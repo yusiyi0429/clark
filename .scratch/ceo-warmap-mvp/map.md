@@ -31,7 +31,7 @@ Spec: `spec.md`
 | 09 | 完成 Meeting 创建与会前准备 | 03, 05, 07 | resolved |
 | 10 | 导入 Transcript 并抽取 MeetingOutcome | 09 | ready-for-agent |
 | 11 | 逐项确认 MeetingOutcome 效果 | 06, 10 | ready-for-agent |
-| 12 | 生成并协商 MonthlyPlan | 03, 05, 08 | ready-for-agent |
+| 12 | 生成并协商 MonthlyPlan | 03, 05, 08 | resolved |
 | 13 | 签发 MonthlyPlan 并刷新业务投影 | 06, 12 | ready-for-agent |
 | 14 | 完成真实数据驱动的像素级 Web | 01, 08, 11, 13 | ready-for-agent |
 | 15 | 建立全链测试、观测与安全门槛 | 14 | ready-for-agent |
@@ -42,9 +42,9 @@ Spec: `spec.md`
 ## Current frontier
 
 - 10 导入 Transcript 并抽取 MeetingOutcome
-- 12 生成并协商 MonthlyPlan
+- 13 签发 MonthlyPlan 并刷新业务投影
 
-10 与 12 可以并行；其他 ticket 必须等待其真实 blocker resolved。
+10 正在做集成 rebase；13 可领取。
 
 ## Results
 
@@ -57,5 +57,6 @@ Spec: `spec.md`
 - 07 resolved：提交 `77e7a48`，实现确定性 Signal promotion、Red deadline quote/location 门槛、DRI Issue import、pending research 和启动丢失恢复。Herdr reviewer 三轮收口无 blocking；contracts 12 + API 85 测试、typecheck/build 通过。
 - 08 resolved：提交 `d1a0abb`，跑通唯一深度 ResearchDoc、CEO 直接决定与 Research Override、Dismissed Issue、统一 effect revoker 与幂等/冲突语义。Herdr deepseek-flash reviewer 三轮收口无 blocking；contracts 12 + API 106 测试、typecheck/build 通过。
 - 09 resolved：提交 `8f85295`，跑通 Issue/DRI → Meeting、stable Person participant、Preflight、准备状态、Supplement Request 和 scheduled cancel。rebase 后 Herdr reviewer 确认 08/09 两条链无覆盖；contracts 15 + API 134 测试、typecheck/build 通过。
+- 12 resolved：提交 `3818f78`，跑通 Company Day 唯一 MonthlyPlan draft、严格候选、显式 retry、versioned 编辑、stable Person todo 与 DRI feedback 幂等协商。Herdr deepseek-flash 双轴 review 无 blocking；contracts 19 + API 146 测试、typecheck/build 通过。
 
 ## Comments
