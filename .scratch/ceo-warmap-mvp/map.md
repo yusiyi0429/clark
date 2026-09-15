@@ -27,7 +27,7 @@ Spec: `spec.md`
 | 05 | 补齐 Search、compaction 与 Runtime 恢复 | 04 | resolved |
 | 06 | 从真实来源生成可管理的 Signal | 02, 05 | resolved |
 | 07 | 自动升级 Issue 并接收 DRI Issue | 03, 04, 05, 06 | resolved |
-| 08 | 完成 Issue 预研与直接决定闭环 | 07 | ready-for-agent |
+| 08 | 完成 Issue 预研与直接决定闭环 | 07 | resolved |
 | 09 | 完成 Meeting 创建与会前准备 | 03, 05, 07 | ready-for-agent |
 | 10 | 导入 Transcript 并抽取 MeetingOutcome | 09 | ready-for-agent |
 | 11 | 逐项确认 MeetingOutcome 效果 | 06, 10 | ready-for-agent |
@@ -41,10 +41,9 @@ Spec: `spec.md`
 
 ## Current frontier
 
-- 08 完成 Issue 预研与直接决定闭环
 - 09 完成 Meeting 创建与会前准备
 
-08 与 09 可以并行；其他 ticket 必须等待其真实 blocker resolved。
+09 可以立即领取；10/12 等 09/08 依赖链 resolved 后领取。
 
 ## Results
 
@@ -55,5 +54,6 @@ Spec: `spec.md`
 - 05 resolved：提交 `92adfdb`，补齐自主 Search、180 秒/8 次保护、Pi compaction、entries 损坏重建、严格 Candidate Tool 与 AgentRun。Herdr review 的 5 项有效发现均经 red→green 修复；contracts 9 + API 46 测试、typecheck/build 通过。
 - 06 resolved：提交 `cc2c2a5`，跑通 scheduled/manual Radar、Web/公众号来源规范化、严格候选到 Signal、独立 read/saved/dismissed 状态和真实 Card。Herdr review 修复全部有效发现；API 60 + contracts 11 测试、typecheck/build 通过。
 - 07 resolved：提交 `77e7a48`，实现确定性 Signal promotion、Red deadline quote/location 门槛、DRI Issue import、pending research 和启动丢失恢复。Herdr reviewer 三轮收口无 blocking；contracts 12 + API 85 测试、typecheck/build 通过。
+- 08 resolved：跑通唯一深度 ResearchDoc（严格 candidate Tool、pending/running/ready/failed 可见失败、显式整份重跑）、CEO 直接决定与 Research Override（Receipt 保存最终文本与当时预研状态）、Dismissed Issue（保留 origin/fingerprint 并阻断再升级）、统一 effect revoker 与幂等/冲突语义，首页通知投影与 Issue Card/Conversation 同源。Herdr deepseek-flash 只读 reviewer 三轮双轴，14 条 findings 全部 red→green 修复后无 blocking；contracts 12 + API 106 测试、typecheck/build 通过。
 
 ## Comments

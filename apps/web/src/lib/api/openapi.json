@@ -1847,6 +1847,250 @@
             }
           }
         }
+      },
+      "ResearchDoc": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "summary",
+          "options",
+          "evidence",
+          "unknowns",
+          "sources"
+        ],
+        "properties": {
+          "summary": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "options": {
+            "minItems": 2,
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "label",
+                "consequences"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "label": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "consequences": {
+                  "minItems": 1,
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "maxLength": 1000,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "evidence": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "quote",
+                "sourceTitle"
+              ],
+              "properties": {
+                "quote": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                "sourceTitle": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "sourceUrl": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "unknowns": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 500,
+              "type": "string"
+            }
+          },
+          "sources": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "title",
+                "url"
+              ],
+              "properties": {
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "url": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "IssueReceipt": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "actionType",
+          "effectRef",
+          "decisionText",
+          "researchStatusAtDecision",
+          "override",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "actionType": {
+            "type": "string"
+          },
+          "effectRef": {
+            "type": "string"
+          },
+          "decisionText": {
+            "type": "string"
+          },
+          "optionId": {
+            "type": "string"
+          },
+          "researchStatusAtDecision": {
+            "anyOf": [
+              {
+                "const": "pending",
+                "type": "string"
+              },
+              {
+                "const": "running",
+                "type": "string"
+              },
+              {
+                "const": "ready",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "researchRunId": {
+            "type": "string"
+          },
+          "override": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "revokedAt": {
+            "type": "string"
+          },
+          "revokeReason": {
+            "type": "string"
+          }
+        }
+      },
+      "IssueDecideInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decisionText"
+        ],
+        "properties": {
+          "decisionText": {
+            "minLength": 1,
+            "maxLength": 5000,
+            "type": "string"
+          },
+          "optionId": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          }
+        }
+      },
+      "IssueDecideOverrideInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decisionText",
+          "confirmOverride"
+        ],
+        "properties": {
+          "decisionText": {
+            "minLength": 1,
+            "maxLength": 5000,
+            "type": "string"
+          },
+          "confirmOverride": {
+            "const": true,
+            "type": "boolean"
+          }
+        }
+      },
+      "IssueDismissInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "maxLength": 500,
+            "type": "string"
+          }
+        }
+      },
+      "IssueRevokeReceiptInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "maxLength": 500,
+            "type": "string"
+          }
+        }
       }
     }
   }

@@ -511,6 +511,52 @@ export interface components {
                 reason?: string;
             };
         };
+        ResearchDoc: {
+            summary: string;
+            options: {
+                id: string;
+                label: string;
+                consequences: string[];
+            }[];
+            evidence: {
+                quote: string;
+                sourceTitle: string;
+                sourceUrl?: string;
+            }[];
+            unknowns: string[];
+            sources: {
+                title: string;
+                url: string;
+            }[];
+        };
+        IssueReceipt: {
+            id: string;
+            actionType: string;
+            effectRef: string;
+            decisionText: string;
+            optionId?: string;
+            researchStatusAtDecision: "pending" | "running" | "ready" | "failed";
+            researchRunId?: string;
+            override: boolean;
+            createdAt: string;
+            revokedAt?: string;
+            revokeReason?: string;
+        };
+        IssueDecideInput: {
+            decisionText: string;
+            optionId?: string;
+        };
+        IssueDecideOverrideInput: {
+            decisionText: string;
+            /** @constant */
+            confirmOverride: true;
+        };
+        IssueDismissInput: {
+            reason: string;
+        };
+        IssueRevokeReceiptInput: {
+            reason?: string;
+        };
     };
     responses: never;
     parameters: never;

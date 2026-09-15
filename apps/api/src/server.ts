@@ -7,6 +7,9 @@ import { createRadarAgentAssessor } from "./radarAgent.js";
 import { createRadarScheduler } from "./radarScheduler.js";
 import { createBraveRadarWebAdapter, createWechatAccountHttpAdapter } from "./radarSources.js";
 import { recoverInterruptedResearch } from "./issues.js";
+import { loadCompanyMemory } from "./companyMemory.js";
+import { createResearchService } from "./research.js";
+import { createResearchAgentRunner } from "./researchAgent.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -26,6 +29,8 @@ const env: AppEnv = {
   piBaseUrl: requiredEnv("PI_BASE_URL"),
   piApiKey: requiredEnv("PI_API_KEY"),
   lightModel: requiredEnv("LIGHT_MODEL"),
+  // 唯一预研深度使用 heavy 槽位；三槽位必须显式配置，不静默降级
+  heavyModel: requiredEnv("HEAVY_MODEL"),
   compactionModel: requiredEnv("COMPACTION_MODEL"),
   buildSha: process.env.BUILD_SHA ?? "dev",
 };
@@ -41,6 +46,16 @@ try {
   client.release();
 }
 
+const researchService = createResearchService({
+  pool,
+  runner: createResearchAgentRunner({
+    query: pool.query.bind(pool),
+    companyMemory: loadCompanyMemory(env),
+    baseUrl: env.piBaseUrl,
+    apiKey: env.piApiKey,
+    modelId: env.heavyModel,
+  }),
+});
 const radarService = createRadarService({
   pool,
   // Provider 未配置时不阻断启动：Radar Card 如实显示未配置（Ticket 16 装载真实凭据）
@@ -55,13 +70,17 @@ const radarService = createRadarService({
     apiKey: env.piApiKey,
     modelId: env.lightModel,
   }),
+  onIssuePromoted: (issueId) => {
+    // DB 抖动时 start 可能抛错：不能让 fire-and-forget 的 rejection 终止进程
+    researchService.start(issueId).catch((err) => console.error("research start failed", err));
+  },
 });
 const scheduler = createRadarScheduler(radarService);
 // 启动补偿：崩溃中断的 running 扫描标为 failed（不自动重跑）
 await radarService.recoverStaleRuns();
 // Ticket 07：创建后、预研启动前崩溃留下的超时 pending research 标为 failed:trigger_not_started
 await recoverInterruptedResearch(pool.query.bind(pool));
-const app = await buildApp({ pool, env, radarService });
+const app = await buildApp({ pool, env, radarService, researchService });
 app.addHook("onClose", async () => scheduler.close());
 scheduler.start();
 await app.listen({ port, host: "0.0.0.0" });

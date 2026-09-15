@@ -87,6 +87,7 @@ export function createRadarService({
   web,
   wechat,
   assessor,
+  onIssuePromoted,
   now = () => new Date(),
   scanTimeoutMs = 180_000,
 }: {
@@ -94,6 +95,7 @@ export function createRadarService({
   web: RadarWebAdapter;
   wechat?: RadarWechatAdapter;
   assessor: RadarAssessor;
+  onIssuePromoted?: (issueId: string) => void;
   now?: () => Date;
   scanTimeoutMs?: number;
 }): RadarService {
@@ -243,6 +245,7 @@ export function createRadarService({
               ],
             );
             const signalInserted = inserted.rowCount === 1;
+            let newlyPromotedIssueId: string | null = null;
             if (signalInserted && candidate.promotion) {
               const signalId = inserted.rows[0].id as string;
               const promoted = assessPromotion({
@@ -289,11 +292,14 @@ export function createRadarService({
                     signalId, issueId, promoted.promotion.fingerprint,
                   ]);
                 }
+                if (created.rowCount === 1 && issueId) newlyPromotedIssueId = issueId;
               }
             }
             await client.query("COMMIT");
             // 只有提交成功的 Signal 才计入本次扫描结果
             if (signalInserted) createdSignals += 1;
+            // 提交后启动唯一深度预研；不阻塞扫描，也不在事务内调模型
+            if (newlyPromotedIssueId) onIssuePromoted?.(newlyPromotedIssueId);
           } catch (cause) {
             await client.query("ROLLBACK").catch(() => undefined);
             warnings.push(`候选保存失败: ${(cause as Error).message || String(cause)}`);
