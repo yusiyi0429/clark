@@ -1,7 +1,7 @@
 # 01: 冻结 CEO WarMap 视觉与交互证据
 
 Type: implementation
-Status: ready-for-agent
+Status: resolved
 Blocked by: None (can start immediately)
 
 ## What to build
