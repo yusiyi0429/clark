@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { IssueLocation, IssueUrgencyLevel } from "./issues.js";
 
 export const RadarLocation = Type.Union([
   Type.Object({ type: Type.Literal("company") }, { additionalProperties: false }),
@@ -55,6 +56,29 @@ export const RadarSourceItem = Type.Object({
   sourceRef: RadarSourceRef,
 }, { additionalProperties: false });
 
+export const RadarDecisionKind = Type.Union([
+  Type.Literal("company_direction"),
+  Type.Literal("resource_allocation"),
+  Type.Literal("external_commitment"),
+  Type.Literal("major_risk"),
+  Type.Literal("mission_boundary"),
+]);
+
+export const RadarPromotionCandidate = Type.Object({
+  decisionKind: RadarDecisionKind,
+  decisionQuestion: Type.String({ minLength: 1, maxLength: 1000 }),
+  options: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { minItems: 2, maxItems: 4 }),
+  location: IssueLocation,
+  urgency: Type.Object({
+    level: IssueUrgencyLevel,
+    reason: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+    decisionBy: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    decisionByEvidence: Type.Optional(Type.Object({
+      quote: Type.String({ minLength: 1, maxLength: 1000 }),
+    }, { additionalProperties: false })),
+  }, { additionalProperties: false }),
+}, { additionalProperties: false });
+
 export const RadarCandidate = Type.Object({
   sourceFingerprint: Type.String({ pattern: "^[a-f0-9]{64}$" }),
   anchorId: Type.String({ minLength: 1, maxLength: 100 }),
@@ -67,6 +91,7 @@ export const RadarCandidate = Type.Object({
     impact: Type.Integer({ minimum: 0, maximum: 5 }),
     urgency: Type.Integer({ minimum: 0, maximum: 5 }),
   }, { additionalProperties: false }),
+  promotion: Type.Optional(RadarPromotionCandidate),
 }, { additionalProperties: false });
 
 export const RadarCandidateSubmission = Type.Object({

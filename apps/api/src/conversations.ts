@@ -7,6 +7,7 @@ import type {
   TReferenceSnapshot,
 } from "@warmap/contracts";
 import { getFixtureHome, projectHomeCard } from "./fixture.js";
+import { getIssueRow, projectIssueCard } from "./issues.js";
 
 export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
@@ -83,6 +84,22 @@ export async function getScopeObject(
 ): Promise<{ snapshot: TReferenceSnapshot | null; visible: boolean }> {
   if (scope === "global") return { snapshot: null, visible: true };
   const [objectType, id] = scope.split(":", 2);
+  // 真实 Issue 优先；fixture 仅在迁移期兼容
+  const issue = objectType === "issue" ? await getIssueRow(q, id) : null;
+  if (issue) {
+    const card = projectIssueCard(issue);
+    return {
+      visible: true,
+      snapshot: {
+        cardId: card.id,
+        version: card.version,
+        kind: card.kind,
+        title: card.title,
+        objectRef: card.objectRef,
+        payload: card.payload,
+      },
+    };
+  }
   const row = await getFixtureObject(q, objectType, id);
   if (!row?.visible_to_ceo) return { snapshot: null, visible: false };
   const card = projectFixtureObjectCard(row);
@@ -128,6 +145,22 @@ export async function resolveReferenceSnapshots(
     const [objectType, id, extra] = reference.cardId.split(":");
     if (extra || !["issue", "signal", "meeting", "monthly-plan"].includes(objectType)) {
       return { status: 404, code: "REFERENCE_NOT_FOUND", message: "Card 引用不存在" };
+    }
+    const issue = objectType === "issue" ? await getIssueRow(q, id) : null;
+    if (issue) {
+      const card = projectIssueCard(issue);
+      if (card.version !== reference.version) {
+        return { status: 409, code: "REFERENCE_VERSION_CONFLICT", message: "Card 引用版本已过期" };
+      }
+      snapshots.push({
+        cardId: card.id,
+        version: card.version,
+        kind: card.kind,
+        title: card.title,
+        objectRef: card.objectRef,
+        payload: card.payload,
+      });
+      continue;
     }
     const row = await getFixtureObject(q, objectType, id);
     if (!row) return { status: 404, code: "REFERENCE_NOT_FOUND", message: "Card 引用不存在" };

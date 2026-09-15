@@ -6,6 +6,7 @@ import { createRadarService } from "./radar.js";
 import { createRadarAgentAssessor } from "./radarAgent.js";
 import { createRadarScheduler } from "./radarScheduler.js";
 import { createBraveRadarWebAdapter, createWechatAccountHttpAdapter } from "./radarSources.js";
+import { recoverInterruptedResearch } from "./issues.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -58,6 +59,8 @@ const radarService = createRadarService({
 const scheduler = createRadarScheduler(radarService);
 // 启动补偿：崩溃中断的 running 扫描标为 failed（不自动重跑）
 await radarService.recoverStaleRuns();
+// Ticket 07：创建后、预研启动前崩溃留下的超时 pending research 标为 failed:trigger_not_started
+await recoverInterruptedResearch(pool.query.bind(pool));
 const app = await buildApp({ pool, env, radarService });
 app.addHook("onClose", async () => scheduler.close());
 scheduler.start();

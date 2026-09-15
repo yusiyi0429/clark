@@ -573,6 +573,74 @@
         }
       }
     },
+    "/api/dri/issues": {
+      "post": {
+        "operationId": "importDriIssue",
+        "summary": "DRI 服务导入 Issue（red 必须提供 decisionBy 与 reason）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriIssueImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "同 externalId 同内容：返回原 Issue Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "创建的 pending Issue Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "health",
@@ -1637,6 +1705,146 @@
           },
           "dismissed": {
             "type": "boolean"
+          }
+        }
+      },
+      "DriIssueImportRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "externalId",
+          "submitterPersonId",
+          "title",
+          "whyNow",
+          "sourceRef",
+          "location"
+        ],
+        "properties": {
+          "externalId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "submitterPersonId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "maxLength": 500,
+            "type": "string"
+          },
+          "whyNow": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "sourceRef": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "level",
+                  "relatedBattlefieldIds"
+                ],
+                "properties": {
+                  "level": {
+                    "const": "company",
+                    "type": "string"
+                  },
+                  "relatedBattlefieldIds": {
+                    "maxItems": 20,
+                    "uniqueItems": true,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "level",
+                  "battlefieldId"
+                ],
+                "properties": {
+                  "level": {
+                    "const": "battlefield",
+                    "type": "string"
+                  },
+                  "battlefieldId": {
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "level",
+                  "capabilityId"
+                ],
+                "properties": {
+                  "level": {
+                    "const": "capability",
+                    "type": "string"
+                  },
+                  "capabilityId": {
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          "urgency": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "level"
+            ],
+            "properties": {
+              "level": {
+                "anyOf": [
+                  {
+                    "const": "red",
+                    "type": "string"
+                  },
+                  {
+                    "const": "yellow",
+                    "type": "string"
+                  },
+                  {
+                    "const": "gray",
+                    "type": "string"
+                  }
+                ]
+              },
+              "decisionBy": {
+                "minLength": 1,
+                "maxLength": 100,
+                "type": "string"
+              },
+              "reason": {
+                "minLength": 1,
+                "maxLength": 1000,
+                "type": "string"
+              }
+            }
           }
         }
       }
