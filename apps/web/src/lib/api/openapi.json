@@ -1,0 +1,736 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CEO WarMap API",
+    "version": "0.1.0",
+    "description": "Card envelope、Action、鉴权与健康的公开契约"
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "operationId": "login",
+        "summary": "CEO 登录，签发 HttpOnly session cookie",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "注销当前 session",
+        "responses": {
+          "200": {
+            "description": "已注销",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/session": {
+      "get": {
+        "operationId": "getSession",
+        "summary": "查询当前登录状态",
+        "responses": {
+          "200": {
+            "description": "登录状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/home": {
+      "get": {
+        "operationId": "getHomeCards",
+        "summary": "首页 Card 集合（无副作用）",
+        "responses": {
+          "200": {
+            "description": "Card 集合",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/execute": {
+      "post": {
+        "operationId": "executeAction",
+        "summary": "执行 Action：fingerprint 幂等优先，再校验 version",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "执行成功或幂等重放，返回当前 Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "version 冲突，携带 latestCard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "health",
+        "summary": "健康检查，无副作用",
+        "responses": {
+          "200": {
+            "description": "健康状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Card": {
+        "additionalProperties": false,
+        "$id": "Card",
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "id",
+          "version",
+          "kind",
+          "objectRef",
+          "title",
+          "payload",
+          "actions"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1,
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "objectRef": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "type",
+              "id",
+              "version"
+            ],
+            "properties": {
+              "type": {
+                "description": "业务对象类型，如 issue、meeting、home",
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "badge": {
+            "type": "string"
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "const": "normal",
+                "type": "string"
+              },
+              {
+                "const": "red",
+                "type": "string"
+              }
+            ]
+          },
+          "payload": {},
+          "navigation": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "href",
+                "label"
+              ],
+              "properties": {
+                "href": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "conversation": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "scope"
+            ],
+            "properties": {
+              "scope": {
+                "description": "对话范围：global 或对象类型:id",
+                "type": "string"
+              }
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "actionId",
+                "actionType",
+                "label"
+              ],
+              "properties": {
+                "actionId": {
+                  "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                  "type": "string"
+                },
+                "actionType": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CardCollection": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cards"
+        ],
+        "properties": {
+          "cards": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "$id": "Card",
+              "type": "object",
+              "required": [
+                "schemaVersion",
+                "id",
+                "version",
+                "kind",
+                "objectRef",
+                "title",
+                "payload",
+                "actions"
+              ],
+              "properties": {
+                "schemaVersion": {
+                  "const": 1,
+                  "type": "number"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "objectRef": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "id",
+                    "version"
+                  ],
+                  "properties": {
+                    "type": {
+                      "description": "业务对象类型，如 issue、meeting、home",
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  }
+                },
+                "title": {
+                  "type": "string"
+                },
+                "badge": {
+                  "type": "string"
+                },
+                "urgency": {
+                  "anyOf": [
+                    {
+                      "const": "normal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "red",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "payload": {},
+                "navigation": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "href",
+                      "label"
+                    ],
+                    "properties": {
+                      "href": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "conversation": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "scope"
+                  ],
+                  "properties": {
+                    "scope": {
+                      "description": "对话范围：global 或对象类型:id",
+                      "type": "string"
+                    }
+                  }
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "actionId",
+                      "actionType",
+                      "label"
+                    ],
+                    "properties": {
+                      "actionId": {
+                        "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                        "type": "string"
+                      },
+                      "actionType": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "itemId": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ActionDescriptor": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actionId",
+          "actionType",
+          "label"
+        ],
+        "properties": {
+          "actionId": {
+            "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+            "type": "string"
+          },
+          "actionType": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiError": {
+        "additionalProperties": false,
+        "$id": "ApiError",
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "requestId"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "fieldErrors": {
+            "type": "object",
+            "patternProperties": {
+              "^(.*)$": {
+                "type": "string"
+              }
+            }
+          },
+          "latestCard": {
+            "additionalProperties": false,
+            "$id": "Card",
+            "type": "object",
+            "required": [
+              "schemaVersion",
+              "id",
+              "version",
+              "kind",
+              "objectRef",
+              "title",
+              "payload",
+              "actions"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "const": 1,
+                "type": "number"
+              },
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "objectRef": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "type",
+                  "id",
+                  "version"
+                ],
+                "properties": {
+                  "type": {
+                    "description": "业务对象类型，如 issue、meeting、home",
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                }
+              },
+              "title": {
+                "type": "string"
+              },
+              "badge": {
+                "type": "string"
+              },
+              "urgency": {
+                "anyOf": [
+                  {
+                    "const": "normal",
+                    "type": "string"
+                  },
+                  {
+                    "const": "red",
+                    "type": "string"
+                  }
+                ]
+              },
+              "payload": {},
+              "navigation": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "href",
+                    "label"
+                  ],
+                  "properties": {
+                    "href": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "conversation": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "scope"
+                ],
+                "properties": {
+                  "scope": {
+                    "description": "对话范围：global 或对象类型:id",
+                    "type": "string"
+                  }
+                }
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "actionId",
+                    "actionType",
+                    "label"
+                  ],
+                  "properties": {
+                    "actionId": {
+                      "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                      "type": "string"
+                    },
+                    "actionType": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "LoginRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "SessionResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "authenticated"
+        ],
+        "properties": {
+          "authenticated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ExecuteActionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actionId"
+        ],
+        "properties": {
+          "actionId": {
+            "type": "string"
+          },
+          "input": {}
+        }
+      },
+      "HealthResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "database",
+          "buildSha"
+        ],
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "const": "ok",
+                "type": "string"
+              },
+              {
+                "const": "degraded",
+                "type": "string"
+              }
+            ]
+          },
+          "database": {
+            "type": "boolean"
+          },
+          "buildSha": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

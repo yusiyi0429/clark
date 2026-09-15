@@ -1,0 +1,26 @@
+{
+  "name": "@warmap/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "gen:client": "pnpm --filter @warmap/contracts build && node ../../packages/contracts/dist/openapi-cli.js > src/lib/api/openapi.json && openapi-typescript src/lib/api/openapi.json -o src/lib/api/schema.d.ts",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@warmap/contracts": "workspace:*",
+    "next": "^16.3.0",
+    "openapi-fetch": "^0.13.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "openapi-typescript": "^7.6.1",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,10 @@
+# CEO WarMap 唯一公网入口。
+# 只有 edge 暴露 80/443；Web、API、PostgreSQL 仅在 Compose 内网。
+# /api/*（含 SSE、multipart）与 /mcp/company-memory 直达 API，不经 Web。
+{$PUBLIC_DOMAIN} {
+	reverse_proxy /api/* api:4000 {
+		flush_interval -1
+	}
+	reverse_proxy /mcp/* api:4000
+	reverse_proxy /* web:3000
+}
