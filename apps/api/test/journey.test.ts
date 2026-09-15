@@ -168,7 +168,8 @@ describe("CEO login → fixture card journey", () => {
         url: "/mcp/company-memory",
         headers: { authorization: `Bearer ${t.env.mcpServiceToken}` },
       });
-      expect(mcp.statusCode).toBe(501);
+      // Ticket 03 起 MCP 已是真实实现：非 MCP 客户端请求（无 Accept/JSON-RPC）由协议层拒绝（非 501 stub）
+      expect(mcp.statusCode).toBe(406);
 
       // CEO cookie 不能访问服务边界
       const cookie = await t.loginCookie();

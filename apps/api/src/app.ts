@@ -24,6 +24,8 @@ import {
 import { getFixtureHome, projectHomeCard } from "./fixture.js";
 import { actionFingerprint, verifyActionId } from "./actionToken.js";
 import { executeDismissNotice } from "./actions.js";
+import { loadCompanyMemory, type CompanyMemorySeedEnv } from "./companyMemory.js";
+import { createCompanyMemoryMcpSession } from "./mcpCompanyMemory.js";
 
 export type AppEnv = {
   sessionSecret: string;
@@ -33,9 +35,11 @@ export type AppEnv = {
   driServiceToken: string;
   mcpServiceToken: string;
   buildSha: string;
-};
+} & CompanyMemorySeedEnv;
 
 export async function buildApp({ pool, env }: { pool: Pool; env: AppEnv }): Promise<FastifyInstance> {
+  // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
+  const companyMemory = loadCompanyMemory(env);
   const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
   const q = pool.query.bind(pool);
 
@@ -180,11 +184,18 @@ export async function buildApp({ pool, env }: { pool: Pool; env: AppEnv }): Prom
     return { status, database, buildSha: env.buildSha };
   });
 
-  // 服务身份 stub：真实 MCP 实现在 Ticket 03，DRI 导入在 Ticket 07。
+  // CompanyMemory MCP：独立服务凭据，只读（ADR-0004/0013）；GET/DELETE 会话协商由无状态 transport 拒绝。
   app.post(
     "/mcp/company-memory",
     { preHandler: requireServiceToken(env.mcpServiceToken) },
-    async (_req, reply) => fail(reply, 501, "NOT_IMPLEMENTED", "CompanyMemory MCP 在 Ticket 03 实现"),
+    async (req, reply) => {
+      reply.hijack();
+      const { server, transport } = await createCompanyMemoryMcpSession(companyMemory);
+      reply.raw.on("close", () => {
+        void server.close();
+      });
+      await transport.handleRequest(req.raw, reply.raw, req.body);
+    },
   );
   app.post(
     "/api/dri/issues",

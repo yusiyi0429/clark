@@ -1,4 +1,5 @@
 import { randomUUID, scryptSync } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { migrate } from "../src/migrate.js";
 import { buildApp, type AppEnv } from "../src/app.js";
@@ -31,6 +32,9 @@ export async function createTestDb(fn: (t: TestDb) => Promise<void>): Promise<vo
 export const scryptHash = (password: string, salt = "testsalt") =>
   `scrypt:${salt}:${scryptSync(password, salt, 32).toString("hex")}`;
 
+const FIXTURE_PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people.json", import.meta.url));
+const FIXTURE_MEMORY_DIR = fileURLToPath(new URL("./fixtures/company-memory", import.meta.url));
+
 export const testEnv: AppEnv = {
   sessionSecret: "test-session-secret",
   ceoPasswordHash: scryptHash("ceo-pass-2024"),
@@ -38,6 +42,8 @@ export const testEnv: AppEnv = {
   publicOrigin: "https://warmap.local",
   driServiceToken: "dri-token-test",
   mcpServiceToken: "mcp-token-test",
+  companyMemorySeedDir: FIXTURE_MEMORY_DIR,
+  companyPeopleSeed: FIXTURE_PEOPLE_SEED,
   buildSha: "test-sha",
 };
 
@@ -52,8 +58,10 @@ export type TestApp = {
   close: () => Promise<void>;
 };
 
-/** 每个用例一个独立数据库 + 已迁移 schema + 完整 app。 */
-export async function createTestApp(): Promise<TestApp> {
+/** 每个用例一个独立数据库 + 已迁移 schema + 完整 app。可覆盖 CompanyMemory seed 路径。 */
+export async function createTestApp(
+  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed">> = {},
+): Promise<TestApp> {
   const database = `warmap_test_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const admin = new Pool({ connectionString: ADMIN_URL, max: 2 });
   await admin.query(`CREATE DATABASE ${database}`);
@@ -64,7 +72,7 @@ export async function createTestApp(): Promise<TestApp> {
   const client = await pool.connect();
   await migrate(client);
   client.release();
-  const app = await buildApp({ pool, env: testEnv });
+  const app = await buildApp({ pool, env: { ...testEnv, ...seedOverrides } });
   return {
     app,
     publicOrigin: testEnv.publicOrigin,
