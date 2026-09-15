@@ -1,5 +1,5 @@
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Type, type Static } from "@sinclair/typebox";
 type ValidationItem = { instancePath?: string; dataPath?: string; message?: string };
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
@@ -38,6 +38,8 @@ import {
   type ConversationRuntime,
 } from "./conversations.js";
 
+export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
+
 export type AppEnv = {
   sessionSecret: string;
   ceoPasswordHash: string;
@@ -49,16 +51,19 @@ export type AppEnv = {
   piBaseUrl: string;
   piApiKey: string;
   lightModel: string;
+  compactionModel: string;
 } & CompanyMemorySeedEnv;
 
 export async function buildApp({
   pool,
   env,
   conversationRuntime,
+  conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
 }: {
   pool: Pool;
   env: AppEnv;
   conversationRuntime?: ConversationRuntime;
+  conversationTurnTimeoutMs?: number;
 }): Promise<FastifyInstance> {
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
   const companyMemory = loadCompanyMemory(env);
@@ -67,6 +72,7 @@ export async function buildApp({
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.lightModel,
+    compactionModelId: env.compactionModel,
   });
   const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
   app.addHook("onClose", async () => runtime.close?.());
@@ -243,6 +249,29 @@ export async function buildApp({
            VALUES ($1, $2, 'user', $3, $4::jsonb, $5)`,
           [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), runId],
         );
+        const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
+          `SELECT role, content, created_at
+             FROM conversation_messages
+            WHERE conversation_id = $1 AND run_id <> $2
+            ORDER BY sequence DESC LIMIT 20`,
+          [row.id, runId],
+        );
+        await client.query(
+          `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
+           VALUES ($1, 'conversation', $2::jsonb, 'running', $3, $4, $5::jsonb)`,
+          [
+            runId,
+            JSON.stringify(object.snapshot?.objectRef ?? null),
+            runtime.modelSlot ?? "light",
+            runtime.promptHash ?? createHash("sha256").update("conversation-runtime").digest("hex"),
+            JSON.stringify({
+              scope: req.params.scope,
+              message: req.body.message,
+              currentObject: object.snapshot,
+              references: references.snapshots,
+            }),
+          ],
+        );
 
         reply.hijack();
         reply.raw.writeHead(200, {
@@ -252,27 +281,53 @@ export async function buildApp({
           "x-accel-buffering": "no",
         });
         reply.raw.on("close", () => {
-          if (!streamFinished) abort.abort();
+          if (!streamFinished) abort.abort(Object.assign(new Error("Conversation client disconnected"), { code: "CLIENT_DISCONNECTED" }));
         });
+        let runUsage: Record<string, unknown> | null = null;
         const emit = (event: Record<string, unknown>) => {
+          if (event.type === "usage") {
+            const { type: _type, ...usage } = event;
+            runUsage = usage;
+          }
           if (reply.raw.destroyed) return;
           const data = { ...event, runId, scope: req.params.scope, sequence: ++eventSequence };
           reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
         };
 
+        const timeout = setTimeout(() => {
+          abort.abort(Object.assign(new Error("Conversation turn exceeded 180 seconds"), { code: "TURN_TIMEOUT" }));
+        }, conversationTurnTimeoutMs);
+        timeout.unref();
         try {
           const result = await runtime.run({
             scope: req.params.scope,
             message: req.body.message,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,
+            recentMessages: recent.rows.reverse().map((message) => ({
+              role: message.role,
+              content: message.content,
+              createdAt: message.created_at.toISOString(),
+            })),
             runtimeEntries: row.runtime_entries,
             piSessionId: row.pi_session_id,
             signal: abort.signal,
             emit,
+            checkpoint: async (runtimeEntries) => {
+              await client.query(
+                "UPDATE conversations SET runtime_entries = $2::jsonb, runtime_updated_at = now() WHERE id = $1",
+                [row.id, JSON.stringify(runtimeEntries)],
+              );
+            },
           });
           if (abort.signal.aborted) {
-            emit({ type: "done", status: "aborted" });
+            const reason = abort.signal.reason as { code?: string; message?: string } | undefined;
+            await client.query(
+              "UPDATE agent_runs SET status = 'aborted', error = $2, usage = $3::jsonb, completed_at = now() WHERE id = $1",
+              [runId, reason?.message ?? "Conversation aborted", JSON.stringify(runUsage)],
+            );
+            if (reason?.code === "TURN_TIMEOUT") emit({ type: "error", code: "TURN_TIMEOUT", message: reason.message });
+            else emit({ type: "done", status: "aborted" });
           } else {
             await client.query("BEGIN");
             await client.query(
@@ -282,17 +337,52 @@ export async function buildApp({
               [row.id, userSequence + 1, result.assistantMessage, runId],
             );
             await client.query(
-              "UPDATE conversations SET runtime_entries = $2::jsonb, runtime_updated_at = now() WHERE id = $1",
-              [row.id, JSON.stringify(result.runtimeEntries)],
+              `UPDATE conversations
+                  SET runtime_entries = $2::jsonb,
+                      pi_session_id = $3,
+                      runtime_updated_at = now(),
+                      recreated_at = CASE WHEN $4::boolean THEN now() ELSE recreated_at END,
+                      runtime_warning = COALESCE($5, runtime_warning)
+                WHERE id = $1`,
+              [
+                row.id,
+                JSON.stringify(result.runtimeEntries),
+                result.piSessionId ?? row.pi_session_id,
+                result.recovery?.recreated === true,
+                result.recovery?.warning ?? null,
+              ],
+            );
+            await client.query(
+              `UPDATE agent_runs
+                  SET status = 'succeeded', candidate_output = $2::jsonb, usage = $3::jsonb, completed_at = now()
+                WHERE id = $1`,
+              [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage)],
             );
             await client.query("COMMIT");
             emit({ type: "done", status: "completed" });
           }
         } catch (err) {
           await client.query("ROLLBACK").catch(() => undefined);
-          if (!abort.signal.aborted) {
-            emit({ type: "error", code: "RUNTIME_FAILED", message: (err as Error).message || "Pi Runtime 失败" });
+          const reason = abort.signal.reason as { code?: string; message?: string } | undefined;
+          await client.query(
+            "UPDATE agent_runs SET status = $2, error = $3, usage = $4::jsonb, completed_at = now() WHERE id = $1",
+            [
+              runId,
+              abort.signal.aborted ? "aborted" : "failed",
+              reason?.message ?? (err as Error).message ?? "Pi Runtime 失败",
+              JSON.stringify(runUsage),
+            ],
+          );
+          if (reason?.code === "TURN_TIMEOUT") {
+            emit({ type: "error", code: "TURN_TIMEOUT", message: reason.message ?? "Conversation turn exceeded 180 seconds" });
+          } else if (!abort.signal.aborted) {
+            const code = (err as { code?: string }).code === "SEARCH_BUDGET_EXHAUSTED"
+              ? "SEARCH_BUDGET_EXHAUSTED"
+              : "RUNTIME_FAILED";
+            emit({ type: "error", code, message: (err as Error).message || "Pi Runtime 失败" });
           }
+        } finally {
+          clearTimeout(timeout);
         }
         streamFinished = true;
         reply.raw.end();

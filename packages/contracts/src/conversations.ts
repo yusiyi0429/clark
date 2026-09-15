@@ -82,6 +82,23 @@ export const ConversationSseEvent = Type.Union([
     { additionalProperties: false },
   ),
   Type.Object(
+    {
+      ...StreamBase,
+      type: Type.Literal("compaction"),
+      phase: Type.Union([Type.Literal("started"), Type.Literal("completed")]),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...StreamBase,
+      type: Type.Literal("warning"),
+      code: Type.Literal("RUNTIME_RECREATED"),
+      message: Type.String(),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
     { ...StreamBase, type: Type.Literal("error"), code: Type.String(), message: Type.String() },
     { additionalProperties: false },
   ),

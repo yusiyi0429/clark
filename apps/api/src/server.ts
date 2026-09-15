@@ -21,6 +21,7 @@ const env: AppEnv = {
   piBaseUrl: requiredEnv("PI_BASE_URL"),
   piApiKey: requiredEnv("PI_API_KEY"),
   lightModel: requiredEnv("LIGHT_MODEL"),
+  compactionModel: requiredEnv("COMPACTION_MODEL"),
   buildSha: process.env.BUILD_SHA ?? "dev",
 };
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createTestApp } from "./helpers.js";
+import { CONVERSATION_TURN_TIMEOUT_MS } from "../src/app.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 
 function parseSse(body: string): unknown[] {
@@ -131,6 +132,114 @@ describe("Conversation HTTP/SSE public seam", () => {
     }
   });
 
+  it("checkpoints compaction entries without deleting raw messages even if the turn later fails", async () => {
+    const compactedEntries = [{ type: "session", version: 3 }, { type: "compaction", summary: "摘要" }];
+    const runtime: ConversationRuntime = {
+      async run(input): Promise<never> {
+        input.emit({ type: "compaction", phase: "started" });
+        await input.checkpoint?.(compactedEntries);
+        input.emit({ type: "compaction", phase: "completed" });
+        throw new Error("provider failed after compaction");
+      },
+    };
+    const t = await createTestApp({}, runtime);
+    try {
+      const cookie = await t.loginCookie();
+      const response = await t.app.inject({
+        method: "POST",
+        url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" },
+        payload: { message: "触发压缩" },
+      });
+      expect(parseSse(response.body)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "compaction", phase: "started" }),
+        expect.objectContaining({ type: "compaction", phase: "completed" }),
+        expect.objectContaining({ type: "error", code: "RUNTIME_FAILED" }),
+      ]));
+      const state = await t.conversationState("global");
+      expect(state.runtimeEntries).toEqual(compactedEntries);
+      expect(state.messages.map((message) => message.content)).toEqual(["触发压缩"]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("publishes and persists the runtime rebuild result while retaining raw messages", async () => {
+    let turn = 0;
+    const replacementSessionId = "22222222-2222-4222-8222-222222222222";
+    const runtime: ConversationRuntime = {
+      async run(input) {
+        turn += 1;
+        if (turn === 1) return { assistantMessage: "first", runtimeEntries: [{ valid: true }] };
+        expect(input.runtimeEntries).toEqual([{ broken: true }]);
+        expect(input.recentMessages?.map((message) => message.content)).toEqual(["one", "first"]);
+        input.emit({ type: "warning", code: "RUNTIME_RECREATED", message: "corrupted entries rebuilt" });
+        return {
+          assistantMessage: "second",
+          runtimeEntries: [{ rebuilt: true }],
+          piSessionId: replacementSessionId,
+          recovery: { recreated: true, warning: "corrupted entries rebuilt" },
+        };
+      },
+    };
+    const t = await createTestApp({}, runtime);
+    try {
+      const cookie = await t.loginCookie();
+      const request = { method: "POST" as const, url: "/api/conversations/global/messages", headers: {
+        cookie, origin: t.publicOrigin, accept: "text/event-stream",
+      } };
+      await t.app.inject({ ...request, payload: { message: "one" } });
+      await t.setRuntimeEntries("global", [{ broken: true }]);
+      const recovered = await t.app.inject({ ...request, payload: { message: "two" } });
+      expect(parseSse(recovered.body)).toContainEqual(expect.objectContaining({
+        type: "warning", code: "RUNTIME_RECREATED", message: "corrupted entries rebuilt",
+      }));
+      const state = await t.conversationState("global");
+      expect(state.messages.map((message) => message.content)).toEqual(["one", "first", "two", "second"]);
+      expect(state.runtimeEntries).toEqual([{ rebuilt: true }]);
+      expect(state.piSessionId).toBe(replacementSessionId);
+      expect(state.recreatedAt).toBeInstanceOf(Date);
+      expect(state.runtimeWarning).toBe("corrupted entries rebuilt");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("saves an observable AgentRun for the Conversation input, output, usage and timing", async () => {
+    const runtime: ConversationRuntime = {
+      async run(input) {
+        input.emit({ type: "usage", input: 3, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 5 });
+        return { assistantMessage: "answer", runtimeEntries: [] };
+      },
+    };
+    const t = await createTestApp({}, runtime);
+    try {
+      const cookie = await t.loginCookie();
+      await t.app.inject({
+        method: "POST",
+        url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" },
+        payload: { message: "question" },
+      });
+      const runs = await t.agentRuns();
+      expect(runs).toHaveLength(1);
+      expect(runs[0]).toMatchObject({
+        kind: "conversation",
+        status: "succeeded",
+        model_slot: "light",
+        input_snapshot: { scope: "global", message: "question", currentObject: null, references: [] },
+        candidate_output: { assistantMessage: "answer" },
+        usage: { input: 3, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 5 },
+        error: null,
+      });
+      expect(runs[0].prompt_hash).toMatch(/^[a-f0-9]{64}$/);
+      expect(runs[0].started_at).toBeInstanceOf(Date);
+      expect(runs[0].completed_at).toBeInstanceOf(Date);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("streams an honest error and never persists a fake assistant success", async () => {
     const runtime: ConversationRuntime = {
       async run(input): Promise<never> {
@@ -156,6 +265,94 @@ describe("Conversation HTTP/SSE public seam", () => {
       const state = await t.conversationState("global");
       expect(state.messages.map((m) => m.role)).toEqual(["user"]);
       expect(state.runtimeEntries).toEqual([]);
+      expect(await t.agentRuns()).toEqual([expect.objectContaining({
+        status: "failed", error: "provider failed", candidate_output: null,
+      })]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("streams autonomous Web Search lifecycle and the evidence-labelled answer", async () => {
+    const runtime: ConversationRuntime = {
+      async run(input) {
+        input.emit({ type: "tool", phase: "started", toolCallId: "search-1", name: "web_search" });
+        input.emit({ type: "tool", phase: "completed", toolCallId: "search-1", name: "web_search", isError: false });
+        input.emit({ type: "message", delta: "[外部证据] fixture\n[推断] 需要关注" });
+        return { assistantMessage: "[外部证据] fixture\n[推断] 需要关注", runtimeEntries: [] };
+      },
+    };
+    const t = await createTestApp({}, runtime);
+    try {
+      const cookie = await t.loginCookie();
+      const response = await t.app.inject({
+        method: "POST",
+        url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" },
+        payload: { message: "需要最新事实" },
+      });
+      expect(parseSse(response.body)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "tool", phase: "started", name: "web_search" }),
+        expect.objectContaining({ type: "tool", phase: "completed", name: "web_search", isError: false }),
+        expect.objectContaining({ type: "message", delta: expect.stringContaining("[外部证据]") }),
+        expect.objectContaining({ type: "done", status: "completed" }),
+      ]));
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("returns a distinct SSE error when the eighth Search exhausts the budget", async () => {
+    const runtime: ConversationRuntime = {
+      async run(): Promise<never> {
+        throw Object.assign(new Error("Search limit reached (8)"), { code: "SEARCH_BUDGET_EXHAUSTED" });
+      },
+    };
+    const t = await createTestApp({}, runtime);
+    try {
+      const cookie = await t.loginCookie();
+      const response = await t.app.inject({
+        method: "POST",
+        url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" },
+        payload: { message: "异常搜索" },
+      });
+      expect(parseSse(response.body)).toContainEqual(expect.objectContaining({
+        type: "error",
+        code: "SEARCH_BUDGET_EXHAUSTED",
+        message: "Search limit reached (8)",
+      }));
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("enforces the public 180 second turn timeout without persisting partial output", async () => {
+    expect(CONVERSATION_TURN_TIMEOUT_MS).toBe(180_000);
+    const runtime: ConversationRuntime = {
+      async run(input): Promise<never> {
+        input.emit({ type: "message", delta: "partial" });
+        await new Promise<void>((resolve) => input.signal.addEventListener("abort", () => resolve(), { once: true }));
+        throw input.signal.reason;
+      },
+    };
+    const t = await createTestApp({}, runtime, { conversationTurnTimeoutMs: 10 });
+    try {
+      const cookie = await t.loginCookie();
+      const response = await t.app.inject({
+        method: "POST",
+        url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" },
+        payload: { message: "timeout" },
+      });
+      expect(parseSse(response.body)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "message", delta: "partial" }),
+        expect.objectContaining({ type: "error", code: "TURN_TIMEOUT" }),
+      ]));
+      expect((await t.conversationState("global")).messages.map((message) => message.role)).toEqual(["user"]);
+      expect(await t.agentRuns()).toEqual([expect.objectContaining({
+        status: "aborted", error: "Conversation turn exceeded 180 seconds", candidate_output: null,
+      })]);
     } finally {
       await t.close();
     }
@@ -188,8 +385,14 @@ describe("Conversation HTTP/SSE public seam", () => {
       });
       await response.body!.getReader().read();
       controller.abort();
-      for (let i = 0; i < 20 && !aborted; i += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+      let runs: Record<string, unknown>[] = [];
+      for (let i = 0; i < 20; i += 1) {
+        runs = await t.agentRuns();
+        if (aborted && runs[0]?.status === "aborted") break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
       expect(aborted).toBe(true);
+      expect(runs).toEqual([expect.objectContaining({ status: "aborted" })]);
       const state = await t.conversationState("global");
       expect(state.messages.map((m) => m.role)).toEqual(["user"]);
       expect(state.runtimeEntries).toEqual([]);

@@ -337,6 +337,24 @@ export interface components {
             scope: string;
             sequence: number;
             /** @constant */
+            type: "compaction";
+            phase: "started" | "completed";
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "warning";
+            /** @constant */
+            code: "RUNTIME_RECREATED";
+            message: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
             type: "error";
             code: string;
             message: string;
