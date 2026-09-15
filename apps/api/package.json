@@ -14,6 +14,7 @@
   "dependencies": {
     "@fastify/rate-limit": "^10.2.2",
     "@fastify/type-provider-typebox": "^5.1.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@sinclair/typebox": "^0.34.52",
     "@warmap/contracts": "workspace:*",
     "fastify": "^5.2.1",

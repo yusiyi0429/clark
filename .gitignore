@@ -13,6 +13,9 @@ coverage/
 !.env.docker.example
 .data/
 
+# 真实人员名单由项目授权人在部署机放置，不进入 git（缺失 → API 启动诚实失败）
+seed/company-people.json
+
 # editor and OS
 .DS_Store
 *.swp

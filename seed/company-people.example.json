@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "company-people.v1",
+  "people": [
+    {
+      "personId": "person-example-001",
+      "displayName": "示例姓名（本地联调占位，生产必须替换为项目授权人提供的真实名单）",
+      "roles": ["ceo"]
+    },
+    {
+      "personId": "person-example-002",
+      "displayName": "示例姓名（本地联调占位，生产必须替换为项目授权人提供的真实名单）",
+      "roles": ["dri", "participant"]
+    }
+  ]
+}

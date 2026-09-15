@@ -29,7 +29,13 @@ services:
       SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-28800}
       DRI_SERVICE_TOKEN: ${DRI_SERVICE_TOKEN:?DRI_SERVICE_TOKEN required}
       COMPANY_MEMORY_MCP_TOKEN: ${COMPANY_MEMORY_MCP_TOKEN:?COMPANY_MEMORY_MCP_TOKEN required}
+      # 单一来源：backend/CompanyMemory.md 目录 + 真实人员名单，均只读挂载；生产可换 host 路径并同步覆盖
+      COMPANY_MEMORY_SEED_DIR: /repo/backend
+      COMPANY_PEOPLE_SEED: /repo/seed/company-people.json
       BUILD_SHA: ${BUILD_SHA:-dev}
+    volumes:
+      - ../backend:/repo/backend:ro
+      - ../seed:/repo/seed:ro
     depends_on:
       postgres:
         condition: service_healthy

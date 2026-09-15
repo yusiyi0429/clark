@@ -16,6 +16,8 @@ const env: AppEnv = {
   publicOrigin: requiredEnv("PUBLIC_ORIGIN"),
   driServiceToken: requiredEnv("DRI_SERVICE_TOKEN"),
   mcpServiceToken: requiredEnv("COMPANY_MEMORY_MCP_TOKEN"),
+  companyMemorySeedDir: requiredEnv("COMPANY_MEMORY_SEED_DIR"),
+  companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
   buildSha: process.env.BUILD_SHA ?? "dev",
 };
 
