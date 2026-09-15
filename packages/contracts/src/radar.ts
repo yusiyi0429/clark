@@ -7,11 +7,20 @@ export const RadarLocation = Type.Union([
   Type.Object({ type: Type.Literal("capability"), id: Type.String({ minLength: 1, maxLength: 100 }) }, { additionalProperties: false }),
 ]);
 
+/** anchor 写入来源：meeting-reopen 为会议复议条件，ontology 为月度签发刷新的基础方向。 */
+export const RadarAnchorSource = Type.Union([
+  Type.Literal("meeting-reopen"),
+  Type.Literal("ontology"),
+]);
+
 export const RadarAnchor = Type.Object({
   id: Type.String({ minLength: 1, maxLength: 100 }),
   title: Type.String({ minLength: 1, maxLength: 200 }),
   query: Type.String({ minLength: 1, maxLength: 500 }),
   location: RadarLocation,
+  source: Type.Optional(RadarAnchorSource),
+  /** 产生该 anchor 的业务对象引用，用于幂等重建与精确撤回。 */
+  originRef: Type.Optional(Type.String({ minLength: 1, maxLength: 300 })),
 }, { additionalProperties: false });
 
 export const RadarSiteSource = Type.Object({

@@ -91,6 +91,16 @@ export const IssueRevokeReceiptInput = Type.Object({
   reason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
 }, { additionalProperties: false });
 
+/** meeting-item Receipt 的来源：知道它来自哪一个会议条目。 */
+export const IssueReceiptSource = Type.Object(
+  {
+    kind: Type.Literal("meeting-item"),
+    meetingId: Type.String({ minLength: 1 }),
+    outcomeItemId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
 /** Receipt 是 Issue 内嵌结构：保存 CEO 最终文本、决定时预研状态与 override 事实。 */
 export const IssueReceipt = Type.Object({
   id: Type.String(),
@@ -101,6 +111,8 @@ export const IssueReceipt = Type.Object({
   researchStatusAtDecision: ResearchStatus,
   researchRunId: Type.Optional(Type.String()),
   override: Type.Boolean(),
+  /** 由 MeetingOutcome decision 确认产生的 Receipt 携带精确来源。 */
+  source: Type.Optional(IssueReceiptSource),
   createdAt: Type.String(),
   revokedAt: Type.Optional(Type.String()),
   revokeReason: Type.Optional(Type.String()),
@@ -115,4 +127,5 @@ export type TIssueDecideInput = Static<typeof IssueDecideInput>;
 export type TIssueDecideOverrideInput = Static<typeof IssueDecideOverrideInput>;
 export type TIssueDismissInput = Static<typeof IssueDismissInput>;
 export type TIssueRevokeReceiptInput = Static<typeof IssueRevokeReceiptInput>;
+export type TIssueReceiptSource = Static<typeof IssueReceiptSource>;
 export type TIssueReceipt = Static<typeof IssueReceipt>;

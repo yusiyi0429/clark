@@ -12,13 +12,19 @@ import {
   DriMonthlyPlanFeedbackRequest,
   DriMonthlyPlanTodoFeedbackRequest,
   MeetingCardPayload,
+  MeetingConfirmItemInput,
+  MeetingDismissItemInput,
+  MeetingRevokeEffectInput,
   MonthlyDraftCandidate,
   MonthlyPlanCardPayload,
   MeetingOutcomeState,
+  OutcomeReview,
   PostMeetingCandidate,
   PreflightCandidate,
   ReplaceTranscriptRequest,
+  IssueReceipt,
   RadarCandidateSubmission,
+  RadarAnchor,
   RadarScanResponse,
   RequestSupplementRequest,
   SignalStateRequest,
@@ -221,6 +227,13 @@ describe("radar public contract", () => {
       warnings: [],
     })).toBe(true);
   });
+
+  it("marks meeting-reopen anchors with an explicit source and originRef", () => {
+    const anchor = { id: "meeting-reopen:m:item-1", title: "六月前风险清单", query: "六月风险", location: { type: "company" }, source: "meeting-reopen", originRef: "meeting:m:reopen:item-1" };
+    expect(Value.Check(RadarAnchor, anchor)).toBe(true);
+    expect(Value.Check(RadarAnchor, { id: "a", title: "t", query: "q", location: { type: "company" } })).toBe(true);
+    expect(Value.Check(RadarAnchor, { ...anchor, extra: true })).toBe(false);
+  });
 });
 
 describe("meeting public contract", () => {
@@ -357,6 +370,39 @@ describe("meeting public contract", () => {
     expect(Value.Check(PostMeetingCandidate, candidate)).toBe(true);
     expect(Value.Check(PostMeetingCandidate, { ...candidate, items: [{ ...candidate.items[0], kind: "promise" }] })).toBe(false);
     expect(Value.Check(PostMeetingCandidate, { ...candidate, items: [{ ...candidate.items[0], judgmentKind: "budget" }] })).toBe(false);
+  });
+
+  it("carries per-item effect details and accepts only versioned review commands", () => {
+    const confirmed = {
+      status: "confirmed",
+      effectRef: "meeting:00000000-0000-4000-8000-000000000001:todo:item-1",
+      handoff: { exportStatus: "pending_export", exportRef: null, error: null },
+      anchorId: null,
+      reason: null,
+    };
+    expect(Value.Check(OutcomeReview, confirmed)).toBe(true);
+    expect(Value.Check(OutcomeReview, { ...confirmed, status: "pending", handoff: { exportStatus: "sent", exportRef: null, error: null } })).toBe(false);
+    expect(Value.Check(MeetingConfirmItemInput, {})).toBe(true);
+    expect(Value.Check(MeetingConfirmItemInput, { itemId: "item-1" })).toBe(false);
+    expect(Value.Check(MeetingDismissItemInput, { reason: "不是本次决定" })).toBe(true);
+    expect(Value.Check(MeetingDismissItemInput, { reason: 3 })).toBe(false);
+    expect(Value.Check(MeetingRevokeEffectInput, {})).toBe(true);
+    expect(Value.Check(MeetingRevokeEffectInput, { effectRef: "x" })).toBe(false);
+  });
+
+  it("records a meeting-item source on an Issue Receipt", () => {
+    const receipt = {
+      id: "receipt-1",
+      actionType: "meeting.confirm_item",
+      effectRef: "meeting:00000000-0000-4000-8000-000000000001:decision:item-1",
+      decisionText: "灯塔项目优先",
+      researchStatusAtDecision: "pending",
+      override: false,
+      source: { kind: "meeting-item", meetingId: "00000000-0000-4000-8000-000000000001", outcomeItemId: "item-1" },
+      createdAt: "2026-06-01T02:05:00.000Z",
+    };
+    expect(Value.Check(IssueReceipt, receipt)).toBe(true);
+    expect(Value.Check(IssueReceipt, { ...receipt, source: { kind: "radar" } })).toBe(false);
   });
 });
 

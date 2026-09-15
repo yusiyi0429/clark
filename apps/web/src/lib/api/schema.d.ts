@@ -708,6 +708,12 @@ export interface components {
             researchStatusAtDecision: "pending" | "running" | "ready" | "failed";
             researchRunId?: string;
             override: boolean;
+            source?: {
+                /** @constant */
+                kind: "meeting-item";
+                meetingId: string;
+                outcomeItemId: string;
+            };
             createdAt: string;
             revokedAt?: string;
             revokeReason?: string;
@@ -925,6 +931,13 @@ export interface components {
                 review: {
                     status: "pending" | "confirmed" | "dismissed";
                     effectRef: string | null;
+                    handoff?: {
+                        exportStatus: "pending_export" | "delivered" | "failed";
+                        exportRef: string | null;
+                        error: string | null;
+                    } | null;
+                    anchorId?: string | null;
+                    reason?: string | null;
                 } | null;
             }[];
             warnings: {
@@ -947,6 +960,13 @@ export interface components {
             };
             /** @constant */
             confirmReplace: true;
+        };
+        MeetingConfirmItemInput: Record<string, never>;
+        MeetingDismissItemInput: {
+            reason?: string;
+        };
+        MeetingRevokeEffectInput: {
+            reason?: string;
         };
     };
     responses: never;

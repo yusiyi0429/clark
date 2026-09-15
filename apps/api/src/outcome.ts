@@ -11,6 +11,7 @@ import {
   type TWarmapTranscript,
   WarmapTranscript,
 } from "@warmap/contracts";
+import { deriveMeetingStatus } from "./effects.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -210,7 +211,7 @@ type OutcomeMeetingRow = {
   version: number;
   title: string;
   scheduled_at: Date;
-  status: string;
+  status: "scheduled" | "held" | "reviewed" | "cancelled";
   participants: TMeetingParticipant[];
   ceo_participant_id: string;
   issue_ids: string[];
@@ -302,6 +303,7 @@ export async function runOutcome(
       await fail(assessed.code, assessed.message);
       return;
     }
+    const nextStatus = deriveMeetingStatus(meeting.status, assessed.items);
     await q(
       `UPDATE meetings
           SET outcome = outcome || jsonb_build_object(
@@ -313,10 +315,11 @@ export async function runOutcome(
                 'error', NULL,
                 'startedAt', NULL
               ),
+              status = $7,
               version = version + 1,
               updated_at = now()
         WHERE id = $1 AND outcome->>'runId' = $2`,
-      [meetingId, runId, assessed.summary, JSON.stringify(assessed.items), JSON.stringify(assessed.warnings), new Date().toISOString()],
+      [meetingId, runId, assessed.summary, JSON.stringify(assessed.items), JSON.stringify(assessed.warnings), new Date().toISOString(), nextStatus],
     );
   } catch (err) {
     await fail(OUTCOME_AGENT_FAILED, (err as Error).message || "PostMeeting Agent 失败");

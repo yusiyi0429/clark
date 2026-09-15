@@ -35,6 +35,9 @@ import {
   PostMeetingCandidate,
   StoredTranscript,
   WarmapTranscript,
+  MeetingConfirmItemInput,
+  MeetingDismissItemInput,
+  MeetingRevokeEffectInput,
 } from "./index.js";
 
 const errorResponse = {
@@ -440,6 +443,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         PostMeetingCandidate: PostMeetingCandidate as JsonSchema,
         MeetingOutcomeState: MeetingOutcomeState as JsonSchema,
         ReplaceTranscriptRequest: ReplaceTranscriptRequest as JsonSchema,
+        MeetingConfirmItemInput: MeetingConfirmItemInput as JsonSchema,
+        MeetingDismissItemInput: MeetingDismissItemInput as JsonSchema,
+        MeetingRevokeEffectInput: MeetingRevokeEffectInput as JsonSchema,
       },
     },
   };

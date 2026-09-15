@@ -2607,6 +2607,29 @@
           "override": {
             "type": "boolean"
           },
+          "source": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "meetingId",
+              "outcomeItemId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "meeting-item",
+                "type": "string"
+              },
+              "meetingId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "outcomeItemId": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
           "createdAt": {
             "type": "string"
           },
@@ -3931,6 +3954,80 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "handoff": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "exportStatus",
+                                "exportRef",
+                                "error"
+                              ],
+                              "properties": {
+                                "exportStatus": {
+                                  "anyOf": [
+                                    {
+                                      "const": "pending_export",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "delivered",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "failed",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "exportRef": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "error": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "anchorId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       }
                     },
@@ -4038,6 +4135,33 @@
           "confirmReplace": {
             "const": true,
             "type": "boolean"
+          }
+        }
+      },
+      "MeetingConfirmItemInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "MeetingDismissItemInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "maxLength": 500,
+            "type": "string"
+          }
+        }
+      },
+      "MeetingRevokeEffectInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "maxLength": 500,
+            "type": "string"
           }
         }
       }

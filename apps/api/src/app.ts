@@ -17,6 +17,9 @@ import {
   HealthResponse,
   JoinMeetingRequest,
   LoginRequest,
+  MeetingConfirmItemInput,
+  MeetingDismissItemInput,
+  MeetingRevokeEffectInput,
   RadarScanResponse,
   ReplaceTranscriptRequest,
   RequestSupplementRequest,
@@ -57,12 +60,15 @@ import { getIssueRow, executeIssueAction, importDriIssue, listPendingRedIssueCar
 import type { ResearchService } from "./research.js";
 import {
   executeCancelMeeting,
+  executeConfirmItem,
   executeCreateMeeting,
+  executeDismissItem,
   executeJoinMeeting,
   executeReplaceTranscript,
   executeRequestSupplement,
   executeRetryOutcome,
   executeRetryPreflight,
+  executeRevokeEffect,
   executeUpdateDraft,
   getMeetingRow,
   importDriMeeting,
@@ -685,6 +691,21 @@ export async function buildApp({
       }
       if (scope.actionType === "meeting.retry_outcome") {
         return respond(reply, await executeRetryOutcome(pool, outcome, env.sessionSecret, scope, fingerprint));
+      }
+      // Ticket 11：逐项确认/忽略/撤回；itemId 由签名 actionId 携带
+      if (scope.actionType === "meeting.confirm_item") {
+        if (!Value.Check(MeetingConfirmItemInput, input ?? {})) return invalidInput(reply, MeetingConfirmItemInput, input ?? {});
+        return respond(reply, await executeConfirmItem(pool, driExporter, env.sessionSecret, scope, fingerprint));
+      }
+      if (scope.actionType === "meeting.dismiss_item") {
+        const dismissInput = input ?? {};
+        if (!Value.Check(MeetingDismissItemInput, dismissInput)) return invalidInput(reply, MeetingDismissItemInput, dismissInput);
+        return respond(reply, await executeDismissItem(pool, env.sessionSecret, scope, fingerprint, dismissInput.reason));
+      }
+      if (scope.actionType === "meeting.revoke_effect") {
+        const revokeInput = input ?? {};
+        if (!Value.Check(MeetingRevokeEffectInput, revokeInput)) return invalidInput(reply, MeetingRevokeEffectInput, revokeInput);
+        return respond(reply, await executeRevokeEffect(pool, env.sessionSecret, scope, fingerprint, revokeInput.reason));
       }
 
       if (scope.actionType === "monthly-plan.update_draft") {
