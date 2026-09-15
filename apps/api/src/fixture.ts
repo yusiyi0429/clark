@@ -9,7 +9,7 @@ export type FixtureHomeRow = {
   notice_fingerprint: string | null;
 };
 
-type Query = (sql: string, params?: unknown[]) => QueryResult;
+type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
 /** GET 无副作用：只读。 */
 export async function getFixtureHome(q: Query): Promise<FixtureHomeRow> {
@@ -42,7 +42,7 @@ export function projectHomeCard(row: FixtureHomeRow, secret: string): TCard {
         dismissed: row.notice_dismissed,
       },
     },
-    navigation: [{ href: "/radar", label: "Radar" }],
+    navigation: [{ href: "/issues/fixture-001", label: "查看示例 Issue" }],
     conversation: { scope: "global" },
     actions: row.notice_dismissed ? [] : [{ actionId: signActionId(secret, scope), ...{ actionType: scope.actionType, label: "知道了" } }],
   };

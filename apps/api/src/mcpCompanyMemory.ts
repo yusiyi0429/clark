@@ -27,9 +27,7 @@ function tool(name: string, description: string, inputSchema: object, extra: Par
  * 每个请求一个 MCP session（官方无状态模式）：握手、协议协商与 JSON-RPC 全部交给 SDK，
  * 工具层只暴露四个只读方法，存储细节封闭在 CompanyMemoryRepository 后面。
  */
-export async function createCompanyMemoryMcpSession(
-  repo: CompanyMemoryRepository,
-): Promise<{ server: Server; transport: StreamableHTTPServerTransport }> {
+export function createCompanyMemoryMcpServer(repo: CompanyMemoryRepository): Server {
   const server = new Server({ name: "company-memory", version: "0.1.0" }, { capabilities: { tools: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -74,6 +72,13 @@ export async function createCompanyMemoryMcpSession(
     }
   });
 
+  return server;
+}
+
+export async function createCompanyMemoryMcpSession(
+  repo: CompanyMemoryRepository,
+): Promise<{ server: Server; transport: StreamableHTTPServerTransport }> {
+  const server = createCompanyMemoryMcpServer(repo);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

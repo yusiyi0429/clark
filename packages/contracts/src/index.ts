@@ -4,3 +4,4 @@ export * from "./auth.js";
 export * from "./actions.js";
 export * from "./health.js";
 export * from "./mcp.js";
+export * from "./conversations.js";

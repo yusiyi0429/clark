@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildOpenApiDocument } from "../src/openapi.js";
-import { ApiError, ActionDescriptor, Card } from "../src/index.js";
+import { ApiError, ActionDescriptor, Card, ConversationMessageRequest, ConversationScope, ConversationSseEvent } from "../src/index.js";
 import { Value } from "@sinclair/typebox/value";
 
 describe("openapi contract", () => {
@@ -14,7 +14,9 @@ describe("openapi contract", () => {
         "/api/auth/logout",
         "/api/auth/session",
         "/api/cards/home",
+        "/api/cards/issues/{id}",
         "/api/actions/execute",
+        "/api/conversations/{scope}/messages",
         "/healthz",
       ]),
     );
@@ -56,6 +58,36 @@ describe("card envelope schema", () => {
     };
     expect(Value.Check(Card, card)).toBe(true);
     expect(Value.Check(ActionDescriptor, card.actions[0])).toBe(true);
+  });
+});
+
+describe("conversation public contract", () => {
+  it("accepts stable global/object scopes and trusted-reference input only", () => {
+    expect(Value.Check(ConversationScope, "global")).toBe(true);
+    for (const type of ["issue", "signal", "meeting", "monthly-plan"]) {
+      expect(Value.Check(ConversationScope, `${type}:fixture-001`)).toBe(true);
+    }
+    expect(Value.Check(ConversationScope, "home:default")).toBe(false);
+    expect(Value.Check(ConversationMessageRequest, {
+      message: "比较这些依据",
+      references: [{ cardId: "home:default", version: 1 }],
+    })).toBe(true);
+    expect(Value.Check(ConversationMessageRequest, {
+      message: "伪造",
+      references: [{ cardId: "home:default", version: 1, payload: { trusted: false } }],
+    })).toBe(false);
+  });
+
+  it("defines message, tool lifecycle, usage, error and done SSE events", () => {
+    const common = { runId: "run-1", scope: "global", sequence: 1 };
+    for (const event of [
+      { ...common, type: "message", delta: "回答" },
+      { ...common, type: "tool", phase: "started", toolCallId: "tool-1", name: "search_people" },
+      { ...common, type: "tool", phase: "completed", toolCallId: "tool-1", name: "search_people", isError: false },
+      { ...common, type: "usage", input: 3, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 5 },
+      { ...common, type: "error", code: "RUNTIME_FAILED", message: "模型失败" },
+      { ...common, type: "done", status: "completed" },
+    ]) expect(Value.Check(ConversationSseEvent, event)).toBe(true);
   });
 });
 

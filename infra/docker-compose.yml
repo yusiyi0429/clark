@@ -32,6 +32,9 @@ services:
       # 单一来源：backend/CompanyMemory.md 目录 + 真实人员名单，均只读挂载；生产可换 host 路径并同步覆盖
       COMPANY_MEMORY_SEED_DIR: /repo/backend
       COMPANY_PEOPLE_SEED: /repo/seed/company-people.json
+      PI_BASE_URL: ${PI_BASE_URL:?PI_BASE_URL required}
+      PI_API_KEY: ${PI_API_KEY:?PI_API_KEY required}
+      LIGHT_MODEL: ${LIGHT_MODEL:?LIGHT_MODEL required}
       BUILD_SHA: ${BUILD_SHA:-dev}
     volumes:
       - ../backend:/repo/backend:ro

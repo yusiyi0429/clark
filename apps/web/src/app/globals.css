@@ -59,3 +59,40 @@ form {
 [role="alert"] {
   color: #ff9b9b;
 }
+
+.conversation-dock {
+  margin-top: 24px;
+}
+
+.conversation-history {
+  min-height: 120px;
+  max-height: 280px;
+  overflow: auto;
+  border-block: 1px solid #2a323b;
+}
+
+.reference-tray label {
+  margin: 10px 0;
+}
+
+.reference-tray input {
+  display: inline;
+  margin: 0 8px 0 0;
+}
+
+.conversation-input {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.conversation-input textarea {
+  min-height: 64px;
+  flex: 1;
+  resize: vertical;
+  border: 1px solid #3b4653;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #171d24;
+  color: inherit;
+}

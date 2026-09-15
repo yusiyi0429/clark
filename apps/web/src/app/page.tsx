@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { serverApi } from "@/lib/api/client";
 import { renderCard } from "@/cards/registry";
+import { ConversationDock } from "@/conversation/ConversationDock";
 
 export default async function HomePage() {
   const cookieStore = await cookies();
@@ -38,6 +39,7 @@ export default async function HomePage() {
       {(data?.cards ?? []).map((card) => (
         <div key={card.id}>{renderCard(card)}</div>
       ))}
+      <ConversationDock scope="global" availableCards={data?.cards ?? []} />
     </main>
   );
 }

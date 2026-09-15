@@ -18,6 +18,9 @@ const env: AppEnv = {
   mcpServiceToken: requiredEnv("COMPANY_MEMORY_MCP_TOKEN"),
   companyMemorySeedDir: requiredEnv("COMPANY_MEMORY_SEED_DIR"),
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
+  piBaseUrl: requiredEnv("PI_BASE_URL"),
+  piApiKey: requiredEnv("PI_API_KEY"),
+  lightModel: requiredEnv("LIGHT_MODEL"),
   buildSha: process.env.BUILD_SHA ?? "dev",
 };
 
