@@ -26,7 +26,7 @@ Spec: `spec.md`
 | 04 | 跑通 global 与对象 Conversation | 02, 03 | resolved |
 | 05 | 补齐 Search、compaction 与 Runtime 恢复 | 04 | resolved |
 | 06 | 从真实来源生成可管理的 Signal | 02, 05 | resolved |
-| 07 | 自动升级 Issue 并接收 DRI Issue | 03, 04, 05, 06 | ready-for-agent |
+| 07 | 自动升级 Issue 并接收 DRI Issue | 03, 04, 05, 06 | resolved |
 | 08 | 完成 Issue 预研与直接决定闭环 | 07 | ready-for-agent |
 | 09 | 完成 Meeting 创建与会前准备 | 03, 05, 07 | ready-for-agent |
 | 10 | 导入 Transcript 并抽取 MeetingOutcome | 09 | ready-for-agent |
@@ -41,9 +41,10 @@ Spec: `spec.md`
 
 ## Current frontier
 
-- 07 自动升级 Issue 并接收 DRI Issue
+- 08 完成 Issue 预研与直接决定闭环
+- 09 完成 Meeting 创建与会前准备
 
-其他 ticket 必须等待其真实 blocker resolved。
+08 与 09 可以并行；其他 ticket 必须等待其真实 blocker resolved。
 
 ## Results
 
@@ -53,5 +54,6 @@ Spec: `spec.md`
 - 04 resolved：提交 `9826f0d`，跑通鉴权 Conversation HTTP/SSE、scope 隔离、可信 Card 快照、PostgreSQL 原始消息/runtime entries 恢复和受控 Pi + 只读 MCP；39 项测试、全 workspace typecheck/build 与双轴 review 通过。
 - 05 resolved：提交 `92adfdb`，补齐自主 Search、180 秒/8 次保护、Pi compaction、entries 损坏重建、严格 Candidate Tool 与 AgentRun。Herdr review 的 5 项有效发现均经 red→green 修复；contracts 9 + API 46 测试、typecheck/build 通过。
 - 06 resolved：提交 `cc2c2a5`，跑通 scheduled/manual Radar、Web/公众号来源规范化、严格候选到 Signal、独立 read/saved/dismissed 状态和真实 Card。Herdr review 修复全部有效发现；API 60 + contracts 11 测试、typecheck/build 通过。
+- 07 resolved：提交 `77e7a48`，实现确定性 Signal promotion、Red deadline quote/location 门槛、DRI Issue import、pending research 和启动丢失恢复。Herdr reviewer 三轮收口无 blocking；contracts 12 + API 85 测试、typecheck/build 通过。
 
 ## Comments
