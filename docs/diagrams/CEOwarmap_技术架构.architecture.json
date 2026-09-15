@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "CEO WarMap 技术架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1380, 540],
+    "views": [
+      { "id": "ceo_path", "label": "CEO 请求路径", "focus": ["ceo", "edge", "web", "api", "postgres"], "note": "Caddy 终止 TLS 并分流 Web、Card、Action 与 Conversation。" },
+      { "id": "agent_memory", "label": "Pi 与四层记忆", "focus": ["api", "piRuntime", "postgres", "companyMcp", "companyStore"], "note": "Pi 只持有运行和压缩执行态，业务对象与公司认知保持独立。" },
+      { "id": "external_edges", "label": "外部输入与取证", "focus": ["externalInput", "piRuntime", "externalSources", "modelEndpoint", "langsmith"], "note": "DRI、逐字稿、搜索、公众号和模型都经过明确的只读或导入边界。" }
+    ]
+  },
+  "components": [
+    { "id": "externalInput", "type": "external", "label": "外部结构化输入", "sublabel": "DRI JSON · Transcript", "pos": [50, 60], "size": [170, 60] },
+    { "id": "edge", "type": "security", "label": "Caddy Edge", "sublabel": "HTTPS · TLS · Route", "pos": [300, 60], "size": [160, 60], "tag": "唯一公网入口" },
+    { "id": "ceo", "type": "external", "label": "CEO", "sublabel": "桌面浏览器", "pos": [50, 165], "size": [130, 58] },
+    { "id": "web", "type": "frontend", "label": "apps/web", "sublabel": "Next.js · 类型化 Card", "pos": [300, 165], "size": [160, 58], "tag": "像素级重构" },
+    { "id": "api", "type": "backend", "label": "apps/api", "sublabel": "Fastify · TypeBox", "pos": [620, 165], "size": [170, 58], "tag": "Auth + Scheduler" },
+    { "id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "业务事实 + Pi entries", "pos": [970, 165], "size": [180, 58] },
+    { "id": "piRuntime", "type": "backend", "label": "Pi SDK Runtime", "sublabel": "Loop · Tool · Compaction", "pos": [620, 300], "size": [170, 62], "tag": "无 coding tools" },
+    { "id": "companyMcp", "type": "backend", "label": "CompanyMemory MCP", "sublabel": "只读目录与段落", "pos": [920, 300], "size": [170, 62] },
+    { "id": "companyStore", "type": "database", "label": "CompanyMemory", "sublabel": "Markdown → Database", "pos": [1190, 300], "size": [150, 62] },
+    { "id": "modelEndpoint", "type": "cloud", "label": "模型端点", "sublabel": "OpenAI-compatible Responses", "pos": [300, 435], "size": [180, 62] },
+    { "id": "externalSources", "type": "external", "label": "Search／公众号", "sublabel": "真实外部来源", "pos": [620, 435], "size": [170, 62] },
+    { "id": "langsmith", "type": "cloud", "label": "LangSmith", "sublabel": "应用级 run／tool trace", "pos": [970, 435], "size": [180, 62] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "单机 Docker Compose", "wraps": ["edge", "web", "api", "postgres", "piRuntime", "companyMcp", "companyStore"], "pad": 24 },
+    { "kind": "security-group", "label": "HTTPS／CEO Session／Service Token", "wraps": ["edge", "web", "api", "companyMcp"], "pad": 12 }
+  ],
+  "connections": [
+    { "id": "ceoEdge", "from": "ceo", "to": "edge", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "inputEdge", "from": "externalInput", "to": "edge", "label": "Service JSON", "variant": "security" },
+    { "id": "edgeWeb", "from": "edge", "to": "web", "label": "/", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "route": "straight", "labelAt": [380, 134] },
+    { "id": "edgeApi", "from": "edge", "to": "api", "label": "/api · /mcp · SSE", "variant": "security" },
+    { "id": "apiDb", "from": "api", "to": "postgres", "label": "对象 · 消息 · runtime JSONB", "variant": "emphasis" },
+    { "id": "apiPi", "from": "api", "to": "piRuntime", "label": "Prompt + 当前 scope", "variant": "emphasis", "labelAt": [705, 243] },
+    { "id": "piMcp", "from": "piRuntime", "to": "companyMcp", "label": "只读 MCP Tool", "variant": "default" },
+    { "id": "mcpStore", "from": "companyMcp", "to": "companyStore", "label": "目录 · 段落 · 人员", "variant": "default" },
+    { "id": "piModel", "from": "piRuntime", "to": "modelEndpoint", "label": "Responses API", "variant": "default" },
+    { "id": "piSources", "from": "piRuntime", "to": "externalSources", "label": "web_search · 8 次异常保护", "variant": "default", "labelAt": [705, 378] },
+    { "id": "piTrace", "from": "piRuntime", "to": "langsmith", "label": "输入 · 输出 · Tool 事件", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "入口与前后端边界", "items": ["Caddy 是唯一公网入口和 TLS 终止点", "Web 只渲染 Card 并提交 opaque Action", "API 与 PostgreSQL 拥有业务状态和事实"] },
+    { "dot": "violet", "title": "四层记忆", "items": ["Pi 管当前 loop 与压缩执行态", "runtime entries 以 JSONB 恢复", "CompanyMemory 经只读 MCP 按需取段"] },
+    { "dot": "emerald", "title": "最小生产形态", "items": ["单机 Docker Compose", "无 Redis、队列和对象存储", "真实 Search 与公众号渠道是 Radar 上线门槛"] }
+  ]
+}

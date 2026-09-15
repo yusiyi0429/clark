@@ -1,0 +1,13 @@
+# 只排除真正不需要的。注意：src/app/fonts/*.woff2 必须留在上下文里，
+# 缺了会导致 next build 以一条看不出原因的 Turbopack panic 失败。
+node_modules
+.next
+.git
+.github
+*.tgz
+demo/audio
+.env
+.env.*
+!.env.example
+npm-debug.log*
+tsconfig.tsbuildinfo

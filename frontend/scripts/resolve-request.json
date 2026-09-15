@@ -1,0 +1,8 @@
+{
+  "enterprise_id": "tokenking",
+  "organization_scope": [],
+  "purpose": "decision_preparation",
+  "query": "是否在本季度同时完成产品 1.0 上线和灯塔项目交付",
+  "as_of": "2026-08-13T23:59:59+08:00",
+  "actor_id": "ceo-agent"
+}

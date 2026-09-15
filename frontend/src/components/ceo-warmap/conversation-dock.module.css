@@ -1,0 +1,205 @@
+.layer {
+  position: fixed;
+  z-index: 1000;
+  left: calc(35% + 6px);
+  bottom: 30px;
+  width: min(620px, calc(70vw - 62px));
+  height: 48px;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  font-family: inherit;
+}
+
+.dock {
+  width: 292px;
+  max-width: 100%;
+  height: 48px;
+  flex: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid rgba(255,255,255,.88);
+  border-radius: 26px;
+  background: rgba(248,248,250,.97);
+  box-shadow: 0 4px 18px #1d1d1f12, 0 0 0 0.5px #1d1d1f12, inset 0 1px 0 #fff;
+  pointer-events: auto;
+  transition: height 260ms cubic-bezier(.22,1,.36,1), width 320ms cubic-bezier(.22,1,.36,1), background-color 260ms ease, color 220ms ease, box-shadow 260ms ease, border-color 260ms ease;
+}
+
+.typing { width: 560px; position:relative; }
+.composerExpanded { display:block; }
+.composerExpanded .content { width:100%; flex:none; }
+.dock .iconButton {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #737780;
+  flex: none;
+  display: grid;
+  place-items: center;
+  transition: background 180ms ease, color 180ms ease, transform 180ms ease;
+}
+.dock .iconButton:hover { background: #1d1d1f08; color: #202125; }
+.dock .iconButton:active { transform: scale(.93); }
+.dock .iconButton[aria-pressed=true] { color: #596574; background: #dbe1e766; }
+.dock .iconButton:focus-visible,.dock .voiceButton:focus-visible,.dock .sendButton:focus-visible { outline: 2px solid #007aff88; outline-offset: 2px; }
+.leadingButton { overflow:hidden; }
+.leadingIcon { position:absolute; inset:0; display:grid; place-items:center; transition:opacity 180ms ease,transform 320ms cubic-bezier(.22,1,.36,1); }
+.historyIcon { opacity:1; transform:scale(1) rotate(0); }
+.volumeIcon { opacity:0; transform:scale(.65) rotate(-10deg); }
+.leadingButton[data-voice-active=true] .historyIcon { opacity:0; transform:scale(.65) rotate(10deg); }
+.leadingButton[data-voice-active=true] .volumeIcon { opacity:1; transform:scale(1) rotate(0); }
+.dock .modeButton { background: #ffffff95; box-shadow: 0 1px 4px #00000006; }
+.modeButton[data-listening=true]::after { content:''; position:absolute; right:6px; top:6px; width:5px; height:5px; background:#007aff; border:2px solid #f3f5f7; border-radius:50%; }
+.modeIcon { position:absolute; display:grid; place-items:center; transition:opacity 200ms ease, transform 320ms cubic-bezier(.22,1,.36,1); }
+.keyboardIcon { opacity:1; transform:scale(1); }
+.microphoneIcon { opacity:0; transform:scale(.65) rotate(-12deg); }
+.typing .keyboardIcon { opacity:0; transform:scale(.65) rotate(12deg); }
+.typing .microphoneIcon { opacity:1; transform:scale(1); }
+
+/* Both modes occupy the exact same plane; neither adds a row or mounts late. */
+.content { position:relative; height:36px; min-width:0; flex:1; transition:height 220ms cubic-bezier(.22,1,.36,1); }
+.voiceLayer,.textLayer { position:absolute; inset:0; transition:opacity 180ms ease, transform 360ms cubic-bezier(.22,1,.36,1), filter 240ms ease; }
+.voiceLayer { opacity:1; transform:scale(1); filter:blur(0); }
+.textLayer { opacity:0; transform:translateX(10px) scale(.98); filter:blur(3px); pointer-events:none; }
+.typing .voiceLayer { opacity:0; transform:scale(.96); filter:blur(3px); pointer-events:none; }
+.typing .textLayer { opacity:1; transform:translateX(0) scale(1); filter:blur(0); pointer-events:auto; }
+.dock .voiceButton { width:100%; height:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:0 8px; border:0; border-radius:22px; background:transparent; color:#1d1d1f; font-size:14px; font-weight:500; letter-spacing:.15px; white-space:nowrap; }
+.dock .voiceButton:hover { background:#ffffff55; }
+.dock .voiceButton:disabled { opacity:.65; }
+.wave { display:flex; align-items:center; justify-content:center; gap:2.5px; width:20px; height:22px; color:#929aa5; }
+.wave i { width:2px; height:6px; border-radius:3px; background:currentColor; transition:color 250ms ease; }
+.wave i:nth-child(2),.wave i:nth-child(4) { height:12px; }
+.wave i:nth-child(3) { height:18px; }
+.live .wave { color:#007aff; }
+.live { box-shadow:0 5px 22px #1b233014, 0 0 24px #76baff12, inset 0 1px #fff; }
+.live .wave i { animation:listen 1300ms ease-in-out infinite; }
+.live .wave i:nth-child(2) { animation-delay:-400ms; }
+.live .wave i:nth-child(3) { animation-delay:-850ms; }
+.live .wave i:nth-child(4) { animation-delay:-250ms; }
+.live .wave i:nth-child(5) { animation-delay:-700ms; }
+.thinking .wave { color:#7895b8; }
+.thinking .wave i { animation:listen 1900ms ease-in-out infinite; }
+.dock .inputForm { display:flex; align-items:center; gap:8px; width:100%; height:100%; }
+.dock .inputForm textarea { min-width:0; flex:1; width:100%; height:100%; max-height:196px; padding:7px; border:0; border-radius:0; background:transparent; color:#282c32; font-family:inherit; font-size:14px; line-height:20px; caret-color:#007aff; resize:none; overflow-y:auto; scrollbar-width:none; transition:color 220ms ease; }
+.composerExpanded .inputForm { position:relative; display:block; }
+.composerExpanded .inputForm textarea { display:block; padding:9px 10px 44px; }
+.dock .inputForm textarea::-webkit-scrollbar { display:none; }
+.dock .inputForm textarea::placeholder { color:#9197a0; font-size:14px; }
+.dock .inputForm textarea:focus,.dock .inputForm textarea:focus-visible { outline:none; box-shadow:none; }
+.dock .sendButton { width:28px; height:28px; border-radius:50%; border:1px solid #006de5; background:#007aff; color:#fff; display:grid; place-items:center; flex:none; padding:0; opacity:1; box-shadow:0 2px 7px #007aff38; transition:background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 160ms ease; }
+.dock .sendButton:disabled { background:#e0e4e9; border-color:#d8dde4; color:#939ba6; box-shadow:none; opacity:1; cursor:default; }
+.dock .sendButton:not(:disabled):hover { background:#006de5; }
+.dock .sendButton:not(:disabled):active { transform:scale(.91); }
+
+.layer .caption { position:absolute; bottom:calc(100% + 9px); left:50%; transform:translateX(-50%); width:max-content; max-width:100%; padding:6px 12px; border:1px solid #ffffff25; border-radius:20px; background:#242831e8; color:#f4f5f7; font-size:12px; font-weight:400; line-height:18px; box-sizing:border-box; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); box-shadow:0 2px 10px #00000004; pointer-events:auto; animation:captionIn 220ms ease; }
+.caption span { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.caption:hover { color:#fff; background:#1d2129f5; }
+@keyframes listen { 0%,100% { transform:scaleY(.55); opacity:.65; } 50% { transform:scaleY(1); opacity:1; } }
+@keyframes captionIn { from { opacity:0; } to { opacity:1; } }
+@media(min-width:1800px) { .dock { width:320px; } .typing { width:600px; } }
+@media(max-width:1250px) { .layer { width:calc(70vw - 40px); } }
+@media(max-width:1000px) { .layer { left:calc((100% - 290px)/2); width:calc(100% - 324px); } .dock { width:280px; } .typing { width:100%; } }
+@media(max-width:690px) { .layer { left:50%; width:calc(100% - 30px); bottom:max(17px,env(safe-area-inset-bottom)); height:48px; } .dock { width:280px; height:48px; padding:5px; } .typing { width:100%; } .dock .voiceButton { font-size:14px; } .dock .inputForm textarea { font-size:16px; } .dock .inputForm textarea::placeholder { font-size:12px; } .layer .caption { font-size:12px; } }
+@media(prefers-reduced-motion:reduce) { .layer * { animation:none!important; transition:none!important; } }
+
+.dock .iconButton svg { width:18px; height:18px; }
+.dock .sendButton svg { width:17px; height:17px; }
+
+.layer{left:calc((100vw + var(--main-start) - var(--shell-edge))/2);width:min(620px,calc(100vw - var(--main-start) - var(--shell-edge) - 32px))}
+@media(max-width:1000px){.layer .dock{max-width:100%}}
+@media(max-width:690px){.layer{left:50%;width:calc(100% - 30px)}}
+
+@media(prefers-reduced-transparency:reduce){.dock{background:#f8f8fa;backdrop-filter:none;-webkit-backdrop-filter:none}.layer .caption{background:#242831;backdrop-filter:none;-webkit-backdrop-filter:none}}
+@media(prefers-contrast:more){.dock{border-color:#8e8e93}.dock .iconButton{color:#454549}.layer .caption{color:#fff;background:#17191f;border-color:#8e8e93}.dock .inputForm textarea::placeholder{color:#63636a}}
+
+.layer{transition:left 360ms cubic-bezier(.2,.8,.2,1),width 360ms cubic-bezier(.2,.8,.2,1)}
+.layer[data-moving=true]{transition:none}
+.layer[data-issue-context=true]{left:calc(100vw - var(--shell-edge) - var(--issue-chat-width) / 2);width:calc(var(--issue-chat-width) - 30px)}
+.layer[data-issue-context=true] .typing{width:100%}
+.contextLabel{position:absolute;bottom:calc(100% + 8px);max-width:100%;font-size:11px;line-height:18px;color:#77777c;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;pointer-events:none}
+.referenceContext{display:flex;align-items:center;gap:8px;width:100%;overflow:visible}
+.referenceContext>span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis}
+.referenceContext>button{display:flex;align-items:center;gap:3px;flex:none;margin-left:auto;padding:3px 5px;border:0;border-radius:6px;background:transparent;color:#4b6e99;font-size:11px;line-height:18px;pointer-events:auto;transition:background 160ms ease,color 160ms ease}
+.referenceContext>button:hover,.referenceContext>button:focus-visible{background:#007aff0a;color:#006edc}
+.layer[data-issue-closing=true],.layer[data-issue-closing=true] .dock{transition-duration:250ms;transition-timing-function:cubic-bezier(.4,0,.2,1)}
+@media(max-width:690px){.layer[data-issue-context=true]{left:calc((100vw + var(--main-start) - var(--shell-edge))/2);width:min(560px,calc(100vw - var(--main-start) - var(--shell-edge) - 30px))}}
+@media(max-width:690px){.layer[data-issue-context=true]{left:50%;width:calc(100% - 30px)}}
+@media(prefers-reduced-motion:reduce){.layer{transition:none}}
+
+.layer{align-items:flex-end}
+.layer[data-has-references=true] .dock{position:relative;width:100%;height:84px;padding-top:39px;border-radius:23px;box-shadow:0 3px 18px #2437510c,inset 0 1px #fff}
+
+/* The global composer belongs to the dark conversation surface while history is open. */
+.layer[data-history-open=true] .dock {
+  background: rgba(49,49,52,.98);
+  border-color: rgba(255,255,255,.11);
+  color: #f5f5f7;
+  box-shadow: 0 8px 28px rgba(0,0,0,.2), 0 0 0 .5px rgba(255,255,255,.06), inset 0 1px rgba(255,255,255,.08);
+}
+
+
+.layer[data-history-open=true] .dock .iconButton { color:#b8bec7; }
+.layer[data-history-open=true] .dock .iconButton:hover { color:#fff; background:rgba(255,255,255,.08); }
+.layer[data-history-open=true] .dock .iconButton[aria-pressed=true] { color:#e5e5ea; background:rgba(255,255,255,.11); }
+.layer[data-history-open=true] .dock .modeButton { background:rgba(255,255,255,.07); box-shadow:inset 0 1px rgba(255,255,255,.05); }
+.layer[data-history-open=true] .dock .voiceButton { color:#f5f5f7; }
+.layer[data-history-open=true] .dock .voiceButton:hover { background:rgba(255,255,255,.05); }
+.layer[data-history-open=true] .dock .inputForm textarea { color:#f5f5f7; }
+.layer[data-history-open=true] .dock .inputForm textarea::placeholder { color:#98989f; }
+.layer[data-history-open=true] .dock .sendButton:disabled { background:#48484c; color:#85858c; }
+.layer[data-history-open=true] .dock .sendButton:not(:disabled) { background:#0a84ff; color:#fff; }
+
+/* In the multiline composer, controls form one stable bottom toolbar. */
+.dock.composerExpanded .leadingButton { position:absolute; left:6px; bottom:6px; z-index:3; }
+.dock.composerExpanded .modeButton { position:absolute; right:6px; bottom:6px; z-index:3; }
+.dock.composerExpanded .sendButton { position:absolute; right:42px; bottom:2px; z-index:3; width:34px; height:34px; }
+.dock.composerExpanded .inputForm::after {
+  content:'';
+  position:absolute;
+  z-index:1;
+  left:0;
+  right:0;
+  bottom:0;
+  height:56px;
+  border-radius:0 0 22px 22px;
+  background:linear-gradient(180deg,rgba(248,248,250,0) 0%,rgba(248,248,250,.72) 34%,rgba(248,248,250,.96) 62%,rgba(248,248,250,.98) 100%);
+  pointer-events:none;
+}
+.layer[data-history-open=true] .dock.composerExpanded .inputForm::after {
+  background:linear-gradient(180deg,rgba(49,49,52,0) 0%,rgba(49,49,52,.74) 34%,rgba(49,49,52,.96) 62%,rgba(49,49,52,.99) 100%);
+}
+
+/* Let scope labels follow the actual composer height, including multiline drafts. */
+.layer { height:auto; min-height:48px; }
+
+.layer[data-moving=true] .dock{transition-property:background-color,color,box-shadow,border-color;backdrop-filter:none;-webkit-backdrop-filter:none;background:#f8f8faf5}
+.layer[data-moving=true][data-history-open=true] .dock{background:#313134f5}
+
+/* 一次输入或一次回答完整占据一个自适应气泡，不再用省略号截断。 */
+.layer .caption{
+  width:max-content;
+  min-width:min(220px,100%);
+  max-width:min(720px,100%);
+  max-height:min(58dvh,520px);
+  padding:10px 14px;
+  border-radius:18px;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  text-align:left;
+  font-size:13px;
+  line-height:1.65;
+}
+.caption span{white-space:pre-wrap;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.layer[data-scoped-context=true] .caption{bottom:calc(100% + 34px)}
+@media(max-width:690px){.layer .caption{max-height:55dvh;padding:9px 12px;font-size:13px;line-height:1.6}}

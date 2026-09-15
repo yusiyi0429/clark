@@ -1,0 +1,136 @@
+# TKOS 前端 · 本地容器验证
+#
+# 只构建本仓库。本体 Runtime API 是外部依赖（由 Ontology 域部署维护），
+# 这里只通过 TKOS_ONTOLOGY_BASE_URL 指向它，不在这里 build——那份代码
+# 不在本仓库里，用相对路径去构建父目录的兄弟项目会在任何构建机上断掉。
+#
+#   cp .env.docker.example .env.docker      # 填密钥，.gitignore 已忽略 .env*
+#   docker compose --env-file .env.docker up -d --build
+#   curl localhost:3000/api/health
+#   docker compose down
+#
+# 部署到火山云时这份文件不参与——那边用镜像 + 平台自己的编排。
+# 它在这里的作用是：本机验证镜像，以及作为环境变量清单的单一来源。
+
+name: tkos-frontend
+
+services:
+  frontend:
+    build:
+      context: .
+      args:
+        # 境外网络构建时覆盖为 https://registry.npmjs.org
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+    image: tkos-frontend:${TAG:-dev}
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      TKOS_CODE_SHA: ${TKOS_CODE_SHA:-dev}
+
+      # ── 本体 Runtime API（外部依赖）──
+      TKOS_ONTOLOGY_BASE_URL: ${TKOS_ONTOLOGY_BASE_URL:-http://115.190.213.44:8000}
+      TKOS_API_KEY: ${TKOS_API_KEY:-}
+      # 默认关。本体数据集与前端种子当前对不上，打开会稳定 no_match。
+      TKOS_ONTOLOGY_CONTEXT: ${TKOS_ONTOLOGY_CONTEXT:-0}
+      TKOS_ONTOLOGY_TIMEOUT_MS: ${TKOS_ONTOLOGY_TIMEOUT_MS:-25000}
+      TKOS_ENTERPRISE_ID: ${TKOS_ENTERPRISE_ID:-tokenking}
+
+      # ── 对话模型 ──
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      # 方舟这边只剩模型广场一个出口（ARK_API_KEY + /api/v3），出 pro / flash / seed。
+      # 套餐那个出口（ARK_AGENT_API_KEY + /api/plan/v3）2026-08-25 起没有模型走它，删掉了：
+      # 配着却没有任何代码去读的 key 是个陷阱。
+      ARK_API_KEY: ${ARK_API_KEY:-}
+      ARK_BASE_URL: ${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}
+      # 模型 id 覆盖，不填就用注册表默认值。
+      ARK_MODEL_DEEPSEEK_PRO: ${ARK_MODEL_DEEPSEEK_PRO:-}
+      ARK_MODEL_DEEPSEEK_FLASH: ${ARK_MODEL_DEEPSEEK_FLASH:-}
+      # 深研第四条链路（屏幕上叫「豆包」）就在上面那把 ARK_API_KEY 上，不用配新 key；
+      # 这一行只是 id 覆盖 —— 账号里开通之后可能要换成推理接入点 ep-xxxxxxxx。
+      ARK_MODEL_DOUBAO_SEED: ${ARK_MODEL_DOUBAO_SEED:-}
+      DEEPSEEK_MODEL_PRO: ${DEEPSEEK_MODEL_PRO:-deepseek-v4-pro}
+
+      # ── 深研另外两条链路：Bedrock 上的 Claude Opus 5（ALT）与 GPT-5.6（SYNTH）──
+      # **一把 key 撑两条**（同一个账号同一个区域的两个模型，只是出口方言不同），所以它
+      # 缺了是一次少两栏，判断板的主源同时落回 DeepSeek 那一条。区域是拼进域名的，一处改
+      # 两个口一起走；两个口的整条地址覆盖是两个变量 —— 共用一个的话，配一条带 /openai/v1
+      # 的网关地址会把 Claude 那一条一起打歪。
+      WANGSU_API_KEY: ${WANGSU_API_KEY:-}
+      WANGSU_BASE_URL: ${WANGSU_BASE_URL:-}
+      WANGSU_MODEL_GPT56: ${WANGSU_MODEL_GPT56:-}
+      WANGSU_MODEL_OPUS5: ${WANGSU_MODEL_OPUS5:-}
+
+      # live 才接真模型跑 A1a；MOCK=1 是罐头答案（不出网），上线必须留空。
+      TKOS_MODE: ${TKOS_MODE:-live}
+      TKOS_MODEL_MOCK: ${TKOS_MODEL_MOCK:-}
+
+      # 深研走哪条链。留空 = 走那条七步链，也就是默认。这一行的用处只是把 0 送进去：
+      # 容器里的环境是这张表列出来的，没列的变量在里面压根不存在 —— 少了它，
+      # 想拿四链路那一支对比的人会在宿主机上写 TKOS_DR_V2=0 然后发现毫无变化。
+      TKOS_DR_V2: ${TKOS_DR_V2:-}
+
+      # 深研按区块交（有版式的那一份）。默认开：关着跑出来是纯文本报告，而屏幕上没有
+      # 一处说这一份是旧形态 —— 只在这一行漏配时才发现，等于把整个版式白做一遍。
+      TKOS_DR_BLOCKS: ${TKOS_DR_BLOCKS:-1}
+
+      # ── GraphKnowledge（M7 只读本体服务）──
+      # VERIFY_TLS=0 = 这条链路不防中间人。图服务现在是 IP + 自签证书，只能先关；
+      # 换域名 + 正式证书之后删掉这一行。/api/health 会把它报出来。
+      TKOS_GRAPHKNOWLEDGE_BASE_URL: ${TKOS_GRAPHKNOWLEDGE_BASE_URL:-}
+      TKOS_GRAPHKNOWLEDGE_AUTH: ${TKOS_GRAPHKNOWLEDGE_AUTH:-}
+      TKOS_GRAPHKNOWLEDGE_VERIFY_TLS: ${TKOS_GRAPHKNOWLEDGE_VERIFY_TLS:-0}
+      TKOS_GRAPHKNOWLEDGE_VIEWER: ${TKOS_GRAPHKNOWLEDGE_VIEWER:-PSN-01}
+
+      # ── 访问门（缺任何一项 = 谁都进不去，/access 会直说）──
+      TKOS_ACCESS_PASSWORD: ${TKOS_ACCESS_PASSWORD:-}
+      TKOS_ACCESS_SECRET: ${TKOS_ACCESS_SECRET:-}
+
+      OPERATOR_TOKEN: ${OPERATOR_TOKEN:-}
+
+      # ── 外部检索：**两条路共用**这几家 ──
+      # 一条是「主动开始扫描」（src/lib/scan/run.ts，按靶点策略拟检索式去搜），
+      # 一条是深研自己的取证（src/lib/research/）。两条都**在这个容器里跑**，所以这里
+      # 漏一行，扫描那一轮直接失败、容器里的深研一轮都不联网 —— 而它不
+      # 这几项**在这个容器里跑**，所以这里漏一行，容器里的深研就一轮都不联网 —— 而它不
+      # 报错：报告照实写「本轮未联网核验」，从目录上看跟联网跑出来的那份一样。
+      # PROVIDER 可以填一串（`bocha,doubao` = 一轮里同时用两家）；key 一家一把。
+      TKOS_SEARCH_PROVIDER: ${TKOS_SEARCH_PROVIDER:-none}
+      TKOS_SEARCH_BOCHA_KEY: ${TKOS_SEARCH_BOCHA_KEY:-}
+      TKOS_SEARCH_DOUBAO_KEY: ${TKOS_SEARCH_DOUBAO_KEY:-}
+
+      # ── 会议录音 → 逐字稿 ──
+      # 缺一样整条不通而且不报错（在后台某一步倒掉），所以 /api/health 的 recording
+      # 把三件前提分开报。ffmpeg 由镜像装（见 Dockerfile），这里只有凭据。
+      # ENDPOINT 不带协议前缀；两代控制台的 ASR 凭据形状不同，配一种即可。
+      TOS_ACCESS_KEY: ${TOS_ACCESS_KEY:-}
+      TOS_SECRET_KEY: ${TOS_SECRET_KEY:-}
+      TOS_ENDPOINT: ${TOS_ENDPOINT:-tos-cn-beijing.volces.com}
+      TOS_REGION: ${TOS_REGION:-cn-beijing}
+      TOS_BUCKET: ${TOS_BUCKET:-}
+      VOLC_ASR_API_KEY: ${VOLC_ASR_API_KEY:-}
+      VOLC_ASR_APP_KEY: ${VOLC_ASR_APP_KEY:-}
+      VOLC_ASR_ACCESS_KEY: ${VOLC_ASR_ACCESS_KEY:-}
+      VOLC_ASR_RESOURCE_ID: ${VOLC_ASR_RESOURCE_ID:-}
+
+      # 对象库落盘。TKOS_PERSIST=0 关掉（每次重启回到种子，反复演示时好用）；
+      # TKOS_FAKE_LATENCY=1 给读操作加回 200-600ms 假延迟。
+      TKOS_DATA_DIR: /app/.data
+      TKOS_PERSIST: ${TKOS_PERSIST:-1}
+      TKOS_FAKE_LATENCY: ${TKOS_FAKE_LATENCY:-0}
+      # 默认冻上。`0` 的意思是「谁改一行种子文案，下一次重启把一个月的真实回传
+      # 全部抹掉换回示例数据」，而日志里只有一行 warn（见 src/lib/data/persist.ts
+      # 上 seedFrozen 那段）。开发期要「改种子立刻见效」就在本地 .env 里设 0。
+      TKOS_SEED_FROZEN: ${TKOS_SEED_FROZEN:-1}
+    volumes:
+      - tkos-data:/app/.data
+    restart: unless-stopped
+    # lib/asr/relay.ts 与 lib/stage/bus.ts 是进程内内存，语音链路不支持多副本。
+    # operator 本版封存，不影响常规扩容；开语音时单副本或 sticky session。
+    deploy:
+      # 快照是单进程单写者（persist.ts:9），两个副本会互相覆盖。
+      replicas: 1
+
+volumes:
+  tkos-data:

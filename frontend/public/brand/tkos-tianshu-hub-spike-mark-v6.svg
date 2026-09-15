@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">天枢 TKOS 六向枢纽光刺标志</title>
+  <desc id="desc">六条由中央双层枢纽核出发、向外收尖的柔化光路。</desc>
+
+  <!-- 六条光路位于枢纽核下方：根部宽、末端窄，形成明确的“去往”方向。 -->
+  <g stroke-linejoin="round">
+    <path d="M104 104L229 204L204 229Z" fill="#0072FE" stroke="#0072FE" stroke-width="10"/>
+    <path d="M424 424L283 308L308 283Z" fill="#0072FE" stroke="#0072FE" stroke-width="10"/>
+
+    <path d="M410 148L319 237L294 203Z" fill="#01368B" stroke="#01368B" stroke-width="9"/>
+    <path d="M108 364L193 277L219 312Z" fill="#01368B" stroke="#01368B" stroke-width="9"/>
+
+    <path d="M276 158L282 211L248 205Z" fill="#01368B" stroke="#01368B" stroke-width="8"/>
+    <path d="M238 342L231 301L266 306Z" fill="#01368B" stroke="#01368B" stroke-width="8"/>
+  </g>
+
+  <!-- 外圈是枢纽，内核是最终判断；六条路线均从这里获得方向。 -->
+  <circle cx="256" cy="256" r="58" fill="#01368B"/>
+  <circle cx="256" cy="256" r="37" fill="#0072FE"/>
+</svg>

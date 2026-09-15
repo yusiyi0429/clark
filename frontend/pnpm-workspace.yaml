@@ -1,0 +1,7 @@
+allowBuilds:
+  sharp: false
+  # 火山 TOS SDK 带的 CRC64 原生加速。**关掉**：它要在装依赖时现编译，而这条链路上
+  # 的构建机（Windows 本机、Docker 里的 node:24-slim）都没有编译工具链 —— 开着的代价
+  # 是每次装依赖都可能在一个跟产品无关的地方失败。SDK 自己有 JS 回落，上传照走。
+  tos-crc64-js: false
+  unrs-resolver: false

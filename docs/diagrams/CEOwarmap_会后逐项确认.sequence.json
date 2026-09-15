@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "CEO WarMap · 会后逐项确认",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [900, 510],
+    "views": [
+      { "id": "review", "label": "通知浮卡处理", "focus": ["ceoWeb", "api", "postgres"], "note": "每项确认或忽略，确认一项就立即产生该项效果。" },
+      { "id": "handoff", "label": "效果与外发", "focus": ["api", "postgres", "dri"], "note": "effectRef 支持精确撤回；没有真实渠道时保持 pending_export。" }
+    ]
+  },
+  "participants": [
+    { "id": "ceoWeb", "type": "frontend", "label": "CEO Web", "sublabel": "会后通知浮卡" },
+    { "id": "api", "type": "backend", "label": "WarMap API", "sublabel": "Action 与幂等" },
+    { "id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "Outcome／Receipt／Radar" },
+    { "id": "dri", "type": "external", "label": "DRI 边界", "sublabel": "Todo export" }
+  ],
+  "segments": [
+    { "from": 145, "to": 286, "label": "逐项确认或忽略" },
+    { "from": 294, "to": 438, "label": "产生效果并收敛 Meeting" }
+  ],
+  "messages": [
+    { "from": "api", "to": "ceoWeb", "y": 160, "label": "投影 pending Outcome items", "variant": "emphasis" },
+    { "from": "ceoWeb", "to": "api", "y": 188, "label": "确认 decision item", "variant": "emphasis" },
+    { "from": "api", "to": "postgres", "y": 216, "label": "写精确来源 Receipt + effectRef", "variant": "security" },
+    { "from": "ceoWeb", "to": "api", "y": 244, "label": "确认 todo item" },
+    { "from": "api", "to": "dri", "y": 272, "label": "导出 Todo · pending_export", "variant": "dashed" },
+    { "from": "api", "to": "postgres", "y": 310, "label": "保存 todo review + effectRef" },
+    { "from": "ceoWeb", "to": "api", "y": 338, "label": "确认 CEO 判断／复议条件" },
+    { "from": "api", "to": "postgres", "y": 366, "label": "保存判断 + Radar anchor", "variant": "security" },
+    { "from": "ceoWeb", "to": "api", "y": 394, "label": "忽略其余候选" },
+    { "from": "api", "to": "postgres", "y": 422, "label": "全部处理 → Meeting.reviewed", "variant": "emphasis" }
+  ],
+  "activations": [
+    { "participant": "api", "from": 154, "to": 428, "type": "backend" },
+    { "participant": "ceoWeb", "from": 154, "to": 400, "type": "frontend" },
+    { "participant": "postgres", "from": 210, "to": 428, "type": "database" },
+    { "participant": "dri", "from": 266, "to": 278, "type": "external" }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "$comment": "音色和语速在这个文件里，不在代码里。会前试听完把 voice/speed 改到这儿，改完不用重启前端（路由每次请求重读）。厂商也在这儿切：provider 改成 minimax，下面 minimax 那一段就生效。cosyvoice-v2 的音色 id 一般带 _v2 后缀（longxiaochun_v2 这种），换 v2 的时候 model 和 voice 要一起改，sampleRate 也要跟着改成 24000。",
+  "provider": "cosyvoice",
+  "cosyvoice": {
+    "endpoint": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+    "model": "cosyvoice-v1",
+    "voice": "longcheng",
+    "speed": 1,
+    "sampleRate": 22050,
+    "volume": 50,
+    "pitch": 1
+  },
+  "minimax": {
+    "endpoint": "https://api.minimax.chat/v1/t2a_v2",
+    "model": "speech-01-turbo",
+    "voice": "male-qn-jingying",
+    "speed": 1,
+    "sampleRate": 24000
+  },
+  "$comment_flush": "第一段话切多短。模型的第一句写完要两三秒，等不起 —— 攒到 firstClauseChars 个字、遇到一个逗号就先送去合成，后面的段落才按整句切。这一条直接决定「他说完话到听见声音」那个数字。",
+  "flush": {
+    "firstClauseChars": 14,
+    "maxSegmentChars": 120
+  },
+  "$comment_audition": "试听：3 个音色 × 2 个语速 = 6 个文件，落在 demo/audio/audition/。跑 pnpm tts:audition，听完把选中的填回上面 cosyvoice.voice / cosyvoice.speed。",
+  "audition": {
+    "voices": ["longcheng", "longshu", "longxiaochun"],
+    "speeds": [1, 1.1]
+  },
+  "$comment_listen": "语音识别。voiceRms 和 bargeInRms 这两个数【必须在会议室现场调】，下面这两个值是我这台笔记本上的猜测，不是给那个房间的：voiceRms 是多大的声音算他在说话（房间大、麦克风远、空调响都会往上抬），bargeInRms 是参谋正在念的时候多大的声音才算抢话，它必须明显高于 voiceRms —— 低了，投影音箱的声音会被麦克风收回来，参谋一句话都念不完。会前拿真麦克风试一遍：他正常说话要能触发（识别出的字会出现在语音条中间那一行），参谋念的时候不许自己断掉。改完不用重启。silenceMs 是静多久算一句说完（厂商 VAD 用它），graceMs 是本地那个保险定时器多等厂商一会儿。",
+  "listen": {
+    "endpoint": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+    "model": "paraformer-realtime-v2",
+    "sampleRate": 16000,
+    "silenceMs": 700,
+    "graceMs": 600,
+    "voiceRms": 0.02,
+    "bargeInRms": 0.06,
+    "voiceHoldMs": 160,
+    "bargeInHoldMs": 320,
+    "preRollMs": 400,
+    "chunkMs": 120,
+    "idleMs": 8000
+  }
+}

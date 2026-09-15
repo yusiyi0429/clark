@@ -1,0 +1,22 @@
+# dependencies and build output
+node_modules/
+.next/
+dist/
+build/
+coverage/
+.turbo/
+
+# local environment and runtime data
+.env
+.env.*
+!.env.example
+!.env.docker.example
+.data/
+
+# editor and OS
+.DS_Store
+*.swp
+*.tsbuildinfo
+
+# local worktrees
+.worktrees/

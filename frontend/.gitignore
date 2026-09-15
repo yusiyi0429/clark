@@ -1,0 +1,73 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+# 第二台 dev 的产出目录（`NEXT_DIST_DIR`，见 next.config.ts）。
+/.next-*/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+# 冒烟跑的落盘输出。里面是某一次真模型的原话，重跑一次就变 —— 不是源码。
+smoke.log
+
+# env files (can opt-in for committing if needed)
+.env*
+# 模板要进仓库 —— 没有它，别人 clone 下来不知道要配哪些环境变量
+!.env.example
+!.env.docker.example
+
+# 对象库的落盘快照（lib/data/persist.ts）。运行时状态不是源码 ——
+# 进仓库会让每个人的演示状态互相覆盖。要重置就删掉它再启动。
+/.data/
+
+# 本体取样。带公司经营数据，不进仓库。scripts/tkos-probe.ps1 随时能重取。
+/resolve-sample.json
+/render-sample.json
+
+# 预合成的台词音频。裸 PCM，几十兆，而且 `pnpm tts:pregen` 随时能重新生成 ——
+# 改一句口播就得重合一遍，进版本库只会留下一串对不上正文的旧二进制。
+/demo/audio/
+
+# 按计划执行时的过程草稿（台账、任务简报、评审包）。是脚手架不是源码 ——
+# 记录本身在 git 历史里，这些文件只是当时的中间产物。
+/.superpowers/
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# 传文件用的临时包与「待删除」暂存区。挂载盘上删不掉文件，只能挪进来，
+# 由你在资源管理器里清 —— 但它们不该进仓库。
+/_to_delete/
+/*.tgz
+
+# 提示词导出包。是给人看的一次性打包，随时能重导；十几万字节的二进制进版本库
+# 只会让每次改提示词都多一条对不上正文的旧包。
+/docs/prompt-export.zip

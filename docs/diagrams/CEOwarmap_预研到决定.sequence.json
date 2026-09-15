@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "CEO WarMap · 预研到 CEO 决定",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [960, 540],
+    "views": [
+      { "id": "research", "label": "唯一预研", "focus": ["api", "piRuntime", "companyMcp", "sources", "postgres"], "note": "ResearchDoc 整份生成，Conversation 不做局部拼接。" },
+      { "id": "decision", "label": "CEO 确定性决定", "focus": ["ceoWeb", "api", "postgres"], "note": "只有 Card Action 写 Receipt；未完成预研需二次确认旁路。" }
+    ]
+  },
+  "participants": [
+    { "id": "ceoWeb", "type": "frontend", "label": "CEO Web", "sublabel": "Issue Card／Action" },
+    { "id": "api", "type": "backend", "label": "WarMap API", "sublabel": "规则与状态迁移" },
+    { "id": "piRuntime", "type": "backend", "label": "Pi Runtime", "sublabel": "预研临时 Session" },
+    { "id": "companyMcp", "type": "backend", "label": "CompanyMemory MCP", "sublabel": "只读段落" },
+    { "id": "sources", "type": "external", "label": "Web Search", "sublabel": "可核对外部来源" },
+    { "id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "Issue／Receipt" }
+  ],
+  "segments": [
+    { "from": 145, "to": 374, "label": "ResearchDoc 生成与状态更新" },
+    { "from": 382, "to": 474, "label": "CEO 决定并写回" }
+  ],
+  "messages": [
+    { "from": "api", "to": "piRuntime", "y": 160, "label": "创建预研临时 Session", "variant": "emphasis" },
+    { "from": "piRuntime", "to": "companyMcp", "y": 188, "label": "检索相关公司认知" },
+    { "from": "companyMcp", "to": "piRuntime", "y": 216, "label": "段落 + 来源", "variant": "return" },
+    { "from": "piRuntime", "to": "sources", "y": 244, "label": "必要时 web_search" },
+    { "from": "sources", "to": "piRuntime", "y": 272, "label": "URL + 摘录", "variant": "return" },
+    { "from": "piRuntime", "to": "api", "y": 300, "label": "submit_candidate ResearchDoc", "variant": "return" },
+    { "from": "api", "to": "postgres", "y": 328, "label": "research ready／failed", "variant": "security" },
+    { "from": "api", "to": "ceoWeb", "y": 356, "label": "刷新 Issue Card" },
+    { "from": "ceoWeb", "to": "api", "y": 398, "label": "Action：确认最终 decisionText", "variant": "emphasis" },
+    { "from": "api", "to": "postgres", "y": 426, "label": "事务写 Receipt + Issue.decided", "variant": "security" },
+    { "from": "api", "to": "ceoWeb", "y": 454, "label": "返回新 version Card", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "api", "from": 154, "to": 362, "type": "backend" },
+    { "participant": "piRuntime", "from": 154, "to": 306, "type": "backend" },
+    { "participant": "companyMcp", "from": 182, "to": 222, "type": "backend" },
+    { "participant": "sources", "from": 238, "to": 278, "type": "external" },
+    { "participant": "api", "from": 392, "to": 460, "type": "backend" },
+    { "participant": "postgres", "from": 322, "to": 432, "type": "database" },
+    { "participant": "ceoWeb", "from": 350, "to": 460, "type": "frontend" }
+  ]
+}

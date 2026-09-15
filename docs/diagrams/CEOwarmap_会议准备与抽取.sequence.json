@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "CEO WarMap · 会议准备与 Outcome 抽取",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [1080, 610],
+    "views": [
+      { "id": "preflight", "label": "会前预审", "focus": ["dri", "ceoWeb", "api", "piRuntime", "companyMcp", "postgres"], "note": "Meeting 由 WarMap 持有，会前动作不替 CEO 表态。" },
+      { "id": "transcript", "label": "逐字稿与抽取", "focus": ["transcript", "api", "piRuntime", "postgres"], "note": "只接受 warmap-transcript.v1，身份或格式不兼容就整份失败。" }
+    ]
+  },
+  "participants": [
+    { "id": "dri", "type": "external", "label": "DRI 边界", "sublabel": "JSON import／export" },
+    { "id": "ceoWeb", "type": "frontend", "label": "CEO Web", "sublabel": "Meeting Card" },
+    { "id": "api", "type": "backend", "label": "WarMap API", "sublabel": "Action 与硬校验" },
+    { "id": "piRuntime", "type": "backend", "label": "Pi Runtime", "sublabel": "临时 Session" },
+    { "id": "companyMcp", "type": "backend", "label": "CompanyMemory MCP", "sublabel": "材料／人员" },
+    { "id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "业务事实源" },
+    { "id": "transcript", "type": "external", "label": "Transcript v1", "sublabel": "已绑定 speakerId" }
+  ],
+  "segments": [
+    { "from": 145, "to": 330, "label": "Meeting 创建与会前预审" },
+    { "from": 335, "to": 550, "label": "逐字稿校验与 Outcome 抽取" }
+  ],
+  "messages": [
+    { "from": "dri", "to": "api", "y": 160, "label": "导入 Meeting／Issue", "variant": "security" },
+    { "from": "api", "to": "postgres", "y": 188, "label": "保存 scheduled Meeting", "variant": "emphasis" },
+    { "from": "api", "to": "piRuntime", "y": 216, "label": "创建会前装配临时 Session" },
+    { "from": "piRuntime", "to": "companyMcp", "y": 244, "label": "读取相关认知与人员" },
+    { "from": "companyMcp", "to": "piRuntime", "y": 272, "label": "段落 + 来源", "variant": "return" },
+    { "from": "piRuntime", "to": "api", "y": 300, "label": "submit_candidate preflight", "variant": "return" },
+    { "from": "api", "to": "postgres", "y": 328, "label": "校验并保存 entries" },
+    { "from": "api", "to": "ceoWeb", "y": 356, "label": "Meeting Card + preflight", "variant": "emphasis" },
+    { "from": "ceoWeb", "to": "api", "y": 384, "label": "核对／编辑／请补充／提交" },
+    { "from": "api", "to": "postgres", "y": 412, "label": "保存 draft 与 Supplement Request" },
+    { "from": "transcript", "to": "api", "y": 440, "label": "上传 warmap-transcript.v1", "variant": "security" },
+    { "from": "api", "to": "postgres", "y": 468, "label": "整份校验通过 → Meeting.held", "variant": "emphasis" },
+    { "from": "api", "to": "piRuntime", "y": 496, "label": "创建会后复盘临时 Session" },
+    { "from": "piRuntime", "to": "api", "y": 524, "label": "submit_candidate Outcome", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "api", "from": 154, "to": 334, "type": "backend" },
+    { "participant": "piRuntime", "from": 210, "to": 306, "type": "backend" },
+    { "participant": "companyMcp", "from": 238, "to": 278, "type": "backend" },
+    { "participant": "api", "from": 350, "to": 530, "type": "backend" },
+    { "participant": "piRuntime", "from": 490, "to": 530, "type": "backend" },
+    { "participant": "transcript", "from": 434, "to": 446, "type": "external" },
+    { "participant": "postgres", "from": 182, "to": 474, "type": "database" }
+  ]
+}

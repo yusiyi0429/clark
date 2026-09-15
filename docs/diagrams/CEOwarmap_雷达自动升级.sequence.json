@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "CEO WarMap · 雷达自动升级",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [960, 480],
+    "views": [
+      { "id": "scan", "label": "扫描与研判", "focus": ["trigger", "sources", "api", "piRuntime"], "note": "每日扫描与手动补扫共用同一管线。" },
+      { "id": "promote", "label": "代码门槛与升级", "focus": ["api", "postgres", "ceoWeb"], "note": "满足门槛后直接创建 pending Issue，不再要求 CEO 二次点击。" }
+    ]
+  },
+  "participants": [
+    { "id": "trigger", "type": "external", "label": "触发器", "sublabel": "每日／手动补扫" },
+    { "id": "sources", "type": "external", "label": "外部来源", "sublabel": "Search／公众号" },
+    { "id": "api", "type": "backend", "label": "WarMap API", "sublabel": "规则与状态迁移" },
+    { "id": "piRuntime", "type": "backend", "label": "Pi Runtime", "sublabel": "雷达临时 Session" },
+    { "id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "业务事实源" },
+    { "id": "ceoWeb", "type": "frontend", "label": "CEO Web", "sublabel": "Radar／Issue Card" }
+  ],
+  "segments": [
+    { "from": 145, "to": 286, "label": "内容获取与 Agent 研判" },
+    { "from": 292, "to": 362, "label": "自动升级并立即展示" }
+  ],
+  "messages": [
+    { "from": "trigger", "to": "api", "y": 160, "label": "scheduled scan／manual 补扫", "variant": "emphasis" },
+    { "from": "api", "to": "sources", "y": 188, "label": "按 anchors 获取最新内容" },
+    { "from": "sources", "to": "api", "y": 216, "label": "URL + 标题 + 摘录", "variant": "return" },
+    { "from": "api", "to": "piRuntime", "y": 244, "label": "创建雷达研判临时 Session" },
+    { "from": "piRuntime", "to": "api", "y": 272, "label": "submit_candidate", "variant": "return" },
+    { "from": "api", "to": "postgres", "y": 314, "label": "校验门槛后保存 Signal + pending Issue", "variant": "security", "note": "选项、连续引文、归属、最终分值与去重全部由代码裁决。" },
+    { "from": "api", "to": "ceoWeb", "y": 342, "label": "立即返回 Issue Card · research pending", "variant": "emphasis" }
+  ],
+  "activations": [
+    { "participant": "api", "from": 154, "to": 348, "type": "backend" },
+    { "participant": "sources", "from": 182, "to": 222, "type": "external" },
+    { "participant": "piRuntime", "from": 238, "to": 278, "type": "backend" },
+    { "participant": "postgres", "from": 308, "to": 320, "type": "database" },
+    { "participant": "ceoWeb", "from": 336, "to": 348, "type": "frontend" }
+  ]
+}

@@ -1,0 +1,248 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "clark",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "walkthrough",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "TKOS_DATA_DIR=.data/walkthrough TKOS_ACCESS_PASSWORD=walkthrough TKOS_ACCESS_SECRET=walkthrough-only-not-a-real-secret pnpm exec next dev -p 3001"
+      ],
+      "port": 3001
+    },
+    {
+      "name": "agenda-check",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3002"
+      ],
+      "port": 3002,
+      "env": {
+        "NEXT_DIST_DIR": ".next-agenda",
+        "TKOS_DATA_DIR": ".data/agenda-check",
+        "TKOS_ACCESS_PASSWORD": "204060",
+        "TKOS_ACCESS_SECRET": "agenda-check-only-not-a-real-secret",
+        "TKOS_PERSIST": "1"
+      }
+    },
+    {
+      "name": "tokenkingos-site",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "-C",
+        "../tokenkingos-site",
+        "dev",
+        "--port",
+        "3100"
+      ],
+      "port": 3100
+    },
+    {
+      "name": "demo-check",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3003"
+      ],
+      "port": 3003,
+      "env": {
+        "NEXT_DIST_DIR": ".next-demo",
+        "TKOS_MODE": "demo",
+        "TKOS_DATA_DIR": ".data/demo-check",
+        "TKOS_PERSIST": "0",
+        "TKOS_ACCESS_PASSWORD": "204060",
+        "TKOS_ACCESS_SECRET": "demo-check-only-not-a-real-secret"
+      }
+    },
+    {
+      "name": "recordings-check",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3004"
+      ],
+      "port": 3004,
+      "env": {
+        "NEXT_DIST_DIR": ".next-recordings",
+        "TKOS_DATA_DIR": ".data/recordings-check",
+        "TKOS_PERSIST": "1",
+        "TKOS_ACCESS_PASSWORD": "204060",
+        "TKOS_ACCESS_SECRET": "recordings-check-only-not-a-real-secret"
+      }
+    },
+    {
+      "name": "merge-check",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3005"
+      ],
+      "port": 3005,
+      "env": {
+        "NEXT_DIST_DIR": ".next-merge",
+        "TKOS_MODE": "demo",
+        "TKOS_DATA_DIR": ".data/merge-check",
+        "TKOS_PERSIST": "1",
+        "TKOS_ACCESS_PASSWORD": "204060",
+        "TKOS_ACCESS_SECRET": "merge-check-only-not-a-real-secret",
+        "OPERATOR_TOKEN": "merge-check-operator-token"
+      }
+    },
+    {
+      "name": "rail-check",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3011"
+      ],
+      "port": 3011,
+      "env": {
+        "NEXT_DIST_DIR": ".next-rail",
+        "TKOS_DATA_DIR": ".data/rail-check",
+        "TKOS_PERSIST": "0",
+        "TKOS_ACCESS_PASSWORD": "204060",
+        "TKOS_ACCESS_SECRET": "rail-check-only-not-a-real-secret"
+      }
+    },
+    {
+      "name": "readonly-check",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3012"
+      ],
+      "port": 3012,
+      "env": {
+        "NEXT_DIST_DIR": ".next-readonly",
+        "TKOS_DATA_DIR": ".data/readonly-check",
+        "TKOS_PERSIST": "0",
+        "TKOS_ACCESS_PASSWORD": "204060",
+        "TKOS_ACCESS_SECRET": "readonly-check-only-not-a-real-secret"
+      }
+    },
+    {
+      "name": "panel-check",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3013"
+      ],
+      "port": 3013,
+      "env": {
+        "NEXT_DIST_DIR": ".next-panel",
+        "TKOS_DATA_DIR": ".data/panel-check",
+        "TKOS_PERSIST": "0",
+        "TKOS_ACCESS_PASSWORD": "204060",
+        "TKOS_ACCESS_SECRET": "panel-check-only-not-a-real-secret"
+      }
+    },
+    {
+      "name": "writer-synth",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3020"
+      ],
+      "port": 3020,
+      "env": {
+        "NEXT_DIST_DIR": ".next-synth",
+        "TKOS_DATA_DIR": ".data/writer-synth",
+        "TKOS_A4_DRAFT_SLOT": "alt",
+        "TKOS_A4_WRITER_SLOT": "synth"
+      }
+    },
+    {
+      "name": "writer-alt",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3021"
+      ],
+      "port": 3021,
+      "env": {
+        "NEXT_DIST_DIR": ".next-writer-alt",
+        "TKOS_DATA_DIR": ".data/writer-alt",
+        "TKOS_A4_DRAFT_SLOT": "alt",
+        "TKOS_A4_WRITER_SLOT": "alt"
+      }
+    },
+    {
+      "name": "a4-check-b",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3022"
+      ],
+      "port": 3022,
+      "env": {
+        "NEXT_DIST_DIR": ".next-checkb",
+        "TKOS_DATA_DIR": ".data/check-b",
+        "TKOS_A4_DRAFT_SLOT": "alt",
+        "TKOS_A4_WRITER_SLOT": "alt"
+      }
+    },
+    {
+      "name": "cheap-check",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3023"
+      ],
+      "port": 3023,
+      "env": {
+        "NEXT_DIST_DIR": ".next-cheap",
+        "TKOS_DATA_DIR": ".data/cheap-check",
+        "TKOS_PERSIST": "1",
+        "TKOS_A4_DRAFT_SLOT": "synth",
+        "TKOS_A4_WRITER_SLOT": "synth",
+        "TKOS_A4_PLAN_SLOT": "pro",
+        "TKOS_A4_WARM_CACHE": "0",
+        "TKOS_ACCESS_PASSWORD": "204060",
+        "TKOS_ACCESS_SECRET": "cheap-check-only-not-a-real-secret"
+      }
+    }
+  ]
+}
