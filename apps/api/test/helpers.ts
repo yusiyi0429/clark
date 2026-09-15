@@ -144,7 +144,7 @@ export async function createTestApp(
   const monthlyPlans = monthlyDraftAgent
     ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;
-  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, ...appRuntimeOptions });
+  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, now: monthlyNow, ...appRuntimeOptions });
   const apps = [app];
   return {
     app,
@@ -189,7 +189,7 @@ export async function createTestApp(
     agentRuns: async () => (await pool.query("SELECT * FROM agent_runs ORDER BY started_at, id")).rows,
     sql: async (text, params) => (await pool.query(text, params)).rows,
     restart: async (runtime) => {
-      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, researchService, monthlyPlanService: monthlyPlans, ...appRuntimeOptions });
+      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, researchService, monthlyPlanService: monthlyPlans, now: monthlyNow, ...appRuntimeOptions });
       apps.push(restarted);
       return restarted;
     },

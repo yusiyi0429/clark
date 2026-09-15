@@ -3,6 +3,7 @@ import type { Pool, QueryResult } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import { MonthlyDraftCandidate, type TMonthlyDraftCandidate, type TMonthlyPlanFeedback, type TMonthlyPlanTodo } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
+import { getRegisteredBattlefieldIds, findUnregisteredBattlefieldId } from "./battlefields.js";
 import { companyPeriod, getMonthlyPlanRow, projectMonthlyFeedback, type MonthlyPlanRow, type StoredMonthlyFeedback } from "./monthlyPlans.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
@@ -159,6 +160,14 @@ export function createMonthlyPlanService({
       const badOwner = candidate.todos.find((todo) => !people.has(todo.ownerId));
       if (badOwner) {
         throw Object.assign(new Error(`todo ownerId 不在 company-people.v1: ${badOwner.ownerId}`), { code: INVALID_MONTHLY_DRAFT });
+      }
+      const registered = await getRegisteredBattlefieldIds(q);
+      const badBattlefield = findUnregisteredBattlefieldId(registered, [
+        ...candidate.battlefields.map((battlefield) => battlefield.battlefieldId),
+        ...candidate.todos.flatMap((todo) => (todo.battlefieldId ? [todo.battlefieldId] : [])),
+      ]);
+      if (badBattlefield) {
+        throw Object.assign(new Error(`battlefieldId 未在 BattlefieldConfig 注册: ${badBattlefield}`), { code: INVALID_MONTHLY_DRAFT });
       }
       const todos: TMonthlyPlanTodo[] = candidate.todos.map((todo) => ({ id: `todo-${randomUUID()}`, ...todo }));
       await q(

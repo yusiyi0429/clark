@@ -22,6 +22,12 @@ import {
   LoginRequest,
   MonthlyDraftCandidate,
   MonthlyPlanCardPayload,
+  MonthlyPlanExport,
+  MonthlyPlanExportListResponse,
+  SignMonthlyPlanRequest,
+  DriMonthlyExportDeliveredRequest,
+  DriMonthlyExportFailedRequest,
+  BattlefieldCardPayload,
   RadarScanResponse,
   ReplaceTranscriptRequest,
   RequestSupplementRequest,
@@ -183,6 +189,16 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "200": { description: "MonthlyPlan Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
             "401": errorResponse,
             "404": errorResponse,
+          },
+        },
+      },
+      "/api/cards/battlefields": {
+        get: {
+          operationId: "listBattlefieldCards",
+          summary: "战场 Card：正面确认目标，背面按 battlefieldId 投影普通待办与最新 feedback",
+          responses: {
+            "200": { description: "Battlefield Cards", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
           },
         },
       },
@@ -348,6 +364,61 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/dri/monthly-exports": {
+        get: {
+          operationId: "listDriMonthlyExports",
+          summary: "DRI 待外发/已外发的普通 todo（真实 pending_export/delivered 状态）",
+          parameters: [
+            { name: "status", in: "query", required: false, schema: { type: "string", enum: ["pending_export", "delivered", "failed"] } },
+          ],
+          responses: {
+            "200": { description: "导出记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MonthlyPlanExportListResponse" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/dri/monthly-exports/{effectRef}/delivered": {
+        post: {
+          operationId: "markDriMonthlyExportDelivered",
+          summary: "外部渠道回执：标记普通 todo 已送达",
+          parameters: [{ name: "effectRef", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/DriMonthlyExportDeliveredRequest" }),
+          responses: {
+            "200": { description: "更新后的导出记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MonthlyPlanExportListResponse" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/dri/monthly-exports/{effectRef}/failed": {
+        post: {
+          operationId: "markDriMonthlyExportFailed",
+          summary: "外部渠道回执：标记普通 todo 外发失败，不自动重试",
+          parameters: [{ name: "effectRef", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/DriMonthlyExportFailedRequest" }),
+          responses: {
+            "200": { description: "更新后的导出记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MonthlyPlanExportListResponse" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/dri/monthly-exports/{effectRef}/re-export": {
+        post: {
+          operationId: "reexportDriMonthlyExport",
+          summary: "显式再导出：failed → pending_export（不自动重试）",
+          parameters: [{ name: "effectRef", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "更新后的导出记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MonthlyPlanExportListResponse" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
       "/api/dri/meetings/{id}/transcript": {
         post: {
           operationId: "importDriMeetingTranscript",
@@ -434,6 +505,12 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         UpdateMeetingDraftRequest: UpdateMeetingDraftRequest as JsonSchema,
         RequestSupplementRequest: RequestSupplementRequest as JsonSchema,
         MonthlyPlanCardPayload: MonthlyPlanCardPayload as JsonSchema,
+        MonthlyPlanExport: MonthlyPlanExport as JsonSchema,
+        MonthlyPlanExportListResponse: MonthlyPlanExportListResponse as JsonSchema,
+        SignMonthlyPlanRequest: SignMonthlyPlanRequest as JsonSchema,
+        DriMonthlyExportDeliveredRequest: DriMonthlyExportDeliveredRequest as JsonSchema,
+        DriMonthlyExportFailedRequest: DriMonthlyExportFailedRequest as JsonSchema,
+        BattlefieldCardPayload: BattlefieldCardPayload as JsonSchema,
         MonthlyDraftCandidate: MonthlyDraftCandidate as JsonSchema,
         UpdateMonthlyPlanDraftRequest: UpdateMonthlyPlanDraftRequest as JsonSchema,
         DriMonthlyPlanFeedbackRequest: DriMonthlyPlanFeedbackRequest as JsonSchema,

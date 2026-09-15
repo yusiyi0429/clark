@@ -84,6 +84,33 @@ export const MonthlyPlanGeneration = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 普通待办的 DRI 外发快照：WarMap 不跟踪执行状态，只如实记录是否已按真实渠道发出。
+ * pending_export 表示已生成待外发内容；只有外部回执才能变成 delivered。
+ */
+export const MonthlyPlanExportStatus = Type.Union([
+  Type.Literal("pending_export"),
+  Type.Literal("delivered"),
+  Type.Literal("failed"),
+]);
+
+export const MonthlyPlanExport = Type.Object(
+  {
+    effectRef: Type.String({ minLength: 1, maxLength: 300 }),
+    todoId: Type.String({ minLength: 1 }),
+    title: Type.String({ minLength: 1, maxLength: 500 }),
+    ownerId: Type.String({ minLength: 1, maxLength: 200 }),
+    dueAt: Type.Union([Type.String(), Type.Null()]),
+    sourceRef: Type.String({ minLength: 1, maxLength: 2000 }),
+    status: MonthlyPlanExportStatus,
+    exportRef: Type.Union([Type.String(), Type.Null()]),
+    error: Type.Union([Type.String(), Type.Null()]),
+    createdAt: Type.String(),
+    updatedAt: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 export const MonthlyPlanCardPayload = Type.Object(
   {
     period: MonthlyPlanPeriod,
@@ -91,6 +118,7 @@ export const MonthlyPlanCardPayload = Type.Object(
     companyOutcome: Type.String(),
     battlefields: Type.Array(MonthlyPlanBattlefield),
     todos: Type.Array(MonthlyPlanTodo),
+    exports: Type.Array(MonthlyPlanExport),
     negotiation: MonthlyPlanNegotiation,
     generation: MonthlyPlanGeneration,
     confirmedAt: Type.Union([Type.String(), Type.Null()]),
@@ -171,6 +199,31 @@ export const DriMonthlyPlanTodoFeedbackRequest = Type.Object(
   { additionalProperties: false },
 );
 
+/** 签发不接收业务输入：可签发内容来自已核对并持久化的计划本身。 */
+export const SignMonthlyPlanRequest = Type.Object({}, { additionalProperties: false });
+
+/** DRI 出站边界：外部渠道回执把 pending_export 变为 delivered 或 failed。 */
+export const DriMonthlyExportDeliveredRequest = Type.Object(
+  { exportRef: Type.String({ minLength: 1, maxLength: 200 }) },
+  { additionalProperties: false },
+);
+
+export const DriMonthlyExportFailedRequest = Type.Object(
+  { error: Type.String({ minLength: 1, maxLength: 1000 }) },
+  { additionalProperties: false },
+);
+
+export const MonthlyPlanExportListResponse = Type.Object(
+  { exports: Type.Array(MonthlyPlanExport) },
+  { additionalProperties: false },
+);
+
+export type TMonthlyPlanExportStatus = Static<typeof MonthlyPlanExportStatus>;
+export type TMonthlyPlanExport = Static<typeof MonthlyPlanExport>;
+export type TSignMonthlyPlanRequest = Static<typeof SignMonthlyPlanRequest>;
+export type TDriMonthlyExportDeliveredRequest = Static<typeof DriMonthlyExportDeliveredRequest>;
+export type TDriMonthlyExportFailedRequest = Static<typeof DriMonthlyExportFailedRequest>;
+export type TMonthlyPlanExportListResponse = Static<typeof MonthlyPlanExportListResponse>;
 export type TMonthlyPlanStatus = Static<typeof MonthlyPlanStatus>;
 export type TMonthlyPlanPeriod = Static<typeof MonthlyPlanPeriod>;
 export type TMonthlyPlanTodo = Static<typeof MonthlyPlanTodo>;

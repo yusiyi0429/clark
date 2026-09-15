@@ -18,6 +18,7 @@ describe("migration", () => {
       expect(names).toContain("issues");
       expect(names).toContain("meetings");
       expect(names).toContain("monthly_plans");
+      expect(names).toContain("battlefield_config");
 
       const applied = await db.query<{ id: number; filename: string }>(
         "SELECT id, filename FROM schema_migrations ORDER BY id",
@@ -33,6 +34,7 @@ describe("migration", () => {
         "008_meetings.sql",
         "009_monthly_plans.sql",
         "010_meeting_transcript_outcome.sql",
+        "011_battlefield_config.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -40,7 +42,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(10);
+      expect(Number(again.rows[0].count)).toBe(11);
 
       // fixture seed 行存在
       const seed = await db.query("SELECT * FROM fixture_home WHERE id = 'default'");

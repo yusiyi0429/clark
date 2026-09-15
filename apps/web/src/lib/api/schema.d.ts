@@ -174,6 +174,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cards/battlefields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 战场 Card：正面确认目标，背面按 battlefieldId 投影普通待办与最新 feedback */
+        get: operations["listBattlefieldCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/radar": {
         parameters: {
             query?: never;
@@ -356,6 +373,74 @@ export interface paths {
         put?: never;
         /** DRI 服务追加 todo 叙述性 feedback，不修改执行状态 */
         post: operations["importDriMonthlyTodoFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dri/monthly-exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** DRI 待外发/已外发的普通 todo（真实 pending_export/delivered 状态） */
+        get: operations["listDriMonthlyExports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dri/monthly-exports/{effectRef}/delivered": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 外部渠道回执：标记普通 todo 已送达 */
+        post: operations["markDriMonthlyExportDelivered"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dri/monthly-exports/{effectRef}/failed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 外部渠道回执：标记普通 todo 外发失败，不自动重试 */
+        post: operations["markDriMonthlyExportFailed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dri/monthly-exports/{effectRef}/re-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 显式再导出：failed → pending_export（不自动重试） */
+        post: operations["reexportDriMonthlyExport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -783,6 +868,19 @@ export interface components {
                 dueAt?: string;
                 sourceRef: string;
             }[];
+            exports: {
+                effectRef: string;
+                todoId: string;
+                title: string;
+                ownerId: string;
+                dueAt: string | null;
+                sourceRef: string;
+                status: "pending_export" | "delivered" | "failed";
+                exportRef: string | null;
+                error: string | null;
+                createdAt: string;
+                updatedAt: string;
+            }[];
             negotiation: {
                 edits: {
                     at: string;
@@ -814,6 +912,81 @@ export interface components {
                 generatedAt: string | null;
             };
             confirmedAt: string | null;
+        };
+        MonthlyPlanExport: {
+            effectRef: string;
+            todoId: string;
+            title: string;
+            ownerId: string;
+            dueAt: string | null;
+            sourceRef: string;
+            status: "pending_export" | "delivered" | "failed";
+            exportRef: string | null;
+            error: string | null;
+            createdAt: string;
+            updatedAt: string;
+        };
+        MonthlyPlanExportListResponse: {
+            exports: {
+                effectRef: string;
+                todoId: string;
+                title: string;
+                ownerId: string;
+                dueAt: string | null;
+                sourceRef: string;
+                status: "pending_export" | "delivered" | "failed";
+                exportRef: string | null;
+                error: string | null;
+                createdAt: string;
+                updatedAt: string;
+            }[];
+        };
+        SignMonthlyPlanRequest: Record<string, never>;
+        DriMonthlyExportDeliveredRequest: {
+            exportRef: string;
+        };
+        DriMonthlyExportFailedRequest: {
+            error: string;
+        };
+        BattlefieldCardPayload: {
+            battlefieldId: string;
+            name: string;
+            positioning: string;
+            period: string | null;
+            target: string | null;
+            pendingIssues: {
+                id: string;
+                title: string;
+                urgency: "red" | "yellow" | "gray";
+                location: {
+                    /** @constant */
+                    level: "company";
+                    relatedBattlefieldIds: string[];
+                } | {
+                    /** @constant */
+                    level: "battlefield";
+                    battlefieldId: string;
+                } | {
+                    /** @constant */
+                    level: "capability";
+                    capabilityId: string;
+                };
+            }[];
+            todos: {
+                id: string;
+                title: string;
+                ownerId: string;
+                dueAt: string | null;
+                sourceRef: string;
+                exportStatus: ("pending_export" | "delivered" | "failed") | null;
+                exportRef: string | null;
+            }[];
+            latestFeedback: {
+                text: string;
+                observedAt: string;
+                sourceRef: string;
+                evidenceRef: string | null;
+            } | null;
         };
         MonthlyDraftCandidate: {
             companyOutcome: string;
@@ -1286,6 +1459,35 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listBattlefieldCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Battlefield Cards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1895,6 +2097,201 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listDriMonthlyExports: {
+        parameters: {
+            query?: {
+                status?: "pending_export" | "delivered" | "failed";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 导出记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyPlanExportListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    markDriMonthlyExportDelivered: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                effectRef: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DriMonthlyExportDeliveredRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的导出记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyPlanExportListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    markDriMonthlyExportFailed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                effectRef: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DriMonthlyExportFailedRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的导出记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyPlanExportListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    reexportDriMonthlyExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                effectRef: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 更新后的导出记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyPlanExportListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

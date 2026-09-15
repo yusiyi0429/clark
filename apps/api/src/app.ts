@@ -25,6 +25,9 @@ import {
   RequestSupplementRequest,
   SessionResponse,
   SignalStateRequest,
+  SignMonthlyPlanRequest,
+  DriMonthlyExportDeliveredRequest,
+  DriMonthlyExportFailedRequest,
   UpdateMeetingDraftRequest,
   UpdateMonthlyPlanDraftRequest,
   type TApiError,
@@ -83,13 +86,18 @@ import {
 import { createPreflightAgent } from "./preflightAgent.js";
 import {
   appendDriMonthlyFeedback,
+  companyPeriod,
   executeRetryMonthlyPlanDraft,
+  executeSignMonthlyPlan,
   executeUpdateMonthlyPlanDraft,
   getMonthlyPlanNotice,
   getMonthlyPlanRow,
   listMonthlyPlanRows,
+  listMonthlyExports,
+  mutateMonthlyExport,
   projectMonthlyPlanCard,
 } from "./monthlyPlans.js";
+import { listBattlefieldCards } from "./battlefields.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
 import { recoverInterruptedOutcome, type PostMeetingAgent } from "./outcome.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
@@ -125,6 +133,7 @@ export async function buildApp({
   driExporter,
   monthlyPlanService,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
+  now = () => new Date(),
 }: {
   pool: Pool;
   env: AppEnv;
@@ -136,6 +145,8 @@ export async function buildApp({
   driExporter?: DriExporter;
   monthlyPlanService?: MonthlyPlanService;
   conversationTurnTimeoutMs?: number;
+  /** 业务时钟；通知与战场投影按公司月读取同一持久对象。 */
+  now?: () => Date;
 }): Promise<FastifyInstance> {
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
   const companyMemory = loadCompanyMemory(env);
@@ -590,7 +601,7 @@ export async function buildApp({
   // 月度通知与月度页面同样读取同一 MonthlyPlan 持久对象。
   app.get("/api/cards/notifications", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
     const rows = (await listMeetingRows(q)).filter((row) => row.status === "scheduled");
-    const monthlyNotice = await getMonthlyPlanNotice(q, env.sessionSecret);
+    const monthlyNotice = await getMonthlyPlanNotice(q, env.sessionSecret, now());
     return { cards: [...(monthlyNotice ? [monthlyNotice] : []), ...rows.map((row) => projectMeetingCard(row, env.sessionSecret))] };
   });
 
@@ -607,6 +618,11 @@ export async function buildApp({
       return row ? { cards: [projectMonthlyPlanCard(row, env.sessionSecret)] } : fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
     },
   );
+
+  // 战场 Card：正面读已签发计划目标，背面按 battlefieldId 投影 todo/feedback，与通知同源。
+  app.get("/api/cards/battlefields", { preHandler: requireCEO }, async (): Promise<TCardCollection> => ({
+    cards: await listBattlefieldCards(q, companyPeriod(now())),
+  }));
 
   /** Transcript 导入结果 → HTTP；Web multipart 与 service API 共用同一个边界。 */
   function respondTranscriptImport(reply: FastifyReply, result: TranscriptImportResult): TCardCollection | FastifyReply {
@@ -724,6 +740,11 @@ export async function buildApp({
         }
         return respond(reply, result);
       }
+      if (scope.actionType === "monthly-plan.sign") {
+        const signInput = input ?? {};
+        if (!Value.Check(SignMonthlyPlanRequest, signInput)) return invalidInput(reply, SignMonthlyPlanRequest, signInput);
+        return respond(reply, await executeSignMonthlyPlan(pool, companyMemory, env.sessionSecret, scope, fingerprint));
+      }
 
       if (scope.objectType === "issue") {
         const result = await executeIssueAction(pool, env.sessionSecret, scope, fingerprint, req.body.input);
@@ -825,6 +846,43 @@ export async function buildApp({
         return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
       }
       return reply.status(result.status).send({ cards: [result.card] });
+    },
+  );
+
+  // DRI 出站：普通 todo 的真实 pending_export/delivered/failed 状态；WarMap 不跟踪执行进度。
+  const exportParams = Type.Object({ effectRef: Type.String({ minLength: 1 }) }, { additionalProperties: false });
+  const exportStatusQuery = Type.Object(
+    { status: Type.Optional(Type.Union([Type.Literal("pending_export"), Type.Literal("delivered"), Type.Literal("failed")])) },
+    { additionalProperties: false },
+  );
+  app.get(
+    "/api/dri/monthly-exports",
+    { onRequest: requireServiceToken(env.driServiceToken), schema: { querystring: exportStatusQuery } },
+    async (req) => ({ exports: await listMonthlyExports(q, req.query.status) }),
+  );
+  app.post(
+    "/api/dri/monthly-exports/:effectRef/delivered",
+    { onRequest: requireServiceToken(env.driServiceToken), schema: { params: exportParams, body: DriMonthlyExportDeliveredRequest } },
+    async (req, reply) => {
+      const result = await mutateMonthlyExport(pool, req.params.effectRef, { status: "delivered", exportRef: req.body.exportRef });
+      return result.status === 200 ? { exports: result.exports } : fail(reply, result.status, result.code, result.message);
+    },
+  );
+  app.post(
+    "/api/dri/monthly-exports/:effectRef/failed",
+    { onRequest: requireServiceToken(env.driServiceToken), schema: { params: exportParams, body: DriMonthlyExportFailedRequest } },
+    async (req, reply) => {
+      const result = await mutateMonthlyExport(pool, req.params.effectRef, { status: "failed", error: req.body.error });
+      return result.status === 200 ? { exports: result.exports } : fail(reply, result.status, result.code, result.message);
+    },
+  );
+  // failed → pending_export 只在显式再导出时发生，不自动重试
+  app.post(
+    "/api/dri/monthly-exports/:effectRef/re-export",
+    { onRequest: requireServiceToken(env.driServiceToken), schema: { params: exportParams } },
+    async (req, reply) => {
+      const result = await mutateMonthlyExport(pool, req.params.effectRef, { status: "pending_export" });
+      return result.status === 200 ? { exports: result.exports } : fail(reply, result.status, result.code, result.message);
     },
   );
 

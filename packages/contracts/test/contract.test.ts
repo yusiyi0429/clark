@@ -17,6 +17,8 @@ import {
   MeetingRevokeEffectInput,
   MonthlyDraftCandidate,
   MonthlyPlanCardPayload,
+  MonthlyPlanExport,
+  BattlefieldCardPayload,
   MeetingOutcomeState,
   OutcomeReview,
   PostMeetingCandidate,
@@ -55,8 +57,13 @@ describe("openapi contract", () => {
         "/api/dri/issues",
         "/api/cards/monthly-plans",
         "/api/cards/monthly-plans/{id}",
+        "/api/cards/battlefields",
         "/api/dri/monthly-feedback",
         "/api/dri/todo-feedback",
+        "/api/dri/monthly-exports",
+        "/api/dri/monthly-exports/{effectRef}/delivered",
+        "/api/dri/monthly-exports/{effectRef}/failed",
+        "/api/dri/monthly-exports/{effectRef}/re-export",
         "/api/signals/{id}/state",
         "/api/actions/execute",
         "/api/conversations/{scope}/messages",
@@ -73,6 +80,10 @@ describe("openapi contract", () => {
         "ApiError",
         "DriIssueImportRequest",
         "MonthlyPlanCardPayload",
+        "MonthlyPlanExport",
+        "MonthlyPlanExportListResponse",
+        "SignMonthlyPlanRequest",
+        "BattlefieldCardPayload",
         "MonthlyDraftCandidate",
         "UpdateMonthlyPlanDraftRequest",
         "DriMonthlyPlanFeedbackRequest",
@@ -440,6 +451,21 @@ describe("monthly plan public contract", () => {
       companyOutcome: "公司结果",
       battlefields: [{ battlefieldId: "growth", outcome: "战场结果" }],
       todos: [{ id: "todo-1", title: "待办", ownerId: "person-002", sourceRef: "issue:1" }],
+      exports: [
+        {
+          effectRef: "monthly-plan:2026-06:todo:todo-1",
+          todoId: "todo-1",
+          title: "待办",
+          ownerId: "person-002",
+          dueAt: null,
+          sourceRef: "issue:1",
+          status: "pending_export",
+          exportRef: null,
+          error: null,
+          createdAt: "2026-06-02T00:00:00.000Z",
+          updatedAt: "2026-06-02T00:00:00.000Z",
+        },
+      ],
       negotiation: {
         edits: [{ at: "2026-06-02T00:00:00.000Z", fields: ["companyOutcome"] }],
         checkedItemIds: ["company"],
@@ -486,6 +512,48 @@ describe("monthly plan public contract", () => {
     expect(Value.Check(DriMonthlyPlanFeedbackRequest, { ...base, status: "done" })).toBe(false);
     expect(Value.Check(DriMonthlyPlanTodoFeedbackRequest, { ...base, todoId: "todo-1" })).toBe(true);
     expect(Value.Check(DriMonthlyPlanTodoFeedbackRequest, base)).toBe(false);
+  });
+
+  it("keeps DRI export status honest and battlefield projection free of execution state", () => {
+    const exported = {
+      effectRef: "monthly-plan:2026-06:todo:todo-1",
+      todoId: "todo-1",
+      title: "待办",
+      ownerId: "person-002",
+      dueAt: null,
+      sourceRef: "issue:1",
+      status: "pending_export",
+      exportRef: null,
+      error: null,
+      createdAt: "2026-06-02T00:00:00.000Z",
+      updatedAt: "2026-06-02T00:00:00.000Z",
+    };
+    expect(Value.Check(MonthlyPlanExport, exported)).toBe(true);
+    expect(Value.Check(MonthlyPlanExport, { ...exported, status: "delivered" })).toBe(true);
+    expect(Value.Check(MonthlyPlanExport, { ...exported, status: "done" })).toBe(false);
+    expect(Value.Check(MonthlyPlanExport, { ...exported, percent: 50 })).toBe(false);
+
+    const battlefield = {
+      battlefieldId: "growth",
+      name: "增长战场",
+      positioning: "验证渠道结构",
+      period: "2026-06",
+      target: "增长战场完成渠道切换",
+      pendingIssues: [
+        { id: "issue-1", title: "渠道投入是否调整", urgency: "red", location: { level: "battlefield", battlefieldId: "growth" } },
+      ],
+      todos: [
+        { id: "todo-1", title: "待办", ownerId: "person-002", dueAt: null, sourceRef: "issue:1", exportStatus: "pending_export", exportRef: null },
+      ],
+      latestFeedback: { text: "渠道复核已完成", observedAt: "2026-06-10T00:00:00.000Z", sourceRef: "dri://retro/1", evidenceRef: null },
+    };
+    expect(Value.Check(BattlefieldCardPayload, battlefield)).toBe(true);
+    // 不展示 Agent 推测的完成百分比与执行状态
+    expect(Value.Check(BattlefieldCardPayload, { ...battlefield, progress: 0.5 })).toBe(false);
+    expect(Value.Check(BattlefieldCardPayload, {
+      ...battlefield,
+      todos: [{ ...battlefield.todos[0], status: "done" }],
+    })).toBe(false);
   });
 });
 

@@ -6,13 +6,17 @@ import {
   type TDriMonthlyPlanFeedbackRequest,
   type TDriMonthlyPlanTodoFeedbackRequest,
   type TMonthlyPlanBattlefield,
+  type TMonthlyPlanExport,
+  type TMonthlyPlanExportStatus,
   type TMonthlyPlanFeedback,
   type TMonthlyPlanGeneration,
   type TMonthlyPlanNegotiation,
   type TMonthlyPlanTodo,
+  type TRadarAnchor,
   type TUpdateMonthlyPlanDraftRequest,
 } from "@warmap/contracts";
 import { canonicalJson, signActionId, type ActionScope } from "./actionToken.js";
+import { getRegisteredBattlefieldIds, findUnregisteredBattlefieldId } from "./battlefields.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
@@ -33,6 +37,7 @@ export type MonthlyPlanRow = {
   company_outcome: string;
   battlefields: TMonthlyPlanBattlefield[];
   todos: TMonthlyPlanTodo[];
+  exports: TMonthlyPlanExport[];
   negotiation: StoredMonthlyNegotiation;
   generation: TMonthlyPlanGeneration;
   action_fingerprints: string[];
@@ -42,7 +47,7 @@ export type MonthlyPlanRow = {
 };
 
 const MONTHLY_PLAN_COLUMNS = [
-  "id", "version", "period", "status", "company_outcome", "battlefields", "todos",
+  "id", "version", "period", "status", "company_outcome", "battlefields", "todos", "exports",
   "negotiation", "generation", "action_fingerprints", "confirmed_at", "created_at", "updated_at",
 ];
 const monthlyPlanColumns = (prefix = "") => MONTHLY_PLAN_COLUMNS.map((column) => `${prefix}${column}`).join(", ");
@@ -116,7 +121,7 @@ export function projectMonthlyPlanCard(row: MonthlyPlanRow, secret: string): TCa
   const actions: TActionDescriptor[] = [];
   // 生成中不接受编辑：Agent 写回会整份替换草案内容
   if (row.status !== "confirmed" && row.generation.status !== "pending" && row.generation.status !== "running") {
-    actions.push(action("monthly-plan.update_draft", "保存计划"));
+    actions.push(action("monthly-plan.update_draft", "保存计划"), action("monthly-plan.sign", "签发计划"));
   }
   if (row.status !== "confirmed" && row.generation.status === "failed") {
     actions.push(action("monthly-plan.retry_draft", "重试生成"));
@@ -136,6 +141,7 @@ export function projectMonthlyPlanCard(row: MonthlyPlanRow, secret: string): TCa
       companyOutcome: row.company_outcome,
       battlefields: row.battlefields,
       todos: row.todos,
+      exports: row.exports,
       negotiation: {
         edits: row.negotiation.edits,
         checkedItemIds: row.negotiation.checkedItemIds,
@@ -258,6 +264,15 @@ export async function executeUpdateMonthlyPlanDraft(
       if (todo.dueAt && !Number.isFinite(Date.parse(todo.dueAt))) {
         return planError(400, "INVALID_DUE_AT", "dueAt 不是可解析时间", { dueAt: "unparsable" });
       }
+    }
+    // battlefieldId 必须来自 BattlefieldConfig 注册表；不接受任意字符串
+    const registered = await getRegisteredBattlefieldIds((sql, params) => client.query(sql, params));
+    const unknownBattlefield = findUnregisteredBattlefieldId(registered, [
+      ...(input.battlefields ?? []).map((battlefield) => battlefield.battlefieldId),
+      ...(input.todos ?? []).flatMap((todo) => (todo.battlefieldId ? [todo.battlefieldId] : [])),
+    ]);
+    if (unknownBattlefield) {
+      return planError(400, "INVALID_BATTLEFIELD", `battlefieldId 未在 BattlefieldConfig 注册: ${unknownBattlefield}`, { battlefieldId: "unknown battlefield" });
     }
     const nextTodos: TMonthlyPlanTodo[] | undefined = input.todos?.map((todo) => {
       const { id, ...fields } = todo;
@@ -420,6 +435,13 @@ export async function appendDriMonthlyFeedback(
       await client.query("ROLLBACK");
       return { status: 400, code: "INVALID_TODO", message: "todoId 不属于该 MonthlyPlan", fieldErrors: { todoId: "unknown todo" } };
     }
+    if (body.battlefieldId) {
+      const registered = await getRegisteredBattlefieldIds((sql, params) => client.query(sql, params));
+      if (!registered.has(body.battlefieldId)) {
+        await client.query("ROLLBACK");
+        return { status: 400, code: "INVALID_BATTLEFIELD", message: "battlefieldId 未在 BattlefieldConfig 注册", fieldErrors: { battlefieldId: "unknown battlefield" } };
+      }
+    }
     const feedback: StoredMonthlyFeedback = {
       id: randomUUID(),
       externalId: body.externalId,
@@ -441,6 +463,198 @@ export async function appendDriMonthlyFeedback(
     );
     await client.query("COMMIT");
     return { status: 201, card: projectMonthlyPlanCard(updated, secret) };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+function buildExports(row: MonthlyPlanRow, at: string): TMonthlyPlanExport[] {
+  return row.todos.map((todo) => ({
+    effectRef: `monthly-plan:${row.period}:todo:${todo.id}`,
+    todoId: todo.id,
+    title: todo.title,
+    ownerId: todo.ownerId,
+    dueAt: todo.dueAt ?? null,
+    sourceRef: todo.sourceRef,
+    status: "pending_export" as const,
+    exportRef: null,
+    error: null,
+    createdAt: at,
+    updatedAt: at,
+  }));
+}
+
+/**
+ * 签发后以 source=ontology、originRef=monthly-plan:<period> 重建基础 anchors。
+ * 只替换 ontology 来源的 anchors；manual 与 meeting-reopen 保持不变，不新增 monthly-plan source。
+ */
+async function refreshOntologyAnchors(client: PoolClient, row: MonthlyPlanRow): Promise<void> {
+  const names = await client.query<{ id: string; name: string }>("SELECT id, name FROM battlefield_config");
+  const nameById = new Map(names.rows.map((battlefield) => [battlefield.id, battlefield.name]));
+  const config = await client.query<{ anchors: TRadarAnchor[] }>(
+    "SELECT anchors FROM radar_config WHERE id = 'default' FOR UPDATE",
+  );
+  if (config.rowCount !== 1) throw new Error("RadarConfig missing");
+  const originRef = `monthly-plan:${row.period}`;
+  const anchors: TRadarAnchor[] = [
+    {
+      id: "ontology:company",
+      title: "公司目标",
+      query: row.company_outcome.slice(0, 500),
+      location: { type: "company" },
+      source: "ontology",
+      originRef,
+    },
+    ...row.battlefields.map((battlefield) => ({
+      id: `ontology:${battlefield.battlefieldId}`,
+      title: nameById.get(battlefield.battlefieldId) ?? battlefield.battlefieldId,
+      query: battlefield.outcome.slice(0, 500),
+      location: { type: "battlefield" as const, id: battlefield.battlefieldId },
+      source: "ontology" as const,
+      originRef,
+    })),
+  ];
+  const kept = (config.rows[0].anchors ?? []).filter((anchor) => anchor.source !== "ontology");
+  await client.query(
+    "UPDATE radar_config SET anchors = $1::jsonb, version = version + 1, updated_at = now() WHERE id = 'default'",
+    [JSON.stringify([...kept, ...anchors])],
+  );
+}
+
+/**
+ * CEO 签发：锁计划 → 校验必核对项/owner/sourceRef/状态/version → 同一事务重建 Radar anchors 并生成导出快照。
+ * 不写 CompanyMemory，也不创建 Mission、Todo 实体或完成百分比。
+ */
+export async function executeSignMonthlyPlan(
+  pool: Pool,
+  companyMemory: CompanyMemoryRepository,
+  secret: string,
+  scope: ActionScope,
+  fingerprint: string,
+): Promise<MonthlyPlanActionOutcome> {
+  return withPlanLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+    if (row.status === "confirmed") {
+      return planError(409, "MONTHLY_PLAN_CONFIRMED", "MonthlyPlan 已签发");
+    }
+    if (row.generation.status === "pending" || row.generation.status === "running") {
+      return planError(409, "MONTHLY_PLAN_DRAFT_RUNNING", "草案正在生成，请等待本轮结束后再签发");
+    }
+    // 必核对项：company、每个战场结果与每个普通待办都必须显式核对
+    const checked = new Set(row.negotiation.checkedItemIds);
+    const missing = checkableItemIds(row).filter((itemId) => !checked.has(itemId));
+    if (missing.length > 0) {
+      return planError(400, "MONTHLY_PLAN_UNCHECKED_ITEMS", "签发前必须核对企业结果、战场结果与普通待办", {
+        missingItemIds: missing.join(", "),
+      });
+    }
+    if (row.company_outcome.trim().length === 0) {
+      return planError(400, "INVALID_PLAN_CONTENT", "公司结果不能为空", { companyOutcome: "required" });
+    }
+    const emptyBattlefield = row.battlefields.find((battlefield) => battlefield.outcome.trim().length === 0);
+    if (emptyBattlefield) {
+      return planError(400, "INVALID_PLAN_CONTENT", `战场结果不能为空: ${emptyBattlefield.battlefieldId}`, { battlefields: "outcome required" });
+    }
+    const emptyTodo = row.todos.find((todo) => todo.title.trim().length === 0 || todo.sourceRef.trim().length === 0);
+    if (emptyTodo) {
+      return planError(400, "INVALID_PLAN_CONTENT", "todo 必须有标题与 sourceRef", { todos: "title/sourceRef required" });
+    }
+    // owner 必须是 company-people.v1 稳定 personId
+    const people = new Set(companyMemory.searchPeople(undefined).map((person) => person.personId));
+    const unknownOwner = row.todos.find((todo) => !people.has(todo.ownerId));
+    if (unknownOwner) {
+      return planError(400, "INVALID_OWNER", `todo ownerId 不在 company-people.v1 人员目录中: ${unknownOwner.ownerId}`, { ownerId: "unknown personId" });
+    }
+    // battlefieldId 必须准确归属 BattlefieldConfig 注册表
+    const registered = await getRegisteredBattlefieldIds((sql, params) => client.query(sql, params));
+    const unknownBattlefield = findUnregisteredBattlefieldId(registered, [
+      ...row.battlefields.map((battlefield) => battlefield.battlefieldId),
+      ...row.todos.flatMap((todo) => (todo.battlefieldId ? [todo.battlefieldId] : [])),
+    ]);
+    if (unknownBattlefield) {
+      return planError(400, "INVALID_BATTLEFIELD", `battlefieldId 未在 BattlefieldConfig 注册: ${unknownBattlefield}`, { battlefieldId: "unknown battlefield" });
+    }
+
+    const at = new Date().toISOString();
+    await refreshOntologyAnchors(client, row);
+    const updated = await updatePlan(
+      client,
+      row.id,
+      "status = 'confirmed', confirmed_at = $2, exports = $3::jsonb, action_fingerprints = $4::jsonb, version = version + 1",
+      [at, JSON.stringify(buildExports(row, at)), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+    );
+    return commit(client, updated, secret);
+  });
+}
+
+export async function listMonthlyExports(q: Query, status?: TMonthlyPlanExportStatus): Promise<TMonthlyPlanExport[]> {
+  const rows = await q("SELECT exports FROM monthly_plans WHERE status = 'confirmed' ORDER BY period DESC");
+  const all = (rows.rows as { exports: TMonthlyPlanExport[] }[]).flatMap((row) => row.exports);
+  return status ? all.filter((item) => item.status === status) : all;
+}
+
+export type MonthlyExportMutationResult =
+  | { status: 200; exports: TMonthlyPlanExport[] }
+  | { status: 404 | 409; code: string; message: string };
+
+/**
+ * DRI 出站回执：只有真实外部渠道才能改变导出状态。
+ * pending_export → delivered|failed；failed → pending_export 只在显式再导出时发生；
+ * delivered 是终态：乱序到达的 failed 不得覆盖真实送达或清空回执。
+ */
+export async function mutateMonthlyExport(
+  pool: Pool,
+  effectRef: string,
+  update: { status: TMonthlyPlanExportStatus; exportRef?: string; error?: string },
+): Promise<MonthlyExportMutationResult> {
+  const match = /^monthly-plan:(\d{4}-\d{2}):todo:(.+)$/.exec(effectRef);
+  if (!match) return { status: 404, code: "EXPORT_NOT_FOUND", message: "未知 effectRef" };
+  const [, period] = match;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const found = await client.query<MonthlyPlanRow>(
+      `SELECT ${monthlyPlanColumns()} FROM monthly_plans WHERE period = $1 AND status = 'confirmed' FOR UPDATE`,
+      [period],
+    );
+    if (found.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return { status: 404, code: "EXPORT_NOT_FOUND", message: "已签发计划或导出不存在" };
+    }
+    const row = found.rows[0];
+    const index = row.exports.findIndex((item) => item.effectRef === effectRef);
+    if (index < 0) {
+      await client.query("ROLLBACK");
+      return { status: 404, code: "EXPORT_NOT_FOUND", message: "导出不存在" };
+    }
+    const current = row.exports[index];
+    // delivered 是终态：后到的 failed 不能伪造撤回，也不能丢掉真实送达回执
+    if (current.status === "delivered" && update.status !== "delivered") {
+      await client.query("ROLLBACK");
+      return { status: 409, code: "EXPORT_ALREADY_DELIVERED", message: "已送达的导出不能被撤回或改写" };
+    }
+    // failed 只能先显式 re-export 回到 pending_export，不能直接跳到 delivered
+    if (current.status === "failed" && update.status === "delivered") {
+      await client.query("ROLLBACK");
+      return { status: 409, code: "EXPORT_REEXPORT_REQUIRED", message: "失败的导出必须先显式再导出" };
+    }
+    if (current.status === update.status) {
+      await client.query("ROLLBACK");
+      return { status: 200, exports: row.exports };
+    }
+    const exports = [...row.exports];
+    exports[index] = {
+      ...current,
+      status: update.status,
+      exportRef: update.status === "delivered" ? update.exportRef ?? null : null,
+      error: update.status === "failed" ? update.error ?? "export failed" : null,
+      updatedAt: new Date().toISOString(),
+    };
+    const updated = await updatePlan(client, row.id, "exports = $2::jsonb, version = version + 1", [JSON.stringify(exports)]);
+    await client.query("COMMIT");
+    return { status: 200, exports: updated.exports };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;
