@@ -1,0 +1,65 @@
+# CEO WarMap 单机 Compose（.tech/08）。
+# 只有 edge 暴露公网端口；web/api/postgres 仅内网。
+name: warmap
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: warmap
+      POSTGRES_USER: warmap
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U warmap -d warmap"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgres://warmap:${POSTGRES_PASSWORD}@postgres:5432/warmap
+      PUBLIC_ORIGIN: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN required}
+      CEO_ACCESS_PASSWORD_HASH: ${CEO_ACCESS_PASSWORD_HASH:?CEO_ACCESS_PASSWORD_HASH required}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET required}
+      SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-28800}
+      DRI_SERVICE_TOKEN: ${DRI_SERVICE_TOKEN:?DRI_SERVICE_TOKEN required}
+      COMPANY_MEMORY_MCP_TOKEN: ${COMPANY_MEMORY_MCP_TOKEN:?COMPANY_MEMORY_MCP_TOKEN required}
+      BUILD_SHA: ${BUILD_SHA:-dev}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      API_SERVER_URL: http://api:4000
+      PUBLIC_ORIGIN: https://${PUBLIC_DOMAIN}
+    depends_on:
+      - api
+
+  edge:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
+    volumes:
+      - ../infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - api
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

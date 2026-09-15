@@ -1,0 +1,29 @@
+{
+  "name": "@warmap/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "hash-password": "node scripts/hash-password.mjs"
+  },
+  "dependencies": {
+    "@fastify/rate-limit": "^10.2.2",
+    "@fastify/type-provider-typebox": "^5.1.0",
+    "@sinclair/typebox": "^0.34.52",
+    "@warmap/contracts": "workspace:*",
+    "fastify": "^5.2.1",
+    "pg": "^8.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/pg": "^8.11.11",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.8"
+  }
+}
