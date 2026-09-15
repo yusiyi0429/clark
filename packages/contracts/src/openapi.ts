@@ -20,11 +20,16 @@ import {
   ResearchDoc,
   JoinMeetingRequest,
   LoginRequest,
+  MonthlyDraftCandidate,
+  MonthlyPlanCardPayload,
   RadarScanResponse,
   RequestSupplementRequest,
   SessionResponse,
   SignalStateRequest,
   UpdateMeetingDraftRequest,
+  UpdateMonthlyPlanDraftRequest,
+  DriMonthlyPlanFeedbackRequest,
+  DriMonthlyPlanTodoFeedbackRequest,
 } from "./index.js";
 
 const errorResponse = {
@@ -144,10 +149,32 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/cards/notifications": {
         get: {
           operationId: "listNotificationCards",
-          summary: "会前通知：与 Meeting 详情同一 projector 的 scheduled Meeting 投影",
+          summary: "会前通知与月度通知：与详情同一 projector 的投影",
           responses: {
             "200": { description: "通知 Card 集合", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
             "401": errorResponse,
+          },
+        },
+      },
+      "/api/cards/monthly-plans": {
+        get: {
+          operationId: "listMonthlyPlanCards",
+          summary: "读取 MonthlyPlan Card 列表",
+          responses: {
+            "200": { description: "MonthlyPlan Cards", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/cards/monthly-plans/{id}": {
+        get: {
+          operationId: "getMonthlyPlanCard",
+          summary: "读取 MonthlyPlan 详情 Card",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "MonthlyPlan Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
           },
         },
       },
@@ -283,6 +310,36 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/dri/monthly-feedback": {
+        post: {
+          operationId: "importDriMonthlyFeedback",
+          summary: "DRI 服务追加叙述性月度 feedback（externalId 幂等）",
+          requestBody: jsonBody({ $ref: "#/components/schemas/DriMonthlyPlanFeedbackRequest" }),
+          responses: {
+            "200": { description: "同 externalId 同内容：返回原 MonthlyPlan Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "201": { description: "追加反馈后的 MonthlyPlan Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "409": errorResponse,
+            "422": errorResponse,
+          },
+        },
+      },
+      "/api/dri/todo-feedback": {
+        post: {
+          operationId: "importDriMonthlyTodoFeedback",
+          summary: "DRI 服务追加 todo 叙述性 feedback，不修改执行状态",
+          requestBody: jsonBody({ $ref: "#/components/schemas/DriMonthlyPlanTodoFeedbackRequest" }),
+          responses: {
+            "200": { description: "同 externalId 同内容：返回原 MonthlyPlan Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "201": { description: "追加反馈后的 MonthlyPlan Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "409": errorResponse,
+            "422": errorResponse,
+          },
+        },
+      },
       "/healthz": {
         get: {
           operationId: "health",
@@ -325,6 +382,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         JoinMeetingRequest: JoinMeetingRequest as JsonSchema,
         UpdateMeetingDraftRequest: UpdateMeetingDraftRequest as JsonSchema,
         RequestSupplementRequest: RequestSupplementRequest as JsonSchema,
+        MonthlyPlanCardPayload: MonthlyPlanCardPayload as JsonSchema,
+        MonthlyDraftCandidate: MonthlyDraftCandidate as JsonSchema,
+        UpdateMonthlyPlanDraftRequest: UpdateMonthlyPlanDraftRequest as JsonSchema,
+        DriMonthlyPlanFeedbackRequest: DriMonthlyPlanFeedbackRequest as JsonSchema,
+        DriMonthlyPlanTodoFeedbackRequest: DriMonthlyPlanTodoFeedbackRequest as JsonSchema,
       },
     },
   };

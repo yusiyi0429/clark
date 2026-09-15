@@ -42,7 +42,7 @@ export function verifyActionId(secret: string, token: string): ActionScope | nul
 }
 
 /** 稳定 JSON 序列化：键排序，fingerprint 输入规范化。 */
-function canonicalJson(value: unknown): string {
+export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   const entries = Object.entries(value as Record<string, unknown>)

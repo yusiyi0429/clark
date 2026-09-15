@@ -9,13 +9,18 @@ import {
   ConversationSseEvent,
   CreateMeetingRequest,
   DriIssueImportRequest,
+  DriMonthlyPlanFeedbackRequest,
+  DriMonthlyPlanTodoFeedbackRequest,
   MeetingCardPayload,
+  MonthlyDraftCandidate,
+  MonthlyPlanCardPayload,
   PreflightCandidate,
   RadarCandidateSubmission,
   RadarScanResponse,
   RequestSupplementRequest,
   SignalStateRequest,
   UpdateMeetingDraftRequest,
+  UpdateMonthlyPlanDraftRequest,
   WebSearchInput,
   WebSearchResponse,
 } from "../src/index.js";
@@ -38,6 +43,10 @@ describe("openapi contract", () => {
         "/api/cards/signals/{id}",
         "/api/radar/scans/manual",
         "/api/dri/issues",
+        "/api/cards/monthly-plans",
+        "/api/cards/monthly-plans/{id}",
+        "/api/dri/monthly-feedback",
+        "/api/dri/todo-feedback",
         "/api/signals/{id}/state",
         "/api/actions/execute",
         "/api/conversations/{scope}/messages",
@@ -48,10 +57,18 @@ describe("openapi contract", () => {
 
   it("publishes card, action and error schemas as components", () => {
     expect(Object.keys(doc.components.schemas)).toEqual(
-      expect.arrayContaining(["Card", "ActionDescriptor", "ApiError", "DriIssueImportRequest"]),
+      expect.arrayContaining([
+        "Card",
+        "ActionDescriptor",
+        "ApiError",
+        "DriIssueImportRequest",
+        "MonthlyPlanCardPayload",
+        "MonthlyDraftCandidate",
+        "UpdateMonthlyPlanDraftRequest",
+        "DriMonthlyPlanFeedbackRequest",
+      ]),
     );
   });
-
   it("version conflict responses document ApiError", () => {
     const execute = doc.paths["/api/actions/execute"].post;
     expect(execute.responses["409"]).toBeDefined();
@@ -259,6 +276,89 @@ describe("meeting public contract", () => {
       ...payload,
       draft: { ...payload.draft, supplementRequests: [{ ...payload.draft, exportStatus: "sent" }] },
     })).toBe(false);
+  });
+});
+
+describe("monthly plan public contract", () => {
+  const candidate = {
+    companyOutcome: "完成渠道结构切换",
+    battlefields: [{ battlefieldId: "growth", outcome: "增长战场完成渠道切换" }],
+    todos: [{ title: "完成渠道合同复核", ownerId: "person-002", sourceRef: "issue:decision-1" }],
+  };
+
+  it("accepts only a strict Candidate Material without execution state", () => {
+    expect(Value.Check(MonthlyDraftCandidate, candidate)).toBe(true);
+    expect(Value.Check(MonthlyDraftCandidate, { ...candidate, extra: true })).toBe(false);
+    expect(Value.Check(MonthlyDraftCandidate, { ...candidate, companyOutcome: "" })).toBe(false);
+    expect(Value.Check(MonthlyDraftCandidate, {
+      ...candidate,
+      todos: [{ ...candidate.todos[0], status: "done" }],
+    })).toBe(false);
+  });
+
+  it("accepts partial CEO edits, including company-level todos without a battlefield", () => {
+    expect(Value.Check(UpdateMonthlyPlanDraftRequest, { companyOutcome: "CEO 结果" })).toBe(true);
+    expect(Value.Check(UpdateMonthlyPlanDraftRequest, {
+      todos: [{ title: "公司级待办", ownerId: "person-002", sourceRef: "monthly-plan:2026-05" }],
+      checkedItemIds: ["company"],
+    })).toBe(true);
+    expect(Value.Check(UpdateMonthlyPlanDraftRequest, {})).toBe(false);
+    expect(Value.Check(UpdateMonthlyPlanDraftRequest, { todos: [{ title: "无来源", ownerId: "person-002" }] })).toBe(false);
+  });
+
+  it("types the card payload and keeps narrative feedback free of todo execution state", () => {
+    const payload = {
+      period: "2026-06",
+      status: "negotiating",
+      companyOutcome: "公司结果",
+      battlefields: [{ battlefieldId: "growth", outcome: "战场结果" }],
+      todos: [{ id: "todo-1", title: "待办", ownerId: "person-002", sourceRef: "issue:1" }],
+      negotiation: {
+        edits: [{ at: "2026-06-02T00:00:00.000Z", fields: ["companyOutcome"] }],
+        checkedItemIds: ["company"],
+        feedback: [{
+          id: "feedback-1",
+          externalId: "dri-1",
+          text: "渠道复核已完成",
+          evidenceRef: "dri://evidence/1",
+          observedAt: "2026-06-10T00:00:00.000Z",
+          sourceRef: "dri://retro/1",
+        }],
+        note: "",
+      },
+      generation: {
+        status: "ready",
+        pendingSince: "2026-06-01T00:00:00.000Z",
+        runId: "run-1",
+        previousRunIds: [],
+        error: null,
+        generatedAt: "2026-06-01T00:01:00.000Z",
+      },
+      confirmedAt: null,
+    };
+    expect(Value.Check(MonthlyPlanCardPayload, payload)).toBe(true);
+    expect(Value.Check(MonthlyPlanCardPayload, { ...payload, status: "signed" })).toBe(false);
+    expect(Value.Check(MonthlyPlanCardPayload, {
+      ...payload,
+      todos: [{ ...payload.todos[0], status: "done" }],
+    })).toBe(false);
+  });
+
+  it("accepts DRI narrative feedback requests with observedAt and todo scope", () => {
+    const base = {
+      externalId: "dri-1",
+      period: "2026-06",
+      submitterPersonId: "person-002",
+      sourceRef: "dri://retro/1",
+      text: "渠道复核已完成",
+      observedAt: "2026-06-10T00:00:00.000Z",
+    };
+    expect(Value.Check(DriMonthlyPlanFeedbackRequest, base)).toBe(true);
+    expect(Value.Check(DriMonthlyPlanFeedbackRequest, { ...base, period: "2026-13" })).toBe(false);
+    expect(Value.Check(DriMonthlyPlanFeedbackRequest, { ...base, observedAt: undefined })).toBe(false);
+    expect(Value.Check(DriMonthlyPlanFeedbackRequest, { ...base, status: "done" })).toBe(false);
+    expect(Value.Check(DriMonthlyPlanTodoFeedbackRequest, { ...base, todoId: "todo-1" })).toBe(true);
+    expect(Value.Check(DriMonthlyPlanTodoFeedbackRequest, base)).toBe(false);
   });
 });
 
