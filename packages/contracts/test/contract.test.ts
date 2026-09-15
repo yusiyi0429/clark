@@ -7,10 +7,15 @@ import {
   ConversationMessageRequest,
   ConversationScope,
   ConversationSseEvent,
+  CreateMeetingRequest,
   DriIssueImportRequest,
+  MeetingCardPayload,
+  PreflightCandidate,
   RadarCandidateSubmission,
   RadarScanResponse,
+  RequestSupplementRequest,
   SignalStateRequest,
+  UpdateMeetingDraftRequest,
   WebSearchInput,
   WebSearchResponse,
 } from "../src/index.js";
@@ -194,6 +199,66 @@ describe("radar public contract", () => {
       createdSignals: 1,
       warnings: [],
     })).toBe(true);
+  });
+});
+
+describe("meeting public contract", () => {
+  const candidate = {
+    entries: [{ kind: "agenda", title: "议程", body: "先对齐选择", sourceRefs: ["issue:00000000-0000-4000-8000-000000000001"] }],
+    basis: "依据关联 Issue",
+    brief: "CEO 会前需确认节奏",
+  };
+
+  it("accepts a strict Preflight candidate and rejects model overreach", () => {
+    expect(Value.Check(PreflightCandidate, candidate)).toBe(true);
+    expect(Value.Check(PreflightCandidate, { ...candidate, entries: [] })).toBe(false);
+    expect(Value.Check(PreflightCandidate, {
+      ...candidate,
+      entries: [{ ...candidate.entries[0], sourceRefs: [] }],
+    })).toBe(false);
+    expect(Value.Check(PreflightCandidate, {
+      ...candidate,
+      entries: [{ ...candidate.entries[0], kind: "decision" }],
+    })).toBe(false);
+    expect(Value.Check(PreflightCandidate, { ...candidate, extra: true })).toBe(false);
+  });
+
+  it("accepts Meeting creation and draft/supplement commands only with complete inputs", () => {
+    const create = {
+      title: "渠道投入决策会",
+      scheduledAt: "2026-06-01T10:00:00.000+08:00",
+      leadDriId: "person-002",
+      ceoParticipantId: "person-001",
+      participants: ["person-002"],
+      issueIds: ["00000000-0000-4000-8000-000000000001"],
+    };
+    expect(Value.Check(CreateMeetingRequest, create)).toBe(true);
+    expect(Value.Check(CreateMeetingRequest, { ...create, participants: [] })).toBe(false);
+    expect(Value.Check(CreateMeetingRequest, { ...create, issueIds: [] })).toBe(false);
+    expect(Value.Check(UpdateMeetingDraftRequest, { checkedEntryIds: ["entry-1"], editsByEntryId: { "entry-1": "改" } })).toBe(true);
+    expect(Value.Check(UpdateMeetingDraftRequest, { note: 3 })).toBe(false);
+    expect(Value.Check(RequestSupplementRequest, { targetDriId: "person-002", text: "请补充证据" })).toBe(true);
+    expect(Value.Check(RequestSupplementRequest, { targetDriId: "person-002", text: "" })).toBe(false);
+  });
+
+  it("types the Meeting card payload with snapshot participants and honest supplement status", () => {
+    const payload = {
+      status: "scheduled",
+      scheduledAt: "2026-06-01T02:00:00.000Z",
+      leadDriId: "person-002",
+      ceoParticipantId: "person-001",
+      participants: [{ personId: "person-001", displayName: "CEO", roles: ["ceo"], sourceRef: "seed#person-001", updatedAt: "2026-05-01T00:00:00.000Z" }],
+      issueIds: ["00000000-0000-4000-8000-000000000001"],
+      originRef: { type: "issue", issueId: "00000000-0000-4000-8000-000000000001" },
+      preflight: { status: "ready", pendingSince: null, runId: "run-1", entries: [], basis: "b", brief: "c", error: null, generatedAt: "2026-05-01T00:00:00.000Z" },
+      draft: { readIssueIds: [], carriedIssueIds: [], checkedEntryIds: [], editsByEntryId: {}, supplementRequests: [], note: "" },
+    };
+    expect(Value.Check(MeetingCardPayload, payload)).toBe(true);
+    expect(Value.Check(MeetingCardPayload, { ...payload, status: "postponed" })).toBe(false);
+    expect(Value.Check(MeetingCardPayload, {
+      ...payload,
+      draft: { ...payload.draft, supplementRequests: [{ ...payload.draft, exportStatus: "sent" }] },
+    })).toBe(false);
   });
 });
 

@@ -10,6 +10,7 @@ import { recoverInterruptedResearch } from "./issues.js";
 import { loadCompanyMemory } from "./companyMemory.js";
 import { createResearchService } from "./research.js";
 import { createResearchAgentRunner } from "./researchAgent.js";
+import { recoverInterruptedPreflight } from "./meetings.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -80,6 +81,8 @@ const scheduler = createRadarScheduler(radarService);
 await radarService.recoverStaleRuns();
 // Ticket 07：创建后、预研启动前崩溃留下的超时 pending research 标为 failed:trigger_not_started
 await recoverInterruptedResearch(pool.query.bind(pool));
+// Ticket 09：崩溃留下的未完成预审标为可见 failed，等待 CEO 显式重试
+await recoverInterruptedPreflight(pool.query.bind(pool));
 const app = await buildApp({ pool, env, radarService, researchService });
 app.addHook("onClose", async () => scheduler.close());
 scheduler.start();

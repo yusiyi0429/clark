@@ -303,6 +303,13 @@ function issueActions(row: IssueRow, secret: string): TActionDescriptor[] {
       });
     }
   }
+  // Ticket 09：Meeting 是 pending Issue 的可选决策路径（decided/dismissed 不再暴露）
+  if (row.status === "pending") {
+    actions.push(
+      { actionId: sign("issue.create_meeting"), actionType: "issue.create_meeting", label: "新建 Meeting" },
+      { actionId: sign("issue.join_meeting"), actionType: "issue.join_meeting", label: "加入已有 Meeting" },
+    );
+  }
   return actions;
 }
 

@@ -171,6 +171,110 @@
         }
       }
     },
+    "/api/cards/meetings": {
+      "get": {
+        "operationId": "listMeetingCards",
+        "summary": "读取 Meeting Card 列表（用于加入已有 scheduled Meeting）",
+        "responses": {
+          "200": {
+            "description": "Meeting Cards",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/meetings/{id}": {
+      "get": {
+        "operationId": "getMeetingCard",
+        "summary": "读取 Meeting 详情 Card",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Meeting Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/notifications": {
+      "get": {
+        "operationId": "listNotificationCards",
+        "summary": "会前通知：与 Meeting 详情同一 projector 的 scheduled Meeting 投影",
+        "responses": {
+          "200": {
+            "description": "通知 Card 集合",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cards/radar": {
       "get": {
         "operationId": "getRadarCard",
@@ -600,6 +704,74 @@
           },
           "201": {
             "description": "创建的 pending Issue Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dri/meetings": {
+      "post": {
+        "operationId": "importDriMeeting",
+        "summary": "DRI 服务导入 Meeting 元数据（稳定 Person 目录）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriMeetingImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "同 externalId 同内容：返回原 Meeting Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "创建的 scheduled Meeting Card",
             "content": {
               "application/json": {
                 "schema": {
@@ -2088,6 +2260,191 @@
           "reason": {
             "minLength": 1,
             "maxLength": 500,
+            "type": "string"
+          }
+        }
+      },
+      "DriMeetingImportRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "externalId",
+          "title",
+          "scheduledAt",
+          "leadDriId",
+          "ceoParticipantId",
+          "participants",
+          "issueIds"
+        ],
+        "properties": {
+          "externalId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "scheduledAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "leadDriId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "ceoParticipantId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "participants": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          "issueIds": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CreateMeetingRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "scheduledAt",
+          "leadDriId",
+          "ceoParticipantId",
+          "participants",
+          "issueIds"
+        ],
+        "properties": {
+          "title": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "scheduledAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "leadDriId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "ceoParticipantId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "participants": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          "issueIds": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "JoinMeetingRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "meetingId"
+        ],
+        "properties": {
+          "meetingId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "UpdateMeetingDraftRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "readIssueIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "carriedIssueIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checkedEntryIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "editsByEntryId": {
+            "type": "object",
+            "patternProperties": {
+              "^(.*)$": {
+                "type": "string"
+              }
+            }
+          },
+          "note": {
+            "maxLength": 5000,
+            "type": "string"
+          }
+        }
+      },
+      "RequestSupplementRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "targetDriId",
+          "text"
+        ],
+        "properties": {
+          "entryId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "targetDriId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "maxLength": 2000,
             "type": "string"
           }
         }
