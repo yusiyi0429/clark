@@ -2,6 +2,10 @@ import { join } from "node:path";
 import { buildApp, type AppEnv } from "./app.js";
 import { migrate } from "./migrate.js";
 import { Pool } from "pg";
+import { createRadarService } from "./radar.js";
+import { createRadarAgentAssessor } from "./radarAgent.js";
+import { createRadarScheduler } from "./radarScheduler.js";
+import { createBraveRadarWebAdapter, createWechatAccountHttpAdapter } from "./radarSources.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -36,6 +40,26 @@ try {
   client.release();
 }
 
-const app = await buildApp({ pool, env });
+const radarService = createRadarService({
+  pool,
+  // Provider 未配置时不阻断启动：Radar Card 如实显示未配置（Ticket 16 装载真实凭据）
+  web: createBraveRadarWebAdapter({ apiKey: process.env.SEARCH_API_KEY }),
+  wechat: createWechatAccountHttpAdapter({
+    endpoint: process.env.WECHAT_PROVIDER,
+    credentials: process.env.WECHAT_CREDENTIALS,
+  }),
+  assessor: createRadarAgentAssessor({
+    query: pool.query.bind(pool),
+    baseUrl: env.piBaseUrl,
+    apiKey: env.piApiKey,
+    modelId: env.lightModel,
+  }),
+});
+const scheduler = createRadarScheduler(radarService);
+// 启动补偿：崩溃中断的 running 扫描标为 failed（不自动重跑）
+await radarService.recoverStaleRuns();
+const app = await buildApp({ pool, env, radarService });
+app.addHook("onClose", async () => scheduler.close());
+scheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);

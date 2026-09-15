@@ -10,7 +10,7 @@ import type { WebSearchAdapter } from "../src/webSearch.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
-export type TestDb = { db: import("pg").PoolClient; admin: Pool; database: string };
+export type TestDb = { db: import("pg").PoolClient; pool: Pool; admin: Pool; database: string };
 
 /** 建一个一次性空库跑迁移/集成测试，结束后删除。 */
 export async function createTestDb(fn: (t: TestDb) => Promise<void>): Promise<void> {
@@ -23,7 +23,7 @@ export async function createTestDb(fn: (t: TestDb) => Promise<void>): Promise<vo
   });
   const client = await db.connect();
   try {
-    await fn({ db: client, admin, database });
+    await fn({ db: client, pool: db, admin, database });
   } finally {
     client.release();
     await db.end();

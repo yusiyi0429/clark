@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { buildOpenApiDocument } from "../src/openapi.js";
-import { ApiError, ActionDescriptor, Card, ConversationMessageRequest, ConversationScope, ConversationSseEvent, WebSearchInput, WebSearchResponse } from "../src/index.js";
+import {
+  ApiError,
+  ActionDescriptor,
+  Card,
+  ConversationMessageRequest,
+  ConversationScope,
+  ConversationSseEvent,
+  RadarCandidateSubmission,
+  RadarScanResponse,
+  SignalStateRequest,
+  WebSearchInput,
+  WebSearchResponse,
+} from "../src/index.js";
 import { Value } from "@sinclair/typebox/value";
 
 describe("openapi contract", () => {
@@ -15,6 +27,11 @@ describe("openapi contract", () => {
         "/api/auth/session",
         "/api/cards/home",
         "/api/cards/issues/{id}",
+        "/api/cards/radar",
+        "/api/cards/signals",
+        "/api/cards/signals/{id}",
+        "/api/radar/scans/manual",
+        "/api/signals/{id}/state",
         "/api/actions/execute",
         "/api/conversations/{scope}/messages",
         "/healthz",
@@ -98,6 +115,43 @@ describe("conversation public contract", () => {
     expect(Value.Check(WebSearchInput, { query: "latest", freshness: "forever" })).toBe(false);
     expect(Value.Check(WebSearchResponse, {
       results: [{ title: "公告", url: "https://example.com", excerpt: "内容", provider: "fake" }],
+      warnings: [],
+    })).toBe(true);
+  });
+});
+
+describe("radar public contract", () => {
+  it("accepts only bounded strict Radar candidate submissions", () => {
+    const candidate = {
+      candidates: [{
+        sourceFingerprint: "a".repeat(64),
+        anchorId: "anchor-market",
+        summary: "竞争对手发布新价格",
+        strategicImpact: "可能改变本季度定价选择",
+        evidenceQuote: "价格将在六月一日调整",
+        unknowns: ["覆盖哪些地区"],
+        score: { relevance: 4, impact: 5, urgency: 3 },
+      }],
+    };
+    expect(Value.Check(RadarCandidateSubmission, candidate)).toBe(true);
+    expect(Value.Check(RadarCandidateSubmission, {
+      ...candidate,
+      candidates: [{ ...candidate.candidates[0], extra: "模型越界字段" }],
+    })).toBe(false);
+    expect(Value.Check(RadarCandidateSubmission, {
+      candidates: [{ ...candidate.candidates[0], score: { relevance: 9, impact: 5, urgency: 3 } }],
+    })).toBe(false);
+  });
+
+  it("keeps Signal state flags independently optional and exposes scan outcomes", () => {
+    expect(Value.Check(SignalStateRequest, { read: true })).toBe(true);
+    expect(Value.Check(SignalStateRequest, { saved: true, dismissed: false })).toBe(true);
+    expect(Value.Check(SignalStateRequest, {})).toBe(false);
+    expect(Value.Check(RadarScanResponse, {
+      trigger: "manual",
+      status: "completed",
+      companyDay: "2026-05-02",
+      createdSignals: 1,
       warnings: [],
     })).toBe(true);
   });

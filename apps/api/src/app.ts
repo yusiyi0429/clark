@@ -10,7 +10,9 @@ import {
   ExecuteActionRequest,
   HealthResponse,
   LoginRequest,
+  RadarScanResponse,
   SessionResponse,
+  SignalStateRequest,
   type TApiError,
   type TCardCollection,
 } from "@warmap/contracts";
@@ -37,6 +39,8 @@ import {
   resolveReferenceSnapshots,
   type ConversationRuntime,
 } from "./conversations.js";
+import type { RadarService } from "./radar.js";
+import { getSignalCard, listSignalCards, projectRadarCard, setSignalState } from "./signals.js";
 
 export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
 
@@ -58,11 +62,13 @@ export async function buildApp({
   pool,
   env,
   conversationRuntime,
+  radarService,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
 }: {
   pool: Pool;
   env: AppEnv;
   conversationRuntime?: ConversationRuntime;
+  radarService?: RadarService;
   conversationTurnTimeoutMs?: number;
 }): Promise<FastifyInstance> {
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
@@ -74,6 +80,12 @@ export async function buildApp({
     modelId: env.lightModel,
     compactionModelId: env.compactionModel,
   });
+  const radar = radarService ?? {
+    providerStatus: { web: false, wechat: false },
+    async recoverStaleRuns() {},
+    runManual: async () => ({ trigger: "manual" as const, status: "failed" as const, companyDay: new Date().toISOString().slice(0, 10), createdSignals: 0, warnings: ["Radar providers are not configured"] }),
+    runScheduled: async () => ({ trigger: "scheduled" as const, status: "failed" as const, companyDay: new Date().toISOString().slice(0, 10), createdSignals: 0, warnings: ["Radar providers are not configured"] }),
+  };
   const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
   app.addHook("onClose", async () => runtime.close?.());
   const q = pool.query.bind(pool);
@@ -185,6 +197,44 @@ export async function buildApp({
     const row = await getFixtureHome(q);
     return { cards: [projectHomeCard(row, env.sessionSecret)] };
   });
+
+  const idParams = Type.Object({ id: Type.String({ minLength: 1 }) }, { additionalProperties: false });
+
+  app.get("/api/cards/radar", { preHandler: requireCEO }, async (): Promise<TCardCollection> => ({
+    cards: [await projectRadarCard(q, radar.providerStatus)],
+  }));
+
+  app.get("/api/cards/signals", { preHandler: requireCEO }, async (): Promise<TCardCollection> => ({
+    cards: await listSignalCards(q),
+  }));
+
+  app.get(
+    "/api/cards/signals/:id",
+    { preHandler: requireCEO, schema: { params: idParams } },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      const card = await getSignalCard(q, req.params.id);
+      return card ? { cards: [card] } : fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
+    },
+  );
+
+  app.patch(
+    "/api/signals/:id/state",
+    { preHandler: requireCEO, schema: { params: idParams, body: SignalStateRequest } },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      const card = await setSignalState(q, req.params.id, req.body);
+      return card ? { cards: [card] } : fail(reply, 404, "CARD_NOT_FOUND", "Signal 不存在");
+    },
+  );
+
+  app.post(
+    "/api/radar/scans/manual",
+    { preHandler: requireCEO, schema: { response: { 200: RadarScanResponse } } },
+    async (_req, reply) => {
+      const result = await radar.runManual();
+      if (result.status === "busy") return fail(reply, 409, "RADAR_SCAN_IN_PROGRESS", "Radar 正在运行");
+      return result;
+    },
+  );
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
 
@@ -397,7 +447,7 @@ export async function buildApp({
     "/api/cards/issues/:id",
     {
       preHandler: requireCEO,
-      schema: { params: Type.Object({ id: Type.String({ minLength: 1 }) }, { additionalProperties: false }) },
+      schema: { params: idParams },
     },
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       const row = await getFixtureObject(q, "issue", req.params.id);

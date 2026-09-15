@@ -10,7 +10,9 @@ import {
   ConversationSseEvent,
   HealthResponse,
   LoginRequest,
+  RadarScanResponse,
   SessionResponse,
+  SignalStateRequest,
 } from "./index.js";
 
 const errorResponse = {
@@ -105,6 +107,64 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/cards/radar": {
+        get: {
+          operationId: "getRadarCard",
+          summary: "读取 Radar 配置、最近运行和来源状态",
+          responses: {
+            "200": { description: "Radar Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/cards/signals": {
+        get: {
+          operationId: "listSignalCards",
+          summary: "读取 Signal Card 列表",
+          responses: {
+            "200": { description: "Signal Cards", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/cards/signals/{id}": {
+        get: {
+          operationId: "getSignalCard",
+          summary: "读取 Signal 详情 Card",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Signal Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/radar/scans/manual": {
+        post: {
+          operationId: "runManualRadarScan",
+          summary: "运行一次与 scheduled 共用管线的手动 Radar 扫描",
+          responses: {
+            "200": { description: "扫描结果", content: { "application/json": { schema: { $ref: "#/components/schemas/RadarScanResponse" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/signals/{id}/state": {
+        patch: {
+          operationId: "setSignalState",
+          summary: "独立设置 Signal read、saved、dismissed 状态",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/SignalStateRequest" }),
+          responses: {
+            "200": { description: "更新后的 Signal Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
       "/api/conversations/{scope}/messages": {
         get: {
           operationId: "getConversationMessages",
@@ -179,6 +239,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
         ConversationSseEvent: ConversationSseEvent as JsonSchema,
         HealthResponse: HealthResponse as JsonSchema,
+        RadarScanResponse: RadarScanResponse as JsonSchema,
+        SignalStateRequest: SignalStateRequest as JsonSchema,
       },
     },
   };
