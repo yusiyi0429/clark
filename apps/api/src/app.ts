@@ -7,6 +7,7 @@ import type { Pool } from "pg";
 import {
   ConversationMessageRequest,
   ConversationScope,
+  DriIssueImportRequest,
   ExecuteActionRequest,
   HealthResponse,
   LoginRequest,
@@ -41,6 +42,7 @@ import {
 } from "./conversations.js";
 import type { RadarService } from "./radar.js";
 import { getSignalCard, listSignalCards, projectRadarCard, setSignalState } from "./signals.js";
+import { getIssueRow, importDriIssue, projectIssueCard } from "./issues.js";
 
 export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
 
@@ -450,6 +452,9 @@ export async function buildApp({
       schema: { params: idParams },
     },
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      // 默认只读：真实 Issue 优先，Ticket 04 的 fixture 仅在迁移期兼容
+      const issue = await getIssueRow(q, req.params.id);
+      if (issue) return { cards: [projectIssueCard(issue)] };
       const row = await getFixtureObject(q, "issue", req.params.id);
       if (!row?.visible_to_ceo) return fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
       return { cards: [projectFixtureObjectCard(row)] };
@@ -504,8 +509,15 @@ export async function buildApp({
   );
   app.post(
     "/api/dri/issues",
-    { preHandler: requireServiceToken(env.driServiceToken) },
-    async (_req, reply) => fail(reply, 501, "NOT_IMPLEMENTED", "DRI Issue 导入在 Ticket 07 实现"),
+    // 服务身份用 onRequest：未鉴权调用先得到 401，而不是从 400 推断字段
+    { onRequest: requireServiceToken(env.driServiceToken), schema: { body: DriIssueImportRequest } },
+    async (req, reply) => {
+      const result = await importDriIssue(pool, companyMemory, req.body);
+      if ("code" in result) {
+        return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
+      }
+      return reply.status(result.status).send({ cards: [result.card] });
+    },
   );
 
   return app;

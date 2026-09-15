@@ -8,6 +8,7 @@ import {
   ConversationHistory,
   ConversationMessageRequest,
   ConversationSseEvent,
+  DriIssueImportRequest,
   HealthResponse,
   LoginRequest,
   RadarScanResponse,
@@ -211,6 +212,20 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/dri/issues": {
+        post: {
+          operationId: "importDriIssue",
+          summary: "DRI 服务导入 Issue（red 必须提供 decisionBy 与 reason）",
+          requestBody: jsonBody({ $ref: "#/components/schemas/DriIssueImportRequest" }),
+          responses: {
+            "200": { description: "同 externalId 同内容：返回原 Issue Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "201": { description: "创建的 pending Issue Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
       "/healthz": {
         get: {
           operationId: "health",
@@ -241,6 +256,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         HealthResponse: HealthResponse as JsonSchema,
         RadarScanResponse: RadarScanResponse as JsonSchema,
         SignalStateRequest: SignalStateRequest as JsonSchema,
+        DriIssueImportRequest: DriIssueImportRequest as JsonSchema,
       },
     },
   };

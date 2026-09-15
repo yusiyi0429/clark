@@ -209,6 +209,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/dri/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** DRI 服务导入 Issue（red 必须提供 decisionBy 与 reason） */
+        post: operations["importDriIssue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -468,6 +485,31 @@ export interface components {
             read?: boolean;
             saved?: boolean;
             dismissed?: boolean;
+        };
+        DriIssueImportRequest: {
+            externalId: string;
+            submitterPersonId: string;
+            title: string;
+            whyNow: string;
+            sourceRef: string;
+            location: {
+                /** @constant */
+                level: "company";
+                relatedBattlefieldIds: string[];
+            } | {
+                /** @constant */
+                level: "battlefield";
+                battlefieldId: string;
+            } | {
+                /** @constant */
+                level: "capability";
+                capabilityId: string;
+            };
+            urgency?: {
+                level: "red" | "yellow" | "gray";
+                decisionBy?: string;
+                reason?: string;
+            };
         };
     };
     responses: never;
@@ -970,6 +1012,66 @@ export interface operations {
                 };
             };
             /** @description version 冲突，携带 latestCard */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    importDriIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DriIssueImportRequest"];
+            };
+        };
+        responses: {
+            /** @description 同 externalId 同内容：返回原 Issue Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description 创建的 pending Issue Card */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
             409: {
                 headers: {
                     [name: string]: unknown;

@@ -10,6 +10,7 @@ import {
   type TRadarSourceItem,
   type TRadarSources,
 } from "@warmap/contracts";
+import { assessPromotion } from "./issues.js";
 
 export type FingerprintedRadarSource = TRadarSourceItem & { sourceFingerprint: string };
 
@@ -224,20 +225,79 @@ export function createRadarService({
             warnings.push(`候选未通过来源引文或归属校验: ${candidate.sourceFingerprint}`);
             continue;
           }
-          const inserted = await client.query(
-            `INSERT INTO signals
-               (id, version, source_type, source_fingerprint, source_title, source_url, published_at, excerpt,
-                source_ref, anchor_id, location, summary, strategic_impact, evidence_quote, unknowns, score)
-             VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14::jsonb, $15::jsonb)
-             ON CONFLICT (source_fingerprint) DO NOTHING`,
-            [
-              randomUUID(), source.sourceType, source.sourceFingerprint, source.title, source.url, source.publishedAt,
-              source.excerpt, JSON.stringify(source.sourceRef), candidate.anchorId, JSON.stringify(anchor.location),
-              candidate.summary, candidate.strategicImpact, candidate.evidenceQuote, JSON.stringify(candidate.unknowns),
-              JSON.stringify(candidate.score),
-            ],
-          );
-          createdSignals += inserted.rowCount ?? 0;
+          // 单事务：Signal 与自动升级的 pending Issue 要么一起落库，要么都不落
+          await client.query("BEGIN");
+          try {
+            const inserted = await client.query(
+              `INSERT INTO signals
+                 (id, version, source_type, source_fingerprint, source_title, source_url, published_at, excerpt,
+                  source_ref, anchor_id, location, summary, strategic_impact, evidence_quote, unknowns, score)
+               VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14::jsonb, $15::jsonb)
+               ON CONFLICT (source_fingerprint) DO NOTHING
+               RETURNING id`,
+              [
+                randomUUID(), source.sourceType, source.sourceFingerprint, source.title, source.url, source.publishedAt,
+                source.excerpt, JSON.stringify(source.sourceRef), candidate.anchorId, JSON.stringify(anchor.location),
+                candidate.summary, candidate.strategicImpact, candidate.evidenceQuote, JSON.stringify(candidate.unknowns),
+                JSON.stringify(candidate.score),
+              ],
+            );
+            const signalInserted = inserted.rowCount === 1;
+            if (signalInserted && candidate.promotion) {
+              const signalId = inserted.rows[0].id as string;
+              const promoted = assessPromotion({
+                promotion: candidate.promotion,
+                excerpt: source.excerpt,
+                evidenceQuote: candidate.evidenceQuote,
+                score: candidate.score,
+              });
+              if (!promoted.ok) {
+                warnings.push(`候选未通过升级门槛: ${promoted.reason}`);
+              } else {
+                const created = await client.query<{ id: string }>(
+                  `INSERT INTO issues
+                     (id, version, origin, origin_ref, title, location, urgency, status, research, promotion_fingerprint)
+                   VALUES ($1, 1, 'radar', $2::jsonb, $3, $4::jsonb, $5::jsonb, 'pending', $6::jsonb, $7)
+                   ON CONFLICT DO NOTHING
+                   RETURNING id`,
+                  [
+                    randomUUID(),
+                    JSON.stringify({
+                      signalId, sourceFingerprint: source.sourceFingerprint, anchorId: candidate.anchorId,
+                      summary: candidate.summary, strategicImpact: candidate.strategicImpact,
+                      options: promoted.promotion.options, evidenceQuote: candidate.evidenceQuote,
+                    }),
+                    promoted.promotion.decisionQuestion,
+                    JSON.stringify(promoted.promotion.location),
+                    JSON.stringify(promoted.promotion.urgency),
+                    JSON.stringify({
+                      status: "pending", pendingSince: new Date().toISOString(),
+                      runId: null, previousRunIds: [], error: null,
+                    }),
+                    promoted.promotion.fingerprint,
+                  ],
+                );
+                const issueId = created.rowCount === 1
+                  ? created.rows[0].id
+                  : (await client.query<{ id: string }>(
+                      "SELECT id FROM issues WHERE promotion_fingerprint = $1",
+                      [promoted.promotion.fingerprint],
+                    )).rows[0]?.id;
+                // 重复执行只得到一个 Issue：第二个等价候选只绑定到已有 Issue，不新建
+                if (issueId) {
+                  await client.query("UPDATE signals SET promoted_issue_id = $2, promotion_fingerprint = $3 WHERE id = $1", [
+                    signalId, issueId, promoted.promotion.fingerprint,
+                  ]);
+                }
+              }
+            }
+            await client.query("COMMIT");
+            // 只有提交成功的 Signal 才计入本次扫描结果
+            if (signalInserted) createdSignals += 1;
+          } catch (cause) {
+            await client.query("ROLLBACK").catch(() => undefined);
+            warnings.push(`候选保存失败: ${(cause as Error).message || String(cause)}`);
+          }
         }
       }
 

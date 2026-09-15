@@ -7,6 +7,7 @@ import {
   ConversationMessageRequest,
   ConversationScope,
   ConversationSseEvent,
+  DriIssueImportRequest,
   RadarCandidateSubmission,
   RadarScanResponse,
   SignalStateRequest,
@@ -31,6 +32,7 @@ describe("openapi contract", () => {
         "/api/cards/signals",
         "/api/cards/signals/{id}",
         "/api/radar/scans/manual",
+        "/api/dri/issues",
         "/api/signals/{id}/state",
         "/api/actions/execute",
         "/api/conversations/{scope}/messages",
@@ -41,7 +43,7 @@ describe("openapi contract", () => {
 
   it("publishes card, action and error schemas as components", () => {
     expect(Object.keys(doc.components.schemas)).toEqual(
-      expect.arrayContaining(["Card", "ActionDescriptor", "ApiError"]),
+      expect.arrayContaining(["Card", "ActionDescriptor", "ApiError", "DriIssueImportRequest"]),
     );
   });
 
@@ -116,6 +118,44 @@ describe("conversation public contract", () => {
     expect(Value.Check(WebSearchResponse, {
       results: [{ title: "公告", url: "https://example.com", excerpt: "内容", provider: "fake" }],
       warnings: [],
+    })).toBe(true);
+  });
+});
+
+describe("issue import and promotion public contract", () => {
+  it("accepts stable DRI JSON import and a structured Radar promotion candidate", () => {
+    expect(Value.Check(DriIssueImportRequest, {
+      externalId: "dri-issue-001",
+      submitterPersonId: "person-fixture-002",
+      title: "是否调整增长投入",
+      whyNow: "季度预算将在本周锁定",
+      sourceRef: "dri://planning/001",
+      location: { level: "battlefield", battlefieldId: "growth" },
+      urgency: { level: "red", decisionBy: "2026-05-04T10:00:00.000+08:00", reason: "预算锁定后不可调整" },
+    })).toBe(true);
+
+    expect(Value.Check(RadarCandidateSubmission, {
+      candidates: [{
+        sourceFingerprint: "a".repeat(64),
+        anchorId: "anchor-market",
+        summary: "竞争对手发布新价格",
+        strategicImpact: "可能改变本季度定价选择",
+        evidenceQuote: "价格将在六月一日调整",
+        unknowns: [],
+        score: { relevance: 5, impact: 4, urgency: 3 },
+        promotion: {
+          decisionKind: "resource_allocation",
+          decisionQuestion: "是否在六月前调整渠道投入？",
+          options: ["调整投入", "维持现状"],
+          location: { level: "battlefield", battlefieldId: "growth" },
+          urgency: {
+            level: "red",
+            reason: "渠道窗口即将关闭",
+            decisionBy: "2026-06-01T00:00:00.000+08:00",
+            decisionByEvidence: { quote: "六月一日前完成渠道申报" },
+          },
+        },
+      }],
     })).toBe(true);
   });
 });

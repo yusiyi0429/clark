@@ -12,15 +12,23 @@ const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@local
 
 export type TestDb = { db: import("pg").PoolClient; pool: Pool; admin: Pool; database: string };
 
+/** DROP DATABASE (FORCE) 终止测试库残留连接是预期行为；其他池错误必须保持可见。 */
+function tolerateDroppedConnections(pool: Pool): Pool {
+  pool.on("error", (error: Error & { code?: string }) => {
+    if (error.code !== "57P01") console.error("test pool error", error);
+  });
+  return pool;
+}
+
 /** 建一个一次性空库跑迁移/集成测试，结束后删除。 */
 export async function createTestDb(fn: (t: TestDb) => Promise<void>): Promise<void> {
   const database = `warmap_test_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const admin = new Pool({ connectionString: ADMIN_URL, max: 2 });
   await admin.query(`CREATE DATABASE ${database}`);
-  const db = new Pool({
+  const db = tolerateDroppedConnections(new Pool({
     connectionString: ADMIN_URL.replace(/\/postgres$/, `/${database}`),
     max: 5,
-  });
+  }));
   const client = await db.connect();
   try {
     await fn({ db: client, pool: db, admin, database });
@@ -107,10 +115,10 @@ export async function createTestApp(
   const database = `warmap_test_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const admin = new Pool({ connectionString: ADMIN_URL, max: 2 });
   await admin.query(`CREATE DATABASE ${database}`);
-  const pool = new Pool({
+  const pool = tolerateDroppedConnections(new Pool({
     connectionString: ADMIN_URL.replace(/\/postgres$/, `/${database}`),
     max: 5,
-  });
+  }));
   const client = await pool.connect();
   await migrate(client);
   client.release();
