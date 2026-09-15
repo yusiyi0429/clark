@@ -11,6 +11,9 @@ import { loadCompanyMemory } from "./companyMemory.js";
 import { createResearchService } from "./research.js";
 import { createResearchAgentRunner } from "./researchAgent.js";
 import { recoverInterruptedPreflight } from "./meetings.js";
+import { createMonthlyPlanService } from "./monthlyDraft.js";
+import { createMonthlyDraftAgent } from "./monthlyDraftAgent.js";
+import { createMonthlyPlanScheduler } from "./monthlyPlanScheduler.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -47,11 +50,12 @@ try {
   client.release();
 }
 
+const companyMemory = loadCompanyMemory(env);
 const researchService = createResearchService({
   pool,
   runner: createResearchAgentRunner({
     query: pool.query.bind(pool),
-    companyMemory: loadCompanyMemory(env),
+    companyMemory,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.heavyModel,
@@ -77,14 +81,31 @@ const radarService = createRadarService({
   },
 });
 const scheduler = createRadarScheduler(radarService);
+const monthlyPlanService = createMonthlyPlanService({
+  pool,
+  companyMemory,
+  agent: createMonthlyDraftAgent({
+    query: pool.query.bind(pool),
+    baseUrl: env.piBaseUrl,
+    apiKey: env.piApiKey,
+    modelId: env.heavyModel,
+  }),
+});
+const monthlyScheduler = createMonthlyPlanScheduler(monthlyPlanService);
 // 启动补偿：崩溃中断的 running 扫描标为 failed（不自动重跑）
 await radarService.recoverStaleRuns();
 // Ticket 07：创建后、预研启动前崩溃留下的超时 pending research 标为 failed:trigger_not_started
 await recoverInterruptedResearch(pool.query.bind(pool));
 // Ticket 09：崩溃留下的未完成预审标为可见 failed，等待 CEO 显式重试
 await recoverInterruptedPreflight(pool.query.bind(pool));
-const app = await buildApp({ pool, env, radarService, researchService });
-app.addHook("onClose", async () => scheduler.close());
+// Ticket 12：崩溃留下的未完成月度草案标为可见 failed，不自动重跑
+await monthlyPlanService.recoverInterrupted();
+const app = await buildApp({ pool, env, radarService, researchService, monthlyPlanService });
+app.addHook("onClose", async () => {
+  scheduler.close();
+  monthlyScheduler.close();
+});
 scheduler.start();
+monthlyScheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);

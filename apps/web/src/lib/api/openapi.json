@@ -250,7 +250,7 @@
     "/api/cards/notifications": {
       "get": {
         "operationId": "listNotificationCards",
-        "summary": "会前通知：与 Meeting 详情同一 projector 的 scheduled Meeting 投影",
+        "summary": "会前通知与月度通知：与详情同一 projector 的投影",
         "responses": {
           "200": {
             "description": "通知 Card 集合",
@@ -263,6 +263,82 @@
             }
           },
           "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/monthly-plans": {
+      "get": {
+        "operationId": "listMonthlyPlanCards",
+        "summary": "读取 MonthlyPlan Card 列表",
+        "responses": {
+          "200": {
+            "description": "MonthlyPlan Cards",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/monthly-plans/{id}": {
+      "get": {
+        "operationId": "getMonthlyPlanCard",
+        "summary": "读取 MonthlyPlan 详情 Card",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MonthlyPlan Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -801,6 +877,162 @@
             }
           },
           "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dri/monthly-feedback": {
+      "post": {
+        "operationId": "importDriMonthlyFeedback",
+        "summary": "DRI 服务追加叙述性月度 feedback（externalId 幂等）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriMonthlyPlanFeedbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "同 externalId 同内容：返回原 MonthlyPlan Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "追加反馈后的 MonthlyPlan Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dri/todo-feedback": {
+      "post": {
+        "operationId": "importDriMonthlyTodoFeedback",
+        "summary": "DRI 服务追加 todo 叙述性 feedback，不修改执行状态",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriMonthlyPlanTodoFeedbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "同 externalId 同内容：返回原 MonthlyPlan Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "追加反馈后的 MonthlyPlan Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -2445,6 +2677,588 @@
           "text": {
             "minLength": 1,
             "maxLength": 2000,
+            "type": "string"
+          }
+        }
+      },
+      "MonthlyPlanCardPayload": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period",
+          "status",
+          "companyOutcome",
+          "battlefields",
+          "todos",
+          "negotiation",
+          "generation",
+          "confirmedAt"
+        ],
+        "properties": {
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "draft",
+                "type": "string"
+              },
+              {
+                "const": "negotiating",
+                "type": "string"
+              },
+              {
+                "const": "confirmed",
+                "type": "string"
+              }
+            ]
+          },
+          "companyOutcome": {
+            "type": "string"
+          },
+          "battlefields": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "battlefieldId",
+                "outcome"
+              ],
+              "properties": {
+                "battlefieldId": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "outcome": {
+                  "minLength": 1,
+                  "maxLength": 4000,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "todos": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "ownerId",
+                "sourceRef"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "battlefieldId": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "ownerId": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "dueAt": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "sourceRef": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "negotiation": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "edits",
+              "checkedItemIds",
+              "feedback",
+              "note"
+            ],
+            "properties": {
+              "edits": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "at",
+                    "fields"
+                  ],
+                  "properties": {
+                    "at": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "checkedItemIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "feedback": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "externalId",
+                    "text",
+                    "observedAt",
+                    "sourceRef"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "todoId": {
+                      "type": "string"
+                    },
+                    "battlefieldId": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "evidenceRef": {
+                      "type": "string"
+                    },
+                    "observedAt": {
+                      "type": "string"
+                    },
+                    "sourceRef": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          },
+          "generation": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "status",
+              "pendingSince",
+              "runId",
+              "previousRunIds",
+              "error",
+              "generatedAt"
+            ],
+            "properties": {
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "pending",
+                    "type": "string"
+                  },
+                  {
+                    "const": "running",
+                    "type": "string"
+                  },
+                  {
+                    "const": "ready",
+                    "type": "string"
+                  },
+                  {
+                    "const": "failed",
+                    "type": "string"
+                  }
+                ]
+              },
+              "pendingSince": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "runId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "previousRunIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "code",
+                      "message",
+                      "at"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "generatedAt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "confirmedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "MonthlyDraftCandidate": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "companyOutcome",
+          "battlefields",
+          "todos"
+        ],
+        "properties": {
+          "companyOutcome": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "battlefields": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "battlefieldId",
+                "outcome"
+              ],
+              "properties": {
+                "battlefieldId": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "outcome": {
+                  "minLength": 1,
+                  "maxLength": 4000,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "todos": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "title",
+                "ownerId",
+                "sourceRef"
+              ],
+              "properties": {
+                "battlefieldId": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "ownerId": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "dueAt": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "sourceRef": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "UpdateMonthlyPlanDraftRequest": {
+        "additionalProperties": false,
+        "minProperties": 1,
+        "type": "object",
+        "properties": {
+          "companyOutcome": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "battlefields": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "battlefieldId",
+                "outcome"
+              ],
+              "properties": {
+                "battlefieldId": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "outcome": {
+                  "minLength": 1,
+                  "maxLength": 4000,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "todos": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "title",
+                "ownerId",
+                "sourceRef"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "battlefieldId": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "ownerId": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "dueAt": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "sourceRef": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "checkedItemIds": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 300,
+              "type": "string"
+            }
+          },
+          "note": {
+            "maxLength": 5000,
+            "type": "string"
+          }
+        }
+      },
+      "DriMonthlyPlanFeedbackRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "externalId",
+          "period",
+          "submitterPersonId",
+          "sourceRef",
+          "text",
+          "observedAt"
+        ],
+        "properties": {
+          "externalId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "以 (period, externalId) 为幂等键；同内容返回原结果，不同内容 409",
+            "type": "string"
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "submitterPersonId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "sourceRef": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "evidenceRef": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "observedAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "battlefieldId": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          }
+        }
+      },
+      "DriMonthlyPlanTodoFeedbackRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "externalId",
+          "period",
+          "submitterPersonId",
+          "sourceRef",
+          "text",
+          "observedAt",
+          "todoId"
+        ],
+        "properties": {
+          "externalId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "以 (period, externalId) 为幂等键；同内容返回原结果，不同内容 409",
+            "type": "string"
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "submitterPersonId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "sourceRef": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "evidenceRef": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "observedAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "battlefieldId": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "todoId": {
+            "minLength": 1,
             "type": "string"
           }
         }

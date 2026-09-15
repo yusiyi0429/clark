@@ -8,6 +8,8 @@ import type { FastifyInstance } from "fastify";
 import type { ConversationRuntime } from "../src/conversations.js";
 import type { ResearchService } from "../src/research.js";
 import type { DriExporter, PreflightAgent } from "../src/meetings.js";
+import { createMonthlyPlanService, type MonthlyDraftAgent, type MonthlyPlanService } from "../src/monthlyDraft.js";
+import { loadCompanyMemory } from "../src/companyMemory.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
@@ -99,6 +101,8 @@ export type TestApp = {
   setRuntimeEntries: (scope: string, entries: unknown) => Promise<void>;
   agentRuns: () => Promise<Record<string, unknown>[]>;
   sql: (text: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
+  /** 仅当注入 monthlyDraftAgent 时存在；测试用它触发 Company Day scheduler。 */
+  monthlyPlans?: MonthlyPlanService;
   restart: (runtime: ConversationRuntime) => Promise<FastifyInstance>;
   close: () => Promise<void>;
 };
@@ -114,7 +118,13 @@ const defaultConversationRuntime: ConversationRuntime = {
 export async function createTestApp(
   seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
-  runtimeOptions: { conversationTurnTimeoutMs?: number; preflightAgent?: PreflightAgent; driExporter?: DriExporter } = {},
+  runtimeOptions: {
+    conversationTurnTimeoutMs?: number;
+    preflightAgent?: PreflightAgent;
+    driExporter?: DriExporter;
+    monthlyDraftAgent?: MonthlyDraftAgent;
+    monthlyNow?: () => Date;
+  } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {
   const database = `warmap_test_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
@@ -128,10 +138,15 @@ export async function createTestApp(
   await migrate(client);
   client.release();
   const env = { ...testEnv, ...seedOverrides };
-  const app = await buildApp({ pool, env, conversationRuntime, researchService, ...runtimeOptions });
+  const { monthlyDraftAgent, monthlyNow, ...appRuntimeOptions } = runtimeOptions;
+  const monthlyPlans = monthlyDraftAgent
+    ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
+    : undefined;
+  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, ...appRuntimeOptions });
   const apps = [app];
   return {
     app,
+    monthlyPlans,
     publicOrigin: testEnv.publicOrigin,
     env: testEnv,
     loginCookie: async () => {
@@ -172,7 +187,7 @@ export async function createTestApp(
     agentRuns: async () => (await pool.query("SELECT * FROM agent_runs ORDER BY started_at, id")).rows,
     sql: async (text, params) => (await pool.query(text, params)).rows,
     restart: async (runtime) => {
-      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, researchService, ...runtimeOptions });
+      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, researchService, monthlyPlanService: monthlyPlans, ...appRuntimeOptions });
       apps.push(restarted);
       return restarted;
     },

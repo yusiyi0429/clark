@@ -11,6 +11,8 @@ import {
   CreateMeetingRequest,
   DriIssueImportRequest,
   DriMeetingImportRequest,
+  DriMonthlyPlanFeedbackRequest,
+  DriMonthlyPlanTodoFeedbackRequest,
   ExecuteActionRequest,
   HealthResponse,
   JoinMeetingRequest,
@@ -20,8 +22,10 @@ import {
   SessionResponse,
   SignalStateRequest,
   UpdateMeetingDraftRequest,
+  UpdateMonthlyPlanDraftRequest,
   type TApiError,
   type TCardCollection,
+  type TUpdateMonthlyPlanDraftRequest,
 } from "@warmap/contracts";
 import rateLimit from "@fastify/rate-limit";
 import {
@@ -66,6 +70,16 @@ import {
   type PreflightAgent,
 } from "./meetings.js";
 import { createPreflightAgent } from "./preflightAgent.js";
+import {
+  appendDriMonthlyFeedback,
+  executeRetryMonthlyPlanDraft,
+  executeUpdateMonthlyPlanDraft,
+  getMonthlyPlanNotice,
+  getMonthlyPlanRow,
+  listMonthlyPlanRows,
+  projectMonthlyPlanCard,
+} from "./monthlyPlans.js";
+import type { MonthlyPlanService } from "./monthlyDraft.js";
 
 export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
 
@@ -92,6 +106,7 @@ export async function buildApp({
   researchService,
   preflightAgent,
   driExporter,
+  monthlyPlanService,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
 }: {
   pool: Pool;
@@ -101,6 +116,7 @@ export async function buildApp({
   researchService?: ResearchService;
   preflightAgent?: PreflightAgent;
   driExporter?: DriExporter;
+  monthlyPlanService?: MonthlyPlanService;
   conversationTurnTimeoutMs?: number;
 }): Promise<FastifyInstance> {
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
@@ -542,10 +558,26 @@ export async function buildApp({
   );
 
   // 会前通知与 Meeting 详情是同一 projector 的投影，不保存第二份 Meeting。
+  // 月度通知与月度页面同样读取同一 MonthlyPlan 持久对象。
   app.get("/api/cards/notifications", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
     const rows = (await listMeetingRows(q)).filter((row) => row.status === "scheduled");
-    return { cards: rows.map((row) => projectMeetingCard(row, env.sessionSecret)) };
+    const monthlyNotice = await getMonthlyPlanNotice(q, env.sessionSecret);
+    return { cards: [...(monthlyNotice ? [monthlyNotice] : []), ...rows.map((row) => projectMeetingCard(row, env.sessionSecret))] };
   });
+
+  app.get("/api/cards/monthly-plans", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
+    const rows = await listMonthlyPlanRows(q);
+    return { cards: rows.map((row) => projectMonthlyPlanCard(row, env.sessionSecret)) };
+  });
+
+  app.get(
+    "/api/cards/monthly-plans/:id",
+    { preHandler: requireCEO, schema: { params: idParams } },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      const row = await getMonthlyPlanRow(q, req.params.id);
+      return row ? { cards: [projectMonthlyPlanCard(row, env.sessionSecret)] } : fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
+    },
+  );
 
   app.post(
     "/api/actions/execute",
@@ -580,6 +612,23 @@ export async function buildApp({
       }
       if (scope.actionType === "meeting.retry_preflight") {
         return respond(reply, await executeRetryPreflight(pool, companyMemory, preflight, env.sessionSecret, scope, fingerprint));
+      }
+
+      if (scope.actionType === "monthly-plan.update_draft") {
+        const monthlyInput = input ?? {};
+        if (!Value.Check(UpdateMonthlyPlanDraftRequest, monthlyInput)) {
+          return invalidInput(reply, UpdateMonthlyPlanDraftRequest, monthlyInput);
+        }
+        return respond(reply, await executeUpdateMonthlyPlanDraft(pool, companyMemory, env.sessionSecret, scope, monthlyInput as TUpdateMonthlyPlanDraftRequest, fingerprint));
+      }
+      if (scope.actionType === "monthly-plan.retry_draft") {
+        const result = await executeRetryMonthlyPlanDraft(pool, env.sessionSecret, scope, fingerprint);
+        // 重跑已进入 running：提交后异步执行，不阻塞返回
+        if ("startDraft" in result && result.startDraft) {
+          const { planId, runId } = result.startDraft;
+          monthlyPlanService?.executeRun(planId, runId).catch((err) => console.error("monthly draft run failed", err));
+        }
+        return respond(reply, result);
       }
 
       if (scope.objectType === "issue") {
@@ -655,6 +704,29 @@ export async function buildApp({
     { onRequest: requireServiceToken(env.driServiceToken), schema: { body: DriMeetingImportRequest } },
     async (req, reply) => {
       const result = await importDriMeeting(pool, companyMemory, preflight, env.sessionSecret, req.body);
+      if ("code" in result) {
+        return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
+      }
+      return reply.status(result.status).send({ cards: [result.card] });
+    },
+  );
+  // DRI 叙述性 feedback：只追加到同一个 MonthlyPlan，不修改 todo 执行状态。
+  app.post(
+    "/api/dri/monthly-feedback",
+    { onRequest: requireServiceToken(env.driServiceToken), schema: { body: DriMonthlyPlanFeedbackRequest } },
+    async (req, reply) => {
+      const result = await appendDriMonthlyFeedback(pool, companyMemory, req.body, env.sessionSecret);
+      if ("code" in result) {
+        return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
+      }
+      return reply.status(result.status).send({ cards: [result.card] });
+    },
+  );
+  app.post(
+    "/api/dri/todo-feedback",
+    { onRequest: requireServiceToken(env.driServiceToken), schema: { body: DriMonthlyPlanTodoFeedbackRequest } },
+    async (req, reply) => {
+      const result = await appendDriMonthlyFeedback(pool, companyMemory, req.body, env.sessionSecret);
       if ("code" in result) {
         return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
       }

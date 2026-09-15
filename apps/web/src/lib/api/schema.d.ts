@@ -130,8 +130,42 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 会前通知：与 Meeting 详情同一 projector 的 scheduled Meeting 投影 */
+        /** 会前通知与月度通知：与详情同一 projector 的投影 */
         get: operations["listNotificationCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/monthly-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取 MonthlyPlan Card 列表 */
+        get: operations["listMonthlyPlanCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/monthly-plans/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取 MonthlyPlan 详情 Card */
+        get: operations["getMonthlyPlanCard"];
         put?: never;
         post?: never;
         delete?: never;
@@ -288,6 +322,40 @@ export interface paths {
         put?: never;
         /** DRI 服务导入 Meeting 元数据（稳定 Person 目录） */
         post: operations["importDriMeeting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dri/monthly-feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** DRI 服务追加叙述性月度 feedback（externalId 幂等） */
+        post: operations["importDriMonthlyFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dri/todo-feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** DRI 服务追加 todo 叙述性 feedback，不修改执行状态 */
+        post: operations["importDriMonthlyTodoFeedback"];
         delete?: never;
         options?: never;
         head?: never;
@@ -659,6 +727,108 @@ export interface components {
             targetDriId: string;
             text: string;
         };
+        MonthlyPlanCardPayload: {
+            period: string;
+            status: "draft" | "negotiating" | "confirmed";
+            companyOutcome: string;
+            battlefields: {
+                battlefieldId: string;
+                outcome: string;
+            }[];
+            todos: {
+                id: string;
+                battlefieldId?: string;
+                title: string;
+                ownerId: string;
+                dueAt?: string;
+                sourceRef: string;
+            }[];
+            negotiation: {
+                edits: {
+                    at: string;
+                    fields: string[];
+                }[];
+                checkedItemIds: string[];
+                feedback: {
+                    id: string;
+                    externalId: string;
+                    todoId?: string;
+                    battlefieldId?: string;
+                    text: string;
+                    evidenceRef?: string;
+                    observedAt: string;
+                    sourceRef: string;
+                }[];
+                note: string;
+            };
+            generation: {
+                status: "pending" | "running" | "ready" | "failed";
+                pendingSince: string | null;
+                runId: string | null;
+                previousRunIds: string[];
+                error: {
+                    code: string;
+                    message: string;
+                    at: string;
+                } | null;
+                generatedAt: string | null;
+            };
+            confirmedAt: string | null;
+        };
+        MonthlyDraftCandidate: {
+            companyOutcome: string;
+            battlefields: {
+                battlefieldId: string;
+                outcome: string;
+            }[];
+            todos: {
+                battlefieldId?: string;
+                title: string;
+                ownerId: string;
+                dueAt?: string;
+                sourceRef: string;
+            }[];
+        };
+        UpdateMonthlyPlanDraftRequest: {
+            companyOutcome?: string;
+            battlefields?: {
+                battlefieldId: string;
+                outcome: string;
+            }[];
+            todos?: {
+                id?: string;
+                battlefieldId?: string;
+                title: string;
+                ownerId: string;
+                dueAt?: string;
+                sourceRef: string;
+            }[];
+            checkedItemIds?: string[];
+            note?: string;
+        };
+        DriMonthlyPlanFeedbackRequest: {
+            /** @description 以 (period, externalId) 为幂等键；同内容返回原结果，不同内容 409 */
+            externalId: string;
+            period: string;
+            submitterPersonId: string;
+            sourceRef: string;
+            text: string;
+            evidenceRef?: string;
+            observedAt: string;
+            battlefieldId?: string;
+        };
+        DriMonthlyPlanTodoFeedbackRequest: {
+            /** @description 以 (period, externalId) 为幂等键；同内容返回原结果，不同内容 409 */
+            externalId: string;
+            period: string;
+            submitterPersonId: string;
+            sourceRef: string;
+            text: string;
+            evidenceRef?: string;
+            observedAt: string;
+            battlefieldId?: string;
+            todoId: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -908,6 +1078,75 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMonthlyPlanCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description MonthlyPlan Cards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMonthlyPlanCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description MonthlyPlan Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1379,6 +1618,144 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    importDriMonthlyFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DriMonthlyPlanFeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description 同 externalId 同内容：返回原 MonthlyPlan Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description 追加反馈后的 MonthlyPlan Card */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    importDriMonthlyTodoFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DriMonthlyPlanTodoFeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description 同 externalId 同内容：返回原 MonthlyPlan Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description 追加反馈后的 MonthlyPlan Card */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

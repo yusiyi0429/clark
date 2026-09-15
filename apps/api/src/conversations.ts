@@ -9,6 +9,7 @@ import type {
 import { getFixtureHome, projectHomeCard } from "./fixture.js";
 import { getIssueRow, projectIssueCard } from "./issues.js";
 import { getMeetingRow, projectMeetingCard } from "./meetings.js";
+import { getMonthlyPlanRow, projectMonthlyPlanCard } from "./monthlyPlans.js";
 
 export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
@@ -117,6 +118,21 @@ export async function getScopeObject(
       },
     };
   }
+  const monthlyPlan = objectType === "monthly-plan" ? await getMonthlyPlanRow(q, id) : null;
+  if (monthlyPlan) {
+    const card = projectMonthlyPlanCard(monthlyPlan, secret);
+    return {
+      visible: true,
+      snapshot: {
+        cardId: card.id,
+        version: card.version,
+        kind: card.kind,
+        title: card.title,
+        objectRef: card.objectRef,
+        payload: card.payload,
+      },
+    };
+  }
   const row = await getFixtureObject(q, objectType, id);
   if (!row?.visible_to_ceo) return { snapshot: null, visible: false };
   const card = projectFixtureObjectCard(row);
@@ -182,6 +198,22 @@ export async function resolveReferenceSnapshots(
     const meeting = objectType === "meeting" ? await getMeetingRow(q, id) : null;
     if (meeting) {
       const card = projectMeetingCard(meeting, secret);
+      if (card.version !== reference.version) {
+        return { status: 409, code: "REFERENCE_VERSION_CONFLICT", message: "Card 引用版本已过期" };
+      }
+      snapshots.push({
+        cardId: card.id,
+        version: card.version,
+        kind: card.kind,
+        title: card.title,
+        objectRef: card.objectRef,
+        payload: card.payload,
+      });
+      continue;
+    }
+    const monthlyPlan = objectType === "monthly-plan" ? await getMonthlyPlanRow(q, id) : null;
+    if (monthlyPlan) {
+      const card = projectMonthlyPlanCard(monthlyPlan, secret);
       if (card.version !== reference.version) {
         return { status: 409, code: "REFERENCE_VERSION_CONFLICT", message: "Card 引用版本已过期" };
       }
