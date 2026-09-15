@@ -42,7 +42,8 @@ import {
 } from "./conversations.js";
 import type { RadarService } from "./radar.js";
 import { getSignalCard, listSignalCards, projectRadarCard, setSignalState } from "./signals.js";
-import { getIssueRow, importDriIssue, projectIssueCard } from "./issues.js";
+import { getIssueRow, executeIssueAction, importDriIssue, listPendingRedIssueCards, projectIssueCard } from "./issues.js";
+import type { ResearchService } from "./research.js";
 
 export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
 
@@ -57,6 +58,7 @@ export type AppEnv = {
   piBaseUrl: string;
   piApiKey: string;
   lightModel: string;
+  heavyModel: string;
   compactionModel: string;
 } & CompanyMemorySeedEnv;
 
@@ -65,12 +67,14 @@ export async function buildApp({
   env,
   conversationRuntime,
   radarService,
+  researchService,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
 }: {
   pool: Pool;
   env: AppEnv;
   conversationRuntime?: ConversationRuntime;
   radarService?: RadarService;
+  researchService?: ResearchService;
   conversationTurnTimeoutMs?: number;
 }): Promise<FastifyInstance> {
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
@@ -89,7 +93,16 @@ export async function buildApp({
     runScheduled: async () => ({ trigger: "scheduled" as const, status: "failed" as const, companyDay: new Date().toISOString().slice(0, 10), createdSignals: 0, warnings: ["Radar providers are not configured"] }),
   };
   const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
-  app.addHook("onClose", async () => runtime.close?.());
+  // 未注入真实 Runner 时不虚构预研：Issue 保留 pending，等显式配置
+  const research = researchService ?? {
+    async start() {},
+    async executeRun() {},
+    async idle() {},
+  };
+  app.addHook("onClose", async () => {
+    await research.idle();
+    await runtime.close?.();
+  });
   const q = pool.query.bind(pool);
 
   // ponytail: 登录限速用进程内计数器，单进程 MVP 足够；多实例部署时换共享存储
@@ -197,7 +210,9 @@ export async function buildApp({
 
   app.get("/api/cards/home", { preHandler: requireCEO }, async (_req, reply): Promise<TCardCollection> => {
     const row = await getFixtureHome(q);
-    return { cards: [projectHomeCard(row, env.sessionSecret)] };
+    // 通知投影只读同一 issues 表：pending + red 的 Issue Card 与详情页完全同源
+    const notifications = await listPendingRedIssueCards(q, env.sessionSecret);
+    return { cards: [projectHomeCard(row, env.sessionSecret), ...notifications] };
   });
 
   const idParams = Type.Object({ id: Type.String({ minLength: 1 }) }, { additionalProperties: false });
@@ -244,7 +259,7 @@ export async function buildApp({
     "/api/conversations/:scope/messages",
     { preHandler: requireCEO, schema: { params: conversationParams } },
     async (req, reply) => {
-      const object = await getScopeObject(q, req.params.scope);
+      const object = await getScopeObject(q, req.params.scope, env.sessionSecret);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
       return getConversationHistory(q, req.params.scope);
     },
@@ -257,7 +272,7 @@ export async function buildApp({
       schema: { params: conversationParams, body: ConversationMessageRequest },
     },
     async (req, reply) => {
-      const object = await getScopeObject(q, req.params.scope);
+      const object = await getScopeObject(q, req.params.scope, env.sessionSecret);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
       const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret);
       if (!("snapshots" in references)) {
@@ -454,7 +469,7 @@ export async function buildApp({
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       // 默认只读：真实 Issue 优先，Ticket 04 的 fixture 仅在迁移期兼容
       const issue = await getIssueRow(q, req.params.id);
-      if (issue) return { cards: [projectIssueCard(issue)] };
+      if (issue) return { cards: [projectIssueCard(issue, env.sessionSecret)] };
       const row = await getFixtureObject(q, "issue", req.params.id);
       if (!row?.visible_to_ceo) return fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
       return { cards: [projectFixtureObjectCard(row)] };
@@ -466,13 +481,28 @@ export async function buildApp({
     { preHandler: requireCEO, schema: { body: ExecuteActionRequest } },
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       const scope = verifyActionId(env.sessionSecret, req.body.actionId);
-      if (!scope || scope.objectType !== "home") {
+      if (!scope) {
         return fail(reply, 404, "UNKNOWN_ACTION", "无效 actionId");
+      }
+      const fingerprint = actionFingerprint(env.sessionSecret, req.body.actionId, req.body.input);
+      if (scope.objectType === "issue") {
+        const result = await executeIssueAction(pool, env.sessionSecret, scope, fingerprint, req.body.input);
+        if (!result.ok) {
+          return fail(reply, result.status, result.code, result.message, result.latestCard ? { latestCard: result.latestCard } : undefined);
+        }
+        // 重跑已进入 running：提交后异步执行，不阻塞返回
+        if (result.startResearch) {
+          research.executeRun(result.startResearch.issueId, result.startResearch.runId)
+            .catch((err) => console.error("research run failed", err));
+        }
+        return { cards: [result.card] };
+      }
+      if (scope.objectType !== "home") {
+        return fail(reply, 404, "UNKNOWN_ACTION", "未注册的 actionType");
       }
       if (scope.actionType !== "home.dismiss_notice") {
         return fail(reply, 404, "UNKNOWN_ACTION", "未注册的 actionType");
       }
-      const fingerprint = actionFingerprint(env.sessionSecret, req.body.actionId, req.body.input);
       const result = await executeDismissNotice(pool, env.sessionSecret, scope, fingerprint);
       if (result.conflict) {
         return fail(reply, 409, "VERSION_CONFLICT", "对象已被修改，请基于最新 Card 重试", {
@@ -512,9 +542,13 @@ export async function buildApp({
     // 服务身份用 onRequest：未鉴权调用先得到 401，而不是从 400 推断字段
     { onRequest: requireServiceToken(env.driServiceToken), schema: { body: DriIssueImportRequest } },
     async (req, reply) => {
-      const result = await importDriIssue(pool, companyMemory, req.body);
+      const result = await importDriIssue(pool, companyMemory, req.body, env.sessionSecret);
       if ("code" in result) {
         return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
+      }
+      // 创建后立即展示，随后启动唯一深度预研；不阻塞响应，也不让 rejection 终止进程
+      if (result.status === 201) {
+        research.start(result.card.objectRef.id).catch((err) => console.error("research start failed", err));
       }
       return reply.status(result.status).send({ cards: [result.card] });
     },

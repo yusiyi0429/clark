@@ -27,6 +27,7 @@ describe("migration", () => {
         "004_runtime_recovery.sql",
         "005_radar_signals.sql",
         "006_issues.sql",
+        "007_issue_research_decisions.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -34,7 +35,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(6);
+      expect(Number(again.rows[0].count)).toBe(7);
 
       // fixture seed 行存在
       const seed = await db.query("SELECT * FROM fixture_home WHERE id = 'default'");

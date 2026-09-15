@@ -81,13 +81,14 @@ export function projectFixtureObjectCard(row: FixtureObjectRow): TCard {
 export async function getScopeObject(
   q: Query,
   scope: TConversationScope,
+  secret: string,
 ): Promise<{ snapshot: TReferenceSnapshot | null; visible: boolean }> {
   if (scope === "global") return { snapshot: null, visible: true };
   const [objectType, id] = scope.split(":", 2);
   // 真实 Issue 优先；fixture 仅在迁移期兼容
   const issue = objectType === "issue" ? await getIssueRow(q, id) : null;
   if (issue) {
-    const card = projectIssueCard(issue);
+    const card = projectIssueCard(issue, secret);
     return {
       visible: true,
       snapshot: {
@@ -148,7 +149,7 @@ export async function resolveReferenceSnapshots(
     }
     const issue = objectType === "issue" ? await getIssueRow(q, id) : null;
     if (issue) {
-      const card = projectIssueCard(issue);
+      const card = projectIssueCard(issue, actionSecret);
       if (card.version !== reference.version) {
         return { status: 409, code: "REFERENCE_VERSION_CONFLICT", message: "Card 引用版本已过期" };
       }

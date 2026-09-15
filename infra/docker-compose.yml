@@ -35,6 +35,7 @@ services:
       PI_BASE_URL: ${PI_BASE_URL:?PI_BASE_URL required}
       PI_API_KEY: ${PI_API_KEY:?PI_API_KEY required}
       LIGHT_MODEL: ${LIGHT_MODEL:?LIGHT_MODEL required}
+      HEAVY_MODEL: ${HEAVY_MODEL:?HEAVY_MODEL required}
       COMPACTION_MODEL: ${COMPACTION_MODEL:?COMPACTION_MODEL required}
       # Radar Provider 可选：缺失时 Radar Card 如实显示未配置
       SEARCH_API_KEY: ${SEARCH_API_KEY:-}

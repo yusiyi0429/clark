@@ -6,6 +6,7 @@ import { migrate } from "../src/migrate.js";
 import { buildApp, type AppEnv } from "../src/app.js";
 import type { FastifyInstance } from "fastify";
 import type { ConversationRuntime } from "../src/conversations.js";
+import type { ResearchService } from "../src/research.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
@@ -58,6 +59,7 @@ export const testEnv: AppEnv = {
   piBaseUrl: "https://provider.invalid/v1/responses",
   piApiKey: "test-key",
   lightModel: "test-light-model",
+  heavyModel: "test-heavy-model",
   compactionModel: "test-compaction-model",
   buildSha: "test-sha",
 };
@@ -111,6 +113,7 @@ export async function createTestApp(
   seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: { conversationTurnTimeoutMs?: number } = {},
+  researchService?: ResearchService,
 ): Promise<TestApp> {
   const database = `warmap_test_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const admin = new Pool({ connectionString: ADMIN_URL, max: 2 });
@@ -123,7 +126,7 @@ export async function createTestApp(
   await migrate(client);
   client.release();
   const env = { ...testEnv, ...seedOverrides };
-  const app = await buildApp({ pool, env, conversationRuntime, ...runtimeOptions });
+  const app = await buildApp({ pool, env, conversationRuntime, researchService, ...runtimeOptions });
   const apps = [app];
   return {
     app,
@@ -166,7 +169,7 @@ export async function createTestApp(
     },
     agentRuns: async () => (await pool.query("SELECT * FROM agent_runs ORDER BY started_at, id")).rows,
     restart: async (runtime) => {
-      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, ...runtimeOptions });
+      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, researchService, ...runtimeOptions });
       apps.push(restarted);
       return restarted;
     },
