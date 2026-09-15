@@ -64,7 +64,9 @@
     ".next-cheap/types/**/*.ts",
     ".next-cheap/dev/types/**/*.ts",
     ".next-share-preview/types/**/*.ts",
-    ".next-share-preview/dev/types/**/*.ts"
+    ".next-share-preview/dev/types/**/*.ts",
+    ".next-baseline/types/**/*.ts",
+    ".next-baseline/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -1,0 +1,12 @@
+{
+  "name": "warmap-visual-baseline",
+  "private": true,
+  "type": "module",
+  "description": "Ticket 01: capture the frozen CEO WarMap visual & interaction baseline from the legacy frontend.",
+  "scripts": {
+    "capture": "node capture.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}
