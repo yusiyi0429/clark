@@ -20,8 +20,8 @@ Spec: `spec.md`
 
 | ID | Ticket | Blocked by | Status |
 |---|---|---|---|
-| 01 | 冻结 CEO WarMap 视觉与交互证据 | None | ready-for-agent |
-| 02 | 建立可登录的 Monorepo 纵向骨架 | None | ready-for-agent |
+| 01 | 冻结 CEO WarMap 视觉与交互证据 | None | resolved |
+| 02 | 建立可登录的 Monorepo 纵向骨架 | None | resolved |
 | 03 | 提供只读 CompanyMemory MCP 与稳定人员目录 | 02 | ready-for-agent |
 | 04 | 跑通 global 与对象 Conversation | 02, 03 | ready-for-agent |
 | 05 | 补齐 Search、compaction 与 Runtime 恢复 | 04 | ready-for-agent |
@@ -41,13 +41,13 @@ Spec: `spec.md`
 
 ## Current frontier
 
-- 01 冻结 CEO WarMap 视觉与交互证据
-- 02 建立可登录的 Monorepo 纵向骨架
+- 03 提供只读 CompanyMemory MCP 与稳定人员目录
 
-01 与 02 可以并行；其他 ticket 必须等待其真实 blocker resolved。
+其他 ticket 必须等待其真实 blocker resolved。
 
 ## Results
 
-尚未开始实施。
+- 01 resolved：提交 `de96165`，冻结 46 张双视口截图、66 项公开交互断言、design tokens、health 与可重复采集工具；像素内容复跑一致，内部 Standards/Spec review 通过。
+- 02 resolved：提交 `18f04cb`，跑通 Caddy → Web/API → PostgreSQL、CEO 登录、fixture Card、OpenAPI 客户端与 Action 幂等链；20 个测试、三包构建、Caddy/Compose/浏览器旅程通过，内部 Standards/Spec review 通过。
 
 ## Comments
