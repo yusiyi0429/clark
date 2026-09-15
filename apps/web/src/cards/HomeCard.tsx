@@ -58,6 +58,7 @@ export function HomeCard({ card }: { card: Card }) {
       ) : (
         <p>本周无待处理通知。</p>
       )}
+      {card.navigation?.map((item) => <p key={item.href}><a href={item.href}>{item.label}</a></p>)}
       {error ? <p role="alert">{error}</p> : null}
     </section>
   );

@@ -5,6 +5,9 @@ import {
   Card,
   CardCollection,
   ExecuteActionRequest,
+  ConversationHistory,
+  ConversationMessageRequest,
+  ConversationSseEvent,
   HealthResponse,
   LoginRequest,
   SessionResponse,
@@ -90,6 +93,43 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/cards/issues/{id}": {
+        get: {
+          operationId: "getIssueCard",
+          summary: "读取 Issue Card（Ticket 04 最小 fixture）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Issue Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/conversations/{scope}/messages": {
+        get: {
+          operationId: "getConversationMessages",
+          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
+          summary: "读取独立 scope 的原始 Conversation 消息",
+          responses: {
+            "200": { description: "Conversation 历史", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationHistory" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+        post: {
+          operationId: "sendConversationMessage",
+          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
+          summary: "发送消息并通过 SSE 返回 Pi 运行事件",
+          requestBody: jsonBody({ $ref: "#/components/schemas/ConversationMessageRequest" }),
+          responses: {
+            "200": { description: "SSE 事件流", content: { "text/event-stream": { schema: { $ref: "#/components/schemas/ConversationSseEvent" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
       "/api/actions/execute": {
         post: {
           operationId: "executeAction",
@@ -135,6 +175,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         LoginRequest: LoginRequest as JsonSchema,
         SessionResponse: SessionResponse as JsonSchema,
         ExecuteActionRequest: ExecuteActionRequest as JsonSchema,
+        ConversationHistory: ConversationHistory as JsonSchema,
+        ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
+        ConversationSseEvent: ConversationSseEvent as JsonSchema,
         HealthResponse: HealthResponse as JsonSchema,
       },
     },

@@ -12,6 +12,8 @@
     "hash-password": "node scripts/hash-password.mjs"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
     "@fastify/rate-limit": "^10.2.2",
     "@fastify/type-provider-typebox": "^5.1.0",
     "@modelcontextprotocol/sdk": "^1.30.0",

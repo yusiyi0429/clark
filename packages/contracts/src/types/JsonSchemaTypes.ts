@@ -5,6 +5,7 @@ export namespace OpenAPIV3 {
     operationId: string;
     summary?: string;
     tags?: string[];
+    parameters?: unknown[];
     requestBody?: unknown;
     responses: Record<string, unknown>;
   };
