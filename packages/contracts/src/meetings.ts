@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { MeetingOutcomeState, StoredTranscript } from "./transcript.js";
 
 export const MeetingStatus = Type.Union([
   Type.Literal("scheduled"),
@@ -105,6 +106,8 @@ export const MeetingCardPayload = Type.Object(
     originRef: Type.Unknown(),
     preflight: MeetingPreflight,
     draft: MeetingDraft,
+    transcript: Type.Union([StoredTranscript, Type.Null()]),
+    outcome: Type.Union([MeetingOutcomeState, Type.Null()]),
   },
   { additionalProperties: false },
 );

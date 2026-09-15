@@ -10,6 +10,7 @@ import type { ResearchService } from "../src/research.js";
 import type { DriExporter, PreflightAgent } from "../src/meetings.js";
 import { createMonthlyPlanService, type MonthlyDraftAgent, type MonthlyPlanService } from "../src/monthlyDraft.js";
 import { loadCompanyMemory } from "../src/companyMemory.js";
+import type { PostMeetingAgent } from "../src/outcome.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
@@ -121,6 +122,7 @@ export async function createTestApp(
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
     preflightAgent?: PreflightAgent;
+    outcomeAgent?: PostMeetingAgent;
     driExporter?: DriExporter;
     monthlyDraftAgent?: MonthlyDraftAgent;
     monthlyNow?: () => Date;

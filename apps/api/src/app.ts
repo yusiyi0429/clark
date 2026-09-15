@@ -18,6 +18,7 @@ import {
   JoinMeetingRequest,
   LoginRequest,
   RadarScanResponse,
+  ReplaceTranscriptRequest,
   RequestSupplementRequest,
   SessionResponse,
   SignalStateRequest,
@@ -58,16 +59,20 @@ import {
   executeCancelMeeting,
   executeCreateMeeting,
   executeJoinMeeting,
+  executeReplaceTranscript,
   executeRequestSupplement,
+  executeRetryOutcome,
   executeRetryPreflight,
   executeUpdateDraft,
   getMeetingRow,
   importDriMeeting,
+  importTranscript,
   listMeetingRows,
   projectMeetingCard,
   type DriExporter,
   type MeetingActionOutcome,
   type PreflightAgent,
+  type TranscriptImportResult,
 } from "./meetings.js";
 import { createPreflightAgent } from "./preflightAgent.js";
 import {
@@ -80,8 +85,13 @@ import {
   projectMonthlyPlanCard,
 } from "./monthlyPlans.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
+import { recoverInterruptedOutcome, type PostMeetingAgent } from "./outcome.js";
+import { createPostMeetingAgent } from "./postMeetingAgent.js";
+import multipart from "@fastify/multipart";
 
 export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
+/** warmap-transcript.v1 单文件上限；Web multipart 与 service API 共用。 */
+export const MAX_TRANSCRIPT_BYTES = 1024 * 1024;
 
 export type AppEnv = {
   sessionSecret: string;
@@ -105,6 +115,7 @@ export async function buildApp({
   radarService,
   researchService,
   preflightAgent,
+  outcomeAgent,
   driExporter,
   monthlyPlanService,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
@@ -115,6 +126,7 @@ export async function buildApp({
   radarService?: RadarService;
   researchService?: ResearchService;
   preflightAgent?: PreflightAgent;
+  outcomeAgent?: PostMeetingAgent;
   driExporter?: DriExporter;
   monthlyPlanService?: MonthlyPlanService;
   conversationTurnTimeoutMs?: number;
@@ -126,6 +138,12 @@ export async function buildApp({
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.lightModel,
+  });
+  const outcome = outcomeAgent ?? createPostMeetingAgent({
+    query: pool.query.bind(pool),
+    baseUrl: env.piBaseUrl,
+    apiKey: env.piApiKey,
+    modelId: env.heavyModel,
   });
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     companyMemory,
@@ -155,6 +173,8 @@ export async function buildApp({
 
   // ponytail: 登录限速用进程内计数器，单进程 MVP 足够；多实例部署时换共享存储
   await app.register(rateLimit, { global: false });
+  // Transcript 是唯一上传格式；大小上限与 service API 共用
+  await app.register(multipart, { limits: { fileSize: MAX_TRANSCRIPT_BYTES, files: 1, fields: 5 } });
 
   function fail(
     reply: FastifyReply,
@@ -218,6 +238,9 @@ export async function buildApp({
     const err = rawErr as FastifyError & { validation?: ValidationItem[] };
     if (err.statusCode === 429) {
       return fail(reply, 429, "RATE_LIMITED", "尝试过于频繁，请稍后再试");
+    }
+    if (err.statusCode === 413) {
+      return fail(reply, 413, "PAYLOAD_TOO_LARGE", "请求体超过大小上限");
     }
     const validation = err.validation;
     if (validation) {
@@ -579,6 +602,48 @@ export async function buildApp({
     },
   );
 
+  /** Transcript 导入结果 → HTTP；Web multipart 与 service API 共用同一个边界。 */
+  function respondTranscriptImport(reply: FastifyReply, result: TranscriptImportResult): TCardCollection | FastifyReply {
+    if (result.status === 200) return { cards: [result.card] };
+    return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
+  }
+
+  // CEO Web 上传：multipart/form-data 单文件；大小与 schema 校验与 service API 完全一致。
+  app.post(
+    "/api/meetings/:id/transcript",
+    { preHandler: requireCEO, schema: { params: idParams }, bodyLimit: MAX_TRANSCRIPT_BYTES * 2 },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      let buffer: Buffer;
+      try {
+        const upload = await req.file();
+        if (!upload) return fail(reply, 400, "INVALID_TRANSCRIPT", "multipart 缺少 Transcript 文件");
+        buffer = await upload.toBuffer();
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        if (code === "FST_REQ_FILE_TOO_LARGE" || code === "FST_FILES_LIMIT") {
+          return fail(reply, 413, "TRANSCRIPT_TOO_LARGE", `Transcript 超过 ${MAX_TRANSCRIPT_BYTES} 字节上限`);
+        }
+        throw err;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(buffer));
+      } catch (err) {
+        const encoding = (err as { code?: string }).code === "ERR_ENCODING_INVALID_ENCODED_DATA";
+        return fail(reply, 400, encoding ? "INVALID_TRANSCRIPT_ENCODING" : "INVALID_TRANSCRIPT", encoding ? "Transcript 不是合法 UTF-8" : "Transcript 不是合法 JSON");
+      }
+      return respondTranscriptImport(reply, await importTranscript(pool, outcome, env.sessionSecret, req.params.id, parsed));
+    },
+  );
+
+  // 集成客户端上传：同一 warmap-transcript.v1 与同一导入函数，仅服务身份不同。
+  app.post(
+    "/api/dri/meetings/:id/transcript",
+    { onRequest: requireServiceToken(env.driServiceToken), bodyLimit: MAX_TRANSCRIPT_BYTES, schema: { params: idParams } },
+    async (req, reply): Promise<TCardCollection | FastifyReply> =>
+      respondTranscriptImport(reply, await importTranscript(pool, outcome, env.sessionSecret, req.params.id, req.body)),
+  );
+
   app.post(
     "/api/actions/execute",
     { preHandler: requireCEO, schema: { body: ExecuteActionRequest } },
@@ -612,6 +677,14 @@ export async function buildApp({
       }
       if (scope.actionType === "meeting.retry_preflight") {
         return respond(reply, await executeRetryPreflight(pool, companyMemory, preflight, env.sessionSecret, scope, fingerprint));
+      }
+      // Ticket 10：Transcript 替换是危险 Action，要求二次确认
+      if (scope.actionType === "meeting.replace_transcript") {
+        if (!Value.Check(ReplaceTranscriptRequest, input)) return invalidInput(reply, ReplaceTranscriptRequest, input);
+        return respond(reply, await executeReplaceTranscript(pool, outcome, env.sessionSecret, scope, input, fingerprint));
+      }
+      if (scope.actionType === "meeting.retry_outcome") {
+        return respond(reply, await executeRetryOutcome(pool, outcome, env.sessionSecret, scope, fingerprint));
       }
 
       if (scope.actionType === "monthly-plan.update_draft") {

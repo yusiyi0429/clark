@@ -14,6 +14,7 @@ import { recoverInterruptedPreflight } from "./meetings.js";
 import { createMonthlyPlanService } from "./monthlyDraft.js";
 import { createMonthlyDraftAgent } from "./monthlyDraftAgent.js";
 import { createMonthlyPlanScheduler } from "./monthlyPlanScheduler.js";
+import { recoverInterruptedOutcome } from "./outcome.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -100,6 +101,8 @@ await recoverInterruptedResearch(pool.query.bind(pool));
 await recoverInterruptedPreflight(pool.query.bind(pool));
 // Ticket 12：崩溃留下的未完成月度草案标为可见 failed，不自动重跑
 await monthlyPlanService.recoverInterrupted();
+// Ticket 10：崩溃留下的未完成会后抽取同样标为可见 failed，等待 CEO 显式重试
+await recoverInterruptedOutcome(pool.query.bind(pool));
 const app = await buildApp({ pool, env, radarService, researchService, monthlyPlanService });
 app.addHook("onClose", async () => {
   scheduler.close();

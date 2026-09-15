@@ -362,6 +362,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/dri/meetings/{id}/transcript": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 集成客户端导入 warmap-transcript.v1（同一导入边界） */
+        post: operations["importDriMeetingTranscript"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/transcript": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** CEO Web 上传 warmap-transcript.v1（multipart 单文件） */
+        post: operations["importMeetingTranscript"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -828,6 +862,91 @@ export interface components {
             observedAt: string;
             battlefieldId?: string;
             todoId: string;
+        };
+        WarmapTranscript: {
+            /** @constant */
+            schemaVersion: "warmap-transcript.v1";
+            meetingId: string;
+            turns: {
+                id: string;
+                speakerId: string;
+                startedAt?: string;
+                text: string;
+            }[];
+        };
+        StoredTranscript: {
+            /** @constant */
+            schemaVersion: "warmap-transcript.v1";
+            meetingId: string;
+            turns: {
+                id: string;
+                speakerId: string;
+                startedAt?: string;
+                text: string;
+            }[];
+            importedAt: string;
+        };
+        PostMeetingCandidate: {
+            summary: string;
+            items: {
+                kind: "decision" | "todo" | "ceoJudgment" | "reopenWhen" | "open";
+                text: string;
+                turnId: string;
+                quote: string;
+                ownerPersonId?: string;
+                issueId?: string;
+                judgmentKind?: "company_direction" | "resource_allocation" | "external_commitment" | "major_risk" | "mission_boundary";
+                parentIndex?: number;
+            }[];
+        };
+        MeetingOutcomeState: {
+            status: "pending" | "running" | "ready" | "failed";
+            pendingSince: string | null;
+            startedAt: string | null;
+            runId: string | null;
+            previousRunIds: string[];
+            error: {
+                code: string;
+                message: string;
+                at: string;
+            } | null;
+            summary: string;
+            items: {
+                id: string;
+                kind: "decision" | "todo" | "ceoJudgment" | "reopenWhen" | "open";
+                text: string;
+                turnId: string;
+                quote: string;
+                speakerId: string;
+                ownerPersonId: string | null;
+                issueId: string | null;
+                judgmentKind: ("company_direction" | "resource_allocation" | "external_commitment" | "major_risk" | "mission_boundary") | null;
+                parentItemId: string | null;
+                review: {
+                    status: "pending" | "confirmed" | "dismissed";
+                    effectRef: string | null;
+                } | null;
+            }[];
+            warnings: {
+                candidate: unknown;
+                reason: string;
+            }[];
+            extractedAt: string | null;
+        };
+        ReplaceTranscriptRequest: {
+            transcript: {
+                /** @constant */
+                schemaVersion: "warmap-transcript.v1";
+                meetingId: string;
+                turns: {
+                    id: string;
+                    speakerId: string;
+                    startedAt?: string;
+                    text: string;
+                }[];
+            };
+            /** @constant */
+            confirmReplace: true;
         };
     };
     responses: never;
@@ -1756,6 +1875,151 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    importDriMeetingTranscript: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WarmapTranscript"];
+            };
+        };
+        responses: {
+            /** @description 导入成功后的 held Meeting Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    importMeetingTranscript: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 导入成功后的 held Meeting Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -23,6 +23,7 @@ import {
   MonthlyDraftCandidate,
   MonthlyPlanCardPayload,
   RadarScanResponse,
+  ReplaceTranscriptRequest,
   RequestSupplementRequest,
   SessionResponse,
   SignalStateRequest,
@@ -30,6 +31,10 @@ import {
   UpdateMonthlyPlanDraftRequest,
   DriMonthlyPlanFeedbackRequest,
   DriMonthlyPlanTodoFeedbackRequest,
+  MeetingOutcomeState,
+  PostMeetingCandidate,
+  StoredTranscript,
+  WarmapTranscript,
 } from "./index.js";
 
 const errorResponse = {
@@ -340,6 +345,49 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/dri/meetings/{id}/transcript": {
+        post: {
+          operationId: "importDriMeetingTranscript",
+          summary: "集成客户端导入 warmap-transcript.v1（同一导入边界）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/WarmapTranscript" }),
+          responses: {
+            "200": { description: "导入成功后的 held Meeting Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+            "413": errorResponse,
+          },
+        },
+      },
+      "/api/meetings/{id}/transcript": {
+        post: {
+          operationId: "importMeetingTranscript",
+          summary: "CEO Web 上传 warmap-transcript.v1（multipart 单文件）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "multipart/form-data": {
+                schema: {
+                  type: "object",
+                  required: ["file"],
+                  properties: { file: { type: "string", format: "binary" } },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "导入成功后的 held Meeting Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+            "413": errorResponse,
+          },
+        },
+      },
       "/healthz": {
         get: {
           operationId: "health",
@@ -387,6 +435,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         UpdateMonthlyPlanDraftRequest: UpdateMonthlyPlanDraftRequest as JsonSchema,
         DriMonthlyPlanFeedbackRequest: DriMonthlyPlanFeedbackRequest as JsonSchema,
         DriMonthlyPlanTodoFeedbackRequest: DriMonthlyPlanTodoFeedbackRequest as JsonSchema,
+        WarmapTranscript: WarmapTranscript as JsonSchema,
+        StoredTranscript: StoredTranscript as JsonSchema,
+        PostMeetingCandidate: PostMeetingCandidate as JsonSchema,
+        MeetingOutcomeState: MeetingOutcomeState as JsonSchema,
+        ReplaceTranscriptRequest: ReplaceTranscriptRequest as JsonSchema,
       },
     },
   };

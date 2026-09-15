@@ -14,13 +14,17 @@ import {
   MeetingCardPayload,
   MonthlyDraftCandidate,
   MonthlyPlanCardPayload,
+  MeetingOutcomeState,
+  PostMeetingCandidate,
   PreflightCandidate,
+  ReplaceTranscriptRequest,
   RadarCandidateSubmission,
   RadarScanResponse,
   RequestSupplementRequest,
   SignalStateRequest,
   UpdateMeetingDraftRequest,
   UpdateMonthlyPlanDraftRequest,
+  WarmapTranscript,
   WebSearchInput,
   WebSearchResponse,
 } from "../src/index.js";
@@ -269,6 +273,8 @@ describe("meeting public contract", () => {
       originRef: { type: "issue", issueId: "00000000-0000-4000-8000-000000000001" },
       preflight: { status: "ready", pendingSince: null, runId: "run-1", entries: [], basis: "b", brief: "c", error: null, generatedAt: "2026-05-01T00:00:00.000Z" },
       draft: { readIssueIds: [], carriedIssueIds: [], checkedEntryIds: [], editsByEntryId: {}, supplementRequests: [], note: "" },
+      transcript: null,
+      outcome: null,
     };
     expect(Value.Check(MeetingCardPayload, payload)).toBe(true);
     expect(Value.Check(MeetingCardPayload, { ...payload, status: "postponed" })).toBe(false);
@@ -276,6 +282,81 @@ describe("meeting public contract", () => {
       ...payload,
       draft: { ...payload.draft, supplementRequests: [{ ...payload.draft, exportStatus: "sent" }] },
     })).toBe(false);
+  });
+
+  it("accepts only the versioned warmap-transcript.v1 shape", () => {
+    const file = {
+      schemaVersion: "warmap-transcript.v1",
+      meetingId: "00000000-0000-4000-8000-000000000001",
+      turns: [
+        { id: "turn-001", speakerId: "person-001", startedAt: "2026-06-01T10:00:05+08:00", text: "决定" },
+        { id: "turn-002", speakerId: "person-002", text: "我来跟进" },
+      ],
+    };
+    expect(Value.Check(WarmapTranscript, file)).toBe(true);
+    expect(Value.Check(WarmapTranscript, { ...file, schemaVersion: "warmap-transcript.v2" })).toBe(false);
+    expect(Value.Check(WarmapTranscript, { ...file, turns: [] })).toBe(false);
+    expect(Value.Check(WarmapTranscript, { ...file, turns: [{ ...file.turns[0], extra: true }] })).toBe(false);
+    expect(Value.Check(WarmapTranscript, { ...file, extra: true })).toBe(false);
+    // 危险替换必须携带服务端可验证的二次确认
+    expect(Value.Check(ReplaceTranscriptRequest, { transcript: file, confirmReplace: true })).toBe(true);
+    expect(Value.Check(ReplaceTranscriptRequest, { transcript: file })).toBe(false);
+  });
+
+  it("types the extracted MeetingOutcome items with turn-bound quotes and per-item review", () => {
+    const state = {
+      status: "ready",
+      pendingSince: null,
+      startedAt: null,
+      runId: "run-1",
+      previousRunIds: [],
+      error: null,
+      summary: "会议形成一项待办",
+      extractedAt: "2026-06-01T02:05:00.000Z",
+      warnings: [],
+      items: [
+        {
+          id: "item-1",
+          kind: "todo",
+          text: "提交排期",
+          turnId: "turn-002",
+          quote: "我来跟进",
+          speakerId: "person-002",
+          ownerPersonId: "person-002",
+          issueId: null,
+          judgmentKind: null,
+          parentItemId: null,
+          review: { status: "pending", effectRef: null },
+        },
+        {
+          id: "item-2",
+          kind: "open",
+          text: "覆盖哪些地区",
+          turnId: "turn-001",
+          quote: "决定",
+          speakerId: "person-001",
+          ownerPersonId: null,
+          issueId: null,
+          judgmentKind: null,
+          parentItemId: null,
+          review: null,
+        },
+      ],
+    };
+    expect(Value.Check(MeetingOutcomeState, state)).toBe(true);
+    expect(Value.Check(MeetingOutcomeState, { ...state, status: "reviewing" })).toBe(false);
+    expect(Value.Check(MeetingOutcomeState, { ...state, items: [{ ...state.items[0], review: { status: "sent" } }] })).toBe(false);
+    expect(Value.Check(MeetingOutcomeState, { ...state, items: [{ ...state.items[0], extra: true }] })).toBe(false);
+  });
+
+  it("keeps PostMeeting candidates strict so free text cannot smuggle unknown kinds", () => {
+    const candidate = {
+      summary: "s",
+      items: [{ kind: "decision", text: "t", turnId: "turn-001", quote: "q", judgmentKind: "mission_boundary" }],
+    };
+    expect(Value.Check(PostMeetingCandidate, candidate)).toBe(true);
+    expect(Value.Check(PostMeetingCandidate, { ...candidate, items: [{ ...candidate.items[0], kind: "promise" }] })).toBe(false);
+    expect(Value.Check(PostMeetingCandidate, { ...candidate, items: [{ ...candidate.items[0], judgmentKind: "budget" }] })).toBe(false);
   });
 });
 

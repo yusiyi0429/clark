@@ -6,14 +6,17 @@ import {
   type TActionDescriptor,
   type TCard,
   type TMeetingDraft,
+  type TMeetingOutcomeState,
   type TMeetingParticipant,
   type TMeetingPreflight,
   type TMeetingPreflightEntry,
+  type TStoredTranscript,
   type TSupplementRequest,
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import { getIssueRow, projectIssueCard } from "./issues.js";
+import { hasConfirmedEffect, pendingOutcome, runOutcome, validateTranscript, type PostMeetingAgent } from "./outcome.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -31,6 +34,8 @@ export type MeetingRow = {
   issue_ids: string[];
   preflight: TMeetingPreflight;
   draft: TMeetingDraft;
+  transcript: TStoredTranscript | null;
+  outcome: TMeetingOutcomeState | null;
   origin_ref: unknown;
   external_id: string | null;
   request_fingerprint: string | null;
@@ -41,7 +46,7 @@ export type MeetingRow = {
 
 const MEETING_COLUMNS = [
   "id", "version", "title", "status", "scheduled_at", "lead_dri_id", "ceo_participant_id",
-  "participants", "issue_ids", "preflight", "draft", "origin_ref", "external_id",
+  "participants", "issue_ids", "preflight", "draft", "transcript", "outcome", "origin_ref", "external_id",
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
 ];
 const meetingColumns = (prefix = "") => MEETING_COLUMNS.map((column) => `${prefix}${column}`).join(", ");
@@ -116,6 +121,11 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
     );
     if (row.preflight.status === "failed") actions.push(action("meeting.retry_preflight", "重试预审"));
   }
+  // Ticket 10：held 后只能显式重试失败的抽取；无 confirmed effect 时才允许危险替换 Transcript
+  if (row.status === "held") {
+    if (row.outcome?.status === "failed") actions.push(action("meeting.retry_outcome", "重试会后抽取"));
+    if (!hasConfirmedEffect(row.outcome)) actions.push(action("meeting.replace_transcript", "替换 Transcript"));
+  }
   return {
     schemaVersion: 1,
     id: `meeting:${row.id}`,
@@ -135,6 +145,8 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
       originRef: row.origin_ref,
       preflight: row.preflight,
       draft: row.draft,
+      transcript: row.transcript,
+      outcome: row.outcome,
     },
     navigation: [{ href: `/meetings/${row.id}`, label: "Meeting" }],
     conversation: { scope: `meeting:${row.id}` },
@@ -767,4 +779,121 @@ export async function importDriMeeting(
   }
   await runPreflight(pool, companyMemory, preflightAgent, meetingId);
   return { status: 201, card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), meetingId))!, secret) };
+}
+
+export type TranscriptImportResult =
+  | { status: 200; card: TCard }
+  | { status: 400 | 404 | 409; code: string; message: string; fieldErrors?: Record<string, string> };
+
+/**
+ * 唯一 Transcript 导入边界：Web multipart 与 service API 都走这里做整份校验。
+ * 校验成功后单事务保存 JSONB 并把 scheduled Meeting 改 held，提交后才启动 Outcome 抽取。
+ */
+export async function importTranscript(
+  pool: Pool,
+  outcomeAgent: PostMeetingAgent,
+  secret: string,
+  meetingId: string,
+  raw: unknown,
+): Promise<TranscriptImportResult> {
+  const meeting = await getMeetingRow(pool.query.bind(pool), meetingId);
+  if (!meeting) return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
+  const validated = validateTranscript(raw, meeting);
+  if (!validated.ok) return { status: 400, code: validated.code, message: validated.message, fieldErrors: validated.fieldErrors };
+
+  const now = new Date().toISOString();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query<MeetingRow>(`SELECT ${meetingColumns()} FROM meetings WHERE id = $1 FOR UPDATE`, [meetingId]);
+    if (locked.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
+    }
+    const row = locked.rows[0];
+    if (row.transcript) {
+      await client.query("ROLLBACK");
+      return { status: 409, code: "TRANSCRIPT_ALREADY_IMPORTED", message: "Transcript 已存在，替换必须走危险 Action" };
+    }
+    if (row.status !== "scheduled") {
+      await client.query("ROLLBACK");
+      return { status: 409, code: "MEETING_NOT_SCHEDULED", message: "只有 scheduled Meeting 可以导入 Transcript" };
+    }
+    const transcript: TStoredTranscript = { ...validated.value, importedAt: now };
+    await client.query(
+      `UPDATE meetings
+          SET transcript = $2::jsonb, outcome = $3::jsonb, status = 'held', version = version + 1, updated_at = now()
+        WHERE id = $1`,
+      [meetingId, JSON.stringify(transcript), JSON.stringify(pendingOutcome(new Date(now)))],
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  await runOutcome(pool, outcomeAgent, meetingId);
+  return { status: 200, card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), meetingId))!, secret) };
+}
+
+/**
+ * 危险 Action：仅在 held 且没有 confirmed effect 时整份替换 Transcript。
+ * 替换清空旧 candidate、bump version 使旧 actionId 失效，提交后强制重跑抽取。
+ */
+export async function executeReplaceTranscript(
+  pool: Pool,
+  outcomeAgent: PostMeetingAgent,
+  secret: string,
+  scope: ActionScope,
+  input: { transcript: unknown },
+  fingerprint: string,
+): Promise<MeetingActionOutcome> {
+  const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+    if (row.status !== "held") return { error: { status: 409, code: "MEETING_NOT_HELD", message: "只有 held Meeting 可以替换 Transcript" } };
+    if (hasConfirmedEffect(row.outcome)) {
+      return { error: { status: 409, code: "OUTCOME_HAS_CONFIRMED_EFFECT", message: "已有 confirmed effect，禁止替换 Transcript" } };
+    }
+    const validated = validateTranscript(input.transcript, row);
+    if (!validated.ok) {
+      return { error: { status: 400, code: validated.code, message: validated.message, fieldErrors: validated.fieldErrors } };
+    }
+    const now = new Date().toISOString();
+    const transcript: TStoredTranscript = { ...validated.value, importedAt: now };
+    const updated = await updateMeeting(
+      client,
+      row.id,
+      "transcript = $2::jsonb, outcome = $3::jsonb, version = version + 1, action_fingerprints = $4::jsonb",
+      [JSON.stringify(transcript), JSON.stringify(pendingOutcome(new Date(now))), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+    );
+    return commit(client, updated, secret);
+  });
+  if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
+  await runOutcome(pool, outcomeAgent, scope.objectId);
+  return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
+}
+
+/** 显式重试：只有 held 且抽取失败时可用；失败保留 Transcript，不自动 retry。 */
+export async function executeRetryOutcome(
+  pool: Pool,
+  outcomeAgent: PostMeetingAgent,
+  secret: string,
+  scope: ActionScope,
+  fingerprint: string,
+): Promise<MeetingActionOutcome> {
+  const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+    if (row.status !== "held" || !row.transcript) return { error: { status: 409, code: "MEETING_NOT_HELD", message: "只有已导入 Transcript 的 held Meeting 可以重试抽取" } };
+    if (row.outcome?.status !== "failed") return { error: { status: 409, code: "MEETING_OUTCOME_NOT_FAILED", message: "只有失败的会后抽取可以显式重试" } };
+    const updated = await updateMeeting(
+      client,
+      row.id,
+      "version = version + 1, action_fingerprints = $2::jsonb",
+      [JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+    );
+    return commit(client, updated, secret);
+  });
+  if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
+  await runOutcome(pool, outcomeAgent, scope.objectId);
+  return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
 }
