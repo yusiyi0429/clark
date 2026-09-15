@@ -1167,6 +1167,84 @@
               "scope",
               "sequence",
               "type",
+              "phase"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "scope": {
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+                "description": "global 或稳定对象 scope",
+                "type": "string"
+              },
+              "sequence": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "compaction",
+                "type": "string"
+              },
+              "phase": {
+                "anyOf": [
+                  {
+                    "const": "started",
+                    "type": "string"
+                  },
+                  {
+                    "const": "completed",
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "runId",
+              "scope",
+              "sequence",
+              "type",
+              "code",
+              "message"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "scope": {
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+                "description": "global 或稳定对象 scope",
+                "type": "string"
+              },
+              "sequence": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "warning",
+                "type": "string"
+              },
+              "code": {
+                "const": "RUNTIME_RECREATED",
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "runId",
+              "scope",
+              "sequence",
+              "type",
               "code",
               "message"
             ],

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildOpenApiDocument } from "../src/openapi.js";
-import { ApiError, ActionDescriptor, Card, ConversationMessageRequest, ConversationScope, ConversationSseEvent } from "../src/index.js";
+import { ApiError, ActionDescriptor, Card, ConversationMessageRequest, ConversationScope, ConversationSseEvent, WebSearchInput, WebSearchResponse } from "../src/index.js";
 import { Value } from "@sinclair/typebox/value";
 
 describe("openapi contract", () => {
@@ -85,9 +85,21 @@ describe("conversation public contract", () => {
       { ...common, type: "tool", phase: "started", toolCallId: "tool-1", name: "search_people" },
       { ...common, type: "tool", phase: "completed", toolCallId: "tool-1", name: "search_people", isError: false },
       { ...common, type: "usage", input: 3, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 5 },
+      { ...common, type: "compaction", phase: "started" },
+      { ...common, type: "compaction", phase: "completed" },
+      { ...common, type: "warning", code: "RUNTIME_RECREATED", message: "执行态已重建" },
       { ...common, type: "error", code: "RUNTIME_FAILED", message: "模型失败" },
       { ...common, type: "done", status: "completed" },
     ]) expect(Value.Check(ConversationSseEvent, event)).toBe(true);
+  });
+
+  it("defines the strict replaceable Web Search Tool contract", () => {
+    expect(Value.Check(WebSearchInput, { query: "latest", freshness: "week", domains: ["example.com"] })).toBe(true);
+    expect(Value.Check(WebSearchInput, { query: "latest", freshness: "forever" })).toBe(false);
+    expect(Value.Check(WebSearchResponse, {
+      results: [{ title: "公告", url: "https://example.com", excerpt: "内容", provider: "fake" }],
+      warnings: [],
+    })).toBe(true);
   });
 });
 

@@ -10,20 +10,31 @@ import { getFixtureHome, projectHomeCard } from "./fixture.js";
 
 export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
+  | { type: "warning"; code: "RUNTIME_RECREATED"; message: string }
+  | { type: "compaction"; phase: "started" | "completed" }
   | { type: "tool"; phase: "started" | "completed"; toolCallId: string; name: string; isError?: boolean }
   | { type: "usage"; input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number };
 
 export type ConversationRuntime = {
+  promptHash?: string;
+  modelSlot?: string;
   run(input: {
     scope: TConversationScope;
     message: string;
     currentObject: TReferenceSnapshot | null;
     referencesSnapshot: TReferenceSnapshot[];
+    recentMessages?: { role: "user" | "assistant"; content: string; createdAt: string }[];
     runtimeEntries: unknown[];
     piSessionId: string;
     signal: AbortSignal;
     emit: (event: ConversationRuntimeEvent) => void;
-  }): Promise<{ assistantMessage: string; runtimeEntries: unknown[] }>;
+    checkpoint?: (runtimeEntries: unknown[]) => Promise<void>;
+  }): Promise<{
+    assistantMessage: string;
+    runtimeEntries: unknown[];
+    piSessionId?: string;
+    recovery?: { recreated: true; warning: string };
+  }>;
   close?(): Promise<void>;
 };
 

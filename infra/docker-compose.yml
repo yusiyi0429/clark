@@ -35,6 +35,7 @@ services:
       PI_BASE_URL: ${PI_BASE_URL:?PI_BASE_URL required}
       PI_API_KEY: ${PI_API_KEY:?PI_API_KEY required}
       LIGHT_MODEL: ${LIGHT_MODEL:?LIGHT_MODEL required}
+      COMPACTION_MODEL: ${COMPACTION_MODEL:?COMPACTION_MODEL required}
       BUILD_SHA: ${BUILD_SHA:-dev}
     volumes:
       - ../backend:/repo/backend:ro

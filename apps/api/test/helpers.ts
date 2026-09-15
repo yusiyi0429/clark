@@ -1,10 +1,12 @@
 import { randomUUID, scryptSync } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
+import type { TWebSearchInput, TWebSearchResponse, TWebSearchResult } from "@warmap/contracts";
 import { migrate } from "../src/migrate.js";
 import { buildApp, type AppEnv } from "../src/app.js";
 import type { FastifyInstance } from "fastify";
 import type { ConversationRuntime } from "../src/conversations.js";
+import type { WebSearchAdapter } from "../src/webSearch.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
@@ -48,10 +50,27 @@ export const testEnv: AppEnv = {
   piBaseUrl: "https://provider.invalid/v1/responses",
   piApiKey: "test-key",
   lightModel: "test-light-model",
+  compactionModel: "test-compaction-model",
   buildSha: "test-sha",
 };
 
 export const TEST_PASSWORD = "ceo-pass-2024";
+
+export function createFakeWebSearchAdapter(
+  fixtures: Record<string, TWebSearchResponse | TWebSearchResult[]>,
+): WebSearchAdapter & { calls: TWebSearchInput[] } {
+  const calls: TWebSearchInput[] = [];
+  return {
+    calls,
+    async search(input, signal) {
+      if (signal.aborted) throw signal.reason;
+      calls.push(structuredClone(input));
+      const fixture = fixtures[input.query];
+      if (!fixture) return { results: [], warnings: [`No fake fixture for: ${input.query}`] };
+      return Array.isArray(fixture) ? { results: structuredClone(fixture), warnings: [] } : structuredClone(fixture);
+    },
+  };
+}
 
 export type TestApp = {
   app: FastifyInstance;
@@ -59,7 +78,15 @@ export type TestApp = {
   env: AppEnv;
   loginCookie: () => Promise<string>;
   fixtureRow: () => Promise<Record<string, unknown>>;
-  conversationState: (scope: string) => Promise<{ runtimeEntries: unknown[]; messages: Record<string, unknown>[] }>;
+  conversationState: (scope: string) => Promise<{
+    runtimeEntries: unknown[];
+    piSessionId?: string;
+    recreatedAt?: Date | null;
+    runtimeWarning?: string | null;
+    messages: Record<string, unknown>[];
+  }>;
+  setRuntimeEntries: (scope: string, entries: unknown) => Promise<void>;
+  agentRuns: () => Promise<Record<string, unknown>[]>;
   restart: (runtime: ConversationRuntime) => Promise<FastifyInstance>;
   close: () => Promise<void>;
 };
@@ -75,6 +102,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 export async function createTestApp(
   seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
+  runtimeOptions: { conversationTurnTimeoutMs?: number } = {},
 ): Promise<TestApp> {
   const database = `warmap_test_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const admin = new Pool({ connectionString: ADMIN_URL, max: 2 });
@@ -87,7 +115,7 @@ export async function createTestApp(
   await migrate(client);
   client.release();
   const env = { ...testEnv, ...seedOverrides };
-  const app = await buildApp({ pool, env, conversationRuntime });
+  const app = await buildApp({ pool, env, conversationRuntime, ...runtimeOptions });
   const apps = [app];
   return {
     app,
@@ -109,7 +137,7 @@ export async function createTestApp(
     },
     conversationState: async (scope) => {
       const conversation = await pool.query(
-        "SELECT id, runtime_entries FROM conversations WHERE scope = $1",
+        "SELECT id, pi_session_id, runtime_entries, recreated_at, runtime_warning FROM conversations WHERE scope = $1",
         [scope],
       );
       if (!conversation.rows[0]) return { runtimeEntries: [], messages: [] };
@@ -117,10 +145,20 @@ export async function createTestApp(
         "SELECT role, content, references_snapshot FROM conversation_messages WHERE conversation_id = $1 ORDER BY sequence",
         [conversation.rows[0].id],
       );
-      return { runtimeEntries: conversation.rows[0].runtime_entries, messages: messages.rows };
+      return {
+        runtimeEntries: conversation.rows[0].runtime_entries,
+        piSessionId: conversation.rows[0].pi_session_id,
+        recreatedAt: conversation.rows[0].recreated_at,
+        runtimeWarning: conversation.rows[0].runtime_warning,
+        messages: messages.rows,
+      };
     },
+    setRuntimeEntries: async (scope, entries) => {
+      await pool.query("UPDATE conversations SET runtime_entries = $2::jsonb WHERE scope = $1", [scope, JSON.stringify(entries)]);
+    },
+    agentRuns: async () => (await pool.query("SELECT * FROM agent_runs ORDER BY started_at, id")).rows,
     restart: async (runtime) => {
-      const restarted = await buildApp({ pool, env, conversationRuntime: runtime });
+      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, ...runtimeOptions });
       apps.push(restarted);
       return restarted;
     },
