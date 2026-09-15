@@ -89,6 +89,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cards/meetings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取 Meeting Card 列表（用于加入已有 scheduled Meeting） */
+        get: operations["listMeetingCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/meetings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取 Meeting 详情 Card */
+        get: operations["getMeetingCard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 会前通知：与 Meeting 详情同一 projector 的 scheduled Meeting 投影 */
+        get: operations["listNotificationCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/radar": {
         parameters: {
             query?: never;
@@ -220,6 +271,23 @@ export interface paths {
         put?: never;
         /** DRI 服务导入 Issue（red 必须提供 decisionBy 与 reason） */
         post: operations["importDriIssue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dri/meetings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** DRI 服务导入 Meeting 元数据（稳定 Person 目录） */
+        post: operations["importDriMeeting"];
         delete?: never;
         options?: never;
         head?: never;
@@ -557,6 +625,40 @@ export interface components {
         IssueRevokeReceiptInput: {
             reason?: string;
         };
+        DriMeetingImportRequest: {
+            externalId: string;
+            title: string;
+            scheduledAt: string;
+            leadDriId: string;
+            ceoParticipantId: string;
+            participants: string[];
+            issueIds: string[];
+        };
+        CreateMeetingRequest: {
+            title: string;
+            scheduledAt: string;
+            leadDriId: string;
+            ceoParticipantId: string;
+            participants: string[];
+            issueIds: string[];
+        };
+        JoinMeetingRequest: {
+            meetingId: string;
+        };
+        UpdateMeetingDraftRequest: {
+            readIssueIds?: string[];
+            carriedIssueIds?: string[];
+            checkedEntryIds?: string[];
+            editsByEntryId?: {
+                [key: string]: string;
+            };
+            note?: string;
+        };
+        RequestSupplementRequest: {
+            entryId?: string;
+            targetDriId: string;
+            text: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -708,6 +810,104 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMeetingCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Meeting Cards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMeetingCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Meeting Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listNotificationCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 通知 Card 集合 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1091,6 +1291,66 @@ export interface operations {
                 };
             };
             /** @description 创建的 pending Issue Card */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    importDriMeeting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DriMeetingImportRequest"];
+            };
+        };
+        responses: {
+            /** @description 同 externalId 同内容：返回原 Meeting Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description 创建的 scheduled Meeting Card */
             201: {
                 headers: {
                     [name: string]: unknown;

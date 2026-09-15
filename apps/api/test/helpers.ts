@@ -7,6 +7,7 @@ import { buildApp, type AppEnv } from "../src/app.js";
 import type { FastifyInstance } from "fastify";
 import type { ConversationRuntime } from "../src/conversations.js";
 import type { ResearchService } from "../src/research.js";
+import type { DriExporter, PreflightAgent } from "../src/meetings.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
@@ -97,6 +98,7 @@ export type TestApp = {
   }>;
   setRuntimeEntries: (scope: string, entries: unknown) => Promise<void>;
   agentRuns: () => Promise<Record<string, unknown>[]>;
+  sql: (text: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
   restart: (runtime: ConversationRuntime) => Promise<FastifyInstance>;
   close: () => Promise<void>;
 };
@@ -112,7 +114,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 export async function createTestApp(
   seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
-  runtimeOptions: { conversationTurnTimeoutMs?: number } = {},
+  runtimeOptions: { conversationTurnTimeoutMs?: number; preflightAgent?: PreflightAgent; driExporter?: DriExporter } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {
   const database = `warmap_test_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
@@ -168,6 +170,7 @@ export async function createTestApp(
       await pool.query("UPDATE conversations SET runtime_entries = $2::jsonb WHERE scope = $1", [scope, JSON.stringify(entries)]);
     },
     agentRuns: async () => (await pool.query("SELECT * FROM agent_runs ORDER BY started_at, id")).rows,
+    sql: async (text, params) => (await pool.query(text, params)).rows,
     restart: async (runtime) => {
       const restarted = await buildApp({ pool, env, conversationRuntime: runtime, researchService, ...runtimeOptions });
       apps.push(restarted);

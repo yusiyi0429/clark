@@ -8,7 +8,9 @@ import {
   ConversationHistory,
   ConversationMessageRequest,
   ConversationSseEvent,
+  CreateMeetingRequest,
   DriIssueImportRequest,
+  DriMeetingImportRequest,
   HealthResponse,
   IssueDecideInput,
   IssueDecideOverrideInput,
@@ -16,10 +18,13 @@ import {
   IssueReceipt,
   IssueRevokeReceiptInput,
   ResearchDoc,
+  JoinMeetingRequest,
   LoginRequest,
   RadarScanResponse,
+  RequestSupplementRequest,
   SessionResponse,
   SignalStateRequest,
+  UpdateMeetingDraftRequest,
 } from "./index.js";
 
 const errorResponse = {
@@ -111,6 +116,38 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "200": { description: "Issue Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
             "401": errorResponse,
             "404": errorResponse,
+          },
+        },
+      },
+      "/api/cards/meetings": {
+        get: {
+          operationId: "listMeetingCards",
+          summary: "读取 Meeting Card 列表（用于加入已有 scheduled Meeting）",
+          responses: {
+            "200": { description: "Meeting Cards", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/cards/meetings/{id}": {
+        get: {
+          operationId: "getMeetingCard",
+          summary: "读取 Meeting 详情 Card",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Meeting Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/cards/notifications": {
+        get: {
+          operationId: "listNotificationCards",
+          summary: "会前通知：与 Meeting 详情同一 projector 的 scheduled Meeting 投影",
+          responses: {
+            "200": { description: "通知 Card 集合", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
           },
         },
       },
@@ -232,6 +269,20 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/dri/meetings": {
+        post: {
+          operationId: "importDriMeeting",
+          summary: "DRI 服务导入 Meeting 元数据（稳定 Person 目录）",
+          requestBody: jsonBody({ $ref: "#/components/schemas/DriMeetingImportRequest" }),
+          responses: {
+            "200": { description: "同 externalId 同内容：返回原 Meeting Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "201": { description: "创建的 scheduled Meeting Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
       "/healthz": {
         get: {
           operationId: "health",
@@ -269,6 +320,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         IssueDecideOverrideInput: IssueDecideOverrideInput as JsonSchema,
         IssueDismissInput: IssueDismissInput as JsonSchema,
         IssueRevokeReceiptInput: IssueRevokeReceiptInput as JsonSchema,
+        DriMeetingImportRequest: DriMeetingImportRequest as JsonSchema,
+        CreateMeetingRequest: CreateMeetingRequest as JsonSchema,
+        JoinMeetingRequest: JoinMeetingRequest as JsonSchema,
+        UpdateMeetingDraftRequest: UpdateMeetingDraftRequest as JsonSchema,
+        RequestSupplementRequest: RequestSupplementRequest as JsonSchema,
       },
     },
   };

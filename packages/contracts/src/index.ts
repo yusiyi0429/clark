@@ -8,3 +8,4 @@ export * from "./conversations.js";
 export * from "./agentRuntime.js";
 export * from "./radar.js";
 export * from "./issues.js";
+export * from "./meetings.js";

@@ -1,19 +1,25 @@
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
 type ValidationItem = { instancePath?: string; dataPath?: string; message?: string };
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { Pool } from "pg";
 import {
   ConversationMessageRequest,
   ConversationScope,
+  CreateMeetingRequest,
   DriIssueImportRequest,
+  DriMeetingImportRequest,
   ExecuteActionRequest,
   HealthResponse,
+  JoinMeetingRequest,
   LoginRequest,
   RadarScanResponse,
+  RequestSupplementRequest,
   SessionResponse,
   SignalStateRequest,
+  UpdateMeetingDraftRequest,
   type TApiError,
   type TCardCollection,
 } from "@warmap/contracts";
@@ -44,6 +50,22 @@ import type { RadarService } from "./radar.js";
 import { getSignalCard, listSignalCards, projectRadarCard, setSignalState } from "./signals.js";
 import { getIssueRow, executeIssueAction, importDriIssue, listPendingRedIssueCards, projectIssueCard } from "./issues.js";
 import type { ResearchService } from "./research.js";
+import {
+  executeCancelMeeting,
+  executeCreateMeeting,
+  executeJoinMeeting,
+  executeRequestSupplement,
+  executeRetryPreflight,
+  executeUpdateDraft,
+  getMeetingRow,
+  importDriMeeting,
+  listMeetingRows,
+  projectMeetingCard,
+  type DriExporter,
+  type MeetingActionOutcome,
+  type PreflightAgent,
+} from "./meetings.js";
+import { createPreflightAgent } from "./preflightAgent.js";
 
 export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
 
@@ -68,6 +90,8 @@ export async function buildApp({
   conversationRuntime,
   radarService,
   researchService,
+  preflightAgent,
+  driExporter,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
 }: {
   pool: Pool;
@@ -75,10 +99,18 @@ export async function buildApp({
   conversationRuntime?: ConversationRuntime;
   radarService?: RadarService;
   researchService?: ResearchService;
+  preflightAgent?: PreflightAgent;
+  driExporter?: DriExporter;
   conversationTurnTimeoutMs?: number;
 }): Promise<FastifyInstance> {
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
   const companyMemory = loadCompanyMemory(env);
+  const preflight = preflightAgent ?? createPreflightAgent({
+    query: pool.query.bind(pool),
+    baseUrl: env.piBaseUrl,
+    apiKey: env.piApiKey,
+    modelId: env.lightModel,
+  });
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     companyMemory,
     baseUrl: env.piBaseUrl,
@@ -145,6 +177,25 @@ export async function buildApp({
       }
       done();
     };
+  }
+
+  function invalidInput(reply: FastifyReply, schema: TSchema, input: unknown): FastifyReply {
+    const fieldErrors: Record<string, string> = {};
+    for (const error of Value.Errors(schema, input)) {
+      fieldErrors[(error.path || "/").replace(/^\//, "") || "input"] = error.message;
+    }
+    return fail(reply, 400, "INVALID_INPUT", "输入校验失败", { fieldErrors });
+  }
+
+  /** Action 结果 → HTTP：error 用统一 ApiError，version 冲突携带 latestCard，成功返回新 Card。 */
+  function respond(reply: FastifyReply, outcome: MeetingActionOutcome): TCardCollection | FastifyReply {
+    if ("error" in outcome) {
+      return fail(reply, outcome.error.status, outcome.error.code, outcome.error.message, outcome.error.fieldErrors ? { fieldErrors: outcome.error.fieldErrors } : undefined);
+    }
+    if (outcome.conflict) {
+      return fail(reply, 409, "VERSION_CONFLICT", "对象已被修改，请基于最新 Card 重试", { latestCard: outcome.latestCard });
+    }
+    return { cards: [outcome.card] };
   }
 
   app.setErrorHandler((rawErr, req, reply) => {
@@ -476,6 +527,26 @@ export async function buildApp({
     },
   );
 
+  app.get("/api/cards/meetings", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
+    const rows = await listMeetingRows(q);
+    return { cards: rows.map((row) => projectMeetingCard(row, env.sessionSecret)) };
+  });
+
+  app.get(
+    "/api/cards/meetings/:id",
+    { preHandler: requireCEO, schema: { params: idParams } },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      const meeting = await getMeetingRow(q, req.params.id);
+      return meeting ? { cards: [projectMeetingCard(meeting, env.sessionSecret)] } : fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
+    },
+  );
+
+  // 会前通知与 Meeting 详情是同一 projector 的投影，不保存第二份 Meeting。
+  app.get("/api/cards/notifications", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
+    const rows = (await listMeetingRows(q)).filter((row) => row.status === "scheduled");
+    return { cards: rows.map((row) => projectMeetingCard(row, env.sessionSecret)) };
+  });
+
   app.post(
     "/api/actions/execute",
     { preHandler: requireCEO, schema: { body: ExecuteActionRequest } },
@@ -485,6 +556,32 @@ export async function buildApp({
         return fail(reply, 404, "UNKNOWN_ACTION", "无效 actionId");
       }
       const fingerprint = actionFingerprint(env.sessionSecret, req.body.actionId, req.body.input);
+      const input = req.body.input;
+
+      // Ticket 09：Issue 侧 Meeting Action 先于 Ticket 08 的通用 Issue Action 分派
+      if (scope.actionType === "issue.create_meeting") {
+        if (!Value.Check(CreateMeetingRequest, input)) return invalidInput(reply, CreateMeetingRequest, input);
+        return respond(reply, await executeCreateMeeting(pool, companyMemory, preflight, env.sessionSecret, scope, input, fingerprint));
+      }
+      if (scope.actionType === "issue.join_meeting") {
+        if (!Value.Check(JoinMeetingRequest, input)) return invalidInput(reply, JoinMeetingRequest, input);
+        return respond(reply, await executeJoinMeeting(pool, companyMemory, preflight, env.sessionSecret, scope, input, fingerprint));
+      }
+      if (scope.actionType === "meeting.update_draft") {
+        if (!Value.Check(UpdateMeetingDraftRequest, input)) return invalidInput(reply, UpdateMeetingDraftRequest, input);
+        return respond(reply, await executeUpdateDraft(pool, env.sessionSecret, scope, input, fingerprint));
+      }
+      if (scope.actionType === "meeting.request_supplement") {
+        if (!Value.Check(RequestSupplementRequest, input)) return invalidInput(reply, RequestSupplementRequest, input);
+        return respond(reply, await executeRequestSupplement(pool, companyMemory, driExporter, env.sessionSecret, scope, input, fingerprint));
+      }
+      if (scope.actionType === "meeting.cancel") {
+        return respond(reply, await executeCancelMeeting(pool, env.sessionSecret, scope, fingerprint));
+      }
+      if (scope.actionType === "meeting.retry_preflight") {
+        return respond(reply, await executeRetryPreflight(pool, companyMemory, preflight, env.sessionSecret, scope, fingerprint));
+      }
+
       if (scope.objectType === "issue") {
         const result = await executeIssueAction(pool, env.sessionSecret, scope, fingerprint, req.body.input);
         if (!result.ok) {
@@ -549,6 +646,17 @@ export async function buildApp({
       // 创建后立即展示，随后启动唯一深度预研；不阻塞响应，也不让 rejection 终止进程
       if (result.status === 201) {
         research.start(result.card.objectRef.id).catch((err) => console.error("research start failed", err));
+      }
+      return reply.status(result.status).send({ cards: [result.card] });
+    },
+  );
+  app.post(
+    "/api/dri/meetings",
+    { onRequest: requireServiceToken(env.driServiceToken), schema: { body: DriMeetingImportRequest } },
+    async (req, reply) => {
+      const result = await importDriMeeting(pool, companyMemory, preflight, env.sessionSecret, req.body);
+      if ("code" in result) {
+        return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
       }
       return reply.status(result.status).send({ cards: [result.card] });
     },

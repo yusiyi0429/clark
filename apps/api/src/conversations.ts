@@ -8,6 +8,7 @@ import type {
 } from "@warmap/contracts";
 import { getFixtureHome, projectHomeCard } from "./fixture.js";
 import { getIssueRow, projectIssueCard } from "./issues.js";
+import { getMeetingRow, projectMeetingCard } from "./meetings.js";
 
 export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
@@ -101,6 +102,21 @@ export async function getScopeObject(
       },
     };
   }
+  const meeting = objectType === "meeting" ? await getMeetingRow(q, id) : null;
+  if (meeting) {
+    const card = projectMeetingCard(meeting, secret);
+    return {
+      visible: true,
+      snapshot: {
+        cardId: card.id,
+        version: card.version,
+        kind: card.kind,
+        title: card.title,
+        objectRef: card.objectRef,
+        payload: card.payload,
+      },
+    };
+  }
   const row = await getFixtureObject(q, objectType, id);
   if (!row?.visible_to_ceo) return { snapshot: null, visible: false };
   const card = projectFixtureObjectCard(row);
@@ -120,7 +136,7 @@ export async function getScopeObject(
 export async function resolveReferenceSnapshots(
   q: Query,
   references: TCardReference[],
-  actionSecret: string,
+  secret: string,
 ): Promise<
   | { snapshots: TReferenceSnapshot[] }
   | { status: 403 | 404 | 409; code: string; message: string }
@@ -128,7 +144,7 @@ export async function resolveReferenceSnapshots(
   const snapshots: TReferenceSnapshot[] = [];
   for (const reference of references) {
     if (reference.cardId === "home:default") {
-      const card = projectHomeCard(await getFixtureHome(q), actionSecret);
+      const card = projectHomeCard(await getFixtureHome(q), secret);
       if (card.version !== reference.version) {
         return { status: 409, code: "REFERENCE_VERSION_CONFLICT", message: "Card 引用版本已过期" };
       }
@@ -149,7 +165,23 @@ export async function resolveReferenceSnapshots(
     }
     const issue = objectType === "issue" ? await getIssueRow(q, id) : null;
     if (issue) {
-      const card = projectIssueCard(issue, actionSecret);
+      const card = projectIssueCard(issue, secret);
+      if (card.version !== reference.version) {
+        return { status: 409, code: "REFERENCE_VERSION_CONFLICT", message: "Card 引用版本已过期" };
+      }
+      snapshots.push({
+        cardId: card.id,
+        version: card.version,
+        kind: card.kind,
+        title: card.title,
+        objectRef: card.objectRef,
+        payload: card.payload,
+      });
+      continue;
+    }
+    const meeting = objectType === "meeting" ? await getMeetingRow(q, id) : null;
+    if (meeting) {
+      const card = projectMeetingCard(meeting, secret);
       if (card.version !== reference.version) {
         return { status: 409, code: "REFERENCE_VERSION_CONFLICT", message: "Card 引用版本已过期" };
       }
