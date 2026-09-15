@@ -1045,6 +1045,191 @@
         }
       }
     },
+    "/api/dri/meetings/{id}/transcript": {
+      "post": {
+        "operationId": "importDriMeetingTranscript",
+        "summary": "集成客户端导入 warmap-transcript.v1（同一导入边界）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WarmapTranscript"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "导入成功后的 held Meeting Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/transcript": {
+      "post": {
+        "operationId": "importMeetingTranscript",
+        "summary": "CEO Web 上传 warmap-transcript.v1（multipart 单文件）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "导入成功后的 held Meeting Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "health",
@@ -3260,6 +3445,599 @@
           "todoId": {
             "minLength": 1,
             "type": "string"
+          }
+        }
+      },
+      "WarmapTranscript": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "meetingId",
+          "turns"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "warmap-transcript.v1",
+            "type": "string"
+          },
+          "meetingId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "turns": {
+            "minItems": 1,
+            "maxItems": 2000,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "speakerId",
+                "text"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "speakerId": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "startedAt": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "text": {
+                  "maxLength": 20000,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "StoredTranscript": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "meetingId",
+          "turns",
+          "importedAt"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "warmap-transcript.v1",
+            "type": "string"
+          },
+          "meetingId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "turns": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "speakerId",
+                "text"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "speakerId": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "startedAt": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "text": {
+                  "maxLength": 20000,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "importedAt": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "PostMeetingCandidate": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "summary",
+          "items"
+        ],
+        "properties": {
+          "summary": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "items": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "kind",
+                "text",
+                "turnId",
+                "quote"
+              ],
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "decision",
+                      "type": "string"
+                    },
+                    {
+                      "const": "todo",
+                      "type": "string"
+                    },
+                    {
+                      "const": "ceoJudgment",
+                      "type": "string"
+                    },
+                    {
+                      "const": "reopenWhen",
+                      "type": "string"
+                    },
+                    {
+                      "const": "open",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "text": {
+                  "minLength": 1,
+                  "maxLength": 4000,
+                  "type": "string"
+                },
+                "turnId": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "quote": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                "ownerPersonId": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "issueId": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "judgmentKind": {
+                  "anyOf": [
+                    {
+                      "const": "company_direction",
+                      "type": "string"
+                    },
+                    {
+                      "const": "resource_allocation",
+                      "type": "string"
+                    },
+                    {
+                      "const": "external_commitment",
+                      "type": "string"
+                    },
+                    {
+                      "const": "major_risk",
+                      "type": "string"
+                    },
+                    {
+                      "const": "mission_boundary",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "parentIndex": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MeetingOutcomeState": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "pendingSince",
+          "startedAt",
+          "runId",
+          "previousRunIds",
+          "error",
+          "summary",
+          "items",
+          "warnings",
+          "extractedAt"
+        ],
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "const": "pending",
+                "type": "string"
+              },
+              {
+                "const": "running",
+                "type": "string"
+              },
+              {
+                "const": "ready",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "pendingSince": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "previousRunIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "kind",
+                "text",
+                "turnId",
+                "quote",
+                "speakerId",
+                "ownerPersonId",
+                "issueId",
+                "judgmentKind",
+                "parentItemId",
+                "review"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "decision",
+                      "type": "string"
+                    },
+                    {
+                      "const": "todo",
+                      "type": "string"
+                    },
+                    {
+                      "const": "ceoJudgment",
+                      "type": "string"
+                    },
+                    {
+                      "const": "reopenWhen",
+                      "type": "string"
+                    },
+                    {
+                      "const": "open",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "text": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "turnId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "quote": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "speakerId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "ownerPersonId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "issueId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "judgmentKind": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "company_direction",
+                          "type": "string"
+                        },
+                        {
+                          "const": "resource_allocation",
+                          "type": "string"
+                        },
+                        {
+                          "const": "external_commitment",
+                          "type": "string"
+                        },
+                        {
+                          "const": "major_risk",
+                          "type": "string"
+                        },
+                        {
+                          "const": "mission_boundary",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "parentItemId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "review": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "status",
+                        "effectRef"
+                      ],
+                      "properties": {
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "pending",
+                              "type": "string"
+                            },
+                            {
+                              "const": "confirmed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "dismissed",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "effectRef": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "candidate",
+                "reason"
+              ],
+              "properties": {
+                "candidate": {},
+                "reason": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "extractedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ReplaceTranscriptRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "transcript",
+          "confirmReplace"
+        ],
+        "properties": {
+          "transcript": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "schemaVersion",
+              "meetingId",
+              "turns"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "const": "warmap-transcript.v1",
+                "type": "string"
+              },
+              "meetingId": {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              "turns": {
+                "minItems": 1,
+                "maxItems": 2000,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "speakerId",
+                    "text"
+                  ],
+                  "properties": {
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "speakerId": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "text": {
+                      "maxLength": 20000,
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "confirmReplace": {
+            "const": true,
+            "type": "boolean"
           }
         }
       }
