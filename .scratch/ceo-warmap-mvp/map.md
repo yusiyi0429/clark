@@ -24,7 +24,7 @@ Spec: `spec.md`
 | 02 | 建立可登录的 Monorepo 纵向骨架 | None | resolved |
 | 03 | 提供只读 CompanyMemory MCP 与稳定人员目录 | 02 | resolved |
 | 04 | 跑通 global 与对象 Conversation | 02, 03 | resolved |
-| 05 | 补齐 Search、compaction 与 Runtime 恢复 | 04 | ready-for-agent |
+| 05 | 补齐 Search、compaction 与 Runtime 恢复 | 04 | resolved |
 | 06 | 从真实来源生成可管理的 Signal | 02, 05 | ready-for-agent |
 | 07 | 自动升级 Issue 并接收 DRI Issue | 03, 04, 05, 06 | ready-for-agent |
 | 08 | 完成 Issue 预研与直接决定闭环 | 07 | ready-for-agent |
@@ -41,7 +41,7 @@ Spec: `spec.md`
 
 ## Current frontier
 
-- 05 补齐 Search、compaction 与 Runtime 恢复
+- 06 从真实来源生成可管理的 Signal
 
 其他 ticket 必须等待其真实 blocker resolved。
 
@@ -51,5 +51,6 @@ Spec: `spec.md`
 - 02 resolved：提交 `18f04cb`，跑通 Caddy → Web/API → PostgreSQL、CEO 登录、fixture Card、OpenAPI 客户端与 Action 幂等链；20 个测试、三包构建、Caddy/Compose/浏览器旅程通过，内部 Standards/Spec review 通过。
 - 03 resolved：提交 `b5145b5`，提供四个只读 CompanyMemory MCP 工具、稳定 Person seed 校验与独立服务鉴权；contracts 6 + API 23 测试、构建和真实 endpoint smoke 通过。Master 消融审查删除了 603 行 CompanyMemory 重复副本，改为直接读取现有单一来源。
 - 04 resolved：提交 `9826f0d`，跑通鉴权 Conversation HTTP/SSE、scope 隔离、可信 Card 快照、PostgreSQL 原始消息/runtime entries 恢复和受控 Pi + 只读 MCP；39 项测试、全 workspace typecheck/build 与双轴 review 通过。
+- 05 resolved：提交 `92adfdb`，补齐自主 Search、180 秒/8 次保护、Pi compaction、entries 损坏重建、严格 Candidate Tool 与 AgentRun。Herdr review 的 5 项有效发现均经 red→green 修复；contracts 9 + API 46 测试、typecheck/build 通过。
 
 ## Comments
