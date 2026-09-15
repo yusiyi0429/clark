@@ -36,6 +36,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   baseUrl: string;
   apiKey: string;
   modelId: string;
+  modelSlot?: "light" | "heavy";
   signal?: AbortSignal;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 }): Promise<{ runId: string; candidate: Static<T> }> {
@@ -43,8 +44,8 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   const promptHash = createHash("sha256").update(options.prompt).digest("hex");
   await options.query(
     `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
-     VALUES ($1, $2, $3::jsonb, 'running', 'heavy', $4, $5::jsonb)`,
-    [runId, options.kind, JSON.stringify(options.objectRef ?? null), promptHash, JSON.stringify(options.input)],
+     VALUES ($1, $2, $3::jsonb, 'running', $4, $5, $6::jsonb)`,
+    [runId, options.kind, JSON.stringify(options.objectRef ?? null), options.modelSlot ?? "heavy", promptHash, JSON.stringify(options.input)],
   );
 
   const resourceLoader: ResourceLoader = {

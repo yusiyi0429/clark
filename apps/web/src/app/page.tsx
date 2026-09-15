@@ -32,6 +32,8 @@ export default async function HomePage() {
   return (
     <main>
       <nav>
+        <a href="/radar">Radar</a>{" "}
+        <a href="/signals">Signal</a>{" "}
         <form action={logout}>
           <button type="submit">退出登录</button>
         </form>
