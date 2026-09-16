@@ -98,6 +98,8 @@ import type { MonthlyPlanService } from "./monthlyDraft.js";
 import { recoverInterruptedOutcome, type PostMeetingAgent } from "./outcome.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import multipart from "@fastify/multipart";
+import { logEvent } from "./observability.js";
+import { configureLangSmith, recordAgentTrace } from "./langsmith.js";
 
 export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
 /** warmap-transcript.v1 单文件上限；Web multipart 与 service API 共用。 */
@@ -116,6 +118,9 @@ export type AppEnv = {
   lightModel: string;
   heavyModel: string;
   compactionModel: string;
+  /** 可选 LangSmith adapter；缺失时完全 no-op（.tech/07 §7）。 */
+  langsmithApiKey?: string;
+  langsmithProject?: string;
 } & CompanyMemorySeedEnv;
 
 export async function buildApp({
@@ -144,6 +149,7 @@ export async function buildApp({
   /** 业务时钟；通知与战场投影按公司月读取同一持久对象。 */
   now?: () => Date;
 }): Promise<FastifyInstance> {
+  configureLangSmith({ apiKey: env.langsmithApiKey, project: env.langsmithProject });
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
   const companyMemory = loadCompanyMemory(env);
   const preflight = preflightAgent ?? createPreflightAgent({
@@ -183,6 +189,24 @@ export async function buildApp({
     await runtime.close?.();
   });
   const q = pool.query.bind(pool);
+  // 每个请求的结构化日志上下文：handler 里补充 action/run 字段，onResponse 统一落一条。
+  const requestContext = new WeakMap<FastifyRequest, { runId?: string; scope?: string; objectRef?: string; actionType?: string; errorCode?: string }>();
+  app.addHook("onResponse", async (req, reply) => {
+    const ctx = requestContext.get(req) ?? {};
+    logEvent({
+      event: "http.request",
+      requestId: String(req.id),
+      method: req.method,
+      url: req.url,
+      status: String(reply.statusCode),
+      durationMs: Math.round(reply.elapsedTime),
+      errorCode: reply.statusCode >= 400 ? (ctx.errorCode ?? `HTTP_${reply.statusCode}`) : undefined,
+      runId: ctx.runId,
+      scope: ctx.scope,
+      objectRef: ctx.objectRef,
+      actionType: ctx.actionType,
+    });
+  });
 
   // ponytail: 登录限速用进程内计数器，单进程 MVP 足够；多实例部署时换共享存储
   await app.register(rateLimit, { global: false });
@@ -196,6 +220,7 @@ export async function buildApp({
     message: string,
     extra?: Partial<TApiError>,
   ): FastifyReply {
+    requestContext.set(reply.request, { ...requestContext.get(reply.request), errorCode: code });
     return reply.status(status).send({ code, message, retryable: false, requestId: reply.request.id, ...extra });
   }
 
@@ -399,9 +424,15 @@ export async function buildApp({
       }
 
       const runId = randomUUID();
+      requestContext.set(req, { runId, scope: req.params.scope });
+      const runStartedAt = Date.now();
       const abort = new AbortController();
       let streamFinished = false;
       let eventSequence = 0;
+      const runToolEvents: { name: string; isError?: boolean }[] = [];
+      let runStatus = "aborted";
+      let runError: string | undefined;
+      let runOutput: unknown;
       try {
         const conversationId = randomUUID();
         const piSessionId = randomUUID();
@@ -468,6 +499,9 @@ export async function buildApp({
             const { type: _type, ...usage } = event;
             runUsage = usage;
           }
+          if (event.type === "tool" && event.phase === "completed") {
+            runToolEvents.push({ name: String(event.name), isError: event.isError === true });
+          }
           if (reply.raw.destroyed) return;
           const data = { ...event, runId, scope: req.params.scope, sequence: ++eventSequence };
           reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -505,6 +539,7 @@ export async function buildApp({
               "UPDATE agent_runs SET status = 'aborted', error = $2, usage = $3::jsonb, completed_at = now() WHERE id = $1",
               [runId, reason?.message ?? "Conversation aborted", JSON.stringify(runUsage)],
             );
+            runError = reason?.message ?? "Conversation aborted";
             if (reason?.code === "TURN_TIMEOUT") emit({ type: "error", code: "TURN_TIMEOUT", message: reason.message });
             else emit({ type: "done", status: "aborted" });
           } else {
@@ -538,6 +573,8 @@ export async function buildApp({
               [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage)],
             );
             await client.query("COMMIT");
+            runStatus = "succeeded";
+            runOutput = { assistantMessage: result.assistantMessage };
             emit({ type: "done", status: "completed" });
           }
         } catch (err) {
@@ -552,6 +589,8 @@ export async function buildApp({
               JSON.stringify(runUsage),
             ],
           );
+          runStatus = abort.signal.aborted ? "aborted" : "failed";
+          runError = reason?.message ?? (err as Error).message ?? "Pi Runtime 失败";
           if (reason?.code === "TURN_TIMEOUT") {
             emit({ type: "error", code: "TURN_TIMEOUT", message: reason.message ?? "Conversation turn exceeded 180 seconds" });
           } else if (!abort.signal.aborted) {
@@ -563,6 +602,38 @@ export async function buildApp({
         } finally {
           clearTimeout(timeout);
         }
+        const durationMs = Date.now() - runStartedAt;
+        const provider = "warmap";
+        const model = runtime.modelId ?? env.lightModel;
+        logEvent({
+          event: "agent.run",
+          requestId: String(req.id),
+          runId,
+          agentKind: "conversation",
+          scope: req.params.scope,
+          objectRef: object.snapshot ? `${object.snapshot.objectRef.type}:${object.snapshot.objectRef.id}` : undefined,
+          provider,
+          model,
+          durationMs,
+          status: runStatus,
+          errorCode: runError ? (runStatus === "aborted" ? "ABORTED" : "RUNTIME_FAILED") : undefined,
+          error: runError,
+        });
+        void recordAgentTrace({
+          runId,
+          name: "conversation",
+          agentKind: "conversation",
+          promptHash: runtime.promptHash,
+          objectRef: object.snapshot?.objectRef ?? { type: "global", id: "global" },
+          inputs: { message: req.body.message, currentObject: object.snapshot, references: references.snapshots },
+          outputs: runOutput,
+          toolEvents: runToolEvents,
+          usage: runUsage,
+          error: runError,
+          status: runStatus,
+          startedAt: runStartedAt,
+          durationMs,
+        });
         streamFinished = true;
         reply.raw.end();
       } finally {
@@ -677,6 +748,7 @@ export async function buildApp({
       if (!scope) {
         return fail(reply, 404, "UNKNOWN_ACTION", "无效 actionId");
       }
+      requestContext.set(req, { actionType: scope.actionType, objectRef: `${scope.objectType}:${scope.objectId}` });
       const fingerprint = actionFingerprint(env.sessionSecret, req.body.actionId, req.body.input);
       const input = req.body.input;
 
@@ -765,6 +837,7 @@ export async function buildApp({
     },
   );
 
+  // Health 只读进程状态与已装配依赖，不发起模型/Search 调用，也不写任何持久化状态。
   app.get("/healthz", { schema: { response: { 200: HealthResponse } } }, async (): Promise<Static<typeof HealthResponse>> => {
     let database = true;
     try {
@@ -772,8 +845,18 @@ export async function buildApp({
     } catch {
       database = false;
     }
-    const status: Static<typeof HealthResponse>["status"] = database ? "ok" : "degraded";
-    return { status, database, buildSha: env.buildSha };
+    const dependencies = {
+      // 启动不变量：任一为 false 时 API 不可能对外服务；字段来自已装配对象而非环境名。
+      piRuntime: Boolean(runtime),
+      modelSlots: Boolean(env.lightModel && env.heavyModel && env.compactionModel),
+      companyMemoryMcp: Boolean(companyMemory),
+      // Provider 可选项：安装时就能诚实区分，不发起外部调用。
+      search: radar.providerStatus.web,
+      wechat: radar.providerStatus.wechat,
+    };
+    const status: Static<typeof HealthResponse>["status"] =
+      database && dependencies.piRuntime && dependencies.modelSlots && dependencies.companyMemoryMcp ? "ok" : "degraded";
+    return { status, api: true, database, buildSha: env.buildSha, dependencies };
   });
 
   // CompanyMemory MCP：独立服务凭据，只读（ADR-0004/0013）；GET/DELETE 会话协商由无状态 transport 拒绝。

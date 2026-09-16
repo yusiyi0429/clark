@@ -6,6 +6,7 @@ import {
   type Context,
 } from "@earendil-works/pi-ai";
 import { runCandidateAgent } from "../src/candidateAgentRuntime.js";
+import { configureLangSmith } from "../src/langsmith.js";
 import { createTestDb } from "./helpers.js";
 import { migrate } from "../src/migrate.js";
 
@@ -121,5 +122,67 @@ describe("batch candidate runtime public seam", () => {
         error: "Candidate agent did not call submit_candidate",
       });
     });
+  });
+
+  it("records application-visible LangSmith traces for batch runs, including failures", async () => {
+    const payloads: Record<string, any>[] = [];
+    configureLangSmith({
+      apiKey: "ls-batch",
+      fetchImpl: async (_url, init) => {
+        payloads.push(JSON.parse(init.body) as Record<string, any>);
+        return { ok: true, status: 202 };
+      },
+    });
+    try {
+      await createTestDb(async ({ db }) => {
+        await migrate(db);
+        await runCandidateAgent({
+          query: db.query.bind(db),
+          kind: "issue-research",
+          objectRef: { type: "issue", id: "fixture-001", version: 1 },
+          input: { question: "比较供应链" },
+          prompt: "只提交结构化研究候选。",
+          schema: Candidate,
+          baseUrl: "https://provider.invalid/v1/responses",
+          apiKey: "test-key",
+          modelId: "fake-heavy",
+          streamSimple: () => stream([{
+            type: "toolCall",
+            id: "submit-1",
+            name: "submit_candidate",
+            arguments: { summary: "选择合作供应链" },
+          }], "toolUse"),
+        });
+        await expect(runCandidateAgent({
+          query: db.query.bind(db),
+          kind: "radar-candidate",
+          input: { source: "fixture" },
+          prompt: "只提交结构化候选。",
+          schema: Candidate,
+          baseUrl: "https://provider.invalid/v1/responses",
+          apiKey: "test-key",
+          modelId: "fake-heavy",
+          streamSimple: () => stream([{ type: "text", text: "散文" }], "stop"),
+        })).rejects.toThrow("did not call submit_candidate");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        expect(payloads).toHaveLength(2);
+        expect(payloads[0]).toMatchObject({
+          name: "issue-research",
+          inputs: { agentKind: "issue-research", input: { question: "比较供应链" } },
+          outputs: { summary: "选择合作供应链" },
+          extra: { status: "succeeded", usage, toolEvents: [{ name: "submit_candidate", isError: false }] },
+        });
+        expect((payloads[0].inputs as { promptHash: string }).promptHash).toMatch(/^[a-f0-9]{64}$/);
+        expect(payloads[1]).toMatchObject({
+          name: "radar-candidate",
+          extra: { status: "failed", toolEvents: [{ name: "submit_candidate", isError: true }] },
+        });
+        expect(payloads[1].error).toContain("submit_candidate");
+        expect(JSON.stringify(payloads)).not.toContain("ls-batch");
+      });
+    } finally {
+      configureLangSmith({});
+    }
   });
 });

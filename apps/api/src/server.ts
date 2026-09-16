@@ -38,6 +38,9 @@ const env: AppEnv = {
   heavyModel: requiredEnv("HEAVY_MODEL"),
   compactionModel: requiredEnv("COMPACTION_MODEL"),
   buildSha: process.env.BUILD_SHA ?? "dev",
+  // 可选观测：未配置时 LangSmith 完全 no-op，不阻断启动或业务
+  langsmithApiKey: process.env.LANGSMITH_API_KEY,
+  langsmithProject: process.env.LANGSMITH_PROJECT,
 };
 
 const port = Number(process.env.PORT ?? "4000");

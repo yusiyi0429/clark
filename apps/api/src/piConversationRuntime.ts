@@ -181,6 +181,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
   return {
     promptHash: createHash("sha256").update(SYSTEM_PROMPT).digest("hex"),
     modelSlot: "light",
+    modelId: options.modelId,
     async run(input) {
       const search = options.search ?? unavailableWebSearchAdapter;
       let searchCount = 0;
