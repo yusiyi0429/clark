@@ -13,13 +13,15 @@ Blocked by: 15 建立全链测试、观测与安全门槛
 - [x] Caddy、Web、API 和 PostgreSQL 通过单机 Docker Compose 运行，只有 Caddy 暴露 80/443 并自动处理证书与 HTTP 跳转。
 - [x] Web/API 镜像可重复构建、以非 root 运行；migration 在 API 接流量前完成且不会自动回滚数据库。
 - [x] SSE、Transcript multipart、DRI service API 与 MCP 均直接经 Caddy 正确透传，不经过 Web rewrite。
-- [ ] 一个真实 Web Search query 返回 title、URL、excerpt，并由 Pi 完成一次自主 Tool loop。
+- [x] 一个真实 Web Search query 返回 title、URL、excerpt，并由 Pi 完成一次自主 Tool loop。
 - [ ] 一个真实公众号账号按账号拉取文章并进入同一 Signal 管线，不以站点关键词搜索替代。
-- [ ] light、heavy、compaction 模型槽位和合法 Transcript 各完成一次真实验收。
+- [x] light、heavy、compaction 模型槽位和合法 Transcript 各完成一次真实验收。
 - [ ] CompanyMemory MCP 装载真实人员 seed，Pi 与独立客户端得到一致稳定 personId。
 - [ ] 宿主机 cron 生成 age 加密 pg_dump、校验 checksum、经 SSH/SFTP 复制异机并保留至少 7 天。
 - [ ] 独立 restore 流程恢复到空 PostgreSQL，不覆盖现有库；恢复后抽查六实体、Transcript、消息和 Pi entries，并继续一次 Conversation。
 - [x] staging smoke、回滚步骤和发布观察清单完成；未引入 Redis、队列、对象存储、Kubernetes或额外 Runtime。
+
+> AC6 provenance：light/heavy/compaction 三槽位为真实最小调用（`gpt-5.6-terra/sol/luna`）；Transcript 半边用的是脚本内自造的 schema 合法样例（example seed 的 personId），过 `Value.Check`+`validateTranscript` 后直调 `createPostMeetingAgent` seam，**未经 multipart 导入端点、也不是项目方真实会议稿**。该项按用户授权的“example seed 可验证模型/Transcript 链”口径成立；真实会议稿导入仍需提供（现有 API 测试覆盖导入端点本身）。
 
 ## Comments
 
@@ -45,10 +47,26 @@ Blocked by: 15 建立全链测试、观测与安全门槛
 - 结论：Axis A green、Axis B green，无 blocking；确认博查唯一、公众号严格账号级 MCP（用真实镜像源码核对工具签名）、Caddy 唯一公网直透、migration 前置于 listen 且无自动回滚、备份/恢复六要素齐备。
 - 主 agent 修复的有效 non-blocking：`.dockerignore` 排除 `seed`/`backend`；新增 `infra/staging/wechat-login.override.yml` + runbook §5 可执行扫码路径（解除 AC#5 落地阻塞）；docs/08 §4 变量名改 `PI_BASE_URL`/`PI_API_KEY`，`.env.example` 补 `WECHAT_SITE_URL` 与宿主机 `DATABASE_URL`；sidecar 镜像钉 `1.7.0@sha256:4723fcbb...`。
 
+### 内部评审（增量 · Herdr · deepseek-flash 只读）
+
+- 针对 `6619c39` 以来的新增（验收脚本、override 端口、runbook、证据、勾选）重审：Axis A green；Axis B 首轮 red，唯一 blocking 为 AC6 Transcript 半边未标注 provenance。
+- 修复：evidence/ticket/runbook 显式标注 Transcript provenance；`webSearch.ts` 错误体按已知 key 精确抹除；验收脚本改为先按已知 secret 精确 redact 再长度兜底并剥离控制字符；runbook §7 指向验收脚本；`.env.example` 补 `WECHAT_LOGIN_PORT`。保留 non-blocking：Bocha 预算为单次进程；验收脚本不在 `pnpm typecheck` 的 `src` 范围。
+
+### 真实外部验收（2026-09-16，脱敏证据见 `.scratch/ceo-warmap-mvp/evidence/ticket16/real-provider-acceptance.md`）
+
+- 可重复执行入口：`apps/api/scripts/real-acceptance.ts`（失败即停、不重试、打印前 redact；`--only=<step>` 用于修复脚本 bug 后单步复跑）。
+- AC4 已实测：Bocha 1 次真实 query 返回 19 条含 title/URL/excerpt（ms=296）；Pi 自主 `web_search` 一次 started+completed（isError=false），Bocha 累计 2/3 次上限内。
+- AC6 已实测：light=`gpt-5.6-terra`(17 tok)/heavy=`gpt-5.6-sol`(17 tok)/compaction=`gpt-5.6-luna`(34 tok) 各 1 次最小调用成功；schema 合法 `warmap-transcript.v1`（2 turns，脚本自造 example personId）整份校验通过并经 heavy 抽取 `PostMeetingCandidate` items=2（1174 tok）。无自动重试、无换档。（provenance 见 AC6 下注。）
+- 第 4 步首次执行在发出模型请求前因脚本缺临时库 migration 失败（`agent_runs` 不存在，0 次模型调用），修脚本后仅复跑一次成功。
+- 公众号 sidecar：`docker compose -f infra/docker-compose.yml -f infra/staging/wechat-login.override.yml up -d wechat` 后 `/api/health`=200、`/mcp` 无 Token=401、带 Token `initialize`=200；数据卷仅新 `rss.db`、无凭证 → **等待管理员扫码**。本机扫码 URL：`http://127.0.0.1:15000/login.html`；未调用任何账号级工具、未模拟订阅、未用关键词替代。
+- `infra/staging/wechat-login.override.yml` 宿主端口改为 `${WECHAT_LOGIN_PORT:-15000}`（避开 macOS AirPlay 占用的 5000），runbook §5 同步。
+
 ### 仍阻塞（真实外部验收，必须真实凭据与实际输出）
 
-- 用户需把真实值放入 `infra/.env`（本仓库不提交、不输出）：`BOCHA_API_KEY`；`PI_BASE_URL`、`PI_API_KEY`、`LIGHT_MODEL`、`HEAVY_MODEL`、`COMPACTION_MODEL`；`WECHAT_MCP_TOKEN`（sidecar `MCP_TOKEN` 同值）与 sidecar 扫码登录得到的已订阅 fakeid；`BACKUP_AGE_RECIPIENT`、`BACKUP_AGE_IDENTITY`、`BACKUP_SSH_HOST`、`BACKUP_SSH_USER`、`BACKUP_SSH_PATH`、`BACKUP_SSH_KEY_PATH`、`BACKUP_RETENTION_DAYS`；`PUBLIC_DOMAIN`。
-- 真实人员名单需放到 `seed/company-people.json`（当前仓库只有 example；缺失时 API 启动即失败，属预期诚实失败）。
-- 真实合法 `warmap-transcript.v1` 与参与人 personId 需由项目方提供。
+- 已 SET 并已用于真实验收：`BOCHA_API_KEY`、`PI_BASE_URL`、`PI_API_KEY`、`LIGHT_MODEL`、`HEAVY_MODEL`、`COMPACTION_MODEL`、`WECHAT_MCP_TOKEN`、`WECHAT_MCP_URL`（已规范为 `http://wechat:5000/mcp`）、`WECHAT_SITE_URL`。
+- AC5 公众号：等待管理员在 `http://127.0.0.1:15000/login.html` 扫码并订阅目标公众号；之后把 fakeid 写入 `radar_config.sources`（runbook §5）再跑一次 manual scan（1 账号 1 轮），不得用关键词替代。
+- AC7 真实人员 seed：`COMPANY_PEOPLE_SEED` 当前指向 `company-people.example.json`；需项目授权人真实名单并重启 API。
+- AC8/AC9 异机备份与恢复：需 `BACKUP_AGE_RECIPIENT`、`BACKUP_AGE_IDENTITY`、`BACKUP_SSH_HOST`、`BACKUP_SSH_USER`、`BACKUP_SSH_PATH`、`BACKUP_SSH_KEY_PATH`、`BACKUP_RETENTION_DAYS` 与真实异机目标（脚本本地真实往返已在 `verification.md` §3 验证）。
+- AC1 真实 TLS 签发需可解析的 staging 域名与公网 80/443（当前 `PUBLIC_DOMAIN=localhost` 仅验证配置与路由）。
 - 以上到齐后按 `infra/staging/runbook.md` §6/§7 逐项执行；未完成前 Ticket 16 保持 `claimed`，不标 `resolved`，也不发送完成信号。
 - 已知实现边界：Radar 来源（sites/wechatAccounts）目前无 Action 面（Ticket 06 已记录），staging 验收前用 runbook §5 的 SQL 写入 `radar_config.sources`。

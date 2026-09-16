@@ -45,7 +45,8 @@
 
 ```bash
 docker compose -f infra/docker-compose.yml -f infra/staging/wechat-login.override.yml up -d wechat
-# 远程服务器：ssh -L 5000:127.0.0.1:5000 <host>，本地浏览器打开 http://127.0.0.1:5000/login.html
+# 远程服务器：ssh -L 15000:127.0.0.1:15000 <host>，本地浏览器打开 http://127.0.0.1:15000/login.html
+# 默认宿主端口 15000（避开 macOS AirPlay 占用的 5000）；可用 WECHAT_LOGIN_PORT 覆盖
 docker compose -f infra/docker-compose.yml up -d wechat   # 扫码完成后回到无公网端口的内网形态
 ```
 
@@ -90,12 +91,16 @@ UPDATE radar_config SET version = version + 1, updated_at = now(), sources = jso
 
 逐项执行，失败记录但不自动重试；任何一项需要缺失的凭据/扫码/SSH 时该验收保持 BLOCKED，不得标记通过。
 
+可重复执行入口：`set -a; . infra/.env; set +a; cd apps/api && npx tsx scripts/real-acceptance.ts`（失败即停、不重试、输出 redact；`--dry-run` 只打印计划，`--only=<bocha|models|pi-loop|transcript-outcome>` 用于修复脚本 bug 后单步复跑；Bocha 预算为单次进程 ≤3）。
+
+> Transcript/Outcome 口径：脚本内用 `company-people.example.json` 的 personId 构造 schema 合法样例，先过 `Value.Check` 与 `validateTranscript`，再直调 `createPostMeetingAgent` seam（不经 multipart 导入端点）。项目方真实会议稿仍须按最下方第 4 行单独验收。
+
 | 验收 | 前置 | 判定 |
 |---|---|---|
 | Bocha Web Search + Pi 自主 Tool loop | `BOCHA_API_KEY`、`PI_*` | 真实 query 返回 title/URL/excerpt；Pi 自主调用一次并停止 |
 | 公众号账号级拉取 | sidecar 扫码、`WECHAT_MCP_*`、Radar 已订阅 fakeid | `get_recent_articles(source_id=fakeid)` 产出 Signal，非关键词搜索 |
 | light/heavy/compaction 三个槽位 | `PI_BASE_URL`/`PI_API_KEY`/三模型名 | 每槽位一次真实调用成功 |
-| 合法 Transcript 导入 + Outcome | heavy 槽位 | 整份校验通过并抽取 |
+| 合法 Transcript 导入 + Outcome | heavy 槽位 | 整份校验通过并抽取（真实导入端点见 API 测试；验收脚本为直调 agent seam + example personId） |
 | 真实人员 seed | 项目授权人名单 `COMPANY_PEOPLE_SEED` | MCP 与 Pi 得到一致稳定 personId |
 | 异机加密备份 + 恢复 | SSH/SFTP 目标、age 公私钥 | §6 全流程通过并继续一次 Conversation |
 

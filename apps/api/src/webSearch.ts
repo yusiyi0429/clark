@@ -78,7 +78,9 @@ export function createBochaWebSearchAdapter({
       });
       if (!response.ok) {
         const detail = await response.text().catch(() => "");
-        throw new Error(`Bocha Search HTTP ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`);
+        // 提供商错误体可能回显 Authorization：按已知 key 精确抹除后再进错误信息
+        const safeDetail = (apiKey ? detail.split(apiKey).join("***") : detail).slice(0, 200);
+        throw new Error(`Bocha Search HTTP ${response.status}${safeDetail ? `: ${safeDetail}` : ""}`);
       }
       const body = obj(await response.json());
       const code = body.code;

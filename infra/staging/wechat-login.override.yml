@@ -1,9 +1,10 @@
 # 仅用于公众号 sidecar 首次扫码登录：临时把登录页绑到宿主机回环，扫码完成后必须撤掉。
 # 用法（在仓库根）：
 #   docker compose -f infra/docker-compose.yml -f infra/staging/wechat-login.override.yml up -d wechat
-#   远程服务器：ssh -L 5000:127.0.0.1:5000 <host>，本地打开 http://127.0.0.1:5000/login.html
+#   远程服务器：ssh -L 15000:127.0.0.1:15000 <host>，本地打开 http://127.0.0.1:15000/login.html
 #   docker compose -f infra/docker-compose.yml up -d wechat   # 回到无公网端口的内网形态
+# 默认宿主端口 15000（避开 macOS AirPlay 占用的 5000）；可用 WECHAT_LOGIN_PORT 覆盖。
 services:
   wechat:
     ports:
-      - "127.0.0.1:5000:5000"
+      - "127.0.0.1:${WECHAT_LOGIN_PORT:-15000}:5000"

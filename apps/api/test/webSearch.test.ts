@@ -48,6 +48,18 @@ describe("Bocha Web Search adapter public seam", () => {
     await expect(adapter.search({ query: "x" }, new AbortController().signal)).rejects.toThrow(/code=403/);
   });
 
+  it("redacts the API key if a provider error body echoes it", async () => {
+    const adapter = createBochaWebSearchAdapter({
+      apiKey: "bocha-secret-key-abcdef",
+      endpoint: "https://bocha.invalid/web-search",
+      fetch: async () => new Response(`invalid token bocha-secret-key-abcdef`, { status: 401 }),
+    });
+    const error = await adapter.search({ query: "x" }, new AbortController().signal).catch((cause: Error) => cause);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/HTTP 401/);
+    expect((error as Error).message).not.toContain("bocha-secret-key-abcdef");
+  });
+
   it("fails honestly when the API key is missing", async () => {
     const adapter = createBochaWebSearchAdapter({});
     await expect(adapter.search({ query: "x" }, new AbortController().signal)).rejects.toThrow(/BOCHA_API_KEY/);
