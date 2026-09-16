@@ -379,3 +379,12 @@ Pi SDK 提供 Chat agent loop、自定义 Web Search、Session 和 compaction。
 - 一个 Web Search Provider、一个公众号账号级渠道和 heavy 模型槽位仍需实施 PoC。PoC 未完成会阻止对应验收旅程，但不会重新打开产品意图。
 - 像素级重构指保留当前 scope 内视觉与交互契约，不代表保留错误的本地业务行为。
 - 本文在本地标记为 `ready-for-agent`。项目已配置 Local Markdown issue tracker，发布时应复制到对应 `.scratch/<feature-slug>/spec.md`。
+
+## 生产切换风险豁免（2026-09-16）
+
+用户明确选择方案 C，将以下两项从本次 cutover 阻塞门槛调整为上线后补齐：
+
+- 微信公众号账号级 MCP 已完成扫码、精确账号订阅和安全边界验证，但真实文章拉取受微信 `ret=200013 freq control` 阻塞；保留实现，不以关键词替代，不宣称真实采集已通过。
+- PostgreSQL 已完成真实 age 加密、checksum、空库恢复、六实体与运行数据核对并继续 Conversation；异机 SSH/SFTP 复制与至少 7 天保留尚未执行，用户明确接受单机故障时的数据丢失风险。
+
+该豁免仅允许进入人工 UI 验收及后续 cutover 流程，不等于完成公众号或异机备份技术验收，也不替代 Ticket 17 对生产入口切换与删除旧 `frontend/` 的明确人工授权。

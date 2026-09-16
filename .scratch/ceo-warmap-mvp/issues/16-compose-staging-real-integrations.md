@@ -1,7 +1,7 @@
 # 16: 完成 Compose 部署与真实外部验收
 
 Type: implementation
-Status: claimed
+Status: resolved
 Blocked by: 15 建立全链测试、观测与安全门槛
 
 ## What to build
@@ -14,10 +14,10 @@ Blocked by: 15 建立全链测试、观测与安全门槛
 - [x] Web/API 镜像可重复构建、以非 root 运行；migration 在 API 接流量前完成且不会自动回滚数据库。
 - [x] SSE、Transcript multipart、DRI service API 与 MCP 均直接经 Caddy 正确透传，不经过 Web rewrite。
 - [x] 一个真实 Web Search query 返回 title、URL、excerpt，并由 Pi 完成一次自主 Tool loop。
-- [ ] 一个真实公众号账号按账号拉取文章并进入同一 Signal 管线，不以站点关键词搜索替代。
+- [x] **用户风险豁免（2026-09-16）**：账号级 MCP 实现、扫码与精确订阅已完成，但真实文章拉取受微信 `ret=200013 freq control` 阻塞；用户明确选择延期，不以关键词替代，也不再阻塞 17/18。
 - [x] light、heavy、compaction 模型槽位和合法 Transcript 各完成一次真实验收。
 - [x] CompanyMemory MCP 装载真实人员 seed，Pi 与独立客户端得到一致稳定 personId。
-- [ ] 宿主机 cron 生成 age 加密 pg_dump、校验 checksum、经 SSH/SFTP 复制异机并保留至少 7 天。
+- [x] **用户风险豁免（2026-09-16）**：age 加密、checksum、Compose 内网 dump 与独立恢复已真实通过，但异机 SSH/SFTP 和 7 天保留尚未执行；用户明确接受该数据丢失风险并延期，不再阻塞 17/18。
 - [x] 独立 restore 流程恢复到空 PostgreSQL，不覆盖现有库；恢复后抽查六实体、Transcript、消息和 Pi entries，并继续一次 Conversation。
 - [x] staging smoke、回滚步骤和发布观察清单完成；未引入 Redis、队列、对象存储、Kubernetes或额外 Runtime。
 
@@ -96,11 +96,12 @@ Blocked by: 15 建立全链测试、观测与安全门槛
 - target 上继续同一 `issue` 对象 Conversation（1 次 light turn，无重试）：`messages 1→3`、`pi_entries 0→5`、SSE `message,usage,done:completed`、run succeeded、usage total=695、3362ms。
 - 清理：临时容器/卷/网络/文件全销毁；仅保留演练前已有的 `warmap_caddy_config/warmap_caddy_data/warmap_pgdata/warmap_wechat_data`，未删任何现有 volume。证据不含正文/全文/姓名/完整ID/secret。
 
-### 仍阻塞（真实外部验收，必须真实凭据与实际输出）
+### 用户明确风险豁免（2026-09-16，选择 C）
 
 - 已 SET 并已用于真实验收：`BOCHA_API_KEY`、`PI_BASE_URL`、`PI_API_KEY`、`LIGHT_MODEL`、`HEAVY_MODEL`、`COMPACTION_MODEL`、`WECHAT_MCP_TOKEN`、`WECHAT_MCP_URL`（已规范为 `http://wechat:5000/mcp`）、`WECHAT_SITE_URL`。
 - AC5 公众号：侧车已登录且已订阅 `量子位/QbitAI`；直连与经 SOCKS5 代理均被微信频控（`ret=200013 freq control`），`articles=0`；需等账号频控自然解除后再拉取，再跑账号级 `get_recent_articles` → Radar 管线（1 篇、1 次 light 候选）。
 - AC8 异机备份仍阻塞：AC9 本机恢复演练已完成（见上），但异机 SSH/SFTP、age 至真实异机与 ≥7 天保留需 `BACKUP_SSH_HOST`/`BACKUP_SSH_USER`/`BACKUP_SSH_PATH`/`BACKUP_SSH_KEY_PATH` 与真实目标。
 - AC1 真实 TLS 签发需可解析的 staging 域名与公网 80/443（当前 `PUBLIC_DOMAIN=localhost` 仅验证配置与路由）。
-- 以上到齐后按 `infra/staging/runbook.md` §6/§7 逐项执行；未完成前 Ticket 16 保持 `claimed`，不标 `resolved`，也不发送完成信号。
+- 用户明确选择方案 C：公众号真实文章拉取与异机 SSH/SFTP 备份均延期，接受对应来源缺失与单机故障数据丢失风险；这两项不得被描述为技术验收通过。
+- 本豁免仅解除 Ticket 16 对 Ticket 17 的阻塞，不替代 Ticket 17 的人工像素验收、生产入口切换授权或旧 `frontend/` 删除授权。
 - 已知实现边界：Radar 来源（sites/wechatAccounts）目前无 Action 面（Ticket 06 已记录），staging 验收前用 runbook §5 的 SQL 写入 `radar_config.sources`。

@@ -11,7 +11,7 @@ Blocked by: 17 执行用户像素级验收与 cutover 授权
 ## Acceptance criteria
 
 - [ ] 开始前确认 17 已 resolved，且包含明确的 cutover 与旧前端删除授权。
-- [ ] 生产数据库备份、恢复证据、环境配置、DNS/TLS、migration 与回滚入口均已就绪。
+- [ ] 本机 age 加密与独立恢复证据、环境配置、DNS/TLS、migration 与回滚入口均已就绪；异机备份按 2026-09-16 用户风险豁免延期，不得描述为已完成。
 - [ ] 切换后登录、首页、对象 URL、Action、SSE、Transcript、DRI API 与 MCP smoke 全部通过。
 - [ ] 观察窗口内监测 health、错误、Agent usage、Provider 与数据库状态；触发既定条件时执行回滚。
 - [ ] 稳定条件满足后整体删除旧 `frontend/`，不迁移其业务数据、localStorage、兼容路由或旧 Agent。
