@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import { Card, ResearchDoc, type TResearchDoc } from "@warmap/contracts";
 import { buildApp } from "../src/app.js";
 import { signActionId } from "../src/actionToken.js";
-import { revokeEffect } from "../src/effects.js";
+import { revokeIssueReceipt } from "../src/effects.js";
 import { recoverInterruptedResearch } from "../src/issues.js";
 import { createResearchService, type ResearchRunner } from "../src/research.js";
 import { createRadarService } from "../src/radar.js";
@@ -647,16 +647,16 @@ describe("unified effect revoker", () => {
         expect(revokedB.statusCode).toBe(200);
         expect(revokedB.json().cards[0].payload.status).toBe("pending");
 
-        // 统一 revoker 拒绝没有对应实现的外部效果，不声称已恢复
+        // meeting item 的撤回由 Ticket 11 的统一 meeting revoker 处理，Issue Receipt 纯函数不代为恢复
         const row = await db.query("SELECT * FROM issues WHERE id = $1", [id]);
-        const meeting = revokeEffect(
+        const meeting = revokeIssueReceipt(
           { ...row.rows[0], id, receipts: revokedB.json().cards[0].payload.receipts.map((r: Record<string, unknown>) => ({
             ...r, actionFingerprint: "x",
           })) } as never,
           `meeting:${randomUUID()}:decision:item-1`,
           "fp",
         );
-        expect(meeting).toMatchObject({ ok: false, code: "EFFECT_REVOKER_PENDING" });
+        expect(meeting).toMatchObject({ ok: false, code: "UNKNOWN_EFFECT" });
       } finally {
         await app.close();
       }

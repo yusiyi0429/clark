@@ -43,6 +43,8 @@ export type IssueReceiptRow = {
   researchStatusAtDecision: IssueResearch["status"];
   researchRunId?: string;
   override: boolean;
+  /** 由 MeetingOutcome decision 确认产生的 Receipt 携带精确来源。 */
+  source?: { kind: "meeting-item"; meetingId: string; outcomeItemId: string };
   createdAt: string;
   revokedAt?: string;
   revokedFingerprint?: string;
@@ -262,6 +264,7 @@ function projectReceipt(receipt: IssueReceiptRow) {
     researchStatusAtDecision: receipt.researchStatusAtDecision,
     researchRunId: receipt.researchRunId,
     override: receipt.override,
+    ...(receipt.source ? { source: receipt.source } : {}),
     createdAt: receipt.createdAt,
     revokedAt: receipt.revokedAt,
     revokeReason: receipt.revokeReason,
@@ -587,6 +590,15 @@ export async function executeIssueAction(
     return { ok: false, status: 400, code: "INVALID_INPUT", message: "Action 输入不符合契约" };
   }
 
+  // Issue 页面遇到 meeting-item Receipt：必须委托统一 meeting revoker，不得直接改 Receipt
+  if (scope.actionType === "issue.revoke_receipt") {
+    const preview = await getIssueRow(pool.query.bind(pool), scope.objectId);
+    const target = scope.itemId ? preview?.receipts.find((receipt) => receipt.id === scope.itemId) : undefined;
+    if (preview && target?.effectRef.startsWith("meeting:")) {
+      return revokeMeetingReceiptFromIssue(pool, secret, preview, target, scope.objectVersion, fingerprint, (payload as { reason?: string }).reason);
+    }
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -709,23 +721,67 @@ export async function executeIssueAction(
       await client.query("COMMIT");
       return { ok: true, card: current() };
     }
-    const revoked = revokeEffect(row, target.effectRef, fingerprint, {
+    const revoked = await revokeEffect(client, target.effectRef, fingerprint, {
       reason: (payload as { reason?: string }).reason,
       at: now,
     });
-    if (!revoked.ok) return conflict(revoked.code, revoked.message);
-    const status: IssueRow["status"] = revoked.receipts.some((receipt) => !receipt.revokedAt) ? "decided" : "pending";
-    await client.query(
-      "UPDATE issues SET receipts = $2::jsonb, status = $3, version = version + 1, updated_at = now() WHERE id = $1",
-      [row.id, JSON.stringify(revoked.receipts), status],
-    );
-    const card = projectIssueCard({ ...row, status, receipts: revoked.receipts, version: row.version + 1 }, secret);
+    if (!revoked.ok) {
+      if ("conflict" in revoked && revoked.conflict) return conflict("VERSION_CONFLICT", "对象已被修改，请基于最新 Card 重试");
+      return conflict(revoked.code, revoked.message);
+    }
     await client.query("COMMIT");
-    return { ok: true, card };
+    // 此分支只处理 issue: Receipt；meeting: Receipt 已在前面委托 meeting revoker
+    return { ok: true, card: projectIssueCard(revoked.target === "issue" ? revoked.issue : row, secret) };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;
   } finally {
     client.release();
   }
+}
+
+/**
+ * 从 Issue 页面撤回由 MeetingOutcome decision 写入的 Receipt：
+ * 委托统一 revokeMeetingEffect，同步 Outcome item、Radar anchor 与 Meeting 派生状态。
+ */
+async function revokeMeetingReceiptFromIssue(
+  pool: Pool,
+  secret: string,
+  issue: IssueRow,
+  receipt: IssueReceiptRow,
+  expectedIssueVersion: number,
+  fingerprint: string,
+  reason?: string,
+): Promise<IssueActionOutcome> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await revokeEffect(client, receipt.effectRef, fingerprint, {
+      // 与 executeIssueAction 一致：用 Card 上的 Issue version 串行，不信任读到的行版本
+      expectedIssueVersion,
+      reason,
+    });
+    if (!result.ok) {
+      await client.query("ROLLBACK");
+      if ("conflict" in result && result.conflict) {
+        return {
+          ok: false,
+          status: 409,
+          code: "VERSION_CONFLICT",
+          message: "对象已被修改，请基于最新 Card 重试",
+          latestCard: result.latestIssue ? projectIssueCard(result.latestIssue, secret) : undefined,
+        };
+      }
+      return { ok: false, status: 409, code: result.code, message: result.message };
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+  const updated = await getIssueRow(pool.query.bind(pool), issue.id);
+  // Issue 不被删除，回退时保留原 Card
+  return { ok: true, card: projectIssueCard(updated ?? issue, secret) };
 }

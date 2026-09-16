@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { Pool } from "pg";
 import { Value } from "@sinclair/typebox/value";
-import { Card, MeetingCardPayload, type TSupplementRequest, type TPreflightCandidate } from "@warmap/contracts";
+import { Card, MeetingCardPayload, type TPreflightCandidate } from "@warmap/contracts";
 import { buildApp } from "../src/app.js";
 import { loadCompanyMemory } from "../src/companyMemory.js";
 import { migrate } from "../src/migrate.js";
 import { createTestApp, createTestDb, testEnv, TEST_PASSWORD, type TestApp } from "./helpers.js";
-import { recoverInterruptedPreflight, runPreflight, type PreflightAgent, type PreflightAgentInput } from "../src/meetings.js";
+import { recoverInterruptedPreflight, runPreflight, type DriExportRequest, type PreflightAgent, type PreflightAgentInput } from "../src/meetings.js";
 
 const MEETING_INPUT = {
   title: "渠道投入决策会",
@@ -595,8 +595,8 @@ describe("Supplement Request honest export status", () => {
   it("records delivered only from a real channel receipt and failed when the channel errors", async () => {
     let calls = 0;
     const exporter = {
-      calls: [] as TSupplementRequest[],
-      async export(request: TSupplementRequest): Promise<{ exportRef: string }> {
+      calls: [] as DriExportRequest[],
+      async export(request: DriExportRequest): Promise<{ exportRef: string }> {
         calls += 1;
         exporter.calls.push(request);
         if (calls === 1) return { exportRef: "dri-msg-001" };

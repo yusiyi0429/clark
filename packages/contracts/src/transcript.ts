@@ -82,11 +82,33 @@ export const OutcomeReviewStatus = Type.Union([
   Type.Literal("dismissed"),
 ]);
 
-/** 逐项 Review：open 条目没有 Review（Ticket 11 处理 confirm/dismiss/revoke）。 */
+/** 逐项 Review：open 条目没有 Review。confirmed 记录精确 effectRef 与外发状态。 */
+export const HandoffExportStatus = Type.Union([
+  Type.Literal("pending_export"),
+  Type.Literal("delivered"),
+  Type.Literal("failed"),
+]);
+
+/** todo 的 DRI Handoff：没有真实渠道回执时只能停在 pending_export，不得显示 delivered。 */
+export const OutcomeHandoff = Type.Object(
+  {
+    exportStatus: HandoffExportStatus,
+    exportRef: Type.Union([Type.String(), Type.Null()]),
+    error: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 export const OutcomeReview = Type.Object(
   {
     status: OutcomeReviewStatus,
     effectRef: Type.Union([Type.String(), Type.Null()]),
+    /** 已确认 todo 的 DRI Handoff。 */
+    handoff: Type.Optional(Type.Union([OutcomeHandoff, Type.Null()])),
+    /** reopenWhen 写入的 Radar anchor id。 */
+    anchorId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    /** dismiss 原因（含父 decision 被忽略时的 parent_dismissed）。 */
+    reason: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -150,6 +172,17 @@ export const ReplaceTranscriptRequest = Type.Object(
   { additionalProperties: false },
 );
 
+/** 逐项处理 Action 的输入；itemId 由确定性 actionId 携带，不重复提交。 */
+export const MeetingConfirmItemInput = Type.Object({}, { additionalProperties: false });
+export const MeetingDismissItemInput = Type.Object(
+  { reason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })) },
+  { additionalProperties: false },
+);
+export const MeetingRevokeEffectInput = Type.Object(
+  { reason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })) },
+  { additionalProperties: false },
+);
+
 export type TTranscriptSchemaVersion = Static<typeof TranscriptSchemaVersion>;
 export type TTranscriptTurn = Static<typeof TranscriptTurn>;
 export type TWarmapTranscript = Static<typeof WarmapTranscript>;
@@ -159,7 +192,12 @@ export type TCeoJudgmentKind = Static<typeof CeoJudgmentKind>;
 export type TPostMeetingItem = Static<typeof PostMeetingItem>;
 export type TPostMeetingCandidate = Static<typeof PostMeetingCandidate>;
 export type TOutcomeReviewStatus = Static<typeof OutcomeReviewStatus>;
+export type THandoffExportStatus = Static<typeof HandoffExportStatus>;
+export type TOutcomeHandoff = Static<typeof OutcomeHandoff>;
 export type TOutcomeReview = Static<typeof OutcomeReview>;
+export type TMeetingConfirmItemInput = Static<typeof MeetingConfirmItemInput>;
+export type TMeetingDismissItemInput = Static<typeof MeetingDismissItemInput>;
+export type TMeetingRevokeEffectInput = Static<typeof MeetingRevokeEffectInput>;
 export type TMeetingOutcomeItem = Static<typeof MeetingOutcomeItem>;
 export type TOutcomeWarning = Static<typeof OutcomeWarning>;
 export type TOutcomeError = Static<typeof OutcomeError>;
