@@ -35,7 +35,7 @@ Spec: `spec.md`
 | 13 | 签发 MonthlyPlan 并刷新业务投影 | 06, 12 | resolved |
 | 14 | 完成真实数据驱动的像素级 Web | 01, 08, 11, 13 | resolved |
 | 15 | 建立全链测试、观测与安全门槛 | 14 | resolved |
-| 16 | 完成 Compose 部署与真实外部验收 | 15 | ready-for-agent |
+| 16 | 完成 Compose 部署与真实外部验收 | 15 | claimed |
 | 17 | 执行用户像素级验收与 cutover 授权 | 16 | ready-for-human |
 | 18 | 切换生产入口并删除旧 frontend | 17 | ready-for-agent |
 
@@ -43,7 +43,7 @@ Spec: `spec.md`
 
 - 16 完成 Compose 部署与真实外部验收
 
-16 已解锁；其他 ticket 必须等待其真实 blocker resolved。
+16 已完成 8/10；公众号账号文章受微信频控阻塞，异机备份等待真实 SSH/SFTP 目标。17/18 继续阻塞。
 
 ## Results
 
@@ -62,5 +62,6 @@ Spec: `spec.md`
 - 13 resolved：提交 `ddd4222`，跑通 CEO-only MonthlyPlan 签发、唯一 confirmed 计划、战场与 Radar ontology 投影、普通 todo DRI 出站状态。rebase 后 contracts 26 + API 200 测试、typecheck/build 通过。
 - 14 resolved：提交 `007e52a`，将登录、首页、Issue、Meeting、Radar、Signal、MonthlyPlan、Conversation 与 opaque Action 接入真实 API，恢复双视口布局和微交互，并移除目标路由 fixture。contracts 26 + Web 9 + API 199 测试、typecheck/build 与 diff check 通过；双视口浏览器证据已记录。
 - 15 resolved：提交 `16ce136`，建立 Spec 最高 seam 矩阵、CEO 主旅程、结构化脱敏日志、可选 LangSmith、health 依赖状态、安全测试与确定性 CI。contracts 26 + Web 9 + API 210 测试、typecheck/build 通过；Herdr 双轴 review 无 blocking。
+- 16 claimed（partial 已集成至 `e47c528`）：完成 Compose/Caddy/非 root 镜像、Bocha 与真实 Pi/三模型槽、账号级 WeChat MCP 接线、真实人员 MCP 一致性、age/checksum 备份脚本和本机独立恢复后继续 Conversation。API 串行 233 项与双轴 review 通过；剩余公众号微信频控和真实异机 SSH/SFTP 两项。
 
 ## Comments
