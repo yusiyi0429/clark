@@ -124,7 +124,7 @@ export function projectSignalCard(row: SignalRow): TCard {
       },
       collectedAt: row.collected_at.toISOString(),
     },
-    navigation: [{ href: `/signals/${row.id}`, label: "Signal" }],
+    navigation: [{ href: `/radar/signals/${row.id}`, label: "Signal" }],
     conversation: { scope: `signal:${row.id}` },
     actions: [],
   };

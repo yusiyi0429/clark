@@ -1,0 +1,114 @@
+/* macOS-inspired hierarchy: material for the toolbar, quiet surfaces for reading. */
+.workspace {
+  --accent:69 91 142;
+  --heavy-ink:#25282e;
+  --heavy-secondary:#616770;
+  --heavy-note:#6e747d;
+  --heavy-separator:#252b361c;
+  --heavy-control:#0068d9;
+  position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;
+  min-width:0;min-height:0;overflow:hidden;container-type:inline-size;
+  border:1px solid #ffffffd9;border-left:2px solid rgb(var(--accent)/.28);
+  border-radius:22px;background:#f6f7f9f2;
+  backdrop-filter:blur(26px) saturate(1.08);
+  box-shadow:inset 12px 0 24px -21px rgb(var(--accent)/.35),0 1px 3px #1d29351a,0 16px 38px #1d293514;
+  color:var(--heavy-ink);animation:enter .32s cubic-bezier(.2,.8,.2,1) both;
+}
+.preflight{--accent:69 91 142}.monthly{--accent:150 103 23}
+.header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:24px 28px;flex-shrink:0;border-bottom:1px solid var(--heavy-separator);background:#f7f8fac9;backdrop-filter:blur(22px) saturate(1.08);box-shadow:inset 0 1px #ffffffd9}
+.identity{display:flex;align-items:center;gap:12px;min-width:0}
+.marker{width:8px;height:8px;border-radius:50%;background:rgb(var(--accent)/.85);box-shadow:0 0 0 4px rgb(var(--accent)/.065);flex-shrink:0}
+.workspace .eyebrow{display:block;font-size:var(--type-note,11px);font-weight:500;letter-spacing:.035em;color:var(--heavy-secondary);margin-bottom:4px}
+.workspace .header h1{font-size:var(--type-title,20px);line-height:1.4;letter-spacing:-.025em;font-weight:600;margin:0}
+.workspace .close{height:34px;width:34px;border-radius:50%;background:#e7e9edc9;border:1px solid #ffffff70;display:grid;place-items:center;color:#5d636d;flex-shrink:0;transition:background .14s,box-shadow .14s}
+.workspace .close:hover{background:#dadde3;box-shadow:0 1px 2px #0000000a}
+.workspace .close:active{background:#ced3db;box-shadow:inset 0 1px 2px #00000012}
+.body{flex:1;min-height:0;display:block;padding-bottom:0}
+.materials{height:100%;overflow-y:auto;min-width:0;padding:28px max(28px,calc((100% - 980px)/2)) 128px;background:#fdfdfdfc;scrollbar-width:thin;scrollbar-color:#bdc2cb transparent;overscroll-behavior:contain;box-sizing:border-box}
+.workspace .demo{font-size:var(--type-note,11px);color:var(--heavy-note);display:block;margin-bottom:12px}
+.workspace .intro p{font-size:var(--type-reading,16px);line-height:1.75;color:var(--heavy-secondary);margin:0 0 28px}
+.reviewList{display:grid;gap:0}
+.reviewItem{padding:0 0 24px;margin-bottom:24px;border-bottom:1px solid var(--heavy-separator)}
+.itemHeading{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+.workspace .number{font-size:var(--type-note,11px);color:rgb(var(--accent));font-variant-numeric:tabular-nums;letter-spacing:.03em}
+.workspace .itemHeading h2{font-size:var(--type-reading,16px);font-weight:600;line-height:1.5;color:var(--heavy-ink)}
+.workspace .proposal{font-size:var(--type-reading,16px);line-height:1.8;white-space:pre-line;margin:0 0 12px;color:#353a43}
+.workspace .basis{font-size:var(--type-meta,12px);line-height:1.75;color:var(--heavy-secondary);margin:0}
+.edit{flex:1;min-width:0}
+.workspace .edit summary{font-size:var(--type-meta,12px);color:#536575;cursor:pointer;list-style:none;display:inline-block;padding:7px 0;min-height:30px;box-sizing:border-box;user-select:none}
+.edit summary::-webkit-details-marker{display:none}
+.workspace .edit summary:hover{color:var(--heavy-control)}
+.workspace .edit summary:active{color:#00499d}
+.edit[open]{padding-right:4px}
+.workspace .edit label{display:block;margin:8px 0;font-size:var(--type-meta,12px);color:var(--heavy-secondary)}
+.workspace textarea{display:block;width:100%;resize:vertical;min-height:68px;border:1px solid #cdd2db;border-radius:9px;background:#fff;font-family:inherit;font-size:var(--type-body,14px);line-height:1.75;padding:12px;color:var(--heavy-ink);outline:none;box-sizing:border-box;box-shadow:inset 0 1px 2px #22283305;transition:border-color .14s,box-shadow .14s}
+.workspace textarea:focus{border-color:#3285de;box-shadow:0 0 0 3px #007aff20}
+.workspace textarea::placeholder{color:#737983;font-size:var(--type-meta,12px)}
+.workspace .edit small{font-size:var(--type-note,11px);color:var(--heavy-note);display:block;margin-top:8px}
+.workspace .reviewButton{display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;min-width:88px;min-height:30px;padding:6px 12px;border:1px solid #cfd4dc;border-radius:8px;background:#ffffff;color:#565e69;font-size:var(--type-meta,12px);font-weight:500;box-shadow:0 1px 2px #1a22300a;transition:background .14s,border-color .14s,box-shadow .14s}
+.workspace .reviewButton:hover:not(:disabled){background:#f2f4f7;border-color:#bdc4cf}
+.workspace .reviewButton:active:not(:disabled){background:#e8edf4;box-shadow:inset 0 1px 2px #1a223012}
+.workspace .reviewButton[aria-pressed=true]{background:#eaf4ed;color:#366747;border-color:#c6ddcd;box-shadow:none}
+.workspace .reviewButton[aria-pressed=true]:hover{background:#dfeee4}
+.notes{margin-bottom:24px}
+.workspace .notes label{display:block;font-size:var(--type-meta,12px);font-weight:600;color:#525b67;margin-bottom:8px}
+.commitArea{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-top:4px}
+.commitInfo{display:flex;flex-direction:column;gap:6px}
+.workspace .commitInfo span{font-size:var(--type-meta,12px);color:var(--heavy-secondary)}
+.workspace .commitInfo small{font-size:var(--type-note,11px);color:var(--heavy-note)}
+.workspace .submit{display:flex;align-items:center;justify-content:center;gap:6px;min-height:36px;border:1px solid #0061cc;background:var(--heavy-control);border-radius:9px;padding:8px 16px;font-size:var(--type-body,14px);font-weight:600;color:#fff;box-shadow:inset 0 1px #ffffff1f,0 1px 2px #005ec81f;transition:background .14s,box-shadow .14s}
+.workspace .submit:disabled{opacity:1;color:#737a85;background:#e8ebf0;border-color:#dce1e8;box-shadow:none;cursor:default}
+.workspace .submit:hover:not(:disabled){background:#005fc8}
+.workspace .submit:active:not(:disabled){background:#0053b3;box-shadow:inset 0 1px 3px #00316e38}
+.workspace .receipt{font-size:var(--type-meta,12px);line-height:1.75;color:#426c50;padding:16px 0 0;margin:0}
+.conversation{border-left:1px solid var(--heavy-separator);background:#f6f7f9;min-width:0;min-height:0;display:flex;flex-direction:column;padding:28px 20px 128px}
+.workspace .conversationHeading h2{font-size:var(--type-meta,12px);font-weight:600}
+.workspace .empty{padding:8px 0}
+.workspace .empty p{font-size:var(--type-body,14px);line-height:1.8;color:var(--heavy-secondary);margin:0 0 16px}
+.workspace .empty span{font-size:var(--type-meta,12px);line-height:1.8;color:var(--heavy-secondary)}
+.workspace .inputHint{font-size:var(--type-note,11px);line-height:1.75;color:var(--heavy-note);margin:20px 0 0}
+.workspace .message{padding:12px 14px;margin:0 0 12px;border:1px solid #e0e4eb;border-radius:13px;background:#fff;overflow-wrap:anywhere;font-size:var(--type-body,14px);line-height:1.8;box-shadow:0 1px 2px #28354603}
+.workspace .message small{font-size:var(--type-note,11px);color:var(--heavy-note);display:block;margin-bottom:4px}
+.workspace .message p{font-size:var(--type-body,14px);line-height:1.8;margin:4px 0}
+.workspace .message ul,.workspace .message ol{padding-left:20px}
+.workspace .message h1,.workspace .message h2,.workspace .message h3{font-size:var(--type-body,14px);line-height:1.6;font-weight:600;margin:8px 0}
+.workspace .message pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.workspace .message a{color:#005bbb;text-decoration:underline;text-underline-offset:2px}
+.workspace .user{background:#eaf1fa;border-color:#d9e3f1;margin-left:16px}
+.workspace button:focus-visible,.workspace summary:focus-visible{outline:3px solid #007aff70;outline-offset:3px}
+@container(max-width:720px){
+  .header{padding:20px 24px}.materials{padding:24px 20px 128px}
+}
+@media(max-width:690px){
+  .header{padding:20px 16px}.body{display:block;padding-bottom:0;position:relative}
+  .materials{padding:24px 16px 128px}
+  .workspace .reviewButton{margin-left:auto}.commitArea{gap:12px}.workspace .message{max-width:94%}
+}
+@media(pointer:coarse){
+  .workspace .close{width:44px;height:44px}.workspace .reviewButton,.workspace .submit,.workspace .mobileTabs button{min-height:44px}
+  .workspace .edit summary{min-height:44px;padding-top:12px}
+}
+@keyframes enter{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+@keyframes leave{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(-10px)}}
+@media(prefers-reduced-motion:reduce){.workspace,.closing{animation:none}.workspace *{transition:none!important;scroll-behavior:auto!important}}
+@media(prefers-reduced-transparency:reduce){.workspace,.header,.materials{backdrop-filter:none;background:#f8f9fb}.materials{background:#fff}}
+@media(prefers-contrast:more){
+  .workspace{--heavy-secondary:#424954;--heavy-note:#4c5562;--heavy-separator:#77818c;border-color:#77818c;backdrop-filter:none;background:#f8f9fb}
+  .header,.materials{backdrop-filter:none}.header{background:#f1f3f6}.materials{background:#fff}
+  .workspace textarea,.workspace .reviewButton{border-color:#737d8b}.workspace .submit:disabled{color:#535c69;border-color:#89929f}
+}
+@media(forced-colors:active){
+  .workspace,.header,.materials{background:Canvas;color:CanvasText;backdrop-filter:none;box-shadow:none}
+  .workspace button,.workspace textarea,.workspace .message{border:1px solid ButtonText;box-shadow:none}
+  .workspace .marker{background:Highlight;box-shadow:none}.workspace .submit{background:Highlight;color:HighlightText}
+}
+
+.header>[data-reference-id]{margin-left:auto}.itemHeading>[data-reference-id]{margin-left:auto;flex:none}.itemHeading h2{min-width:0}
+
+/* 新 Web：月度编辑字段沿用材料页输入控件，不引入第二套表单样式。 */
+.workspace .notes{display:flex;flex-direction:column;gap:6px;min-width:0}
+.workspace .notes>span{font-size:var(--type-note,11px);color:var(--heavy-note)}
+.workspace .notes input:not([type="checkbox"]){display:block;width:100%;box-sizing:border-box;border:1px solid #cdd2db;border-radius:9px;background:#fff;font:inherit;font-size:var(--type-body,14px);line-height:1.7;padding:10px 12px;color:var(--heavy-ink)}
+.workspace .notes input:not([type="checkbox"]):focus{outline:none;border-color:#3285de;box-shadow:0 0 0 3px #007aff20}
+.workspace .notes input[type="checkbox"]{margin-right:6px;vertical-align:-2px}
+.workspace .edit{display:flex;gap:8px;align-items:center;justify-content:flex-end}

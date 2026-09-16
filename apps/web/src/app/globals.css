@@ -1,98 +1,130 @@
 :root {
-  color-scheme: dark;
+  --brand-bright: #5bd8f6;
+  --brand-deep: #075ccb;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 body {
-  margin: 0;
-  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-  background: #101418;
-  color: #e6e9ec;
+  -webkit-font-smoothing: antialiased;
 }
 
-main {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
-}
-
-section {
-  border: 1px solid #2a323b;
-  border-radius: 10px;
-  padding: 20px;
-  background: #171d24;
-}
-
-button {
-  border: 1px solid #3b4653;
-  border-radius: 6px;
-  padding: 6px 14px;
-  background: #232c36;
+a {
   color: inherit;
+}
+
+@keyframes enterWorkspace {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes enterSheet {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes veilIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Action 反馈与未知 Card：复用材料页的低干扰视觉语言，不新增设计系统。 */
+.action-conflict,
+.action-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.action-conflict {
+  background: #fdf4e4;
+  color: #8a6220;
+}
+.action-error {
+  background: #fdecea;
+  color: #9c4a40;
+}
+.action-conflict button,
+.action-error button,
+.unsupported-card button {
+  border: 1px solid #d9dde3;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: #58616c;
   cursor: pointer;
 }
-
-button:disabled {
-  opacity: 0.6;
-  cursor: default;
+.unsupported-card {
+  margin: 48px auto;
+  max-width: 560px;
+  border: 1px solid #1d1d1f14;
+  border-radius: 22px;
+  background: #fff;
+  padding: 28px 30px;
+  color: #1d1d1f;
 }
-
-input {
-  display: block;
-  margin-top: 8px;
-  padding: 8px 10px;
+.unsupported-card h1 {
+  font-size: 20px;
+  margin: 0 0 10px;
+}
+.unsupported-card p {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #55565c;
+  margin: 0;
+}
+.unsupported-card code {
+  font-size: 13px;
+  background: #f2f2f4;
   border-radius: 6px;
-  border: 1px solid #3b4653;
-  background: #171d24;
-  color: inherit;
+  padding: 2px 6px;
 }
 
-label {
-  display: block;
-  margin-bottom: 16px;
-}
-
-form {
-  display: flex;
-  gap: 12px;
-}
-
-[role="alert"] {
-  color: #ff9b9b;
-}
-
-.conversation-dock {
-  margin-top: 24px;
-}
-
-.conversation-history {
-  min-height: 120px;
-  max-height: 280px;
-  overflow: auto;
-  border-block: 1px solid #2a323b;
-}
-
-.reference-tray label {
-  margin: 10px 0;
-}
-
-.reference-tray input {
-  display: inline;
-  margin: 0 8px 0 0;
-}
-
-.conversation-input {
-  display: flex;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.conversation-input textarea {
-  min-height: 64px;
-  flex: 1;
-  resize: vertical;
-  border: 1px solid #3b4653;
-  border-radius: 6px;
-  padding: 8px 10px;
-  background: #171d24;
-  color: inherit;
-}
+/* 对象页入场过渡由 CardPage 播放（来源矩形 → 面板矩形），这里只保留直达 URL 的终态样式。 */

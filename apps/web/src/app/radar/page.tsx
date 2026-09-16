@@ -1,18 +1,8 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import { renderCard } from "@/cards/registry";
-import { serverApi } from "@/lib/api/client";
+import { CardPage } from "@/components/CardPage";
+import { loadRadarCards, requireCeo } from "@/lib/api/server";
 
 export default async function RadarPage() {
-  const cookieStore = await cookies();
-  if (!cookieStore.get("warmap_session")) redirect("/login");
-
-  const { data, response } = await serverApi.GET("/api/cards/radar", {
-    headers: { cookie: cookieStore.toString() },
-  });
-  if (response.status === 401) redirect("/login");
-  const card = data?.cards[0];
-  if (!card) redirect("/");
-
-  return <main>{renderCard(card)}</main>;
+  const cookie = await requireCeo("/radar");
+  const { radar, signals } = await loadRadarCards(cookie);
+  return <CardPage initialCards={[radar, ...signals]} scope="global" label="雷达信号" layout="feed" />;
 }

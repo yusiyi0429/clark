@@ -158,7 +158,7 @@ export function projectMonthlyPlanCard(row: MonthlyPlanRow, secret: string): TCa
       },
       confirmedAt: row.confirmed_at?.toISOString() ?? null,
     },
-    navigation: [{ href: `/monthly-plans/${row.id}`, label: "MonthlyPlan" }],
+    navigation: [{ href: `/plans/${row.period}`, label: "MonthlyPlan" }],
     conversation: { scope: `monthly-plan:${row.id}` },
     actions,
   };

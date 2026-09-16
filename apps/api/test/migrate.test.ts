@@ -12,7 +12,8 @@ describe("migration", () => {
       );
       const names = tables.rows.map((r) => r.table_name);
       expect(names).toContain("schema_migrations");
-      expect(names).toContain("fixture_home");
+      expect(names).not.toContain("fixture_home");
+      expect(names).not.toContain("fixture_objects");
       expect(names).toContain("radar_config");
       expect(names).toContain("signals");
       expect(names).toContain("issues");
@@ -35,6 +36,7 @@ describe("migration", () => {
         "009_monthly_plans.sql",
         "010_meeting_transcript_outcome.sql",
         "011_battlefield_config.sql",
+        "012_drop_fixture_tables.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -42,16 +44,12 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(11);
-
-      // fixture seed 行存在
-      const seed = await db.query("SELECT * FROM fixture_home WHERE id = 'default'");
-      expect(seed.rows).toHaveLength(1);
+      expect(Number(again.rows[0].count)).toBe(12);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(
         `SELECT column_name, data_type FROM information_schema.columns
-         WHERE table_name = 'fixture_home'`,
+         WHERE table_name = 'issues'`,
       );
       const tsCols = cols.rows.filter((r) => r.column_name.endsWith("_at"));
       expect(tsCols.length).toBeGreaterThanOrEqual(2);
