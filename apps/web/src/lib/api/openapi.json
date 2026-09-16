@@ -351,6 +351,34 @@
         }
       }
     },
+    "/api/cards/battlefields": {
+      "get": {
+        "operationId": "listBattlefieldCards",
+        "summary": "战场 Card：正面确认目标，背面按 battlefieldId 投影普通待办与最新 feedback",
+        "responses": {
+          "200": {
+            "description": "Battlefield Cards",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cards/radar": {
       "get": {
         "operationId": "getRadarCard",
@@ -1033,6 +1061,253 @@
             }
           },
           "422": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dri/monthly-exports": {
+      "get": {
+        "operationId": "listDriMonthlyExports",
+        "summary": "DRI 待外发/已外发的普通 todo（真实 pending_export/delivered 状态）",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending_export",
+                "delivered",
+                "failed"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "导出记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyPlanExportListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dri/monthly-exports/{effectRef}/delivered": {
+      "post": {
+        "operationId": "markDriMonthlyExportDelivered",
+        "summary": "外部渠道回执：标记普通 todo 已送达",
+        "parameters": [
+          {
+            "name": "effectRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriMonthlyExportDeliveredRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新后的导出记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyPlanExportListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dri/monthly-exports/{effectRef}/failed": {
+      "post": {
+        "operationId": "markDriMonthlyExportFailed",
+        "summary": "外部渠道回执：标记普通 todo 外发失败，不自动重试",
+        "parameters": [
+          {
+            "name": "effectRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriMonthlyExportFailedRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新后的导出记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyPlanExportListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dri/monthly-exports/{effectRef}/re-export": {
+      "post": {
+        "operationId": "reexportDriMonthlyExport",
+        "summary": "显式再导出：failed → pending_export（不自动重试）",
+        "parameters": [
+          {
+            "name": "effectRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "更新后的导出记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyPlanExportListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -2898,6 +3173,7 @@
           "companyOutcome",
           "battlefields",
           "todos",
+          "exports",
           "negotiation",
           "generation",
           "confirmedAt"
@@ -2988,6 +3264,104 @@
                 "sourceRef": {
                   "minLength": 1,
                   "maxLength": 2000,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "exports": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "effectRef",
+                "todoId",
+                "title",
+                "ownerId",
+                "dueAt",
+                "sourceRef",
+                "status",
+                "exportRef",
+                "error",
+                "createdAt",
+                "updatedAt"
+              ],
+              "properties": {
+                "effectRef": {
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                "todoId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "ownerId": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "dueAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sourceRef": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "pending_export",
+                      "type": "string"
+                    },
+                    {
+                      "const": "delivered",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "exportRef": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "error": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
                   "type": "string"
                 }
               }
@@ -3177,6 +3551,500 @@
             "anyOf": [
               {
                 "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "MonthlyPlanExport": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "effectRef",
+          "todoId",
+          "title",
+          "ownerId",
+          "dueAt",
+          "sourceRef",
+          "status",
+          "exportRef",
+          "error",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "effectRef": {
+            "minLength": 1,
+            "maxLength": 300,
+            "type": "string"
+          },
+          "todoId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "maxLength": 500,
+            "type": "string"
+          },
+          "ownerId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "dueAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceRef": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "pending_export",
+                "type": "string"
+              },
+              {
+                "const": "delivered",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "exportRef": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        }
+      },
+      "MonthlyPlanExportListResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "exports"
+        ],
+        "properties": {
+          "exports": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "effectRef",
+                "todoId",
+                "title",
+                "ownerId",
+                "dueAt",
+                "sourceRef",
+                "status",
+                "exportRef",
+                "error",
+                "createdAt",
+                "updatedAt"
+              ],
+              "properties": {
+                "effectRef": {
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                "todoId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "ownerId": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "dueAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sourceRef": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "pending_export",
+                      "type": "string"
+                    },
+                    {
+                      "const": "delivered",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "exportRef": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "error": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SignMonthlyPlanRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "DriMonthlyExportDeliveredRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "exportRef"
+        ],
+        "properties": {
+          "exportRef": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
+      "DriMonthlyExportFailedRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "minLength": 1,
+            "maxLength": 1000,
+            "type": "string"
+          }
+        }
+      },
+      "BattlefieldCardPayload": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "battlefieldId",
+          "name",
+          "positioning",
+          "period",
+          "target",
+          "pendingIssues",
+          "todos",
+          "latestFeedback"
+        ],
+        "properties": {
+          "battlefieldId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "positioning": {
+            "type": "string"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pendingIssues": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "urgency",
+                "location"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "urgency": {
+                  "anyOf": [
+                    {
+                      "const": "red",
+                      "type": "string"
+                    },
+                    {
+                      "const": "yellow",
+                      "type": "string"
+                    },
+                    {
+                      "const": "gray",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "location": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "level",
+                        "relatedBattlefieldIds"
+                      ],
+                      "properties": {
+                        "level": {
+                          "const": "company",
+                          "type": "string"
+                        },
+                        "relatedBattlefieldIds": {
+                          "maxItems": 20,
+                          "uniqueItems": true,
+                          "type": "array",
+                          "items": {
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "level",
+                        "battlefieldId"
+                      ],
+                      "properties": {
+                        "level": {
+                          "const": "battlefield",
+                          "type": "string"
+                        },
+                        "battlefieldId": {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "level",
+                        "capabilityId"
+                      ],
+                      "properties": {
+                        "level": {
+                          "const": "capability",
+                          "type": "string"
+                        },
+                        "capabilityId": {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "todos": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "ownerId",
+                "dueAt",
+                "sourceRef",
+                "exportStatus",
+                "exportRef"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "ownerId": {
+                  "type": "string"
+                },
+                "dueAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sourceRef": {
+                  "type": "string"
+                },
+                "exportStatus": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "pending_export",
+                          "type": "string"
+                        },
+                        {
+                          "const": "delivered",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "exportRef": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "latestFeedback": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "text",
+                  "observedAt",
+                  "sourceRef",
+                  "evidenceRef"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "observedAt": {
+                    "type": "string"
+                  },
+                  "sourceRef": {
+                    "type": "string"
+                  },
+                  "evidenceRef": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
               },
               {
                 "type": "null"

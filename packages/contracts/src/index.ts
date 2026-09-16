@@ -10,4 +10,5 @@ export * from "./radar.js";
 export * from "./issues.js";
 export * from "./meetings.js";
 export * from "./monthlyPlans.js";
+export * from "./battlefields.js";
 export * from "./transcript.js";

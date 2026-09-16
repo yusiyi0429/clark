@@ -7,10 +7,11 @@ export const RadarLocation = Type.Union([
   Type.Object({ type: Type.Literal("capability"), id: Type.String({ minLength: 1, maxLength: 100 }) }, { additionalProperties: false }),
 ]);
 
-/** anchor 写入来源：meeting-reopen 为会议复议条件，ontology 为月度签发刷新的基础方向。 */
+/** anchor 写入来源：ontology 由已签发 MonthlyPlan 重建；meeting-reopen 为会议复议条件；manual 为人工配置。 */
 export const RadarAnchorSource = Type.Union([
-  Type.Literal("meeting-reopen"),
   Type.Literal("ontology"),
+  Type.Literal("manual"),
+  Type.Literal("meeting-reopen"),
 ]);
 
 export const RadarAnchor = Type.Object({
@@ -122,6 +123,7 @@ export const RadarScanResponse = Type.Object({
 }, { additionalProperties: false });
 
 export type TRadarAnchor = Static<typeof RadarAnchor>;
+export type TRadarAnchorSource = Static<typeof RadarAnchorSource>;
 export type TRadarSources = Static<typeof RadarSources>;
 export type TRadarSourceItem = Static<typeof RadarSourceItem>;
 export type TRadarCandidateSubmission = Static<typeof RadarCandidateSubmission>;
