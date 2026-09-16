@@ -16,7 +16,7 @@ Blocked by: 15 建立全链测试、观测与安全门槛
 - [x] 一个真实 Web Search query 返回 title、URL、excerpt，并由 Pi 完成一次自主 Tool loop。
 - [ ] 一个真实公众号账号按账号拉取文章并进入同一 Signal 管线，不以站点关键词搜索替代。
 - [x] light、heavy、compaction 模型槽位和合法 Transcript 各完成一次真实验收。
-- [ ] CompanyMemory MCP 装载真实人员 seed，Pi 与独立客户端得到一致稳定 personId。
+- [x] CompanyMemory MCP 装载真实人员 seed，Pi 与独立客户端得到一致稳定 personId。
 - [ ] 宿主机 cron 生成 age 加密 pg_dump、校验 checksum、经 SSH/SFTP 复制异机并保留至少 7 天。
 - [ ] 独立 restore 流程恢复到空 PostgreSQL，不覆盖现有库；恢复后抽查六实体、Transcript、消息和 Pi entries，并继续一次 Conversation。
 - [x] staging smoke、回滚步骤和发布观察清单完成；未引入 Redis、队列、对象存储、Kubernetes或额外 Runtime。
@@ -69,11 +69,18 @@ Blocked by: 15 建立全链测试、观测与安全门槛
 - 收尾：`docker compose -f infra/docker-compose.yml up -d --force-recreate wechat` 撤销 15000 宿主端口（PORTS 仅 `5000/tcp`），容器 healthy，`wechat_data` 卷未删且重建后仍 `logged_in=true`。
 - 方案 B 代理重试（仅一次）：worktree `infra/.env` 配 `WECHAT_PROXY_URLS`（值不输出），`.env.example` 新增可选 `WECHAT_PROXY_URLS`，compose 给 wechat 传 `PROXY_URLS` 并加 `host.docker.internal:host-gateway`，runbook §5 同步；重建后容器内 `PROXY_URLS` configured 且经代理 HTTPS → ok。临时回环 override 后只触发 `POST /api/rss/poll` 一次、只调 `get_recent_articles(limit=1)` 一次 → `isError=false, articles=0`；侧车日志仍 `ret=200013 err_msg='freq control'`（登录态维度频控，换出口 IP 未绕过）。按规则停止，未再重试；`read_article` 0 次、Radar 管线未执行、0 次模型调用；再次 base compose force-recreate 撤回宿主端口。
 
+### AC7 真实人员 seed 验收（2026-09-16，通过）
+
+- 真实 seed `seed/company-people.json`（8 人，唯一 CEO 1 人、7 人 dri+participant，唯一 ID/姓名），不使用 example。
+- 临时独立 MCP 服务（同一 `createCompanyMemoryMcpSession`/`loadCompanyMemory` repository）+ 独立 Streamable HTTP 客户端 `search_people({})`：count=8、roles `{ceo:1,dri:7,participant:7}`、idSetSha256=`fe3d9805...`。
+- 真实 Pi runtime（当前 light 槽位，`runtime.run()` 1 次、无重试）：tool 事件 `search_people` started+completed（isError=false）；从工具结果回算唯一 personId=8、idSetSha256 与独立客户端完全一致；tokens in=3 out=55 total=1547、ms=6207。
+- 只读验证：MCP 无写工具、seed 哈希验收前后一致、未写业务事实。证据只存 count/hash/角色统计/tool 事件/耗时/usage，不含姓名/完整 personId。
+- 工具口径：实际只读工具集无 `list_people`，“读取完整目录”为 `search_people`（query 缺省返回全部），角色筛在客户端侧；一次 tool loop 需 2 次模型响应（工具调用+收尾），已如实记录。
+
 ### 仍阻塞（真实外部验收，必须真实凭据与实际输出）
 
 - 已 SET 并已用于真实验收：`BOCHA_API_KEY`、`PI_BASE_URL`、`PI_API_KEY`、`LIGHT_MODEL`、`HEAVY_MODEL`、`COMPACTION_MODEL`、`WECHAT_MCP_TOKEN`、`WECHAT_MCP_URL`（已规范为 `http://wechat:5000/mcp`）、`WECHAT_SITE_URL`。
 - AC5 公众号：侧车已登录且已订阅 `量子位/QbitAI`；直连与经 SOCKS5 代理均被微信频控（`ret=200013 freq control`），`articles=0`；需等账号频控自然解除后再拉取，再跑账号级 `get_recent_articles` → Radar 管线（1 篇、1 次 light 候选）。
-- AC7 真实人员 seed：`COMPANY_PEOPLE_SEED` 当前指向 `company-people.example.json`；需项目授权人真实名单并重启 API。
 - AC8/AC9 异机备份与恢复：需 `BACKUP_AGE_RECIPIENT`、`BACKUP_AGE_IDENTITY`、`BACKUP_SSH_HOST`、`BACKUP_SSH_USER`、`BACKUP_SSH_PATH`、`BACKUP_SSH_KEY_PATH`、`BACKUP_RETENTION_DAYS` 与真实异机目标（脚本本地真实往返已在 `verification.md` §3 验证）。
 - AC1 真实 TLS 签发需可解析的 staging 域名与公网 80/443（当前 `PUBLIC_DOMAIN=localhost` 仅验证配置与路由）。
 - 以上到齐后按 `infra/staging/runbook.md` §6/§7 逐项执行；未完成前 Ticket 16 保持 `claimed`，不标 `resolved`，也不发送完成信号。

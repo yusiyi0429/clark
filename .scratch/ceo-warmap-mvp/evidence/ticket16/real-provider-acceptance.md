@@ -80,6 +80,24 @@ The sidecar DB: `subscriptions=1`、`articles=0`。
 - 侧车日志仍为 `ret=200013 err_msg='freq control'`（登录态维度的频控，换出口 IP 未绕过）。按规则记录并停止，未再重试、未换号、未关键词搜索；`read_article` 0 次，Radar 管线未执行，未产生任何模型调用。
 - AC5 仍 **BLOCKED**，不勾选。下一步：等微信账号频控自然解除（通常需更长时间）后再拉取；代理保持接入不影响其它功能。
 
+## AC7 真实人员 seed 验收（2026-09-16，通过）
+
+真实 seed 由 Master 写入 `seed/company-people.json`（ignored、mode600）；本次不使用 example。证据只保留 count/hash/角色统计/tool 事件/耗时/usage，不含姓名或完整 personId。
+
+- 临时独立 MCP 服务：与 API 同一 `createCompanyMemoryMcpSession`/`loadCompanyMemory` repository，用真实 seed 启动，经 Streamable HTTP 由一个独立 `Client` 调用。
+- 实际只读工具集：`get_passages,list_sections,search_people,search_sections`；不存在 `list_people` 工具，“读取完整人员目录”的官方方式为 `search_people`（`query` 缺省返回全部），角色筛选在客户端侧完成（仓库只按 displayName 过滤）。
+
+| 步骤 | 结果 |
+|---|---|
+| 独立 MCP 客户端 `search_people({})` | count=8；roles `{ceo:1, dri:7, participant:7}`；`dri_and_participant=7`；idSetSha256=`fe3d9805...` |
+| 真实 Pi runtime（当前 light 槽位，1 次 turn） | tool 事件 `search_people` started+completed（isError=false）；模型响应 2 次（工具调用 + 收尾回答，无重试）；ms=6207；tokens in=3 out=55 total=1547 |
+| Pi 工具结果回算 | 记录到的唯一 personId=8；idSetSha256=`fe3d9805...`（与独立客户端完全一致） |
+| 一致性判定 | `count=8, hash_match=true, roles_ok=true, consistent=true` |
+
+- 只读验证：MCP 只暴露 4 个 `readOnlyHint` 工具、无写工具；验收后真实 seed 文件哈希与验收前一致（`seed_unchanged=true`）；未启动业务 DB、未写任何业务事实。
+- 口径说明：`runtime.run()` 只调用 1 次（无重试）；一次真实 tool loop 至少需要 2 次模型响应（先工具调用、后收尾），已如实记录；未使用 example seed，也未修改 CompanyMemory/seed。
+- 成本口径对齐：AC7 本次只额外用 light 槽位 1 turn（非重试、非批量、非换档），与 ticket15 `acceptance-gates.md` 的「每槽位 1 次」不同轮次、按 AC7 独立授权计；连同 AC4/AC6 的调用，全部在 ticket15 单次 ≤32k token 与无自动重试范围内。
+
 ## 收尾：扫码端口回退（第 7 步，已执行）
 
 ```bash
