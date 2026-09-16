@@ -129,7 +129,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/cards/issues/{id}": {
         get: {
           operationId: "getIssueCard",
-          summary: "读取 Issue Card（Ticket 04 最小 fixture）",
+          summary: "读取 Issue Card",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           responses: {
             "200": { description: "Issue Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },

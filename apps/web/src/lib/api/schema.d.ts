@@ -79,7 +79,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 读取 Issue Card（Ticket 04 最小 fixture） */
+        /** 读取 Issue Card */
         get: operations["getIssueCard"];
         put?: never;
         post?: never;

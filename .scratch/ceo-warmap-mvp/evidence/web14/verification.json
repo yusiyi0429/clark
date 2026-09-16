@@ -1,0 +1,206 @@
+{
+  "ticket": "14-pixel-web-real-data",
+  "verifiedAt": "2026-09-16T02:20:00.000Z",
+  "environment": {
+    "api": "http://localhost:4000 (apps/api, PUBLIC_ORIGIN=http://localhost:3000)",
+    "web": "http://localhost:3000 (next dev, /api/* dev-rewrite -> API_SERVER_URL)",
+    "db": "postgres://localhost:54329/warmap_web14 (12 migrations, fixture tables dropped)",
+    "seed": "2 battlefields (growth/delivery), 5 DRI issues, 3 signals, 2 meetings (held/scheduled), 1 monthly plan 2026-09",
+    "tool": "chrome-devtools MCP, viewport emulation DPR=1"
+  },
+  "checks": {
+    "typecheck": "pnpm -r typecheck — contracts/web/api all pass",
+    "test": "pnpm -r test — api 199 passed (15 files), web 9 passed (3 files: registry unknown-kind, SSE parser, Action response 409/401 seam)",
+    "build": "pnpm -r build — next build routes: / /access /healthz /issues/[id] /meetings/[id] /plans/[period] /radar /radar/signals/[id]"
+  },
+  "geometry": {
+    "note": "getBoundingClientRect [x,y,w,h] at DPR 1, compared against docs/visual-baseline/evidence/*.json",
+    "1440x900": {
+      "home.board": [
+        412,
+        14,
+        1014,
+        872
+      ],
+      "home.strategy": [
+        412,
+        14,
+        791,
+        324
+      ],
+      "home.radarSlot": [
+        1213,
+        14,
+        211,
+        324
+      ],
+      "home.zones.y": 394,
+      "home.zone": [
+        501,
+        363
+      ],
+      "home.zoneDelivery": [
+        412,
+        394,
+        501,
+        363
+      ],
+      "home.zoneGrowth": [
+        925,
+        394,
+        501,
+        363
+      ],
+      "home.capabilities": [
+        412,
+        770,
+        1014,
+        124
+      ],
+      "home.rail": [
+        14,
+        14,
+        384,
+        872
+      ],
+      "dock": [
+        773,
+        822,
+        292,
+        48
+      ],
+      "notificationFloat": [
+        40,
+        336,
+        332,
+        228
+      ],
+      "objectPanel.issue": [
+        412,
+        14,
+        1014,
+        872
+      ],
+      "issueWorkspace": [
+        412,
+        14,
+        1014,
+        872
+      ],
+      "issueReading": [
+        413,
+        168,
+        1012,
+        717
+      ],
+      "objectPanel.meeting": [
+        412,
+        14,
+        1014,
+        872
+      ],
+      "objectPanel.monthlyPlan": [
+        412,
+        14,
+        1014,
+        872
+      ]
+    },
+    "1600x1000": {
+      "home.board": [
+        456,
+        14,
+        1130,
+        972
+      ],
+      "home.rail": [
+        14,
+        14,
+        428,
+        972
+      ],
+      "home.strategy": [
+        456,
+        14,
+        882,
+        324
+      ],
+      "home.zoneDelivery": [
+        456,
+        394,
+        558,
+        363
+      ],
+      "home.zoneGrowth": [
+        1028,
+        394,
+        558,
+        363
+      ],
+      "home.capabilities": [
+        456,
+        770,
+        1130,
+        124
+      ],
+      "dock": [
+        875,
+        922,
+        292,
+        48
+      ],
+      "objectPanel.monthlyPlan": [
+        456,
+        14,
+        1130,
+        972
+      ],
+      "note": "基线 1600 记录 shell/board/strategy 1130|882×324、zones 558×363 @y394、dock 875,922,292,48 全部一致"
+    }
+  },
+  "interactions": {
+    "objectEnter": "首页点击 → 面板从来源矩形展开：采样 [100ms:948,w455]→[225ms:465,w959]→[425ms:412,w1014]，1 个运行中动画 → 0；终态与直达 URL 一致",
+    "objectEnterDirectUrl": "直接打开/刷新对象 URL：首个采样即为终态 [412,14,1014,872]，面板 getAnimations() 全程 0；来源矩形模块变量只由点击导航写入",
+    "objectEnterStale": "对象页「返回首页」后再浏览器回退到对象页：面板全程 0 动画（HomeShell 挂载清空未消费的来源矩形 + 1500ms 过期）",
+    "battlefieldFlip": "翻面后几何不变 [925,394,501,363]；背面展示已签发计划的当月战场结果/普通待办/最新负责人反馈与「不计算完成百分比」说明；标题为 payload.name（不再出现「增长战场战场」）",
+    "notificationFloat": "open → role=dialog，焦点落到「关闭通知浮卡」；Escape 关闭并归还焦点",
+    "escapeLayering": "对话记录层 / 监测范围 / 引用选择器 / 通知浮卡先处理 Escape，底层对象页不退出；无弹层时对象页与 feed 页（/radar、/radar/signals）Escape 返回首页（真实按键验证）",
+    "radarScopeDialog": "打开时焦点进入关闭按钮、Escape 关闭、焦点归还触发按钮、页面停留在 /radar",
+    "referenceTray": "引用选择器逐张多选（aria-pressed 独立），可同时选第 1、3 张；托盘展示 title vN；发送后清空",
+    "historySources": "对话记录层用 <details> 折叠展示 referencesSnapshot（来源 N 张 Card）",
+    "actionConflict": "旧 actionId → 409「对象已被修改」+ latestCard 刷新 + 重试；400 展示服务端 message（如 MONTHLY_PLAN_UNCHECKED_ITEMS）",
+    "monthlyCheckedSync": "勾选 5 项后服务端 checkedItemIds=5；编辑内容并保存 → 服务端清空为 0，UI 同步显示「已核对 0 项」且签发按钮禁用；未保存文本在勾选操作后不再被覆盖",
+    "monthlySign": "签发按钮在 armed 勾选「我确认签发」前禁用；签发成功后卡片变为已签发并锁定字段，战场背面出现当月目标",
+    "meetingCancel": "取消会议按钮在 armed 勾选前禁用；勾选后可取消，卡片显示已取消（不再使用 window.confirm）",
+    "meetingTargetDri": "目标 DRI select 为受控值（person-example-002），提交使用所选 personId",
+    "transcript": "multipart 上传后会议转 held；替换需 armed 勾选；PI 不可用时如实显示 outcome_agent_failed + 重试",
+    "signalState": "标记已读/取消收藏/隐藏通过既有 PATCH /api/signals/{id}/state 生效",
+    "conversationDock": "SSE 发送在本地 PI 不可用时如实进入 failed（role=alert）；历史层焦点/Escape 正常"
+  },
+  "reducedMotion": {
+    "method": "chrome-devtools MCP 无 prefers-reduced-motion 模拟开关；等价验证：把 CSSOM 中 69 条 @media(prefers-reduced-motion:reduce) 规则复制为无条件规则后重跑交互",
+    "result": "翻面/浮卡后运行中动画 0；几何与有动效时一致 [925,394,501,363]；objectTransition 在 reduced 下 duration=0",
+    "label": "proxy verification — 真实媒体查询路径本轮未在浏览器中触发"
+  },
+  "cssPrune": {
+    "method": "按 CSS 块递归解析，仅删除「选择器内所有类名在 apps/web/src 的 .ts/.tsx 中零引用」的规则；:global(...) 与纯元素选择器一律保留",
+    "removed": "15 个 module 共 519 条未引用规则（app-shell 161、meeting-workspace 80、notifications 71、battlefield-card 34、radar-feed 34、conversation-dock 26、access 23、card-references 19、home-board 17、issue-workspace 16、radar-config 12、radar 11、conversation-transcript 6、monthly-workspace 6、tianshu-mark 3）",
+    "alsoRemoved": "strategy.module.css、capability-issues.module.css、tianshu-mark.module.css（含未引用的 TianshuMarkStyles 再导出）整份删除；旧语音/座位模式规则（voiceGlow/liveCapsule/orbButton/keyboardMode/wave/seatControl/seatThumb 等）已删除",
+    "regressionFound": "删除 globals.css 中 [data-testid=expanded-panel] > div > section[class*=workspace] 覆盖后，Issue 工作区因沿袭旧前端的 position:fixed + --main-start 被 .expanded 的 will-change:transform 再次偏移（x=823）",
+    "regressionFix": "在 issue-workspace.module.css 内把 .workspace 改为 position:absolute;inset:0（与 meeting/monthly 一致），不再依赖跨模块属性选择器；复测 [412,14,1014,872]",
+    "verification": "清理后重建并复核首页（board/strategy/zones/dock/rail/caps 几何与基线一致）与 Issue/Meeting/Signal/Monthly/Access 页面截图"
+  },
+  "knownDeviations": [
+    "capability 分组标题与 Issue 归属前缀直接展示真实 capabilityId/battlefieldId（如 technology、战场 · growth）：API 没有能力名称注册表，旧前端的「产品/技术/综合」是 fixture 专用映射，不在新 Web 里伪造",
+    "Signal 已读/收藏/隐藏与 Radar 手动补扫沿用既有专用端点（PATCH /api/signals/{id}/state、POST /api/radar/scans/manual）：packages/contracts 未定义对应 Action，改契约超出本 ticket 范围",
+    "create-meeting UI 仍未实现：没有面向 CEO 的人员目录端点，只能加入已有 scheduled Meeting",
+    "监测范围对话框只读：API 没有配置写入入口",
+    "本地 PI provider 无效，Conversation 成功流与 Outcome/Preflight Agent 只能验证到如实失败状态",
+    "capability 面板高度 124px 与基线 146px 的差异由真实议题数量决定（内容驱动）"
+  ],
+  "internalReview": {
+    "tool": "Herdr 只读 reviewer（pi / deepseek-flash），Standards + Spec 双轴",
+    "round1": "AxisA red / AxisB red —— 3 条 red（MonthlyPlan 核对项不同步、监测范围对话框无 Escape/焦点、对象页展开动画缺失）+ 若干 yellow",
+    "round2": "AxisA green / AxisB green —— 上轮 3 条 red 全部 fixed；本轮新增 3 条（重置吞掉未保存输入、来源矩形无生命周期、引用选择器未进 Escape 分层）已在第二轮后 fix 并复测"
+  }
+}

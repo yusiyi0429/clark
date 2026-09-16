@@ -161,9 +161,25 @@ export async function createTestApp(
       if (login.statusCode !== 200) throw new Error(`login failed: ${login.body}`);
       return (login.headers["set-cookie"] as string).split(";")[0];
     },
-    fixtureRow: async () => {
-      const res = await pool.query("SELECT to_jsonb(t) AS row FROM fixture_home t WHERE id = 'default'");
-      return res.rows[0].row as Record<string, unknown>;
+    /** 真实 DRI 导入的 pending Issue：目标路由只消费持久对象，测试不再依赖 fixture 表。 */
+    createIssue: async (overrides: Record<string, unknown> = {}) => {
+      const payload = {
+        externalId: `test-issue-${randomUUID()}`,
+        submitterPersonId: "person-fixture-002",
+        title: "测试议题：是否调整渠道投入",
+        whyNow: "渠道窗口将在六月关闭",
+        sourceRef: "dri://test/issue",
+        location: { level: "battlefield", battlefieldId: "growth" },
+        ...overrides,
+      };
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/dri/issues",
+        headers: { authorization: `Bearer ${testEnv.driServiceToken}` },
+        payload,
+      });
+      if (res.statusCode !== 201) throw new Error(`createIssue failed: ${res.statusCode} ${res.body}`);
+      return (res.json() as { cards: { objectRef: { id: string }; id: string; version: number }[] }).cards[0];
     },
     conversationState: async (scope) => {
       const conversation = await pool.query(

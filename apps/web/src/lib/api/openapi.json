@@ -126,7 +126,7 @@
     "/api/cards/issues/{id}": {
       "get": {
         "operationId": "getIssueCard",
-        "summary": "读取 Issue Card（Ticket 04 最小 fixture）",
+        "summary": "读取 Issue Card",
         "parameters": [
           {
             "name": "id",

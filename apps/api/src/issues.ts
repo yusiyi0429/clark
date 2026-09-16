@@ -316,11 +316,11 @@ function issueActions(row: IssueRow, secret: string): TActionDescriptor[] {
   return actions;
 }
 
-/** 通知投影只取 pending + red，与 Issue Card 共用同一持久对象。 */
-export async function listPendingRedIssueCards(q: Query, secret: string): Promise<TCard[]> {
+/** 首页与通知共用同一持久对象：一次返回全部 pending Issue，Web 按 location/urgency 固定布局。 */
+export async function listPendingIssueCards(q: Query, secret: string): Promise<TCard[]> {
   const result = await q(
     `SELECT ${issueColumns()} FROM issues
-      WHERE status = 'pending' AND urgency->>'level' = 'red'
+      WHERE status = 'pending'
       ORDER BY created_at, id`,
   );
   return (result.rows as IssueRow[]).map((row) => projectIssueCard(row, secret));

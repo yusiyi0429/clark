@@ -1,0 +1,40 @@
+.workspace{position:absolute;inset:0;z-index:70;display:flex;flex-direction:column;overflow:hidden;clip-path:inset(0 round 22px);border-radius:22px;background:#f8f8fa;border:1px solid #fff;box-shadow:0 4px 24px #1d1d1f0c;color:#1d1d1f}
+.header{display:flex;align-items:flex-start;justify-content:space-between;gap:22px;padding:22px 27px;background:#f5f5f7e8;border-bottom:1px solid #1d1d1f0b;flex:none}
+.header span{font-size:12px;color:#6e6e73}.header h1{font-size:22px;font-weight:600;line-height:1.5;margin-top:7px!important;letter-spacing:-.025em}
+.header>button{display:grid;place-items:center;width:32px;height:32px;border:0;border-radius:50%;background:#e9e9ed;color:#65656b;flex:none;transition:background 150ms,transform 150ms}.header>button:hover{background:#dddde2}.header>button:active{transform:scale(.95)}
+.columns{display:block;min-height:0;flex:1;overflow:hidden}
+.materials{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0;background:#fff}
+.tabs{display:flex;gap:22px;padding:0 28px;border-bottom:1px solid #1d1d1f0a;flex:none}
+.tabs button{border:0;border-bottom:2px solid transparent;background:none;padding:16px 0 13px;color:#77777c;font-size:13px}.tabs button[aria-pressed=true]{color:#006edc;border-bottom-color:#007aff}
+.reading{position:relative;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:24px 28px 48px;min-height:0;line-height:1.8;font-size:16px}
+.reading .note{font-size:11px;color:#797980;margin:0 0 23px}.reading h2{font-size:14px;font-weight:600;color:#63636a;margin-bottom:12px}
+.judgment>p{font-size:19px;line-height:1.8;letter-spacing:-.02em}.judgment>button{border:0;background:#007aff09;color:#006edc;border-radius:8px;padding:7px 10px;font-size:12px;margin-top:14px}
+.section{margin-top:30px;padding-top:24px;border-top:1px solid #1d1d1f0d}.section ol{padding:0;list-style:none;margin:0}.section li{display:flex;gap:14px;margin-top:15px}.section li>span{font-size:11px;color:#8e8e93;padding-top:4px;font-variant-numeric:tabular-nums}.section p+p{margin-top:12px}
+.unknown{margin-top:28px;border-radius:12px;background:#f5f5f7;padding:18px 20px}.unknown p{color:#56565e;font-size:14px}
+.preflightActions{margin-top:28px;padding-top:22px;border-top:1px solid #1d1d1f0d}.preflightActions>div:first-child p{font-size:12px;color:#77777c;margin-top:-7px}.actionRow{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}.actionRow button{display:flex;align-items:center;gap:6px;border:1px solid #d9dde3;border-radius:9px;background:#fff;padding:8px 11px;font-size:12px;color:#58616c}.actionRow button:hover{border-color:#bfc6cf;background:#f7f8fa}.actionRow button[aria-pressed=true]{border-color:#c7d9cc;background:#f0f7f2;color:#356047}.preflightActions>small{display:block;margin-top:10px;color:#5d7164;font-size:11px}
+.discussion{margin-top:26px;border-top:1px solid #1d1d1f10;padding-top:20px}.discussion>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:13px}.discussion>header h2{margin-bottom:3px}.discussion>header p{color:#77777c;font-size:12px;line-height:1.6}.discussion>header>span{flex:none;border:1px solid #dfe3e8;border-radius:999px;background:#f7f8fa;color:#737982;padding:3px 8px;font-size:10px;line-height:1.5}.discussion>small{display:block;color:#797980;font-size:11px;line-height:1.7;margin-top:11px}.options{display:grid;gap:7px;list-style:none;margin:0;padding:0}.options li{display:flex;align-items:center;gap:11px;border:1px solid #1d1d1f0e;background:#fafafb;color:#303036;border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5}.options li>span{flex:none;color:#92979f;font-size:10px;font-variant-numeric:tabular-nums}.receipt{display:flex;gap:10px;align-items:flex-start;border:1px solid #dce9e2;border-radius:10px;background:#f4f9f6;padding:12px 14px}.receipt>svg{color:#34785c;flex:none;margin-top:3px}.receipt p{flex:1;font-size:14px;line-height:1.7}
+.prose h3{font-size:16px;margin:22px 0 10px!important}.prose p{margin:12px 0!important}.prose ul,.prose ol{padding-left:22px}
+.workspace button:focus-visible{outline:3px solid #007aff70;outline-offset:3px}
+@media(max-width:690px){.header{padding:18px 22px}.header h1{font-size:19px}.reading{padding-bottom:125px}.judgment>p{font-size:18px}}
+@media(max-width:690px){.workspace{left:9px;right:9px;top:9px;bottom:9px}.header{padding:16px}.header h1{font-size:18px}.reading{padding:20px 19px 130px}.tabs{padding:0 19px}}
+@media(prefers-reduced-transparency:reduce){.workspace,.header{background:#f5f5f7}}
+@media(prefers-reduced-motion:reduce){.workspace *{transition:none!important;scroll-behavior:auto!important}}
+
+.header>[data-reference-id]{margin-left:auto}.header>div:first-child{min-width:0;flex:1}
+
+/* The opening reveal clips a full-resolution surface; text is never scaled as a bitmap. */
+.workspace{contain:layout paint}
+
+/* 新 Web：决定表单与真实 Receipt/研究文档的补充样式，沿用材料页原有视觉语言。 */
+.field{display:flex;flex-direction:column;gap:6px;font-size:var(--type-meta,12px);color:#6a6f78;min-width:0}
+.field textarea,.field input,.field select{width:100%;box-sizing:border-box;border:1px solid #d7dbe2;border-radius:9px;background:#fff;padding:9px 10px;font:inherit;font-size:var(--type-body,14px);line-height:1.6;color:#2f343c}
+.field textarea{resize:vertical}
+.field textarea:focus,.field input:focus,.field select:focus{outline:3px solid #007aff30;outline-offset:1px;border-color:#8fb6e6}
+.check{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:var(--type-meta,12px);color:#4e5560}
+.options li{padding:0;background:transparent;border:0}
+.options li>button{display:flex;align-items:center;gap:10px;width:100%;border:1px solid #1d1d1f0e;background:#fafafb;color:#303036;border-radius:10px;padding:10px 12px;font:inherit;font-size:var(--type-body,14px);line-height:1.5;text-align:left}
+.options li>button[aria-pressed=true]{border-color:#8fb6e6;background:#f0f6ff;color:#14508f}
+.receipt{flex-direction:column;align-items:stretch}
+.receipt small{font-size:var(--type-meta,12px);color:#6d727b;line-height:1.6}
+.receipt button{align-self:flex-start;margin-top:10px;border:1px solid #d9dde3;background:#fff;border-radius:8px;padding:7px 11px;font-size:var(--type-meta,12px);color:#58616c}
+.receipt button:hover{background:#f2f5f8}

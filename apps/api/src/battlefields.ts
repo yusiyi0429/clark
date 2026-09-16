@@ -135,7 +135,8 @@ export async function listBattlefieldCards(q: Query, period: string): Promise<TC
       badge: "Battlefield",
       urgency: "normal",
       payload,
-      navigation: [{ href: `/battlefields/${battlefield.id}`, label: "Battlefield" }],
+      // 战场没有独立页面：正面就在首页，导航回首页避免死链。
+      navigation: [{ href: "/", label: "Battlefield" }],
       actions: [],
     };
   });

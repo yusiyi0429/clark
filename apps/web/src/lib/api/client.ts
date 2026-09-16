@@ -3,6 +3,8 @@ import type { components, paths } from "./schema";
 
 export type Card = components["schemas"]["Card"];
 export type CardCollection = components["schemas"]["CardCollection"];
+export type CardAction = Card["actions"][number];
+export type ApiError = components["schemas"]["ApiError"];
 
 // 浏览器端：同源相对路径，经 Caddy 边界访问 API
 export const browserApi = createClient<paths>({ baseUrl: "/" });

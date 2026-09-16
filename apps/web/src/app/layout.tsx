@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "CEO WarMap",
   description: "CEO 决策驾驶舱",
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,82 +1,104 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { Card } from "@/lib/api/client";
+import { ChevronLeft, ExternalLink } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
+import type { CardRenderProps } from "./registry";
+import { payloadOf, type SignalPayload } from "./payloads";
+import s from "@/styles/radar-feed.module.css";
 
-type SignalPayload = {
-  source?: { type?: string; title?: string; url?: string; excerpt?: string; publishedAt?: string };
-  assessment?: { summary?: string; strategicImpact?: string; evidenceQuote?: string; unknowns?: string[] };
-  state?: { read?: boolean; saved?: boolean; dismissed?: boolean };
-};
+type SignalState = { read?: boolean; saved?: boolean; dismissed?: boolean };
 
-export function SignalCard({ card }: { card: Card }) {
-  const [payload, setPayload] = useState(card.payload as SignalPayload);
+/** Signal 阅读器：来源、影响、锚点、原文摘录与独立 read/saved/dismissed 状态。 */
+export function SignalCard({ card, onCard, onNavigate }: CardRenderProps) {
+  const payload = payloadOf<SignalPayload>(card);
+  const [state, setState] = useState(payload.state);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const router = useRouter();
-  const state = payload.state ?? {};
+  const [last, setLast] = useState<SignalState | null>(null);
 
-  async function update(next: { read?: boolean; saved?: boolean; dismissed?: boolean }) {
-    setBusy(true);
+  async function update(next: SignalState) {
+    setLast(next);
+    setPending(true);
     setError(null);
-    const { data, response } = await browserApi.PATCH("/api/signals/{id}/state", {
+    const { data, error, response } = await browserApi.PATCH("/api/signals/{id}/state", {
       params: { path: { id: card.objectRef.id } },
       body: next,
     });
-    setBusy(false);
+    setPending(false);
     if (response.status === 401) {
-      router.push("/login");
+      onNavigate("/access");
       return;
     }
     const updated = data?.cards[0];
     if (response.ok && updated) {
-      setPayload(updated.payload as SignalPayload);
+      setState((updated.payload as SignalPayload).state);
+      onCard(updated);
       return;
     }
-    const body = (await response.json()) as { message?: string };
-    setError(body.message ?? "Signal 状态更新失败");
+    setError((error as { message?: string } | undefined)?.message ?? "状态更新失败，请重试。");
   }
 
   return (
-    <section aria-labelledby="signal-card-title">
-      <p>
-        <a href="/">← 返回首页</a> <a href="/signals">Signal 列表</a>
+    <div className={s.reader}>
+    <article className={s.article} data-testid="signal-reader" aria-labelledby="signal-title">
+      <button type="button" className={s.back} onClick={() => onNavigate("/radar")}>
+        <ChevronLeft size={15} aria-hidden="true" />
+        返回 Radar
+      </button>
+      <p className={s.meta}>
+        {card.badge ?? "Web"} · 采集于 {payload.collectedAt.slice(0, 16).replace("T", " ")}
+        {state.read ? " · 已读" : " · 未读"}
+        {state.saved ? " · 已收藏" : ""}
+        {state.dismissed ? " · 已隐藏" : ""}
       </p>
-      <h1 id="signal-card-title">{card.title}</h1>
-      <p>
-        <span>{card.badge}</span> <span>v{card.version}</span>
-        {state.read ? <span> 已读</span> : <span> 未读</span>}
-        {state.saved ? <span> 已收藏</span> : null}
-        {state.dismissed ? <span> 已隐藏</span> : null}
-      </p>
-      <p>{payload.assessment?.strategicImpact}</p>
-      <blockquote>
-        <p>{payload.assessment?.evidenceQuote}</p>
+      <h2 id="signal-title">{payload.assessment.summary}</h2>
+      <p className={`${s.lead} ${s.signalLead}`}>{payload.assessment.strategicImpact}</p>
+
+      <blockquote className={s.signalQuote}>
+        <p>{payload.assessment.evidenceQuote}</p>
         <footer>
-          来源：
-          <a href={payload.source?.url} rel="noreferrer noopener" target="_blank">{payload.source?.title}</a>
-          {payload.source?.publishedAt ? <span>（{payload.source.publishedAt}）</span> : null}
+          <a href={payload.source.url} target="_blank" rel="noreferrer noopener">
+            {payload.source.title}
+            <ExternalLink size={12} aria-hidden="true" />
+          </a>
+          <span>
+            {payload.source.type === "wechat-account" ? "微信公众号" : "Web"} · 发布 {payload.source.publishedAt.slice(0, 10)}
+          </span>
         </footer>
       </blockquote>
-      {payload.assessment?.unknowns?.length ? (
-        <ul>
-          {payload.assessment.unknowns.map((item) => <li key={item}>{item}</li>)}
-        </ul>
+
+      {payload.assessment.unknowns.length ? (
+        <section className={s.clarify}>
+          <strong>尚未弄清</strong>
+          <ul>
+            {payload.assessment.unknowns.map((unknown) => (
+              <li key={unknown}>{unknown}</li>
+            ))}
+          </ul>
+        </section>
       ) : null}
-      <p>
-        <button onClick={() => update({ read: !state.read })} disabled={busy}>
+
+      <div className={s.signalStates}>
+        <button type="button" disabled={pending} onClick={() => void update({ read: !state.read })}>
           {state.read ? "标记未读" : "标记已读"}
-        </button>{" "}
-        <button onClick={() => update({ saved: !state.saved })} disabled={busy}>
+        </button>
+        <button type="button" disabled={pending} onClick={() => void update({ saved: !state.saved })}>
           {state.saved ? "取消收藏" : "收藏"}
-        </button>{" "}
-        <button onClick={() => update({ dismissed: !state.dismissed })} disabled={busy}>
+        </button>
+        <button type="button" disabled={pending} onClick={() => void update({ dismissed: !state.dismissed })}>
           {state.dismissed ? "取消隐藏" : "隐藏"}
         </button>
-      </p>
-      {error ? <p role="alert">{error}</p> : null}
-    </section>
+      </div>
+      {error ? (
+        <p className={s.error} role="alert">
+          {error}
+          <button type="button" onClick={() => last && void update(last)}>
+            重试
+          </button>
+        </p>
+      ) : null}
+    </article>
+    </div>
   );
 }

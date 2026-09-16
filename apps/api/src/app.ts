@@ -43,23 +43,19 @@ import {
   verifyPassword,
   verifySessionToken,
 } from "./session.js";
-import { getFixtureHome, projectHomeCard } from "./fixture.js";
 import { actionFingerprint, verifyActionId } from "./actionToken.js";
-import { executeDismissNotice } from "./actions.js";
 import { loadCompanyMemory, type CompanyMemorySeedEnv } from "./companyMemory.js";
 import { createCompanyMemoryMcpSession } from "./mcpCompanyMemory.js";
 import { createPiConversationRuntime } from "./piConversationRuntime.js";
 import {
   getConversationHistory,
-  getFixtureObject,
   getScopeObject,
-  projectFixtureObjectCard,
   resolveReferenceSnapshots,
   type ConversationRuntime,
 } from "./conversations.js";
 import type { RadarService } from "./radar.js";
 import { getSignalCard, listSignalCards, projectRadarCard, setSignalState } from "./signals.js";
-import { getIssueRow, executeIssueAction, importDriIssue, listPendingRedIssueCards, projectIssueCard } from "./issues.js";
+import { getIssueRow, executeIssueAction, importDriIssue, listPendingIssueCards, projectIssueCard } from "./issues.js";
 import type { ResearchService } from "./research.js";
 import {
   executeCancelMeeting,
@@ -315,11 +311,20 @@ export async function buildApp({
     return { authenticated: verifySessionToken(env.sessionSecret, cookie) };
   });
 
-  app.get("/api/cards/home", { preHandler: requireCEO }, async (_req, reply): Promise<TCardCollection> => {
-    const row = await getFixtureHome(q);
-    // 通知投影只读同一 issues 表：pending + red 的 Issue Card 与详情页完全同源
-    const notifications = await listPendingRedIssueCards(q, env.sessionSecret);
-    return { cards: [projectHomeCard(row, env.sessionSecret), ...notifications] };
+  // 首页一次返回真实 Card 集合；战略/战场/能力/Radar/通知都是这些持久对象的固定投影。
+  app.get("/api/cards/home", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
+    const [radarCard, battlefields, issues, meetingRows, monthlyNotice] = await Promise.all([
+      projectRadarCard(q, radar.providerStatus),
+      listBattlefieldCards(q, companyPeriod(now())),
+      listPendingIssueCards(q, env.sessionSecret),
+      listMeetingRows(q),
+      getMonthlyPlanNotice(q, env.sessionSecret, now()),
+    ]);
+    const meetings = meetingRows
+      .filter((row) => row.status === "scheduled")
+      .map((row) => projectMeetingCard(row, env.sessionSecret));
+    const monthly = monthlyNotice && (monthlyNotice.payload as { status?: string }).status !== "confirmed" ? [monthlyNotice] : [];
+    return { cards: [radarCard, ...battlefields, ...issues, ...meetings, ...monthly] };
   });
 
   const idParams = Type.Object({ id: Type.String({ minLength: 1 }) }, { additionalProperties: false });
@@ -574,12 +579,10 @@ export async function buildApp({
       schema: { params: idParams },
     },
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
-      // 默认只读：真实 Issue 优先，Ticket 04 的 fixture 仅在迁移期兼容
       const issue = await getIssueRow(q, req.params.id);
-      if (issue) return { cards: [projectIssueCard(issue, env.sessionSecret)] };
-      const row = await getFixtureObject(q, "issue", req.params.id);
-      if (!row?.visible_to_ceo) return fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
-      return { cards: [projectFixtureObjectCard(row)] };
+      return issue
+        ? { cards: [projectIssueCard(issue, env.sessionSecret)] }
+        : fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
     },
   );
 
@@ -758,19 +761,7 @@ export async function buildApp({
         }
         return { cards: [result.card] };
       }
-      if (scope.objectType !== "home") {
-        return fail(reply, 404, "UNKNOWN_ACTION", "未注册的 actionType");
-      }
-      if (scope.actionType !== "home.dismiss_notice") {
-        return fail(reply, 404, "UNKNOWN_ACTION", "未注册的 actionType");
-      }
-      const result = await executeDismissNotice(pool, env.sessionSecret, scope, fingerprint);
-      if (result.conflict) {
-        return fail(reply, 409, "VERSION_CONFLICT", "对象已被修改，请基于最新 Card 重试", {
-          latestCard: result.latestCard,
-        });
-      }
-      return { cards: [result.card] };
+      return fail(reply, 404, "UNKNOWN_ACTION", "未注册的 actionType");
     },
   );
 

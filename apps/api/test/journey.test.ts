@@ -3,7 +3,7 @@ import { Value } from "@sinclair/typebox/value";
 import { Card, SessionResponse } from "@warmap/contracts";
 import { TEST_PASSWORD, createTestApp } from "./helpers.js";
 
-describe("CEO login → fixture card journey", () => {
+describe("CEO login → real Card journey", () => {
   it("rejects wrong password and unauthenticated card access", async () => {
     const t = await createTestApp();
     const { app } = t;
@@ -25,7 +25,7 @@ describe("CEO login → fixture card journey", () => {
     }
   });
 
-  it("issues an HttpOnly Secure SameSite=Strict cookie and serves the fixture card", async () => {
+  it("issues an HttpOnly Secure SameSite=Strict cookie and serves real home Cards", async () => {
     const t = await createTestApp();
     const { app } = t;
     try {
@@ -50,12 +50,11 @@ describe("CEO login → fixture card journey", () => {
         headers: { cookie },
       });
       expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(Value.Check(Card, body.cards[0])).toBe(true);
-      expect(body.cards[0].kind).toBe("home");
-      expect(body.cards[0].version).toBe(1);
-      expect(body.cards[0].actions).toHaveLength(1);
-      expect(body.cards[0].actions[0].actionType).toBe("home.dismiss_notice");
+      const body = res.json() as { cards: { kind: string; payload: unknown }[] };
+      // 首页是真实投影：Radar 配置 + 注册战场，不再有 fixture home Card
+      expect(body.cards[0].kind).toBe("radar");
+      expect(body.cards.some((card) => card.kind === "battlefield")).toBe(true);
+      for (const card of body.cards) expect(Value.Check(Card, card)).toBe(true);
 
       const session = await app.inject({
         method: "GET",
@@ -73,13 +72,12 @@ describe("CEO login → fixture card journey", () => {
     const { app } = t;
     try {
       const cookie = await t.loginCookie();
+      const issue = await t.createIssue();
       const first = await app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie } });
-      const row1 = await t.fixtureRow();
       const second = await app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie } });
-      const row2 = await t.fixtureRow();
       expect(second.statusCode).toBe(200);
       expect(second.json()).toEqual(first.json());
-      expect(row1).toEqual(row2);
+      expect(second.json().cards.some((card: { id: string }) => card.id === `issue:${issue.objectRef.id}`)).toBe(true);
     } finally {
       await t.close();
     }

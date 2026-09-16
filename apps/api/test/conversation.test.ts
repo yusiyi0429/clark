@@ -30,25 +30,26 @@ describe("Conversation HTTP/SSE public seam", () => {
     }
   });
 
-  it("serves the minimal replaceable Issue Card with its own stable Conversation scope", async () => {
+  it("serves a real Issue Card with its own stable Conversation scope", async () => {
     const t = await createTestApp();
     try {
       const cookie = await t.loginCookie();
-      const response = await t.app.inject({ method: "GET", url: "/api/cards/issues/fixture-001", headers: { cookie } });
+      const issue = await t.createIssue();
+      const response = await t.app.inject({ method: "GET", url: `/api/cards/issues/${issue.objectRef.id}`, headers: { cookie } });
       expect(response.statusCode).toBe(200);
       expect(response.json().cards[0]).toMatchObject({
-        id: "issue:fixture-001",
+        id: `issue:${issue.objectRef.id}`,
         kind: "issue",
         version: 1,
-        conversation: { scope: "issue:fixture-001" },
+        conversation: { scope: `issue:${issue.objectRef.id}` },
       });
-      expect((await t.app.inject({ method: "GET", url: "/api/cards/issues/fixture-hidden", headers: { cookie } })).statusCode).toBe(404);
+      expect((await t.app.inject({ method: "GET", url: "/api/cards/issues/11111111-1111-4111-8111-111111111111", headers: { cookie } })).statusCode).toBe(404);
     } finally {
       await t.close();
     }
   });
 
-  it("builds reference snapshots from current Card ID/version and rejects stale, missing or forbidden cards", async () => {
+  it("builds reference snapshots from current Card ID/version and rejects stale or missing cards", async () => {
     let received: unknown[] = [];
     const runtime: ConversationRuntime = {
       async run(input) {
@@ -60,6 +61,7 @@ describe("Conversation HTTP/SSE public seam", () => {
     const t = await createTestApp({}, runtime);
     try {
       const cookie = await t.loginCookie();
+      const issue = await t.createIssue();
       const post = (references: { cardId: string; version: number }[]) => t.app.inject({
         method: "POST",
         url: "/api/conversations/global/messages",
@@ -67,28 +69,21 @@ describe("Conversation HTTP/SSE public seam", () => {
         payload: { message: "核对引用", references },
       });
 
-      const accepted = await post([
-        { cardId: "home:default", version: 1 },
-        { cardId: "issue:fixture-001", version: 1 },
-      ]);
+      const accepted = await post([{ cardId: `issue:${issue.objectRef.id}`, version: 1 }]);
       expect(accepted.statusCode).toBe(200);
       expect(received).toMatchObject([
-        { cardId: "home:default", version: 1, title: "公司战况", payload: { notice: { dismissed: false } } },
-        { cardId: "issue:fixture-001", version: 1, title: "月球基地供应链选择", payload: { summary: "需要比较自建与合作供应链" } },
+        { cardId: `issue:${issue.objectRef.id}`, version: 1, kind: "issue" },
       ]);
 
       const history = await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } });
       expect(history.json().messages[0].referencesSnapshot).toEqual(received);
 
-      const stale = await post([{ cardId: "home:default", version: 99 }]);
+      const stale = await post([{ cardId: `issue:${issue.objectRef.id}`, version: 99 }]);
       expect(stale.statusCode).toBe(409);
       expect(stale.json()).toMatchObject({ code: "REFERENCE_VERSION_CONFLICT" });
-      const missing = await post([{ cardId: "issue:not-found", version: 1 }]);
+      const missing = await post([{ cardId: "issue:11111111-1111-4111-8111-111111111111", version: 1 }]);
       expect(missing.statusCode).toBe(404);
       expect(missing.json()).toMatchObject({ code: "REFERENCE_NOT_FOUND" });
-      const forbidden = await post([{ cardId: "issue:fixture-hidden", version: 1 }]);
-      expect(forbidden.statusCode).toBe(403);
-      expect(forbidden.json()).toMatchObject({ code: "REFERENCE_FORBIDDEN" });
     } finally {
       await t.close();
     }
@@ -418,6 +413,8 @@ describe("Conversation HTTP/SSE public seam", () => {
     const t = await createTestApp({}, runtime);
     try {
       const cookie = await t.loginCookie();
+      const issue = await t.createIssue();
+      const scope = `issue:${issue.objectRef.id}`;
       const send = (scope: string, message: string) => t.app.inject({
         method: "POST",
         url: `/api/conversations/${encodeURIComponent(scope)}/messages`,
@@ -426,7 +423,7 @@ describe("Conversation HTTP/SSE public seam", () => {
       });
 
       const global1 = await send("global", "global one");
-      const object1 = await send("issue:fixture-001", "issue one");
+      const object1 = await send(scope, "issue one");
       const global2 = await send("global", "global two");
       expect([global1.statusCode, object1.statusCode, global2.statusCode]).toEqual([200, 200, 200]);
       expect(parseSse(global1.body)).toEqual(expect.arrayContaining([
@@ -439,17 +436,17 @@ describe("Conversation HTTP/SSE public seam", () => {
         method: "GET", url: "/api/conversations/global/messages", headers: { cookie },
       });
       const objectHistory = await t.app.inject({
-        method: "GET", url: `/api/conversations/${encodeURIComponent("issue:fixture-001")}/messages`, headers: { cookie },
+        method: "GET", url: `/api/conversations/${encodeURIComponent(scope)}/messages`, headers: { cookie },
       });
       expect(globalHistory.json().messages.map((m: { content: string }) => m.content)).toEqual([
         "global one", "reply:global:1", "global two", "reply:global:2",
       ]);
       expect(objectHistory.json().messages.map((m: { content: string }) => m.content)).toEqual([
-        "issue one", "reply:issue:fixture-001:1",
+        "issue one", `reply:${scope}:1`,
       ]);
       expect(seen).toMatchObject([
         { scope: "global", entries: [], currentObject: null },
-        { scope: "issue:fixture-001", entries: [], currentObject: { cardId: "issue:fixture-001" } },
+        { scope, entries: [], currentObject: { cardId: scope } },
         { scope: "global", entries: ["global-entry-1"], currentObject: null },
       ]);
     } finally {

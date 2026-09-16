@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "warmap-transcript.v1",
+  "meetingId": "b2c0eb2d-6e1d-4055-8a0d-5af3e0584a94",
+  "turns": [
+    { "id": "turn-001", "speakerId": "person-example-001", "startedAt": "2026-09-18T10:00:05+08:00", "text": "灯塔项目优先，TokenOps 保留最低验证力量。" },
+    { "id": "turn-002", "speakerId": "person-example-002", "startedAt": "2026-09-18T10:00:40+08:00", "text": "我来整理最小验证包范围，本周给出三条验收标准。" }
+  ]
+}
