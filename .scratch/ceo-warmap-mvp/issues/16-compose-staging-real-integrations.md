@@ -67,11 +67,12 @@ Blocked by: 15 建立全链测试、观测与安全门槛
 - 侧车文档化的首次订阅立即拉取 `POST /api/rss/poll` ×1 返回 success，但侧车日志显示 WeChat 文章列表接口 `ret=200013 err_msg='freq control'`（微信频控），未写入任何文章；`subscriptions=1`、`articles=0`。
 - 未重试、未换号、未用关键词/site 搜索、未改生产语义；Radar→Candidate→Signal 管线因无来源未执行。AC5 保持未勾，等频控解除/配 `PROXY_URLS` 后从 `get_recent_articles` 重验。
 - 收尾：`docker compose -f infra/docker-compose.yml up -d --force-recreate wechat` 撤销 15000 宿主端口（PORTS 仅 `5000/tcp`），容器 healthy，`wechat_data` 卷未删且重建后仍 `logged_in=true`。
+- 方案 B 代理重试（仅一次）：worktree `infra/.env` 配 `WECHAT_PROXY_URLS`（值不输出），`.env.example` 新增可选 `WECHAT_PROXY_URLS`，compose 给 wechat 传 `PROXY_URLS` 并加 `host.docker.internal:host-gateway`，runbook §5 同步；重建后容器内 `PROXY_URLS` configured 且经代理 HTTPS → ok。临时回环 override 后只触发 `POST /api/rss/poll` 一次、只调 `get_recent_articles(limit=1)` 一次 → `isError=false, articles=0`；侧车日志仍 `ret=200013 err_msg='freq control'`（登录态维度频控，换出口 IP 未绕过）。按规则停止，未再重试；`read_article` 0 次、Radar 管线未执行、0 次模型调用；再次 base compose force-recreate 撤回宿主端口。
 
 ### 仍阻塞（真实外部验收，必须真实凭据与实际输出）
 
 - 已 SET 并已用于真实验收：`BOCHA_API_KEY`、`PI_BASE_URL`、`PI_API_KEY`、`LIGHT_MODEL`、`HEAVY_MODEL`、`COMPACTION_MODEL`、`WECHAT_MCP_TOKEN`、`WECHAT_MCP_URL`（已规范为 `http://wechat:5000/mcp`）、`WECHAT_SITE_URL`。
-- AC5 公众号：侧车已登录且已订阅 `量子位/QbitAI`，但首次拉取被微信频控（`ret=200013 freq control`）阻挡，`articles=0`；需频控解除或配 `PROXY_URLS` 后重拉，再跑账号级 `get_recent_articles` → Radar 管线（1 篇、1 次 light 候选）。
+- AC5 公众号：侧车已登录且已订阅 `量子位/QbitAI`；直连与经 SOCKS5 代理均被微信频控（`ret=200013 freq control`），`articles=0`；需等账号频控自然解除后再拉取，再跑账号级 `get_recent_articles` → Radar 管线（1 篇、1 次 light 候选）。
 - AC7 真实人员 seed：`COMPANY_PEOPLE_SEED` 当前指向 `company-people.example.json`；需项目授权人真实名单并重启 API。
 - AC8/AC9 异机备份与恢复：需 `BACKUP_AGE_RECIPIENT`、`BACKUP_AGE_IDENTITY`、`BACKUP_SSH_HOST`、`BACKUP_SSH_USER`、`BACKUP_SSH_PATH`、`BACKUP_SSH_KEY_PATH`、`BACKUP_RETENTION_DAYS` 与真实异机目标（脚本本地真实往返已在 `verification.md` §3 验证）。
 - AC1 真实 TLS 签发需可解析的 staging 域名与公网 80/443（当前 `PUBLIC_DOMAIN=localhost` 仅验证配置与路由）。

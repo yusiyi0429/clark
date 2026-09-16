@@ -47,11 +47,12 @@
 docker compose -f infra/docker-compose.yml -f infra/staging/wechat-login.override.yml up -d wechat
 # 远程服务器：ssh -L 15000:127.0.0.1:15000 <host>，本地浏览器打开 http://127.0.0.1:15000/login.html
 # 默认宿主端口 15000（避开 macOS AirPlay 占用的 5000）；可用 WECHAT_LOGIN_PORT 覆盖
-docker compose -f infra/docker-compose.yml up -d wechat   # 扫码完成后回到无公网端口的内网形态
+docker compose -f infra/docker-compose.yml up -d --force-recreate wechat   # 扫码/验收后回到无公网端口形态
 ```
 
   凭证只存在 `wechat_data` 卷，WarMap 从不读取 Cookie；登录有效期约 4 天，过期需重新扫码。
 - `MCP_RESOURCE_URL=http://wechat:5000/mcp` 必须与 API 访问 Host 一致，否则 sidecar 的 DNS-rebinding 白名单会拒绝内网调用。
+- 可选 `WECHAT_PROXY_URLS`（sidecar 侧环境变量名 `PROXY_URLS`）：填入 SOCKS5 代理池（逗号分隔）以降低微信风控；本机代理用 `socks5://host.docker.internal:<port>`（compose 已为 Linux 加 `host.docker.internal:host-gateway`，需 Docker Engine ≥ 20.10）。留空则直连。
 - 账号级拉取：Radar 来源配置的 `accountId` 必须是 sidecar 已订阅公众号的 `fakeid`；未订阅时该来源如实失败，禁止用关键词或 `site:mp.weixin.qq.com` 替代。
 - 来源配置目前没有 Action 面（Ticket 06 已记录该边界），staging 验收前用 SQL 写入 `radar_config.sources`，`site.id`/`account.id` 只用于本地展示，不会被发送给 Provider：
 

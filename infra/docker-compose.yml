@@ -33,6 +33,11 @@ services:
       SITE_URL: ${WECHAT_SITE_URL:-http://localhost:5000}
       # MVP 不配代理池：关闭正文抓取，只取已抓取的文章元数据，降低账号风控风险
       RSS_FETCH_FULL_CONTENT: "false"
+      # 可选 SOCKS5 代理池（逗号分隔），降低微信风控；留空则直连
+      PROXY_URLS: ${WECHAT_PROXY_URLS:-}
+    # Linux 上让 sidecar 能访问宿主机代理（macOS/Windows Docker Desktop 自带）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - wechat_data:/app/data
     healthcheck:

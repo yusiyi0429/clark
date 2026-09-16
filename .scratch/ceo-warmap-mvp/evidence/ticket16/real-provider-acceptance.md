@@ -72,6 +72,14 @@ The sidecar DB: `subscriptions=1`、`articles=0`。
 - 下一步：等微信频控解除后（或按 sidecar 文档配置 `PROXY_URLS` SOCKS5 代理池降低风控）再触发一次轮询，然后从第 3 步（MCP `get_recent_articles`）重新验收并进入 Radar 管线；完整 `fakeid` 不写入任何证据。
 - 本步未做代码/生产语义修改；临时验收脚本已删除。
 
+### 代理重试一次（方案 B，仍失败，未再重试）
+
+- 本机 SOCKS5 代理接入：worktree `infra/.env` 设 `WECHAT_PROXY_URLS`（不输出值）；`.env.example` 新增可选 `WECHAT_PROXY_URLS`；compose 给 `wechat` 传 `PROXY_URLS=${WECHAT_PROXY_URLS:-}` 并加 `host.docker.internal:host-gateway`（Linux 可移植）；runbook §5 同步。
+- 重建后容器内验证：`PROXY_URLS` configured；经代理访问 HTTPS 一次 → ok；`wechat_data` 卷与登录态保留。
+- 临时回环 override 开放后只触发 `POST /api/rss/poll` **一次**，之后只调 `get_recent_articles(limit=1)` **一次**：`isError=false、articles=0`。
+- 侧车日志仍为 `ret=200013 err_msg='freq control'`（登录态维度的频控，换出口 IP 未绕过）。按规则记录并停止，未再重试、未换号、未关键词搜索；`read_article` 0 次，Radar 管线未执行，未产生任何模型调用。
+- AC5 仍 **BLOCKED**，不勾选。下一步：等微信账号频控自然解除（通常需更长时间）后再拉取；代理保持接入不影响其它功能。
+
 ## 收尾：扫码端口回退（第 7 步，已执行）
 
 ```bash
