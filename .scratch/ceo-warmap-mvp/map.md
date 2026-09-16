@@ -33,7 +33,7 @@ Spec: `spec.md`
 | 11 | 逐项确认 MeetingOutcome 效果 | 06, 10 | resolved |
 | 12 | 生成并协商 MonthlyPlan | 03, 05, 08 | resolved |
 | 13 | 签发 MonthlyPlan 并刷新业务投影 | 06, 12 | resolved |
-| 14 | 完成真实数据驱动的像素级 Web | 01, 08, 11, 13 | ready-for-agent |
+| 14 | 完成真实数据驱动的像素级 Web | 01, 08, 11, 13 | resolved |
 | 15 | 建立全链测试、观测与安全门槛 | 14 | ready-for-agent |
 | 16 | 完成 Compose 部署与真实外部验收 | 15 | ready-for-agent |
 | 17 | 执行用户像素级验收与 cutover 授权 | 16 | ready-for-human |
@@ -41,9 +41,9 @@ Spec: `spec.md`
 
 ## Current frontier
 
-- 14 完成真实数据驱动的像素级 Web
+- 15 建立全链测试、观测与安全门槛
 
-14 已解锁；其他 ticket 必须等待其真实 blocker resolved。
+15 已解锁；其他 ticket 必须等待其真实 blocker resolved。
 
 ## Results
 
@@ -60,5 +60,6 @@ Spec: `spec.md`
 - 10 resolved：提交 `07c86d9`，跑通 Transcript v1 双入口整份校验、scheduled → held、严格 MeetingOutcome 抽取、失败重试和无 confirmed effect 时的危险替换。rebase 后 API 171 + contracts 22 测试、typecheck/build 通过。
 - 11 resolved：提交 `2fabfa6`，跑通 MeetingOutcome 逐项 confirm/dismiss、精确 Issue Receipt、DRI Handoff、reopenWhen Radar anchor 与统一 effect 撤回。Herdr deepseek-flash 三轮双轴 review 无 blocking；API 190 + contracts 25 测试、typecheck/build 通过。
 - 13 resolved：提交 `ddd4222`，跑通 CEO-only MonthlyPlan 签发、唯一 confirmed 计划、战场与 Radar ontology 投影、普通 todo DRI 出站状态。rebase 后 contracts 26 + API 200 测试、typecheck/build 通过。
+- 14 resolved：提交 `007e52a`，将登录、首页、Issue、Meeting、Radar、Signal、MonthlyPlan、Conversation 与 opaque Action 接入真实 API，恢复双视口布局和微交互，并移除目标路由 fixture。contracts 26 + Web 9 + API 199 测试、typecheck/build 与 diff check 通过；双视口浏览器证据已记录。
 
 ## Comments
