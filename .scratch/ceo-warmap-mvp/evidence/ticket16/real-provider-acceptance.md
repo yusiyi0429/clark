@@ -45,9 +45,8 @@ docker compose -f infra/docker-compose.yml -f infra/staging/wechat-login.overrid
 
 ## 仍未完成（不勾选）
 
-- AC5 公众号账号级文章拉取：等待管理员扫码；尚未有已订阅 fakeid。
-- AC7 真实人员 seed：本次只用 `company-people.example.json` 验证模型/Transcript 链，未装载项目授权人真实名单。
-- AC8/AC9 异机加密备份与恢复演练：缺 `BACKUP_SSH_*`/`BACKUP_AGE_*` 与真实异机目标（脚本本地往返已在 `verification.md` §3 验证）。
+- AC5 公众号账号级文章拉取：sidecar 已登录且已订阅 `量子位/QbitAI`，但直连与 SOCKS5 代理各一次仍被微信 `ret=200013 freq control` 阻挡，`articles=0`；等频控解除后重验。
+- AC8 异机加密备份与保留：缺 `BACKUP_SSH_HOST`/`BACKUP_SSH_USER`/`BACKUP_SSH_PATH`/`BACKUP_SSH_KEY_PATH` 与真实异机目标；age 加密 + checksum + 本机独立恢复演练（AC9）已完成，见下文。
 
 ## AC5 真实尝试（2026-09-16，未完成，按“失败一次即停”执行）
 
@@ -97,6 +96,25 @@ The sidecar DB: `subscriptions=1`、`articles=0`。
 - 只读验证：MCP 只暴露 4 个 `readOnlyHint` 工具、无写工具；验收后真实 seed 文件哈希与验收前一致（`seed_unchanged=true`）；未启动业务 DB、未写任何业务事实。
 - 口径说明：`runtime.run()` 只调用 1 次（无重试）；一次真实 tool loop 至少需要 2 次模型响应（先工具调用、后收尾），已如实记录；未使用 example seed，也未修改 CompanyMemory/seed。
 - 成本口径对齐：AC7 本次只额外用 light 槽位 1 turn（非重试、非批量、非换档），与 ticket15 `acceptance-gates.md` 的「每槽位 1 次」不同轮次、按 AC7 独立授权计；连同 AC4/AC6 的调用，全部在 ticket15 单次 ≤32k token 与无自动重试范围内。
+
+## AC9 本机独立恢复演练（2026-09-16，通过）
+
+方案 C：暂缓异机传输，只完成本机独立恢复演练。全程不涉及公众号调用。临时 source/target 容器、卷、网络、文件均在本次新建并在结束时销毁；未触碰任何现有卷/库/数据。
+
+| 步骤 | 实测 |
+|---|---|
+| 环境 | 专用临时 `postgres:17-alpine` source + 独立空 target（各自临时卷、仅 loopback 随机端口，端口不同）；target 初始业务表=**0**；target URL != 生产 `DATABASE_URL` |
+| source migrations | `AC9_MIGRATE schema=12`（现有全部 migration） |
+| source fixtures（六实体 + 附加） | Issue 经真实 DRI seam 创建；Signal/Meeting/MonthlyPlan/Conversation 最小 SQL fixture；合法 Transcript 过 `validateTranscript`；MeetingOutcome 非空。counts：`issues=1 signals=1 meetings=1 transcripts=1 outcomes=1 monthly_plans=1 conversations=1 messages=1 pi_entries=0` |
+| dump→加密 | `docker exec -i <source> pg_dump --format=custom --no-owner --no-privileges`（compose 内网同形）；dump 非空 21139 B；`age -r <已配置 recipient>` 产物头 `age-encryption.org/v1`；生成 sha256 checksum；**立即删除明文** |
+| restore 默认 dry-run | checksum + 生产 URL 保护 + 空库检查均通过，零写入 |
+| 安全边界（不破坏数据） | 目标==`DATABASE_URL` → **拒绝恢复**；恢复到非空 target → **拒绝覆盖** |
+| `--execute` 真实恢复 | 恢复后 counts `issues=1 signals=1 meetings=1 transcripts=1 outcomes=1 monthly_plans=1 conversations=1 messages=1 pi_entries=0`，与 source **完全一致** |
+| 继续同一对象 Conversation（target，1 次 light turn） | `messages 1→3`、`pi_entries 0→5`；SSE 事件 `message,usage,done:completed`；`run_status=succeeded`；model `gpt-5.6-terra`；usage in=690 out=5 total=695；duration=3362ms；无自动重试 |
+| 清理 | 临时容器/卷/网络/临时文件已删除；剩余 `warmap_*` 卷仍为演练前四个（`warmap_caddy_config/warmap_caddy_data/warmap_pgdata/warmap_wechat_data`），未删任何现有 volume |
+
+- 证据只含 counts/状态/usage/duration/事件类型/anchor 元数据；不含消息正文、Transcript 全文、CompanyMemory passage、姓名、完整 personId/UUID、任何 secret。
+- 失败策略：任何一步失败即记录并停止，不重试；本次全过。AC8（异机传输/age 至真实异机/≥7 天保留）仍未做，保持未勾。
 
 ## 收尾：扫码端口回退（第 7 步，已执行）
 

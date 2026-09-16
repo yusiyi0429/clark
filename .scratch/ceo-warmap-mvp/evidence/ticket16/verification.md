@@ -35,6 +35,7 @@
 - 早前本地真实往返（用注入的容器化 `pg_dump`/`age`/`pg_restore` 与本地目录 stub 代替异机）已跑通：dump → 非空校验 → `age -r` 加密（产物头 `age-encryption.org/v1`）→ `.sha256` + `.meta.json`（含 schema=12）→ 复制到「异机」目录 → 保留策略 → 删除本机明文。该轮用的是显式 url/注入模式；默认 compose 模式由单测覆盖命令形状。
 - `restore.sh`（默认 dry-run）：checksum 校验、生产 `DATABASE_URL` 保护、空库检查；`--execute` 解密并 `pg_restore`，恢复后抽查 `conversations=1 messages=1 pi_entries=1`；对已有表的库如实拒绝。
 - 安全/命令形状单测（`apps/api/test/deployment.test.ts`，17 项）：compose 模式命令形状与“无 DATABASE_URL”；容器内 `pg_dump -U warmap -d warmap --format=custom --no-owner --no-privileges` + `psql` 读 schema；`POSTGRES_PASSWORD` 不出现在 stdout/stderr/docker 参数；url 模式兼容且缺 `DATABASE_URL` 时失败；dry-run 零写入；缺配置、保留 <7 天、checksum 不符、目标=生产库、非空库均拒绝。
+- AC9 本机独立恢复演练已通过（专用临时 source + 独立空 target，真实 pg_dump→age→checksum→restore `--execute`，六实体/Transcript/messages/Pi entries counts 一致，target 上继续一次对象 Conversation `messages 1→3`、`pi_entries 0→5`，临时资源全销毁）；完整记录见 `real-provider-acceptance.md` 的 AC9 节。
 
 ## 4. 确定性门槛（已执行）
 
