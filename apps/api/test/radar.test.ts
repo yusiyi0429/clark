@@ -5,7 +5,7 @@ import { Card, type TRadarCandidateSubmission, type TRadarSourceItem } from "@wa
 import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
 import { buildApp } from "../src/app.js";
 import { createRadarService, type RadarAssessor, type RadarWebAdapter } from "../src/radar.js";
-import { createBraveRadarWebAdapter, createWechatAccountHttpAdapter } from "../src/radarSources.js";
+import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "../src/radarSources.js";
 import { createRadarAgentAssessor } from "../src/radarAgent.js";
 import { createRadarScheduler } from "../src/radarScheduler.js";
 import { migrate } from "../src/migrate.js";
@@ -74,50 +74,86 @@ async function login(app: Awaited<ReturnType<typeof buildApp>>): Promise<string>
 }
 
 describe("Radar source adapter public seam", () => {
-  it("normalizes recorded Web and account-level WeChat responses without keyword substitution", async () => {
-    const requests: { url: string; authorization: string | null }[] = [];
+  it("normalizes recorded Bocha Web and account-level WeChat MCP responses without keyword substitution", async () => {
+    const requests: { url: string; authorization: string | null; body: Record<string, unknown> }[] = [];
     const fakeFetch: typeof fetch = async (input, init) => {
-      const url = String(input);
-      requests.push({ url, authorization: new Headers(init?.headers).get("authorization") });
-      if (url.startsWith("https://brave.invalid")) {
-        return new Response(JSON.stringify({ web: { results: [{
-          title: "Web 公告",
-          url: "https://example.com/web",
-          description: "Web 摘录",
-          page_age: "2026-05-01T08:00:00.000Z",
-        }] } }), { status: 200, headers: { "content-type": "application/json" } });
-      }
-      return new Response(JSON.stringify({ articles: [{
-        title: "公众号文章",
-        url: "https://mp.weixin.qq.com/s/account-article",
-        publishedAt: "2026-05-01T09:00:00.000Z",
-        excerpt: "公众号连续摘录",
-      }] }), { status: 200, headers: { "content-type": "application/json" } });
+      requests.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get("authorization"),
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      });
+      return new Response(JSON.stringify({ code: 200, data: { webPages: { value: [{
+        name: "Web 公告",
+        url: "https://example.com/web",
+        summary: "Web 摘录",
+        datePublished: "2026-05-01T08:00:00+08:00",
+      }] } } }), { status: 200, headers: { "content-type": "application/json" } });
     };
 
-    const web = createBraveRadarWebAdapter({ apiKey: "brave-key", endpoint: "https://brave.invalid/search", fetch: fakeFetch });
+    const web = createBochaRadarWebAdapter({ apiKey: "bocha-key", endpoint: "https://bocha.invalid/web-search", fetch: fakeFetch });
     const webItems = await web.search({ query: "市场变化", domains: ["example.com"] }, new AbortController().signal);
     expect(webItems[0]).toEqual({
       sourceType: "web",
       title: "Web 公告",
       url: "https://example.com/web",
-      publishedAt: "2026-05-01T08:00:00.000Z",
+      publishedAt: "2026-05-01T00:00:00.000Z",
       excerpt: "Web 摘录",
-      sourceRef: { type: "web-search", provider: "brave", query: "市场变化" },
+      sourceRef: { type: "web-search", provider: "bocha", query: "市场变化" },
     });
+    expect(requests[0].url).toBe("https://bocha.invalid/web-search");
+    expect(requests[0].authorization).toBe("Bearer bocha-key");
+    expect(requests[0].body).toMatchObject({ query: "市场变化 site:example.com", summary: true });
 
-    const wechat = createWechatAccountHttpAdapter({ endpoint: "https://wechat.invalid/latest", credentials: "wechat-token", fetch: fakeFetch });
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const wechat = createWechatMcpAdapter({
+      url: "http://wechat:5000/mcp",
+      token: "wechat-mcp-token",
+      callTool: async (name, args) => {
+        calls.push({ name, args });
+        if (name === "list_subscriptions") return [{ fakeid: "wx-account-42", nickname: "增长观察" }];
+        if (name === "get_recent_articles") {
+          return { articles: [{
+            id: 7,
+            title: "公众号文章",
+            digest: "",
+            link: "https://mp.weixin.qq.com/s/account-article",
+            publish_time: 1777626000,
+          }], next_since: 0 };
+        }
+        if (name === "read_article") return "---\ntitle: x\n---\n\n全文摘录内容";
+        throw new Error(`unexpected tool ${name}`);
+      },
+    });
     const wechatItems = await wechat.fetchLatest({ accountId: "wx-account-42", accountName: "增长观察" }, new AbortController().signal);
     expect(wechatItems[0]).toMatchObject({
       sourceType: "wechat-account",
       title: "公众号文章",
-      sourceRef: { type: "wechat-account", provider: "wechat-http", accountId: "wx-account-42", accountName: "增长观察" },
+      url: "https://mp.weixin.qq.com/s/account-article",
+      publishedAt: new Date(1777626000 * 1000).toISOString(),
+      excerpt: "全文摘录内容",
+      sourceRef: { type: "wechat-account", provider: "wechat-mcp", accountId: "wx-account-42", accountName: "增长观察" },
     });
-    expect(requests[0].url).toContain("q=%E5%B8%82%E5%9C%BA%E5%8F%98%E5%8C%96");
-    expect(requests[1]).toEqual({
-      url: "https://wechat.invalid/latest?accountId=wx-account-42",
-      authorization: "Bearer wechat-token",
+    expect(calls.map((call) => call.name)).toEqual(["list_subscriptions", "get_recent_articles", "read_article"]);
+    expect(calls[1].args).toEqual({ since: 0, limit: 30, source_id: "wx-account-42" });
+  });
+
+  it("rejects an unsubscribed WeChat account instead of substituting keyword search", async () => {
+    const wechat = createWechatMcpAdapter({
+      url: "http://wechat:5000/mcp",
+      token: "wechat-mcp-token",
+      callTool: async (name) => {
+        if (name === "list_subscriptions") return [{ fakeid: "some-other-account" }];
+        throw new Error(`unexpected tool ${name}`);
+      },
     });
+    await expect(wechat.fetchLatest({ accountId: "wx-account-42", accountName: "增长观察" }, new AbortController().signal))
+      .rejects.toThrow(/不在公众号 sidecar 订阅列表/);
+  });
+
+  it("reports the Web Search provider honestly when BOCHA_API_KEY is absent", async () => {
+    const web = createBochaRadarWebAdapter({});
+    expect(web.configured).toBe(false);
+    await expect(web.search({ query: "市场变化" }, new AbortController().signal)).rejects.toThrow(/BOCHA_API_KEY/);
   });
 });
 

@@ -1,0 +1,20 @@
+# 构建上下文只保留 monorepo 构建所需内容；不把 node_modules、旧前端、密钥与本地状态送进 daemon。
+node_modules
+**/node_modules
+**/.next
+**/dist
+.git
+.scratch
+frontend
+docs
+tools
+# 运行期靠只读 volume 提供；不让真实 CompanyMemory 与人员名单进入构建上下文
+seed
+backend
+infra/.env
+infra/backup/.state
+.env
+.env.*
+!.env.example
+**/*.log
+.DS_Store

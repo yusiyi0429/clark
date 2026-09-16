@@ -47,6 +47,7 @@ import { actionFingerprint, verifyActionId } from "./actionToken.js";
 import { loadCompanyMemory, type CompanyMemorySeedEnv } from "./companyMemory.js";
 import { createCompanyMemoryMcpSession } from "./mcpCompanyMemory.js";
 import { createPiConversationRuntime } from "./piConversationRuntime.js";
+import type { WebSearchAdapter } from "./webSearch.js";
 import {
   getConversationHistory,
   getScopeObject,
@@ -133,6 +134,7 @@ export async function buildApp({
   outcomeAgent,
   driExporter,
   monthlyPlanService,
+  webSearch,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   now = () => new Date(),
 }: {
@@ -145,6 +147,8 @@ export async function buildApp({
   outcomeAgent?: PostMeetingAgent;
   driExporter?: DriExporter;
   monthlyPlanService?: MonthlyPlanService;
+  /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
+  webSearch?: WebSearchAdapter;
   conversationTurnTimeoutMs?: number;
   /** 业务时钟；通知与战场投影按公司月读取同一持久对象。 */
   now?: () => Date;
@@ -170,6 +174,7 @@ export async function buildApp({
     apiKey: env.piApiKey,
     modelId: env.lightModel,
     compactionModelId: env.compactionModel,
+    search: webSearch,
   });
   const radar = radarService ?? {
     providerStatus: { web: false, wechat: false },
@@ -838,7 +843,8 @@ export async function buildApp({
   );
 
   // Health 只读进程状态与已装配依赖，不发起模型/Search 调用，也不写任何持久化状态。
-  app.get("/healthz", { schema: { response: { 200: HealthResponse } } }, async (): Promise<Static<typeof HealthResponse>> => {
+  // 同时挂在 /healthz 与 /api/healthz：后者让 Caddy 的 /api/* 边界把 API health 暴露到公网（无 secret）。
+  const healthz = async (): Promise<Static<typeof HealthResponse>> => {
     let database = true;
     try {
       await q("SELECT 1");
@@ -857,7 +863,9 @@ export async function buildApp({
     const status: Static<typeof HealthResponse>["status"] =
       database && dependencies.piRuntime && dependencies.modelSlots && dependencies.companyMemoryMcp ? "ok" : "degraded";
     return { status, api: true, database, buildSha: env.buildSha, dependencies };
-  });
+  };
+  app.get("/healthz", { schema: { response: { 200: HealthResponse } } }, healthz);
+  app.get("/api/healthz", { schema: { response: { 200: HealthResponse } } }, healthz);
 
   // CompanyMemory MCP：独立服务凭据，只读（ADR-0004/0013）；GET/DELETE 会话协商由无状态 transport 拒绝。
   app.post(

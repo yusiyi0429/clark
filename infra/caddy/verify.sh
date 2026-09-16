@@ -64,6 +64,7 @@ fail() { echo "FAIL: $1"; exit 1; }
 
 [ "$(curl -s "http://localhost:$EDGE_PORT/")" = "WEB" ] || fail "/ 应路由到 Web"
 [ "$(curl -s "http://localhost:$EDGE_PORT/api/cards/home")" = "API /api/cards/home" ] || fail "/api/* 应路由到 API"
+[ "$(curl -s "http://localhost:$EDGE_PORT/api/healthz")" = "API /api/healthz" ] || fail "/api/healthz 应直达 API（不经 Web）"
 [ "$(curl -s -X POST "http://localhost:$EDGE_PORT/mcp/company-memory")" = "API POST ct= bytes=0" ] || fail "/mcp/company-memory 应路由到 API"
 
 head -c 2048 /dev/zero > /tmp/warmap-verify-multipart.bin
