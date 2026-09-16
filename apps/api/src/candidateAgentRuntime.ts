@@ -19,6 +19,8 @@ import {
   type Model,
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
+import { logEvent } from "./observability.js";
+import { recordAgentTrace } from "./langsmith.js";
 
 function normalizedBaseUrl(value: string): string {
   return value.replace(/\/+$/, "").replace(/\/responses$/, "");
@@ -41,6 +43,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 }): Promise<{ runId: string; candidate: Static<T> }> {
   const runId = randomUUID();
+  const startedAt = Date.now();
   const promptHash = createHash("sha256").update(options.prompt).digest("hex");
   await options.query(
     `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
@@ -138,6 +141,21 @@ export async function runCandidateAgent<T extends TSchema>(options: {
         WHERE id = $1`,
       [runId, JSON.stringify(candidate), JSON.stringify(usage ?? null)],
     );
+    logBatchRun({ runId, kind: options.kind, modelId: options.modelId, objectRef: options.objectRef, startedAt, status: "succeeded" });
+    void recordAgentTrace({
+      runId,
+      name: options.kind,
+      agentKind: options.kind,
+      promptHash,
+      objectRef: options.objectRef,
+      inputs: options.input,
+      outputs: candidate,
+      toolEvents: [{ name: "submit_candidate", isError: false }],
+      usage: usage ?? null,
+      status: "succeeded",
+      startedAt,
+      durationMs: Date.now() - startedAt,
+    });
     return { runId, candidate };
   } catch (cause) {
     const error = (cause as Error).message || String(cause);
@@ -147,8 +165,48 @@ export async function runCandidateAgent<T extends TSchema>(options: {
         WHERE id = $1`,
       [runId, options.signal?.aborted ? "aborted" : "failed", error, JSON.stringify(usage ?? null)],
     );
+    const status = options.signal?.aborted ? "aborted" : "failed";
+    logBatchRun({ runId, kind: options.kind, modelId: options.modelId, objectRef: options.objectRef, startedAt, status, error });
+    void recordAgentTrace({
+      runId,
+      name: options.kind,
+      agentKind: options.kind,
+      promptHash,
+      objectRef: options.objectRef,
+      inputs: options.input,
+      outputs: candidate,
+      toolEvents: [{ name: "submit_candidate", isError: !candidate }],
+      usage: usage ?? null,
+      error,
+      status,
+      startedAt,
+      durationMs: Date.now() - startedAt,
+    });
     throw cause;
   } finally {
     session?.dispose();
   }
+}
+
+function logBatchRun(input: {
+  runId: string;
+  kind: string;
+  modelId: string;
+  objectRef?: { type: string; id: string; version?: number };
+  startedAt: number;
+  status: string;
+  error?: string;
+}): void {
+  logEvent({
+    event: "agent.run",
+    runId: input.runId,
+    agentKind: input.kind,
+    objectRef: input.objectRef ? `${input.objectRef.type}:${input.objectRef.id}` : undefined,
+    provider: "warmap",
+    model: input.modelId,
+    durationMs: Date.now() - input.startedAt,
+    status: input.status,
+    errorCode: input.error ? input.status.toUpperCase() : undefined,
+    error: input.error,
+  });
 }

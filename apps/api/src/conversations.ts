@@ -19,6 +19,8 @@ export type ConversationRuntimeEvent =
 export type ConversationRuntime = {
   promptHash?: string;
   modelSlot?: string;
+  /** Provider 模型 id，只用于日志/trace，不进入业务状态。 */
+  modelId?: string;
   run(input: {
     scope: TConversationScope;
     message: string;

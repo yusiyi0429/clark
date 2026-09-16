@@ -726,8 +726,16 @@ export interface components {
         };
         HealthResponse: {
             status: "ok" | "degraded";
+            api: boolean;
             database: boolean;
             buildSha: string;
+            dependencies: {
+                piRuntime: boolean;
+                modelSlots: boolean;
+                companyMemoryMcp: boolean;
+                search: boolean;
+                wechat: boolean;
+            };
         };
         RadarScanResponse: {
             trigger: "manual" | "scheduled";

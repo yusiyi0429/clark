@@ -42,6 +42,8 @@ services:
       WECHAT_PROVIDER: ${WECHAT_PROVIDER:-}
       WECHAT_CREDENTIALS: ${WECHAT_CREDENTIALS:-}
       BUILD_SHA: ${BUILD_SHA:-dev}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-warmap}
     volumes:
       - ../backend:/repo/backend:ro
       - ../seed:/repo/seed:ro
