@@ -27,14 +27,14 @@
 - `apps/api/test/deployment.test.ts`：12 项（Compose 边界、镜像非 root、脚本安全边界、smoke dry-run）。
 - `docker compose config` 未验证真实 TLS 证书签发（需真实域名/80/443 可达，属真实 staging，见「仍阻塞」）。
 
-## 3. 备份/恢复脚本（本地真实往返，已执行）
+## 3. 备份/恢复脚本（本地真实往返 + 源模式单测）
 
-用真实 `pg_dump`/`age`/`pg_restore`（容器化客户端，异机 `scp`/`ssh` 用本地目录 stub）跑通：
+方案 A（Ticket 16 后续）：默认 `BACKUP_SOURCE_MODE=compose`；PostgreSQL 继续只在 Compose 内网且**从不映射端口**，宿主机 cron 经 `docker compose exec -T postgres pg_dump/psql` 在容器内 dump/查 schema；脚本不读取/拼接/打印 `POSTGRES_PASSWORD`。显式 `BACKUP_SOURCE_MODE=url` 才要求 `DATABASE_URL` 与宿主 `pg_dump`/`psql`（libpq keg-only 仅 url/restore 需要）。未引入通用 adapter。
 
-- `backup.sh --dry-run` 只打印计划、不写盘、不打印 secret。
-- `backup.sh`：dump → 非空校验 → `age -r` 加密（产物头 `age-encryption.org/v1`）→ `.sha256` + `.meta.json`（含 schema=12）→ 复制到「异机」目录 → 保留策略 → 删除本机明文。
+- `backup.sh --dry-run`：报告 source mode、将执行的 dump/schema 命令与远端流程，零写入；仍校验 age/SSH 配置。
+- 早前本地真实往返（用注入的容器化 `pg_dump`/`age`/`pg_restore` 与本地目录 stub 代替异机）已跑通：dump → 非空校验 → `age -r` 加密（产物头 `age-encryption.org/v1`）→ `.sha256` + `.meta.json`（含 schema=12）→ 复制到「异机」目录 → 保留策略 → 删除本机明文。该轮用的是显式 url/注入模式；默认 compose 模式由单测覆盖命令形状。
 - `restore.sh`（默认 dry-run）：checksum 校验、生产 `DATABASE_URL` 保护、空库检查；`--execute` 解密并 `pg_restore`，恢复后抽查 `conversations=1 messages=1 pi_entries=1`；对已有表的库如实拒绝。
-- 安全边界单测：缺配置、保留 <7 天、checksum 不符、目标=生产库、非空库全部拒绝。
+- 安全/命令形状单测（`apps/api/test/deployment.test.ts`，17 项）：compose 模式命令形状与“无 DATABASE_URL”；容器内 `pg_dump -U warmap -d warmap --format=custom --no-owner --no-privileges` + `psql` 读 schema；`POSTGRES_PASSWORD` 不出现在 stdout/stderr/docker 参数；url 模式兼容且缺 `DATABASE_URL` 时失败；dry-run 零写入；缺配置、保留 <7 天、checksum 不符、目标=生产库、非空库均拒绝。
 
 ## 4. 确定性门槛（已执行）
 

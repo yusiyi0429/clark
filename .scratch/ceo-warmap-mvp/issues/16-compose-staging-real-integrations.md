@@ -77,11 +77,21 @@ Blocked by: 15 建立全链测试、观测与安全门槛
 - 只读验证：MCP 无写工具、seed 哈希验收前后一致、未写业务事实。证据只存 count/hash/角色统计/tool 事件/耗时/usage，不含姓名/完整 personId。
 - 工具口径：实际只读工具集无 `list_people`，“读取完整目录”为 `search_people`（query 缺省返回全部），角色筛在客户端侧；一次 tool loop 需 2 次模型响应（工具调用+收尾），已如实记录。
 
+### 备份源模式方案 A（2026-09-16，实现完成，AC8/AC9 仍未勾）
+
+- `infra/backup/backup.sh` 默认 `BACKUP_SOURCE_MODE=compose`：PostgreSQL 只在 Compose 内网且**从不映射端口**，经 `docker compose -f … --env-file … exec -T postgres pg_dump -U warmap -d warmap --format=custom --no-owner --no-privileges` 在容器内 dump，schema 同容器 `psql`；不再要求 `DATABASE_URL`，不读取/拼接/打印 `POSTGRES_PASSWORD`。
+- 保留 `BACKUP_SOURCE_MODE=url` 兼容外部库（此模式才需 `DATABASE_URL` 与宿主 `pg_dump`/`psql`）；未增加通用 adapter。
+- `--dry-run` 报告 source mode 与将执行命令、零写入，仍校验 age/SSH。
+- 同步 `.env.example`（`BACKUP_SOURCE_MODE`、可选 `WARMAP_*` 覆盖）与 runbook §6（compose cron 示例、`PATH=/opt/homebrew/opt/libpq/bin:…` 仅 url/restore 需要、绝不映射 Postgres 端口）。
+- 单测（`deployment.test.ts` 17 项）：compose 命令形状/无 `DATABASE_URL`/密码不入 stdout、stderr、docker 参数；url 模式兼容与缺 `DATABASE_URL` 失败；dry-run 零写入；原有安全边界不变。`pnpm --filter @warmap/api test --no-file-parallelism` 233 项通过，typecheck/build/compose config/secret scan 通过。
+- 增量 review（Herdr deepseek-flash 只读双轴）：Axis A/B green、无 blocking；已修有效发现 F-A（非法模式报错中 `$SOURCE_MODE` 紧跟全角字符在 bash 3.2 下退化为 unbound variable → 改 `${SOURCE_MODE}` 并新增非法模式单测）。保留 non-blocking：url 模式 DSN 仍经 argv（仅非默认兼容路径）、dry-run 对缺失 compose 文件仅报告、本机测试容器 `warmap-pg` 绑 0.0.0.0:54329（属测试基建/ticket15）。
+- AC8/AC9 仍**不勾**：尚无真实异机 SSH/SFTP 与 age 公私钥、未做真实恢复演练。
+
 ### 仍阻塞（真实外部验收，必须真实凭据与实际输出）
 
 - 已 SET 并已用于真实验收：`BOCHA_API_KEY`、`PI_BASE_URL`、`PI_API_KEY`、`LIGHT_MODEL`、`HEAVY_MODEL`、`COMPACTION_MODEL`、`WECHAT_MCP_TOKEN`、`WECHAT_MCP_URL`（已规范为 `http://wechat:5000/mcp`）、`WECHAT_SITE_URL`。
 - AC5 公众号：侧车已登录且已订阅 `量子位/QbitAI`；直连与经 SOCKS5 代理均被微信频控（`ret=200013 freq control`），`articles=0`；需等账号频控自然解除后再拉取，再跑账号级 `get_recent_articles` → Radar 管线（1 篇、1 次 light 候选）。
-- AC8/AC9 异机备份与恢复：需 `BACKUP_AGE_RECIPIENT`、`BACKUP_AGE_IDENTITY`、`BACKUP_SSH_HOST`、`BACKUP_SSH_USER`、`BACKUP_SSH_PATH`、`BACKUP_SSH_KEY_PATH`、`BACKUP_RETENTION_DAYS` 与真实异机目标（脚本本地真实往返已在 `verification.md` §3 验证）。
+- AC8/AC9 异机备份与恢复：脚本默认 compose 模式已实现并通过单测，但仍需 `BACKUP_AGE_RECIPIENT`、`BACKUP_AGE_IDENTITY`、`BACKUP_SSH_HOST`、`BACKUP_SSH_USER`、`BACKUP_SSH_PATH`、`BACKUP_SSH_KEY_PATH`、`BACKUP_RETENTION_DAYS` 与真实异机目标才能完成真实验收（早前本地往返已在 `verification.md` §3）。
 - AC1 真实 TLS 签发需可解析的 staging 域名与公网 80/443（当前 `PUBLIC_DOMAIN=localhost` 仅验证配置与路由）。
 - 以上到齐后按 `infra/staging/runbook.md` §6/§7 逐项执行；未完成前 Ticket 16 保持 `claimed`，不标 `resolved`，也不发送完成信号。
 - 已知实现边界：Radar 来源（sites/wechatAccounts）目前无 Action 面（Ticket 06 已记录），staging 验收前用 runbook §5 的 SQL 写入 `radar_config.sources`。

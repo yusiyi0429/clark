@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -136,6 +136,140 @@ describe("backup.sh safety boundaries", () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("至少为 7");
+  });
+});
+
+const SECRET_PASSWORD = "postgres-super-secret-DO-NOT-PRINT";
+
+/** 桩：docker/age/scp/ssh + 宿主 pg_dump/psql（url 模式）；记录 docker 参数。 */
+function createBackupStubs(dir: string): { bin: string; dockerLog: string; offsite: string } {
+  const bin = join(dir, "bin");
+  mkdirSync(bin, { recursive: true });
+  const dockerLog = join(dir, "docker.log");
+  writeFileSync(dockerLog, "");
+  const offsite = join(dir, "offsite");
+  mkdirSync(offsite, { recursive: true });
+  writeFileSync(join(bin, "docker"), [
+    "#!/usr/bin/env bash",
+    `printf '%s\\n' "$*" >> ${dockerLog}`,
+    'case "$*" in',
+    "  *pg_dump*) printf 'DUMPBYTES' ;;",
+    "  *psql*) printf '12\\n' ;;",
+    "esac",
+    "exit 0",
+  ].join("\n"), { mode: 0o755 });
+  writeFileSync(join(bin, "age"), [
+    "#!/usr/bin/env bash",
+    'out=""; args=("$@")',
+    'for ((i=0;i<$#;i++)); do [ "${args[$i]}" = "-o" ] && out="${args[$((i+1))]}"; done',
+    'cp "${args[${#args[@]}-1]}" "$out"',
+  ].join("\n"), { mode: 0o755 });
+  writeFileSync(join(bin, "scp"), [
+    "#!/usr/bin/env bash",
+    'args=("$@"); files=(); i=0',
+    'while [ $i -lt ${#args[@]} ]; do',
+    '  a="${args[$i]}"',
+    '  case "$a" in',
+    '    -i|-o) i=$((i+2)); continue ;;',
+    '    -*) i=$((i+1)); continue ;;',
+    '    *) files+=("$a"); i=$((i+1)) ;;',
+    "  esac",
+    "done",
+    'unset "files[${#files[@]}-1]"',
+    'cp "${files[@]}" "$WARMAP_TEST_OFFSITE/"',
+  ].join("\n"), { mode: 0o755 });
+  writeFileSync(join(bin, "ssh"), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o755 });
+  writeFileSync(join(bin, "pg_dump"), "#!/usr/bin/env bash\nprintf 'DUMPBYTES'\n", { mode: 0o755 });
+  writeFileSync(join(bin, "psql"), "#!/usr/bin/env bash\necho 12\n", { mode: 0o755 });
+  return { bin, dockerLog, offsite };
+}
+
+function backupEnv(dir: string, extras: Record<string, string>): Record<string, string> {
+  const key = join(dir, "id_ed25519");
+  if (!existsSync(key)) writeFileSync(key, "dummy-key\n");
+  return {
+    BACKUP_AGE_RECIPIENT: "age1dummy",
+    BACKUP_SSH_HOST: "backup.example.com",
+    BACKUP_SSH_USER: "warmap",
+    BACKUP_SSH_PATH: "/srv/backups",
+    BACKUP_SSH_KEY_PATH: key,
+    ...extras,
+  };
+}
+
+describe("backup.sh source modes", () => {
+  it("defaults to compose mode: dumps inside the postgres container without DATABASE_URL or password", () => {
+    const dir = tempDir();
+    const { bin, dockerLog, offsite } = createBackupStubs(dir);
+    const composeFile = join(dir, "docker-compose.yml");
+    writeFileSync(composeFile, "services: {}\n");
+    const composeEnv = join(dir, "infra.env");
+    writeFileSync(composeEnv, `POSTGRES_PASSWORD=${SECRET_PASSWORD}\n`);
+    const result = run(BACKUP_SH, [], backupEnv(dir, {
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      WARMAP_COMPOSE_FILE: composeFile,
+      WARMAP_ENV_FILE: composeEnv,
+      WARMAP_TEST_OFFSITE: offsite,
+      BACKUP_LOCAL_DIR: join(dir, "local"),
+      DATABASE_URL: "",
+    }));
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    const calls = readFileSync(dockerLog, "utf8");
+    expect(calls).toContain("exec -T postgres pg_dump -U warmap -d warmap --format=custom --no-owner --no-privileges");
+    expect(calls).toContain("exec -T postgres psql -U warmap -d warmap");
+    // 密码只存在于 env 文件路径，绝不进入命令行、脚本输出或 docker 参数
+    expect(calls).not.toContain(SECRET_PASSWORD);
+    expect(result.stdout).not.toContain(SECRET_PASSWORD);
+    expect(result.stderr).not.toContain(SECRET_PASSWORD);
+    const local = readdirSync(join(dir, "local"));
+    expect(local.some((f) => f.endsWith(".dump.age"))).toBe(true);
+    expect(local.some((f) => f.endsWith(".dump.age.sha256"))).toBe(true);
+    expect(local.some((f) => f.endsWith(".dump.meta.json"))).toBe(true);
+    expect(readdirSync(offsite).length).toBe(3);
+  });
+
+  it("dry-run reports compose mode, the exact command shape and writes nothing", () => {
+    const dir = tempDir();
+    const result = run(BACKUP_SH, ["--dry-run"], backupEnv(dir, { BACKUP_LOCAL_DIR: join(dir, "local"), DATABASE_URL: "" }));
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("source_mode=compose");
+    expect(result.stdout).toContain("docker compose -f");
+    expect(result.stdout).toContain("exec -T postgres pg_dump -U warmap -d warmap --format=custom --no-owner --no-privileges");
+    expect(result.stdout).toContain("未执行任何写入、未连接数据库、未触达远端");
+    expect(existsSync(join(dir, "local"))).toBe(false);
+  });
+
+  it("still supports BACKUP_SOURCE_MODE=url with host pg_dump/psql", () => {
+    const dir = tempDir();
+    const { bin, dockerLog, offsite } = createBackupStubs(dir);
+    const result = run(BACKUP_SH, [], backupEnv(dir, {
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      BACKUP_SOURCE_MODE: "url",
+      DATABASE_URL: "postgres://user:url-secret@db.internal:5432/warmap",
+      WARMAP_TEST_OFFSITE: offsite,
+      BACKUP_LOCAL_DIR: join(dir, "local"),
+    }));
+    expect(result.status).toBe(0);
+    expect(readFileSync(dockerLog, "utf8")).toBe("");
+    expect(result.stdout).toContain("source_mode=url");
+    expect(result.stdout).not.toContain("url-secret");
+    expect(readdirSync(join(dir, "local")).some((f) => f.endsWith(".dump.age"))).toBe(true);
+  });
+
+  it("url mode requires DATABASE_URL", () => {
+    const dir = tempDir();
+    const result = run(BACKUP_SH, ["--dry-run"], backupEnv(dir, { BACKUP_SOURCE_MODE: "url", DATABASE_URL: "" }));
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("DATABASE_URL");
+  });
+
+  it("rejects an unknown source mode with a readable message", () => {
+    const dir = tempDir();
+    const result = run(BACKUP_SH, ["--dry-run"], backupEnv(dir, { BACKUP_SOURCE_MODE: "bogus" }));
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("只支持 compose 或 url");
+    expect(result.stderr).not.toContain("unbound variable");
   });
 });
 

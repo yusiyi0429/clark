@@ -69,15 +69,20 @@ UPDATE radar_config SET version = version + 1, updated_at = now(), sources = jso
 
 ### 每日备份（宿主机 cron）
 
+默认 `BACKUP_SOURCE_MODE=compose`：PostgreSQL 只在 Compose 内网且**从不映射端口**，宿主机通过 `docker compose exec -T postgres pg_dump/psql` 在容器内备份；脚本不读取/拼接/打印 `POSTGRES_PASSWORD`。
+
 ```cron
-15 3 * * * DATABASE_URL=postgres://... BACKUP_AGE_RECIPIENT=age1... BACKUP_SSH_HOST=... BACKUP_SSH_USER=... \
+PATH=/opt/homebrew/opt/libpq/bin:/opt/homebrew/bin:/usr/bin:/bin
+15 3 * * * BACKUP_AGE_RECIPIENT=age1... BACKUP_SSH_HOST=... BACKUP_SSH_USER=... \
   BACKUP_SSH_PATH=/srv/warmap-backups BACKUP_SSH_KEY_PATH=/root/.ssh/warmap_backup \
+  WARMAP_ENV_FILE=/path/to/repo/infra/.env \
   /path/to/repo/infra/backup/backup.sh >> /var/log/warmap-backup.log 2>&1
 ```
 
-- 需要宿主机安装 `postgresql-client`（`pg_dump`/`psql`）与 `age`。
-- 流程：`pg_dump -Fc` → 非空校验 → `age -r` 加密 → checksum + meta（含 schema version）→ `scp` 异机 → 异机与本机清理 `BACKUP_RETENTION_DAYS`（≥7）天前文件 → 删除本机明文。
-- 先用 `backup.sh --dry-run` 验证配置；真实执行后确认异机目录存在 `.age` 与 `.sha256`。
+- compose 模式只需宿主机有 `docker`、`age`、`ssh`/`scp`；`docker compose` 会在容器内使用 image 自带的 `pg_dump`/`psql`。
+- 只有 `BACKUP_SOURCE_MODE=url`（外部库）与 `restore.sh` 才需要宿主 `pg_dump`/`psql`/`psql`；macOS 上 libpq 是 keg-only，用上面的 `PATH` 前缀（`/opt/homebrew/opt/libpq/bin`）即可，不需全局链接。
+- 流程：容器内 `pg_dump -Fc` → 非空校验 → 容器内 `psql` 读 schema version → `age -r` 加密 → checksum + meta → `scp` 异机 → 异机与本机清理 `BACKUP_RETENTION_DAYS`（≥7）天前文件 → 删除本机明文。
+- 先用 `backup.sh --dry-run` 验证配置（会报告 source mode、将执行的 dump/schema 命令与远端流程，零写入）；真实执行后确认异机目录存在 `.age` 与 `.sha256`。
 
 ### 恢复演练（只恢复到空库）
 
