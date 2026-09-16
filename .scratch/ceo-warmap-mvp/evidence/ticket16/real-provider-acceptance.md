@@ -49,6 +49,38 @@ docker compose -f infra/docker-compose.yml -f infra/staging/wechat-login.overrid
 - AC7 真实人员 seed：本次只用 `company-people.example.json` 验证模型/Transcript 链，未装载项目授权人真实名单。
 - AC8/AC9 异机加密备份与恢复演练：缺 `BACKUP_SSH_*`/`BACKUP_AGE_*` 与真实异机目标（脚本本地往返已在 `verification.md` §3 验证）。
 
+## AC5 真实尝试（2026-09-16，未完成，按“失败一次即停”执行）
+
+管理员扫码完成后，对唯一精确候选“量子位 / QbitAI”执行受限验收；每一步只调用一次，失败后停止、未重试、未换号、未用关键词。
+
+| 步骤 | 调用 | 结果 |
+|---|---|---|
+| 1 | MCP `search_accounts({query:"量子位"})` ×1 | 5 个候选；唯一精确项 nickname=`量子位` alias=`QbitAI`，masked fakeid `MzIz...Mw==` |
+| 2 | MCP `subscribe_account({fakeid})` ×1 | `success=true`（未订阅近似项） |
+| 2 | MCP `list_subscriptions()` ×1 | 订阅数=1，目标存在；sidecar 尚未回填 nickname/alias |
+| 3 | MCP `get_recent_articles({since:0,limit:1,source_id})` ×1 | **articles=0** |
+| 3 | MCP `read_article` | 未调用（无文章可读，0 次） |
+| 4 | Radar→Candidate→Signal 管线 | 未执行（无来源可采集） |
+
+The sidecar DB: `subscriptions=1`、`articles=0`。
+
+触发侧车文档化的首次订阅立即拉取（`POST /api/rss/poll` ×1，非 MCP、非关键词搜索、仅拉取已订阅账号）返回 `success=true`，
+但侧车日志显示 WeChat 账号文章列表接口返回业务错：`ret=200013 err_msg='freq control'`（微信频率控制），因此未写入任何文章。
+
+- 未做任何自动重试；未对 `get_recent_articles` 反复轮询；未改用其它账号或关键词/site 搜索。
+- AC5 记为 **BLOCKED（外部微信频率控制）**，不勾选。
+- 下一步：等微信频控解除后（或按 sidecar 文档配置 `PROXY_URLS` SOCKS5 代理池降低风控）再触发一次轮询，然后从第 3 步（MCP `get_recent_articles`）重新验收并进入 Radar 管线；完整 `fakeid` 不写入任何证据。
+- 本步未做代码/生产语义修改；临时验收脚本已删除。
+
+## 收尾：扫码端口回退（第 7 步，已执行）
+
+```bash
+docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --force-recreate wechat
+```
+
+- `warmap-wechat-1` healthy，`PORTS` 仅 `5000/tcp`（无宿主发布，login override 的 `127.0.0.1:15000` 已撤）；宿主 `http://127.0.0.1:15000` 不可达。
+- 未删除 `wechat_data` 卷；`.credentials.json` 不变，容器重建后 `logged_in=true`（登录态留在命名卷，验证了凭据持久化）。
+
 ## 增量内部评审（Herdr · deepseek-flash 只读）
 
 - 命令：对 `t16-reviewer` 发增量提示，只审 `6619c39` 以来的新增（验收脚本、override 端口、runbook、证据、票据勾选）。

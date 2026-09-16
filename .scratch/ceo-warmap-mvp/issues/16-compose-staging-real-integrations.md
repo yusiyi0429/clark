@@ -61,10 +61,17 @@ Blocked by: 15 建立全链测试、观测与安全门槛
 - 公众号 sidecar：`docker compose -f infra/docker-compose.yml -f infra/staging/wechat-login.override.yml up -d wechat` 后 `/api/health`=200、`/mcp` 无 Token=401、带 Token `initialize`=200；数据卷仅新 `rss.db`、无凭证 → **等待管理员扫码**。本机扫码 URL：`http://127.0.0.1:15000/login.html`；未调用任何账号级工具、未模拟订阅、未用关键词替代。
 - `infra/staging/wechat-login.override.yml` 宿主端口改为 `${WECHAT_LOGIN_PORT:-15000}`（避开 macOS AirPlay 占用的 5000），runbook §5 同步。
 
+### AC5 公众号尝试（2026-09-16，BLOCKED，未勾选）
+
+- 管理员扫码后：MCP `search_accounts("量子位")` ×1 → 唯一精确项 nickname=`量子位`/alias=`QbitAI`（masked fakeid `MzIz...Mw==`）；MCP `subscribe_account` ×1 `success=true`；MCP `list_subscriptions` ×1 订阅数=1 且目标存在；MCP `get_recent_articles(limit=1)` ×1 → **articles=0**；未调用 `read_article`。
+- 侧车文档化的首次订阅立即拉取 `POST /api/rss/poll` ×1 返回 success，但侧车日志显示 WeChat 文章列表接口 `ret=200013 err_msg='freq control'`（微信频控），未写入任何文章；`subscriptions=1`、`articles=0`。
+- 未重试、未换号、未用关键词/site 搜索、未改生产语义；Radar→Candidate→Signal 管线因无来源未执行。AC5 保持未勾，等频控解除/配 `PROXY_URLS` 后从 `get_recent_articles` 重验。
+- 收尾：`docker compose -f infra/docker-compose.yml up -d --force-recreate wechat` 撤销 15000 宿主端口（PORTS 仅 `5000/tcp`），容器 healthy，`wechat_data` 卷未删且重建后仍 `logged_in=true`。
+
 ### 仍阻塞（真实外部验收，必须真实凭据与实际输出）
 
 - 已 SET 并已用于真实验收：`BOCHA_API_KEY`、`PI_BASE_URL`、`PI_API_KEY`、`LIGHT_MODEL`、`HEAVY_MODEL`、`COMPACTION_MODEL`、`WECHAT_MCP_TOKEN`、`WECHAT_MCP_URL`（已规范为 `http://wechat:5000/mcp`）、`WECHAT_SITE_URL`。
-- AC5 公众号：等待管理员在 `http://127.0.0.1:15000/login.html` 扫码并订阅目标公众号；之后把 fakeid 写入 `radar_config.sources`（runbook §5）再跑一次 manual scan（1 账号 1 轮），不得用关键词替代。
+- AC5 公众号：侧车已登录且已订阅 `量子位/QbitAI`，但首次拉取被微信频控（`ret=200013 freq control`）阻挡，`articles=0`；需频控解除或配 `PROXY_URLS` 后重拉，再跑账号级 `get_recent_articles` → Radar 管线（1 篇、1 次 light 候选）。
 - AC7 真实人员 seed：`COMPANY_PEOPLE_SEED` 当前指向 `company-people.example.json`；需项目授权人真实名单并重启 API。
 - AC8/AC9 异机备份与恢复：需 `BACKUP_AGE_RECIPIENT`、`BACKUP_AGE_IDENTITY`、`BACKUP_SSH_HOST`、`BACKUP_SSH_USER`、`BACKUP_SSH_PATH`、`BACKUP_SSH_KEY_PATH`、`BACKUP_RETENTION_DAYS` 与真实异机目标（脚本本地真实往返已在 `verification.md` §3 验证）。
 - AC1 真实 TLS 签发需可解析的 staging 域名与公网 80/443（当前 `PUBLIC_DOMAIN=localhost` 仅验证配置与路由）。
