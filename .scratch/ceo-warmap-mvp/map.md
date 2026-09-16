@@ -30,7 +30,7 @@ Spec: `spec.md`
 | 08 | 完成 Issue 预研与直接决定闭环 | 07 | resolved |
 | 09 | 完成 Meeting 创建与会前准备 | 03, 05, 07 | resolved |
 | 10 | 导入 Transcript 并抽取 MeetingOutcome | 09 | resolved |
-| 11 | 逐项确认 MeetingOutcome 效果 | 06, 10 | ready-for-agent |
+| 11 | 逐项确认 MeetingOutcome 效果 | 06, 10 | resolved |
 | 12 | 生成并协商 MonthlyPlan | 03, 05, 08 | resolved |
 | 13 | 签发 MonthlyPlan 并刷新业务投影 | 06, 12 | ready-for-agent |
 | 14 | 完成真实数据驱动的像素级 Web | 01, 08, 11, 13 | ready-for-agent |
@@ -41,10 +41,9 @@ Spec: `spec.md`
 
 ## Current frontier
 
-- 11 逐项确认 MeetingOutcome 效果
 - 13 签发 MonthlyPlan 并刷新业务投影
 
-11 与 13 可以并行；其他 ticket 必须等待其真实 blocker resolved。
+13 正在做集成 rebase；完成后解锁 14。
 
 ## Results
 
@@ -59,5 +58,6 @@ Spec: `spec.md`
 - 09 resolved：提交 `8f85295`，跑通 Issue/DRI → Meeting、stable Person participant、Preflight、准备状态、Supplement Request 和 scheduled cancel。rebase 后 Herdr reviewer 确认 08/09 两条链无覆盖；contracts 15 + API 134 测试、typecheck/build 通过。
 - 12 resolved：提交 `3818f78`，跑通 Company Day 唯一 MonthlyPlan draft、严格候选、显式 retry、versioned 编辑、stable Person todo 与 DRI feedback 幂等协商。Herdr deepseek-flash 双轴 review 无 blocking；contracts 19 + API 146 测试、typecheck/build 通过。
 - 10 resolved：提交 `07c86d9`，跑通 Transcript v1 双入口整份校验、scheduled → held、严格 MeetingOutcome 抽取、失败重试和无 confirmed effect 时的危险替换。rebase 后 API 171 + contracts 22 测试、typecheck/build 通过。
+- 11 resolved：提交 `2fabfa6`，跑通 MeetingOutcome 逐项 confirm/dismiss、精确 Issue Receipt、DRI Handoff、reopenWhen Radar anchor 与统一 effect 撤回。Herdr deepseek-flash 三轮双轴 review 无 blocking；API 190 + contracts 25 测试、typecheck/build 通过。
 
 ## Comments
