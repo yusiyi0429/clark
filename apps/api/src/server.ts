@@ -5,7 +5,8 @@ import { Pool } from "pg";
 import { createRadarService } from "./radar.js";
 import { createRadarAgentAssessor } from "./radarAgent.js";
 import { createRadarScheduler } from "./radarScheduler.js";
-import { createBraveRadarWebAdapter, createWechatAccountHttpAdapter } from "./radarSources.js";
+import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "./radarSources.js";
+import { createBochaWebSearchAdapter } from "./webSearch.js";
 import { recoverInterruptedResearch } from "./issues.js";
 import { loadCompanyMemory } from "./companyMemory.js";
 import { createResearchService } from "./research.js";
@@ -68,10 +69,10 @@ const researchService = createResearchService({
 const radarService = createRadarService({
   pool,
   // Provider 未配置时不阻断启动：Radar Card 如实显示未配置（Ticket 16 装载真实凭据）
-  web: createBraveRadarWebAdapter({ apiKey: process.env.SEARCH_API_KEY }),
-  wechat: createWechatAccountHttpAdapter({
-    endpoint: process.env.WECHAT_PROVIDER,
-    credentials: process.env.WECHAT_CREDENTIALS,
+  web: createBochaRadarWebAdapter({ apiKey: process.env.BOCHA_API_KEY }),
+  wechat: createWechatMcpAdapter({
+    url: process.env.WECHAT_MCP_URL,
+    token: process.env.WECHAT_MCP_TOKEN,
   }),
   assessor: createRadarAgentAssessor({
     query: pool.query.bind(pool),
@@ -106,7 +107,14 @@ await recoverInterruptedPreflight(pool.query.bind(pool));
 await monthlyPlanService.recoverInterrupted();
 // Ticket 10：崩溃留下的未完成会后抽取同样标为可见 failed，等待 CEO 显式重试
 await recoverInterruptedOutcome(pool.query.bind(pool));
-const app = await buildApp({ pool, env, radarService, researchService, monthlyPlanService });
+const app = await buildApp({
+  pool,
+  env,
+  radarService,
+  researchService,
+  monthlyPlanService,
+  webSearch: createBochaWebSearchAdapter({ apiKey: process.env.BOCHA_API_KEY }),
+});
 app.addHook("onClose", async () => {
   scheduler.close();
   monthlyScheduler.close();

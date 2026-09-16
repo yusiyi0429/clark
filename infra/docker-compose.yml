@@ -1,5 +1,7 @@
 # CEO WarMap 单机 Compose（.tech/08）。
-# 只有 edge 暴露公网端口；web/api/postgres 仅内网。
+# 只有 edge 暴露公网端口；web/api/postgres/wechat 仅内网。
+# migration 由 API 启动前内联执行（apps/api/src/migrate.ts：advisory lock、只向前、失败不 listen），
+# 不存在自动 down/rollback；回滚依赖部署前备份（infra/backup）与旧镜像。
 name: warmap
 
 services:
@@ -16,6 +18,29 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+
+  # 公众号账号级来源的独立 AGPL sidecar：官方镜像、不 vendor 源码、无 ports（不经 Caddy）。
+  # WarMap API 只经内网 MCP 调用它并持静态 Token；微信 Cookie 只存在 sidecar 的 wechat_data 卷。
+  wechat:
+    # AGPL sidecar：钉 tag + digest，避免 tag 重推静默换代码（供应链接口与来源可审计）
+    image: tmwgsicp/wechat-download-api:1.7.0@sha256:4723fcbbda1e4c28edb605760fade4e5815636a087d25bf0dfa7ddd397e82c3a
+    environment:
+      TZ: Asia/Shanghai
+      ENABLE_MCP: "1"
+      MCP_TOKEN: ${WECHAT_MCP_TOKEN:-}
+      # DNS-rebinding 白名单必须包含 API 访问用的 Host（wechat:5000），否则 MCP 拒绝内网调用
+      MCP_RESOURCE_URL: http://wechat:5000/mcp
+      SITE_URL: ${WECHAT_SITE_URL:-http://localhost:5000}
+      # MVP 不配代理池：关闭正文抓取，只取已抓取的文章元数据，降低账号风控风险
+      RSS_FETCH_FULL_CONTENT: "false"
+    volumes:
+      - wechat_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   api:
     build:
@@ -37,10 +62,11 @@ services:
       LIGHT_MODEL: ${LIGHT_MODEL:?LIGHT_MODEL required}
       HEAVY_MODEL: ${HEAVY_MODEL:?HEAVY_MODEL required}
       COMPACTION_MODEL: ${COMPACTION_MODEL:?COMPACTION_MODEL required}
-      # Radar Provider 可选：缺失时 Radar Card 如实显示未配置
-      SEARCH_API_KEY: ${SEARCH_API_KEY:-}
-      WECHAT_PROVIDER: ${WECHAT_PROVIDER:-}
-      WECHAT_CREDENTIALS: ${WECHAT_CREDENTIALS:-}
+      # Radar Provider 可选：缺失时 Radar Card 如实显示未配置。
+      # 唯一 Web Search Provider 为博查；公众号只经内网 MCP sidecar，账号级、非关键词替代。
+      BOCHA_API_KEY: ${BOCHA_API_KEY:-}
+      WECHAT_MCP_URL: ${WECHAT_MCP_URL:-http://wechat:5000/mcp}
+      WECHAT_MCP_TOKEN: ${WECHAT_MCP_TOKEN:-}
       BUILD_SHA: ${BUILD_SHA:-dev}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-warmap}
@@ -50,6 +76,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      wechat:
+        condition: service_started
 
   web:
     build:
@@ -78,5 +106,6 @@ services:
 
 volumes:
   pgdata:
+  wechat_data:
   caddy_data:
   caddy_config:
