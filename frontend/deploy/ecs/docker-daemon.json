@@ -1,8 +1,0 @@
-{
-  "data-root": "/srv/tokenhub/docker",
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "20m",
-    "max-file": "5"
-  }
-}

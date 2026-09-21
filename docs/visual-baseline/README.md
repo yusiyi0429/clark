@@ -43,6 +43,8 @@ tools/visual-baseline/         ← 可重复采集工具（fixture.mjs + capture
 
 ## 复现方法
 
+> Ticket 18 后旧 `frontend/` 已删除，以下步骤为历史记录，无法再执行；本目录截图与 evidence 为冻结产物。
+
 前置：Node 22+、pnpm、本机 Google Chrome。
 
 ```bash
