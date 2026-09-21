@@ -53,6 +53,11 @@ describe("responsive workspace CSS", () => {
     expect(css("./issue-workspace.module.css")).toContain(".unknown{grid-area:judgment;");
   });
 
+  it("keeps the Radar feed at the designed 1680 版心 with a ≥40px horizontal gutter", () => {
+    const source = css("./radar-feed.module.css");
+    expect(source).toContain(".feed{max-width:1680px;margin:auto;padding:0 40px 80px;");
+  });
+
   it("preserves compact Access geometry and 42px coarse-pointer notification controls", () => {
     expect(css("./access.module.css")).toContain("@media (min-width: 561px) {");
     expect(css("./notifications.module.css")).toContain("@media(pointer:coarse){.railLock button{width:42px;height:42px}}");
