@@ -1,0 +1,241 @@
+ Image warmap-web Building 
+ Image warmap-api Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 971B done
+#1 DONE 0.0s
+
+#2 [web internal] load build definition from Dockerfile
+#2 transferring dockerfile: 732B done
+#2 DONE 0.0s
+
+#3 [api internal] load build definition from Dockerfile
+#3 transferring dockerfile: 601B 0.0s done
+#3 DONE 0.0s
+
+#4 [api internal] load metadata for docker.io/library/node:22-alpine
+#4 DONE 0.0s
+
+#5 [web internal] load .dockerignore
+#5 transferring context: 441B done
+#5 transferring context: 441B done
+#5 DONE 0.0s
+
+#6 [api 1/7] FROM docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+#6 resolve docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 0.0s done
+#6 DONE 0.0s
+
+#7 [api internal] load build context
+#7 transferring context: 114.52kB 0.0s done
+#7 DONE 0.0s
+
+#8 [api 4/7] COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+#8 CACHED
+
+#9 [api 2/7] RUN npm install -g pnpm@11.20.0
+#9 CACHED
+
+#10 [api 3/7] WORKDIR /repo
+#10 CACHED
+
+#11 [api 5/7] COPY packages/contracts packages/contracts
+#11 CACHED
+
+#12 [web internal] load build context
+#12 transferring context: 787.02kB 0.1s done
+#12 DONE 0.1s
+
+#11 [web 5/7] COPY packages/contracts packages/contracts
+#11 CACHED
+
+#13 [web build 6/9] COPY apps/web/package.json apps/web/
+#13 CACHED
+
+#9 [web 2/7] RUN npm install -g pnpm@11.20.0
+#9 CACHED
+
+#10 [web 3/7] WORKDIR /repo
+#10 CACHED
+
+#14 [web build 4/9] COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+#14 CACHED
+
+#15 [web build 5/9] COPY packages/contracts packages/contracts
+#15 CACHED
+
+#16 [web build 7/9] RUN pnpm install --frozen-lockfile
+#16 CACHED
+
+#17 [api 6/7] COPY apps/api apps/api
+#17 DONE 0.2s
+
+#18 [web build 8/9] COPY apps/web apps/web
+#18 DONE 0.1s
+
+#19 [web build 9/9] RUN pnpm --filter @warmap/web gen:client && pnpm --filter @warmap/web build
+#19 1.892 $ pnpm --filter @warmap/contracts build && node ../../packages/contracts/dist/openapi-cli.js > src/lib/api/openapi.json && openapi-typescript src/lib/api/openapi.json -o src/lib/api/schema.d.ts
+#19 3.723 $ tsc -p tsconfig.json
+#19 ...
+
+#20 [api 7/7] RUN pnpm install --frozen-lockfile
+#20 2.371 Scope: all 3 workspace projects
+#20 2.580 ? Verifying lockfile against supply-chain policies (588 entries)...
+#20 2.598 Lockfile is up to date, resolution step is skipped
+#20 2.987 Progress: resolved 1, reused 0, downloaded 0, added 0
+#20 3.135 Packages: +335
+#20 3.135 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#20 3.998 Progress: resolved 335, reused 0, downloaded 0, added 0
+#20 4.627 Packages are hard linked from the content-addressable store to the virtual store.
+#20 4.627   Content-addressable store is at: /root/.local/share/pnpm/store/v11
+#20 4.627   Virtual store is at:             node_modules/.pnpm
+#20 5.002 Progress: resolved 335, reused 0, downloaded 7, added 7
+#20 6.014 Progress: resolved 335, reused 0, downloaded 27, added 18
+#20 6.440 [WARN] Tarball download average speed 17 KiB/s (size 28 KiB) is below 50 KiB/s: https://registry.npmjs.org/semver/-/semver-7.8.0.tgz (GET)
+#20 6.636 [WARN] Tarball download average speed 17 KiB/s (size 22 KiB) is below 50 KiB/s: https://registry.npmjs.org/express/-/express-5.2.1.tgz (GET)
+#20 6.638 [WARN] Tarball download average speed 5 KiB/s (size 9 KiB) is below 50 KiB/s: https://registry.npmjs.org/secure-json-parse/-/secure-json-parse-4.1.0.tgz (GET)
+#20 6.813 [WARN] Tarball download average speed 8 KiB/s (size 13 KiB) is below 50 KiB/s: https://registry.npmjs.org/chalk/-/chalk-5.6.2.tgz (GET)
+#20 7.109 Progress: resolved 335, reused 0, downloaded 38, added 24
+#20 8.207 Progress: resolved 335, reused 0, downloaded 49, added 26
+#20 9.231 Progress: resolved 335, reused 0, downloaded 68, added 29
+#20 10.28 Progress: resolved 335, reused 0, downloaded 104, added 32
+#20 11.29 Progress: resolved 335, reused 0, downloaded 178, added 47
+#20 12.34 Progress: resolved 335, reused 0, downloaded 240, added 122
+#20 13.34 Progress: resolved 335, reused 0, downloaded 275, added 154
+#20 14.39 Progress: resolved 335, reused 0, downloaded 313, added 211
+#20 15.08 [WARN] Request took 12695ms: https://registry.npmjs.org/pnpm
+#20 15.15 
+#20 15.15    ╭─────────────────────────────────────────╮
+#20 15.15    │                                         │
+#20 15.15    │   Update available! 11.20.0 → 12.4.2.   │
+#20 15.15    │   Changelog: https://pnpm.io/v/12.4.2   │
+#20 15.15    │    To update, run: pnpm add -g pnpm     │
+#20 15.15    │                                         │
+#20 15.15    ╰─────────────────────────────────────────╯
+#20 15.15 
+#20 15.43 Progress: resolved 335, reused 0, downloaded 327, added 297
+#20 16.49 Progress: resolved 335, reused 0, downloaded 328, added 332
+#20 17.54 Progress: resolved 335, reused 0, downloaded 329, added 332
+#20 ...
+
+#19 [web build 9/9] RUN pnpm --filter @warmap/web gen:client && pnpm --filter @warmap/web build
+#19 17.70 ✨ openapi-typescript 7.13.0
+#19 18.30 🚀 src/lib/api/openapi.json → src/lib/api/schema.d.ts [607.4ms]
+#19 19.49 $ next build
+#19 20.51 ▲ Next.js 16.3.5 (Turbopack)
+#19 21.62 ✓ Running next.config.ts took 1109ms
+#19 21.63 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+#19 21.63 This information is used to shape Next.js' roadmap and prioritize features.
+#19 21.63 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+#19 21.63 https://nextjs.org/telemetry
+#19 21.63 
+#19 21.70 
+#19 21.82   Creating an optimized production build ...
+#19 ...
+
+#20 [api 7/7] RUN pnpm install --frozen-lockfile
+#20 18.89 Progress: resolved 335, reused 0, downloaded 329, added 333
+#20 19.58 Progress: resolved 335, reused 0, downloaded 331, added 335, done
+#20 27.14 ✓ Lockfile passes supply-chain policies (588 entries in 24.5s)
+#20 27.19 .../esbuild@0.28.1/node_modules/esbuild postinstall$ node install.js
+#20 27.20 .../esbuild@0.28.2/node_modules/esbuild postinstall$ node install.js
+#20 27.62 .../esbuild@0.28.1/node_modules/esbuild postinstall: Done
+#20 27.70 .../esbuild@0.28.2/node_modules/esbuild postinstall: Done
+#20 28.66 
+#20 28.66 devDependencies:
+#20 28.66 + typescript 5.9.3
+#20 28.66 
+#20 29.13 Done in 28.5s using pnpm v11.20.0
+#20 DONE 31.7s
+
+#19 [web build 9/9] RUN pnpm --filter @warmap/web gen:client && pnpm --filter @warmap/web build
+#19 ...
+
+#21 [api] exporting to image
+#21 exporting layers
+#21 ...
+
+#19 [web build 9/9] RUN pnpm --filter @warmap/web gen:client && pnpm --filter @warmap/web build
+#19 36.14 ✓ Compiled successfully in 12.3s
+#19 36.16   Running TypeScript ...
+#19 44.48   Finished TypeScript in 8.3s ...
+#19 44.51   Collecting page data using 9 workers ...
+#19 46.64   Generating static pages using 9 workers (0/6) ...
+#19 46.71   Generating static pages using 9 workers (1/6) 
+#19 46.77   Generating static pages using 9 workers (2/6) 
+#19 46.79   Generating static pages using 9 workers (4/6) 
+#19 46.85 ✓ Generating static pages using 9 workers (6/6) in 211ms
+#19 46.86   Finalizing page optimization ...
+#19 47.42 
+#19 47.42 Route (app)
+#19 47.42 ┌ ƒ /
+#19 47.42 ├ ○ /_not-found
+#19 47.42 ├ ƒ /access
+#19 47.42 ├ ƒ /healthz
+#19 47.42 ├ ƒ /issues/[id]
+#19 47.42 ├ ƒ /meetings/[id]
+#19 47.42 ├ ƒ /plans/[period]
+#19 47.42 ├ ƒ /radar
+#19 47.42 └ ƒ /radar/signals/[id]
+#19 47.42 
+#19 47.42 
+#19 47.42 ○  (Static)   prerendered as static content
+#19 47.42 ƒ  (Dynamic)  server-rendered on demand
+#19 47.42 
+#19 DONE 48.5s
+
+#21 [api] exporting to image
+#21 ...
+
+#22 [web stage-1 2/4] WORKDIR /app
+#22 CACHED
+
+#23 [web stage-1 3/4] COPY --from=build --chown=node:node /repo/apps/web/.next/standalone ./
+#23 DONE 0.6s
+
+#21 [api] exporting to image
+#21 ...
+
+#24 [web stage-1 4/4] COPY --from=build --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
+#24 DONE 0.1s
+
+#25 [web] exporting to image
+#25 exporting layers
+#25 exporting layers 1.9s done
+#25 exporting manifest sha256:44222e99642c06f2cfdbb7bf8cebc8e26761c9090a05c9d53c75cf866ecfcba8 done
+#25 exporting config sha256:fa841a893382824b8cf1013916bf82ef0f55b413a42123c430919793a89f4bff done
+#25 exporting attestation manifest sha256:0b017a4e3c5b8650a0537899220a1bd80eee7d2195f80fef9fc13d9294445a56 0.0s done
+#25 exporting manifest list sha256:c2ace585e90259f43c6b643fe6ff12798ad0d5f2b932944338ab705bec6d1183 0.0s done
+#25 naming to docker.io/library/warmap-web:latest done
+#25 unpacking to docker.io/library/warmap-web:latest
+#25 unpacking to docker.io/library/warmap-web:latest 0.5s done
+#25 DONE 2.4s
+
+#26 [web] resolving provenance for metadata file
+#26 DONE 0.0s
+
+#21 [api] exporting to image
+#21 exporting layers 22.8s done
+#21 exporting manifest sha256:794a302fe3cc3be6856501a684976f6f676a6ce2d68bf6ddb53dddb0fe4728a0 done
+#21 exporting config sha256:c14d3d44429817bfaaa19edf5c5181b78dbce1a51ce6e98da7075a4034d9b990 done
+#21 exporting attestation manifest sha256:f8db9e314886641ecf5e2412e0e62dd9a89ef168f22b0d812e3634a0d75c5458 done
+#21 exporting manifest list sha256:3bd13465e56327a28b180152372a91e7d36f9a9cc247da2d46c3547c1671af2a done
+#21 naming to docker.io/library/warmap-api:latest done
+#21 unpacking to docker.io/library/warmap-api:latest
+#21 unpacking to docker.io/library/warmap-api:latest 8.2s done
+#21 DONE 31.1s
+
+#27 [api] resolving provenance for metadata file
+#27 DONE 0.0s
+ Image warmap-api Built 
+ Image warmap-web Built 
+ Container warmap-wechat-1 Running 
+ Container warmap-postgres-1 Running 
+ Container warmap-api-1 Recreate 
+ Container warmap-api-1 Recreated 
+ Container warmap-web-1 Recreate 
+ Container warmap-web-1 Recreated 
+ Container warmap-postgres-1 Waiting 
+ Container warmap-postgres-1 Healthy 
+ Container warmap-api-1 Starting 
+ Container warmap-api-1 Started 
+ Container warmap-web-1 Starting 
+ Container warmap-web-1 Started 

@@ -1,0 +1,117 @@
+ Image warmap-api Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 529B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 601B 0.0s done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:22-alpine
+#3 DONE 0.0s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 441B done
+#4 DONE 0.0s
+
+#5 [1/7] FROM docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+#5 resolve docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 0.0s done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 771.01kB 0.1s done
+#6 DONE 0.1s
+
+#7 [2/7] RUN npm install -g pnpm@11.20.0
+#7 CACHED
+
+#8 [3/7] WORKDIR /repo
+#8 CACHED
+
+#9 [4/7] COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+#9 CACHED
+
+#10 [5/7] COPY packages/contracts packages/contracts
+#10 CACHED
+
+#11 [6/7] COPY apps/api apps/api
+#11 DONE 0.1s
+
+#12 [7/7] RUN pnpm install --frozen-lockfile
+#12 1.934 Scope: all 3 workspace projects
+#12 2.182 ? Verifying lockfile against supply-chain policies (588 entries)...
+#12 2.202 Lockfile is up to date, resolution step is skipped
+#12 2.476 Progress: resolved 1, reused 0, downloaded 0, added 0
+#12 2.582 Packages: +335
+#12 2.582 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#12 3.499 Progress: resolved 335, reused 0, downloaded 0, added 0
+#12 3.638 Packages are hard linked from the content-addressable store to the virtual store.
+#12 3.638   Content-addressable store is at: /root/.local/share/pnpm/store/v11
+#12 3.638   Virtual store is at:             node_modules/.pnpm
+#12 4.409 
+#12 4.409    ╭─────────────────────────────────────────╮
+#12 4.409    │                                         │
+#12 4.409    │   Update available! 11.20.0 → 12.4.2.   │
+#12 4.409    │   Changelog: https://pnpm.io/v/12.4.2   │
+#12 4.409    │    To update, run: pnpm add -g pnpm     │
+#12 4.409    │                                         │
+#12 4.409    ╰─────────────────────────────────────────╯
+#12 4.409 
+#12 4.499 Progress: resolved 335, reused 0, downloaded 25, added 26
+#12 5.496 [WARN] Tarball download average speed 20 KiB/s (size 22 KiB) is below 50 KiB/s: https://registry.npmjs.org/eventsource-parser/-/eventsource-parser-3.1.1.tgz (GET)
+#12 5.500 Progress: resolved 335, reused 0, downloaded 46, added 46
+#12 5.573 [WARN] Tarball download average speed 27 KiB/s (size 28 KiB) is below 50 KiB/s: https://registry.npmjs.org/semver/-/semver-7.8.0.tgz (GET)
+#12 6.511 Progress: resolved 335, reused 0, downloaded 73, added 72
+#12 6.669 [WARN] Tarball download average speed 36 KiB/s (size 108 KiB) is below 50 KiB/s: https://registry.npmjs.org/@aws-sdk/client-bedrock-runtime/-/client-bedrock-runtime-3.1048.0.tgz (GET)
+#12 7.529 Progress: resolved 335, reused 0, downloaded 102, added 89
+#12 8.539 Progress: resolved 335, reused 0, downloaded 119, added 117
+#12 9.551 Progress: resolved 335, reused 0, downloaded 149, added 150
+#12 10.55 Progress: resolved 335, reused 0, downloaded 206, added 210
+#12 11.58 Progress: resolved 335, reused 0, downloaded 225, added 222
+#12 12.62 Progress: resolved 335, reused 0, downloaded 281, added 273
+#12 13.67 Progress: resolved 335, reused 0, downloaded 323, added 326
+#12 14.74 Progress: resolved 335, reused 0, downloaded 325, added 329
+#12 15.34 [WARN] Tarball download average speed 12 KiB/s (size 74 KiB) is below 50 KiB/s: https://registry.npmjs.org/qs/-/qs-6.16.0.tgz (GET)
+#12 15.75 Progress: resolved 335, reused 0, downloaded 326, added 329
+#12 16.55 [WARN] Request took 11011ms: https://registry.npmjs.org/@next%2Fswc-darwin-x64
+#12 16.80 [WARN] Request took 11280ms: https://registry.npmjs.org/@next%2Fenv
+#12 16.81 Progress: resolved 335, reused 0, downloaded 329, added 332
+#12 18.23 Progress: resolved 335, reused 0, downloaded 329, added 333
+#12 19.23 Progress: resolved 335, reused 0, downloaded 330, added 334
+#12 21.98 Progress: resolved 335, reused 0, downloaded 331, added 334
+#12 21.98 Progress: resolved 335, reused 0, downloaded 331, added 335, done
+#12 22.74 ✓ Lockfile passes supply-chain policies (588 entries in 20.5s)
+#12 22.76 .../esbuild@0.28.1/node_modules/esbuild postinstall$ node install.js
+#12 22.77 .../esbuild@0.28.2/node_modules/esbuild postinstall$ node install.js
+#12 23.09 .../esbuild@0.28.2/node_modules/esbuild postinstall: Done
+#12 23.09 .../esbuild@0.28.1/node_modules/esbuild postinstall: Done
+#12 23.36 
+#12 23.36 devDependencies:
+#12 23.36 + typescript 5.9.3
+#12 23.36 
+#12 23.51 Done in 23s using pnpm v11.20.0
+#12 DONE 25.6s
+
+#13 exporting to image
+#13 exporting layers
+#13 exporting layers 14.3s done
+#13 exporting manifest sha256:6fa3569cd0270213e8ff81a6028c43141d9b86e7176a7b4bddd00e1f007ea658 done
+#13 exporting config sha256:4a71bbb1a3e22f048d4b7ac258713e3325c79b8741abff51930abd836e02fed3 done
+#13 exporting attestation manifest sha256:661b7a6a7287ca0822832268a6072232d7fcef6748f477b7288d8b422ec38e05 done
+#13 exporting manifest list sha256:36e0c82b4db2368829db6803ea4f9faf1534f0e026364e30b749363812965f7a done
+#13 naming to docker.io/library/warmap-api:latest done
+#13 unpacking to docker.io/library/warmap-api:latest
+#13 unpacking to docker.io/library/warmap-api:latest 11.3s done
+#13 DONE 25.7s
+
+#14 resolving provenance for metadata file
+#14 DONE 0.0s
+ Image warmap-api Built 
+ Container warmap-postgres-1 Running 
+ Container warmap-wechat-1 Running 
+ Container warmap-api-1 Recreate 
+ Container warmap-api-1 Recreated 
+ Container warmap-postgres-1 Waiting 
+ Container warmap-postgres-1 Healthy 
+ Container warmap-api-1 Starting 
+ Container warmap-api-1 Started 

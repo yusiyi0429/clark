@@ -1,0 +1,472 @@
+ Image warmap-web Building 
+ Image warmap-api Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 971B done
+#1 DONE 0.0s
+
+#2 [web internal] load build definition from Dockerfile
+#2 transferring dockerfile: 732B 0.0s done
+#2 DONE 0.1s
+
+#3 [api internal] load build definition from Dockerfile
+#3 transferring dockerfile: 601B 0.0s done
+#3 DONE 0.1s
+
+#4 [web internal] load metadata for docker.io/library/node:22-alpine
+#4 DONE 0.1s
+
+#5 [web internal] load .dockerignore
+#5 transferring context: 441B done
+#5 DONE 0.0s
+
+#6 [api 1/7] FROM docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+#6 resolve docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 0.0s done
+#6 DONE 0.0s
+
+#7 [web internal] load build context
+#7 ...
+
+#8 [api internal] load build context
+#8 transferring context: 126.54kB 0.0s done
+#8 DONE 0.1s
+
+#9 [api 2/7] RUN npm install -g pnpm@11.20.0
+#9 CACHED
+
+#10 [api 3/7] WORKDIR /repo
+#10 CACHED
+
+#11 [api 4/7] COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+#11 CACHED
+
+#12 [api 5/7] COPY packages/contracts packages/contracts
+#12 DONE 0.1s
+
+#7 [web internal] load build context
+#7 transferring context: 806.50kB 0.2s done
+#7 DONE 0.2s
+
+#9 [web 2/7] RUN npm install -g pnpm@11.20.0
+#9 CACHED
+
+#10 [web 3/7] WORKDIR /repo
+#10 CACHED
+
+#11 [web 4/7] COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+#11 CACHED
+
+#12 [web 5/7] COPY packages/contracts packages/contracts
+#12 DONE 0.1s
+
+#13 [web build 5/9] COPY packages/contracts packages/contracts
+#13 CACHED
+
+#14 [web build 4/9] COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+#14 CACHED
+
+#15 [web build 6/9] COPY apps/web/package.json apps/web/
+#15 DONE 0.0s
+
+#16 [api 6/7] COPY apps/api apps/api
+#16 DONE 0.2s
+
+#17 [web build 7/9] RUN pnpm install --frozen-lockfile
+#17 3.489 Scope: all 3 workspace projects
+#17 3.922 ? Verifying lockfile against supply-chain policies (588 entries)...
+#17 3.962 Lockfile is up to date, resolution step is skipped
+#17 4.578 Progress: resolved 1, reused 0, downloaded 0, added 0
+#17 4.737 Packages: +215
+#17 4.737 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#17 5.638 Progress: resolved 215, reused 0, downloaded 0, added 0
+#17 7.059 Progress: resolved 215, reused 0, downloaded 1, added 0
+#17 7.135 Packages are hard linked from the content-addressable store to the virtual store.
+#17 7.135   Content-addressable store is at: /root/.local/share/pnpm/store/v11
+#17 7.135   Virtual store is at:             node_modules/.pnpm
+#17 8.125 Progress: resolved 215, reused 0, downloaded 19, added 17
+#17 8.480 [WARN] Tarball download average speed 26 KiB/s (size 40 KiB) is below 50 KiB/s: https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.11.23.tgz (GET)
+#17 8.673 [WARN] Tarball download average speed 24 KiB/s (size 31 KiB) is below 50 KiB/s: https://registry.npmjs.org/mdast-util-to-hast/-/mdast-util-to-hast-13.2.1.tgz (GET)
+#17 8.856 
+#17 8.856    ╭─────────────────────────────────────────╮
+#17 8.856    │                                         │
+#17 8.856    │   Update available! 11.20.0 → 12.4.2.   │
+#17 8.856    │   Changelog: https://pnpm.io/v/12.4.2   │
+#17 8.856    │    To update, run: pnpm add -g pnpm     │
+#17 8.856    │                                         │
+#17 8.856    ╰─────────────────────────────────────────╯
+#17 8.856 
+#17 9.130 Progress: resolved 215, reused 0, downloaded 49, added 50
+#17 9.731 [WARN] Tarball download average speed 6 KiB/s (size 10 KiB) is below 50 KiB/s: https://registry.npmjs.org/pathe/-/pathe-2.0.3.tgz (GET)
+#17 ...
+
+#18 [api 7/7] RUN pnpm install --frozen-lockfile
+#18 3.803 Scope: all 3 workspace projects
+#18 4.144 ? Verifying lockfile against supply-chain policies (588 entries)...
+#18 4.225 Lockfile is up to date, resolution step is skipped
+#18 4.914 Progress: resolved 1, reused 0, downloaded 0, added 0
+#18 5.247 Packages: +335
+#18 5.247 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#18 6.055 Progress: resolved 335, reused 0, downloaded 0, added 0
+#18 7.495 Progress: resolved 335, reused 0, downloaded 1, added 0
+#18 7.533 Packages are hard linked from the content-addressable store to the virtual store.
+#18 7.533   Content-addressable store is at: /root/.local/share/pnpm/store/v11
+#18 7.533   Virtual store is at:             node_modules/.pnpm
+#18 8.439 [WARN] Tarball download average speed 19 KiB/s (size 27 KiB) is below 50 KiB/s: https://registry.npmjs.org/pg/-/pg-8.23.0.tgz (GET)
+#18 8.509 Progress: resolved 335, reused 0, downloaded 18, added 18
+#18 8.751 
+#18 8.751    ╭─────────────────────────────────────────╮
+#18 8.751    │                                         │
+#18 8.751    │   Update available! 11.20.0 → 12.4.2.   │
+#18 8.751    │   Changelog: https://pnpm.io/v/12.4.2   │
+#18 8.751    │    To update, run: pnpm add -g pnpm     │
+#18 8.751    │                                         │
+#18 8.751    ╰─────────────────────────────────────────╯
+#18 8.751 
+#18 9.516 Progress: resolved 335, reused 0, downloaded 39, added 39
+#18 9.693 [WARN] Tarball download average speed 20 KiB/s (size 22 KiB) is below 50 KiB/s: https://registry.npmjs.org/eventsource-parser/-/eventsource-parser-3.1.1.tgz (GET)
+#18 9.748 [WARN] Tarball download average speed 44 KiB/s (size 47 KiB) is below 50 KiB/s: https://registry.npmjs.org/jose/-/jose-6.2.12.tgz (GET)
+#18 ...
+
+#17 [web build 7/9] RUN pnpm install --frozen-lockfile
+#17 10.52 Progress: resolved 215, reused 0, downloaded 82, added 81
+#17 10.73 [WARN] Tarball download average speed 8 KiB/s (size 22 KiB) is below 50 KiB/s: https://registry.npmjs.org/@vitest/expect/-/expect-3.2.7.tgz (GET)
+#17 10.75 [WARN] Tarball download average speed 5 KiB/s (size 6 KiB) is below 50 KiB/s: https://registry.npmjs.org/mdast-util-mdx-expression/-/mdast-util-mdx-expression-2.0.1.tgz (GET)
+#17 12.98 Progress: resolved 215, reused 0, downloaded 101, added 88
+#17 13.11 [WARN] Tarball download average speed 2 KiB/s (size 7 KiB) is below 50 KiB/s: https://registry.npmjs.org/unist-util-is/-/unist-util-is-6.0.1.tgz (GET)
+#17 14.02 Progress: resolved 215, reused 0, downloaded 124, added 98
+#17 14.39 [WARN] Tarball download average speed 15 KiB/s (size 17 KiB) is below 50 KiB/s: https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.6.0.tgz (GET)
+#17 15.04 Progress: resolved 215, reused 0, downloaded 161, added 125
+#17 ...
+
+#18 [api 7/7] RUN pnpm install --frozen-lockfile
+#18 10.53 [WARN] Tarball download average speed 48 KiB/s (size 114 KiB) is below 50 KiB/s: https://registry.npmjs.org/minimatch/-/minimatch-10.2.5.tgz (GET)
+#18 10.60 [WARN] Tarball download average speed 44 KiB/s (size 63 KiB) is below 50 KiB/s: https://registry.npmjs.org/find-my-way/-/find-my-way-9.9.0.tgz (GET)
+#18 10.69 Progress: resolved 335, reused 0, downloaded 44, added 44
+#18 12.12 Progress: resolved 335, reused 0, downloaded 52, added 44
+#18 13.29 [WARN] Tarball download average speed 15 KiB/s (size 64 KiB) is below 50 KiB/s: https://registry.npmjs.org/fast-json-stringify/-/fast-json-stringify-7.0.1.tgz (GET)
+#18 13.30 Progress: resolved 335, reused 0, downloaded 54, added 46
+#18 14.37 Progress: resolved 335, reused 0, downloaded 67, added 50
+#18 14.81 [WARN] Tarball download average speed 9 KiB/s (size 13 KiB) is below 50 KiB/s: https://registry.npmjs.org/tinybench/-/tinybench-2.9.0.tgz (GET)
+#18 17.46 [WARN] Tarball download average speed 20 KiB/s (size 65 KiB) is below 50 KiB/s: https://registry.npmjs.org/vite-node/-/vite-node-3.2.4.tgz (GET)
+#18 19.02 Progress: resolved 335, reused 0, downloaded 94, added 54
+#18 ...
+
+#17 [web build 7/9] RUN pnpm install --frozen-lockfile
+#17 19.99 [WARN] Tarball download average speed 28 KiB/s (size 183 KiB) is below 50 KiB/s: https://registry.npmjs.org/tsx/-/tsx-4.23.13.tgz (GET)
+#17 20.07 Progress: resolved 215, reused 0, downloaded 165, added 135
+#17 20.26 [WARN] Request took 16136ms: https://registry.npmjs.org/@esbuild%2Ffreebsd-x64
+#17 21.26 Progress: resolved 215, reused 0, downloaded 186, added 145
+#17 21.70 [WARN] Request took 10333ms: https://registry.npmjs.org/@rollup%2Frollup-android-arm64
+#17 22.28 Progress: resolved 215, reused 0, downloaded 204, added 155
+#17 23.68 Progress: resolved 215, reused 0, downloaded 204, added 158
+#17 23.88 [WARN] Request took 12450ms: https://registry.npmjs.org/@rollup%2Frollup-android-arm-eabi
+#17 23.96 [WARN] Request took 10793ms: https://registry.npmjs.org/@rollup%2Frollup-linux-arm64-gnu
+#17 25.73 Progress: resolved 215, reused 0, downloaded 204, added 162
+#17 25.87 [WARN] Request took 12339ms: https://registry.npmjs.org/@smithy%2Fcredential-provider-imds
+#17 26.23 [WARN] Request took 12713ms: https://registry.npmjs.org/@rollup%2Frollup-win32-arm64-msvc
+#17 26.30 [WARN] Request took 12786ms: https://registry.npmjs.org/@rollup%2Frollup-win32-ia32-msvc
+#17 27.80 Progress: resolved 215, reused 0, downloaded 205, added 168
+#17 27.95 [WARN] Request took 14423ms: https://registry.npmjs.org/@smithy%2Fcore
+#17 27.96 [WARN] Request took 14429ms: https://registry.npmjs.org/@smithy%2Ffetch-http-handler
+#17 27.96 [WARN] Request took 14292ms: https://registry.npmjs.org/@smithy%2Fsignature-v4
+#17 28.05 [WARN] Request took 12617ms: https://registry.npmjs.org/@types%2Fpg
+#17 28.55 [WARN] Request took 15381ms: https://registry.npmjs.org/@rollup%2Frollup-linux-arm64-musl
+#17 29.17 Progress: resolved 215, reused 0, downloaded 205, added 182
+#17 29.26 [WARN] Request took 15230ms: https://registry.npmjs.org/@swc%2Fhelpers
+#17 ...
+
+#18 [api 7/7] RUN pnpm install --frozen-lockfile
+#18 20.11 Progress: resolved 335, reused 0, downloaded 99, added 56
+#18 21.18 Progress: resolved 335, reused 0, downloaded 117, added 60
+#18 23.94 [WARN] Tarball download average speed 40 KiB/s (size 128 KiB) is below 50 KiB/s: https://registry.npmjs.org/google-auth-library/-/google-auth-library-10.9.1.tgz (GET)
+#18 24.39 Progress: resolved 335, reused 0, downloaded 125, added 62
+#18 25.41 [WARN] Request took 11187ms: https://registry.npmjs.org/@rollup%2Frollup-linux-loong64-musl
+#18 25.62 Progress: resolved 335, reused 0, downloaded 129, added 62
+#18 25.65 [WARN] Request took 21231ms: https://registry.npmjs.org/@esbuild%2Flinux-loong64
+#18 25.70 [WARN] Request took 11797ms: https://registry.npmjs.org/@rollup%2Frollup-darwin-x64
+#18 25.81 [WARN] Request took 10976ms: https://registry.npmjs.org/@smithy%2Fcredential-provider-imds
+#18 25.82 [WARN] Request took 10437ms: https://registry.npmjs.org/@smithy%2Futil-buffer-from
+#18 25.85 [WARN] Request took 11296ms: https://registry.npmjs.org/@rollup%2Frollup-win32-arm64-msvc
+#18 26.07 [WARN] Request took 12170ms: https://registry.npmjs.org/@rollup%2Frollup-android-arm64
+#18 26.12 [WARN] Request took 12190ms: https://registry.npmjs.org/@rollup%2Frollup-linux-arm-gnueabihf
+#18 26.17 [WARN] Request took 11446ms: https://registry.npmjs.org/@smithy%2Fcore
+#18 26.38 [WARN] Request took 11007ms: https://registry.npmjs.org/@smithy%2Fsignature-v4
+#18 26.59 [WARN] Request took 12031ms: https://registry.npmjs.org/@rollup%2Frollup-win32-x64-msvc
+#18 27.33 Progress: resolved 335, reused 0, downloaded 140, added 62
+#18 27.40 [WARN] Request took 23051ms: https://registry.npmjs.org/@aws-sdk%2Ftypes
+#18 27.46 [WARN] Request took 12047ms: https://registry.npmjs.org/@types%2Fchai
+#18 28.41 Progress: resolved 335, reused 0, downloaded 150, added 64
+#18 28.77 [WARN] Request took 13376ms: https://registry.npmjs.org/@swc%2Fhelpers
+#18 29.83 Progress: resolved 335, reused 0, downloaded 168, added 66
+#18 ...
+
+#17 [web build 7/9] RUN pnpm install --frozen-lockfile
+#17 30.19 [WARN] Request took 16621ms: https://registry.npmjs.org/@rollup%2Frollup-win32-x64-msvc
+#17 30.21 [WARN] Request took 16889ms: https://registry.npmjs.org/@rollup%2Frollup-linux-x64-gnu
+#17 30.44 Progress: resolved 215, reused 0, downloaded 206, added 191
+#17 30.64 [WARN] Request took 17318ms: https://registry.npmjs.org/@rollup%2Frollup-linux-x64-musl
+#17 30.65 [WARN] Request took 10377ms: https://registry.npmjs.org/@types%2Freact-dom
+#17 32.48 Progress: resolved 215, reused 0, downloaded 208, added 211
+#17 32.50 [WARN] Request took 11220ms: https://registry.npmjs.org/@vitest%2Fspy
+#17 32.83 [WARN] Request took 11771ms: https://registry.npmjs.org/@vitest%2Frunner
+#17 33.48 Progress: resolved 215, reused 0, downloaded 208, added 212
+#17 33.78 [WARN] Request took 11663ms: https://registry.npmjs.org/baseline-browser-mapping
+#17 33.79 [WARN] Request took 12971ms: https://registry.npmjs.org/@vitest%2Fexpect
+#17 34.13 [WARN] Request took 12826ms: https://registry.npmjs.org/@vitest%2Futils
+#17 34.18 [WARN] Request took 10064ms: https://registry.npmjs.org/cac
+#17 35.24 [WARN] Request took 21717ms: https://registry.npmjs.org/@sinclair%2Ftypebox
+#17 35.33 [WARN] Request took 23976ms: https://registry.npmjs.org/@redocly%2Fopenapi-core
+#17 35.36 [WARN] Request took 15080ms: https://registry.npmjs.org/@types%2Freact
+#17 35.41 [WARN] Request took 13761ms: https://registry.npmjs.org/ajv
+#17 37.53 [WARN] Request took 27509ms: https://registry.npmjs.org/@aws-sdk%2Ftoken-providers
+#17 37.85 [WARN] Request took 28214ms: https://registry.npmjs.org/@aws-sdk%2Fclient-bedrock-runtime
+#17 38.70 [WARN] Request took 12380ms: https://registry.npmjs.org/caniuse-lite
+#17 ...
+
+#18 [api 7/7] RUN pnpm install --frozen-lockfile
+#18 32.23 Progress: resolved 335, reused 0, downloaded 187, added 66
+#18 32.44 [WARN] Tarball download average speed 32 KiB/s (size 62 KiB) is below 50 KiB/s: https://registry.npmjs.org/bowser/-/bowser-2.14.1.tgz (GET)
+#18 32.50 [WARN] Request took 11150ms: https://registry.npmjs.org/@vitest%2Fsnapshot
+#18 32.51 [WARN] Request took 11543ms: https://registry.npmjs.org/@types%2Freact-dom
+#18 32.51 [WARN] Request took 11138ms: https://registry.npmjs.org/@vitest%2Fspy
+#18 33.23 Progress: resolved 335, reused 0, downloaded 192, added 66
+#18 33.99 [WARN] Request took 12879ms: https://registry.npmjs.org/@vitest%2Fexpect
+#18 34.01 [WARN] Request took 12637ms: https://registry.npmjs.org/@vitest%2Futils
+#18 34.23 Progress: resolved 335, reused 0, downloaded 196, added 68
+#18 34.99 [WARN] Request took 20427ms: https://registry.npmjs.org/@sinclair%2Ftypebox
+#18 35.23 [WARN] Request took 13406ms: https://registry.npmjs.org/ajv
+#18 35.31 Progress: resolved 335, reused 0, downloaded 214, added 69
+#18 36.34 Progress: resolved 335, reused 0, downloaded 224, added 69
+#18 36.39 [WARN] Request took 15363ms: https://registry.npmjs.org/@types%2Freact
+#18 37.42 Progress: resolved 335, reused 0, downloaded 247, added 70
+#18 37.79 [WARN] Request took 23991ms: https://registry.npmjs.org/@redocly%2Fopenapi-core
+#18 38.43 Progress: resolved 335, reused 0, downloaded 278, added 73
+#18 38.74 [WARN] Request took 25218ms: https://registry.npmjs.org/@aws-sdk%2Ftoken-providers
+#18 39.52 Progress: resolved 335, reused 0, downloaded 323, added 80
+#18 39.93 [WARN] Request took 26852ms: https://registry.npmjs.org/@aws-sdk%2Fclient-bedrock-runtime
+#18 40.02 [WARN] Request took 13841ms: https://registry.npmjs.org/caniuse-lite
+#18 ...
+
+#17 [web build 7/9] RUN pnpm install --frozen-lockfile
+#17 40.37 [WARN] Request took 30586ms: https://registry.npmjs.org/@next%2Fswc-linux-arm64-musl
+#17 40.55 [WARN] Request took 30764ms: https://registry.npmjs.org/@next%2Fswc-linux-arm64-gnu
+#17 41.92 [WARN] Request took 32135ms: https://registry.npmjs.org/@next%2Fswc-darwin-x64
+#17 42.11 [WARN] Request took 32249ms: https://registry.npmjs.org/@next%2Fswc-win32-arm64-msvc
+#17 43.28 [WARN] Request took 33312ms: https://registry.npmjs.org/@next%2Fswc-win32-x64-msvc
+#17 43.77 [WARN] Request took 28766ms: https://registry.npmjs.org/@types%2Fnode
+#17 44.24 [WARN] Request took 34416ms: https://registry.npmjs.org/@next%2Fswc-linux-x64-musl
+#17 45.70 [WARN] Request took 35875ms: https://registry.npmjs.org/@next%2Fswc-linux-x64-gnu
+#17 46.12 [WARN] Request took 36338ms: https://registry.npmjs.org/@next%2Fswc-darwin-arm64
+#17 46.41 Progress: resolved 215, reused 0, downloaded 209, added 212
+#17 48.15 [WARN] Request took 38371ms: https://registry.npmjs.org/@next%2Fenv
+#17 48.53 Progress: resolved 215, reused 0, downloaded 209, added 213
+#17 ...
+
+#18 [api 7/7] RUN pnpm install --frozen-lockfile
+#18 40.57 Progress: resolved 335, reused 0, downloaded 328, added 146
+#18 41.59 Progress: resolved 335, reused 0, downloaded 329, added 154
+#18 42.62 Progress: resolved 335, reused 0, downloaded 329, added 259
+#18 42.75 [WARN] Request took 29699ms: https://registry.npmjs.org/@next%2Fswc-linux-arm64-musl
+#18 43.56 [WARN] Request took 30789ms: https://registry.npmjs.org/@next%2Fswc-darwin-arm64
+#18 44.11 [WARN] Request took 30767ms: https://registry.npmjs.org/@next%2Fswc-linux-x64-gnu
+#18 44.63 Progress: resolved 335, reused 0, downloaded 329, added 288
+#18 45.36 [WARN] Request took 31999ms: https://registry.npmjs.org/@next%2Fswc-linux-x64-musl
+#18 45.73 Progress: resolved 335, reused 0, downloaded 329, added 296
+#18 46.43 [WARN] Request took 33067ms: https://registry.npmjs.org/@next%2Fswc-win32-arm64-msvc
+#18 47.46 Progress: resolved 335, reused 0, downloaded 329, added 300
+#18 47.69 [WARN] Request took 34210ms: https://registry.npmjs.org/@next%2Fswc-win32-x64-msvc
+#18 48.19 [WARN] Request took 35152ms: https://registry.npmjs.org/@next%2Fswc-darwin-x64
+#18 48.88 Progress: resolved 335, reused 0, downloaded 330, added 304
+#18 49.47 [WARN] Request took 28598ms: https://registry.npmjs.org/@types%2Fnode
+#18 50.01 Progress: resolved 335, reused 0, downloaded 330, added 325
+#18 50.53 [WARN] Request took 37482ms: https://registry.npmjs.org/@next%2Fswc-linux-arm64-gnu
+#18 ...
+
+#17 [web build 7/9] RUN pnpm install --frozen-lockfile
+#17 50.69 [WARN] Request took 11218ms: https://registry.npmjs.org/vitest
+#17 51.44 [WARN] Request took 11370ms: https://registry.npmjs.org/zod
+#17 51.65 [WARN] Request took 12187ms: https://registry.npmjs.org/vite
+#17 52.23 [WARN] Request took 13824ms: https://registry.npmjs.org/scheduler
+#17 52.69 [WARN] Request took 14336ms: https://registry.npmjs.org/rollup
+#17 53.19 [WARN] Request took 15279ms: https://registry.npmjs.org/react-dom
+#17 53.40 [WARN] Request took 15482ms: https://registry.npmjs.org/react
+#17 54.43 [WARN] Request took 15380ms: https://registry.npmjs.org/typescript
+#17 57.23 Progress: resolved 215, reused 0, downloaded 210, added 213
+#17 ...
+
+#18 [api 7/7] RUN pnpm install --frozen-lockfile
+#18 51.46 [WARN] Request took 38699ms: https://registry.npmjs.org/@next%2Fenv
+#18 51.62 Progress: resolved 335, reused 0, downloaded 330, added 334
+#18 51.78 [WARN] Request took 11551ms: https://registry.npmjs.org/vitest
+#18 51.95 [WARN] Request took 10878ms: https://registry.npmjs.org/zod
+#18 52.18 [WARN] Request took 11963ms: https://registry.npmjs.org/vite
+#18 52.60 [WARN] Request took 13849ms: https://registry.npmjs.org/rollup
+#18 53.21 [WARN] Request took 14753ms: https://registry.npmjs.org/react
+#18 53.54 [WARN] Request took 15083ms: https://registry.npmjs.org/react-dom
+#18 57.18 [WARN] Request took 20634ms: https://registry.npmjs.org/next
+#18 58.70 [WARN] Request took 19829ms: https://registry.npmjs.org/scheduler
+#18 59.19 [WARN] Request took 19092ms: https://registry.npmjs.org/typescript
+#18 ...
+
+#17 [web build 7/9] RUN pnpm install --frozen-lockfile
+#17 60.15 [WARN] Request took 23372ms: https://registry.npmjs.org/next
+#17 61.47 Progress: resolved 215, reused 0, downloaded 210, added 214
+#17 63.92 [WARN] Request took 17316ms: https://registry.npmjs.org/@types%2Fnode
+#17 ...
+
+#18 [api 7/7] RUN pnpm install --frozen-lockfile
+#18 60.62 Progress: resolved 335, reused 0, downloaded 331, added 334
+#18 61.13 Progress: resolved 335, reused 0, downloaded 331, added 335, done
+#18 64.76 ✓ Lockfile passes supply-chain policies (588 entries in 1m 0.6s)
+#18 64.79 .../esbuild@0.28.2/node_modules/esbuild postinstall$ node install.js
+#18 64.99 .../esbuild@0.28.1/node_modules/esbuild postinstall$ node install.js
+#18 66.61 .../esbuild@0.28.1/node_modules/esbuild postinstall: Done
+#18 66.71 .../esbuild@0.28.2/node_modules/esbuild postinstall: Done
+#18 ...
+
+#17 [web build 7/9] RUN pnpm install --frozen-lockfile
+#17 67.21 [WARN] Request took 12057ms: https://registry.npmjs.org/typescript
+#17 67.38 ✓ Lockfile passes supply-chain policies (588 entries in 1m 3.4s)
+#17 ...
+
+#18 [api 7/7] RUN pnpm install --frozen-lockfile
+#18 67.26 
+#18 67.26 devDependencies:
+#18 67.26 + typescript 5.9.3
+#18 67.26 
+#18 67.59 Done in 1m 6.4s using pnpm v11.20.0
+#18 DONE 79.9s
+
+#17 [web build 7/9] RUN pnpm install --frozen-lockfile
+#17 ...
+
+#19 [api] exporting to image
+#19 exporting layers
+#19 ...
+
+#17 [web build 7/9] RUN pnpm install --frozen-lockfile
+#17 84.45 Progress: resolved 215, reused 0, downloaded 211, added 214
+#17 85.10 Progress: resolved 215, reused 0, downloaded 211, added 215, done
+#17 85.54 .../esbuild@0.28.2/node_modules/esbuild postinstall$ node install.js
+#17 85.71 .../esbuild@0.28.2/node_modules/esbuild postinstall: Done
+#17 85.95 
+#17 85.95 devDependencies:
+#17 85.95 + typescript 5.9.3
+#17 85.95 
+#17 86.18 Done in 1m 25s using pnpm v11.20.0
+#17 DONE 87.2s
+
+#19 [api] exporting to image
+#19 ...
+
+#20 [web build 8/9] COPY apps/web apps/web
+#20 DONE 0.5s
+
+#19 [api] exporting to image
+#19 ...
+
+#21 [web build 9/9] RUN pnpm --filter @warmap/web gen:client && pnpm --filter @warmap/web build
+#21 1.639 $ pnpm --filter @warmap/contracts build && node ../../packages/contracts/dist/openapi-cli.js > src/lib/api/openapi.json && openapi-typescript src/lib/api/openapi.json -o src/lib/api/schema.d.ts
+#21 2.675 $ tsc -p tsconfig.json
+#21 8.418 ✨ openapi-typescript 7.13.0
+#21 8.818 🚀 src/lib/api/openapi.json → src/lib/api/schema.d.ts [405.1ms]
+#21 9.720 $ next build
+#21 10.32 ▲ Next.js 16.3.5 (Turbopack)
+#21 10.46 ✓ Running next.config.ts took 141ms
+#21 10.47 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+#21 10.47 This information is used to shape Next.js' roadmap and prioritize features.
+#21 10.47 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+#21 10.47 https://nextjs.org/telemetry
+#21 10.47 
+#21 10.50 
+#21 10.59   Creating an optimized production build ...
+#21 ...
+
+#19 [api] exporting to image
+#19 exporting layers 39.4s done
+#19 exporting manifest sha256:2300416b90be02f92fe32bd2a8a5bbe2045c5afd5a79a160fae8e3e9fa327593 0.0s done
+#19 exporting config sha256:dfbdcb4feb247c3ad1f576763326966cadcacd20a2885eef4b8e608860dd0598 0.0s done
+#19 exporting attestation manifest sha256:230c52fb434318209779e073a227ef06096b00976ad106dc3479836c0a1c1326 0.0s done
+#19 exporting manifest list sha256:42d7b756fe3ce655f5c018bdbb39970ce3957a6617887d11c24a7dda498fa44c 0.0s done
+#19 naming to docker.io/library/warmap-api:latest done
+#19 unpacking to docker.io/library/warmap-api:latest
+#19 ...
+
+#21 [web build 9/9] RUN pnpm --filter @warmap/web gen:client && pnpm --filter @warmap/web build
+#21 34.95 ✓ Compiled successfully in 22.7s
+#21 34.99   Running TypeScript ...
+#21 48.12   Finished TypeScript in 13.1s ...
+#21 48.14   Collecting page data using 9 workers ...
+#21 ...
+
+#19 [api] exporting to image
+#19 unpacking to docker.io/library/warmap-api:latest 17.1s done
+#19 DONE 56.9s
+
+#21 [web build 9/9] RUN pnpm --filter @warmap/web gen:client && pnpm --filter @warmap/web build
+#21 ...
+
+#22 [api] resolving provenance for metadata file
+#22 DONE 0.1s
+
+#21 [web build 9/9] RUN pnpm --filter @warmap/web gen:client && pnpm --filter @warmap/web build
+#21 50.73   Generating static pages using 9 workers (0/6) ...
+#21 50.80   Generating static pages using 9 workers (1/6) 
+#21 50.90   Generating static pages using 9 workers (2/6) 
+#21 50.92   Generating static pages using 9 workers (4/6) 
+#21 50.99 ✓ Generating static pages using 9 workers (6/6) in 261ms
+#21 51.00   Finalizing page optimization ...
+#21 51.96 
+#21 51.98 Route (app)
+#21 51.98 ┌ ƒ /
+#21 51.98 ├ ○ /_not-found
+#21 51.98 ├ ƒ /access
+#21 51.98 ├ ƒ /healthz
+#21 51.98 ├ ƒ /issues/[id]
+#21 51.98 ├ ƒ /meetings/[id]
+#21 51.98 ├ ƒ /plans/[period]
+#21 51.98 ├ ƒ /radar
+#21 51.98 └ ƒ /radar/signals/[id]
+#21 51.98 
+#21 51.98 
+#21 51.98 ○  (Static)   prerendered as static content
+#21 51.98 ƒ  (Dynamic)  server-rendered on demand
+#21 51.98 
+#21 DONE 53.8s
+
+#23 [web stage-1 2/4] WORKDIR /app
+#23 CACHED
+
+#24 [web stage-1 3/4] COPY --from=build --chown=node:node /repo/apps/web/.next/standalone ./
+#24 DONE 1.4s
+
+#25 [web stage-1 4/4] COPY --from=build --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
+#25 DONE 0.2s
+
+#26 [web] exporting to image
+#26 exporting layers
+#26 exporting layers 1.9s done
+#26 exporting manifest sha256:881500697ec906fcc564a3babdab4708b010aa5b241ca5b968c0f4bf19a429ff 0.0s done
+#26 exporting config sha256:74b4123a7e712f0746f12c4dfffca2fb4ecb4746d102928bc60691a146a73713 done
+#26 exporting attestation manifest sha256:2887a00eb45ca91eed6ff6594a427785e1d6a4ccb803949a273d52a6781aa0f9 0.0s done
+#26 exporting manifest list sha256:f337cb4787836080ea884d468b23f33d5f77f3032d3af46795092a86121e2317 0.0s done
+#26 naming to docker.io/library/warmap-web:latest done
+#26 unpacking to docker.io/library/warmap-web:latest
+#26 unpacking to docker.io/library/warmap-web:latest 0.5s done
+#26 DONE 2.5s
+
+#27 [web] resolving provenance for metadata file
+#27 DONE 0.0s
+ Image warmap-api Built 
+ Image warmap-web Built 
+ Container warmap-postgres-1 Running 
+ Container warmap-wechat-1 Running 
+ Container warmap-api-1 Recreate 
+ Container warmap-api-1 Recreated 
+ Container warmap-web-1 Recreate 
+ Container warmap-web-1 Recreated 
+ Container warmap-postgres-1 Waiting 
+ Container warmap-postgres-1 Healthy 
+ Container warmap-api-1 Starting 
+ Container warmap-api-1 Started 
+ Container warmap-web-1 Starting 
+ Container warmap-web-1 Started 

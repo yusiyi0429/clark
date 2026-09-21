@@ -1,0 +1,166 @@
+ Image warmap-web Building 
+ Image warmap-api Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 971B done
+#1 DONE 0.0s
+
+#2 [web internal] load build definition from Dockerfile
+#2 transferring dockerfile: 732B done
+#2 DONE 0.0s
+
+#3 [api internal] load build definition from Dockerfile
+#3 transferring dockerfile: 601B done
+#3 DONE 0.0s
+
+#4 [web internal] load metadata for docker.io/library/node:22-alpine
+#4 DONE 0.0s
+
+#5 [api internal] load .dockerignore
+#5 transferring context: 441B done
+#5 DONE 0.0s
+
+#6 [api internal] load build context
+#6 DONE 0.0s
+
+#7 [web internal] load build context
+#7 DONE 0.0s
+
+#8 [api 1/7] FROM docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+#8 resolve docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 0.0s done
+#8 resolve docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 0.0s done
+#8 DONE 0.0s
+
+#7 [web internal] load build context
+#7 transferring context: 22.25kB done
+#7 DONE 0.0s
+
+#6 [api internal] load build context
+#6 transferring context: 5.38kB done
+#6 DONE 0.0s
+
+#9 [web build 6/9] COPY apps/web/package.json apps/web/
+#9 CACHED
+
+#10 [web build 5/9] COPY packages/contracts packages/contracts
+#10 CACHED
+
+#11 [web build 4/9] COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+#11 CACHED
+
+#12 [web build 7/9] RUN pnpm install --frozen-lockfile
+#12 CACHED
+
+#13 [api 6/7] COPY apps/api apps/api
+#13 CACHED
+
+#14 [api 3/7] WORKDIR /repo
+#14 CACHED
+
+#15 [api 5/7] COPY packages/contracts packages/contracts
+#15 CACHED
+
+#16 [api 4/7] COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+#16 CACHED
+
+#17 [api 2/7] RUN npm install -g pnpm@11.20.0
+#17 CACHED
+
+#18 [api 7/7] RUN pnpm install --frozen-lockfile
+#18 CACHED
+
+#19 [web build 8/9] COPY apps/web apps/web
+#19 DONE 0.1s
+
+#20 [web build 9/9] RUN pnpm --filter @warmap/web gen:client && pnpm --filter @warmap/web build
+#20 ...
+
+#21 [api] exporting to image
+#21 exporting layers done
+#21 exporting manifest sha256:794a302fe3cc3be6856501a684976f6f676a6ce2d68bf6ddb53dddb0fe4728a0 done
+#21 exporting config sha256:c14d3d44429817bfaaa19edf5c5181b78dbce1a51ce6e98da7075a4034d9b990 done
+#21 exporting attestation manifest sha256:22a6ab4e25a82797546e6b85fb656fb4bf24208a17bd0ddc65cc1ea97324b309 done
+#21 exporting manifest list sha256:4ef9b770ab08344602ee54e114eab0d74d4909781d366852763d42d2c2b2907a 0.0s done
+#21 naming to docker.io/library/warmap-api:latest done
+#21 unpacking to docker.io/library/warmap-api:latest done
+#21 DONE 0.1s
+
+#22 [api] resolving provenance for metadata file
+#22 DONE 0.0s
+
+#20 [web build 9/9] RUN pnpm --filter @warmap/web gen:client && pnpm --filter @warmap/web build
+#20 1.180 $ pnpm --filter @warmap/contracts build && node ../../packages/contracts/dist/openapi-cli.js > src/lib/api/openapi.json && openapi-typescript src/lib/api/openapi.json -o src/lib/api/schema.d.ts
+#20 2.160 $ tsc -p tsconfig.json
+#20 5.308 ✨ openapi-typescript 7.13.0
+#20 5.556 🚀 src/lib/api/openapi.json → src/lib/api/schema.d.ts [251ms]
+#20 6.194 $ next build
+#20 6.654 ▲ Next.js 16.3.5 (Turbopack)
+#20 6.711 ✓ Running next.config.ts took 57ms
+#20 6.718 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+#20 6.718 This information is used to shape Next.js' roadmap and prioritize features.
+#20 6.718 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+#20 6.718 https://nextjs.org/telemetry
+#20 6.718 
+#20 6.735 
+#20 6.791   Creating an optimized production build ...
+#20 15.97 ✓ Compiled successfully in 8.0s
+#20 15.98   Running TypeScript ...
+#20 20.96   Finished TypeScript in 5.0s ...
+#20 20.97   Collecting page data using 9 workers ...
+#20 22.33   Generating static pages using 9 workers (0/6) ...
+#20 22.40   Generating static pages using 9 workers (1/6) 
+#20 22.49   Generating static pages using 9 workers (2/6) 
+#20 22.50   Generating static pages using 9 workers (4/6) 
+#20 22.55 ✓ Generating static pages using 9 workers (6/6) in 225ms
+#20 22.56   Finalizing page optimization ...
+#20 23.06 
+#20 23.06 Route (app)
+#20 23.06 ┌ ƒ /
+#20 23.06 ├ ○ /_not-found
+#20 23.06 ├ ƒ /access
+#20 23.06 ├ ƒ /healthz
+#20 23.06 ├ ƒ /issues/[id]
+#20 23.06 ├ ƒ /meetings/[id]
+#20 23.06 ├ ƒ /plans/[period]
+#20 23.06 ├ ƒ /radar
+#20 23.06 └ ƒ /radar/signals/[id]
+#20 23.06 
+#20 23.06 
+#20 23.06 ○  (Static)   prerendered as static content
+#20 23.06 ƒ  (Dynamic)  server-rendered on demand
+#20 23.06 
+#20 DONE 24.0s
+
+#23 [web stage-1 2/4] WORKDIR /app
+#23 CACHED
+
+#24 [web stage-1 3/4] COPY --from=build --chown=node:node /repo/apps/web/.next/standalone ./
+#24 DONE 0.5s
+
+#25 [web stage-1 4/4] COPY --from=build --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
+#25 DONE 0.0s
+
+#26 [web] exporting to image
+#26 exporting layers
+#26 exporting layers 1.4s done
+#26 exporting manifest sha256:48a9fce3b0967832f4518ce1182b47122fe6813373dea48cf7ce4f06a7fa0950 done
+#26 exporting config sha256:c0dab404251dc1fc4a59082df452558abb35460dec09e10c0fd5480a8550de26 done
+#26 exporting attestation manifest sha256:8d0c7e3c0ce874ce539a522bb1aea332a357c4c7c23b3cd59c6344c0ee3a22b0 done
+#26 exporting manifest list sha256:0361fd2408216871bf5f66f767600a3a54094d0c180621181fce81d6b25fb291 done
+#26 naming to docker.io/library/warmap-web:latest done
+#26 unpacking to docker.io/library/warmap-web:latest
+#26 unpacking to docker.io/library/warmap-web:latest 0.4s done
+#26 DONE 1.8s
+
+#27 [web] resolving provenance for metadata file
+#27 DONE 0.0s
+ Image warmap-api Built 
+ Image warmap-web Built 
+ Container warmap-postgres-1 Running 
+ Container warmap-wechat-1 Running 
+ Container warmap-api-1 Running 
+ Container warmap-web-1 Recreate 
+ Container warmap-web-1 Recreated 
+ Container warmap-postgres-1 Waiting 
+ Container warmap-postgres-1 Healthy 
+ Container warmap-web-1 Starting 
+ Container warmap-web-1 Started 

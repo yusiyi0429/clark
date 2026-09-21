@@ -36,14 +36,15 @@ Spec: `spec.md`
 | 14 | 完成真实数据驱动的像素级 Web | 01, 08, 11, 13 | resolved |
 | 15 | 建立全链测试、观测与安全门槛 | 14 | resolved |
 | 16 | 完成 Compose 部署与真实外部验收 | 15 | resolved |
-| 17 | 执行用户像素级验收与 cutover 授权 | 16 | ready-for-human |
-| 18 | 切换生产入口并删除旧 frontend | 17 | ready-for-agent |
+| 17 | 执行用户像素级验收与 cutover 授权 | 16 | resolved |
+| 18 | 切换生产入口并删除旧 frontend | 17 | resolved |
+| 19 | Meeting 内嵌会前材料 | 解析实现验证、联合备份恢复设计 | blocked |
 
 ## Current frontier
 
-- 17 执行用户像素级验收与 cutover 授权
+- 19 Meeting 内嵌会前材料
 
-16 已按用户明确风险豁免收口；17 进入人工验收。18 仍须等待 17 的明确 cutover 与旧前端删除授权。
+16 已按用户明确风险豁免收口；17 于 2026-09-21 人工验收通过并授权 cutover 与整体删除旧 `frontend/`；18 已据此完成入口切换与旧前端删除。19 已完成设计与领域收口，等待解析实现验证后实施。
 
 ## Results
 
@@ -63,5 +64,8 @@ Spec: `spec.md`
 - 14 resolved：提交 `007e52a`，将登录、首页、Issue、Meeting、Radar、Signal、MonthlyPlan、Conversation 与 opaque Action 接入真实 API，恢复双视口布局和微交互，并移除目标路由 fixture。contracts 26 + Web 9 + API 199 测试、typecheck/build 与 diff check 通过；双视口浏览器证据已记录。
 - 15 resolved：提交 `16ce136`，建立 Spec 最高 seam 矩阵、CEO 主旅程、结构化脱敏日志、可选 LangSmith、health 依赖状态、安全测试与确定性 CI。contracts 26 + Web 9 + API 210 测试、typecheck/build 通过；Herdr 双轴 review 无 blocking。
 - 16 resolved：完成 Compose/Caddy/非 root 镜像、Bocha 与真实 Pi/三模型槽、账号级 WeChat MCP 接线、真实人员 MCP 一致性、age/checksum 备份脚本和本机独立恢复后继续 Conversation。API 串行 233 项与双轴 review 通过。公众号真实文章仍受微信频控、异机 SSH/SFTP 尚未执行；用户于 2026-09-16 明确选择方案 C，接受风险并延期，两项未被描述为技术通过。
+- 19 blocked：Q30/Q31/Q32 已收口为 Meeting 内嵌会前材料、scheduled-only 的确认回退和 Outcome 只读视图；新增 ADR 0017，规格、部署及验收文档已同步。待验证 Node 22/Alpine 的 PDF、DOCX、Markdown 受限解析与 DOCX 安全 HTML 后实施。
+- 17 resolved：2026-09-21 用户在 `https://localhost` 完成像素级交互验收（“前端交互目前没什么问题”），并以明确文字批准 cutover、观察窗口与整体删除旧 `frontend/`。记录与口径说明见 ticket 17 Comments。
+- 18 resolved：2026-09-21 生产入口为 Caddy → `apps/web`（无旧前端路由、未加兼容路由）；整体删除 `frontend/`（905 MB、41 262 文件、883 个跟踪文件），未迁移业务逻辑、localStorage、兼容路由或旧 Agent；清理 `.dockerignore`、`apps/api/src/webSearch.ts` 注释、`CLAUDE.md`、`docs/visual-baseline/README.md` 的旧前端引用，workspace/Compose/Caddy/CI 原本无引用；docs 历史性提及与视觉基线证据保留。验证：`pnpm install --frozen-lockfile`、`@warmap/web` 与 `@warmap/api` typecheck、`docker compose -f infra/docker-compose.yml config` 均通过。运行期 smoke、观察窗口与最终回归未在本 ticket 重跑（依据 ticket 16 证据与 CEO 人工验收）。
 
 ## Comments

@@ -72,29 +72,32 @@ Pi SDK 提供 Chat agent loop、自定义 Web Search、Session 和 compaction。
 41. 作为 CEO，我希望会前 Agent 装配提案、依据和 Issue brief，从而让会议准备保持一致。
 42. 作为 CEO，我希望标记已阅、已核对和带到会议的项目，从而让准备状态在页面访问之间持续存在。
 43. 作为 CEO，我希望修改已核对的会前条目后自动取消该核对，从而避免旧确认覆盖新表述。
-44. 作为 CEO，我希望向 DRI 请求补充材料，从而在开会前明确证据缺口。
+44. 作为 CEO，我希望向 DRI 请求补充信息，从而在开会前明确证据缺口；该请求不创建材料上传路径。
 45. 作为 CEO，我希望 Supplement Request 区分已记录、待外发和已送达，从而避免界面伪造送达结果。
-46. 作为 CEO，我希望取消尚未召开的 Meeting，从而让废弃会议不再停留在会前通知中。
-47. 作为 CEO，我希望在 Meeting 页面上传标准 Transcript JSON，从而无需建设录音或 ASR 也能推进会议链路。
-48. 作为集成客户端，我希望通过鉴权 API 上传同一 Transcript，从而让外部流程可以自动完成导入。
-49. 作为 CEO，我希望不兼容的 Transcript 被整份拒绝，从而避免 MeetingOutcome 混入有效发言和猜测内容。
-50. 作为 CEO，我希望每个 Transcript speakerId 必须匹配 Meeting participant，从而让负责人和 CEO 权限可追溯。
-51. 作为 CEO，我希望成功导入 Transcript 后自动把 Meeting 标为 held 并开始 Outcome 抽取，从而不需要单独的开始或结束按钮。
-52. 作为 CEO，我希望 Outcome 抽取失败时保留 Transcript 并允许显式重试，从而永远不丢失原始会议证据。
-53. 作为 CEO，我希望每条提取内容绑定具体 Transcript turn 和连续引文，从而可以核对原始出处。
-54. 作为 CEO，我希望未知说话人不能成为负责人或 CEO 判断来源，从而避免身份缺口变成组织事实。
-55. 作为 CEO，我希望 Meeting 决定、普通待办、CEO 判断和复议条件作为独立审阅项展示，从而分别处理每一种效果。
-56. 作为 CEO，我希望可以确认或忽略每个 Outcome item，从而让错误抽取不会阻止 Meeting 收敛。
-57. 作为 CEO，我希望确认一个 Outcome item 后立即生效，从而避免已批准事项被整场会议审批阻塞。
-58. 作为 CEO，我希望确认的 decision item 创建精确 Issue Receipt，从而知道它来自哪一个会议条目。
-59. 作为 CEO，我希望确认的 todo 生成 DRI Handoff，从而让决策驾驶舱可以向外传递工作而不变成执行系统。
-60. 作为 CEO，我希望没有真实接收渠道的 todo 标记为 pending_export，从而区分生成导出内容和真正送达。
-61. 作为 CEO，我希望已确认 CEO 判断保留在 MeetingOutcome，从而让未来认知复盘可以读取而不直接写 CompanyMemory。
-62. 作为 CEO，我希望已确认复议条件进入 Radar anchors，从而把会议中的重开逻辑转化为外部监测目标。
-63. 作为 CEO，我希望按 effectRef 撤回审阅项，从而避免撤回操作影响其他条目或 Meeting 的效果。
-64. 作为 CEO，我希望无法撤销的外部效果禁用撤回或显示 warning，从而避免界面报告虚假恢复。
-65. 作为 CEO，我希望 open Meeting item 只展示而不自动创建 Issue，从而避免每个未决发言都污染决策面。
-66. 作为 CEO，我希望所有可审阅条目都 confirmed 或 dismissed 后才把 Meeting 标为 reviewed，从而让进度代表处理完成。
+46. 作为 CEO，我希望为 scheduled Meeting 整批替换会前材料，并在任一 PDF、DOCX 或 Markdown 无法通过安全校验和文字抽取时整批拒绝，从而不保留半套或不可核对的材料。
+47. 作为 CEO，我希望预审就绪后先确认“返回编辑材料”，才能令候选预审失效、替换或清空材料集，并显式重新预审，从而不让材料变更或模型调用自动生效。
+48. 作为 CEO，我希望 held 或 reviewed Meeting 的原始材料只能查看，Outcome 仍只读取 Transcript，从而不让会后材料视图改写已形成的会议依据。
+49. 作为 CEO，我希望取消尚未召开的 Meeting，从而让废弃会议不再停留在会前通知中。
+50. 作为 CEO，我希望在 Meeting 页面上传标准 Transcript JSON，从而无需建设录音或 ASR 也能推进会议链路。
+51. 作为集成客户端，我希望通过鉴权 API 上传同一 Transcript，从而让外部流程可以自动完成导入。
+52. 作为 CEO，我希望不兼容的 Transcript 被整份拒绝，从而避免 MeetingOutcome 混入有效发言和猜测内容。
+53. 作为 CEO，我希望每个 Transcript speakerId 必须匹配 Meeting participant，从而让负责人和 CEO 权限可追溯。
+54. 作为 CEO，我希望成功导入 Transcript 后自动把 Meeting 标为 held 并开始 Outcome 抽取，从而不需要单独的开始或结束按钮。
+55. 作为 CEO，我希望 Outcome 抽取失败时保留 Transcript 并允许显式重试，从而永远不丢失原始会议证据。
+56. 作为 CEO，我希望每条提取内容绑定具体 Transcript turn 和连续引文，从而可以核对原始出处。
+57. 作为 CEO，我希望未知说话人不能成为负责人或 CEO 判断来源，从而避免身份缺口变成组织事实。
+58. 作为 CEO，我希望 Meeting 决定、普通待办、CEO 判断和复议条件作为独立审阅项展示，从而分别处理每一种效果。
+59. 作为 CEO，我希望可以确认或忽略每个 Outcome item，从而让错误抽取不会阻止 Meeting 收敛。
+60. 作为 CEO，我希望确认一个 Outcome item 后立即生效，从而避免已批准事项被整场会议审批阻塞。
+61. 作为 CEO，我希望确认的 decision item 创建精确 Issue Receipt，从而知道它来自哪一个会议条目。
+62. 作为 CEO，我希望确认的 todo 生成 DRI Handoff，从而让决策驾驶舱可以向外传递工作而不变成执行系统。
+63. 作为 CEO，我希望没有真实接收渠道的 todo 标记为 pending_export，从而区分生成导出内容和真正送达。
+64. 作为 CEO，我希望已确认 CEO 判断保留在 MeetingOutcome，从而让未来认知复盘可以读取而不直接写 CompanyMemory。
+65. 作为 CEO，我希望已确认复议条件进入 Radar anchors，从而把会议中的重开逻辑转化为外部监测目标。
+66. 作为 CEO，我希望按 effectRef 撤回审阅项，从而避免撤回操作影响其他条目或 Meeting 的效果。
+67. 作为 CEO，我希望无法撤销的外部效果禁用撤回或显示 warning，从而避免界面报告虚假恢复。
+68. 作为 CEO，我希望 open Meeting item 只展示而不自动创建 Issue，从而避免每个未决发言都污染决策面。
+69. 作为 CEO，我希望所有可审阅条目都 confirmed 或 dismissed 后才把 Meeting 标为 reviewed，从而让进度代表处理完成。
 67. 作为 CEO，我希望每月 1 日按 Asia/Shanghai 自动创建一个 MonthlyPlan，从而让计划周期稳定开始。
 68. 作为 CEO，我希望月度生成失败时显示错误并允许显式重试，从而避免 scheduler 或 Agent 故障产生静默空计划。
 69. 作为 CEO，我希望在月度页面编辑公司和战场目标，从而让 Agent 草案继续保持候选性质。
@@ -218,7 +221,12 @@ Pi SDK 提供 Chat agent loop、自定义 Web Search、Session 和 compaction。
 - Meeting 从 Issue 创建或由 DRI 导入，不建设会议管理页。
 - participant 来自通过 `company-people.v1` 校验的 CompanyMemory 人员目录，并保存身份快照；不从姓名临时生成 personId。
 - 保留当前会前视觉模式，但把草稿状态放回 Meeting。
-- Supplement Request 诚实区分已记录、待外发和已送达。
+- Meeting Material 是 Meeting 内嵌值对象，不增加第七实体；仅 CEO 可为 `scheduled` Meeting 以整批方式替换或清空当前会前材料集。
+- 仅接受具有有效文字层的 PDF、DOCX 和 Markdown；每份最大 20 MiB、每批最多 10 份且总计最大 100 MiB。PDF 最多 500 页；DOCX 最多 1,000 ZIP entries、250 MiB 解压总量、50 MiB 单 entry 和 200:1 压缩比。格式、容量、安全校验或文字抽取任一失败，整批拒绝且不保留原件、元数据或半套材料；不做 OCR。解析固定使用 `node:22.13-alpine` 上的纯 JavaScript `pdfjs-dist`、`mammoth` 与 ZIP 预检，不引入 `pdf-parse`、native addon 或 Office 服务；每份由受限 Node 子进程顺序解析，15 秒超时、整批 90 秒。
+- 原件只保存在 API-only Docker named volume；PostgreSQL 保存元数据、相对 storage key、SHA-256 和受限抽取文本。Agent 仅接收受限文本和 `material:<id>` 引用，不读取二进制；Web 不持久化文件。
+- `ready` 会前材料集只读。CEO 需确认“返回编辑材料”使当前 preflight Candidate Material 失效并转 `pending`，才可替换、清空或手动重新预审同一材料集；不自动上传、重跑或恢复 `ready`。
+- `held`、`reviewed`、`cancelled` Meeting 的材料严格只读；Outcome 原始材料视图不显示“返回编辑材料”，且 Outcome 只以 `warmap-transcript.v1` 为输入。
+- Supplement Request 仅诚实区分已记录、待外发和已送达，不关联 Meeting Material、材料上传或接收状态。
 - 只接受版本化结构 Transcript 契约。
 - 任一 turn、speaker 身份、时间或必填字段无效时整份拒绝。
 - 不实现录音、ASR、格式转换、部分导入或说话人映射。
@@ -286,11 +294,11 @@ Pi SDK 提供 Chat agent loop、自定义 Web Search、Session 和 compaction。
 - 使用环境变量配置 CEO 凭据，并签发 HttpOnly secure session cookie。
 - DRI import/export 和 MCP 使用独立服务凭据。
 - Caddy、Web、API 和 PostgreSQL 部署在单服务器 Docker Compose 中，只有 Caddy 暴露公网端口。
-- PostgreSQL 保存业务实体、配置、Transcript JSONB、Candidate Material、Conversation 和 Pi entries。
+- PostgreSQL 保存业务实体、配置、Transcript JSONB、Meeting Material 元数据与受限抽取文本、Candidate Material、Conversation 和 Pi entries；Meeting Material 原件仅存 API-only Docker named volume。
 - API 进程内运行轻量 scheduler，使用 PostgreSQL 锁和日期键去重。
 - MVP 不引入 Redis、消息队列、对象存储、Kubernetes 或独立 worker。
 - 数据库时间使用 UTC，公司计划按 Asia/Shanghai 解释。
-- 宿主机 cron 每天执行加密数据库备份并通过 SSH/SFTP 复制到异机，至少保留 7 天；提供独立 restore 脚本。
+- 宿主机 cron 每天执行同一 UTC 批次的加密 PostgreSQL dump 与 material volume tar，并通过 SSH/SFTP 复制到异机，至少保留 7 天；备份和恢复均须在禁止材料写入的维护窗口进行，恢复只接受同批次并校验 storage key 与 SHA-256。
 
 ### 前端重构
 
@@ -337,7 +345,7 @@ Pi SDK 提供 Chat agent loop、自定义 Web Search、Session 和 compaction。
 - 动画终态、焦点返回、Escape、reduced motion 和关键 accessible name 与像素截图分开测试。
 - Radar 完成前执行一次真实 Web Search 和一次真实微信公众号账号级采集验收。
 - 使用生产模型端点执行一次真实 Pi compaction/recovery 验收。
-- 实际恢复一次加密 PostgreSQL 备份，并验证恢复后的对象、Transcript 和 Conversation。
+- 实际恢复一次同批次加密 PostgreSQL dump 与 material volume tar，并验证恢复后的对象、Transcript、Meeting Material 和 Conversation。
 - 能通过 Card、Action、MCP 或 API 边界观察的行为，不再为私有 helper 编写重复测试。
 
 ## 范围外
@@ -365,6 +373,7 @@ Pi SDK 提供 Chat agent loop、自定义 Web Search、Session 和 compaction。
 - 同时使用多个 Agent Runtime。
 - 多 Web Search 或公众号 Provider 插件平台。
 - Redis、消息队列、对象存储、Kubernetes 或分布式 scheduler。
+- Meeting Material OCR、扫描件/图片型文件、TXT、PPT/PPTX、Office 像素还原、通用文件库、DRI 材料上传、补充材料流程、材料版本浏览器或回滚。
 - 旧业务数据迁移、localStorage 迁移或兼容路由。
 - 目标验收后继续保留旧前端。
 - 超出 MVP 健康检查和 trace 的大规模评测平台、对账报表或运营驾驶舱。
