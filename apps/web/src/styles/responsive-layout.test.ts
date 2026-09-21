@@ -19,11 +19,11 @@ describe("responsive workspace CSS", () => {
     expect(source).toContain("--rail-stub:52px");
   });
 
-  it("insets the narrow issue workspace without relative-position overflow", () => {
+  it("stacks the issue workspace to a single column without relative-position overflow", () => {
     const source = css("./issue-workspace.module.css");
     expect(source).not.toContain("left:9px;right:9px;top:9px;bottom:9px");
-    const inset = ".workspace{width:min(1680px,calc(100% - 18px));height:calc(100% - 18px);margin:9px auto";
-    expect(source.lastIndexOf(inset)).toBeGreaterThan(source.indexOf("@media(max-width:1280px)"));
+    const stacked = "@media(max-width:1280px){.workspace{width:100%;padding:16px 20px 40px;overflow:auto}.columns{display:block;overflow:visible}";
+    expect(source.lastIndexOf(stacked)).toBeGreaterThan(source.indexOf(".workspace{position:relative"));
   });
 
   it("clears the floating dock over the stacked narrow notification rail", () => {
@@ -31,26 +31,26 @@ describe("responsive workspace CSS", () => {
     expect(source).toContain("@media(max-width:690px){.noticeList{padding-bottom:52px}}");
   });
 
-  it("symmetrizes the narrow issue gutter so the workspace stays viewport-centered", () => {
+  it("gives the embedded-conversation issue page the full main area like meeting", () => {
     const source = css("./app-shell.module.css");
     expect(source).toContain(
-      "@media(max-width:1250px){.expandedScroll[data-card-kind=issue]{padding-right:18px}}",
-    );
-    expect(source).toContain(
-      "@media(max-width:690px){.expandedScroll[data-card-kind=issue]{padding-right:12px}}",
+      ".expandedScroll[data-card-kind=meeting],.expandedScroll[data-card-kind=issue]{margin:0;padding:0;overflow:hidden}",
     );
   });
 
-  it("renders the research tab as a single max-width reading column without touching the summary grid", () => {
+  it("lays every issue status out as the 2480 three-column workbench", () => {
     const source = css("./issue-workspace.module.css");
-    expect(source).toContain("@media(min-width:1281px){\n .columns[data-tab=research]{display:flex;flex-direction:column;gap:18px}");
-    expect(source).toContain(".columns[data-tab=research] .reading{display:block;width:100%;max-width:980px;margin:0 auto");
-    // 总结与判断 tab 的 1680 双栏（左 1fr、右 560px）保持原样。
-    expect(source).toContain("grid-template-columns:minmax(0,1fr) 560px");
+    expect(source).toContain(".workspace{position:relative;z-index:70;display:flex;flex-direction:column;width:min(2480px,100%);height:100%;margin:auto;box-sizing:border-box;padding:20px 40px 80px");
+    expect(source).toContain(".columns{--rail-right:400px;display:grid;grid-template-columns:380px minmax(0,1fr) auto;gap:20px");
+    // 旧的双栏 tab 网格与单独的研究阅读列不再存在。
+    expect(source).not.toContain("grid-template-columns:minmax(0,1fr) 560px");
+    expect(source).not.toContain("data-tab=research");
   });
 
-  it("keeps a dismissed issue summary in the judgment column", () => {
-    expect(css("./issue-workspace.module.css")).toContain(".unknown{grid-area:judgment;");
+  it("keeps a dismissed issue summary in the left rail without the old grid areas", () => {
+    const source = css("./issue-workspace.module.css");
+    expect(source).toContain(".unknown{background:#fff}");
+    expect(source).not.toContain("grid-area:");
   });
 
   it("keeps the Radar feed at the designed 1680 版心 with a ≥40px horizontal gutter", () => {

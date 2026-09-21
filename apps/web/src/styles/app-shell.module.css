@@ -128,7 +128,7 @@
 .shell[data-layout] .mainArea{grid-column:1}
 .feedSurface{height:100%;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
 /* Meeting 自己管理左/中/右三栏滚动；外层不再预留底部 dock 空间。 */
-.expandedScroll[data-card-kind=meeting]{margin:0;padding:0;overflow:hidden}
+.expandedScroll[data-card-kind=meeting],.expandedScroll[data-card-kind=issue]{margin:0;padding:0;overflow:hidden}
 
 /* 缩放/低高度下优先保留可滚动的完整页面，不让 fixed shell 裁掉内容。 */
 @media (max-height:760px) and (min-width:691px){
@@ -147,7 +147,3 @@
  .shell[data-layout]{position:fixed;inset:0;height:100dvh;min-height:0;padding:8px;overflow:hidden}
  .shell[data-layout] .mainArea{display:block;height:100%;min-height:0}
 }
-
-/* Issue 面在 expandedScroll 内容盒内居中；窄幅左右内边距不对称（左 18/12、右 5）会把中心带偏最多 6.5px，仅对 Issue 对称化。 */
-@media(max-width:1250px){.expandedScroll[data-card-kind=issue]{padding-right:18px}}
-@media(max-width:690px){.expandedScroll[data-card-kind=issue]{padding-right:12px}}

@@ -6,5 +6,5 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
   const cookie = await requireCeo(`/issues/${id}`);
   const [{ cards }, meetings] = await Promise.all([loadIssueCard(cookie, id), loadMeetingCards(cookie)]);
   const scheduled = meetings.cards.filter((card) => (card.payload as { status?: string }).status === "scheduled");
-  return <CardPage initialCards={[...cards, ...scheduled]} scope={`issue:${id}`} label={cards[0].title} />;
+  return <CardPage initialCards={[...cards, ...scheduled]} scope={`issue:${id}`} label={cards[0].title} conversationPlacement="embedded" />;
 }
