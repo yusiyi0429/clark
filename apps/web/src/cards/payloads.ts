@@ -43,6 +43,7 @@ export type IssuePayload = {
   }[];
   dismissedAt: string | null;
   dismissReason: string | null;
+  restoredAt?: string | null;
 };
 
 /** 直接复用 packages/contracts 的投影契约，避免 Web 内再定义一份会漂移的类型。 */

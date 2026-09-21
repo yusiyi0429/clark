@@ -8,6 +8,7 @@ import { createRadarService, type RadarAssessor, type RadarWebAdapter } from "..
 import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "../src/radarSources.js";
 import { createRadarAgentAssessor } from "../src/radarAgent.js";
 import { createRadarScheduler } from "../src/radarScheduler.js";
+import { loadCompanyMemory } from "../src/companyMemory.js";
 import { migrate } from "../src/migrate.js";
 import { createTestDb, testEnv, TEST_PASSWORD } from "./helpers.js";
 
@@ -22,6 +23,15 @@ const SOURCES = {
   sites: [{ id: "site-web", name: "公开 Web", enabled: true, domains: ["example.com"] }],
   wechatAccounts: [],
 };
+
+/** 契约要求每条候选附带 promotion：提交即完成 CompanyMemory 筛选并升级预研。 */
+const promotionFixture = () => ({
+  decisionKind: "company_direction" as const,
+  decisionQuestion: "是否调整渠道策略？",
+  options: ["调整渠道策略", "保持观察"],
+  location: { level: "battlefield" as const, battlefieldId: "growth" },
+  urgency: { level: "gray" as const },
+});
 
 const usage = {
   input: 5, output: 3, cacheRead: 0, cacheWrite: 0, totalTokens: 8,
@@ -60,6 +70,17 @@ function webItem(query: string, url: string, publishedAt: string): TRadarSourceI
     publishedAt,
     excerpt: "连续原文",
     sourceRef: { type: "web-search", provider: "recorded-web", query },
+  };
+}
+
+function outletItem(index: number): TRadarSourceItem {
+  return {
+    sourceType: "outlet",
+    title: `发布方条目 ${index}`,
+    url: `https://www.ft.com/content/outlet-${index}`,
+    publishedAt: "2026-05-01T08:00:00.000Z",
+    excerpt: `发布方连续原文 ${index}`,
+    sourceRef: { type: "outlet", provider: "publisher-feed", outletId: "ft", outletName: "金融时报" },
   };
 }
 
@@ -190,6 +211,7 @@ describe("Radar scheduled/manual public seam", () => {
           evidenceQuote: "价格将在六月一日调整",
           unknowns: ["覆盖地区"],
           score: { relevance: 5, impact: 4, urgency: 3 },
+          promotion: promotionFixture(),
         }] })),
         now: () => NOW,
       });
@@ -262,6 +284,7 @@ describe("Radar scheduled/manual public seam", () => {
           evidenceQuote: "连续原文",
           unknowns: [],
           score: { relevance: 4, impact: 3, urgency: 2 },
+          promotion: promotionFixture(),
         })) })),
         now: () => NOW,
       });
@@ -317,6 +340,78 @@ describe("Radar scheduled/manual public seam", () => {
     });
   });
 
+  it("stops scheduling assess batches after the timeout signal fires", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await db.query("UPDATE radar_config SET anchors = $1::jsonb, sources = $2::jsonb WHERE id = 'default'", [
+        JSON.stringify(ANCHORS), JSON.stringify(SOURCES),
+      ]);
+      let calls = 0;
+      const radar = createRadarService({
+        pool,
+        web: {
+          configured: true,
+          async search(input) {
+            return Array.from({ length: 10 }, (_, index) => webItem(input.query, `https://example.com/slow-${index}`, "2026-05-01T08:00:00.000Z"));
+          },
+        },
+        assessor: {
+          // 模拟一个已启动后忽略 abort 的模型调用；修复前它返回后会继续启动后续 batch。
+          async assess() {
+            calls += 1;
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            return { candidates: [] };
+          },
+        },
+        now: () => NOW,
+        scanTimeoutMs: 20,
+      });
+      const result = await radar.runManual();
+      expect(result.status).toBe("failed");
+      expect(result.warnings.join(" ")).toContain("Radar scan exceeded 20ms");
+      expect(calls).toBe(1);
+    });
+  });
+
+  it("caps publisher-feed items globally before assess", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      const sources = {
+        sites: [],
+        wechatAccounts: [],
+        outlets: [{ id: "outlet-finance", name: "全球财经媒体", enabled: true, outlets: ["ft", "bbc"] }],
+      };
+      await db.query("UPDATE radar_config SET anchors = $1::jsonb, sources = $2::jsonb WHERE id = 'default'", [
+        JSON.stringify(ANCHORS), JSON.stringify(sources),
+      ]);
+      const batches: number[] = [];
+      const received: { outletIds: string[]; lookbackHours: number }[] = [];
+      const radar = createRadarService({
+        pool,
+        web: { configured: false, async search() { return []; } },
+        outlets: {
+          configured: true,
+          async fetchLatest(input) {
+            received.push(input);
+            return Array.from({ length: 25 }, (_, index) => outletItem(index));
+          },
+        },
+        assessor: {
+          async assess({ sources: batch }) {
+            batches.push(batch.length);
+            return { candidates: [] };
+          },
+        },
+        now: () => NOW,
+      });
+      const result = await radar.runManual();
+      expect(result.status).toBe("completed");
+      expect(received).toEqual([{ outletIds: ["ft", "bbc"], lookbackHours: 48 }]);
+      expect(batches).toEqual([5, 5, 5, 5]);
+      expect(result.warnings.join(" ")).toContain("超过总上限 20 条，已截断");
+    });
+  });
+
   it("bounds anchors and assess batches, and keeps only the successful batches", async () => {
     await createTestDb(async ({ db, pool }) => {
       await migrate(db);
@@ -358,6 +453,7 @@ describe("Radar scheduled/manual public seam", () => {
               evidenceQuote: "连续原文",
               unknowns: [],
               score: { relevance: 4, impact: 3, urgency: 2 },
+              promotion: promotionFixture(),
             })) };
           },
         },
@@ -551,8 +647,9 @@ describe("strict Radar Candidate Tool to Signal persistence", () => {
             }];
           },
         },
-        assessor: createRadarAgentAssessor({
+        assessor: await createRadarAgentAssessor({
           query: pool.query.bind(pool),
+          companyMemory: loadCompanyMemory(testEnv),
           baseUrl: "https://provider.invalid/v1/responses",
           apiKey: "test-key",
           modelId: "fake-light",
@@ -564,6 +661,7 @@ describe("strict Radar Candidate Tool to Signal persistence", () => {
             evidenceQuote: "渠道政策将在六月调整",
             unknowns: [],
             score: { relevance: 5, impact: 4, urgency: 3 },
+            promotion: promotionFixture(),
           }] }),
         }),
         now: () => NOW,
@@ -608,6 +706,7 @@ describe("strict Radar Candidate Tool to Signal persistence", () => {
           evidenceQuote: "价格确定将在六月调整",
           unknowns: [],
           score: { relevance: 4, impact: 3, urgency: 2 },
+          promotion: promotionFixture(),
         }] })),
         now: () => NOW,
       });
@@ -704,6 +803,67 @@ describe("Radar and Signal Card/API seam", () => {
       } finally {
         await app.close();
       }
+    });
+  });
+});
+
+describe("publisher outlet Signal persistence", () => {
+  it("把发布方 feed 条目按 source_type=outlet 落库，不回落全网检索", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      const url = "https://www.bloomberg.com/news/articles/2026-09-18/treasury-basis-trade";
+      const excerpt = "Treasury basis trade overview for the bond market.";
+      await db.query("UPDATE radar_config SET anchors = $1::jsonb, sources = $2::jsonb WHERE id = 'default'", [
+        JSON.stringify(ANCHORS),
+        JSON.stringify({
+          sites: [],
+          wechatAccounts: [],
+          outlets: [{ id: "global-finance", name: "全球财经媒体", enabled: true, outlets: ["bloomberg"] }],
+        }),
+      ]);
+      const expectedFingerprint = createHash("sha256").update(`v1\n${url}`).digest("hex");
+      let webCalls = 0;
+      const radar = createRadarService({
+        pool,
+        web: { configured: true, async search() { webCalls += 1; return []; } },
+        outlets: {
+          configured: true,
+          async fetchLatest(request) {
+            expect(request).toEqual({ outletIds: ["bloomberg"], lookbackHours: 48 });
+            return [{
+              sourceType: "outlet",
+              title: "Treasury basis trade",
+              url,
+              publishedAt: "2026-05-01T08:00:00.000Z",
+              excerpt,
+              sourceRef: { type: "outlet", provider: "publisher-feed", outletId: "bloomberg", outletName: "彭博" },
+            }];
+          },
+        },
+        assessor: await createRadarAgentAssessor({
+          query: pool.query.bind(pool),
+          companyMemory: loadCompanyMemory(testEnv),
+          baseUrl: "https://provider.invalid/v1/responses",
+          apiKey: "test-key",
+          modelId: "fake-light",
+          streamSimple: () => toolStream({ candidates: [{
+            sourceFingerprint: expectedFingerprint,
+            anchorId: "anchor-market",
+            summary: "债券市场承压",
+            strategicImpact: "需要判断融资成本",
+            evidenceQuote: "Treasury basis trade overview",
+            unknowns: [],
+            score: { relevance: 5, impact: 4, urgency: 3 },
+            promotion: promotionFixture(),
+          }] }),
+        }),
+        now: () => NOW,
+      });
+
+      expect(await radar.runManual()).toMatchObject({ status: "completed", createdSignals: 1 });
+      expect((await db.query("SELECT source_type, source_title FROM signals")).rows)
+        .toEqual([{ source_type: "outlet", source_title: "Treasury basis trade" }]);
+      expect(webCalls).toBe(0);
     });
   });
 });

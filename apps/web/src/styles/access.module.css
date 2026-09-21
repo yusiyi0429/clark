@@ -486,3 +486,19 @@
 .unlockButton:disabled { opacity: 0.6; cursor: default; }
 .unlockButton:focus-visible { outline: 2px solid rgba(207, 187, 255, 0.94); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .passwordField, .unlockButton { transition: none; } }
+
+/* pen Access 登录（A-02/A-03）：Brand 72/56、Lockscreen 460 起于 y=400、Footer 1070/1370；
+   口令错误时字段描边与提示文字用 #E34B43。 */
+@media (min-width: 561px) {
+  .brand { top: clamp(24px, 4vw, 56px); left: clamp(24px, 4vw, 72px); gap: 14px; }
+  .brandMark { width: 40px; height: 40px; }
+  .brandName { font-size: 20px; font-weight: 500; }
+  .lockscreen { padding-right: 20px; padding-left: 20px; }
+  @media (min-height: 761px) {
+    .lockscreen { padding-top: clamp(96px, 27.8vh, 400px); }
+  }
+  .accessForm { width: min(460px, calc(100vw - 40px)); }
+  .panelFooter { bottom: 56px; color: rgba(255, 255, 255, 0.4); font-size: 12px; }
+}
+.accessForm:has([role="alert"]) .passwordField { border-color: #e34b43; border-width: 1.5px; }
+.errorSlot p { color: #e34b43; font-size: 12px; }

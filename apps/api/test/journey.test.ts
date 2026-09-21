@@ -4,7 +4,7 @@ import { createAssistantMessageEventStream, type AssistantMessage, type Context 
 import { Card, SessionResponse } from "@warmap/contracts";
 import { loadCompanyMemory } from "../src/companyMemory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
-import { TEST_PASSWORD, createTestApp, testEnv } from "./helpers.js";
+import { TEST_PASSWORD, createTestApp, preflightCandidate, testEnv } from "./helpers.js";
 
 const USAGE = {
   input: 4,
@@ -241,11 +241,7 @@ describe("CEO login → real Card journey", () => {
         async generate(input: { issues: { id: string }[] }) {
           return {
             runId: "preflight-1",
-            candidate: {
-              entries: [{ kind: "agenda", title: "议程", body: "先对齐渠道投入的两个选择", sourceRefs: input.issues.map((issue) => `issue:${issue.id}`) }],
-              basis: "依据关联 Issue 与 CompanyMemory 相关段落",
-              brief: "CEO 需要在会前确认渠道投入节奏",
-            },
+            candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)),
           };
         },
       },

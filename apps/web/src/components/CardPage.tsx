@@ -14,10 +14,12 @@ type Props = {
   label: string;
   /** workspace：对象材料铺满主区；feed：列表型页面由 Card 自己滚动。 */
   layout?: "workspace" | "feed";
+  /** Meeting / Signal 阅读把同一 Conversation 嵌入右侧栏，其余对象继续使用底部 dock。 */
+  conversationPlacement?: "dock" | "embedded";
 };
 
 /** 对象页外壳：主区只渲染 Card，底部是共享 Conversation dock。 */
-export function CardPage({ initialCards, scope, label, layout = "workspace" }: Props) {
+export function CardPage({ initialCards, scope, label, layout = "workspace", conversationPlacement = "dock" }: Props) {
   const [cards, setCards] = useState(initialCards);
   const router = useRouter();
 
@@ -55,7 +57,7 @@ export function CardPage({ initialCards, scope, label, layout = "workspace" }: P
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
-      if (document.querySelector('[role="dialog"]')) return;
+      if (document.querySelector('dialog, [role="dialog"]')) return;
       router.push("/");
     }
     window.addEventListener("keydown", onKey);
@@ -65,11 +67,11 @@ export function CardPage({ initialCards, scope, label, layout = "workspace" }: P
   if (!primary) return null;
 
   return (
-    <div className={s.shell} data-testid="ceo-workspace">
+    <div className={s.shell} data-testid="ceo-workspace" data-layout={layout}>
       <div className={s.mainArea}>
         {layout === "workspace" ? (
           <div className={s.expanded} data-testid="expanded-panel" ref={panel}>
-            <div className={s.expandedScroll}>{renderCard({ card: primary, collection: cards, onCard, onNavigate })}</div>
+            <div className={s.expandedScroll} data-card-kind={primary.kind}>{renderCard({ card: primary, collection: cards, onCard, onNavigate })}</div>
           </div>
         ) : (
           <div className={s.feedSurface} data-testid="expanded-panel">
@@ -77,7 +79,7 @@ export function CardPage({ initialCards, scope, label, layout = "workspace" }: P
           </div>
         )}
       </div>
-      <ConversationDock scope={scope} label={label} availableCards={cards} />
+      {conversationPlacement === "dock" ? <ConversationDock scope={scope} label={label} availableCards={cards} /> : null}
     </div>
   );
 }

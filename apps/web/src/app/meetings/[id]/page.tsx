@@ -7,5 +7,5 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
   const { cards } = await loadMeetingCard(cookie, id);
   const issueIds = (cards[0].payload as { issueIds?: string[] }).issueIds ?? [];
   const issues = await tryLoadIssueCards(cookie, issueIds);
-  return <CardPage initialCards={[...cards, ...issues]} scope={`meeting:${id}`} label={cards[0].title} />;
+  return <CardPage initialCards={[...cards, ...issues]} scope={`meeting:${id}`} label={cards[0].title} conversationPlacement="embedded" />;
 }

@@ -24,6 +24,11 @@ export type RadarWechatAdapter = {
   fetchLatest(input: { accountId: string; accountName: string }, signal: AbortSignal): Promise<TRadarSourceItem[]>;
 };
 
+export type RadarOutletAdapter = {
+  configured: boolean;
+  fetchLatest(input: { outletIds: string[]; lookbackHours: number }, signal: AbortSignal): Promise<TRadarSourceItem[]>;
+};
+
 export type RadarAssessor = {
   assess(input: { anchors: TRadarAnchor[]; sources: FingerprintedRadarSource[] }, signal: AbortSignal): Promise<TRadarCandidateSubmission>;
 };
@@ -33,7 +38,7 @@ export type RadarService = {
   runScheduled(): Promise<TRadarScanResponse>;
   /** 启动补偿：进程崩溃时留下的 running 扫描必须可见地标为 failed（doc 03 §16），不自动重跑。 */
   recoverStaleRuns(): Promise<void>;
-  providerStatus: { web: boolean; wechat: boolean };
+  providerStatus: { web: boolean; wechat: boolean; outlets: boolean };
 };
 
 type RadarConfigRow = {
@@ -48,6 +53,8 @@ const LOCK_KEY = "radar:default";
 /** 单批送入 assess 的来源上限与监测方向上限（doc 03 §6/§11 固定上限，避免无界 prompt）。 */
 const ASSESS_BATCH_SIZE = 5;
 const MAX_ANCHORS = 20;
+/** outlets 是整份 feed，不按 anchor 检索；总量必须受限，保证 180 秒 scan timeout 真正可达。 */
+const MAX_OUTLET_ITEMS = 20;
 
 function companyDay(now: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -86,6 +93,7 @@ export function createRadarService({
   pool,
   web,
   wechat,
+  outlets,
   assessor,
   onIssuePromoted,
   now = () => new Date(),
@@ -94,6 +102,7 @@ export function createRadarService({
   pool: Pool;
   web: RadarWebAdapter;
   wechat?: RadarWechatAdapter;
+  outlets?: RadarOutletAdapter;
   assessor: RadarAssessor;
   onIssuePromoted?: (issueId: string) => void;
   now?: () => Date;
@@ -173,6 +182,34 @@ export function createRadarService({
           warnings.push(`微信公众号 ${account.name} failed: ${(cause as Error).message || String(cause)}`);
         }
       }
+      // 发布方级来源（方案 A）：一次取整份最新列表，不按 anchor 相乘，不增加博查配额。
+      // 窗口内零条目时单条 warning；绝不回落到全网检索，否则「限定 7 家」就成了谎话。
+      let outletCollected = 0;
+      for (const source of (sources.outlets ?? []).filter((entry) => entry.enabled)) {
+        if (outletCollected >= MAX_OUTLET_ITEMS) {
+          warnings.push(`发布方来源超过总上限 ${MAX_OUTLET_ITEMS} 条，剩余来源未采集`);
+          break;
+        }
+        attempted += 1;
+        if (!outlets?.configured) {
+          warnings.push(`发布方来源 ${source.name} 未配置 Outlet Feed Adapter`);
+          continue;
+        }
+        try {
+          const fetched = await outlets.fetchLatest(
+            { outletIds: source.outlets, lookbackHours: config.lookback_hours },
+            abort.signal,
+          );
+          const accepted = fetched.slice(0, MAX_OUTLET_ITEMS - outletCollected);
+          collected.push(...accepted);
+          outletCollected += accepted.length;
+          succeeded += 1;
+          if (accepted.length === 0) warnings.push(`发布方来源 ${source.name} 在 ${config.lookback_hours} 小时窗口内无条目`);
+          if (accepted.length < fetched.length) warnings.push(`发布方来源 ${source.name} 超过总上限 ${MAX_OUTLET_ITEMS} 条，已截断`);
+        } catch (cause) {
+          warnings.push(`发布方来源 ${source.name} failed: ${(cause as Error).message || String(cause)}`);
+        }
+      }
       if (attempted === 0) warnings.push("Radar 未配置启用的来源");
       if (succeeded === 0) {
         const response: TRadarScanResponse = { trigger, status: "failed", companyDay: day, createdSignals: 0, warnings };
@@ -211,6 +248,9 @@ export function createRadarService({
         const candidates: TRadarCandidateSubmission["candidates"] = [];
         let failedBatches = 0;
         for (const batch of batches) {
+          // 某个 candidate 运行没有及时响应 abort 时，绝不能继续启动后续 batch。
+          // 否则 180 秒 timeout 只会成为提示，扫描仍可能串行跑数分钟。
+          if (abort.signal.aborted) throw abort.signal.reason ?? new Error(`Radar scan exceeded ${scanTimeoutMs}ms`);
           try {
             candidates.push(...(await assessor.assess({ anchors: monitoredAnchors, sources: batch }, abort.signal)).candidates);
           } catch (cause) {
@@ -361,6 +401,6 @@ export function createRadarService({
         client.release();
       }
     },
-    providerStatus: { web: web.configured, wechat: wechat?.configured === true },
+    providerStatus: { web: web.configured, wechat: wechat?.configured === true, outlets: outlets?.configured === true },
   };
 }

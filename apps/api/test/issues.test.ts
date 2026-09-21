@@ -33,7 +33,7 @@ function webItem(query: string, url: string): TRadarSourceItem {
   };
 }
 
-/** 合法升级候选：5 类 CEO decision kind、两个不同选择、连续引文、合法归属、分值过门、red 有可解析窗口。 */
+/** 合法升级候选：5 类 CEO decision kind、两个不同选择、连续引文、合法归属、red 有可解析窗口。 */
 function promotionCandidate(sources: { sourceFingerprint: string }[]): TRadarCandidateSubmission {
   return {
     candidates: [{
@@ -486,7 +486,6 @@ describe("promotion gates reject unqualified candidates in code", () => {
   it.each([
     ["an unparsable decision window", (candidate: TRadarCandidateSubmission) => { candidate.candidates[0].promotion!.urgency.decisionBy = "六月一日"; }],
     ["a red level without a reason", (candidate: TRadarCandidateSubmission) => { delete candidate.candidates[0].promotion!.urgency.reason; }],
-    ["a score below the code threshold", (candidate: TRadarCandidateSubmission) => { candidate.candidates[0].score = { relevance: 3, impact: 3, urgency: 3 }; }],
     ["an unsupported CEO decision kind", (candidate: TRadarCandidateSubmission) => { (candidate.candidates[0].promotion as { decisionKind: string }).decisionKind = "ceo_mood"; }],
     ["an invalid location", (candidate: TRadarCandidateSubmission) => { (candidate.candidates[0].promotion as { location: unknown }).location = { level: "battlefield" }; }],
     ["a calendar date that does not exist", (candidate: TRadarCandidateSubmission) => { candidate.candidates[0].promotion!.urgency.decisionByEvidence = { quote: "政策在二月三十日调整" }; }],

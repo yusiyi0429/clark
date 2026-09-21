@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# 宿主机 cron 备份（.tech/08 §11）：pg_dump(custom) → 非空校验 → age 加密 → checksum →
-# SSH/SFTP 异机复制 → 异机与本机保留 BACKUP_RETENTION_DAYS（至少 7）天 → 删除本机明文。
-# 默认 BACKUP_SOURCE_MODE=compose：PostgreSQL 只在 Compose 内网，经 docker compose exec 在容器内 dump/查询；
-# 不读取、不拼接、不打印 POSTGRES_PASSWORD。BACKUP_SOURCE_MODE=url 时兼容外部库（需 DATABASE_URL + 宿主 pg_dump/psql）。
+# 宿主机 cron 备份（.tech/08 §11 + ADR 0017）：同一 UTC 批次内
+#   停 API（仅当其在运行）→ pg_dump(custom) → schema 版本 → 存储行清单 →
+#   meeting_materials + conversation_attachments 两个 API-only volume tar →
+#   非空校验 → age 加密 → checksum → SSH/SFTP 异机复制 → 保留策略 → trap 重启 API → 删除本机明文。
+# 默认 BACKUP_SOURCE_MODE=compose：PostgreSQL 与两个 volume 都在 Compose 内网，经 docker compose 执行；
+# 不读取、不拼接、不打印 POSTGRES_PASSWORD。BACKUP_SOURCE_MODE=url 时仅备份数据库：
+# volume 数据（会前材料/会话附件）不在该模式覆盖范围内，恢复亦不支持——脚本会显式打印该限制。
 # API 镜像不包含本脚本；真实凭据只从环境变量/受限文件读取，脚本不打印 secret。
 # 用法：backup.sh [--dry-run]
 set -euo pipefail
@@ -11,7 +14,7 @@ DRY_RUN=0
 case "${1:-}" in
   --dry-run) DRY_RUN=1 ;;
   "" ) ;;
-  -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
   *) echo "未知参数: $1" >&2; exit 2 ;;
 esac
 
@@ -31,8 +34,12 @@ SOURCE_MODE="${BACKUP_SOURCE_MODE:-compose}"
 COMPOSE_FILE="${WARMAP_COMPOSE_FILE:-$REPO_ROOT/infra/docker-compose.yml}"
 COMPOSE_ENV_FILE="${WARMAP_ENV_FILE:-$REPO_ROOT/infra/.env}"
 COMPOSE_SERVICE="${WARMAP_PG_SERVICE:-postgres}"
+API_SERVICE="${WARMAP_API_SERVICE:-api}"
 DB_NAME="${WARMAP_DB_NAME:-warmap}"
 DB_USER="${WARMAP_DB_USER:-warmap}"
+# 两个 API-only volume（ADR 0017）；名字与 infra/docker-compose.yml 一致
+VOLUME_MEETING="${WARMAP_VOLUME_MEETING:-meeting_materials}"
+VOLUME_ATTACHMENT="${WARMAP_VOLUME_ATTACHMENT:-conversation_attachments}"
 
 : "${BACKUP_AGE_RECIPIENT:?backup: 需要 BACKUP_AGE_RECIPIENT（age 公钥 age1...）}"
 : "${BACKUP_SSH_HOST:?backup: 需要 BACKUP_SSH_HOST（异机地址）}"
@@ -52,14 +59,22 @@ SCP_BIN="${SCP_BIN:-scp}"
 SSH_OPTS=(-i "$BACKUP_SSH_KEY_PATH" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
 TARGET="${BACKUP_SSH_USER}@${BACKUP_SSH_HOST}"
 SCHEMA_SQL="SELECT coalesce(max(id), 0) FROM schema_migrations"
+# 存储行清单：materials 与会话附件的 storageKey/SHA 都以 DB 为准（manifest 的校验基准）
+STORAGE_ROWS_SQL="SELECT 'meeting_material|' || m.id || '|' || value->>'storageKey' || '|' || value->>'sha256' FROM meetings m, jsonb_array_elements(m.materials) value WHERE value->>'storageKey' <> '' UNION ALL SELECT 'conversation_attachment|' || cm.id || '|' || a->>'storageKey' || '|' || a->>'sha256' FROM conversation_messages cm, jsonb_array_elements(cm.attachments) a WHERE a->>'storageKey' <> ''"
 
-# 源模式决定 dump/schema 命令；两种模式都不把密码写进命令行
+compose() { docker compose -f "$COMPOSE_FILE" --env-file "$COMPOSE_ENV_FILE" "$@"; }
+
 case "$SOURCE_MODE" in
   compose)
     DUMP_DESC="docker compose -f $COMPOSE_FILE --env-file $COMPOSE_ENV_FILE exec -T $COMPOSE_SERVICE pg_dump -U $DB_USER -d $DB_NAME --format=custom --no-owner --no-privileges"
     SCHEMA_DESC="docker compose -f $COMPOSE_FILE --env-file $COMPOSE_ENV_FILE exec -T $COMPOSE_SERVICE psql -U $DB_USER -d $DB_NAME -Atc \"$SCHEMA_SQL\""
-    run_dump() { docker compose -f "$COMPOSE_FILE" --env-file "$COMPOSE_ENV_FILE" exec -T "$COMPOSE_SERVICE" pg_dump -U "$DB_USER" -d "$DB_NAME" --format=custom --no-owner --no-privileges "$@" > "$plain"; }
-    run_schema() { docker compose -f "$COMPOSE_FILE" --env-file "$COMPOSE_ENV_FILE" exec -T "$COMPOSE_SERVICE" psql -U "$DB_USER" -d "$DB_NAME" -Atc "$SCHEMA_SQL"; }
+    STORAGE_DESC="docker compose -f $COMPOSE_FILE --env-file $COMPOSE_ENV_FILE exec -T $COMPOSE_SERVICE psql -U $DB_USER -d $DB_NAME -Atc \"$STORAGE_ROWS_SQL\""
+    VOLUME_DESC="docker compose -f $COMPOSE_FILE --env-file $COMPOSE_ENV_FILE run --rm --no-deps -T --entrypoint tar $API_SERVICE czf - -C /var/lib/warmap/<volume> ."
+    FREEZE_DESC="docker compose ps -q $API_SERVICE → 若在运行：docker compose stop ${API_SERVICE}（EXIT trap 重启）"
+    run_dump() { compose exec -T "$COMPOSE_SERVICE" pg_dump -U "$DB_USER" -d "$DB_NAME" --format=custom --no-owner --no-privileges "$@" > "$plain"; }
+    run_schema() { compose exec -T "$COMPOSE_SERVICE" psql -U "$DB_USER" -d "$DB_NAME" -Atc "$SCHEMA_SQL"; }
+    run_storage_rows() { compose exec -T "$COMPOSE_SERVICE" psql -U "$DB_USER" -d "$DB_NAME" -Atc "$STORAGE_ROWS_SQL"; }
+    archive_volume() { compose run --rm --no-deps -T --entrypoint tar "$API_SERVICE" czf - -C "/var/lib/warmap/$1" . > "$2"; }
     ;;
   url)
     : "${DATABASE_URL:?backup: BACKUP_SOURCE_MODE=url 需要 DATABASE_URL（备份源库）}"
@@ -67,62 +82,134 @@ case "$SOURCE_MODE" in
     PSQL_BIN="${PSQL_BIN:-psql}"
     DUMP_DESC="$PG_DUMP_BIN --dbname=$(redact "$DATABASE_URL") --format=custom --no-owner --no-privileges"
     SCHEMA_DESC="$PSQL_BIN $(redact "$DATABASE_URL") -Atc \"$SCHEMA_SQL\""
+    STORAGE_DESC="$PSQL_BIN $(redact "$DATABASE_URL") -Atc \"$STORAGE_ROWS_SQL\""
+    VOLUME_DESC="（url 模式无 volume 归档）"
+    FREEZE_DESC="（url 模式不停止任何服务）"
     run_dump() { "$PG_DUMP_BIN" --dbname="$DATABASE_URL" --format=custom --no-owner --no-privileges > "$plain"; }
     run_schema() { "$PSQL_BIN" "$DATABASE_URL" -Atc "$SCHEMA_SQL"; }
+    run_storage_rows() { "$PSQL_BIN" "$DATABASE_URL" -Atc "$STORAGE_ROWS_SQL"; }
+    archive_volume() { die "url 模式不支持 volume 归档"; }
     ;;
   *) die "BACKUP_SOURCE_MODE 只支持 compose 或 url（当前: ${SOURCE_MODE}）" ;;
 esac
 
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
-base="warmap-${timestamp}.dump"
+base="warmap-${timestamp}"
 
 echo "backup: source_mode=$SOURCE_MODE 异机=${BACKUP_SSH_HOST}:${BACKUP_SSH_PATH} 保留=${RETENTION_DAYS}天 时间=${timestamp}"
 if [ "$DRY_RUN" = 1 ]; then
+  echo "backup: freeze → $FREEZE_DESC"
   echo "backup: dump   → $DUMP_DESC"
   echo "backup: schema → $SCHEMA_DESC"
+  echo "backup: storage→ $STORAGE_DESC"
+  echo "backup: volume → $VOLUME_DESC"
+  if [ "$SOURCE_MODE" = "url" ]; then
+    echo "backup: 警告：url 模式仅备份数据库；meeting_materials/conversation_attachments 卷数据不在覆盖范围，该备份不能用于卷恢复"
+  fi
   if [ "$SOURCE_MODE" = compose ]; then
     echo "backup: compose_file=$COMPOSE_FILE($([ -f "$COMPOSE_FILE" ] && echo exists || echo missing)) env_file=$COMPOSE_ENV_FILE($([ -f "$COMPOSE_ENV_FILE" ] && echo exists || echo missing))"
   fi
-  echo "backup: --dry-run：将执行 dump → age -r → checksum → scp → 清理 ${RETENTION_DAYS} 天前备份；未执行任何写入、未连接数据库、未触达远端"
+  echo "backup: --dry-run：将按 freeze → dump → manifest → volume×2 → 加密 → checksum → scp → 保留策略 → 重启 API 执行；未执行任何写入、未连接数据库、未触达远端"
   exit 0
 fi
 
 if [ "$SOURCE_MODE" = compose ]; then
   [ -f "$COMPOSE_FILE" ] || die "compose 文件不存在: $COMPOSE_FILE"
-  [ -f "$COMPOSE_ENV_FILE" ] || die "compose env 文件不存在: $COMPOSE_ENV_FILE（默认 infra/.env）"
+  [ -f "$COMPOSE_ENV_FILE" ] || die "compose env 文件不存在: ${COMPOSE_ENV_FILE}（默认 infra/.env）"
 fi
+
+make_checksum() { ( cd "$(dirname "$1")" && sha256 "$(basename "$1")" > "$(basename "$1").sha256" ); }
 
 mkdir -p "$BACKUP_LOCAL_DIR"
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/warmap.XXXXXX")
-trap 'rm -rf "$tmpdir"' EXIT
-plain="$tmpdir/$base"
-encrypted="$BACKUP_LOCAL_DIR/${base}.age"
+API_WAS_RUNNING=0
+on_exit() {
+  # 只重启备份前确实在运行的 API；恢复写冻结前的状态
+  if [ "$SOURCE_MODE" = compose ] && [ "$API_WAS_RUNNING" = 1 ]; then
+    compose start "$API_SERVICE" >/dev/null 2>&1 || echo "backup: 警告：API 重启失败，请手动 docker compose start $API_SERVICE" >&2
+  fi
+  rm -rf "$tmpdir"
+}
+trap on_exit EXIT
 
-# 1) dump（stdout 重定向到本机临时文件）；2) 非空校验
+plain="$tmpdir/$base.dump"
+
+if [ "$SOURCE_MODE" = compose ]; then
+  # 冻结写入口：只停止 API（唯一写方），PostgreSQL/edge/wechat 不动
+  running_ids=$(compose ps -q "$API_SERVICE" || true)
+  if [ -n "$running_ids" ]; then
+    API_WAS_RUNNING=1
+    compose stop "$API_SERVICE" >/dev/null
+    echo "backup: 已停止 ${API_SERVICE}（写冻结）"
+  else
+    echo "backup: $API_SERVICE 未在运行，无需冻结"
+  fi
+fi
+
+# 1) dump；2) 非空校验
 run_dump
 [ -s "$plain" ] || die "pg_dump 产物为空，已中止（不覆盖异机历史备份）"
 
 schema_version=$(run_schema) || die "无法读取 schema_migrations"
 [[ "$schema_version" =~ ^[0-9]+$ ]] || die "schema_migrations 返回值不合法"
 
-# 3) age 加密（只保留密文，明文在 trap 中删除）
-"$AGE_BIN" -r "$BACKUP_AGE_RECIPIENT" -o "$encrypted" "$plain"
-[ -s "$encrypted" ] || die "age 加密产物为空"
+# 3) 存储行清单（DB 为唯一事实：materials + 会话附件的 storageKey/SHA）
+if [ "$SOURCE_MODE" = url ]; then
+  echo "backup: 警告：url 模式仅备份数据库；meeting_materials/conversation_attachments 卷数据不在覆盖范围，该备份不能用于卷恢复"
+fi
+run_storage_rows > "$tmpdir/storage_rows.txt" || die "无法读取存储行清单"
+storage_row_count=$(wc -l < "$tmpdir/storage_rows.txt" | tr -d ' ')
 
-# 4) checksum + 元数据
-( cd "$BACKUP_LOCAL_DIR" && sha256 "$(basename "$encrypted")" > "$(basename "$encrypted").sha256" ) || die "checksum 生成失败"
-cat > "$BACKUP_LOCAL_DIR/${base}.meta.json" <<EOF
-{"file":"$(basename "$encrypted")","createdAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","schemaVersion":${schema_version},"retentionDays":${RETENTION_DAYS},"sourceMode":"${SOURCE_MODE}"}
-EOF
+if [ "$SOURCE_MODE" = compose ]; then
+  # 4) 两个 API-only volume 归档（同一 UTC 批次）
+  archive_volume "$VOLUME_MEETING" "$tmpdir/$VOLUME_MEETING.tar.gz"
+  [ -s "$tmpdir/$VOLUME_MEETING.tar.gz" ] || die "$VOLUME_MEETING 卷归档为空，已中止"
+  archive_volume "$VOLUME_ATTACHMENT" "$tmpdir/$VOLUME_ATTACHMENT.tar.gz"
+  [ -s "$tmpdir/$VOLUME_ATTACHMENT.tar.gz" ] || die "$VOLUME_ATTACHMENT 卷归档为空，已中止"
+fi
 
-# 5) 异机复制
-"$SCP_BIN" "${SSH_OPTS[@]}" "$encrypted" "$BACKUP_LOCAL_DIR/${base}.age.sha256" "$BACKUP_LOCAL_DIR/${base}.meta.json" "$TARGET:${BACKUP_SSH_PATH}/" \
+# 5) 加密 + checksum：dump 与两个卷归档分别加密；manifest 无敏感内容，保持明文便于异机盘点
+"$AGE_BIN" -r "$BACKUP_AGE_RECIPIENT" -o "$BACKUP_LOCAL_DIR/$base.dump.age" "$plain"
+[ -s "$BACKUP_LOCAL_DIR/$base.dump.age" ] || die "age 加密产物为空"
+make_checksum "$BACKUP_LOCAL_DIR/$base.dump.age"
+
+manifest="$BACKUP_LOCAL_DIR/$base.manifest.json"
+{
+  echo "{\"batch\":\"$base\",\"createdAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"schemaVersion\":${schema_version},\"sourceMode\":\"${SOURCE_MODE}\",\"retentionDays\":${RETENTION_DAYS},\"volumes\":[\"$VOLUME_MEETING\",\"$VOLUME_ATTACHMENT\"],\"storageRowCount\":${storage_row_count},\"storageRows\":["
+  awk '{ if (NR > 1) printf ","; printf "\"%s\"", $0 }' "$tmpdir/storage_rows.txt"
+  echo "]}"
+} > "$manifest"
+
+artifacts=("$BACKUP_LOCAL_DIR/$base.dump.age")
+if [ "$SOURCE_MODE" = compose ]; then
+  for vol in "$VOLUME_MEETING" "$VOLUME_ATTACHMENT"; do
+    "$AGE_BIN" -r "$BACKUP_AGE_RECIPIENT" -o "$BACKUP_LOCAL_DIR/$base.$vol.tar.gz.age" "$tmpdir/$vol.tar.gz"
+    [ -s "$BACKUP_LOCAL_DIR/$base.$vol.tar.gz.age" ] || die "age 加密卷归档为空: $vol"
+    make_checksum "$BACKUP_LOCAL_DIR/$base.$vol.tar.gz.age"
+    artifacts+=("$BACKUP_LOCAL_DIR/$base.$vol.tar.gz.age")
+  done
+fi
+make_checksum "$manifest"
+artifacts+=("$manifest")
+
+# 6) 异机复制（同批次全部产物）
+"$SCP_BIN" "${SSH_OPTS[@]}" \
+  "$BACKUP_LOCAL_DIR/$base.dump.age" "$BACKUP_LOCAL_DIR/$base.dump.age.sha256" \
+  "$manifest" "$manifest.sha256" \
+  "$TARGET:$BACKUP_SSH_PATH/" \
   || die "SCP 复制失败（本机密文保留在 ${BACKUP_LOCAL_DIR}，可重试）"
+if [ "$SOURCE_MODE" = compose ]; then
+  "$SCP_BIN" "${SSH_OPTS[@]}" \
+    "$BACKUP_LOCAL_DIR/$base.$VOLUME_MEETING.tar.gz.age" "$BACKUP_LOCAL_DIR/$base.$VOLUME_MEETING.tar.gz.age.sha256" \
+    "$BACKUP_LOCAL_DIR/$base.$VOLUME_ATTACHMENT.tar.gz.age" "$BACKUP_LOCAL_DIR/$base.$VOLUME_ATTACHMENT.tar.gz.age.sha256" \
+    "$TARGET:$BACKUP_SSH_PATH/" \
+    || die "SCP 复制卷归档失败（本机密文保留在 ${BACKUP_LOCAL_DIR}，可重试）"
+fi
 
-# 6) 保留策略：异机与本机同步清理
+# 7) 保留策略：异机与本机同步清理
 "$SSH_BIN" "${SSH_OPTS[@]}" "$TARGET" \
   "find '$BACKUP_SSH_PATH' -maxdepth 1 -type f -name 'warmap-*' -mtime +${RETENTION_DAYS} -delete" \
   || die "异机保留策略执行失败"
 find "$BACKUP_LOCAL_DIR" -maxdepth 1 -type f -name 'warmap-*' -mtime "+${RETENTION_DAYS}" -delete
 
-echo "backup: 完成 ${base}.age (schema=${schema_version}, source_mode=${SOURCE_MODE})，明文已删除"
+echo "backup: 完成 $base 批次 (schema=${schema_version}, source_mode=${SOURCE_MODE}, storage_rows=${storage_row_count}, volumes=2)，明文已删除，API 状态已恢复"

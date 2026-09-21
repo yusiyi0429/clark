@@ -55,15 +55,40 @@ Renderer props：Card payload、navigation callback、Action callback、referenc
 
 SSE reducer 只管理展示：idle/streaming/complete/failed/aborted。业务状态来自 Card。
 
+Meeting 会前页使用同一 Conversation 实现的右侧折叠模式，不复制 SSE/历史逻辑，也不再渲染底部 Dock。折叠态为浅色导轨（52px），展开才转深色面板。
+
+页面结构：左侧「预审结论 + 最优先动作 + 最关键问题 + 四输入边界 + 评审目录」，中央 advisor-review 评审正文，右侧 Chat。主操作「重新预审」放在 Header，不随左栏滚动。折叠状态只存在当前组件内。
+
+响应式：≤1279px 右侧 Chat 展开改为覆盖式抽屉（`position:absolute` 右对齐），不挤压正文；≤900px 隐藏 Chat 并将左栏收为细轨；≤879px 高度压缩 Header 内边距。
+
+## 6.1 评审目录
+
+中央正文是单一文档流，章节由「白底 + 左侧 3px 语义色条」统一，不再用不同底色区分。
+左栏的评审目录做 scroll-spy，并以 `position:sticky;bottom:0` 粘底，任何高度都可见。
+分组与命中判定提取为 `apps/web/src/cards/preflightOutline.ts`，由 `preflightOutline.test.ts` 覆盖（含旧 preflight 平铺分支）。
+
 ## 7. 引用
 
 - UI 只保存未发送的 Card ID/version；
 - 发送后清空；
 - 后端生成 snapshot；
 - 聚合 Card 无引用按钮；
-- 对象页默认进入自己的 scope，不注入其他页面。
+- 对象页默认进入自己的 scope；Meeting scope 由后端可信快照自动补入本场关联 Issue 与完整 preflight，其他对象不跨页注入。
 
 ## 8. 视觉基线
+
+### Meeting 页面宽度系统
+
+Meeting 会前页的三栏用一套 CSS 变量派生尺寸，不写死像素：
+
+- `--measure` 控制正文行宽，`clamp(576px, 40vw, 676px)`，13px 字号下约 44–52 字/行；
+- `--card-width` 由 `--measure` 加两侧内边距派生，所有中央卡片共用；
+- `--rail-left` / `--rail-right` / `--rail-stub` 控制左栏、右栏展开与折叠宽度；
+- ≥1700px 时 `--shell-max` 取 `calc(50% + (左栏 + 卡片 + 折叠宽)/2)`，把剩余宽度均分到外侧与内侧，保证 1080p 与 2K 上构图对称。
+
+实测矩阵与验收方法见 `.scratch/ceo-warmap-mvp/evidence/meeting-design/width-system.md`。
+
+注意：`resize_page` 受物理窗口限制，固定视口验收必须使用 `emulate` 的 `viewport` 参数。
 
 在旧前端固定 fixture，生成：
 

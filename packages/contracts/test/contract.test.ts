@@ -28,6 +28,7 @@ import {
   RadarCandidateSubmission,
   RadarAnchor,
   RadarScanResponse,
+  ResearchDoc,
   RequestSupplementRequest,
   SignalStateRequest,
   UpdateMeetingDraftRequest,
@@ -214,6 +215,13 @@ describe("radar public contract", () => {
         evidenceQuote: "价格将在六月一日调整",
         unknowns: ["覆盖哪些地区"],
         score: { relevance: 4, impact: 5, urgency: 3 },
+        promotion: {
+          decisionKind: "resource_allocation",
+          decisionQuestion: "是否在六月前调整渠道投入？",
+          options: ["调整投入", "维持现状"],
+          location: { level: "battlefield", battlefieldId: "growth" },
+          urgency: { level: "gray" },
+        },
       }],
     };
     expect(Value.Check(RadarCandidateSubmission, candidate)).toBe(true);
@@ -248,10 +256,33 @@ describe("radar public contract", () => {
 });
 
 describe("meeting public contract", () => {
+  const sourceRefs = ["issue:00000000-0000-4000-8000-000000000001"];
+  const entry = (kind: string, title: string) => ({ kind, title, body: title, sourceRefs });
   const candidate = {
-    entries: [{ kind: "agenda", title: "议程", body: "先对齐选择", sourceRefs: ["issue:00000000-0000-4000-8000-000000000001"] }],
+    taskDefinition: {
+      materialPurpose: "说明渠道投入选择",
+      reviewPurpose: "支持 CEO 会前判断",
+      primaryRole: "research_analysis",
+      secondaryRole: null,
+      maturity: "internal_alignment",
+      readerAction: "判断是否进入决策讨论",
+      nonGoal: "不替 CEO 批准投入",
+    },
+    readiness: "revise",
+    entries: [
+      entry("core_judgment", "核心判断"),
+      entry("strategic_alignment", "战略一致性"),
+      entry("positive_signal", "积极信号"),
+      entry("risk_calibration", "风险校准"),
+      entry("meeting_question", "追问一"),
+      entry("meeting_question", "追问二"),
+      entry("meeting_question", "追问三"),
+      entry("next_step", "下一步"),
+      entry("leader_lens", "视角预判，非权威发言"),
+    ],
     basis: "依据关联 Issue",
     brief: "CEO 会前需确认节奏",
+    summary: { criticalIssue: "证据不足", priorityAction: "补充选择后果" },
   };
 
   it("accepts a strict Preflight candidate and rejects model overreach", () => {
@@ -297,6 +328,7 @@ describe("meeting public contract", () => {
       originRef: { type: "issue", issueId: "00000000-0000-4000-8000-000000000001" },
       preflight: { status: "ready", pendingSince: null, runId: "run-1", entries: [], basis: "b", brief: "c", error: null, generatedAt: "2026-05-01T00:00:00.000Z" },
       draft: { readIssueIds: [], carriedIssueIds: [], checkedEntryIds: [], editsByEntryId: {}, supplementRequests: [], note: "" },
+      materials: [],
       transcript: null,
       outcome: null,
     };
@@ -577,5 +609,33 @@ describe("error envelope schema", () => {
     };
     expect(Value.Check(ApiError, err)).toBe(true);
     expect(Value.Check(ApiError, { code: "X" })).toBe(false);
+  });
+});
+
+describe("research doc source contract", () => {
+  const doc = (url: string) => ({
+    summary: "渠道政策需要重新判断",
+    options: [
+      { id: "adjust", label: "调整渠道", consequences: ["短期投入上升"] },
+      { id: "hold", label: "保持观察", consequences: ["可能错过窗口"] },
+    ],
+    evidence: [{ quote: "原文引文", sourceTitle: "内部材料" }],
+    unknowns: [],
+    sources: [{ title: "来源标题", url }],
+  });
+
+  it("只接受真实 http(s) 来源，拒绝模型自编的 file:// 与 urn: 地址", () => {
+    expect(Value.Check(ResearchDoc, doc("https://www.cnbc.com/2026/09/17/example.html"))).toBe(true);
+    expect(Value.Check(ResearchDoc, doc("file:///repo/apps/api/CompanyMemory.md"))).toBe(false);
+    expect(Value.Check(ResearchDoc, doc("urn:issue:3d119c0a"))).toBe(false);
+  });
+
+  it("evidence.sourceUrl 给的是同一约束", () => {
+    const withSourceUrl = (url: string) => ({
+      ...doc("https://example.com/a"),
+      evidence: [{ quote: "原文引文", sourceTitle: "内部材料", sourceUrl: url }],
+    });
+    expect(Value.Check(ResearchDoc, withSourceUrl("https://example.com/b"))).toBe(true);
+    expect(Value.Check(ResearchDoc, withSourceUrl("file:///repo/apps/api/CompanyMemory.md"))).toBe(false);
   });
 });

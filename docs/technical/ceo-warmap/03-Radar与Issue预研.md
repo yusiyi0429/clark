@@ -10,14 +10,17 @@
 
 保存 timezone、anchors、sources、lastScheduledAt 和 lastRun。配置更新走 Card Action，GET 只读。
 
-来源仅两类：
+来源仅三类：
 
 ```text
 site
 wechat-account
+outlet
 ```
 
-公众号必须走真实账号渠道，不能用站点搜索冒充。
+公众号必须走真实账号渠道，不能用站点搜索冒充。发布方来源必须走发布方自己的 feed；不接受用关键词或 `site:` 冒充 BBC、路透这类发布方。
+
+`RadarSources.outlets` 必须保持 `Type.Optional`：旧 JSONB 配置里没有该字段，必填会让 `Value.Check` 失败并让 Radar 整个停摆。
 
 ## 3. Scheduler
 
@@ -42,9 +45,16 @@ MVP 只有：
 ```text
 WebSearchProvider.search
 WechatAccountProvider.fetchLatest
+OutletFeedProvider.fetchLatest
 ```
 
 Provider 由 `.env` 固定。统一输出 title、URL、publishedAt、excerpt、sourceRef。API 负责 URL canonicalization、时间窗和 fingerprint。
+
+Outlet Feed 只抓发布方 RSS 或 news-sitemap，逐条验证文章域归属，再去重、截单家上限。Reuters sitemap 只有标题没有摘要，允许 title 作为 excerpt，代价是红色紧迫度所需的日期引文通常凑不出来。WSJ 已停止更新，目录保留、运行配置排除。
+
+发布方渠道失败或零结果时，只写 warning 并保持 `source_type="outlet"`；不得回落到 Bocha 全网检索，否则「限定这几家」就成了假话。
+
+容量：单家 3 条，全局硬上限 20 条，超限截断并写 warning。`ASSESS_BATCH_SIZE=5` 下最多 4 个 assess 批。
 
 ## 5. Radar Plan
 
@@ -71,6 +81,10 @@ Provider 由 `.env` 固定。统一输出 title、URL、publishedAt、excerpt、
 promotion fingerprint 固定为 `SHA-256(v1 + decisionKind + normalizedDecisionQuestion + normalizedLocation)`。问题文本执行 Unicode NFKC、trim、合并空白和移除句末标点；多战场 ID 排序后进入 location。该规则只保证确定性，不承诺识别所有语义改写；真实重复率成为问题时再升级。
 
 模型不能输出最终门槛结论。
+
+每个 assess 批启动前检查 `abort.signal.aborted`：scan timeout 触发后不再排队新批，否则超时只是停止等待、后台仍继续烧模型。
+
+提示词要求没有合格候选时也必须调用 `submit_candidate({"candidates":[]})` 结束本轮，否则模型可能在无关键条目上悬停到超时。
 
 ## 7. 自动升级事务
 
@@ -105,7 +119,9 @@ research: pending | running | ready | failed
 
 ## 10. PreResearch
 
-输入 Issue、origin source、CompanyMemory passages 和 Web Search Tool。使用 HEAVY_MODEL 和严格 ResearchDoc candidate schema。
+输入 Issue、origin source、CompanyMemory passages，以及一个无参数的只读 `read_outlet_feed` Tool（仅当 Radar 配置里有启用发布方时暴露）。使用 HEAVY_MODEL 和严格 ResearchDoc candidate schema。
+
+该 Tool 与 Radar、全局对话共用同一 adapter 与同一白名单。它返回当前启用发布方的窗口内条目，不是全文库或全网关键词检索，也不接受模型指定 outletId：模型猜不出内部 id，猜错即报错会白烧一次额度。
 
 并发保护：
 
@@ -168,6 +184,9 @@ Research Override：research 未 ready 时使用单独 Action，Web 二次确认
 - normal decide/override；
 - dismissed 防重；
 - Receipt 精确撤回；
+- 发布方条目全局上限与截断 warning；
+- timeout 后不再启动新 assess 批；
+- 发布方 Signal 以 `source_type="outlet"` 落库；
 - Signal 三个独立状态；
 - GET 无副作用。
 

@@ -24,7 +24,7 @@ export type BochaWebSearchOptions = {
 };
 
 const DEFAULT_ENDPOINT = "https://api.bochaai.com/v1/web-search";
-// WebSearchInput.freshness → 博查 freshness 枚举（见 frontend/src/lib/research/search.ts 既有实现）。
+// WebSearchInput.freshness → 博查 freshness 枚举。
 const FRESHNESS: Record<NonNullable<WebSearchInput["freshness"]>, string> = {
   day: "oneDay",
   week: "oneWeek",

@@ -116,6 +116,7 @@ async function issueCard(app: Awaited<ReturnType<typeof buildApp>>, cookie: stri
       }[];
       dismissedAt: string | null;
       dismissReason: string | null;
+      restoredAt?: string | null;
     };
   };
 }
@@ -569,6 +570,116 @@ describe("dismissed Issue", () => {
         const replay = await execute(app, cookie, action(pending, "issue.dismiss").actionId, { reason: "误升级" });
         expect(replay.statusCode).toBe(200);
         expect((await db.query("SELECT id FROM issues")).rows).toHaveLength(1);
+      } finally {
+        await app.close();
+      }
+    });
+  });
+
+  it("restores a dismissed Issue to pending and preserves the dismissal audit record", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      const app = await buildApp({ pool, env: testEnv, conversationRuntime: fakeRuntime });
+      try {
+        const created = await postDri(app, { ...DRI_ISSUE, externalId: "issue-restore" });
+        const id = created.json().cards[0].objectRef.id as string;
+        const originRef = created.json().cards[0].payload.originRef;
+        const cookie = await login(app);
+        const pending = await issueCard(app, cookie, id);
+        const researchBefore = pending.payload.research.status;
+        const dismissed = await execute(app, cookie, action(pending, "issue.dismiss").actionId, { reason: "误升级" });
+        expect(dismissed.statusCode).toBe(200);
+        const dismissedCard = await issueCard(app, cookie, id);
+        expect(dismissedCard.actions.map((candidate) => candidate.actionType)).toEqual(["issue.restore"]);
+
+        const restored = await execute(app, cookie, action(dismissedCard, "issue.restore").actionId, {});
+        expect(restored.statusCode).toBe(200);
+        const card = restored.json().cards[0];
+        expect(card.version).toBe(dismissedCard.version + 1);
+        expect(card.payload).toMatchObject({
+          status: "pending",
+          originRef,
+          research: { status: researchBefore },
+          dismissedAt: dismissedCard.payload.dismissedAt,
+          dismissReason: "误升级",
+        });
+        expect(typeof card.payload.restoredAt).toBe("string");
+        // 待处理动作恢复可用
+        expect(card.actions.map((candidate) => candidate.actionType)).toEqual(
+          expect.arrayContaining(["issue.dismiss", "issue.decide_override"]),
+        );
+
+        const row = await db.query<{ status: string; restored_at: Date | null; restore_fingerprint: string | null; dismiss_reason: string | null; dismissed_at: Date | null }>(
+          "SELECT status, restored_at, restore_fingerprint, dismiss_reason, dismissed_at FROM issues WHERE id = $1",
+          [id],
+        );
+        expect(row.rows[0].status).toBe("pending");
+        expect(row.rows[0].restored_at).not.toBeNull();
+        expect(row.rows[0].restore_fingerprint).not.toBeNull();
+        // 移出审计不删除
+        expect(row.rows[0].dismiss_reason).toBe("误升级");
+        expect(row.rows[0].dismissed_at).not.toBeNull();
+
+        // 重复提交同一 restore actionId：幂等重放返回 200 且版本不再变
+        const duplicate = await execute(app, cookie, action(dismissedCard, "issue.restore").actionId, {});
+        expect(duplicate.statusCode).toBe(200);
+        expect(duplicate.json().cards[0].version).toBe(card.version);
+      } finally {
+        await app.close();
+      }
+    });
+  });
+
+  it("allows restore only for dismissed Issues and enforces version on non-replay", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      const app = await buildApp({ pool, env: testEnv, conversationRuntime: fakeRuntime });
+      try {
+        const created = await postDri(app, { ...DRI_ISSUE, externalId: "issue-restore-guards" });
+        const id = created.json().cards[0].objectRef.id as string;
+        const cookie = await login(app);
+        const pending = await issueCard(app, cookie, id);
+
+        const forgedPending = signActionId(testEnv.sessionSecret, {
+          actionType: "issue.restore",
+          objectType: "issue",
+          objectId: id,
+          objectVersion: pending.version,
+        });
+        const notDismissed = await execute(app, cookie, forgedPending, {});
+        expect(notDismissed.statusCode).toBe(409);
+        expect(notDismissed.json()).toMatchObject({ code: "ISSUE_NOT_DISMISSED" });
+
+        const dismiss = await execute(app, cookie, action(pending, "issue.dismiss").actionId, { reason: "误升级" });
+        expect(dismiss.statusCode).toBe(200);
+
+        // 陈旧版本的 restore（version 已前进）：非重放路径必须 VERSION_CONFLICT
+        const stale = signActionId(testEnv.sessionSecret, {
+          actionType: "issue.restore",
+          objectType: "issue",
+          objectId: id,
+          objectVersion: pending.version,
+        });
+        const conflict = await execute(app, cookie, stale, {});
+        expect(conflict.statusCode).toBe(409);
+        expect(conflict.json()).toMatchObject({ code: "VERSION_CONFLICT" });
+
+        // decided 后 restore 同样拒绝（仅 dismissed 可恢复）：decide 需要 pending，另建一个 Issue
+        const second = await postDri(app, { ...DRI_ISSUE, externalId: "issue-restore-decided" });
+        const secondId = second.json().cards[0].objectRef.id as string;
+        const secondPending = await issueCard(app, cookie, secondId);
+        const decided = await execute(app, cookie, action(secondPending, "issue.decide_override").actionId, { decisionText: "x", confirmOverride: true });
+        expect(decided.statusCode).toBe(200);
+        const afterDecided = await issueCard(app, cookie, secondId);
+        const forgedDecided = signActionId(testEnv.sessionSecret, {
+          actionType: "issue.restore",
+          objectType: "issue",
+          objectId: secondId,
+          objectVersion: afterDecided.version,
+        });
+        const rejected = await execute(app, cookie, forgedDecided, {});
+        expect(rejected.statusCode).toBe(409);
+        expect(rejected.json()).toMatchObject({ code: "ISSUE_NOT_DISMISSED" });
       } finally {
         await app.close();
       }

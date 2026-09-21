@@ -1,7 +1,7 @@
 import { randomUUID, scryptSync } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
-import type { TWebSearchInput, TWebSearchResponse, TWebSearchResult } from "@warmap/contracts";
+import type { TPreflightCandidate, TWebSearchInput, TWebSearchResponse, TWebSearchResult } from "@warmap/contracts";
 import { migrate } from "../src/migrate.js";
 import { buildApp, type AppEnv } from "../src/app.js";
 import type { FastifyInstance } from "fastify";
@@ -16,6 +16,38 @@ import type { WebSearchAdapter } from "../src/webSearch.js";
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
 export type TestDb = { db: import("pg").PoolClient; pool: Pool; admin: Pool; database: string };
+
+/** 新版 advisor-review 场景的最小合法候选；各领域测试只替换其关心的内容。 */
+export function preflightCandidate(sourceRefs: string[]): TPreflightCandidate {
+  const entry = (kind: TPreflightCandidate["entries"][number]["kind"], title: string, body: string) =>
+    ({ kind, title, body, sourceRefs });
+  return {
+    taskDefinition: {
+      materialPurpose: "说明渠道投入选择",
+      reviewPurpose: "支持 CEO 会前判断材料是否足以进入讨论",
+      primaryRole: "research_analysis",
+      secondaryRole: null,
+      maturity: "internal_alignment",
+      readerAction: "判断是否进入渠道投入决策讨论",
+      nonGoal: "不在预审阶段替 CEO 批准投入",
+    },
+    readiness: "revise",
+    entries: [
+      entry("core_judgment", "核心判断", "材料可进入讨论，但关键证据仍需补足"),
+      entry("strategic_alignment", "战略一致性", "当前选择需与公司主线校准"),
+      entry("positive_signal", "积极信号", "材料已经提出明确选择"),
+      entry("risk_calibration", "风险与校准", "投入后果仍缺少验证依据"),
+      entry("meeting_question", "重点追问一", "为什么现在必须选择？"),
+      entry("meeting_question", "重点追问二", "选择意味着暂时不做什么？"),
+      entry("meeting_question", "重点追问三", "什么证据会推翻当前判断？"),
+      entry("next_step", "下一阶段建议", "提交人先补齐推荐路径与后果"),
+      entry("leader_lens", "一号位点评参考", "视角预判，非权威发言：首先会追问推荐选择及代价"),
+    ],
+    basis: "依据关联 Issue、ResearchDoc 与 CompanyMemory，只形成候选材料",
+    brief: "材料可进入讨论，但关键证据仍需补足",
+    summary: { criticalIssue: "缺少推荐路径的验证依据", priorityAction: "补齐选择后果与推翻条件" },
+  };
+}
 
 /** DROP DATABASE (FORCE) 终止测试库残留连接是预期行为；其他池错误必须保持可见。 */
 function tolerateDroppedConnections(pool: Pool): Pool {
@@ -117,7 +149,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;

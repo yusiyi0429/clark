@@ -8,8 +8,7 @@
 .panel { border:1px solid #1d1d1f0d; border-radius:22px; background:#fff; box-shadow:0 1px 2px #1d1d1f04; min-width:0; overflow:hidden; }
 .board .radar { grid-column:auto; grid-row:auto; min-height:190px; padding:20px; justify-content:space-between; }
 .board .radar h2 { font-size:var(--type-title,20px); font-weight:600; margin:0; letter-spacing:-.03em; }
-.scanStage { min-height:104px; max-height:132px; }
-.scanStage > div { height:116px; }
+.scanStage { min-height:104px; }
 .strategy { padding:20px 23px 13px; }
 .board .heading h2 { font-size:var(--type-title,20px); color:var(--apple-label,#1d1d1f); line-height:1.4; font-weight:600; letter-spacing:-.025em; margin:0; }
 .strategicIssues { margin-top:11px; }
@@ -33,7 +32,7 @@
 .modeSwitch{position:relative;display:grid;grid-template-columns:1fr 1fr;border-radius:10px;background:#e9ebef;padding:3px;isolation:isolate}
 .modeSwitch>i{position:absolute;z-index:-1;left:3px;top:3px;bottom:3px;width:calc(50% - 3px);border-radius:7px;background:#fff;box-shadow:0 1px 3px #172b4312;transition:transform 280ms cubic-bezier(.22,.72,.18,1)}
 .modeSwitch[data-mode=progress]>i{transform:translateX(100%)}
-.modeSwitch button{border:0;background:none;color:#7b8089;font:inherit;font-size:12px;min-width:62px;padding:5px 12px;cursor:pointer;line-height:1.5;transition:color 180ms}
+.modeSwitch button{border:0;background:none;color:#7b8089;font:inherit;font-size:12px;min-width:62px;padding:5px 12px;cursor:pointer;line-height:1.5;text-align:center;transition:color 180ms}
 .modeSwitch button[aria-pressed=true]{color:#303741}.modeSwitch button:focus-visible{outline:2px solid #8cb1e8;outline-offset:3px;border-radius:7px}
 @media(prefers-reduced-motion:reduce){.modeSwitch>i,.modeSwitch button{transition:none}}
 .battlefield { height:363px; min-height:0; }
@@ -45,10 +44,10 @@
 .receipt { display:flex; align-items:flex-start; gap:9px; font-size:var(--type-body,14px); color:#517868; padding:10px 0; line-height:1.6; }
 .receipt svg { flex:none; margin-top:4px; }
 @keyframes acknowledge { 0% { opacity:0; max-height:150px; } 15%,72% { opacity:1; max-height:150px; } 100% { opacity:0; max-height:0; } }
-@media(min-width:1800px) { .board { gap:16px; }.top,.battlefields { gap:16px; }.strategy { padding:24px 28px; }.battlefield { height:390px; }.board .radar { min-height:225px; }.scanStage { max-height:146px; }.scanStage > div { height:132px; } }
+@media(min-width:1800px) { .board { gap:16px; }.top,.battlefields { gap:16px; }.strategy { padding:24px 28px; }.battlefield { height:390px; }.board .radar { min-height:225px; } }
 @media(max-width:1100px) { .top { grid-template-columns:minmax(0,1fr) 142px; }.board .radar { padding:17px 14px; }.strategy { padding:17px; }.capabilities { gap:14px; padding:17px; }.capabilityItems { gap:2px; }.board .capabilityItems button { padding:9px 7px; gap:5px; } }
-@media(max-width:850px) { .top { grid-template-columns:minmax(0,1fr) 120px; }.battlefields { grid-template-columns:minmax(0,1fr); }.battlefield { height:auto; min-height:146px; }.capabilities { align-items:flex-start; flex-direction:column; gap:10px; }.capabilityItems { width:100%; justify-content:space-between; }.board .radar { padding:17px 12px; }.scanStage > div { height:90px; } }
-@media(max-width:500px) { .top { grid-template-columns:minmax(0,1fr) 100px; gap:9px; }.board .radar h2 { font-size:16px; }.board .radar { padding:15px 9px; }.strategy { padding:15px 12px; }.board .heading h2 { font-size:18px; }.scanStage > div { height:78px; }.board .issue { gap:7px; }.issueArrow { display:none; }.board { gap:10px; } }
+@media(max-width:850px) { .top { grid-template-columns:minmax(0,1fr) 120px; }.battlefields { grid-template-columns:minmax(0,1fr); }.battlefield { height:auto; min-height:146px; }.capabilities { align-items:flex-start; flex-direction:column; gap:10px; }.capabilityItems { width:100%; justify-content:space-between; }.board .radar { padding:17px 12px; } }
+@media(max-width:500px) { .top { grid-template-columns:minmax(0,1fr) 100px; gap:9px; }.board .radar h2 { font-size:16px; }.board .radar { padding:15px 9px; }.strategy { padding:15px 12px; }.board .heading h2 { font-size:18px; }.board .issue { gap:7px; }.issueArrow { display:none; }.board { gap:10px; } }
 @media(prefers-reduced-motion:reduce) {.issue,.heading > svg,.issueArrow,.capabilityItems button { transition:none; } }
 @media(prefers-contrast:more){.panel{border-color:#777}.board .empty,.board .note,.board .campaign h3{color:#444}.board .issueText small{color:#92251c}}
 
@@ -94,13 +93,73 @@
 .capabilityGroup h3{margin:0 0 5px;color:#73777e;font-size:12px;font-weight:500}
 @media(max-width:1250px){.capabilityGroup{padding-left:0;border-left:0}}
 
-/* 冻结基线几何：首屏各行高度与 Ticket 01 的 1440×900 / 1600×1000 容器一致，
-   业务文本长度变化不得改变容器高度。 */
-.board .top{height:324px}
+/* 基线以 2K 视口的面板比例为准；低高度时由 board 自身滚动，不强迫内容继续压缩。 */
+.board .top{height:clamp(250px,31dvh,316px)}
 .board .top>*{height:100%}
-.board .battlefields>.battlefield{height:363px}
+.board .battlefields>.battlefield{height:clamp(290px,37dvh,380px)}
 .board .battlefields>.battlefield>*{height:100%}
-.board .battlefieldToolbar{height:30px;align-items:center;margin-bottom:0}
+.board .battlefieldToolbar{height:36px;align-items:center;margin-bottom:0}
 .board .capabilities{min-height:124px}
-@media(min-width:1800px){.board .capabilities{min-height:124px}}
 .board .battlefields{flex:0 0 auto}
+
+/* pen 首页几何（H-04…H-12）：面板平色、雷达盘归位、能力面板纵向、行分隔线。 */
+.board { gap: 14px; }
+.board .top, .board .battlefields { gap: 14px; }
+.board .panel { border: 1px solid #ffffffed; border-radius: 20px; background: #fff; }
+.board .strategy { border-color: #ffffffed; background: #fff; }
+.board .radar {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 20px 20px 16px;
+  border-color: #ffffffd9;
+  border-radius: 20px;
+  background: #f0f4fa;
+}
+.board .radarStatus {
+  position: static;
+  left: auto;
+  bottom: auto;
+  z-index: 1;
+}
+.scanStage { flex: 1; min-height: 0; max-height: none; }
+.divider { height: 1px; flex: none; margin-top: 11px; background: #e6e9ed; }
+.board .capabilities .divider { margin-top: 0; }
+.board .capabilities {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  padding: 22px 26px;
+  border-color: #ffffffed;
+  background: #fff;
+}
+.board .capabilities > .heading { padding: 0; width: 100%; }
+.board .capabilities > .heading h2 { font-size: var(--type-title, 20px); font-weight: 600; letter-spacing: -.025em; }
+.board .issue { font-size: 15px; }
+.board .issueArrow { opacity: .8; }
+.strategy .issue { padding: 10px 2px; }
+.strategicIssues .issue + .issue { border-top: 1px solid #e6e9ed; }
+.board .top { height: clamp(250px, 31dvh, 316px); }
+.board .battlefields > .battlefield, .board .battlefield { height: clamp(290px, 37dvh, 380px); }
+.board .battlefieldToolbar { padding: 0 4px; height: 36px; }
+.modeSwitch > i { border-radius: 6px; }
+.modeSwitch button { padding: 6px 18px; }
+@media(min-width:1800px) {
+  .board .capabilities { padding: 22px 26px; }
+}
+@media(max-width:1100px), (max-height:820px) {
+  .board { padding-bottom:72px; }
+  .board .top { height:clamp(230px,34dvh,280px); }
+  .board .battlefields > .battlefield, .board .battlefield { height:clamp(270px,40dvh,330px); }
+}
+@media(max-width:850px) {
+  .top { grid-template-columns:minmax(0,1fr) minmax(112px,.45fr); }
+  .board .top { height:auto; min-height:230px; }
+  .board .battlefields > .battlefield, .board .battlefield { height:auto; min-height:250px; }
+}
+@media(prefers-contrast:more) {
+  .board .panel,
+  .board .radar { border-color: #777; }
+}

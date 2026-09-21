@@ -8,6 +8,12 @@ import {
   ConversationHistory,
   ConversationMessageRequest,
   ConversationSseEvent,
+  ConversationAttachment,
+  ConversationAttachmentInfo,
+  ConversationAttachmentUploadResponse,
+  ConversationSessionList,
+  ConversationSessionSummary,
+  CreateConversationSessionRequest,
   CreateMeetingRequest,
   DriIssueImportRequest,
   DriMeetingImportRequest,
@@ -16,10 +22,12 @@ import {
   IssueDecideOverrideInput,
   IssueDismissInput,
   IssueReceipt,
+  IssueRestoreInput,
   IssueRevokeReceiptInput,
   ResearchDoc,
   JoinMeetingRequest,
   LoginRequest,
+  PeopleDirectoryResponse,
   MonthlyDraftCandidate,
   MonthlyPlanCardPayload,
   MonthlyPlanExport,
@@ -106,6 +114,20 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
               description: "登录状态",
               content: {
                 "application/json": { schema: { $ref: "#/components/schemas/SessionResponse" } },
+              },
+            },
+          },
+        },
+      },
+      "/api/people": {
+        get: {
+          operationId: "listPeople",
+          summary: "只读人员目录（Meeting 创建表单使用）",
+          responses: {
+            "200": {
+              description: "人员目录",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/PeopleDirectoryResponse" } },
               },
             },
           },
@@ -282,6 +304,95 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "401": errorResponse,
             "404": errorResponse,
             "409": errorResponse,
+          },
+        },
+      },
+      "/api/conversations/{scope}/sessions": {
+        get: {
+          operationId: "listConversationSessions",
+          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
+          summary: "列出 scope 内未删除的 Conversation 会话",
+          responses: {
+            "200": { description: "会话列表（最早未删除者为默认会话）", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationSessionList" } } } },
+            "401": errorResponse,
+          },
+        },
+        post: {
+          operationId: "createConversationSession",
+          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
+          summary: "在 scope 内新建 Conversation 会话",
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreateConversationSessionRequest" }),
+          responses: {
+            "201": { description: "新建的会话摘要", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationSessionSummary" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/conversations/{scope}/sessions/{sessionId}": {
+        delete: {
+          operationId: "deleteConversationSession",
+          parameters: [
+            { name: "scope", in: "path", required: true, schema: { type: "string" } },
+            { name: "sessionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          ],
+          summary: "删除会话（含消息与附件原件）；运行中拒绝",
+          responses: {
+            "204": { description: "已删除" },
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/conversations/{scope}/sessions/{sessionId}/messages": {
+        get: {
+          operationId: "getConversationSessionMessages",
+          parameters: [
+            { name: "scope", in: "path", required: true, schema: { type: "string" } },
+            { name: "sessionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          ],
+          summary: "读取指定会话的原始 Conversation 消息",
+          responses: {
+            "200": { description: "会话消息历史", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationHistory" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+        post: {
+          operationId: "sendConversationSessionMessage",
+          parameters: [
+            { name: "scope", in: "path", required: true, schema: { type: "string" } },
+            { name: "sessionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          ],
+          summary: "在指定会话发送消息并通过 SSE 返回 Pi 运行事件",
+          requestBody: jsonBody({ $ref: "#/components/schemas/ConversationMessageRequest" }),
+          responses: {
+            "200": { description: "SSE 事件流", content: { "text/event-stream": { schema: { $ref: "#/components/schemas/ConversationSseEvent" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/conversations/{scope}/sessions/{sessionId}/attachments": {
+        post: {
+          operationId: "uploadConversationAttachments",
+          parameters: [
+            { name: "scope", in: "path", required: true, schema: { type: "string" } },
+            { name: "sessionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          ],
+          summary: "上传会话附件（multipart files，PDF/DOCX/Markdown）；元数据随消息发送时内嵌入库",
+          requestBody: {
+            content: { "multipart/form-data": { schema: { type: "object", properties: { files: { type: "array", items: { type: "string", format: "binary" } } } } } },
+          },
+          responses: {
+            "200": { description: "已解析附件的可见信息（发消息时按 id 引用）", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationAttachmentUploadResponse" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "413": errorResponse,
           },
         },
       },
@@ -462,6 +573,100 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/meetings/{id}/materials": {
+        post: {
+          operationId: "replaceMeetingMaterials",
+          summary: "CEO 替换 scheduled Meeting 的整个会前材料集（multipart 多文件 files）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "multipart/form-data": {
+                schema: {
+                  type: "object",
+                  required: ["files"],
+                  properties: { files: { type: "array", items: { type: "string", format: "binary" } } },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "替换成功后的 Meeting Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+            "413": errorResponse,
+          },
+        },
+      },
+      "/api/meetings/{id}/materials/supplement": {
+        post: {
+          operationId: "appendSupplementMaterial",
+          summary: "CEO 把会外收到的补充材料文件归档到已记录的补充请求（scheduled only；不改预审）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "multipart/form-data": {
+                schema: {
+                  type: "object",
+                  required: ["files", "requestId"],
+                  properties: {
+                    files: { type: "string", format: "binary" },
+                    requestId: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "追加成功（含 sha256 幂等重放）后的 Meeting Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+            "413": errorResponse,
+          },
+        },
+      },
+      "/api/meetings/{id}/materials/{materialId}/preview": {
+        get: {
+          operationId: "previewMeetingMaterial",
+          summary: "CEO 鉴权预览：PDF inline、Markdown 纯文本、DOCX 按需 sanitize HTML（不持久化）",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "materialId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            "200": {
+              description: "按 mimeType 返回预览体",
+              content: {
+                "application/pdf": { schema: { type: "string", format: "binary" } },
+                "text/html": { schema: { type: "string" } },
+                "text/plain": { schema: { type: "string" } },
+              },
+            },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/meetings/{id}/materials/{materialId}/download": {
+        get: {
+          operationId: "downloadMeetingMaterial",
+          summary: "CEO 鉴权下载材料原件（attachment）",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "materialId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            "200": { description: "材料原件字节", content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
       "/healthz": {
         get: {
           operationId: "health",
@@ -485,10 +690,17 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ApiError: ApiError as JsonSchema,
         LoginRequest: LoginRequest as JsonSchema,
         SessionResponse: SessionResponse as JsonSchema,
+        PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,
         ExecuteActionRequest: ExecuteActionRequest as JsonSchema,
         ConversationHistory: ConversationHistory as JsonSchema,
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
         ConversationSseEvent: ConversationSseEvent as JsonSchema,
+        ConversationSessionSummary: ConversationSessionSummary as JsonSchema,
+        ConversationSessionList: ConversationSessionList as JsonSchema,
+        CreateConversationSessionRequest: CreateConversationSessionRequest as JsonSchema,
+        ConversationAttachment: ConversationAttachment as JsonSchema,
+        ConversationAttachmentInfo: ConversationAttachmentInfo as JsonSchema,
+        ConversationAttachmentUploadResponse: ConversationAttachmentUploadResponse as JsonSchema,
         HealthResponse: HealthResponse as JsonSchema,
         RadarScanResponse: RadarScanResponse as JsonSchema,
         SignalStateRequest: SignalStateRequest as JsonSchema,
@@ -498,6 +710,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         IssueDecideInput: IssueDecideInput as JsonSchema,
         IssueDecideOverrideInput: IssueDecideOverrideInput as JsonSchema,
         IssueDismissInput: IssueDismissInput as JsonSchema,
+        IssueRestoreInput: IssueRestoreInput as JsonSchema,
         IssueRevokeReceiptInput: IssueRevokeReceiptInput as JsonSchema,
         DriMeetingImportRequest: DriMeetingImportRequest as JsonSchema,
         CreateMeetingRequest: CreateMeetingRequest as JsonSchema,

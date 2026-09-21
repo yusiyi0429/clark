@@ -54,7 +54,7 @@ describe.skipIf(!hasDocker)("Compose deployment boundaries", () => {
   const config = JSON.parse(execFileSync("docker", [
     "compose", "-f", COMPOSE_FILE, "--env-file", envFile, "config", "--format", "json",
   ], { cwd: REPO, encoding: "utf8" })) as {
-    services: Record<string, { ports?: { published?: string }[]; image?: string; environment?: Record<string, string>; volumes?: unknown[] }>;
+    services: Record<string, { ports?: { published?: string }[]; image?: string; environment?: Record<string, string>; volumes?: unknown[]; user?: string; entrypoint?: unknown; depends_on?: Record<string, { condition?: string }> }>;
   };
 
   it("exposes 80/443 only through Caddy and keeps every other service internal", () => {
@@ -81,7 +81,21 @@ describe.skipIf(!hasDocker)("Compose deployment boundaries", () => {
     for (const forbidden of ["redis", "rabbitmq", "kafka", "minio", "kubernetes", "k8s", "celery"]) {
       expect(text).not.toContain(forbidden);
     }
-    expect(Object.keys(config.services).sort()).toEqual(["api", "edge", "postgres", "web", "wechat"]);
+    expect(Object.keys(config.services).sort()).toEqual(["api", "edge", "postgres", "storage-init", "web", "wechat"]);
+  });
+
+  it("initializes material/attachment volume ownership before the non-root api starts", () => {
+    const init = config.services["storage-init"];
+    expect(init, "storage-init 必须存在").toBeDefined();
+    // 一次性 init 才需要 root；API 自身仍非 root
+    expect(init.user).toBe("0:0");
+    expect(config.services.api.user).toBeUndefined();
+    expect(JSON.stringify(init.entrypoint)).toContain("chown -R 1000:1000");
+    for (const volume of ["meeting_materials", "conversation_attachments"]) {
+      expect(JSON.stringify(init.volumes), `storage-init 必须覆盖 ${volume}`).toContain(volume);
+      expect(JSON.stringify(config.services.api.volumes), `api 必须挂载 ${volume}`).toContain(volume);
+    }
+    expect(config.services.api.depends_on?.["storage-init"]?.condition).toBe("service_completed_successfully");
   });
 });
 
@@ -139,6 +153,13 @@ describe("backup.sh safety boundaries", () => {
   });
 });
 
+function stubPath(dir: string, psqlOutput: string): string {
+  const bin = join(dir, "bin");
+  execFileSync("mkdir", ["-p", bin]);
+  writeFileSync(join(bin, "psql"), `#!/usr/bin/env bash\nprintf '%s\\n' "${psqlOutput}"\n`, { mode: 0o755 });
+  return `${bin}:${process.env.PATH ?? ""}`;
+}
+
 const SECRET_PASSWORD = "postgres-super-secret-DO-NOT-PRINT";
 
 /** 桩：docker/age/scp/ssh + 宿主 pg_dump/psql（url 模式）；记录 docker 参数。 */
@@ -153,8 +174,13 @@ function createBackupStubs(dir: string): { bin: string; dockerLog: string; offsi
     "#!/usr/bin/env bash",
     `printf '%s\\n' "$*" >> ${dockerLog}`,
     'case "$*" in',
-    "  *pg_dump*) printf 'DUMPBYTES' ;;",
-    "  *psql*) printf '12\\n' ;;",
+    '  *"ps -q"*) if [ "${WARMAP_TEST_API_RUNNING:-1}" = "1" ]; then echo "container-running-1"; fi ;;',
+    '  *pg_dump*) printf "DUMPBYTES" ;;',
+    '  *"meeting_material|"*) printf "%s\\n" "meeting_material|meeting-1|meet/m-1|aa11" "conversation_attachment|msg-1|conv/a-1|bb22" ;;',
+    '  *psql*) printf "12\\n" ;;',
+    '  *"ls -A /data"*) if [ "${WARMAP_TEST_VOLUME_EMPTY:-1}" = "1" ]; then exit 0; else exit 1; fi ;;',
+    '  *sha256sum*) last="${!#}"; printf "%s  %s\\n" "${WARMAP_TEST_VOLUME_SHA:-aa11}" "$last" ;;',
+    '  *tar*) printf "TARBYTES" ;;',
     "esac",
     "exit 0",
   ].join("\n"), { mode: 0o755 });
@@ -225,8 +251,79 @@ describe("backup.sh source modes", () => {
     const local = readdirSync(join(dir, "local"));
     expect(local.some((f) => f.endsWith(".dump.age"))).toBe(true);
     expect(local.some((f) => f.endsWith(".dump.age.sha256"))).toBe(true);
-    expect(local.some((f) => f.endsWith(".dump.meta.json"))).toBe(true);
-    expect(readdirSync(offsite).length).toBe(3);
+    expect(local.some((f) => f.endsWith("meeting_materials.tar.gz.age"))).toBe(true);
+    expect(local.some((f) => f.endsWith("conversation_attachments.tar.gz.age"))).toBe(true);
+    expect(local.some((f) => f.endsWith(".manifest.json"))).toBe(true);
+    // dump + manifest + 2 卷，各带 checksum sidecar
+    expect(local.length).toBe(8);
+    expect(readdirSync(offsite).length).toBe(8);
+  });
+
+  it("compose mode freezes only a running api before pg_dump and restarts it last (trap)", () => {
+    const dir = tempDir();
+    const { bin, dockerLog, offsite } = createBackupStubs(dir);
+    const composeFile = join(dir, "docker-compose.yml");
+    writeFileSync(composeFile, "services: {}\n");
+    const result = run(BACKUP_SH, [], backupEnv(dir, {
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      WARMAP_COMPOSE_FILE: composeFile,
+      WARMAP_TEST_OFFSITE: offsite,
+      BACKUP_LOCAL_DIR: join(dir, "local"),
+    }));
+    expect(result.status).toBe(0);
+    const calls = readFileSync(dockerLog, "utf8").split("\n").filter(Boolean);
+    const stopIdx = calls.findIndex((c) => / stop api$/.test(c));
+    const dumpIdx = calls.findIndex((c) => c.includes("pg_dump"));
+    const startIdx = calls.findIndex((c) => / start api$/.test(c));
+    expect(stopIdx).toBeGreaterThan(-1);
+    expect(stopIdx, "冻结必须先于 dump").toBeLessThan(dumpIdx);
+    expect(startIdx).toBeGreaterThan(dumpIdx);
+    // 只冻结 api：postgres/edge/wechat 不出现在 stop/start
+    expect(calls.join("\n")).not.toMatch(/ stop (postgres|edge|wechat)$/);
+    expect(calls[calls.length - 1]).toMatch(/ start api$/);
+    // 两个卷都在同批次归档
+    expect(calls.filter((c) => c.includes("--entrypoint tar")).length).toBe(2);
+    expect(calls.some((c) => c.includes("meeting_materials"))).toBe(true);
+    expect(calls.some((c) => c.includes("conversation_attachments"))).toBe(true);
+    const manifest = readdirSync(join(dir, "local")).find((f) => f.endsWith(".manifest.json"));
+    const manifestText = readFileSync(join(dir, "local", manifest ?? ""), "utf8");
+    expect(manifestText).toContain("meet/m-1");
+    expect(manifestText).toContain("meeting_material|meeting-1|meet/m-1|aa11");
+    expect(manifestText).not.toContain("dummy-pg");
+  });
+
+  it("compose mode does not stop/start an api that was not running", () => {
+    const dir = tempDir();
+    const { bin, dockerLog } = createBackupStubs(dir);
+    const composeFile = join(dir, "docker-compose.yml");
+    writeFileSync(composeFile, "services: {}\n");
+    const result = run(BACKUP_SH, [], backupEnv(dir, {
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      WARMAP_COMPOSE_FILE: composeFile,
+      WARMAP_TEST_OFFSITE: join(dir, "offsite"),
+      BACKUP_LOCAL_DIR: join(dir, "local"),
+      WARMAP_TEST_API_RUNNING: "0",
+    }));
+    expect(result.status).toBe(0);
+    const calls = readFileSync(dockerLog, "utf8");
+    expect(calls).not.toMatch(/ stop api$/);
+    expect(calls).not.toMatch(/ start api$/);
+  });
+
+  it("url mode is database-only and explicitly declares volumes unsupported", () => {
+    const dir = tempDir();
+    const { bin, dockerLog, offsite } = createBackupStubs(dir);
+    const result = run(BACKUP_SH, [], backupEnv(dir, {
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      BACKUP_SOURCE_MODE: "url",
+      DATABASE_URL: "postgres://user:url-secret@db.internal:5432/warmap",
+      WARMAP_TEST_OFFSITE: offsite,
+      BACKUP_LOCAL_DIR: join(dir, "local"),
+    }));
+    expect(result.status).toBe(0);
+    expect(readFileSync(dockerLog, "utf8")).toBe("");
+    expect(result.stdout).toContain("仅备份数据库");
+    expect(result.stdout).toContain("不能用于卷恢复");
   });
 
   it("dry-run reports compose mode, the exact command shape and writes nothing", () => {
@@ -285,12 +382,6 @@ describe("restore.sh destructive boundaries", () => {
     return { dir, backup, identity, digest };
   }
 
-  function stubPath(dir: string, psqlOutput: string): string {
-    const bin = join(dir, "bin");
-    execFileSync("mkdir", ["-p", bin]);
-    writeFileSync(join(bin, "psql"), `#!/usr/bin/env bash\nprintf '%s\\n' "${psqlOutput}"\n`, { mode: 0o755 });
-    return `${bin}:${process.env.PATH ?? ""}`;
-  }
 
   it("defaults to dry-run and refuses to touch a non-empty target database", () => {
     const { dir, backup, identity } = fixture();
@@ -328,6 +419,127 @@ describe("restore.sh destructive boundaries", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("dry-run");
     expect(result.stdout).toContain("加 --execute");
+  });
+});
+
+function volumeFixture(dir: string, opts: { volumeEmpty: boolean; rows: string; volumeSha: string }): { env: Record<string, string> } {
+  const bin = join(dir, "bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, "psql"), [
+    "#!/usr/bin/env bash",
+    'case "$*" in',
+    '  *"meeting_material|"*) printf "%s\\n" ${WARMAP_TEST_ROWS} ;;',
+    '  *) echo "0" ;;',
+    "esac",
+  ].join("\n"), { mode: 0o755 });
+  writeFileSync(join(bin, "docker"), [
+    "#!/usr/bin/env bash",
+    'case "$*" in',
+    '  *"ls -A /data"*) if [ "${WARMAP_TEST_VOLUME_EMPTY:-1}" = "1" ]; then exit 0; else exit 1; fi ;;',
+    '  *sha256sum*) last="${!#}"; printf "%s  %s\\n" "${WARMAP_TEST_VOLUME_SHA}" "$last" ;;',
+    "esac",
+    "exit 0",
+  ].join("\n"), { mode: 0o755 });
+  writeFileSync(join(bin, "age"), [
+    "#!/usr/bin/env bash",
+    'out=""; args=("$@")',
+    'for ((i=0;i<$#;i++)); do [ "${args[$i]}" = "-o" ] && out="${args[$((i+1))]}"; done',
+    'printf "RESTORED-DUMP" > "$out"',
+  ].join("\n"), { mode: 0o755 });
+  writeFileSync(join(bin, "pg_restore"), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o755 });
+  return { env: {
+    PATH: `${bin}:${process.env.PATH ?? ""}`,
+    WARMAP_TEST_VOLUME_EMPTY: opts.volumeEmpty ? "1" : "0",
+    WARMAP_TEST_ROWS: opts.rows,
+    WARMAP_TEST_VOLUME_SHA: opts.volumeSha,
+  } };
+}
+
+function volumeBackupFixture(dir: string): { meetingArchive: string; attachmentArchive: string; meetingVolume: string; attachmentVolume: string; manifest: string } {
+  const dump = join(dir, "warmap-test.dump.age");
+  writeFileSync(dump, "encrypted-bytes");
+  writeFileSync(`${dump}.sha256`, `${createHash("sha256").update("encrypted-bytes").digest("hex")}  warmap-test.dump.age\n`);
+  writeFileSync(join(dir, "age-identity.txt"), "AGE-SECRET-KEY-DUMMY\n");
+  const meetingArchive = join(dir, "warmap-x.meeting_materials.tar.gz.age");
+  const attachmentArchive = join(dir, "warmap-x.conversation_attachments.tar.gz.age");
+  for (const [file, content] of [[meetingArchive, "mm-bytes"], [attachmentArchive, "att-bytes"]] as const) {
+    writeFileSync(file, content);
+    writeFileSync(`${file}.sha256`, `${createHash("sha256").update(content).digest("hex")}  ${file.split("/").pop()}\n`);
+  }
+  const manifest = join(dir, "warmap-x.manifest.json");
+  writeFileSync(manifest, JSON.stringify({ batch: "warmap-x", storageRows: [] }));
+  return { meetingArchive, attachmentArchive, meetingVolume: "meeting_materials_restore", attachmentVolume: "conversation_attachments_restore", manifest };
+}
+
+describe("restore.sh volume-backed recovery", () => {
+  it("refuses a non-empty target volume before any write (even in dry-run)", () => {
+    const dir = tempDir();
+    const v = volumeBackupFixture(dir);
+    const { env } = volumeFixture(dir, { volumeEmpty: false, rows: "", volumeSha: "x" });
+    const result = run(RESTORE_SH, [
+      "--backup", join(dir, "warmap-test.dump.age"),
+      "--target-url", "postgres://u:p@restore/db",
+      "--age-identity", join(dir, "age-identity.txt"),
+      "--meeting-materials-archive", v.meetingArchive, "--meeting-materials-volume", v.meetingVolume,
+      "--conversation-attachments-archive", v.attachmentArchive, "--conversation-attachments-volume", v.attachmentVolume,
+    ], env);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("目标 volume 非空");
+  });
+
+  it("fails closed when a restored volume file SHA does not match the restored DB rows", () => {
+    const dir = tempDir();
+    const v = volumeBackupFixture(dir);
+    const { env } = volumeFixture(dir, {
+      volumeEmpty: true,
+      rows: `meeting_material|meeting-1|meet/m-1|${"a".repeat(64)}`,
+      volumeSha: "b".repeat(64),
+    });
+    const result = run(RESTORE_SH, ["--backup", join(dir, "warmap-test.dump.age"), "--target-url", "postgres://u:p@restore/db", "--age-identity", join(dir, "age-identity.txt"),
+      "--meeting-materials-archive", v.meetingArchive, "--meeting-materials-volume", v.meetingVolume,
+      "--conversation-attachments-archive", v.attachmentArchive, "--conversation-attachments-volume", v.attachmentVolume,
+      "--execute"], env);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("存储校验失败");
+  });
+
+  // 真实 shell + 多个 stub 子进程（age/scp/docker/psql/sha256sum），全量并行跑时会超过默认 5s，给足墙钟时间
+  it("passes with explicit empty volumes and verifies every DB storageKey/SHA against the volumes", { timeout: 30_000 }, () => {
+    const dir = tempDir();
+    const v = volumeBackupFixture(dir);
+    const rows = `meeting_material|meeting-1|meet/m-1|${"a".repeat(64)} conversation_attachment|msg-1|conv/a-1|${"b".repeat(64)}`;
+    const { env } = volumeFixture(dir, { volumeEmpty: true, rows, volumeSha: "a".repeat(64) });
+    // sha256sum stub 对每个文件都返回同一摘要：第二行(反例)只在混合摘要时失败——这里两行分别校验
+    const result = run(RESTORE_SH, ["--backup", join(dir, "warmap-test.dump.age"), "--target-url", "postgres://u:p@restore/db", "--age-identity", join(dir, "age-identity.txt"),
+      "--meeting-materials-archive", v.meetingArchive, "--meeting-materials-volume", v.meetingVolume,
+      "--conversation-attachments-archive", v.attachmentArchive, "--conversation-attachments-volume", v.attachmentVolume,
+      "--execute"], { ...env, WARMAP_TEST_VOLUME_SHA: "a".repeat(64) });
+    // 第二行的 DB sha 是 b…，而卷始终返回 a… → 必须失败
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("存储校验失败");
+
+    // 全行匹配的成功路径：两行都是 a…
+    const rowsMatch = `meeting_material|meeting-1|meet/m-1|${"a".repeat(64)} conversation_attachment|msg-1|conv/a-1|${"a".repeat(64)}`;
+    const dir2 = tempDir();
+    const v2 = volumeBackupFixture(dir2);
+    const env2 = volumeFixture(dir2, { volumeEmpty: true, rows: rowsMatch, volumeSha: "a".repeat(64) });
+    const ok = run(RESTORE_SH, ["--backup", join(dir2, "warmap-test.dump.age"), "--target-url", "postgres://u:p@restore/db", "--age-identity", join(dir2, "age-identity.txt"),
+      "--meeting-materials-archive", v2.meetingArchive, "--meeting-materials-volume", v2.meetingVolume,
+      "--conversation-attachments-archive", v2.attachmentArchive, "--conversation-attachments-volume", v2.attachmentVolume,
+      "--execute"], env2.env);
+    expect(ok.status).toBe(0);
+    expect(ok.stdout).toContain("存储校验通过（2 行");
+  });
+
+  it("database-only restore is allowed but explicitly declares volumes unsupported", () => {
+    const dir = tempDir();
+    volumeBackupFixture(dir);
+    const result = run(RESTORE_SH, ["--backup", join(dir, "warmap-test.dump.age"), "--target-url", "postgres://u:p@restore/db", "--age-identity", join(dir, "age-identity.txt")], {
+      PATH: stubPath(dir, "0"),
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("数据库-only 恢复");
+    expect(result.stdout).toContain("不是完整恢复");
   });
 });
 

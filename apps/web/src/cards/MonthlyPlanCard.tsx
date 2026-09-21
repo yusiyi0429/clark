@@ -64,7 +64,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
 
   function checkable(id: string, label: string) {
     return (
-      <label className={s.notes}>
+      <label className={s.check}>
         <span>
           <input type="checkbox" checked={checked.includes(id)} disabled={locked} onChange={() => toggleChecked(id)} /> 已核对 {label}
         </span>
@@ -72,16 +72,19 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
     );
   }
 
+  /** pen Eyebrow 只两段：已签发看签发日期，协商中看草案生成状态。 */
+  const eyebrow =
+    payload.status === "confirmed"
+      ? `已签发${payload.confirmedAt ? ` · ${payload.confirmedAt.slice(0, 10)}` : ""}`
+      : `协商中 · ${GENERATION_LABEL[payload.generation.status] ?? payload.generation.status}`;
+
   return (
     <section className={s.workspace} data-testid="monthly-workspace" aria-labelledby="monthly-title">
       <header className={s.header}>
         <div className={s.identity}>
           <span className={s.marker} aria-hidden="true" />
           <div>
-            <span className={s.eyebrow}>
-              {payload.status === "confirmed" ? "已签发" : "协商中"} · {GENERATION_LABEL[payload.generation.status] ?? payload.generation.status}
-              {payload.confirmedAt ? ` · ${payload.confirmedAt.slice(0, 10)}` : ""}
-            </span>
+            <span className={s.eyebrow}>{eyebrow}</span>
             <h1 id="monthly-title">月度计划 {payload.period}</h1>
           </div>
         </div>
@@ -92,33 +95,35 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
 
       <div className={s.body}>
         <div className={s.materials}>
-          {payload.generation.error ? (
-            <p className={s.basis} role="alert">
-              {payload.generation.error.code}：{payload.generation.error.message}
-              {actionOf("monthly-plan.retry_draft") ? (
-                <button type="button" disabled={pending} onClick={() => void run(actionOf("monthly-plan.retry_draft")!, {})}>
-                  重试生成
-                </button>
-              ) : null}
-            </p>
-          ) : null}
+          <div className={s.resultsColumn}>
+            {payload.generation.error ? (
+              <p className={s.basis} role="alert">
+                {payload.generation.error.code}：{payload.generation.error.message}
+                {actionOf("monthly-plan.retry_draft") ? (
+                  <button type="button" disabled={pending} onClick={() => void run(actionOf("monthly-plan.retry_draft")!, {})}>
+                    重试生成
+                  </button>
+                ) : null}
+              </p>
+            ) : null}
 
-          <section className={s.intro}>
-            <label className={s.notes}>
-              <span>公司结果</span>
-              <textarea value={companyOutcome} onChange={(event) => setCompanyOutcome(event.target.value)} rows={3} disabled={locked} />
-            </label>
-            {checkable("company", "公司结果")}
-          </section>
+            <section className={s.section}>
+              <h2 className={s.sectionTitle}>公司结果</h2>
+              <textarea
+                aria-label="公司结果"
+                value={companyOutcome}
+                onChange={(event) => setCompanyOutcome(event.target.value)}
+                rows={3}
+                disabled={locked}
+              />
+              {checkable("company", "公司结果")}
+            </section>
 
-          <section className={s.reviewList}>
-            {battlefields.map((battlefield, index) => (
-              <div key={battlefield.battlefieldId} className={s.reviewItem}>
-                <div className={s.itemHeading}>
-                  <span className={s.number}>{String(index + 1).padStart(2, "0")}</span>
-                  <h2>{battlefield.battlefieldId} 战场结果</h2>
-                </div>
+            {battlefields.map((battlefield) => (
+              <section key={battlefield.battlefieldId} className={s.section}>
+                <h2 className={s.sectionTitle}>{battlefield.battlefieldId} 战场结果</h2>
                 <textarea
+                  aria-label={`${battlefield.battlefieldId} 战场结果`}
                   value={battlefield.outcome}
                   disabled={locked}
                   rows={2}
@@ -129,127 +134,126 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
                   }
                 />
                 {checkable(`battlefield:${battlefield.battlefieldId}`, `${battlefield.battlefieldId} 战场结果`)}
-              </div>
+              </section>
             ))}
-          </section>
-
-          <section className={s.reviewList}>
-            <div className={s.itemHeading}>
-              <h2>普通待办</h2>
-            </div>
-            {todos.map((todo, index) => (
-              <div key={todo.id ?? `draft-${index}`} className={s.reviewItem}>
-                <div className={s.itemHeading}>
-                  <span className={s.number}>{String(index + 1).padStart(2, "0")}</span>
-                  <h2>{todo.battlefieldId ?? "公司级"}</h2>
-                </div>
-                <label className={s.notes}>
-                  <span>待办</span>
-                  <input
-                    value={todo.title}
-                    disabled={locked}
-                    onChange={(event) => setTodos((current) => current.map((item, i) => (i === index ? { ...item, title: event.target.value } : item)))}
-                  />
-                </label>
-                <label className={s.notes}>
-                  <span>负责人（personId）</span>
-                  <input
-                    value={todo.ownerId}
-                    disabled={locked}
-                    onChange={(event) => setTodos((current) => current.map((item, i) => (i === index ? { ...item, ownerId: event.target.value } : item)))}
-                  />
-                </label>
-                <label className={s.notes}>
-                  <span>可选截止</span>
-                  <input
-                    value={todo.dueAt ?? ""}
-                    disabled={locked}
-                    placeholder="YYYY-MM-DD"
-                    onChange={(event) => setTodos((current) => current.map((item, i) => (i === index ? { ...item, dueAt: event.target.value || undefined } : item)))}
-                  />
-                </label>
-                {todo.id ? checkable(`todo:${todo.id}`, todo.title) : null}
-                <p className={s.basis}>
-                  来源：{todo.sourceRef}
-                  {payload.exports.find((item) => item.todoId === todo.id)
-                    ? ` · ${EXPORT_LABEL[payload.exports.find((item) => item.todoId === todo.id)!.status] ?? ""}`
-                    : ""}
-                </p>
-              </div>
-            ))}
-            {todos.length === 0 ? <p className={s.empty}>本月没有普通待办。</p> : null}
-          </section>
-
-          <section className={s.reviewList}>
-            <div className={s.itemHeading}>
-              <h2>DRI 反馈</h2>
-            </div>
-            {payload.negotiation.feedback.length ? (
-              payload.negotiation.feedback.map((feedback) => (
-                <div key={feedback.id} className={s.reviewItem}>
-                  <p className={s.proposal}>{feedback.text}</p>
-                  <p className={s.basis}>
-                    {feedback.observedAt.slice(0, 16).replace("T", " ")}
-                    {feedback.battlefieldId ? ` · ${feedback.battlefieldId}` : ""}
-                    {feedback.todoId ? ` · 待办 ${feedback.todoId}` : ""}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p className={s.empty}>尚未收到 DRI 反馈。</p>
-            )}
-          </section>
-
-          <section className={s.reviewList}>
-            <div className={s.itemHeading}>
-              <h2>备注</h2>
-            </div>
-            <label className={s.notes}>
-              <textarea value={note} disabled={locked} rows={2} onChange={(event) => setNote(event.target.value)} />
-            </label>
-          </section>
-
-          <div className={s.commitArea}>
-            <div className={s.commitInfo}>
-              <span>签发后刷新战场目标与 Radar 基础 anchors；不直接更新 CompanyMemory。</span>
-              <small>已核对 {checked.length} 项 · 签发前必须核对企业结果、战场结果与普通待办</small>
-            </div>
-            <div className={s.edit}>
-              {actionOf("monthly-plan.update_draft") ? (
-                <button
-                  type="button"
-                  className={s.submit}
-                  disabled={pending || locked}
-                  onClick={() => void run(actionOf("monthly-plan.update_draft")!, { companyOutcome, battlefields, todos, checkedItemIds: checked, note })}
-                >
-                  {pending ? "保存中…" : "保存计划"}
-                </button>
-              ) : null}
-              {actionOf("monthly-plan.sign") ? (
-                <>
-                  <label className={s.notes}>
-                    <span>
-                      <input type="checkbox" checked={signArmed} disabled={locked} onChange={(event) => setSignArmed(event.target.checked)} /> 我确认签发{" "}
-                      {payload.period} 计划，签发后成为当月目标唯一来源
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    className={s.submit}
-                    disabled={pending || locked || !signArmed}
-                    onClick={() => void run(actionOf("monthly-plan.sign")!, {})}
-                  >
-                    签发计划
-                  </button>
-                </>
-              ) : null}
-            </div>
           </div>
-          <ActionFeedback state={state} onRetry={retry} />
 
-          {payload.status === "confirmed" ? <p className={s.receipt}>本计划已签发，是当月目标的唯一来源。</p> : null}
+          <div className={s.feedbackColumn}>
+            <section className={s.section}>
+              <h2 className={s.sectionTitle}>普通待办</h2>
+              {todos.map((todo, index) => (
+                <article key={todo.id ?? `draft-${index}`} className={s.todo}>
+                  <div className={s.todoHead}>
+                    <span className={s.todoIndex}>{String(index + 1).padStart(2, "0")}</span>
+                    <span className={s.battlefieldBadge}>{todo.battlefieldId ?? "公司级"}</span>
+                  </div>
+                  <label className={s.notes}>
+                    <span>待办</span>
+                    <input
+                      value={todo.title}
+                      disabled={locked}
+                      onChange={(event) => setTodos((current) => current.map((item, i) => (i === index ? { ...item, title: event.target.value } : item)))}
+                    />
+                  </label>
+                  <label className={s.notes}>
+                    <span>负责人（personId）</span>
+                    <input
+                      value={todo.ownerId}
+                      disabled={locked}
+                      onChange={(event) => setTodos((current) => current.map((item, i) => (i === index ? { ...item, ownerId: event.target.value } : item)))}
+                    />
+                  </label>
+                  <label className={s.notes}>
+                    <span>可选截止</span>
+                    <input
+                      value={todo.dueAt ?? ""}
+                      disabled={locked}
+                      placeholder="YYYY-MM-DD"
+                      onChange={(event) => setTodos((current) => current.map((item, i) => (i === index ? { ...item, dueAt: event.target.value || undefined } : item)))}
+                    />
+                  </label>
+                  <p className={s.source}>
+                    来源：{todo.sourceRef}
+                    {payload.exports.find((item) => item.todoId === todo.id)
+                      ? ` · ${EXPORT_LABEL[payload.exports.find((item) => item.todoId === todo.id)!.status] ?? ""}`
+                      : ""}
+                  </p>
+                  {todo.id ? checkable(`todo:${todo.id}`, todo.title) : null}
+                </article>
+              ))}
+              {todos.length === 0 ? <p className={s.empty}>本月没有普通待办。</p> : null}
+            </section>
+
+            <section className={s.section}>
+              <h2 className={s.sectionTitle}>DRI 反馈</h2>
+              {payload.negotiation.feedback.length ? (
+                payload.negotiation.feedback.map((feedback) => (
+                  <div key={feedback.id} className={s.feedback}>
+                    <p className={s.feedbackText}>{feedback.text}</p>
+                    <p className={s.feedbackMeta}>
+                      {feedback.observedAt.slice(0, 16).replace("T", " ")}
+                      {feedback.battlefieldId ? ` · ${feedback.battlefieldId}` : ""}
+                      {feedback.todoId ? ` · 待办 ${feedback.todoId}` : ""}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className={s.empty}>尚未收到 DRI 反馈。</p>
+              )}
+            </section>
+
+            <section className={s.section}>
+              <h2 className={s.sectionTitle}>备注</h2>
+              <textarea aria-label="备注" value={note} disabled={locked} rows={2} onChange={(event) => setNote(event.target.value)} />
+            </section>
+          </div>
         </div>
       </div>
+
+      <div className={s.commitArea}>
+        <div className={s.commitInfo}>
+          <span>签发后刷新战场目标与 Radar 基础 anchors；不直接更新 CompanyMemory。</span>
+          <small>已核对 {checked.length} 项 · 签发前必须核对企业结果、战场结果与普通待办</small>
+        </div>
+        <div className={s.edit}>
+          {actionOf("monthly-plan.update_draft") ? (
+            <button
+              type="button"
+              className={s.save}
+              disabled={pending || locked}
+              onClick={() => void run(actionOf("monthly-plan.update_draft")!, { companyOutcome, battlefields, todos, checkedItemIds: checked, note })}
+            >
+              {pending ? "保存中…" : "保存计划"}
+            </button>
+          ) : null}
+          {actionOf("monthly-plan.sign") ? (
+            <>
+              <label className={s.check}>
+                <span>
+                  <input type="checkbox" checked={signArmed} disabled={locked} onChange={(event) => setSignArmed(event.target.checked)} /> 我确认签发{" "}
+                  {payload.period} 计划，签发后成为当月目标唯一来源
+                </span>
+              </label>
+              <button
+                type="button"
+                className={s.submit}
+                disabled={pending || locked || !signArmed}
+                onClick={() => void run(actionOf("monthly-plan.sign")!, {})}
+              >
+                签发计划
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
+      <ActionFeedback state={state} onRetry={retry} />
+
+      {payload.status === "confirmed" ? (
+        <p className={s.receipt}>
+          本计划已签发，是当月目标的唯一来源。
+          {payload.confirmedAt ? <small>签发于 {payload.confirmedAt.slice(0, 10)}</small> : null}
+        </p>
+      ) : null}
     </section>
   );
 }

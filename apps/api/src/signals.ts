@@ -18,7 +18,7 @@ type RadarRow = {
 type SignalRow = {
   id: string;
   version: number;
-  source_type: "web" | "wechat-account";
+  source_type: "web" | "wechat-account" | "outlet";
   source_fingerprint: string;
   source_title: string;
   source_url: string;
@@ -45,6 +45,12 @@ const SIGNAL_COLUMNS = [
 ];
 const signalColumns = (prefix = "") => SIGNAL_COLUMNS.map((column) => `${prefix}${column}`).join(", ");
 
+/** 发布方来源的徽标用中文媒体名，如实标注归属，避免用站点搜索冒充发布方。 */
+function outletBadge(sourceRef: unknown): string {
+  const ref = sourceRef as { type?: string; outletName?: string } | null;
+  return ref?.type === "outlet" && ref.outletName ? ref.outletName : "发布方";
+}
+
 export async function projectRadarCard(q: Query, providers: RadarService["providerStatus"]): Promise<TCard> {
   const result = await q(
     `SELECT version, timezone, lookback_hours, anchors, sources, scheduled_company_day::text,
@@ -55,7 +61,11 @@ export async function projectRadarCard(q: Query, providers: RadarService["provid
   const row = result.rows[0] as RadarRow & { unread: string | number };
   const webSources = row.sources.sites.filter((source) => source.enabled).length;
   const wechatSources = row.sources.wechatAccounts.filter((source) => source.enabled).length;
+  const outletSources = row.sources.outlets ?? [];
+  const outletEntries = outletSources.filter((source) => source.enabled);
+  const outletCount = new Set(outletEntries.flatMap((source) => source.outlets)).size;
   const wechatConfigured = providers.wechat && wechatSources > 0;
+  const outletConfigured = providers.outlets && outletCount > 0;
   return {
     schemaVersion: 1,
     id: "radar:default",
@@ -82,6 +92,11 @@ export async function projectRadarCard(q: Query, providers: RadarService["provid
           sourceCount: wechatSources,
           message: wechatConfigured ? "已配置账号级微信公众号来源" : "未配置微信公众号账号级来源",
         },
+        outlets: {
+          configured: outletConfigured,
+          sourceCount: outletCount,
+          message: outletConfigured ? `已配置 ${outletCount} 家发布方级媒体来源` : "未配置发布方级媒体来源",
+        },
       },
     },
     navigation: [{ href: "/radar", label: "Radar" }],
@@ -97,7 +112,7 @@ export function projectSignalCard(row: SignalRow): TCard {
     kind: "signal",
     objectRef: { type: "signal", id: row.id, version: row.version },
     title: row.summary,
-    badge: row.source_type === "wechat-account" ? "公众号" : "Web",
+    badge: row.source_type === "wechat-account" ? "公众号" : row.source_type === "outlet" ? outletBadge(row.source_ref) : "Web",
     payload: {
       source: {
         type: row.source_type,
@@ -135,7 +150,11 @@ export async function listSignalCards(q: Query): Promise<TCard[]> {
   return (result.rows as SignalRow[]).map(projectSignalCard);
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getSignalCard(q: Query, id: string): Promise<TCard | null> {
+  // 路径/会话 scope 允许非 UUID 字符：先做形状校验，不让 PostgreSQL 报类型错误。
+  if (!UUID_PATTERN.test(id)) return null;
   const result = await q(`SELECT ${signalColumns()} FROM signals WHERE id = $1`, [id]);
   return result.rowCount === 1 ? projectSignalCard(result.rows[0] as SignalRow) : null;
 }

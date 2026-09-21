@@ -1,5 +1,5 @@
 # ponytail: 单阶段镜像，含 devDeps（tsx 直接跑 TS）；Ticket 16 只保证可重复构建与非 root 运行
-FROM node:22-alpine
+FROM node:22.13-alpine
 RUN npm install -g pnpm@11.20.0
 WORKDIR /repo
 

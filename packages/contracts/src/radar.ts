@@ -38,9 +38,108 @@ export const RadarWechatAccountSource = Type.Object({
   enabled: Type.Boolean(),
 }, { additionalProperties: false });
 
+export const RadarOutletChannel = Type.Object({
+  kind: Type.Union([Type.Literal("rss"), Type.Literal("news-sitemap")]),
+  url: Type.String({ minLength: 1, maxLength: 500 }),
+}, { additionalProperties: false });
+
+/**
+ * 发布方级来源：渠道（channels）负责取回，articleDomains 只负责归属校验，二者永不互换。
+ * feeds.bbci.co.uk / feeds.a.dj.com / feeds.bloomberg.com 是渠道主机，绝不能写进 articleDomains。
+ */
+export const RadarOutlet = Type.Object({
+  outletId: Type.String({ minLength: 1, maxLength: 100 }),
+  name: Type.String({ minLength: 1, maxLength: 200 }),
+  articleDomains: Type.Array(Type.String({ minLength: 1, maxLength: 253 }), { minItems: 1, maxItems: 10 }),
+  channels: Type.Array(RadarOutletChannel, { minItems: 1, maxItems: 5 }),
+}, { additionalProperties: false });
+
+export type TRadarOutlet = Static<typeof RadarOutlet>;
+
+/**
+ * 7 家白名单媒体 → 8 个域名（BBC 占两个）。纯数据，不是运营配置。
+ * cnbctv18.com 是被许可方（印度 CNBC-TV18）、bloomberglaw.com 是独立产品线、
+ * bloomberg.co.jp 与 jp.reuters.com 是独立日文版、ftchinese.com 是独立中文品牌——都刻意不纳入。
+ * 不要把「漏配的域名」补进去；它们属于别的编辑部。
+ */
+export const RADAR_OUTLETS = [
+  {
+    outletId: "bbc",
+    name: "BBC",
+    articleDomains: ["bbc.com", "bbc.co.uk"],
+    channels: [
+      { kind: "rss", url: "https://feeds.bbci.co.uk/news/business/rss.xml" },
+      { kind: "rss", url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
+    ],
+  },
+  {
+    outletId: "wsj",
+    name: "华尔街日报",
+    articleDomains: ["wsj.com"],
+    channels: [
+      { kind: "rss", url: "https://feeds.a.dj.com/rss/RSSWorldNews.xml" },
+      { kind: "rss", url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml" },
+    ],
+  },
+  {
+    outletId: "bloomberg",
+    name: "彭博",
+    articleDomains: ["bloomberg.com"],
+    channels: [
+      { kind: "rss", url: "https://feeds.bloomberg.com/markets/news.rss" },
+      { kind: "rss", url: "https://feeds.bloomberg.com/politics/news.rss" },
+    ],
+  },
+  {
+    outletId: "reuters",
+    name: "路透社",
+    articleDomains: ["reuters.com"],
+    channels: [
+      { kind: "news-sitemap", url: "https://www.reuters.com/arc/outboundfeeds/news-sitemap/?outputType=xml" },
+    ],
+  },
+  {
+    outletId: "ft",
+    name: "金融时报",
+    articleDomains: ["ft.com"],
+    channels: [
+      { kind: "rss", url: "https://www.ft.com/world?format=rss" },
+      { kind: "rss", url: "https://www.ft.com/rss/home" },
+    ],
+  },
+  {
+    outletId: "cnbc",
+    name: "CNBC",
+    articleDomains: ["cnbc.com"],
+    channels: [
+      { kind: "rss", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html" },
+      { kind: "rss", url: "https://www.cnbc.com/id/100727362/device/rss/rss.html" },
+    ],
+  },
+  {
+    outletId: "economist",
+    name: "经济学人",
+    articleDomains: ["economist.com"],
+    channels: [
+      { kind: "rss", url: "https://www.economist.com/latest/rss.xml" },
+      { kind: "rss", url: "https://www.economist.com/finance-and-economics/rss.xml" },
+    ],
+  },
+] satisfies Static<typeof RadarOutlet>[];
+
+export const RadarOutletSource = Type.Object({
+  id: Type.String({ minLength: 1, maxLength: 100 }),
+  name: Type.String({ minLength: 1, maxLength: 200 }),
+  enabled: Type.Boolean(),
+  /** 引用 RADAR_OUTLETS 的 outletId；域名与渠道由目录定义，不在配置里重复。 */
+  outlets: Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { minItems: 1, maxItems: 20 }),
+}, { additionalProperties: false });
+
 export const RadarSources = Type.Object({
   sites: Type.Array(RadarSiteSource, { maxItems: 20 }),
   wechatAccounts: Type.Array(RadarWechatAccountSource, { maxItems: 20 }),
+  /** 必须保持 Optional：线上旧行没有这个字段，改成必填会让 Value.Check 失败导致整个 Radar 停摆。 */
+  outlets: Type.Optional(Type.Array(RadarOutletSource, { maxItems: 20 })),
 }, { additionalProperties: false });
 
 export const RadarSourceRef = Type.Union([
@@ -55,10 +154,16 @@ export const RadarSourceRef = Type.Union([
     accountId: Type.String({ minLength: 1, maxLength: 200 }),
     accountName: Type.String({ minLength: 1, maxLength: 200 }),
   }, { additionalProperties: false }),
+  Type.Object({
+    type: Type.Literal("outlet"),
+    provider: Type.Literal("publisher-feed"),
+    outletId: Type.String({ minLength: 1, maxLength: 100 }),
+    outletName: Type.String({ minLength: 1, maxLength: 200 }),
+  }, { additionalProperties: false }),
 ]);
 
 export const RadarSourceItem = Type.Object({
-  sourceType: Type.Union([Type.Literal("web"), Type.Literal("wechat-account")]),
+  sourceType: Type.Union([Type.Literal("web"), Type.Literal("wechat-account"), Type.Literal("outlet")]),
   title: Type.String({ minLength: 1, maxLength: 500 }),
   url: Type.String({ minLength: 1, maxLength: 2000 }),
   publishedAt: Type.String({ format: "date-time" }),
@@ -101,7 +206,7 @@ export const RadarCandidate = Type.Object({
     impact: Type.Integer({ minimum: 0, maximum: 5 }),
     urgency: Type.Integer({ minimum: 0, maximum: 5 }),
   }, { additionalProperties: false }),
-  promotion: Type.Optional(RadarPromotionCandidate),
+  promotion: RadarPromotionCandidate,
 }, { additionalProperties: false });
 
 export const RadarCandidateSubmission = Type.Object({
@@ -125,6 +230,7 @@ export const RadarScanResponse = Type.Object({
 export type TRadarAnchor = Static<typeof RadarAnchor>;
 export type TRadarAnchorSource = Static<typeof RadarAnchorSource>;
 export type TRadarSources = Static<typeof RadarSources>;
+export type TRadarOutletSource = Static<typeof RadarOutletSource>;
 export type TRadarSourceItem = Static<typeof RadarSourceItem>;
 export type TRadarCandidateSubmission = Static<typeof RadarCandidateSubmission>;
 export type TSignalStateRequest = Static<typeof SignalStateRequest>;

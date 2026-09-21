@@ -5,13 +5,22 @@ import { ChevronLeft, ExternalLink } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type SignalPayload } from "./payloads";
+import { ConversationDock } from "@/conversation/ConversationDock";
 import s from "@/styles/radar-feed.module.css";
 
 type SignalState = { read?: boolean; saved?: boolean; dismissed?: boolean };
 
+/** 来源类型标签：与 Radar 监测范围的 SOURCE_LABEL 同一口径。 */
+export function signalSourceLabel(type: string): string {
+  return type === "wechat-account" ? "微信公众号" : type === "outlet" ? "发布方级媒体来源" : "Web";
+}
+
 /** Signal 阅读器：来源、影响、锚点、原文摘录与独立 read/saved/dismissed 状态。 */
-export function SignalCard({ card, onCard, onNavigate }: CardRenderProps) {
+export function SignalCard({ card, collection, onCard, onNavigate }: CardRenderProps) {
   const payload = payloadOf<SignalPayload>(card);
+  // 发布方级来源才带真实媒体名（outletName）；Web 搜索没有可核验的发布方，不编造。
+  const sourceLabel = signalSourceLabel(payload.source.type);
+  const publisher = payload.source.type === "outlet" ? card.badge : null;
   const [state, setState] = useState(payload.state);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +56,8 @@ export function SignalCard({ card, onCard, onNavigate }: CardRenderProps) {
         返回 Radar
       </button>
       <p className={s.meta}>
-        {card.badge ?? "Web"} · 采集于 {payload.collectedAt.slice(0, 16).replace("T", " ")}
+        {sourceLabel}
+        {publisher ? ` · ${publisher}` : ""} · 采集于 {payload.collectedAt.slice(0, 16).replace("T", " ")}
         {state.read ? " · 已读" : " · 未读"}
         {state.saved ? " · 已收藏" : ""}
         {state.dismissed ? " · 已隐藏" : ""}
@@ -63,10 +73,25 @@ export function SignalCard({ card, onCard, onNavigate }: CardRenderProps) {
             <ExternalLink size={12} aria-hidden="true" />
           </a>
           <span>
-            {payload.source.type === "wechat-account" ? "微信公众号" : "Web"} · 发布 {payload.source.publishedAt.slice(0, 10)}
+            {sourceLabel} · 发布 {payload.source.publishedAt.slice(0, 10)}
           </span>
+          {payload.source.excerpt ? <span>已内嵌原文</span> : null}
         </footer>
       </blockquote>
+
+      {/* 只渲染真实抓到的来源文本（摘要/描述/阅读摘录）；不编造原文全文。 */}
+      {payload.source.excerpt ? (
+        <section className={s.sourceText} aria-label="原文摘录">
+          <header>
+            <strong>原文摘录</strong>
+            <span>
+              {publisher ? `${publisher} · ` : ""}
+              {payload.source.publishedAt.slice(0, 10)}
+            </span>
+          </header>
+          <p>{payload.source.excerpt}</p>
+        </section>
+      ) : null}
 
       {payload.assessment.unknowns.length ? (
         <section className={s.clarify}>
@@ -80,7 +105,7 @@ export function SignalCard({ card, onCard, onNavigate }: CardRenderProps) {
       ) : null}
 
       <div className={s.signalStates}>
-        <button type="button" disabled={pending} onClick={() => void update({ read: !state.read })}>
+        <button type="button" data-state={state.read ? "read" : "unread"} disabled={pending} onClick={() => void update({ read: !state.read })}>
           {state.read ? "标记未读" : "标记已读"}
         </button>
         <button type="button" disabled={pending} onClick={() => void update({ saved: !state.saved })}>
@@ -99,6 +124,13 @@ export function SignalCard({ card, onCard, onNavigate }: CardRenderProps) {
         </p>
       ) : null}
     </article>
+    <ConversationDock
+      scope={card.conversation?.scope ?? `signal:${card.objectRef.id}`}
+      label={card.title}
+      availableCards={collection}
+      variant="sidebar"
+      sidebar={{ title: "对话 · 本条信号", tone: "light", open: true, placeholder: "问天枢：本条信号…" }}
+    />
     </div>
   );
 }

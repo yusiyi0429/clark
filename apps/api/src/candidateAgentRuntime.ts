@@ -39,6 +39,8 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   apiKey: string;
   modelId: string;
   modelSlot?: "light" | "heavy";
+  /** 只读辅助工具（如 CompanyMemory MCP）：与 submit_candidate 一同进入工具白名单。 */
+  extraTools?: ReturnType<typeof defineTool<any>>[];
   signal?: AbortSignal;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 }): Promise<{ runId: string; candidate: Static<T> }> {
@@ -113,8 +115,8 @@ export async function runCandidateAgent<T extends TSchema>(options: {
       model,
       modelRuntime,
       resourceLoader,
-      customTools: [submitCandidate],
-      tools: ["submit_candidate"],
+      customTools: [submitCandidate, ...(options.extraTools ?? [])],
+      tools: ["submit_candidate", ...(options.extraTools ?? []).map((tool) => tool.name)],
       sessionManager: SessionManager.inMemory(),
       settingsManager: SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } }),
       thinkingLevel: "off",

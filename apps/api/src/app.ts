@@ -8,7 +8,10 @@ import type { Pool } from "pg";
 import {
   ConversationMessageRequest,
   ConversationScope,
+  ConversationSessionId,
+  CreateConversationSessionRequest,
   CreateMeetingRequest,
+  PeopleDirectoryResponse,
   DriIssueImportRequest,
   DriMeetingImportRequest,
   DriMonthlyPlanFeedbackRequest,
@@ -21,6 +24,7 @@ import {
   MeetingDismissItemInput,
   MeetingRevokeEffectInput,
   RadarScanResponse,
+  RadarSources,
   ReplaceTranscriptRequest,
   RequestSupplementRequest,
   SessionResponse,
@@ -32,7 +36,11 @@ import {
   UpdateMonthlyPlanDraftRequest,
   type TApiError,
   type TCardCollection,
+  type TConversationAttachment,
+  type TConversationMessageRequest,
+  type TConversationScope,
   type TUpdateMonthlyPlanDraftRequest,
+  type TRadarSources,
 } from "@warmap/contracts";
 import rateLimit from "@fastify/rate-limit";
 import {
@@ -49,12 +57,21 @@ import { createCompanyMemoryMcpSession } from "./mcpCompanyMemory.js";
 import { createPiConversationRuntime } from "./piConversationRuntime.js";
 import type { WebSearchAdapter } from "./webSearch.js";
 import {
+  conversationAttachmentInfo,
+  createConversationSession,
   getConversationHistory,
+  getConversationSession,
+  getConversationSessionHistory,
   getScopeObject,
+  listConversationSessions,
+  loadConversationAttachments,
+  removeConversationAttachmentFiles,
   resolveReferenceSnapshots,
+  storeConversationAttachments,
   type ConversationRuntime,
 } from "./conversations.js";
-import type { RadarService } from "./radar.js";
+import type { RadarOutletAdapter, RadarService } from "./radar.js";
+import { resolveConfiguredOutletIds } from "./outletSources.js";
 import { getSignalCard, listSignalCards, projectRadarCard, setSignalState } from "./signals.js";
 import { getIssueRow, executeIssueAction, importDriIssue, listPendingIssueCards, projectIssueCard } from "./issues.js";
 import type { ResearchService } from "./research.js";
@@ -63,11 +80,14 @@ import {
   executeConfirmItem,
   executeCreateMeeting,
   executeDismissItem,
+  executeEditMaterials,
   executeJoinMeeting,
   executeReplaceTranscript,
   executeRequestSupplement,
   executeRetryOutcome,
+  executeRegeneratePreflight,
   executeRetryPreflight,
+  executeRunPreflight,
   executeRevokeEffect,
   executeUpdateDraft,
   getMeetingRow,
@@ -75,6 +95,8 @@ import {
   importTranscript,
   listMeetingRows,
   projectMeetingCard,
+  replaceMeetingMaterials,
+  appendSupplementMaterial,
   type DriExporter,
   type MeetingActionOutcome,
   type PreflightAgent,
@@ -101,10 +123,14 @@ import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import multipart from "@fastify/multipart";
 import { logEvent } from "./observability.js";
 import { configureLangSmith, recordAgentTrace } from "./langsmith.js";
+import { cleanupMaterialTemp, ensureMaterialStorage, MAX_MATERIAL_FILE_BYTES, MAX_MATERIAL_FILES, MaterialParseError, parseMaterialBatch, readStoredMaterial } from "./materialParser.js";
+import { renderMaterialPreview } from "./materialPreview.js";
 
 export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
 /** warmap-transcript.v1 单文件上限；Web multipart 与 service API 共用。 */
 export const MAX_TRANSCRIPT_BYTES = 1024 * 1024;
+const DEFAULT_MATERIAL_STORAGE_DIR = "/tmp/warmap-meeting-materials";
+const DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR = "/tmp/warmap-conversation-attachments";
 
 export type AppEnv = {
   sessionSecret: string;
@@ -122,6 +148,9 @@ export type AppEnv = {
   /** 可选 LangSmith adapter；缺失时完全 no-op（.tech/07 §7）。 */
   langsmithApiKey?: string;
   langsmithProject?: string;
+  materialStorageDir?: string;
+  /** 会话附件 API 卷；与 Meeting 材料卷隔离。 */
+  conversationAttachmentStorageDir?: string;
 } & CompanyMemorySeedEnv;
 
 export async function buildApp({
@@ -135,6 +164,7 @@ export async function buildApp({
   driExporter,
   monthlyPlanService,
   webSearch,
+  outlets,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   now = () => new Date(),
 }: {
@@ -149,6 +179,8 @@ export async function buildApp({
   monthlyPlanService?: MonthlyPlanService;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
+  /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
+  outlets?: RadarOutletAdapter;
   conversationTurnTimeoutMs?: number;
   /** 业务时钟；通知与战场投影按公司月读取同一持久对象。 */
   now?: () => Date;
@@ -156,8 +188,9 @@ export async function buildApp({
   configureLangSmith({ apiKey: env.langsmithApiKey, project: env.langsmithProject });
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
   const companyMemory = loadCompanyMemory(env);
-  const preflight = preflightAgent ?? createPreflightAgent({
+  const preflight = preflightAgent ?? await createPreflightAgent({
     query: pool.query.bind(pool),
+    companyMemory,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.lightModel,
@@ -168,6 +201,14 @@ export async function buildApp({
     apiKey: env.piApiKey,
     modelId: env.heavyModel,
   });
+  const readOutletFeed = outlets ? async (signal: AbortSignal) => {
+    const config = await pool.query("SELECT lookback_hours, sources FROM radar_config WHERE id = 'default'");
+    const row = config.rows[0] as { lookback_hours: number; sources: unknown } | undefined;
+    if (!row || !Value.Check(RadarSources, row.sources)) throw new Error("RadarConfig is invalid");
+    const outletIds = resolveConfiguredOutletIds(row.sources as TRadarSources);
+    if (!outletIds.length) throw new Error("Radar 未配置启用的发布方媒体来源");
+    return outlets.fetchLatest({ outletIds, lookbackHours: row.lookback_hours }, signal);
+  } : undefined;
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     companyMemory,
     baseUrl: env.piBaseUrl,
@@ -175,9 +216,25 @@ export async function buildApp({
     modelId: env.lightModel,
     compactionModelId: env.compactionModel,
     search: webSearch,
+    outletFeed: readOutletFeed,
+    // 对话只读工具：实时待决策 Issue 清单（不含签名 Action，不可写入）。
+    listPendingIssues: async () => {
+      const result = await pool.query(
+        `SELECT id, title, location, urgency, research->>'status' AS research_status, created_at
+           FROM issues WHERE status = 'pending' ORDER BY created_at, id`,
+      );
+      return result.rows.map((row) => ({
+        id: String(row.id),
+        title: String(row.title),
+        location: row.location,
+        urgency: row.urgency,
+        researchStatus: String(row.research_status ?? "none"),
+        createdAt: new Date(row.created_at).toISOString(),
+      }));
+    },
   });
   const radar = radarService ?? {
-    providerStatus: { web: false, wechat: false },
+    providerStatus: { web: false, wechat: false, outlets: false },
     async recoverStaleRuns() {},
     runManual: async () => ({ trigger: "manual" as const, status: "failed" as const, companyDay: new Date().toISOString().slice(0, 10), createdSignals: 0, warnings: ["Radar providers are not configured"] }),
     runScheduled: async () => ({ trigger: "scheduled" as const, status: "failed" as const, companyDay: new Date().toISOString().slice(0, 10), createdSignals: 0, warnings: ["Radar providers are not configured"] }),
@@ -216,7 +273,12 @@ export async function buildApp({
   // ponytail: 登录限速用进程内计数器，单进程 MVP 足够；多实例部署时换共享存储
   await app.register(rateLimit, { global: false });
   // Transcript 是唯一上传格式；大小上限与 service API 共用
+  // Transcript 是唯一上传格式；大小上限与 service API 共用（各上传路由用 per-request limits 收紧）
   await app.register(multipart, { limits: { fileSize: MAX_TRANSCRIPT_BYTES, files: 1, fields: 5 } });
+  const materialStorageDir = env.materialStorageDir ?? DEFAULT_MATERIAL_STORAGE_DIR;
+  await ensureMaterialStorage(materialStorageDir);
+  const conversationAttachmentStorageDir = env.conversationAttachmentStorageDir ?? DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR;
+  await ensureMaterialStorage(conversationAttachmentStorageDir);
 
   function fail(
     reply: FastifyReply,
@@ -227,6 +289,21 @@ export async function buildApp({
   ): FastifyReply {
     requestContext.set(reply.request, { ...requestContext.get(reply.request), errorCode: code });
     return reply.status(status).send({ code, message, retryable: false, requestId: reply.request.id, ...extra });
+  }
+
+  type MaterialLimit = { status: 413 | 400; code: string; message: string };
+  /**
+   * 材料上传的 multipart 上限错误 → 深思熟虑的 4xx；返回 null 表示不是上限错误，调用方必须继续抛出（不吞解析/内部错误）。
+   * - FST_REQ_FILE_TOO_LARGE（文件超过 fileSize）→ 413
+   * - FST_FILES_LIMIT（文件份数超过 files）→ 调用方按语义给 413（主材料整批）或 400（补充材料恰好一份）
+   * - ERR_STREAM_PREMATURE_CLOSE：files 上限触发的清理会销毁当前 part 流，常以此错误呈现（同族客户端错误）→ truncated 映射
+   */
+  function materialMultipartLimitError(error: unknown, tooLarge: MaterialLimit, tooMany: MaterialLimit, truncated: MaterialLimit): MaterialLimit | null {
+    const code = (error as { code?: string }).code;
+    if (code === "FST_REQ_FILE_TOO_LARGE") return tooLarge;
+    if (code === "FST_FILES_LIMIT") return tooMany;
+    if (code === "ERR_STREAM_PREMATURE_CLOSE") return truncated;
+    return null;
   }
 
   /** CEO 浏览器写请求边界：session + 同源 Origin（CSRF）。 */
@@ -342,6 +419,14 @@ export async function buildApp({
   });
 
   // 首页一次返回真实 Card 集合；战略/战场/能力/Radar/通知都是这些持久对象的固定投影。
+  // 人员目录：Issue 页新建 Meeting 表单选择 personId 使用；只读，来源于 CompanyMemory。
+  app.get("/api/people", { preHandler: requireCEO, schema: { response: { 200: PeopleDirectoryResponse } } }, async () => ({
+    people: companyMemory.searchPeople(undefined).map((person) => ({
+      personId: person.personId,
+      displayName: person.displayName,
+      roles: [...person.roles],
+    })),
+  }));
   app.get("/api/cards/home", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
     const [radarCard, battlefields, issues, meetingRows, monthlyNotice] = await Promise.all([
       projectRadarCard(q, radar.providerStatus),
@@ -396,6 +481,12 @@ export async function buildApp({
   );
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
+  const conversationSessionParams = Type.Object(
+    { scope: ConversationScope, sessionId: ConversationSessionId },
+    { additionalProperties: false },
+  );
+  const conversationScopeVisible = async (scope: TConversationScope) =>
+    (await getScopeObject(q, scope, env.sessionSecret)).visible;
 
   app.get(
     "/api/conversations/:scope/messages",
@@ -407,13 +498,12 @@ export async function buildApp({
     },
   );
 
-  app.post(
-    "/api/conversations/:scope/messages",
-    {
-      preHandler: requireCEO,
-      schema: { params: conversationParams, body: ConversationMessageRequest },
-    },
-    async (req, reply) => {
+  /** 一轮对话的完整流程；conversationId 为 null 时走 legacy 默认会话语义。 */
+  const sendConversationTurn = async (
+    req: FastifyRequest<{ Params: { scope: TConversationScope }; Body: TConversationMessageRequest }>,
+    reply: FastifyReply,
+    conversationId: string | null,
+  ): Promise<void> => {
       const object = await getScopeObject(q, req.params.scope, env.sessionSecret);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
       const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret);
@@ -428,6 +518,7 @@ export async function buildApp({
         return fail(reply, 409, "TURN_IN_PROGRESS", "该 Conversation 正在运行");
       }
 
+      let scopeLockHeld = true;
       const runId = randomUUID();
       requestContext.set(req, { runId, scope: req.params.scope });
       const runStartedAt = Date.now();
@@ -439,19 +530,51 @@ export async function buildApp({
       let runError: string | undefined;
       let runOutput: unknown;
       try {
-        const conversationId = randomUUID();
-        const piSessionId = randomUUID();
-        await client.query(
-          `INSERT INTO conversations (id, scope, pi_session_id)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (scope) DO NOTHING`,
-          [conversationId, req.params.scope, piSessionId],
-        );
-        const conversation = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[] }>(
-          "SELECT id, pi_session_id, runtime_entries FROM conversations WHERE scope = $1",
-          [req.params.scope],
-        );
-        const row = conversation.rows[0];
+        let row: { id: string; pi_session_id: string; runtime_entries: unknown[] };
+        if (conversationId) {
+          const found = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[] }>(
+            "SELECT id, pi_session_id, runtime_entries FROM conversations WHERE id = $1::uuid AND scope = $2 AND deleted_at IS NULL",
+            [conversationId, req.params.scope],
+          );
+          if (!found.rows[0]) {
+            return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
+          }
+          row = found.rows[0];
+        } else {
+          // legacy 路由：默认会话 = 最早未删除；不存在则在锁内惰性创建（scope 唯一约束已随会话化移除）。
+          const existing = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[] }>(
+            "SELECT id, pi_session_id, runtime_entries FROM conversations WHERE scope = $1 AND deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1",
+            [req.params.scope],
+          );
+          if (existing.rows[0]) {
+            row = existing.rows[0];
+          } else {
+            row = { id: randomUUID(), pi_session_id: randomUUID(), runtime_entries: [] };
+            await client.query(
+              "INSERT INTO conversations (id, scope, pi_session_id) VALUES ($1, $2, $3)",
+              [row.id, req.params.scope, row.pi_session_id],
+            );
+          }
+        }
+        // 附件：只信服务端 sidecar（客户端只能传 id）；原件不进入 Runtime，只拼接有界抽取文本。
+        let attachments: TConversationAttachment[] = [];
+        if (req.body.attachments?.length) {
+          try {
+            attachments = await loadConversationAttachments(
+              conversationAttachmentStorageDir,
+              row.id,
+              req.body.attachments.map((item) => item.id),
+            );
+          } catch (error) {
+            if ((error as { code?: string }).code === "ATTACHMENT_NOT_FOUND") {
+              return fail(reply, 400, "ATTACHMENT_NOT_FOUND", (error as Error).message);
+            }
+            throw error;
+          }
+        }
+        const runtimeMessage = attachments.length
+          ? `${req.body.message}\n\n${attachments.map((attachment) => `[附件 ${attachment.fileName}]\n${attachment.extractedText}`).join("\n\n")}`
+          : req.body.message;
         const next = await client.query<{ sequence: number }>(
           `SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence
              FROM conversation_messages WHERE conversation_id = $1`,
@@ -460,9 +583,9 @@ export async function buildApp({
         const userSequence = next.rows[0].sequence;
         await client.query(
           `INSERT INTO conversation_messages
-             (conversation_id, sequence, role, content, references_snapshot, run_id)
-           VALUES ($1, $2, 'user', $3, $4::jsonb, $5)`,
-          [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), runId],
+             (conversation_id, sequence, role, content, references_snapshot, attachments, run_id)
+           VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
+          [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
         );
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
@@ -481,9 +604,11 @@ export async function buildApp({
             runtime.promptHash ?? createHash("sha256").update("conversation-runtime").digest("hex"),
             JSON.stringify({
               scope: req.params.scope,
+              conversationId: row.id,
               message: req.body.message,
               currentObject: object.snapshot,
               references: references.snapshots,
+              attachments: attachments.map(conversationAttachmentInfo),
             }),
           ],
         );
@@ -519,7 +644,7 @@ export async function buildApp({
         try {
           const result = await runtime.run({
             scope: req.params.scope,
-            message: req.body.message,
+            message: runtimeMessage,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,
             recentMessages: recent.rows.reverse().map((message) => ({
@@ -640,9 +765,134 @@ export async function buildApp({
           durationMs,
         });
         streamFinished = true;
+        // Fastify inject/browser may observe SSE end before this function's finally runs.
+        // Release first so an immediate next turn/delete cannot spuriously see TURN_IN_PROGRESS.
+        await client.query("SELECT pg_advisory_unlock(hashtext($1))", [req.params.scope]).catch(() => undefined);
+        scopeLockHeld = false;
         reply.raw.end();
       } finally {
-        await client.query("SELECT pg_advisory_unlock(hashtext($1))", [req.params.scope]).catch(() => undefined);
+        if (scopeLockHeld) await client.query("SELECT pg_advisory_unlock(hashtext($1))", [req.params.scope]).catch(() => undefined);
+        client.release();
+      }
+    };
+
+  // legacy 路由：读写默认会话，老调用方与既有测试行为不变。
+  app.post(
+    "/api/conversations/:scope/messages",
+    {
+      preHandler: requireCEO,
+      schema: { params: conversationParams, body: ConversationMessageRequest },
+    },
+    async (req: FastifyRequest<{ Params: { scope: TConversationScope }; Body: TConversationMessageRequest }>, reply) =>
+      sendConversationTurn(req, reply, null),
+  );
+
+  app.get(
+    "/api/conversations/:scope/sessions",
+    { preHandler: requireCEO, schema: { params: conversationParams } },
+    async (req, reply) => {
+      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      return listConversationSessions(q, req.params.scope);
+    },
+  );
+
+  app.post(
+    "/api/conversations/:scope/sessions",
+    { preHandler: requireCEO, schema: { params: conversationParams, body: CreateConversationSessionRequest } },
+    async (req, reply) => {
+      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      const session = await createConversationSession(q, req.params.scope, req.body.title);
+      return reply.code(201).send(session);
+    },
+  );
+
+  app.get(
+    "/api/conversations/:scope/sessions/:sessionId/messages",
+    { preHandler: requireCEO, schema: { params: conversationSessionParams } },
+    async (req, reply) => {
+      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      const session = await getConversationSession(q, req.params.scope, req.params.sessionId);
+      if (!session) return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
+      return getConversationSessionHistory(q, req.params.scope, req.params.sessionId);
+    },
+  );
+
+  app.post(
+    "/api/conversations/:scope/sessions/:sessionId/messages",
+    {
+      preHandler: requireCEO,
+      schema: { params: conversationSessionParams, body: ConversationMessageRequest },
+    },
+    async (req: FastifyRequest<{ Params: { scope: TConversationScope; sessionId: string }; Body: TConversationMessageRequest }>, reply) => {
+      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      const session = await getConversationSession(q, req.params.scope, req.params.sessionId);
+      if (!session) return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
+      return sendConversationTurn(req, reply, session.id);
+    },
+  );
+
+  // 会话附件：复用 Meeting 材料的受限解析器（PDF/DOCX/Markdown、同一大小/数量/超时限制），API 卷独立。
+  app.post(
+    "/api/conversations/:scope/sessions/:sessionId/attachments",
+    { preHandler: requireCEO, schema: { params: conversationSessionParams }, bodyLimit: 101 * 1024 * 1024 },
+    async (req, reply) => {
+      let parsed: Awaited<ReturnType<typeof parseMaterialBatch>> | undefined;
+      try {
+        if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+        const session = await getConversationSession(q, req.params.scope, req.params.sessionId);
+        if (!session) return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
+        const files: { filename: string; mimetype: string; buffer: Buffer }[] = [];
+        for await (const part of req.files({ limits: { fileSize: MAX_MATERIAL_FILE_BYTES, files: MAX_MATERIAL_FILES } })) {
+          if (part.type !== "file" || part.fieldname !== "files") return fail(reply, 400, "INVALID_ATTACHMENT", "multipart 只接受 files 文件字段");
+          files.push({ filename: part.filename, mimetype: part.mimetype, buffer: await part.toBuffer() });
+        }
+        if (!files.length) return fail(reply, 400, "INVALID_ATTACHMENT", "缺少附件文件");
+        parsed = await parseMaterialBatch(files);
+        const stored = await storeConversationAttachments(conversationAttachmentStorageDir, session.id, parsed.materials);
+        return { attachments: stored.map(conversationAttachmentInfo) };
+      } catch (error) {
+        if (error instanceof MaterialParseError) return fail(reply, 400, error.code, error.message);
+        const code = (error as { code?: string }).code;
+        if (code === "FST_REQ_FILE_TOO_LARGE" || code === "FST_FILES_LIMIT") return fail(reply, 413, "MATERIAL_BATCH_TOO_LARGE", "附件文件或数量超出上限");
+        throw error;
+      } finally {
+        if (parsed) await cleanupMaterialTemp(parsed.directory);
+      }
+    },
+  );
+
+  // 删除会话：与轮次共用 scope 级 advisory lock，拿到锁即可保证没有进行中的轮次。
+  app.delete(
+    "/api/conversations/:scope/sessions/:sessionId",
+    { preHandler: requireCEO, schema: { params: conversationSessionParams } },
+    async (req, reply): Promise<FastifyReply> => {
+      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      const client = await pool.connect();
+      let locked = false;
+      try {
+        const lock = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtext($1)) AS locked", [req.params.scope]);
+        locked = lock.rows[0]?.locked === true;
+        if (!locked) return fail(reply, 409, "SESSION_BUSY", "会话正在运行一轮对话，稍后再删");
+        await client.query("BEGIN");
+        const row = await client.query<{ id: string }>(
+          "SELECT id FROM conversations WHERE id = $1::uuid AND scope = $2 AND deleted_at IS NULL FOR UPDATE",
+          [req.params.sessionId, req.params.scope],
+        );
+        if (!row.rows[0]) {
+          await client.query("ROLLBACK");
+          return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
+        }
+        await client.query("DELETE FROM conversation_messages WHERE conversation_id = $1", [row.rows[0].id]);
+        await client.query("UPDATE conversations SET deleted_at = now() WHERE id = $1", [row.rows[0].id]);
+        await client.query("COMMIT");
+        // DB 删除已提交后才清文件；清理失败只留孤儿文件，不影响删除语义。
+        await removeConversationAttachmentFiles(conversationAttachmentStorageDir, row.rows[0].id);
+        return reply.code(204).send();
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally {
+        if (locked) await client.query("SELECT pg_advisory_unlock(hashtext($1))", [req.params.scope]).catch(() => undefined);
         client.release();
       }
     },
@@ -716,7 +966,7 @@ export async function buildApp({
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       let buffer: Buffer;
       try {
-        const upload = await req.file();
+        const upload = await req.file({ limits: { fileSize: MAX_TRANSCRIPT_BYTES, files: 1 } });
         if (!upload) return fail(reply, 400, "INVALID_TRANSCRIPT", "multipart 缺少 Transcript 文件");
         buffer = await upload.toBuffer();
       } catch (err) {
@@ -734,6 +984,117 @@ export async function buildApp({
         return fail(reply, 400, encoding ? "INVALID_TRANSCRIPT_ENCODING" : "INVALID_TRANSCRIPT", encoding ? "Transcript 不是合法 UTF-8" : "Transcript 不是合法 JSON");
       }
       return respondTranscriptImport(reply, await importTranscript(pool, outcome, env.sessionSecret, req.params.id, parsed));
+    },
+  );
+
+  // Meeting Material 使用独立 endpoint，绝不复用 Transcript 语义或 DRI service 身份。
+  app.post(
+    "/api/meetings/:id/materials",
+    { preHandler: requireCEO, schema: { params: idParams }, bodyLimit: 101 * 1024 * 1024 },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      let parsed: Awaited<ReturnType<typeof parseMaterialBatch>> | undefined;
+      try {
+        const files: { filename: string; mimetype: string; buffer: Buffer }[] = [];
+        let totalBytes = 0;
+        for await (const part of req.files({ limits: { fileSize: MAX_MATERIAL_FILE_BYTES, files: MAX_MATERIAL_FILES } })) {
+          if (part.type !== "file" || part.fieldname !== "files") return fail(reply, 400, "INVALID_MATERIAL", "multipart 只接受 files 文件字段");
+          const buffer = await part.toBuffer();
+          totalBytes += buffer.length;
+          if (totalBytes > 100 * 1024 * 1024) return fail(reply, 413, "MATERIAL_BATCH_TOO_LARGE", "材料总大小超过 100 MiB");
+          files.push({ filename: part.filename, mimetype: part.mimetype, buffer });
+        }
+        parsed = await parseMaterialBatch(files);
+        const result = await replaceMeetingMaterials(pool, env.sessionSecret, req.params.id, parsed.materials, materialStorageDir);
+        return respond(reply, result);
+      } catch (error) {
+        if (error instanceof MaterialParseError) return fail(reply, 400, error.code, error.message);
+        const limited = materialMultipartLimitError(
+          error,
+          { status: 413, code: "MATERIAL_BATCH_TOO_LARGE", message: "材料文件或数量超出上限" },
+          { status: 400, code: "MATERIAL_BATCH_TOO_LARGE", message: `每批最多 ${MAX_MATERIAL_FILES} 份材料文件` },
+          { status: 400, code: "MATERIAL_BATCH_TOO_LARGE", message: `每批最多 ${MAX_MATERIAL_FILES} 份材料文件` },
+        );
+        if (limited) return fail(reply, limited.status, limited.code, limited.message);
+        throw error;
+      } finally {
+        if (parsed) await cleanupMaterialTemp(parsed.directory);
+      }
+    },
+  );
+
+  // 预览同样仅 CEO 鉴权：PDF inline 字节、Markdown 纯文本、DOCX 按需 sanitize HTML（不持久化）。
+  // 补充材料文件组：CEO 把会外收到的回应文件归档到已记录请求；scheduled only；不重置/不触发预审。
+  app.post(
+    "/api/meetings/:id/materials/supplement",
+    { preHandler: requireCEO, schema: { params: idParams }, bodyLimit: MAX_MATERIAL_FILE_BYTES * 2 },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      let parsed: Awaited<ReturnType<typeof parseMaterialBatch>> | undefined;
+      try {
+        let requestId: string | null = null;
+        let file: { filename: string; mimetype: string; buffer: Buffer } | null = null;
+        for await (const part of req.parts({ limits: { fileSize: MAX_MATERIAL_FILE_BYTES, files: 1 } })) {
+          if (part.type === "file") {
+            if (part.fieldname !== "files") return fail(reply, 400, "INVALID_MATERIAL", "multipart 文件必须放在 files 字段");
+            if (file) return fail(reply, 400, "INVALID_MATERIAL", "补充材料一次只能上传一份");
+            file = { filename: part.filename, mimetype: part.mimetype, buffer: await part.toBuffer() };
+          } else if (part.fieldname === "requestId") {
+            requestId = String(part.value ?? "").trim() || null;
+          }
+        }
+        if (!file || !requestId) return fail(reply, 400, "INVALID_MATERIAL", "multipart 需要 files 文件与 requestId 字段");
+        parsed = await parseMaterialBatch([file]);
+        const result = await appendSupplementMaterial(pool, env.sessionSecret, req.params.id, requestId, parsed.materials[0], materialStorageDir);
+        return respond(reply, result);
+      } catch (error) {
+        if (error instanceof MaterialParseError) return fail(reply, 400, error.code, error.message);
+        const limited = materialMultipartLimitError(
+          error,
+          { status: 413, code: "MATERIAL_FILE_TOO_LARGE", message: "补充材料超出 20 MiB 上限" },
+          { status: 400, code: "INVALID_MATERIAL", message: "补充材料一次只能上传一份" },
+          { status: 400, code: "INVALID_MATERIAL", message: "补充材料必须恰好一份，或上传在完成前中断" },
+        );
+        if (limited) return fail(reply, limited.status, limited.code, limited.message);
+        throw error;
+      } finally {
+        if (parsed) await cleanupMaterialTemp(parsed.directory);
+      }
+    },
+  );
+
+  app.get(
+    "/api/meetings/:id/materials/:materialId/preview",
+    { preHandler: requireCEO, schema: { params: Type.Object({ id: Type.String(), materialId: Type.String() }) } },
+    async (req, reply): Promise<FastifyReply> => {
+      const meeting = await getMeetingRow(q, req.params.id);
+      const material = meeting?.materials.find((candidate) => candidate.id === req.params.materialId);
+      if (!material) return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在");
+      try {
+        const buffer = await readStoredMaterial(materialStorageDir, material.storageKey);
+        const preview = await renderMaterialPreview(buffer, material.mimeType);
+        return reply.type(preview.contentType)
+          .header("content-disposition", "inline")
+          .header("x-content-type-options", "nosniff")
+          .header("content-security-policy", "default-src 'none'; sandbox")
+          .send(preview.body);
+      } catch {
+        return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料原件不存在");
+      }
+    },
+  );
+
+  app.get(
+    "/api/meetings/:id/materials/:materialId/download",
+    { preHandler: requireCEO, schema: { params: Type.Object({ id: Type.String(), materialId: Type.String() }) } },
+    async (req, reply): Promise<FastifyReply> => {
+      const meeting = await getMeetingRow(q, req.params.id);
+      const material = meeting?.materials.find((candidate) => candidate.id === req.params.materialId);
+      if (!material) return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在");
+      try {
+        const buffer = await readStoredMaterial(materialStorageDir, material.storageKey);
+        return reply.type(material.mimeType).header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(material.fileName)}`).send(buffer);
+      } catch {
+        return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料原件不存在");
+      }
     },
   );
 
@@ -774,11 +1135,20 @@ export async function buildApp({
         if (!Value.Check(RequestSupplementRequest, input)) return invalidInput(reply, RequestSupplementRequest, input);
         return respond(reply, await executeRequestSupplement(pool, companyMemory, driExporter, env.sessionSecret, scope, input, fingerprint));
       }
+      if (scope.actionType === "meeting.edit_materials") {
+        return respond(reply, await executeEditMaterials(pool, env.sessionSecret, scope, fingerprint));
+      }
+      if (scope.actionType === "meeting.run_preflight") {
+        return respond(reply, await executeRunPreflight(pool, companyMemory, preflight, env.sessionSecret, scope, fingerprint));
+      }
       if (scope.actionType === "meeting.cancel") {
         return respond(reply, await executeCancelMeeting(pool, env.sessionSecret, scope, fingerprint));
       }
       if (scope.actionType === "meeting.retry_preflight") {
         return respond(reply, await executeRetryPreflight(pool, companyMemory, preflight, env.sessionSecret, scope, fingerprint));
+      }
+      if (scope.actionType === "meeting.regenerate_preflight") {
+        return respond(reply, await executeRegeneratePreflight(pool, companyMemory, preflight, env.sessionSecret, scope, fingerprint));
       }
       // Ticket 10：Transcript 替换是危险 Action，要求二次确认
       if (scope.actionType === "meeting.replace_transcript") {
@@ -859,6 +1229,7 @@ export async function buildApp({
       // Provider 可选项：安装时就能诚实区分，不发起外部调用。
       search: radar.providerStatus.web,
       wechat: radar.providerStatus.wechat,
+      outlets: radar.providerStatus.outlets ?? false,
     };
     const status: Static<typeof HealthResponse>["status"] =
       database && dependencies.piRuntime && dependencies.modelSlots && dependencies.companyMemoryMcp ? "ok" : "degraded";

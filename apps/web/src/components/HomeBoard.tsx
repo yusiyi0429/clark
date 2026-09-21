@@ -68,6 +68,7 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
       <div className={b.top}>
         <section className={`${b.panel} ${b.strategy}`} data-origin="strategy">
           <h2>公司战略议题</h2>
+          <div className={b.divider} aria-hidden="true" />
           <div className={b.strategicIssues}>
             {strategy.length ? strategy.map(issueRow) : <p className={b.empty}>暂无跨战场待决策议题</p>}
           </div>
@@ -121,6 +122,7 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
 
       <section className={`${b.panel} ${b.capabilities}`} data-origin="capabilities">
         <h2>公司能力</h2>
+        <div className={b.divider} aria-hidden="true" />
         {capabilityGroups.length ? (
           <div className={b.capabilityItems}>
             {capabilityGroups.map(([capabilityId, group]) => (

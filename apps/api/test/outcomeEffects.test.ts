@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
-import { Card, MeetingCardPayload, MeetingOutcomeState, type TPostMeetingCandidate, type TPreflightCandidate } from "@warmap/contracts";
-import { createTestApp, testEnv, type TestApp } from "./helpers.js";
+import { Card, MeetingCardPayload, MeetingOutcomeState, type TPostMeetingCandidate } from "@warmap/contracts";
+import { createTestApp, preflightCandidate, testEnv, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
 import type { DriExportRequest, DriExporter, PreflightAgent, PreflightAgentInput } from "../src/meetings.js";
 import { signActionId } from "../src/actionToken.js";
@@ -36,12 +36,7 @@ function candidate(issueId: string): TPostMeetingCandidate {
 
 const preflightAgent: PreflightAgent = {
   async generate(input: PreflightAgentInput) {
-    const value: TPreflightCandidate = {
-      entries: [{ kind: "agenda", title: "议程", body: "对齐渠道投入", sourceRefs: input.issues.map((issue) => `issue:${issue.id}`) }],
-      basis: "依据关联 Issue",
-      brief: "会前确认渠道节奏",
-    };
-    return { candidate: value };
+    return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) };
   },
 };
 

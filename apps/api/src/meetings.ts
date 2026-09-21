@@ -1,4 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { copyFile, mkdir, rename, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { MAX_MATERIAL_FILES, MAX_PREFLIGHT_MATERIAL_CHARS, type ParsedMaterial } from "./materialParser.js";
 import type { Pool, PoolClient, QueryResult } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import {
@@ -7,15 +11,18 @@ import {
   type TCard,
   type TIssueLocation,
   type TMeetingDraft,
+  type TMeetingMaterial,
   type TMeetingOutcomeItem,
   type TMeetingOutcomeState,
   type TMeetingParticipant,
   type TMeetingPreflight,
   type TMeetingPreflightEntry,
+  type TPreflightInputCoverage,
   type TOutcomeHandoff,
   type TRadarAnchor,
   type TStoredTranscript,
   type TSupplementRequest,
+  type TPreflightCandidate,
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
@@ -26,6 +33,8 @@ import { hasConfirmedEffect, pendingOutcome, runOutcome, validateTranscript, typ
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
 type MeetingStatus = "scheduled" | "held" | "reviewed" | "cancelled";
+
+type StoredMeetingMaterial = TMeetingMaterial & { storageKey: string; sha256: string; extractedText: string };
 
 export type MeetingRow = {
   id: string;
@@ -39,6 +48,7 @@ export type MeetingRow = {
   issue_ids: string[];
   preflight: TMeetingPreflight;
   draft: TMeetingDraft;
+  materials: StoredMeetingMaterial[];
   transcript: TStoredTranscript | null;
   outcome: TMeetingOutcomeState | null;
   origin_ref: unknown;
@@ -51,7 +61,7 @@ export type MeetingRow = {
 
 const MEETING_COLUMNS = [
   "id", "version", "title", "status", "scheduled_at", "lead_dri_id", "ceo_participant_id",
-  "participants", "issue_ids", "preflight", "draft", "transcript", "outcome", "origin_ref", "external_id",
+  "participants", "issue_ids", "preflight", "draft", "materials", "transcript", "outcome", "origin_ref", "external_id",
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
 ];
 const meetingColumns = (prefix = "") => MEETING_COLUMNS.map((column) => `${prefix}${column}`).join(", ");
@@ -71,11 +81,21 @@ export type MeetingActionOutcome =
   | { conflict: true; latestCard: TCard }
   | { error: MeetingActionError };
 
-/** 会前预审 Agent 的只读输入：关联 Issue、ResearchDoc 与 CompanyMemory 相关段落。 */
+/** advisor-review 四输入在现有六实体中的只读映射；缺失项由代码标记，模型不得猜补。 */
 export type PreflightAgentInput = {
   meeting: { id: string; title: string; scheduledAt: string; participants: TMeetingParticipant[] };
   issues: { id: string; title: string; location: unknown; urgency: unknown; research: unknown }[];
-  memory: { sectionId: string; title: string; sourceRef: string; passages: { id: string; text: string; sourceRef: string }[] }[];
+  materials: { id: string; fileName: string; mimeType: string; extractedText: string; sourceRef: string }[];
+  inputCoverage: TPreflightInputCoverage;
+  relatedMeeting: {
+    id: string;
+    title: string;
+    status: "held" | "reviewed";
+    scheduledAt: string;
+    transcript: unknown;
+    outcome: unknown;
+    sourceRefs: string[];
+  } | null;
 };
 
 export type PreflightAgent = {
@@ -102,6 +122,15 @@ function emptyPreflight(now = new Date()): TMeetingPreflight {
 
 function emptyDraft(): TMeetingDraft {
   return { readIssueIds: [], carriedIssueIds: [], checkedEntryIds: [], editsByEntryId: {}, supplementRequests: [], note: "" };
+}
+
+function projectMaterial(material: StoredMeetingMaterial): TMeetingMaterial {
+  const { storageKey: _storageKey, sha256: _sha256, extractedText: _extractedText, ...projected } = material;
+  return projected;
+}
+
+function resetPreflightDraft(draft: TMeetingDraft): TMeetingDraft {
+  return { ...draft, checkedEntryIds: [], editsByEntryId: {} };
 }
 
 function unique(values: string[]): string[] {
@@ -131,12 +160,15 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
   };
   const actions: TActionDescriptor[] = [];
   if (row.status === "scheduled") {
+    if (row.preflight.status === "ready") actions.push(action("meeting.edit_materials", "返回编辑材料"));
+    if (row.preflight.status === "pending") actions.push(action("meeting.run_preflight", "运行预审"));
     actions.push(
       action("meeting.update_draft", "保存准备状态"),
       action("meeting.request_supplement", "请求补充材料"),
       action("meeting.cancel", "取消会议"),
     );
     if (row.preflight.status === "failed") actions.push(action("meeting.retry_preflight", "重试预审"));
+    if (row.preflight.status === "ready") actions.push(action("meeting.regenerate_preflight", "重新预审"));
   }
   // Ticket 10：held 后只能显式重试失败的抽取；无 confirmed effect 时才允许危险替换 Transcript（reviewed 同样适用）
   if (row.status === "held" && row.outcome?.status === "failed") actions.push(action("meeting.retry_outcome", "重试会后抽取"));
@@ -179,6 +211,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
       originRef: row.origin_ref,
       preflight: row.preflight,
       draft: row.draft,
+      materials: row.materials.map(projectMaterial),
       transcript: row.transcript,
       outcome: row.outcome,
     },
@@ -347,8 +380,8 @@ export async function executeCreateMeeting(
       const inserted = await client.query<MeetingRow>(
         `INSERT INTO meetings
            (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
-            participants, issue_ids, preflight, draft, origin_ref, action_fingerprints)
-         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb)
+            participants, issue_ids, preflight, draft, materials, origin_ref, action_fingerprints)
+         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11::jsonb)
          RETURNING ${meetingColumns()}`,
         [
           meetingId,
@@ -547,6 +580,189 @@ async function updateSupplementStatus(
   }
 }
 
+export async function executeEditMaterials(
+  pool: Pool,
+  secret: string,
+  scope: ActionScope,
+  fingerprint: string,
+): Promise<MeetingActionOutcome> {
+  return withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+    if (row.status !== "scheduled" || row.preflight.status !== "ready") {
+      return { error: { status: 409, code: "MEETING_MATERIALS_NOT_LOCKED", message: "只有 ready 的 scheduled Meeting 可以返回编辑材料" } };
+    }
+    const updated = await updateMeeting(
+      client,
+      row.id,
+      "preflight = $2::jsonb, draft = $3::jsonb, version = version + 1, action_fingerprints = $4::jsonb",
+      [JSON.stringify(emptyPreflight()), JSON.stringify(resetPreflightDraft(row.draft)), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+    );
+    return commit(client, updated, secret);
+  });
+}
+
+export async function executeRunPreflight(
+  pool: Pool,
+  companyMemory: CompanyMemoryRepository,
+  preflightAgent: PreflightAgent,
+  secret: string,
+  scope: ActionScope,
+  fingerprint: string,
+): Promise<MeetingActionOutcome> {
+  const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+    if (row.status !== "scheduled" || row.preflight.status !== "pending") {
+      return { error: { status: 409, code: "MEETING_PREFLIGHT_NOT_PENDING", message: "只有 pending 的 scheduled Meeting 可以运行预审" } };
+    }
+    const updated = await updateMeeting(client, row.id, "version = version + 1, action_fingerprints = $2::jsonb", [JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
+    return commit(client, updated, secret);
+  });
+  if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
+  await runPreflight(pool, companyMemory, preflightAgent, scope.objectId);
+  return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
+}
+
+/**
+ * 暂存文件落盘。TMPDIR 与材料卷在 compose 部署中分属不同文件系统（overlay vs 命名卷），
+ * rename 必然 EXDEV；此时退化为独占复制（目标已存在则失败，不覆盖）+ 删除源文件。
+ * 其他错误（含权限、磁盘满）原样抛出，由调用方回滚。
+ */
+export async function moveStagedFile(source: string, destination: string): Promise<void> {
+  try {
+    await rename(source, destination);
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+  }
+  try {
+    await copyFile(source, destination, constants.COPYFILE_EXCL);
+  } catch (error) {
+    // EEXIST：目标已存在且非本次创建，不得删除；其他错误可能留下半个副本，清掉
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") await rm(destination, { force: true });
+    throw error;
+  }
+  await rm(source, { force: true });
+}
+
+/** 解析成功的全批材料：DB 更新和原件替换在同一临界区完成；失败时不留下新元数据或新文件。 */
+export async function replaceMeetingMaterials(
+  pool: Pool,
+  secret: string,
+  meetingId: string,
+  materials: ParsedMaterial[],
+  storageDir: string,
+): Promise<MeetingActionOutcome> {
+  const client = await pool.connect();
+  const staged: { source: string; destination: string }[] = [];
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query<MeetingRow>(`SELECT ${meetingColumns()} FROM meetings WHERE id = $1 FOR UPDATE`, [meetingId]);
+    if (locked.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return { error: { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" } };
+    }
+    const row = locked.rows[0];
+    if (row.status !== "scheduled") {
+      await client.query("ROLLBACK");
+      return { error: { status: 409, code: "MEETING_MATERIALS_READ_ONLY", message: "只有 scheduled Meeting 可以替换材料" } };
+    }
+    if (row.preflight.status === "ready") {
+      await client.query("ROLLBACK");
+      return { error: { status: 409, code: "MEETING_MATERIALS_LOCKED", message: "请先确认返回编辑材料" } };
+    }
+    const next: StoredMeetingMaterial[] = materials.map((material) => {
+      const id = randomUUID();
+      const storageKey = `${meetingId}/${id}`;
+      staged.push({ source: material.tempPath, destination: join(storageDir, storageKey) });
+      return { id, fileName: material.fileName, mimeType: material.mimeType, sizeBytes: material.sizeBytes, receivedBy: row.ceo_participant_id, providedBy: null, uploadedAt: new Date().toISOString(), storageKey, sha256: material.sha256, extractedText: material.extractedText, ...(material.pageCount ? { pageCount: material.pageCount } : {}) };
+    });
+    for (const item of staged) await mkdir(dirname(item.destination), { recursive: true, mode: 0o700 });
+    for (const item of staged) await moveStagedFile(item.source, item.destination);
+    const updated = await updateMeeting(client, row.id, "materials = $2::jsonb, preflight = $3::jsonb, draft = $4::jsonb, version = version + 1", [JSON.stringify(next), JSON.stringify(emptyPreflight()), JSON.stringify(resetPreflightDraft(row.draft))]);
+    await client.query("COMMIT");
+    await Promise.all(row.materials.map((material) => rm(join(storageDir, material.storageKey), { force: true })));
+    return { card: projectMeetingCard(updated, secret) };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    await Promise.all(staged.map((item) => rm(item.destination, { force: true })));
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** 补充材料增量追加：scheduled-only；不重置/不触发预审；sha256+request 幂等；staged 文件与 DB 同事务原子落盘。 */
+export async function appendSupplementMaterial(
+  pool: Pool,
+  secret: string,
+  meetingId: string,
+  requestId: string,
+  material: ParsedMaterial,
+  storageDir: string,
+): Promise<MeetingActionOutcome> {
+  const client = await pool.connect();
+  let staged: { destination: string } | null = null;
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query<MeetingRow>(`SELECT ${meetingColumns()} FROM meetings WHERE id = $1 FOR UPDATE`, [meetingId]);
+    if (locked.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return { error: { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" } };
+    }
+    const row = locked.rows[0];
+    if (row.status !== "scheduled") {
+      await client.query("ROLLBACK");
+      return { error: { status: 409, code: "MEETING_MATERIALS_READ_ONLY", message: "只有 scheduled Meeting 可以追加补充材料" } };
+    }
+    if (!row.draft.supplementRequests.some((request) => request.id === requestId)) {
+      await client.query("ROLLBACK");
+      return { error: { status: 404, code: "SUPPLEMENT_REQUEST_NOT_FOUND", message: "补充请求不存在" } };
+    }
+    // sha256 + request 幂等：重复提交返回当前 Card，不重复落盘、不升版本
+    if (row.materials.some((item) => item.kind === "supplement" && item.supplementFor === requestId && item.sha256 === material.sha256)) {
+      await client.query("COMMIT");
+      return { card: projectMeetingCard(row, secret) };
+    }
+    if (row.materials.length >= MAX_MATERIAL_FILES) {
+      await client.query("ROLLBACK");
+      return { error: { status: 409, code: "MATERIAL_BATCH_TOO_LARGE", message: `材料总数已达上限 ${MAX_MATERIAL_FILES} 份` } };
+    }
+    const textBudget = row.materials.reduce((sum, item) => sum + item.extractedText.length, 0) + material.extractedText.length;
+    if (textBudget > MAX_PREFLIGHT_MATERIAL_CHARS) {
+      await client.query("ROLLBACK");
+      return { error: { status: 409, code: "MATERIAL_TEXT_TOO_LARGE", message: "材料预审文本总量超过 300,000 字符" } };
+    }
+    const materialId = randomUUID();
+    const storageKey = `${meetingId}/${materialId}`;
+    const destination = join(storageDir, storageKey);
+    await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
+    await moveStagedFile(material.tempPath, destination);
+    staged = { destination };
+    const entry: StoredMeetingMaterial = {
+      id: materialId,
+      fileName: material.fileName,
+      mimeType: material.mimeType,
+      sizeBytes: material.sizeBytes,
+      receivedBy: row.ceo_participant_id,
+      providedBy: null,
+      uploadedAt: new Date().toISOString(),
+      storageKey,
+      sha256: material.sha256,
+      extractedText: material.extractedText,
+      ...(material.pageCount ? { pageCount: material.pageCount } : {}),
+      kind: "supplement",
+      supplementFor: requestId,
+    };
+    const updated = await updateMeeting(client, row.id, "materials = $2::jsonb, version = version + 1", [JSON.stringify([...row.materials, entry])]);
+    await client.query("COMMIT");
+    return { card: projectMeetingCard(updated, secret) };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    if (staged) await rm(staged.destination, { force: true });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function executeCancelMeeting(
   pool: Pool,
   secret: string,
@@ -565,17 +781,24 @@ export async function executeCancelMeeting(
   });
 }
 
-export async function executeRetryPreflight(
+async function executeExplicitPreflight(
   pool: Pool,
   companyMemory: CompanyMemoryRepository,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
   fingerprint: string,
+  expectedStatus: "failed" | "ready",
 ): Promise<MeetingActionOutcome> {
   const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
-    if (row.status !== "scheduled") return { error: { status: 409, code: "MEETING_NOT_EDITABLE", message: "只有 scheduled Meeting 可以重试预审" } };
-    if (row.preflight.status !== "failed") return { error: { status: 409, code: "MEETING_PREFLIGHT_NOT_FAILED", message: "只有失败的预审可以显式重试" } };
+    if (row.status !== "scheduled") return { error: { status: 409, code: "MEETING_NOT_EDITABLE", message: "只有 scheduled Meeting 可以运行预审" } };
+    if (row.preflight.status !== expectedStatus) {
+      return { error: {
+        status: 409,
+        code: expectedStatus === "failed" ? "MEETING_PREFLIGHT_NOT_FAILED" : "MEETING_PREFLIGHT_NOT_READY",
+        message: expectedStatus === "failed" ? "只有失败的预审可以显式重试" : "只有已完成的预审可以重新生成",
+      } };
+    }
     const updated = await updateMeeting(
       client,
       row.id,
@@ -589,7 +812,54 @@ export async function executeRetryPreflight(
   return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
 }
 
+export const executeRetryPreflight = (
+  pool: Pool,
+  companyMemory: CompanyMemoryRepository,
+  preflightAgent: PreflightAgent,
+  secret: string,
+  scope: ActionScope,
+  fingerprint: string,
+) => executeExplicitPreflight(pool, companyMemory, preflightAgent, secret, scope, fingerprint, "failed");
+
+export const executeRegeneratePreflight = (
+  pool: Pool,
+  companyMemory: CompanyMemoryRepository,
+  preflightAgent: PreflightAgent,
+  secret: string,
+  scope: ActionScope,
+  fingerprint: string,
+) => executeExplicitPreflight(pool, companyMemory, preflightAgent, secret, scope, fingerprint, "ready");
+
 type IssueSnapshotRow = { id: string; title: string; location: unknown; urgency: unknown; research: unknown };
+type RelatedMeetingSnapshotRow = {
+  id: string;
+  title: string;
+  status: "held" | "reviewed";
+  scheduled_at: Date;
+  transcript: unknown;
+  outcome: unknown;
+};
+
+function preflightStructureError(candidate: TPreflightCandidate): string | null {
+  const count = (kind: TPreflightCandidate["entries"][number]["kind"]) =>
+    candidate.entries.filter((entry) => entry.kind === kind).length;
+  for (const kind of ["core_judgment", "strategic_alignment", "leader_lens"] as const) {
+    if (count(kind) !== 1) return `${kind} 必须恰好 1 条`;
+  }
+  for (const kind of ["positive_signal", "risk_calibration", "next_step"] as const) {
+    if (count(kind) < 1) return `${kind} 至少需要 1 条`;
+  }
+  const questions = count("meeting_question");
+  if (questions < 3 || questions > 5) return "meeting_question 必须为 3–5 条";
+  const lens = candidate.entries.find((entry) => entry.kind === "leader_lens")!;
+  if (!lens.body.includes("视角预判") || !lens.body.includes("非权威发言")) {
+    return "leader_lens 必须标明“视角预判，非权威发言”";
+  }
+  if (candidate.taskDefinition.secondaryRole === candidate.taskDefinition.primaryRole) {
+    return "secondaryRole 不能与 primaryRole 相同";
+  }
+  return null;
+}
 
 /** 运行一次会前预审：严格候选校验失败可见，Agent 失败不自动重试。 */
 export async function runPreflight(
@@ -620,27 +890,57 @@ export async function runPreflight(
   try {
     const issueResult = await q("SELECT id, title, location, urgency, research FROM issues WHERE id = ANY($1::uuid[])", [meeting.issue_ids]);
     const issues = issueResult.rows as IssueSnapshotRow[];
-    const memory: PreflightAgentInput["memory"] = [];
-    const allowedSourceRefs = new Set<string>(issues.map((issue) => `issue:${issue.id}`));
+    const relatedResult = await q(
+      `SELECT id, title, status, scheduled_at, transcript, outcome
+         FROM meetings
+        WHERE id <> $1
+          AND status IN ('held', 'reviewed')
+          AND issue_ids ?| $2::text[]
+        ORDER BY scheduled_at DESC
+        LIMIT 1`,
+      [meeting.id, meeting.issue_ids],
+    );
+    const relatedRow = relatedResult.rows[0] as RelatedMeetingSnapshotRow | undefined;
+    const relatedMeeting: PreflightAgentInput["relatedMeeting"] = relatedRow
+      ? {
+          id: relatedRow.id,
+          title: relatedRow.title,
+          status: relatedRow.status,
+          scheduledAt: relatedRow.scheduled_at.toISOString(),
+          transcript: relatedRow.transcript,
+          outcome: relatedRow.outcome,
+          sourceRefs: [
+            `meeting:${relatedRow.id}`,
+            ...(relatedRow.transcript ? [`transcript:${relatedRow.id}`] : []),
+            ...(relatedRow.outcome ? [`outcome:${relatedRow.id}`] : []),
+          ],
+        }
+      : null;
+    const hasResearch = issues.some((issue) => Boolean(issue.research && (issue.research as { doc?: unknown }).doc));
+    const inputCoverage: TPreflightInputCoverage = {
+      background: issues.length > 0 ? "available" : "missing",
+      purpose: "derived",
+      sourceMaterial: hasResearch || meeting.materials.length > 0 ? "available" : "missing",
+      relatedMeeting: relatedMeeting ? "available" : "missing",
+    };
+
+    const allowedSourceRefs = new Set<string>([
+      `meeting:${meeting.id}`,
+      ...issues.map((issue) => `issue:${issue.id}`),
+    ]);
+    for (const material of meeting.materials) allowedSourceRefs.add(`material:${material.id}`);
+    for (const section of companyMemory.listSections()) allowedSourceRefs.add(`memory:${section.id}`);
+    for (const ref of relatedMeeting?.sourceRefs ?? []) allowedSourceRefs.add(ref);
     for (const issue of issues) {
       if (issue.research && (issue.research as { doc?: unknown }).doc) allowedSourceRefs.add(`research:${issue.id}`);
-      for (const match of companyMemory.searchSections(issue.title, 3)) {
-        if (memory.some((section) => section.sectionId === match.id)) continue;
-        const passages = companyMemory.getPassages(match.id, undefined, 3);
-        memory.push({
-          sectionId: match.id,
-          title: match.title,
-          sourceRef: match.sourceRef,
-          passages: passages.passages.map((passage) => ({ id: passage.id, text: passage.text, sourceRef: passage.sourceRef })),
-        });
-        allowedSourceRefs.add(`memory:${match.id}`);
-      }
     }
 
     const input: PreflightAgentInput = {
       meeting: { id: meeting.id, title: meeting.title, scheduledAt: meeting.scheduled_at.toISOString(), participants: meeting.participants },
       issues: issues.map((issue) => ({ id: issue.id, title: issue.title, location: issue.location, urgency: issue.urgency, research: issue.research })),
-      memory,
+      materials: meeting.materials.map((material) => ({ id: material.id, fileName: material.fileName, mimeType: material.mimeType, extractedText: material.extractedText, sourceRef: `material:${material.id}` })),
+      inputCoverage,
+      relatedMeeting,
     };
     // 与 Chat 单 turn 相同的超时保护；悬挂的模型不阻塞请求
     const abort = new AbortController();
@@ -654,6 +954,11 @@ export async function runPreflight(
     }
     if (!Value.Check(PreflightCandidate, generated.candidate)) {
       await fail(INVALID_PREFLIGHT_CANDIDATE, "Preflight candidate 不符合严格 schema");
+      return;
+    }
+    const structureError = preflightStructureError(generated.candidate);
+    if (structureError) {
+      await fail(INVALID_PREFLIGHT_CANDIDATE, structureError);
       return;
     }
     for (const entry of generated.candidate.entries) {
@@ -685,6 +990,10 @@ export async function runPreflight(
         entries,
         basis: generated.candidate.basis,
         brief: generated.candidate.brief,
+        inputCoverage,
+        taskDefinition: generated.candidate.taskDefinition,
+        readiness: generated.candidate.readiness,
+        summary: generated.candidate.summary,
         error: null,
         generatedAt: new Date().toISOString(),
       })],
@@ -768,8 +1077,8 @@ export async function importDriMeeting(
       const inserted = await client.query<MeetingRow>(
         `INSERT INTO meetings
            (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
-            participants, issue_ids, preflight, draft, origin_ref, external_id, request_fingerprint)
-         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12)
+            participants, issue_ids, preflight, draft, materials, origin_ref, external_id, request_fingerprint)
+         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11, $12)
          ON CONFLICT DO NOTHING
          RETURNING ${meetingColumns()}`,
         [

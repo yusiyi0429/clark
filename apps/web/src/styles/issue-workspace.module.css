@@ -1,23 +1,20 @@
-.workspace{position:absolute;inset:0;z-index:70;display:flex;flex-direction:column;overflow:hidden;clip-path:inset(0 round 22px);border-radius:22px;background:#f8f8fa;border:1px solid #fff;box-shadow:0 4px 24px #1d1d1f0c;color:#1d1d1f}
-.header{display:flex;align-items:flex-start;justify-content:space-between;gap:22px;padding:22px 27px;background:#f5f5f7e8;border-bottom:1px solid #1d1d1f0b;flex:none}
-.header span{font-size:12px;color:#6e6e73}.header h1{font-size:22px;font-weight:600;line-height:1.5;margin-top:7px!important;letter-spacing:-.025em}
-.header>button{display:grid;place-items:center;width:32px;height:32px;border:0;border-radius:50%;background:#e9e9ed;color:#65656b;flex:none;transition:background 150ms,transform 150ms}.header>button:hover{background:#dddde2}.header>button:active{transform:scale(.95)}
-.columns{display:block;min-height:0;flex:1;overflow:hidden}
-.materials{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0;background:#fff}
-.tabs{display:flex;gap:22px;padding:0 28px;border-bottom:1px solid #1d1d1f0a;flex:none}
-.tabs button{border:0;border-bottom:2px solid transparent;background:none;padding:16px 0 13px;color:#77777c;font-size:13px}.tabs button[aria-pressed=true]{color:#006edc;border-bottom-color:#007aff}
-.reading{position:relative;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:24px 28px 48px;min-height:0;line-height:1.8;font-size:16px}
-.reading .note{font-size:11px;color:#797980;margin:0 0 23px}.reading h2{font-size:14px;font-weight:600;color:#63636a;margin-bottom:12px}
-.judgment>p{font-size:19px;line-height:1.8;letter-spacing:-.02em}.judgment>button{border:0;background:#007aff09;color:#006edc;border-radius:8px;padding:7px 10px;font-size:12px;margin-top:14px}
+.workspace{position:relative;z-index:70;display:flex;flex-direction:column;width:min(1680px,100%);height:100%;margin:auto;overflow:hidden;color:#1d1d1f}
+.header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:0 0 22px;background:transparent;border-bottom:1px solid #e6e9ed;flex:none}
+.header span{font-size:13px;color:#6e6e73}.header h1{font-size:26px;font-weight:600;line-height:1.4;margin-top:8px!important;letter-spacing:-.025em}
+.header>button{display:grid;place-items:center;width:40px;height:40px;border:1px solid #d9dde5;border-radius:20px;background:#fff;color:#6e6e73;flex:none;transition:background 150ms,transform 150ms}.header>button:hover{background:#f5f5f7}.header>button:active{transform:scale(.95)}
+.columns{display:grid;grid-template-columns:minmax(0,1fr) 560px;grid-template-areas:"tabs path" "note path" "judgment path" "decision path" ". dismiss";gap:18px 28px;align-content:start;min-height:0;flex:1;overflow:auto;padding:0 0 24px;scrollbar-width:thin}
+.materials,.reading{display:contents}.tabs{grid-area:tabs;align-self:flex-start;display:flex;gap:2px;padding:3px;border:0;border-radius:12px;background:#eef0f4}.tabs button{border:0;border-radius:10px;background:transparent;padding:7px 16px;color:#647083;font-size:13px}.tabs button[aria-pressed=true]{color:#20242c;background:#fff;box-shadow:0 2px 7px #2028400c}
+.reading{line-height:1.8;font-size:14px}.reading .note{grid-area:note;font-size:12px;color:#797980;margin:0}.reading h2{font-size:15px;font-weight:600;color:#1d1d1f;margin-bottom:10px}
+.judgment,.discussion,.preflightActions,.unknown{margin:0;border:1px solid #eceef2;border-radius:20px;background:#fff;padding:22px 24px}.judgment{grid-area:judgment}.discussion:not([data-issue-side]){grid-area:decision}.discussion[data-issue-side=path]{grid-area:path}.preflightActions[data-issue-side=dismiss]{grid-area:dismiss}.judgment>p{font-size:14px;line-height:1.8;letter-spacing:0;color:#3c4350}.judgment>button{border:0;background:#007aff09;color:#006edc;border-radius:8px;padding:7px 10px;font-size:12px;margin-top:14px}
 .section{margin-top:30px;padding-top:24px;border-top:1px solid #1d1d1f0d}.section ol{padding:0;list-style:none;margin:0}.section li{display:flex;gap:14px;margin-top:15px}.section li>span{font-size:11px;color:#8e8e93;padding-top:4px;font-variant-numeric:tabular-nums}.section p+p{margin-top:12px}
-.unknown{margin-top:28px;border-radius:12px;background:#f5f5f7;padding:18px 20px}.unknown p{color:#56565e;font-size:14px}
-.preflightActions{margin-top:28px;padding-top:22px;border-top:1px solid #1d1d1f0d}.preflightActions>div:first-child p{font-size:12px;color:#77777c;margin-top:-7px}.actionRow{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}.actionRow button{display:flex;align-items:center;gap:6px;border:1px solid #d9dde3;border-radius:9px;background:#fff;padding:8px 11px;font-size:12px;color:#58616c}.actionRow button:hover{border-color:#bfc6cf;background:#f7f8fa}.actionRow button[aria-pressed=true]{border-color:#c7d9cc;background:#f0f7f2;color:#356047}.preflightActions>small{display:block;margin-top:10px;color:#5d7164;font-size:11px}
-.discussion{margin-top:26px;border-top:1px solid #1d1d1f10;padding-top:20px}.discussion>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:13px}.discussion>header h2{margin-bottom:3px}.discussion>header p{color:#77777c;font-size:12px;line-height:1.6}.discussion>header>span{flex:none;border:1px solid #dfe3e8;border-radius:999px;background:#f7f8fa;color:#737982;padding:3px 8px;font-size:10px;line-height:1.5}.discussion>small{display:block;color:#797980;font-size:11px;line-height:1.7;margin-top:11px}.options{display:grid;gap:7px;list-style:none;margin:0;padding:0}.options li{display:flex;align-items:center;gap:11px;border:1px solid #1d1d1f0e;background:#fafafb;color:#303036;border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5}.options li>span{flex:none;color:#92979f;font-size:10px;font-variant-numeric:tabular-nums}.receipt{display:flex;gap:10px;align-items:flex-start;border:1px solid #dce9e2;border-radius:10px;background:#f4f9f6;padding:12px 14px}.receipt>svg{color:#34785c;flex:none;margin-top:3px}.receipt p{flex:1;font-size:14px;line-height:1.7}
+.unknown{grid-area:judgment;background:#fff}.unknown p{color:#56565e;font-size:14px}.dismissedChip{display:flex;width:max-content;align-items:center;gap:6px;margin-top:12px;border:1px solid #d9dde5;border-radius:10px;background:#fff;padding:10px 18px;color:#4f5866;font-size:13px}
+.preflightActions>div:first-child p{font-size:12px;color:#77777c;margin-top:-7px}.actionRow{display:flex;flex-wrap:wrap;gap:12px;margin-top:15px}.actionRow button{display:flex;align-items:center;gap:6px;border:1px solid #d9dde5;border-radius:10px;background:#fff;padding:10px 16px;font-size:13px;color:#4f5866}.actionRow button:hover{border-color:#bfc6cf;background:#f7f8fa}.actionRow button[aria-pressed=true]{border-color:#c7d9cc;background:#f0f7f2;color:#356047}.preflightActions>small{display:block;margin-top:10px;color:#5d7164;font-size:11px}
+.discussion>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}.discussion>header h2{margin-bottom:4px}.discussion>header p{color:#6e6e73;font-size:13px;line-height:1.6}.discussion>header>span{flex:none;border:1px solid #dfe3e8;border-radius:999px;background:#f7f8fa;color:#737982;padding:3px 8px;font-size:10px;line-height:1.5}.discussion>small{display:block;color:#797980;font-size:11px;line-height:1.7;margin-top:11px}.options{display:grid;gap:10px;list-style:none;margin:0;padding:0}.options li{display:flex;align-items:center;gap:11px;border:0;background:transparent;padding:0}.options li>span{flex:none;color:#92979f;font-size:10px;font-variant-numeric:tabular-nums}.receipt{display:flex;gap:10px;align-items:flex-start;border:1px solid #dce9e2;border-radius:12px;background:#edf3fb;padding:16px 18px}.receipt>svg{color:#34785c;flex:none;margin-top:3px}.receipt p{flex:1;font-size:14px;line-height:1.7}
 .prose h3{font-size:16px;margin:22px 0 10px!important}.prose p{margin:12px 0!important}.prose ul,.prose ol{padding-left:22px}
 .workspace button:focus-visible{outline:3px solid #007aff70;outline-offset:3px}
 @media(max-width:690px){.header{padding:18px 22px}.header h1{font-size:19px}.reading{padding-bottom:125px}.judgment>p{font-size:18px}}
-@media(max-width:690px){.workspace{left:9px;right:9px;top:9px;bottom:9px}.header{padding:16px}.header h1{font-size:18px}.reading{padding:20px 19px 130px}.tabs{padding:0 19px}}
-@media(prefers-reduced-transparency:reduce){.workspace,.header{background:#f5f5f7}}
+@media(max-width:690px){.header{padding:16px}.header h1{font-size:18px}.reading{padding:20px 19px 130px}.tabs{padding:0 19px}}
+@media(prefers-reduced-transparency:reduce){.header{background:transparent}}
 @media(prefers-reduced-motion:reduce){.workspace *{transition:none!important;scroll-behavior:auto!important}}
 
 .header>[data-reference-id]{margin-left:auto}.header>div:first-child{min-width:0;flex:1}
@@ -27,14 +24,38 @@
 
 /* 新 Web：决定表单与真实 Receipt/研究文档的补充样式，沿用材料页原有视觉语言。 */
 .field{display:flex;flex-direction:column;gap:6px;font-size:var(--type-meta,12px);color:#6a6f78;min-width:0}
-.field textarea,.field input,.field select{width:100%;box-sizing:border-box;border:1px solid #d7dbe2;border-radius:9px;background:#fff;padding:9px 10px;font:inherit;font-size:var(--type-body,14px);line-height:1.6;color:#2f343c}
+.field textarea,.field input:not([type=checkbox]),.field select{width:100%;box-sizing:border-box;border:1px solid #d9dde5;border-radius:10px;background:#fff;padding:9px 12px;font:inherit;font-size:13px;line-height:1.6;color:#2f343c}
 .field textarea{resize:vertical}
-.field textarea:focus,.field input:focus,.field select:focus{outline:3px solid #007aff30;outline-offset:1px;border-color:#8fb6e6}
+.field textarea:focus,.field input:not([type=checkbox]):focus,.field select:focus{outline:3px solid #007aff30;outline-offset:1px;border-color:#8fb6e6}
 .check{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:var(--type-meta,12px);color:#4e5560}
 .options li{padding:0;background:transparent;border:0}
-.options li>button{display:flex;align-items:center;gap:10px;width:100%;border:1px solid #1d1d1f0e;background:#fafafb;color:#303036;border-radius:10px;padding:10px 12px;font:inherit;font-size:var(--type-body,14px);line-height:1.5;text-align:left}
-.options li>button[aria-pressed=true]{border-color:#8fb6e6;background:#f0f6ff;color:#14508f}
+.options li>button{display:flex;align-items:center;gap:10px;width:100%;border:1px solid #d9dde5;background:#fff;color:#4f5866;border-radius:12px;padding:11px 14px;font:inherit;font-size:13px;line-height:1.5;text-align:left}
+.options li>button[aria-pressed=true]{border-color:#007aff66;background:#e8f1ff;color:#0a5dc2;font-weight:500}
 .receipt{flex-direction:column;align-items:stretch}
 .receipt small{font-size:var(--type-meta,12px);color:#6d727b;line-height:1.6}
-.receipt button{align-self:flex-start;margin-top:10px;border:1px solid #d9dde3;background:#fff;border-radius:8px;padding:7px 11px;font-size:var(--type-meta,12px);color:#58616c}
+
+/* 新建 Meeting 表单：与决定表单同一视觉语言；参与者按列铺平。 */
+.meetingForm{display:grid;gap:12px;margin-top:15px}
+.meetingForm .actionRow{margin-top:0}
+.participants{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px 16px}
+.participants label{display:flex;align-items:center;gap:6px;font-size:var(--type-body,14px);color:#2f343c}
+
+/* 决策路径行内按钮与 select 等高且底对齐（select：1px 边框 + 9px padding + 1.6 行高）。 */
+.discussion .actionRow{align-items:flex-end}
+.discussion .actionRow button{padding:9px 14px;font-size:13px;line-height:1.6;border-radius:10px}
+.discussion .actionRow button,.discussion .actionRow select{box-sizing:border-box;height:42px}
+.receipt button{align-self:flex-start;margin-top:10px;border:1px solid #d9dde5;background:#fff;border-radius:10px;padding:9px 14px;font-size:13px;color:#4f5866}
 .receipt button:hover{background:#f2f5f8}
+
+/* pen 主行动按钮：判断/决定类的主提交用 accent 底色，其余 actionRow 按钮维持次要样式。 */
+.actionRow button[data-primary]{border-color:#007aff;background:#007aff;color:#fff;border-radius:11px;padding:11px 17px;font-weight:600;font-size:14px}
+.actionRow button[data-primary]:hover{border-color:#0069db;background:#0069db}
+@media(max-width:1280px){.workspace{width:100%}.columns{display:block;overflow:auto}.materials{display:flex;flex-direction:column;min-height:auto;gap:18px}.reading{display:block;padding-bottom:24px}.reading .note{margin:0 0 18px}.judgment,.discussion,.preflightActions,.unknown{margin-bottom:18px}}
+@media(max-width:690px){.workspace{width:min(1680px,calc(100% - 18px));height:calc(100% - 18px);margin:9px auto}.header{padding-bottom:16px}.header h1{font-size:20px}.columns{gap:14px;padding-bottom:16px}.judgment,.discussion,.preflightActions,.unknown{padding:18px}.tabs{align-self:stretch}.tabs button{flex:1;padding-inline:10px}}
+
+/* 研究 tab：唯一 ResearchDoc 走单栏 max-width 阅读列，不再被网格自动摆进右侧 path 列；总结与判断保持 1680 双栏，≤1280 沿用既有单栏。 */
+@media(min-width:1281px){
+ .columns[data-tab=research]{display:flex;flex-direction:column;gap:18px}
+ .columns[data-tab=research] .reading{display:block;width:100%;max-width:980px;margin:0 auto;padding-bottom:24px}
+ .columns[data-tab=research] .reading .note{margin:0 0 18px}
+}

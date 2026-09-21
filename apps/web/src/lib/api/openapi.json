@@ -95,6 +95,24 @@
         }
       }
     },
+    "/api/people": {
+      "get": {
+        "operationId": "listPeople",
+        "summary": "只读人员目录（Meeting 创建表单使用）",
+        "responses": {
+          "200": {
+            "description": "人员目录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleDirectoryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cards/home": {
       "get": {
         "operationId": "getHomeCards",
@@ -711,6 +729,397 @@
             }
           },
           "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{scope}/sessions": {
+      "get": {
+        "operationId": "listConversationSessions",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "列出 scope 内未删除的 Conversation 会话",
+        "responses": {
+          "200": {
+            "description": "会话列表（最早未删除者为默认会话）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSessionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createConversationSession",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "在 scope 内新建 Conversation 会话",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConversationSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "新建的会话摘要",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSessionSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{scope}/sessions/{sessionId}": {
+      "delete": {
+        "operationId": "deleteConversationSession",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "summary": "删除会话（含消息与附件原件）；运行中拒绝",
+        "responses": {
+          "204": {
+            "description": "已删除"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{scope}/sessions/{sessionId}/messages": {
+      "get": {
+        "operationId": "getConversationSessionMessages",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "summary": "读取指定会话的原始 Conversation 消息",
+        "responses": {
+          "200": {
+            "description": "会话消息历史",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationHistory"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "sendConversationSessionMessage",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "summary": "在指定会话发送消息并通过 SSE 返回 Pi 运行事件",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SSE 事件流",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSseEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{scope}/sessions/{sessionId}/attachments": {
+      "post": {
+        "operationId": "uploadConversationAttachments",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "summary": "上传会话附件（multipart files，PDF/DOCX/Markdown）；元数据随消息发送时内嵌入库",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已解析附件的可见信息（发消息时按 id 引用）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationAttachmentUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -1505,6 +1914,331 @@
         }
       }
     },
+    "/api/meetings/{id}/materials": {
+      "post": {
+        "operationId": "replaceMeetingMaterials",
+        "summary": "CEO 替换 scheduled Meeting 的整个会前材料集（multipart 多文件 files）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "files"
+                ],
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "替换成功后的 Meeting Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/materials/supplement": {
+      "post": {
+        "operationId": "appendSupplementMaterial",
+        "summary": "CEO 把会外收到的补充材料文件归档到已记录的补充请求（scheduled only；不改预审）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "files",
+                  "requestId"
+                ],
+                "properties": {
+                  "files": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "requestId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "追加成功（含 sha256 幂等重放）后的 Meeting Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/materials/{materialId}/preview": {
+      "get": {
+        "operationId": "previewMeetingMaterial",
+        "summary": "CEO 鉴权预览：PDF inline、Markdown 纯文本、DOCX 按需 sanitize HTML（不持久化）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "按 mimeType 返回预览体",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/materials/{materialId}/download": {
+      "get": {
+        "operationId": "downloadMeetingMaterial",
+        "summary": "CEO 鉴权下载材料原件（attachment）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "材料原件字节",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "health",
@@ -2013,6 +2747,48 @@
           }
         }
       },
+      "PeopleDirectoryResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "people"
+        ],
+        "properties": {
+          "people": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName",
+                "roles"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "displayName": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "roles": {
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "maxLength": 50,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "ExecuteActionRequest": {
         "additionalProperties": false,
         "type": "object",
@@ -2049,6 +2825,7 @@
                 "role",
                 "content",
                 "referencesSnapshot",
+                "attachments",
                 "runId",
                 "createdAt"
               ],
@@ -2124,6 +2901,53 @@
                     }
                   }
                 },
+                "attachments": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "fileName",
+                      "mimeType",
+                      "sizeBytes"
+                    ],
+                    "properties": {
+                      "id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "fileName": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "mimeType": {
+                        "anyOf": [
+                          {
+                            "const": "application/pdf",
+                            "type": "string"
+                          },
+                          {
+                            "const": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "type": "string"
+                          },
+                          {
+                            "const": "text/markdown",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "sizeBytes": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "pageCount": {
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    }
+                  }
+                },
                 "runId": {
                   "type": "string"
                 },
@@ -2166,6 +2990,23 @@
                 "version": {
                   "minimum": 1,
                   "type": "integer"
+                }
+              }
+            }
+          },
+          "attachments": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
                 }
               }
             }
@@ -2468,6 +3309,314 @@
           }
         ]
       },
+      "ConversationSessionSummary": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "scope",
+          "title",
+          "isDefault",
+          "messageCount",
+          "lastMessageAt",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "scope 内的 Conversation 会话 id",
+            "type": "string"
+          },
+          "scope": {
+            "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+            "description": "global 或稳定对象 scope",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "lastMessageAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "ConversationSessionList": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scope",
+          "sessions"
+        ],
+        "properties": {
+          "scope": {
+            "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+            "description": "global 或稳定对象 scope",
+            "type": "string"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "scope",
+                "title",
+                "isDefault",
+                "messageCount",
+                "lastMessageAt",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "description": "scope 内的 Conversation 会话 id",
+                  "type": "string"
+                },
+                "scope": {
+                  "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+                  "description": "global 或稳定对象 scope",
+                  "type": "string"
+                },
+                "title": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "isDefault": {
+                  "type": "boolean"
+                },
+                "messageCount": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "lastMessageAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CreateConversationSessionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "title": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
+      "ConversationAttachment": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "fileName",
+          "mimeType",
+          "sizeBytes",
+          "storageKey",
+          "sha256",
+          "extractedText"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "fileName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "mimeType": {
+            "anyOf": [
+              {
+                "const": "application/pdf",
+                "type": "string"
+              },
+              {
+                "const": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "type": "string"
+              },
+              {
+                "const": "text/markdown",
+                "type": "string"
+              }
+            ]
+          },
+          "sizeBytes": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "pageCount": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "storageKey": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "extractedText": {
+            "minLength": 1,
+            "maxLength": 100000,
+            "type": "string"
+          }
+        }
+      },
+      "ConversationAttachmentInfo": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "fileName",
+          "mimeType",
+          "sizeBytes"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "fileName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "mimeType": {
+            "anyOf": [
+              {
+                "const": "application/pdf",
+                "type": "string"
+              },
+              {
+                "const": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "type": "string"
+              },
+              {
+                "const": "text/markdown",
+                "type": "string"
+              }
+            ]
+          },
+          "sizeBytes": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "pageCount": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        }
+      },
+      "ConversationAttachmentUploadResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "attachments"
+        ],
+        "properties": {
+          "attachments": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "fileName",
+                "mimeType",
+                "sizeBytes"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "fileName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "mimeType": {
+                  "anyOf": [
+                    {
+                      "const": "application/pdf",
+                      "type": "string"
+                    },
+                    {
+                      "const": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                      "type": "string"
+                    },
+                    {
+                      "const": "text/markdown",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "sizeBytes": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "pageCount": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
       "HealthResponse": {
         "additionalProperties": false,
         "type": "object",
@@ -2508,7 +3657,8 @@
               "modelSlots",
               "companyMemoryMcp",
               "search",
-              "wechat"
+              "wechat",
+              "outlets"
             ],
             "properties": {
               "piRuntime": {
@@ -2524,6 +3674,9 @@
                 "type": "boolean"
               },
               "wechat": {
+                "type": "boolean"
+              },
+              "outlets": {
                 "type": "boolean"
               }
             }
@@ -2819,8 +3972,9 @@
                   "type": "string"
                 },
                 "sourceUrl": {
-                  "minLength": 1,
+                  "minLength": 8,
                   "maxLength": 2000,
+                  "pattern": "^https?://\\S+$",
                   "type": "string"
                 }
               }
@@ -2852,8 +4006,9 @@
                   "type": "string"
                 },
                 "url": {
-                  "minLength": 1,
+                  "minLength": 8,
                   "maxLength": 2000,
+                  "pattern": "^https?://\\S+$",
                   "type": "string"
                 }
               }
@@ -3000,6 +4155,11 @@
             "type": "string"
           }
         }
+      },
+      "IssueRestoreInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
       },
       "IssueRevokeReceiptInput": {
         "additionalProperties": false,

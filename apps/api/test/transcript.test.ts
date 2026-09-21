@@ -7,9 +7,8 @@ import {
   MeetingOutcomeState,
   StoredTranscript,
   type TPostMeetingCandidate,
-  type TPreflightCandidate,
 } from "@warmap/contracts";
-import { createTestApp, createTestDb, testEnv, type TestApp } from "./helpers.js";
+import { createTestApp, createTestDb, preflightCandidate, testEnv, type TestApp } from "./helpers.js";
 import { recoverInterruptedOutcome, type PostMeetingAgent, type PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetings.js";
 import { migrate } from "../src/migrate.js";
@@ -65,12 +64,7 @@ function fakeOutcomeAgent(
 
 const preflightAgent: PreflightAgent = {
   async generate(input: PreflightAgentInput) {
-    const candidate: TPreflightCandidate = {
-      entries: [{ kind: "agenda", title: "议程", body: "对齐渠道投入", sourceRefs: input.issues.map((issue) => `issue:${issue.id}`) }],
-      basis: "依据关联 Issue",
-      brief: "会前确认渠道节奏",
-    };
-    return { candidate };
+    return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) };
   },
 };
 

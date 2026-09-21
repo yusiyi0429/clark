@@ -6,7 +6,7 @@ import { Card, MeetingCardPayload, type TPreflightCandidate } from "@warmap/cont
 import { buildApp } from "../src/app.js";
 import { loadCompanyMemory } from "../src/companyMemory.js";
 import { migrate } from "../src/migrate.js";
-import { createTestApp, createTestDb, testEnv, TEST_PASSWORD, type TestApp } from "./helpers.js";
+import { createTestApp, createTestDb, preflightCandidate, testEnv, TEST_PASSWORD, type TestApp } from "./helpers.js";
 import { recoverInterruptedPreflight, runPreflight, type DriExportRequest, type PreflightAgent, type PreflightAgentInput } from "../src/meetings.js";
 
 const MEETING_INPUT = {
@@ -26,7 +26,7 @@ function fakeAgent(failFirst = false): FakeAgent {
     async generate(input: PreflightAgentInput) {
       agent.calls.push(input);
       if (failFirst && agent.calls.length === 1) {
-        return { candidate: { entries: [{ kind: "agenda", title: "议程", body: "x", sourceRefs: ["memory:not-a-section"] }], basis: "b", brief: "c" } };
+        return { candidate: preflightCandidate(["memory:not-a-section"]) };
       }
       return { candidate: validCandidate(input), runId: `preflight-run-${agent.calls.length}` };
     },
@@ -35,14 +35,9 @@ function fakeAgent(failFirst = false): FakeAgent {
 }
 
 function validCandidate(input: PreflightAgentInput): TPreflightCandidate {
-  return {
-    entries: [
-      { kind: "agenda", title: "议程", body: "先对齐渠道投入的两个选择", sourceRefs: input.issues.map((issue) => `issue:${issue.id}`) },
-      { kind: "open_question", title: "未知", body: "覆盖哪些地区仍未确认", sourceRefs: input.issues.map((issue) => `issue:${issue.id}`) },
-    ],
-    basis: "依据关联 Issue 与 CompanyMemory 相关段落",
-    brief: "CEO 需要在会前确认渠道投入节奏",
-  };
+  const candidate = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
+  candidate.entries[0].sourceRefs.push(`meeting:${input.meeting.id}`);
+  return candidate;
 }
 
 async function createIssue(t: TestApp, externalId: string): Promise<{ id: string }> {
@@ -135,7 +130,14 @@ describe("Issue → Meeting Card/Action user journey", () => {
       expect(payload.status).toBe("scheduled");
       expect(payload.issueIds).toEqual([issue.id]);
       expect(payload.preflight.status).toBe("ready");
-      expect(payload.preflight.entries.map((entry: { id: string }) => entry.id)).toEqual(["entry-1", "entry-2"]);
+      expect(payload.preflight.entries.map((entry: { id: string }) => entry.id)).toEqual([
+        "entry-1", "entry-2", "entry-3", "entry-4", "entry-5", "entry-6", "entry-7", "entry-8", "entry-9",
+      ]);
+      expect(payload.preflight).toMatchObject({
+        readiness: "revise",
+        inputCoverage: { background: "available", purpose: "derived", relatedMeeting: "missing" },
+        taskDefinition: { primaryRole: "research_analysis", maturity: "internal_alignment" },
+      });
       // CEO 身份可确定识别，participant 保存创建时的身份快照
       expect(payload.ceoParticipantId).toBe("person-fixture-001");
       expect(payload.participants).toEqual(expect.arrayContaining([
@@ -174,6 +176,16 @@ describe("Issue → Meeting Card/Action user journey", () => {
         kind: "meeting",
         payload: { status: "scheduled" },
       });
+      const conversationRun = (await t.agentRuns()).find((run) => run.kind === "conversation");
+      expect(conversationRun?.input_snapshot).toMatchObject({
+        currentObject: {
+          cardId: meetingCard.id,
+          payload: {
+            preflight: { status: "ready", readiness: "revise" },
+            linkedIssues: [{ cardId: `issue:${issue.id}`, title: expect.stringContaining("是否在六月前调整渠道投入") }],
+          },
+        },
+      });
 
       // Agent 只在创建时运行一次，输入包含关联 Issue
       expect(agent.calls).toHaveLength(1);
@@ -211,7 +223,7 @@ describe("Issue → Meeting Card/Action user journey", () => {
     try {
       const { cookie, meetingId } = await readyMeeting(t, "dri-lock-100");
       const bad = await execute(t, cookie, await meetingAction(t, cookie, meetingId, "meeting.update_draft"), {
-        checkedEntryIds: ["entry-9"],
+        checkedEntryIds: ["entry-99"],
       });
       expect(bad.statusCode).toBe(400);
       await expectNoIdleInTransaction(t);
@@ -474,6 +486,57 @@ describe("Candidate Preflight", () => {
     }
   });
 
+  it("regenerates a ready advisor preflight only through the explicit action", async () => {
+    const agent = fakeAgent();
+    const t = await createTestApp({}, undefined, { preflightAgent: agent });
+    try {
+      const { cookie, meetingId, card } = await readyMeeting(t, "dri-meeting-regenerate");
+      expect(card.actions.map((action: { actionType: string }) => action.actionType)).toContain("meeting.regenerate_preflight");
+      await execute(t, cookie, await meetingAction(t, cookie, meetingId, "meeting.update_draft"), { checkedEntryIds: ["entry-1"] });
+
+      const regenerate = await meetingAction(t, cookie, meetingId, "meeting.regenerate_preflight");
+      const regenerated = await execute(t, cookie, regenerate);
+      expect(regenerated.statusCode).toBe(200);
+      expect(regenerated.json().cards[0].payload).toMatchObject({
+        preflight: { status: "ready", readiness: "revise", taskDefinition: { primaryRole: "research_analysis" } },
+        draft: { checkedEntryIds: [] },
+      });
+      expect(agent.calls).toHaveLength(2);
+
+      const replay = await execute(t, cookie, regenerate);
+      expect(replay.statusCode).toBe(200);
+      expect(agent.calls).toHaveLength(2);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("injects the latest related historical Meeting and Transcript into the four-input context", async () => {
+    const agent = fakeAgent();
+    const t = await createTestApp({}, undefined, { preflightAgent: agent });
+    try {
+      const first = await readyMeeting(t, "dri-meeting-history");
+      await t.sql(
+        "UPDATE meetings SET status = 'held', transcript = $2::jsonb WHERE id = $1",
+        [first.meetingId, JSON.stringify({ schemaVersion: "warmap-transcript.v1", meetingId: first.meetingId, turns: [{ id: "turn-1", speakerId: "person-fixture-001", text: "先验证渠道窗口" }] })],
+      );
+      const second = await execute(t, first.cookie, await issueAction(t, first.cookie, first.issueId, "issue.create_meeting"), {
+        ...MEETING_INPUT,
+        title: "渠道投入复议会",
+        scheduledAt: "2026-06-08T10:00:00.000+08:00",
+        issueIds: [first.issueId],
+      });
+      expect(second.statusCode).toBe(200);
+      expect(agent.calls).toHaveLength(2);
+      expect(agent.calls[1]).toMatchObject({
+        inputCoverage: { relatedMeeting: "available" },
+        relatedMeeting: { id: first.meetingId, status: "held", sourceRefs: [`meeting:${first.meetingId}`, `transcript:${first.meetingId}`] },
+      });
+    } finally {
+      await t.close();
+    }
+  });
+
   it("keeps the Meeting scheduled when the Preflight Agent throws", async () => {
     const agent: PreflightAgent = { async generate() { throw new Error("model unreachable"); } };
     const t = await createTestApp({}, undefined, { preflightAgent: agent });
@@ -495,7 +558,27 @@ describe("Candidate Preflight", () => {
   });
 });
 
-describe("persistent read/checked/carry state", () => {
+  it("rejects an advisor candidate that omits one of the required seven sections", async () => {
+    const agent: PreflightAgent = {
+      async generate(input) {
+        const candidate = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
+        candidate.entries = candidate.entries.filter((entry) => entry.kind !== "leader_lens");
+        return { candidate };
+      },
+    };
+    const t = await createTestApp({}, undefined, { preflightAgent: agent });
+    try {
+      const { card } = await readyMeeting(t, "dri-meeting-invalid-structure");
+      expect(card.payload.preflight).toMatchObject({
+        status: "failed",
+        error: { code: "invalid_preflight_candidate", message: "leader_lens 必须恰好 1 条" },
+      });
+    } finally {
+      await t.close();
+    }
+  });
+
+  describe("persistent read/checked/carry state", () => {
   it("persists read, carried, checked and note state across page visits", async () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {
@@ -549,7 +632,7 @@ describe("persistent read/checked/carry state", () => {
       const { cookie, issueId, meetingId } = await readyMeeting(t, "dri-meeting-402");
       const bad = await execute(t, cookie, await meetingAction(t, cookie, meetingId, "meeting.update_draft"), {
         readIssueIds: [issueId],
-        checkedEntryIds: ["entry-9"],
+        checkedEntryIds: ["entry-99"],
       });
       expect(bad.statusCode).toBe(400);
       expect(bad.json().code).toBe("INVALID_DRAFT");

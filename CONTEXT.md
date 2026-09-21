@@ -32,6 +32,10 @@ _Avoid_: 多战场重复议题、跨战场标签副本
 WarMap 拥有的会议决策容器，用于组织会前材料并关联 Issue；会议是形成决定的可选路径。合规 Transcript 导入后会议视为已召开，CEO 也可取消尚未召开的会议。
 _Avoid_: 日历事件、外部会议系统副本、会议管理模块
 
+**Meeting Material**:
+CEO 上传并归属到 Meeting 的会前文件。MVP 只接受可抽取文字的 PDF、DOCX 和 Markdown；会前材料集是会前预审的受控输入，上传请求中任一文件未成功解析即整批拒绝。CEO 可以确认替换为空材料集；替换会删除旧材料数据、使现有预审候选失效并令 CEO 显式重新预审。preflight 为 ready 时材料只读；仅 scheduled Meeting 的会前预审可显示“返回编辑材料”，CEO 必须先经二次确认使预审候选失效并回到 pending，才能替换材料集。回退后即使未替换材料，也允许 CEO 明确重新预审同一材料集。held 或 reviewed Meeting（包括 Outcome 复核中的原始材料视图）只可查看材料，不提供“返回编辑材料”。此能力没有自动状态迁移或补充材料流程。Supplement Request 仅记录向 DRI 的外发请求，不关联 Meeting Material。Transcript 和 Meeting Outcome 不读取 Meeting Material。MVP 不对扫描件或图片型材料做 OCR，无法抽取有效文本即解析失败。实际接收者是 CEO，材料提供人可以另行记录。解析实现固定为纯 JavaScript 路径：锁定 `node:22.13-alpine`，PDF 使用 `pdfjs-dist`，DOCX 使用 `mammoth` 与 ZIP 预检，Markdown 仅作 UTF-8 受限纯文本；不使用 `pdf-parse`、Office 服务或 native addon。单文件 20 MiB、每批 10 份/100 MiB、PDF 最多 500 页、DOCX 最多 1,000 ZIP entries/250 MiB 解压总量/50 MiB 单 entry/200:1 压缩比、单文件 15 秒/整批 90 秒、每份抽取文本 100,000 字符/Preflight 总计 300,000 字符。加密 PDF、空文字层、DOCX 图片/外部资源/异常 ZIP 和无效 UTF-8 Markdown 均拒绝。每份由 API 启动无 shell 的受限 Node 子进程解析（`--max-old-space-size=256`，15 秒 `SIGTERM` 后 2 秒 `SIGKILL`），整批顺序执行；这不是独立 worker 服务。DOCX HTML 仅按需生成，经服务端 allowlist sanitizer 后展示且不持久化；Markdown 禁止 raw HTML，预览不加载外部资源。
+_Avoid_: Transcript、DRI 直接上传、自动生效的会议结论、通用文件库
+
 **Transcript**:
 外部按 `warmap-transcript.v1` 结构提供并挂到 Meeting 的逐字发言段集合；每个 speakerId 必须匹配 Meeting 已有 participant，任一条不合规则整份拒绝。WarMap 不负责录音、语音转写、格式转换或说话人映射。
 _Avoid_: 自动可信的会议纪要、WarMap 录音能力、说话人猜测、部分导入

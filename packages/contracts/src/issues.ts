@@ -50,15 +50,21 @@ export const ResearchDocOption = Type.Object({
   consequences: Type.Array(Type.String({ minLength: 1, maxLength: 1000 }), { minItems: 1, maxItems: 10 }),
 }, { additionalProperties: false });
 
+/**
+ * 来源只允许真实 http(s) 地址。模型会自编 `file:///...` 或 `urn:issue:...` 假来源，
+ * Web 会把它渲染成链接，既虚构证据又暴露内部路径。内部材料改用 sourceTitle 表达。
+ */
+const ResearchSourceUrl = Type.String({ minLength: 8, maxLength: 2000, pattern: "^https?://\\S+$" });
+
 export const ResearchDocEvidence = Type.Object({
   quote: Type.String({ minLength: 1, maxLength: 2000 }),
   sourceTitle: Type.String({ minLength: 1, maxLength: 500 }),
-  sourceUrl: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
+  sourceUrl: Type.Optional(ResearchSourceUrl),
 }, { additionalProperties: false });
 
 export const ResearchDocSource = Type.Object({
   title: Type.String({ minLength: 1, maxLength: 500 }),
-  url: Type.String({ minLength: 1, maxLength: 2000 }),
+  url: ResearchSourceUrl,
 }, { additionalProperties: false });
 
 /** 严格 candidate schema：Agent 只能通过 submit_candidate 提交这一整份结构。 */
@@ -84,6 +90,9 @@ export const IssueDecideOverrideInput = Type.Object({
 export const IssueDismissInput = Type.Object({
   reason: Type.String({ minLength: 1, maxLength: 500 }),
 }, { additionalProperties: false });
+
+/** 恢复被移出的 Issue：无输入；dismissed-only，移出审计字段保留。 */
+export const IssueRestoreInput = Type.Object({}, { additionalProperties: false });
 
 export const IssueRetryResearchInput = Type.Object({}, { additionalProperties: false });
 
@@ -126,6 +135,7 @@ export type TResearchDoc = Static<typeof ResearchDoc>;
 export type TIssueDecideInput = Static<typeof IssueDecideInput>;
 export type TIssueDecideOverrideInput = Static<typeof IssueDecideOverrideInput>;
 export type TIssueDismissInput = Static<typeof IssueDismissInput>;
+export type TIssueRestoreInput = Static<typeof IssueRestoreInput>;
 export type TIssueRevokeReceiptInput = Static<typeof IssueRevokeReceiptInput>;
 export type TIssueReceiptSource = Static<typeof IssueReceiptSource>;
 export type TIssueReceipt = Static<typeof IssueReceipt>;

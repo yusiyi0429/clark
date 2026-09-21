@@ -37,6 +37,10 @@ describe("migration", () => {
         "010_meeting_transcript_outcome.sql",
         "011_battlefield_config.sql",
         "012_drop_fixture_tables.sql",
+        "013_signal_outlet_source.sql",
+        "014_meeting_materials.sql",
+        "015_issue_restore.sql",
+        "016_conversation_sessions.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -44,7 +48,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(12);
+      expect(Number(again.rows[0].count)).toBe(16);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(

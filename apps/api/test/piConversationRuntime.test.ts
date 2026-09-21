@@ -462,4 +462,100 @@ describe("controlled Pi conversation adapter public behavior", () => {
       await restoredRuntime?.close?.();
     }
   });
+
+  it("exposes the configured publisher feed as a one-shot read-only tool", async () => {
+    const contexts: Context[] = [];
+    let reads = 0;
+    const streamSimple = (_model: Model<any>, context: Context) => {
+      contexts.push(context);
+      if (contexts.length === 1) {
+        return stream(message([{ type: "toolCall", id: "outlet-1", name: "read_outlet_feed", arguments: {} }], "toolUse"));
+      }
+      const text = JSON.stringify(context.messages).includes("Treasury basis trade") ? "OUTLET OK" : "OUTLET missing";
+      return stream(message([{ type: "text", text }], "stop"));
+    };
+    const runtime = await createPiConversationRuntime({
+      companyMemory: loadCompanyMemory(testEnv),
+      baseUrl: "https://provider.invalid/v1/responses",
+      apiKey: "test-key",
+      modelId: "fake-light",
+      streamSimple,
+      outletFeed: async () => {
+        reads += 1;
+        return [{
+          sourceType: "outlet" as const,
+          title: "Treasury basis trade",
+          url: "https://www.bloomberg.com/news/articles/example",
+          publishedAt: "2026-09-18T00:00:00.000Z",
+          excerpt: "Treasury basis trade overview",
+          sourceRef: { type: "outlet" as const, provider: "publisher-feed" as const, outletId: "bloomberg", outletName: "彭博" },
+        }];
+      },
+    });
+    try {
+      const result = await runtime.run({
+        scope: "global",
+        message: "彭博最近如何报道？",
+        currentObject: null,
+        referencesSnapshot: [],
+        runtimeEntries: [],
+        piSessionId: "33333333-3333-4333-8333-333333333333",
+        signal: new AbortController().signal,
+        emit: () => undefined,
+      });
+      expect(result.assistantMessage).toBe("OUTLET OK");
+      expect(reads).toBe(1);
+      expect(contexts[0].tools?.map((tool) => tool.name)).toContain("read_outlet_feed");
+      expect(contexts[0].systemPrompt).toContain("不得用 web_search 的 site: 语法冒充发布方来源");
+    } finally {
+      await runtime.close?.();
+    }
+  });
+
+  it("exposes list_pending_issues only when configured and returns live board data", async () => {
+    const contexts: Context[] = [];
+    const streamSimple = (_model: Model<any>, context: Context) => {
+      contexts.push(context);
+      if (contexts.length === 1) {
+        return stream(message([
+          { type: "toolCall", id: "board-1", name: "list_pending_issues", arguments: {} },
+        ], "toolUse"));
+      }
+      const toolResult = context.messages.findLast((item) => item.role === "toolResult");
+      const text = JSON.stringify(toolResult).includes("月球基地供应链选择") ? "BOARD OK" : "BOARD missing";
+      return stream(message([{ type: "text", text }], "stop"));
+    };
+    const runtime = await createPiConversationRuntime({
+      companyMemory: loadCompanyMemory(testEnv),
+      baseUrl: "https://provider.invalid/v1/responses",
+      apiKey: "test-key",
+      modelId: "fake-light",
+      streamSimple,
+      listPendingIssues: async () => [{
+        id: "issue-1",
+        title: "月球基地供应链选择",
+        location: { level: "battlefield", battlefieldId: "growth" },
+        urgency: "red",
+        researchStatus: "ready",
+        createdAt: "2026-09-16T00:00:00.000Z",
+      }],
+    });
+    try {
+      const result = await runtime.run({
+        scope: "global",
+        message: "现在公司有哪些战略议题？",
+        currentObject: null,
+        referencesSnapshot: [],
+        runtimeEntries: [],
+        piSessionId: "22222222-2222-4222-8222-222222222222",
+        signal: new AbortController().signal,
+        emit: () => undefined,
+      });
+      expect(result.assistantMessage).toBe("BOARD OK");
+      expect(contexts[0].tools?.map((tool) => tool.name)).toContain("list_pending_issues");
+      expect(contexts[0].systemPrompt).toContain("list_pending_issues");
+    } finally {
+      await runtime.close?.();
+    }
+  });
 });

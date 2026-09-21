@@ -8,6 +8,7 @@ export const HealthDependencies = Type.Object(
     companyMemoryMcp: Type.Boolean(),
     search: Type.Boolean(),
     wechat: Type.Boolean(),
+    outlets: Type.Boolean(),
   },
   { additionalProperties: false },
 );

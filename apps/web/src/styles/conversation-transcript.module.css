@@ -9,4 +9,14 @@
 .prose pre{overflow:auto;padding:16px;background:#18181b;border-radius:12px}.prose code{font-size:.9em}.prose table{display:block;overflow-x:auto;border-collapse:collapse;max-width:100%}.prose td,.prose th{padding:8px 12px;border-bottom:1px solid #ffffff20;text-align:left}
 .sources{margin-top:18px;color:#aaaab5;font-size:12px}.sources summary{cursor:pointer;width:fit-content}.sources a{display:block;color:#d3d8e2;text-decoration:none;padding:10px 0;border-bottom:1px solid #ffffff0d}.sources a:hover{color:#a9caff}.sources a span{display:block;color:#8f929d;font-size:11px}.sources p{font-size:11px}.sources ul{list-style:none;padding:0;margin:8px 0 0}.sources li{padding:6px 0;border-bottom:1px solid #ffffff0d;color:#d3d8e2;font-size:12px}@keyframes breathe{50%{opacity:.3;transform:scale(.8)}}
 @media(min-width:1800px){.assistant,.user{font-size:16px}}
+/* Signal 阅读的对话栏是浅色卡，转写文本需要深色版本（Meeting 深色侧栏不受影响）。 */
+:global([data-tone=light]) .assistant{color:#4f5866}
+:global([data-tone=light]) .user{padding:10px 12px;border-radius:12px;background:#e9edf5;color:#25262b;box-shadow:none}
+:global([data-tone=light]) .meta{color:#8a909b}
+:global([data-tone=light]) .prose strong{color:#25262b}
+:global([data-tone=light]) .prose a{color:#0066cc}
+:global([data-tone=light]) .prose pre{background:#f5f7fa}
+:global([data-tone=light]) .prose td,:global([data-tone=light]) .prose th{border-bottom-color:#e6e9ef}
+:global([data-tone=light]) .sources{color:#8a909b}
+:global([data-tone=light]) .sources li{color:#3c4655;border-bottom-color:#eceef2}
 @media(max-width:690px){.assistant,.user{font-size:14px}.user{max-width:90%;padding:10px 15px}.meta{font-size:11px}.assistant{margin-bottom:28px}}

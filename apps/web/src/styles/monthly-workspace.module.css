@@ -15,25 +15,33 @@
   color:var(--heavy-ink);animation:enter .32s cubic-bezier(.2,.8,.2,1) both;
 }
 .preflight{--accent:69 91 142}.monthly{--accent:150 103 23}
-.header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:24px 28px;flex-shrink:0;border-bottom:1px solid var(--heavy-separator);background:#f7f8fac9;backdrop-filter:blur(22px) saturate(1.08);box-shadow:inset 0 1px #ffffffd9}
-.identity{display:flex;align-items:center;gap:12px;min-width:0}
+.header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:28px 40px 20px;flex-shrink:0;border-bottom:1px solid #e6e9ed;background:#f7f8fac9;backdrop-filter:blur(22px) saturate(1.08);box-shadow:inset 0 1px #ffffffd9}
+.identity{display:flex;align-items:center;gap:14px;min-width:0}
 .marker{width:8px;height:8px;border-radius:50%;background:rgb(var(--accent)/.85);box-shadow:0 0 0 4px rgb(var(--accent)/.065);flex-shrink:0}
-.workspace .eyebrow{display:block;font-size:var(--type-note,11px);font-weight:500;letter-spacing:.035em;color:var(--heavy-secondary);margin-bottom:4px}
-.workspace .header h1{font-size:var(--type-title,20px);line-height:1.4;letter-spacing:-.025em;font-weight:600;margin:0}
-.workspace .close{height:34px;width:34px;border-radius:50%;background:#e7e9edc9;border:1px solid #ffffff70;display:grid;place-items:center;color:#5d636d;flex-shrink:0;transition:background .14s,box-shadow .14s}
-.workspace .close:hover{background:#dadde3;box-shadow:0 1px 2px #0000000a}
-.workspace .close:active{background:#ced3db;box-shadow:inset 0 1px 2px #00000012}
+.workspace .eyebrow{display:block;font-size:12px;font-weight:400;letter-spacing:.035em;color:#5a5a60;margin-bottom:6px}
+.workspace .header h1{font-size:24px;line-height:1.4;letter-spacing:-.025em;font-weight:600;margin:0}
+.workspace .close{height:38px;width:38px;border-radius:50%;background:#fff;border:1px solid #e1e4e9;display:grid;place-items:center;color:#6e6e73;flex-shrink:0;transition:background .14s,box-shadow .14s}
+.workspace .close:hover{background:#f1f3f6;box-shadow:0 1px 2px #0000000a}
+.workspace .close:active{background:#e6e9ed;box-shadow:inset 0 1px 2px #00000012}
 .body{flex:1;min-height:0;display:block;padding-bottom:0}
-.materials{height:100%;overflow-y:auto;min-width:0;padding:28px max(28px,calc((100% - 980px)/2)) 128px;background:#fdfdfdfc;scrollbar-width:thin;scrollbar-color:#bdc2cb transparent;overscroll-behavior:contain;box-sizing:border-box}
+/* pen 月度计划：结果 Column(fill) + 待办反馈 Column(600)，gap 24，正文整块滚动。 */
+.materials{height:100%;overflow:auto;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) 600px;align-content:start;gap:24px;padding:20px 40px 90px;scrollbar-width:thin;scrollbar-color:#bdc2cb transparent;overscroll-behavior:contain;box-sizing:border-box}
 .workspace .demo{font-size:var(--type-note,11px);color:var(--heavy-note);display:block;margin-bottom:12px}
-.workspace .intro p{font-size:var(--type-reading,16px);line-height:1.75;color:var(--heavy-secondary);margin:0 0 28px}
-.reviewList{display:grid;gap:0}
-.reviewItem{padding:0 0 24px;margin-bottom:24px;border-bottom:1px solid var(--heavy-separator)}
-.itemHeading{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
-.workspace .number{font-size:var(--type-note,11px);color:rgb(var(--accent));font-variant-numeric:tabular-nums;letter-spacing:.03em}
-.workspace .itemHeading h2{font-size:var(--type-reading,16px);font-weight:600;line-height:1.5;color:var(--heavy-ink)}
-.workspace .proposal{font-size:var(--type-reading,16px);line-height:1.8;white-space:pre-line;margin:0 0 12px;color:#353a43}
-.workspace .basis{font-size:var(--type-meta,12px);line-height:1.75;color:var(--heavy-secondary);margin:0}
+/* pen 白卡 Section：r20 + #ECEEF2 描边，章节标题统一 15/600。 */
+.resultsColumn,.feedbackColumn{display:flex;flex-direction:column;gap:16px;min-width:0}
+.section{display:flex;flex-direction:column;gap:10px;padding:20px 22px;border:1px solid #eceef2;border-radius:20px;background:#fff}
+.workspace .sectionTitle{font-size:15px;font-weight:600;line-height:1.4;color:#1d1d1f;margin:0}
+/* pen Todo 卡：r12 浅底卡 + 序号 + 战场徒标 + 三字段。 */
+.todo{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid #eef0f4;border-radius:12px;background:#fafbfc}
+.todoHead{display:flex;align-items:center;gap:8px}
+.workspace .todoIndex{font-size:12px;font-weight:500;color:#6e6e73;font-variant-numeric:tabular-nums}
+.workspace .battlefieldBadge{padding:2px 7px;border-radius:6px;background:#f1f3f6;font-size:11px;color:#6e6e73}
+.workspace .source{font-size:11px;color:#6e6e73;margin:0}
+/* pen DRI Feedback：正文 13 + meta 11。 */
+.feedback{display:flex;flex-direction:column;gap:3px}
+.workspace .feedbackText{font-size:13px;line-height:1.7;color:#3c4350;margin:0}
+.workspace .feedbackMeta{font-size:11px;color:#6e6e73;margin:0}
+.workspace .basis{font-size:12px;line-height:1.75;color:var(--heavy-secondary);margin:0}
 .edit{flex:1;min-width:0}
 .workspace .edit summary{font-size:var(--type-meta,12px);color:#536575;cursor:pointer;list-style:none;display:inline-block;padding:7px 0;min-height:30px;box-sizing:border-box;user-select:none}
 .edit summary::-webkit-details-marker{display:none}
@@ -41,26 +49,32 @@
 .workspace .edit summary:active{color:#00499d}
 .edit[open]{padding-right:4px}
 .workspace .edit label{display:block;margin:8px 0;font-size:var(--type-meta,12px);color:var(--heavy-secondary)}
-.workspace textarea{display:block;width:100%;resize:vertical;min-height:68px;border:1px solid #cdd2db;border-radius:9px;background:#fff;font-family:inherit;font-size:var(--type-body,14px);line-height:1.75;padding:12px;color:var(--heavy-ink);outline:none;box-sizing:border-box;box-shadow:inset 0 1px 2px #22283305;transition:border-color .14s,box-shadow .14s}
+.workspace textarea{display:block;width:100%;resize:vertical;min-height:68px;border:1px solid #e1e4e9;border-radius:12px;background:#f5f7fa;font-family:inherit;font-size:13px;line-height:1.7;padding:12px 14px;color:#5a5a60;outline:none;box-sizing:border-box;transition:border-color .14s,box-shadow .14s}
+.workspace textarea:not(:disabled){border-color:#d9dde5;background:#fff;color:#1d1d1f}
 .workspace textarea:focus{border-color:#3285de;box-shadow:0 0 0 3px #007aff20}
-.workspace textarea::placeholder{color:#737983;font-size:var(--type-meta,12px)}
+.workspace textarea::placeholder{color:#737983;font-size:12px}
 .workspace .edit small{font-size:var(--type-note,11px);color:var(--heavy-note);display:block;margin-top:8px}
 .workspace .reviewButton{display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;min-width:88px;min-height:30px;padding:6px 12px;border:1px solid #cfd4dc;border-radius:8px;background:#ffffff;color:#565e69;font-size:var(--type-meta,12px);font-weight:500;box-shadow:0 1px 2px #1a22300a;transition:background .14s,border-color .14s,box-shadow .14s}
 .workspace .reviewButton:hover:not(:disabled){background:#f2f4f7;border-color:#bdc4cf}
 .workspace .reviewButton:active:not(:disabled){background:#e8edf4;box-shadow:inset 0 1px 2px #1a223012}
 .workspace .reviewButton[aria-pressed=true]{background:#eaf4ed;color:#366747;border-color:#c6ddcd;box-shadow:none}
 .workspace .reviewButton[aria-pressed=true]:hover{background:#dfeee4}
-.notes{margin-bottom:24px}
 .workspace .notes label{display:block;font-size:var(--type-meta,12px);font-weight:600;color:#525b67;margin-bottom:8px}
-.commitArea{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-top:4px}
-.commitInfo{display:flex;flex-direction:column;gap:6px}
-.workspace .commitInfo span{font-size:var(--type-meta,12px);color:var(--heavy-secondary)}
-.workspace .commitInfo small{font-size:var(--type-note,11px);color:var(--heavy-note)}
-.workspace .submit{display:flex;align-items:center;justify-content:center;gap:6px;min-height:36px;border:1px solid #0061cc;background:var(--heavy-control);border-radius:9px;padding:8px 16px;font-size:var(--type-body,14px);font-weight:600;color:#fff;box-shadow:inset 0 1px #ffffff1f,0 1px 2px #005ec81f;transition:background .14s,box-shadow .14s}
-.workspace .submit:disabled{opacity:1;color:#737a85;background:#e8ebf0;border-color:#dce1e8;box-shadow:none;cursor:default}
-.workspace .submit:hover:not(:disabled){background:#005fc8}
-.workspace .submit:active:not(:disabled){background:#0053b3;box-shadow:inset 0 1px 3px #00316e38}
-.workspace .receipt{font-size:var(--type-meta,12px);line-height:1.75;color:#426c50;padding:16px 0 0;margin:0}
+.commitArea{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;padding:0 40px;flex:none}
+.commitInfo{display:flex;flex-direction:column;gap:4px}
+.workspace .commitInfo span{font-size:12px;color:#5a5a60}
+.workspace .commitInfo small{font-size:11px;color:#6e6e73}
+/* pen：保存计划为次按钮，签发计划为 accent 主按钮（未确认签发时禁用）。 */
+.workspace .save{display:flex;align-items:center;justify-content:center;flex:none;min-height:36px;border:1px solid #d9dde5;border-radius:10px;background:#fff;padding:10px 18px;font-size:13px;font-weight:500;color:#303741;white-space:nowrap;transition:background .14s,border-color .14s}
+.workspace .save:hover:not(:disabled){background:#f7f8fa;border-color:#c4c9d2}
+.workspace .save:disabled{color:#8a8f97;background:#f7f8fa;cursor:default}
+.workspace .submit{display:flex;align-items:center;justify-content:center;gap:6px;flex:none;min-height:36px;border:1px solid #007aff;background:#007aff;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;color:#fff;white-space:nowrap;box-shadow:inset 0 1px #ffffff1f,0 1px 2px #007aff1f;transition:background .14s,box-shadow .14s}
+.workspace .submit:disabled{opacity:1;color:#6e6e73;background:#f1f3f6;border-color:#e6e9ed;box-shadow:none;cursor:default}
+.workspace .submit:hover:not(:disabled){background:#0069db;border-color:#0069db}
+.workspace .submit:active:not(:disabled){background:#0053b3;border-color:#0053b3;box-shadow:inset 0 1px 3px #00316e38}
+/* pen 签发回执：tinted 卡 + 签发 meta，替代原先的纯文本一行。 */
+.workspace .receipt{display:flex;flex-direction:column;gap:3px;margin:0 40px 20px;padding:14px 18px;border:1px solid #cbe5d2;border-radius:12px;background:#edf6ef;font-size:13px;font-weight:500;color:#2f7a44;flex:none}
+.workspace .receipt small{font-size:12px;font-weight:400;color:#2f7a44}
 .conversation{border-left:1px solid var(--heavy-separator);background:#f6f7f9;min-width:0;min-height:0;display:flex;flex-direction:column;padding:28px 20px 128px}
 .workspace .conversationHeading h2{font-size:var(--type-meta,12px);font-weight:600}
 .workspace .empty{padding:8px 0}
@@ -76,26 +90,27 @@
 .workspace .message a{color:#005bbb;text-decoration:underline;text-underline-offset:2px}
 .workspace .user{background:#eaf1fa;border-color:#d9e3f1;margin-left:16px}
 .workspace button:focus-visible,.workspace summary:focus-visible{outline:3px solid #007aff70;outline-offset:3px}
+@container(max-width:1240px){.materials{grid-template-columns:minmax(0,1fr);padding:20px 24px 64px}}
 @container(max-width:720px){
-  .header{padding:20px 24px}.materials{padding:24px 20px 128px}
+  .header{padding:20px 24px 16px}.materials{padding:24px 20px 64px}
 }
 @media(max-width:690px){
-  .header{padding:20px 16px}.body{display:block;padding-bottom:0;position:relative}
-  .materials{padding:24px 16px 128px}
-  .workspace .reviewButton{margin-left:auto}.commitArea{gap:12px}.workspace .message{max-width:94%}
+  .header{padding:20px 16px 16px}.body{display:block;padding-bottom:0;position:relative}
+  .materials{padding:24px 16px 64px}
+  .commitArea{gap:12px;padding:0 16px}.workspace .receipt{margin:0 16px 20px}.workspace .reviewButton{margin-left:auto}.workspace .message{max-width:94%}
 }
 @media(pointer:coarse){
-  .workspace .close{width:44px;height:44px}.workspace .reviewButton,.workspace .submit,.workspace .mobileTabs button{min-height:44px}
+  .workspace .close{width:44px;height:44px}.workspace .reviewButton,.workspace .submit,.workspace .save,.workspace .mobileTabs button{min-height:44px}
   .workspace .edit summary{min-height:44px;padding-top:12px}
 }
 @keyframes enter{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
 @keyframes leave{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(-10px)}}
 @media(prefers-reduced-motion:reduce){.workspace,.closing{animation:none}.workspace *{transition:none!important;scroll-behavior:auto!important}}
-@media(prefers-reduced-transparency:reduce){.workspace,.header,.materials{backdrop-filter:none;background:#f8f9fb}.materials{background:#fff}}
+@media(prefers-reduced-transparency:reduce){.workspace,.header{backdrop-filter:none;background:#f8f9fb}}
 @media(prefers-contrast:more){
   .workspace{--heavy-secondary:#424954;--heavy-note:#4c5562;--heavy-separator:#77818c;border-color:#77818c;backdrop-filter:none;background:#f8f9fb}
-  .header,.materials{backdrop-filter:none}.header{background:#f1f3f6}.materials{background:#fff}
-  .workspace textarea,.workspace .reviewButton{border-color:#737d8b}.workspace .submit:disabled{color:#535c69;border-color:#89929f}
+  .header{backdrop-filter:none;background:#f1f3f6}
+  .workspace textarea,.workspace .reviewButton,.workspace .section{border-color:#737d8b}.workspace .submit:disabled{color:#535c69;border-color:#89929f}
 }
 @media(forced-colors:active){
   .workspace,.header,.materials{background:Canvas;color:CanvasText;backdrop-filter:none;box-shadow:none}
@@ -103,12 +118,15 @@
   .workspace .marker{background:Highlight;box-shadow:none}.workspace .submit{background:Highlight;color:HighlightText}
 }
 
-.header>[data-reference-id]{margin-left:auto}.itemHeading>[data-reference-id]{margin-left:auto;flex:none}.itemHeading h2{min-width:0}
+.header>[data-reference-id]{margin-left:auto}
 
 /* 新 Web：月度编辑字段沿用材料页输入控件，不引入第二套表单样式。 */
-.workspace .notes{display:flex;flex-direction:column;gap:6px;min-width:0}
-.workspace .notes>span{font-size:var(--type-note,11px);color:var(--heavy-note)}
-.workspace .notes input:not([type="checkbox"]){display:block;width:100%;box-sizing:border-box;border:1px solid #cdd2db;border-radius:9px;background:#fff;font:inherit;font-size:var(--type-body,14px);line-height:1.7;padding:10px 12px;color:var(--heavy-ink)}
+.workspace .notes{display:flex;flex-direction:column;gap:3px;min-width:0}
+.workspace .notes>span{font-size:11px;color:#6e6e73}
+.workspace .notes input:not([type="checkbox"]){display:block;width:100%;box-sizing:border-box;border:1px solid #e1e4e9;border-radius:10px;background:#f5f7fa;font:inherit;font-size:12px;line-height:1.7;padding:7px 10px;color:#5a5a60}
 .workspace .notes input:not([type="checkbox"]):focus{outline:none;border-color:#3285de;box-shadow:0 0 0 3px #007aff20}
-.workspace .notes input[type="checkbox"]{margin-right:6px;vertical-align:-2px}
-.workspace .edit{display:flex;gap:8px;align-items:center;justify-content:flex-end}
+/* pen Check Row：14×14 勾选框 + 12px 说明，间距 8。 */
+.workspace .check{display:block;min-width:0}
+.workspace .check>span{display:flex;align-items:center;gap:8px;font-size:12px;color:#5a5a60}
+.workspace .check input[type="checkbox"]{flex:none;width:14px;height:14px;margin:0;border-radius:3px;accent-color:#007aff}
+.workspace .edit{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:flex-end}

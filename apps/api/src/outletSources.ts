@@ -1,0 +1,125 @@
+import type { TRadarOutlet, TRadarSourceItem, TRadarSources } from "@warmap/contracts";
+import { RADAR_OUTLETS } from "@warmap/contracts";
+import type { RadarOutletAdapter } from "./radar.js";
+
+/** 归属判定：host === d || host.endsWith("." + d)。ftalphaville.ft.com、online.wsj.com 因此自动覆盖。 */
+/** 当前 Radar 配置中的启用 outletId；显式请求只能是已启用的白名单成员。 */
+export function resolveConfiguredOutletIds(sources: TRadarSources, requested?: string[]): string[] {
+  const known = new Set(RADAR_OUTLETS.map((outlet) => outlet.outletId));
+  const enabled = new Set((sources.outlets ?? []).filter((source) => source.enabled).flatMap((source) => source.outlets));
+  for (const id of enabled) if (!known.has(id)) throw new Error(`Radar outlet config contains unknown outletId: ${id}`);
+  const ids = requested?.length ? requested : [...enabled];
+  for (const id of ids) {
+    if (!known.has(id)) throw new Error(`Unknown outletId: ${id}`);
+    if (!enabled.has(id)) throw new Error(`Outlet ${id} is not enabled in Radar config`);
+  }
+  return [...new Set(ids)];
+}
+
+function ownedHost(url: string, domains: readonly string[]): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return false;
+  }
+  return domains.some((domain) => {
+    const d = domain.toLowerCase();
+    return host === d || host.endsWith(`.${d}`);
+  });
+}
+
+function decodeXml(value: string): string {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tag(block: string, name: string): string {
+  const match = block.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, "i"));
+  return match ? decodeXml(match[1]) : "";
+}
+
+/** 发布时间无法解析为合法时刻时不伪造；该条目会被时间窗管线外的丢弃规则剔除。 */
+function iso(value: string): string {
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : "";
+}
+
+/**
+ * 发布方级来源（方案 A）：直取这 7 家自己的 RSS / news-sitemap，在本地做归属校验与时间窗过滤。
+ * 博查实测不支持 site:/includeDomains，且索引里没有这 7 家（299 条命中 0 条），
+ * 所以「全网检索 + 白名单过滤」召回必然为 0，这条路不能替代发布方渠道。
+ */
+export function createOutletFeedAdapter(options: {
+  outlets?: readonly TRadarOutlet[];
+  /** 单家单次扫描的条数上限；防止 economist 300 条把 assess 批次数顶穿。 */
+  limit?: number;
+  fetch?: typeof fetch;
+}): RadarOutletAdapter {
+  const catalog = options.outlets ?? RADAR_OUTLETS;
+  // 3 × 7 家 = 21；Radar 再设全局 20 条硬上限，至多 4 个 assess batch。
+  const limit = options.limit ?? 3;
+  const fetchImpl = options.fetch ?? fetch;
+  return {
+    configured: true,
+    async fetchLatest({ outletIds, lookbackHours }, signal): Promise<TRadarSourceItem[]> {
+      const wanted = catalog.filter((outlet) => outletIds.includes(outlet.outletId));
+      const earliest = Date.now() - lookbackHours * 60 * 60 * 1000;
+      const items: TRadarSourceItem[] = [];
+      for (const outlet of wanted) {
+        const perOutlet = new Map<string, TRadarSourceItem>();
+        for (const channel of outlet.channels) {
+          if (signal?.aborted) break;
+          let response: Response;
+          try {
+            response = await fetchImpl(channel.url, {
+              signal,
+              headers: { "user-agent": "Mozilla/5.0 (compatible; WarMapRadar/1.0)" },
+            });
+          } catch {
+            continue;
+          }
+          if (!response.ok) continue;
+          const text = await response.text().catch(() => "");
+          const blocks = channel.kind === "news-sitemap"
+            ? text.match(/<url>[\s\S]*?<\/url>/g) ?? []
+            : text.match(/<item[\s>][\s\S]*?<\/item>/g) ?? [];
+          for (const block of blocks) {
+            const title = tag(block, channel.kind === "news-sitemap" ? "news:title" : "title");
+            const link = tag(block, channel.kind === "news-sitemap" ? "loc" : "link");
+            const publishedAt = iso(tag(block, channel.kind === "news-sitemap" ? "news:publication_date" : "pubDate"));
+            // Reuters 的 news-sitemap 没有 description：excerpt 退回标题，并如实标注，不用正文抓取冒充
+            const excerpt = tag(block, "description") || title;
+            if (!title || !link || !publishedAt) continue;
+            if (!ownedHost(link, outlet.articleDomains)) continue;
+            const at = Date.parse(publishedAt);
+            if (!Number.isFinite(at) || at < earliest) continue;
+            perOutlet.set(link, {
+              sourceType: "outlet",
+              title: title.slice(0, 500),
+              url: link,
+              publishedAt,
+              excerpt: excerpt.slice(0, 10_000),
+              sourceRef: {
+                type: "outlet",
+                provider: "publisher-feed",
+                outletId: outlet.outletId,
+                outletName: outlet.name,
+              },
+            });
+          }
+        }
+        // 渠道给的是整份最新列表而非检索结果：每家只保留窗口内最新的 limit 条，
+        // 避免 economist 的 300 条把 assess 批次数顶穿。窗口外条目直接丢弃，不逐条报 warning。
+        items.push(...[...perOutlet.values()]
+          .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
+          .slice(0, limit));
+      }
+      return items;
+    },
+  };
+}

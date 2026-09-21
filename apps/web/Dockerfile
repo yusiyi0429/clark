@@ -15,6 +15,7 @@ WORKDIR /app
 # 非 root：standalone 产物归 node 用户所有
 COPY --from=build --chown=node:node /repo/apps/web/.next/standalone ./
 COPY --from=build --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build --chown=node:node /repo/apps/web/public ./apps/web/public
 
 ENV NODE_ENV=production
 USER node

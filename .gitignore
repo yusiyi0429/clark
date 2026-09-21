@@ -23,3 +23,6 @@ seed/company-people.json
 
 # local worktrees
 .worktrees/
+
+# 本地 Caddy 根证书，供浏览器信任 https://localhost
+.scratch/local-ca/

@@ -123,3 +123,9 @@ curl -N -b cookie.txt -X POST "$PUBLIC_ORIGIN/api/conversations/<scope>/messages
   -d '{"message":"最近的公开信息里，<公司>有什么变化？"}'
 # 期望 SSE 出现 tool.started/tool.completed(name=web_search) 后 turn.completed；记录调用次数
 ```
+
+## 备份/恢复（ADR 0017 + §11）
+
+- 备份：`infra/backup/backup.sh`（宿主机 cron）。compose 模式自动停/启 `api` 冻结写入，同批次产出 dump.age、两个卷归档 .age 与 manifest；恢复必须使用同一批次。
+- 恢复：`infra/backup/restore.sh` 默认 dry-run；完整恢复需要加密 dump + 两个卷归档 + 显式命名的**空**目标卷；脚本以恢复后的 DB 逐行核对 storageKey/SHA-256，不一致即失败。数据库-only 恢复对材料/会话附件**不是完整恢复**（脚本会显式提示）。
+- 演练环境提醒：隔离恢复演练必须在 API 启动前把 `PI_BASE_URL` 指向死地址，避免 recovery/scheduler 外呼（见 `.scratch/ceo-warmap-mvp/evidence/isolated-audit-runbook.md`）。

@@ -20,11 +20,95 @@ export const MeetingParticipant = Type.Object(
   { additionalProperties: false },
 );
 
+/** advisor-review 后端场景的七段会前预审；旧三类保留用于历史 Meeting 展示。 */
+export const PreflightReviewEntryKind = Type.Union([
+  Type.Literal("core_judgment"),
+  Type.Literal("strategic_alignment"),
+  Type.Literal("positive_signal"),
+  Type.Literal("risk_calibration"),
+  Type.Literal("meeting_question"),
+  Type.Literal("next_step"),
+  Type.Literal("leader_lens"),
+]);
+
 export const MeetingPreflightEntryKind = Type.Union([
   Type.Literal("agenda"),
   Type.Literal("evidence"),
   Type.Literal("open_question"),
+  Type.Literal("core_judgment"),
+  Type.Literal("strategic_alignment"),
+  Type.Literal("positive_signal"),
+  Type.Literal("risk_calibration"),
+  Type.Literal("meeting_question"),
+  Type.Literal("next_step"),
+  Type.Literal("leader_lens"),
 ]);
+
+export const PreflightReadiness = Type.Union([
+  Type.Literal("ready"),
+  Type.Literal("revise"),
+  Type.Literal("blocked"),
+]);
+
+export const PreflightInputState = Type.Union([
+  Type.Literal("available"),
+  Type.Literal("derived"),
+  Type.Literal("missing"),
+]);
+
+export const PreflightInputCoverage = Type.Object(
+  {
+    background: PreflightInputState,
+    purpose: PreflightInputState,
+    sourceMaterial: PreflightInputState,
+    relatedMeeting: PreflightInputState,
+  },
+  { additionalProperties: false },
+);
+
+export const PreflightMaterialRole = Type.Union([
+  Type.Literal("strategic_judgment"),
+  Type.Literal("standard_method"),
+  Type.Literal("client_proposal"),
+  Type.Literal("project_plan"),
+  Type.Literal("commercial_terms"),
+  Type.Literal("owner_status"),
+  Type.Literal("research_analysis"),
+  Type.Literal("meeting_record"),
+  Type.Literal("daily_communication"),
+]);
+
+export const PreflightMaturity = Type.Union([
+  Type.Literal("exploration"),
+  Type.Literal("modeling"),
+  Type.Literal("internal_alignment"),
+  Type.Literal("client_discussion"),
+  Type.Literal("commercial_decision"),
+  Type.Literal("signing"),
+  Type.Literal("implementation"),
+  Type.Literal("retrospective"),
+]);
+
+export const PreflightTaskDefinition = Type.Object(
+  {
+    materialPurpose: Type.String({ minLength: 1, maxLength: 1000 }),
+    reviewPurpose: Type.String({ minLength: 1, maxLength: 1000 }),
+    primaryRole: PreflightMaterialRole,
+    secondaryRole: Type.Union([PreflightMaterialRole, Type.Null()]),
+    maturity: PreflightMaturity,
+    readerAction: Type.String({ minLength: 1, maxLength: 1000 }),
+    nonGoal: Type.String({ minLength: 1, maxLength: 1000 }),
+  },
+  { additionalProperties: false },
+);
+
+export const PreflightSummary = Type.Object(
+  {
+    criticalIssue: Type.String({ minLength: 1, maxLength: 1000 }),
+    priorityAction: Type.String({ minLength: 1, maxLength: 1000 }),
+  },
+  { additionalProperties: false },
+);
 
 export const MeetingPreflightEntry = Type.Object(
   {
@@ -57,6 +141,11 @@ export const MeetingPreflight = Type.Object(
     brief: Type.String(),
     error: Type.Union([MeetingPreflightError, Type.Null()]),
     generatedAt: Type.Union([Type.String(), Type.Null()]),
+    /** 新版 advisor-review 场景字段；Optional 保证旧 Meeting JSONB 继续可读。 */
+    inputCoverage: Type.Optional(PreflightInputCoverage),
+    taskDefinition: Type.Optional(PreflightTaskDefinition),
+    readiness: Type.Optional(PreflightReadiness),
+    summary: Type.Optional(PreflightSummary),
   },
   { additionalProperties: false },
 );
@@ -95,6 +184,27 @@ export const MeetingDraft = Type.Object(
   { additionalProperties: false },
 );
 
+export const MeetingMaterial = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    fileName: Type.String({ minLength: 1 }),
+    mimeType: Type.Union([
+      Type.Literal("application/pdf"),
+      Type.Literal("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+      Type.Literal("text/markdown"),
+    ]),
+    sizeBytes: Type.Integer({ minimum: 1 }),
+    pageCount: Type.Optional(Type.Integer({ minimum: 1 })),
+    receivedBy: Type.String({ minLength: 1 }),
+    providedBy: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    uploadedAt: Type.String({ minLength: 1 }),
+    /** 补充材料文件组：缺省 = primary（旧 JSONB 行即 primary，无迁移）；supplement 必须指向已记录的外发请求。 */
+    kind: Type.Optional(Type.Union([Type.Literal("primary"), Type.Literal("supplement")])),
+    supplementFor: Type.Optional(Type.String({ minLength: 1 })),
+  },
+  { additionalProperties: false },
+);
+
 export const MeetingCardPayload = Type.Object(
   {
     status: MeetingStatus,
@@ -106,6 +216,7 @@ export const MeetingCardPayload = Type.Object(
     originRef: Type.Unknown(),
     preflight: MeetingPreflight,
     draft: MeetingDraft,
+    materials: Type.Array(MeetingMaterial, { maxItems: 10 }),
     transcript: Type.Union([StoredTranscript, Type.Null()]),
     outcome: Type.Union([MeetingOutcomeState, Type.Null()]),
   },
@@ -133,6 +244,21 @@ export const CreateMeetingRequest = Type.Object(
 /** Issue Action：把当前 Issue 加入已有 scheduled Meeting。 */
 export const JoinMeetingRequest = Type.Object(
   { meetingId: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+
+/** CEO 端只读人员目录：Meeting 创建表单选择 personId；单 CEO 产品，ceo 角色唯一。 */
+export const PeopleDirectoryResponse = Type.Object(
+  {
+    people: Type.Array(
+      Type.Object({
+        personId: Type.String({ minLength: 1, maxLength: 200 }),
+        displayName: Type.String({ minLength: 1, maxLength: 200 }),
+        roles: Type.Array(Type.String({ minLength: 1, maxLength: 50 }), { maxItems: 10 }),
+      }),
+      { maxItems: 200 },
+    ),
+  },
   { additionalProperties: false },
 );
 
@@ -173,10 +299,12 @@ export const DriMeetingImportRequest = Type.Object(
 /** Preflight Agent 的唯一结构化输出；散文不进入 Meeting。 */
 export const PreflightCandidate = Type.Object(
   {
+    taskDefinition: PreflightTaskDefinition,
+    readiness: PreflightReadiness,
     entries: Type.Array(
       Type.Object(
         {
-          kind: MeetingPreflightEntryKind,
+          kind: PreflightReviewEntryKind,
           title: Type.String({ minLength: 1, maxLength: 200 }),
           body: Type.String({ minLength: 1, maxLength: 4000 }),
           sourceRefs: Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems: 10 }),
@@ -187,18 +315,24 @@ export const PreflightCandidate = Type.Object(
     ),
     basis: Type.String({ minLength: 1, maxLength: 4000 }),
     brief: Type.String({ minLength: 1, maxLength: 4000 }),
+    summary: PreflightSummary,
   },
   { additionalProperties: false },
 );
 
 export type TMeetingStatus = Static<typeof MeetingStatus>;
 export type TMeetingParticipant = Static<typeof MeetingParticipant>;
+export type TPreflightReviewEntryKind = Static<typeof PreflightReviewEntryKind>;
 export type TMeetingPreflightEntryKind = Static<typeof MeetingPreflightEntryKind>;
+export type TPreflightInputCoverage = Static<typeof PreflightInputCoverage>;
+export type TPreflightTaskDefinition = Static<typeof PreflightTaskDefinition>;
+export type TPreflightSummary = Static<typeof PreflightSummary>;
 export type TMeetingPreflightEntry = Static<typeof MeetingPreflightEntry>;
 export type TMeetingPreflight = Static<typeof MeetingPreflight>;
 export type TSupplementExportStatus = Static<typeof SupplementExportStatus>;
 export type TSupplementRequest = Static<typeof SupplementRequest>;
 export type TMeetingDraft = Static<typeof MeetingDraft>;
+export type TMeetingMaterial = Static<typeof MeetingMaterial>;
 export type TMeetingCardPayload = Static<typeof MeetingCardPayload>;
 export type TCreateMeetingRequest = Static<typeof CreateMeetingRequest>;
 export type TJoinMeetingRequest = Static<typeof JoinMeetingRequest>;

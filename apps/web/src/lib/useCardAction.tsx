@@ -38,7 +38,7 @@ export function useCardAction(onCard: (card: Card) => void) {
       if (outcome.kind === "ok") {
         onCard(outcome.card);
         setState({ status: "done" });
-        return;
+        return outcome.card;
       }
       if (outcome.kind === "conflict") {
         if (outcome.latestCard) onCard(outcome.latestCard);

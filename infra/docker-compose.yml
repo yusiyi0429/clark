@@ -19,6 +19,20 @@ services:
       timeout: 3s
       retries: 12
 
+  # 材料/附件命名卷属主初始化：Docker 新建命名卷为 root:root，而 API 以 uid 1000 运行，
+  # 不初始化则首次上传 EACCES。复用栈内已有的 postgres 镜像（自带 sh/chown），以 root 一次性
+  # chown 两个卷后退出；API 用 service_completed_successfully 等它结束，自身仍以非 root 运行。
+  storage-init:
+    image: postgres:17-alpine
+    user: "0:0"
+    entrypoint:
+      - sh
+      - -c
+      - mkdir -p /var/lib/warmap/meeting_materials /var/lib/warmap/conversation_attachments && chown -R 1000:1000 /var/lib/warmap/meeting_materials /var/lib/warmap/conversation_attachments
+    volumes:
+      - meeting_materials:/var/lib/warmap/meeting_materials
+      - conversation_attachments:/var/lib/warmap/conversation_attachments
+
   # 公众号账号级来源的独立 AGPL sidecar：官方镜像、不 vendor 源码、无 ports（不经 Caddy）。
   # WarMap API 只经内网 MCP 调用它并持静态 Token；微信 Cookie 只存在 sidecar 的 wechat_data 卷。
   wechat:
@@ -75,12 +89,18 @@ services:
       BUILD_SHA: ${BUILD_SHA:-dev}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-warmap}
+      MEETING_MATERIAL_STORAGE_DIR: /var/lib/warmap/meeting_materials
+      CONVERSATION_ATTACHMENT_STORAGE_DIR: /var/lib/warmap/conversation_attachments
     volumes:
+      - meeting_materials:/var/lib/warmap/meeting_materials
+      - conversation_attachments:/var/lib/warmap/conversation_attachments
       - ../backend:/repo/backend:ro
       - ../seed:/repo/seed:ro
     depends_on:
       postgres:
         condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
       wechat:
         condition: service_started
 
@@ -111,6 +131,8 @@ services:
 
 volumes:
   pgdata:
+  meeting_materials:
+  conversation_attachments:
   wechat_data:
   caddy_data:
   caddy_config:

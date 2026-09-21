@@ -6,6 +6,7 @@ import {
   IssueDecideOverrideInput,
   IssueDismissInput,
   IssueLocation,
+  IssueRestoreInput,
   IssueRetryResearchInput,
   IssueRevokeReceiptInput,
   RadarPromotionCandidate,
@@ -76,6 +77,8 @@ export type IssueRow = {
   dismissed_at: Date | null;
   dismiss_reason: string | null;
   dismiss_fingerprint: string | null;
+  restored_at: Date | null;
+  restore_fingerprint: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -83,13 +86,9 @@ export type IssueRow = {
 const ISSUE_COLUMNS = [
   "id", "version", "origin", "origin_ref", "external_id", "request_fingerprint",
   "title", "location", "urgency", "status", "research", "receipts", "promotion_fingerprint",
-  "dismissed_at", "dismiss_reason", "dismiss_fingerprint", "created_at", "updated_at",
+  "dismissed_at", "dismiss_reason", "dismiss_fingerprint", "restored_at", "restore_fingerprint", "created_at", "updated_at",
 ];
 const issueColumns = (prefix = "") => ISSUE_COLUMNS.map((column) => `${prefix}${column}`).join(", ");
-
-/** 代码门槛：维度分下限与总分下限；模型不能输出最终结论（doc 03 §6）。 */
-export const PROMOTION_MIN_DIMENSION = 3;
-export const PROMOTION_MIN_TOTAL = 12;
 
 /** 预研从未启动的可见失败码；CEO 显式重试由 Ticket 08 提供。 */
 export const TRIGGER_NOT_STARTED = "trigger_not_started";
@@ -141,7 +140,7 @@ export type PromotionAccepted = {
 };
 
 /**
- * 代码重新校验 Agent 提出的升级候选：CEO decision kind、至少两个不同选择、
+ * 代码重新校验 Agent 提出的升级候选：合法契约、至少两个不同选择、
  * 连续引文、合法 location、分值门槛与确定性去重指纹。模型不能决定最终门槛。
  */
 export function assessPromotion(input: {
@@ -170,10 +169,6 @@ export function assessPromotion(input: {
   const dimensions = [score.relevance, score.impact, score.urgency];
   if (dimensions.some((value) => !Number.isInteger(value) || (value as number) < 0 || (value as number) > 5)) {
     return { ok: false, reason: "候选分值超出范围" };
-  }
-  const total = dimensions.reduce<number>((sum, value) => sum + (value as number), 0);
-  if (dimensions.some((value) => (value as number) < PROMOTION_MIN_DIMENSION) || total < PROMOTION_MIN_TOTAL) {
-    return { ok: false, reason: `候选分值未达门槛 ${PROMOTION_MIN_TOTAL}` };
   }
 
   const urgency: IssueUrgency = { level: promotion.urgency.level };
@@ -234,6 +229,7 @@ export function projectIssueCard(row: IssueRow, secret: string): TCard {
       receipts: row.receipts.map(projectReceipt),
       dismissedAt: row.dismissed_at?.toISOString() ?? null,
       dismissReason: row.dismiss_reason,
+      ...(row.restored_at ? { restoredAt: row.restored_at.toISOString() } : {}),
     },
     navigation: [{ href: `/issues/${row.id}`, label: "Issue" }],
     conversation: { scope: `issue:${row.id}` },
@@ -295,6 +291,9 @@ function issueActions(row: IssueRow, secret: string): TActionDescriptor[] {
       });
     }
     actions.push({ actionId: sign("issue.dismiss"), actionType: "issue.dismiss", label: "移出议题" });
+  }
+  if (row.status === "dismissed") {
+    actions.push({ actionId: sign("issue.restore"), actionType: "issue.restore", label: "恢复到待处理" });
   }
   if (row.status === "decided") {
     for (const receipt of row.receipts.filter((candidate) => !candidate.revokedAt)) {
@@ -549,6 +548,7 @@ const ISSUE_ACTION_INPUTS = {
   "issue.decide": IssueDecideInput,
   "issue.decide_override": IssueDecideOverrideInput,
   "issue.dismiss": IssueDismissInput,
+  "issue.restore": IssueRestoreInput,
   "issue.revoke_receipt": IssueRevokeReceiptInput,
 } as const;
 
@@ -563,6 +563,8 @@ function replayAlreadyProduced(row: IssueRow, actionType: string, itemId: string
       return row.receipts.some((receipt) => receipt.actionFingerprint === fingerprint);
     case "issue.dismiss":
       return row.dismiss_fingerprint === fingerprint;
+    case "issue.restore":
+      return row.restore_fingerprint === fingerprint;
     case "issue.retry_research":
       return row.research.retryFingerprint === fingerprint;
     case "issue.revoke_receipt":
@@ -678,6 +680,24 @@ export async function executeIssueAction(
       );
       const card = projectIssueCard(
         { ...row, status: "dismissed", dismissed_at: new Date(now), dismiss_reason: reason, dismiss_fingerprint: fingerprint, version: row.version + 1 },
+        secret,
+      );
+      await client.query("COMMIT");
+      return { ok: true, card };
+    }
+
+    if (scope.actionType === "issue.restore") {
+      if (row.status !== "dismissed") return conflict("ISSUE_NOT_DISMISSED", "只有 dismissed Issue 可以恢复");
+      // 移出审计字段（dismissed_at/reason/fingerprint）保留不删；恢复另存审计指纹与时间。
+      await client.query(
+        `UPDATE issues
+            SET status = 'pending', restored_at = now(), restore_fingerprint = $2,
+                version = version + 1, updated_at = now()
+          WHERE id = $1`,
+        [row.id, fingerprint],
+      );
+      const card = projectIssueCard(
+        { ...row, status: "pending", restored_at: new Date(now), restore_fingerprint: fingerprint, version: row.version + 1 },
         secret,
       );
       await client.query("COMMIT");

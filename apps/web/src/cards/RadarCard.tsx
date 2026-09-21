@@ -11,6 +11,32 @@ import a from "@/styles/radar-config.module.css";
 
 type ScanResult = { trigger: string; status: string; companyDay: string; createdSignals: number; warnings: string[] };
 
+/** 出窗过滤是常规动作：只计入汇总；其余警告（Provider 失败、候选校验失败等）保持可见。 */
+function splitWarnings(warnings: string[]): { outOfWindow: number; notable: string[] } {
+  const notable = warnings.filter((warning) => !warning.startsWith("来源超出时间窗"));
+  return { outOfWindow: warnings.length - notable.length, notable };
+}
+
+/** 三类来源固定标签：outlets 是发布方级媒体来源，不能与微信公众号混用。 */
+const SOURCE_LABEL: Record<string, string> = { web: "Web 搜索", wechat: "微信公众号", outlets: "发布方级媒体来源" };
+
+/**
+ * 发布方级来源的展示名单。运行时启用清单存在 Radar 配置里，API 只回数量；
+ * 这里按当前生效的发布方如实列出，避免为了展示名单新增 API。
+ */
+// ponytail: 名单写死；运行配置增减发布方时改这里，或等 API 暴露 outletId 列表。
+const OUTLET_NAMES = ["BBC", "彭博", "路透社", "金融时报", "CNBC", "经济学人"];
+
+export function radarSourceLabel(key: string): string {
+  return SOURCE_LABEL[key] ?? key;
+}
+
+/** outlets 只读展示生效名单；其余来源直接用 API 的说明。 */
+export function radarSourceMessage(key: string, source: { configured: boolean; message: string }): string {
+  if (key === "outlets" && source.configured) return `${OUTLET_NAMES.join("、")} · 只读`;
+  return source.message;
+}
+
 /** Radar 视图：真实 Signal 列表 + 筛选/排序 + 手动补扫 + 只读监测范围。 */
 export function RadarCard({ card, collection, onNavigate }: CardRenderProps) {
   const payload = payloadOf<RadarPayload>(card);
@@ -24,6 +50,13 @@ export function RadarCard({ card, collection, onNavigate }: CardRenderProps) {
   const [scanPending, setScanPending] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const router = useRouter();
+
+  // 扫描结果 toast 只短暂停留；可重试的失败保持可见。
+  useEffect(() => {
+    if (!scan) return;
+    const timer = window.setTimeout(() => setScan(null), 7000);
+    return () => window.clearTimeout(timer);
+  }, [scan]);
 
   const visible = useMemo(() => {
     const rows = signals
@@ -107,20 +140,27 @@ export function RadarCard({ card, collection, onNavigate }: CardRenderProps) {
       </div>
 
       <p className={f.status}>
+        {scanPending ? "扫描中 · " : ""}
         {payload.unreadCount} 条未读 · 定时扫描 {payload.lastRun?.companyDay ?? "尚未运行"}
         {payload.lastRun ? ` · 最近一次${payload.lastRun.trigger === "manual" ? "手动补扫" : "定时扫描"}：${payload.lastRun.status}` : ""}
         {payload.lastScheduledAt ? ` · 上次启动 ${payload.lastScheduledAt.slice(0, 16).replace("T", " ")}` : ""}
       </p>
-      {payload.lastRun?.warnings?.length ? (
+      {payload.lastRun && splitWarnings(payload.lastRun.warnings ?? []).notable.length ? (
         <p className={f.error} role="status">
-          {payload.lastRun.warnings.join("；")}
+          {splitWarnings(payload.lastRun.warnings ?? []).notable.join("；")}
         </p>
       ) : null}
       {scan ? (
-        <p className={f.status} role="status">
-          手动补扫完成：新增 {scan.createdSignals} 条 Signal（公司日期 {scan.companyDay}）
-          {scan.warnings.length ? ` · ${scan.warnings.join("；")}` : ""}
-        </p>
+        (() => {
+          const summary = splitWarnings(scan.warnings);
+          return (
+            <div className={f.toast} role="status">
+              手动补扫完成 · 新增 {scan.createdSignals} 条 Signal
+              {summary.outOfWindow ? ` · ${summary.outOfWindow} 条来源超出时间窗` : ""}
+              {summary.notable.length ? ` · ${summary.notable.length} 条其他警告` : ""}
+            </div>
+          );
+        })()
       ) : null}
       {scanError ? (
         <p className={f.error} role="alert">
@@ -198,7 +238,7 @@ export function RadarCard({ card, collection, onNavigate }: CardRenderProps) {
                       <div>
                         <small>
                           {anchor.location.type === "company" ? "公司" : anchor.location.type === "battlefield" ? `战场 · ${anchor.location.id}` : `能力 · ${anchor.location.id}`}
-                          {anchor.source ? ` · ${anchor.source}` : ""}
+                          {anchor.source && anchor.source !== "manual" ? ` · ${anchor.source}` : ""}
                         </small>
                         <h4>{anchor.title}</h4>
                         <p>{anchor.query}</p>
@@ -214,18 +254,16 @@ export function RadarCard({ card, collection, onNavigate }: CardRenderProps) {
               <div className={a.groupHeading}>
                 <div>
                   <h3>来源</h3>
-                  <p>普通 Web 搜索与指定微信公众号账号级来源</p>
                 </div>
               </div>
               <div className={a.appendList}>
                 {Object.entries(payload.sources).map(([key, source]) => (
                   <div key={key} className={a.appendItem}>
-                    <span className={a.index} aria-hidden="true" />
                     <div>
-                      <h4>{key === "web" ? "Web 搜索" : "微信公众号"}</h4>
-                      <p className={a.url}>{source.message}</p>
+                      <h4>{radarSourceLabel(key)}</h4>
+                      <p className={a.url}>{radarSourceMessage(key, source)}</p>
                     </div>
-                    <span>{source.configured ? "启用" : "未配置"}</span>
+                    <span data-on={source.configured ? "true" : "false"}>{source.configured ? "启用" : "未配置"}</span>
                   </div>
                 ))}
               </div>

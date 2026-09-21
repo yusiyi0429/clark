@@ -6,6 +6,7 @@ import { createRadarService } from "./radar.js";
 import { createRadarAgentAssessor } from "./radarAgent.js";
 import { createRadarScheduler } from "./radarScheduler.js";
 import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "./radarSources.js";
+import { createOutletFeedAdapter } from "./outletSources.js";
 import { createBochaWebSearchAdapter } from "./webSearch.js";
 import { recoverInterruptedResearch } from "./issues.js";
 import { loadCompanyMemory } from "./companyMemory.js";
@@ -42,6 +43,8 @@ const env: AppEnv = {
   // 可选观测：未配置时 LangSmith 完全 no-op，不阻断启动或业务
   langsmithApiKey: process.env.LANGSMITH_API_KEY,
   langsmithProject: process.env.LANGSMITH_PROJECT,
+  materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
+  conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,
 };
 
 const port = Number(process.env.PORT ?? "4000");
@@ -56,6 +59,7 @@ try {
 }
 
 const companyMemory = loadCompanyMemory(env);
+const outletAdapter = createOutletFeedAdapter({});
 const researchService = createResearchService({
   pool,
   runner: createResearchAgentRunner({
@@ -64,6 +68,7 @@ const researchService = createResearchService({
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.heavyModel,
+    outlets: outletAdapter,
   }),
 });
 const radarService = createRadarService({
@@ -74,8 +79,10 @@ const radarService = createRadarService({
     url: process.env.WECHAT_MCP_URL,
     token: process.env.WECHAT_MCP_TOKEN,
   }),
-  assessor: createRadarAgentAssessor({
+  outlets: outletAdapter,
+  assessor: await createRadarAgentAssessor({
     query: pool.query.bind(pool),
+    companyMemory,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.lightModel,
@@ -114,6 +121,7 @@ const app = await buildApp({
   researchService,
   monthlyPlanService,
   webSearch: createBochaWebSearchAdapter({ apiKey: process.env.BOCHA_API_KEY }),
+  outlets: outletAdapter,
 });
 app.addHook("onClose", async () => {
   scheduler.close();
