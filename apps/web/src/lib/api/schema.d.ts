@@ -398,6 +398,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/config/battlefields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** CEO 注册战场（slug id，写入 Organization Fact 注册表） */
+        post: operations["createBattlefield"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/config/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** CEO 注册公司能力（写入 Organization Fact 注册表） */
+        post: operations["createCapability"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/config/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** CEO 直接新建 pending Issue，照常触发预研 */
+        post: operations["createCeoIssue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/config/meetings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** CEO 独立新建 scheduled Meeting（issueIds 可为空） */
+        post: operations["createConfigMeeting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dri/issues": {
         parameters: {
             query?: never;
@@ -926,6 +994,27 @@ export interface components {
         };
         CreateConversationSessionRequest: {
             title?: string;
+        };
+        CreateBattlefieldRequest: {
+            name: string;
+            owner: string;
+            goal: string;
+        };
+        CreateCapabilityRequest: {
+            name: string;
+            group: string;
+            description: string;
+        };
+        CreateCeoIssueRequest: {
+            title: string;
+            battlefieldId: string;
+            decisionBy?: string;
+        };
+        CreateConfigMeetingRequest: {
+            title: string;
+            scheduledAt: string;
+            leadDriId: string;
+            issueIds?: string[];
         };
         ConversationAttachment: {
             id: string;
@@ -2390,6 +2479,192 @@ export interface operations {
             };
             /** @description version 冲突，携带 latestCard */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createBattlefield: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBattlefieldRequest"];
+            };
+        };
+        responses: {
+            /** @description 新注册的 Battlefield Card */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createCapability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCapabilityRequest"];
+            };
+        };
+        responses: {
+            /** @description 新注册的 Capability Card */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createCeoIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCeoIssueRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建的 pending Issue Card */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createConfigMeeting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConfigMeetingRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建的 scheduled Meeting Card */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { QueryResult } from "pg";
 import type {
   TCard,
@@ -8,6 +9,7 @@ import type {
   TMonthlyPlanFeedback,
   TMonthlyPlanTodo,
 } from "@warmap/contracts";
+import { slugId } from "./slug.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -46,6 +48,27 @@ export function findUnregisteredBattlefieldId(
   battlefieldIds: (string | undefined)[],
 ): string | undefined {
   return battlefieldIds.find((id): id is string => id !== undefined && !registered.has(id));
+}
+
+export type RegisterBattlefieldResult =
+  | { ok: true; id: string }
+  | { ok: false; code: "BATTLEFIELD_EXISTS"; message: string };
+
+/** CEO 注册战场：goal 写入既有 positioning，owner 是 migration 018 新增列；同 slug 名称返回 409。 */
+export async function registerBattlefield(
+  q: Query,
+  input: { name: string; owner: string; goal: string },
+): Promise<RegisterBattlefieldResult> {
+  const id = slugId(input.name) || randomUUID();
+  const result = await q(
+    `INSERT INTO battlefield_config (id, version, name, positioning, owner)
+     VALUES ($1, 1, $2, $3, $4)
+     ON CONFLICT (id) DO NOTHING
+     RETURNING id`,
+    [id, input.name, input.goal, input.owner],
+  );
+  if (result.rowCount !== 1) return { ok: false, code: "BATTLEFIELD_EXISTS", message: `战场 ${id} 已注册` };
+  return { ok: true, id };
 }
 
 /** 依据每个待办/feedback 自己的 battlefieldId 归属；空值表示公司级，不能通过 owner 反推。 */

@@ -1190,6 +1190,218 @@
         }
       }
     },
+    "/api/config/battlefields": {
+      "post": {
+        "operationId": "createBattlefield",
+        "summary": "CEO 注册战场（slug id，写入 Organization Fact 注册表）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBattlefieldRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "新注册的 Battlefield Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config/capabilities": {
+      "post": {
+        "operationId": "createCapability",
+        "summary": "CEO 注册公司能力（写入 Organization Fact 注册表）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCapabilityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "新注册的 Capability Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config/issues": {
+      "post": {
+        "operationId": "createCeoIssue",
+        "summary": "CEO 直接新建 pending Issue，照常触发预研",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCeoIssueRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建的 pending Issue Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config/meetings": {
+      "post": {
+        "operationId": "createConfigMeeting",
+        "summary": "CEO 独立新建 scheduled Meeting（issueIds 可为空）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConfigMeetingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建的 scheduled Meeting Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/dri/issues": {
       "post": {
         "operationId": "importDriIssue",
@@ -3453,6 +3665,118 @@
             "minLength": 1,
             "maxLength": 200,
             "type": "string"
+          }
+        }
+      },
+      "CreateBattlefieldRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "owner",
+          "goal"
+        ],
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "owner": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "goal": {
+            "minLength": 1,
+            "maxLength": 1000,
+            "type": "string"
+          }
+        }
+      },
+      "CreateCapabilityRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "group",
+          "description"
+        ],
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "group": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "description": {
+            "minLength": 1,
+            "maxLength": 1000,
+            "type": "string"
+          }
+        }
+      },
+      "CreateCeoIssueRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "battlefieldId"
+        ],
+        "properties": {
+          "title": {
+            "minLength": 1,
+            "maxLength": 25,
+            "type": "string"
+          },
+          "battlefieldId": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "decisionBy": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          }
+        }
+      },
+      "CreateConfigMeetingRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "scheduledAt",
+          "leadDriId"
+        ],
+        "properties": {
+          "title": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "scheduledAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "leadDriId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "issueIds": {
+            "maxItems": 50,
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            }
           }
         }
       },

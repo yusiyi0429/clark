@@ -10,6 +10,14 @@ describe("responsive workspace CSS", () => {
     expect(source).toContain("--main-start:calc(20px + max(250px,(100vw - 20px)*.3))");
   });
 
+  it("renders the settings page as a 1212-wide 2×2 grid of 44-high inputs", () => {
+    const source = css("./config.module.css");
+    expect(source).toContain("max-width:1212px");
+    expect(source).toContain(".grid{max-width:1212px;margin:0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}");
+    expect(source).toContain("height:44px;border:1px solid #d6dae2;border-radius:10px");
+    expect(source).toContain("@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}");
+  });
+
   it("keeps both scheduled-meeting side panels reachable below 1000px", () => {
     const source = css("./meeting-workspace.module.css");
     expect(source).not.toContain('.advisorShell>:global([data-testid="meeting-chat-sidebar"]){display:none}');

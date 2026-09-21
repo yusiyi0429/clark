@@ -14,6 +14,10 @@ import {
   ConversationSessionList,
   ConversationSessionSummary,
   CreateConversationSessionRequest,
+  CreateBattlefieldRequest,
+  CreateCapabilityRequest,
+  CreateCeoIssueRequest,
+  CreateConfigMeetingRequest,
   CreateMeetingRequest,
   DriIssueImportRequest,
   DriMeetingImportRequest,
@@ -417,6 +421,56 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/config/battlefields": {
+        post: {
+          operationId: "createBattlefield",
+          summary: "CEO 注册战场（slug id，写入 Organization Fact 注册表）",
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreateBattlefieldRequest" }),
+          responses: {
+            "201": { description: "新注册的 Battlefield Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/config/capabilities": {
+        post: {
+          operationId: "createCapability",
+          summary: "CEO 注册公司能力（写入 Organization Fact 注册表）",
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreateCapabilityRequest" }),
+          responses: {
+            "201": { description: "新注册的 Capability Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/config/issues": {
+        post: {
+          operationId: "createCeoIssue",
+          summary: "CEO 直接新建 pending Issue，照常触发预研",
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreateCeoIssueRequest" }),
+          responses: {
+            "201": { description: "创建的 pending Issue Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/config/meetings": {
+        post: {
+          operationId: "createConfigMeeting",
+          summary: "CEO 独立新建 scheduled Meeting（issueIds 可为空）",
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreateConfigMeetingRequest" }),
+          responses: {
+            "201": { description: "创建的 scheduled Meeting Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+          },
+        },
+      },
       "/api/dri/issues": {
         post: {
           operationId: "importDriIssue",
@@ -698,6 +752,10 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ConversationSessionSummary: ConversationSessionSummary as JsonSchema,
         ConversationSessionList: ConversationSessionList as JsonSchema,
         CreateConversationSessionRequest: CreateConversationSessionRequest as JsonSchema,
+        CreateBattlefieldRequest: CreateBattlefieldRequest as JsonSchema,
+        CreateCapabilityRequest: CreateCapabilityRequest as JsonSchema,
+        CreateCeoIssueRequest: CreateCeoIssueRequest as JsonSchema,
+        CreateConfigMeetingRequest: CreateConfigMeetingRequest as JsonSchema,
         ConversationAttachment: ConversationAttachment as JsonSchema,
         ConversationAttachmentInfo: ConversationAttachmentInfo as JsonSchema,
         ConversationAttachmentUploadResponse: ConversationAttachmentUploadResponse as JsonSchema,

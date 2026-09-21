@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Lock, X } from "lucide-react";
+import { ChevronRight, Settings, X } from "lucide-react";
 import type { Card } from "@/lib/api/client";
 import { payloadOf, type IssuePayload, type MeetingPayload, type MonthlyPlanPayload } from "@/cards/payloads";
 import { TianshuMark } from "./TianshuMark";
@@ -151,8 +151,8 @@ export function NotificationRail({ cards, onNavigate }: { cards: Card[]; onNavig
     <div className={n.rail} data-testid="notification-rail">
       <div className={n.railClock} data-testid="notification-clock">
         <span className={n.railLock}>
-          <button type="button" aria-label="已登录 CEO 会话">
-            <Lock aria-hidden="true" />
+          <button type="button" aria-label="配置" onClick={() => onNavigate("/config")}>
+            <Settings aria-hidden="true" />
           </button>
         </span>
         <span className={n.homeCapsule} aria-current="page">

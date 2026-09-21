@@ -11,4 +11,5 @@ export * from "./issues.js";
 export * from "./meetings.js";
 export * from "./monthlyPlans.js";
 export * from "./battlefields.js";
+export * from "./config.js";
 export * from "./transcript.js";

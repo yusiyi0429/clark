@@ -1,4 +1,4 @@
-import type { TMeetingCardPayload, TMonthlyPlanCardPayload, TBattlefieldCardPayload } from "@warmap/contracts";
+import type { TCapabilityCardPayload, TMeetingCardPayload, TMonthlyPlanCardPayload, TBattlefieldCardPayload } from "@warmap/contracts";
 import type { Card } from "@/lib/api/client";
 
 export type IssueLocation =
@@ -17,7 +17,7 @@ export type ResearchDoc = {
 };
 
 export type IssuePayload = {
-  origin: "radar" | "dri";
+  origin: "radar" | "dri" | "ceo";
   originRef: unknown;
   status: "pending" | "decided" | "dismissed";
   location: IssueLocation;
@@ -48,6 +48,7 @@ export type IssuePayload = {
 
 /** 直接复用 packages/contracts 的投影契约，避免 Web 内再定义一份会漂移的类型。 */
 export type BattlefieldPayload = TBattlefieldCardPayload;
+export type CapabilityPayload = TCapabilityCardPayload;
 
 
 export type RadarPayload = {

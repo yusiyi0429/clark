@@ -413,6 +413,52 @@ export async function executeCreateMeeting(
   return { card: projectMeetingCard(row ?? created, secret) };
 }
 
+/**
+ * CEO 配置页独立新建 Meeting：不锚定任何既有 Issue（issueIds 允许为空），
+ * CEO 从人员目录解析，participants 默认只有 lead DRI。创建后照常触发会前预审。
+ */
+export async function createConfigMeeting(
+  pool: Pool,
+  companyMemory: CompanyMemoryRepository,
+  preflightAgent: PreflightAgent,
+  secret: string,
+  input: { title: string; scheduledAt: string; leadDriId: string; issueIds?: string[] },
+): Promise<{ card: TCard } | { error: MeetingActionError }> {
+  const scheduledAt = parseScheduledAt(input.scheduledAt);
+  if (!scheduledAt) return { error: { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } } };
+  const ceo = companyMemory.searchPeople(undefined).find((person) => person.roles.includes("ceo"));
+  if (!ceo) return { error: { status: 400, code: "INVALID_CEO", message: "company-people.v1 中没有 ceo 角色", fieldErrors: { leadDriId: "ceo missing" } } };
+  const resolved = resolveParticipants(companyMemory, { leadDriId: input.leadDriId, ceoParticipantId: ceo.personId, participants: [] });
+  if ("error" in resolved) return resolved;
+  const issueIds = unique(input.issueIds ?? []);
+  if (!(await issuesExist(pool.query.bind(pool), issueIds))) {
+    return { error: { status: 400, code: "INVALID_ISSUE", message: "issueIds 包含不存在的 Issue", fieldErrors: { issueIds: "unknown issue" } } };
+  }
+  const inserted = await pool.query<MeetingRow>(
+    `INSERT INTO meetings
+       (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
+        participants, issue_ids, preflight, draft, origin_ref, action_fingerprints)
+     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb)
+     RETURNING ${meetingColumns()}`,
+    [
+      randomUUID(),
+      input.title,
+      scheduledAt,
+      resolved.lead.personId,
+      resolved.ceo.personId,
+      JSON.stringify(resolved.participants),
+      JSON.stringify(issueIds),
+      JSON.stringify(emptyPreflight()),
+      JSON.stringify(emptyDraft()),
+      JSON.stringify({ type: "config" }),
+    ],
+  );
+  const created = inserted.rows[0];
+  await runPreflight(pool, companyMemory, preflightAgent, created.id);
+  const row = await getMeetingRow(pool.query.bind(pool), created.id);
+  return { card: projectMeetingCard(row ?? created, secret) };
+}
+
 export async function executeJoinMeeting(
   pool: Pool,
   companyMemory: CompanyMemoryRepository,

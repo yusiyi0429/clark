@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { ChevronRight } from "lucide-react";
 import type { Card } from "@/lib/api/client";
 import { renderCard } from "@/cards/registry";
-import { payloadOf, type IssuePayload } from "@/cards/payloads";
+import { payloadOf, type CapabilityPayload, type IssuePayload } from "@/cards/payloads";
 import { BattlefieldDisplayProvider, useBattlefieldDisplay } from "@/cards/battlefieldDisplay";
 import b from "@/styles/home-board.module.css";
 import r from "@/styles/radar.module.css";
@@ -39,15 +39,23 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
 
   const strategy = issues.filter((card) => payloadOf<IssuePayload>(card).location.level === "company");
   const capabilities = issues.filter((card) => payloadOf<IssuePayload>(card).location.level === "capability");
+  /** 首页能力面板 = 注册能力分组 ∪ Issue 派生分组；注册分组即使还没有 Issue 也要出现。 */
   const capabilityGroups = useMemo(() => {
-    const groups = new Map<string, Card[]>();
+    const groups = new Map<string, { id: string; name: string; group?: string; issues: Card[] }>();
+    for (const card of cards) {
+      if (card.kind !== "capability") continue;
+      const payload = payloadOf<CapabilityPayload>(card);
+      groups.set(payload.capabilityId, { id: payload.capabilityId, name: payload.name, group: payload.group, issues: [] });
+    }
     for (const card of capabilities) {
       const location = payloadOf<IssuePayload>(card).location;
       const key = location.level === "capability" ? location.capabilityId : "其他";
-      groups.set(key, [...(groups.get(key) ?? []), card]);
+      const group = groups.get(key) ?? { id: key, name: key, issues: [] };
+      group.issues.push(card);
+      groups.set(key, group);
     }
-    return [...groups.entries()];
-  }, [capabilities]);
+    return [...groups.values()];
+  }, [cards, capabilities]);
 
   function issueRow(card: Card) {
     const payload = payloadOf<IssuePayload>(card);
@@ -136,10 +144,13 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
         <div className={b.divider} aria-hidden="true" />
         {capabilityGroups.length ? (
           <div className={b.capabilityItems}>
-            {capabilityGroups.map(([capabilityId, group]) => (
-              <section key={capabilityId} className={b.capabilityGroup} data-capability-category={capabilityId}>
-                <h3>{capabilityId}</h3>
-                {group.map(issueRow)}
+            {capabilityGroups.map((group) => (
+              <section key={group.id} className={b.capabilityGroup} data-capability-category={group.id}>
+                <h3>
+                  {group.name}
+                  {group.group ? <small className={b.capabilityCategory}>{group.group}</small> : null}
+                </h3>
+                {group.issues.length ? group.issues.map(issueRow) : <p className={b.empty}>暂无待决策议题</p>}
               </section>
             ))}
           </div>

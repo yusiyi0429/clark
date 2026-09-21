@@ -10,6 +10,10 @@ import {
   ConversationScope,
   ConversationSessionId,
   CreateConversationSessionRequest,
+  CreateBattlefieldRequest,
+  CreateCapabilityRequest,
+  CreateCeoIssueRequest,
+  CreateConfigMeetingRequest,
   CreateMeetingRequest,
   PeopleDirectoryResponse,
   DriIssueImportRequest,
@@ -73,11 +77,12 @@ import {
 import type { RadarOutletAdapter, RadarService } from "./radar.js";
 import { resolveConfiguredOutletIds } from "./outletSources.js";
 import { getSignalCard, getSignalImageSource, listSignalCards, projectRadarCard, setSignalState } from "./signals.js";
-import { getIssueRow, executeIssueAction, importDriIssue, listPendingIssueCards, projectIssueCard } from "./issues.js";
+import { getIssueRow, executeIssueAction, createCeoIssue, importDriIssue, listPendingIssueCards, projectIssueCard } from "./issues.js";
 import type { ResearchService } from "./research.js";
 import {
   executeCancelMeeting,
   executeConfirmItem,
+  createConfigMeeting,
   executeCreateMeeting,
   executeDismissItem,
   executeEditMaterials,
@@ -116,7 +121,8 @@ import {
   mutateMonthlyExport,
   projectMonthlyPlanCard,
 } from "./monthlyPlans.js";
-import { listBattlefieldCards } from "./battlefields.js";
+import { listBattlefieldCards, registerBattlefield } from "./battlefields.js";
+import { listCapabilityCards, registerCapability } from "./capabilities.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
 import { recoverInterruptedOutcome, type PostMeetingAgent } from "./outcome.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
@@ -428,10 +434,11 @@ export async function buildApp({
     })),
   }));
   app.get("/api/cards/home", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
-    const [radarCard, battlefields, issues, meetingRows, monthlyNotice] = await Promise.all([
+    const [radarCard, battlefields, issues, capabilities, meetingRows, monthlyNotice] = await Promise.all([
       projectRadarCard(q, radar.providerStatus),
       listBattlefieldCards(q, companyPeriod(now())),
       listPendingIssueCards(q, env.sessionSecret),
+      listCapabilityCards(q),
       listMeetingRows(q),
       getMonthlyPlanNotice(q, env.sessionSecret, now()),
     ]);
@@ -439,8 +446,54 @@ export async function buildApp({
       .filter((row) => row.status === "scheduled")
       .map((row) => projectMeetingCard(row, env.sessionSecret));
     const monthly = monthlyNotice && (monthlyNotice.payload as { status?: string }).status !== "confirmed" ? [monthlyNotice] : [];
-    return { cards: [radarCard, ...battlefields, ...issues, ...meetings, ...monthly] };
+    return { cards: [radarCard, ...battlefields, ...capabilities, ...issues, ...meetings, ...monthly] };
   });
+
+  // CEO 配置页：确定性表单写入 Organization Fact。创建新对象，没有既有 Card version 可锚，所以不走 opaque-action。
+  app.post(
+    "/api/config/battlefields",
+    { preHandler: requireCEO, schema: { body: CreateBattlefieldRequest } },
+    async (req, reply): Promise<FastifyReply> => {
+      const result = await registerBattlefield(q, req.body);
+      if (!result.ok) return fail(reply, 409, result.code, result.message);
+      const cards = await listBattlefieldCards(q, companyPeriod(now()));
+      return reply.status(201).send({ cards: cards.filter((card) => card.objectRef.id === result.id) });
+    },
+  );
+  app.post(
+    "/api/config/capabilities",
+    { preHandler: requireCEO, schema: { body: CreateCapabilityRequest } },
+    async (req, reply): Promise<FastifyReply> => {
+      const result = await registerCapability(q, req.body);
+      if (!result.ok) return fail(reply, 409, result.code, result.message);
+      const cards = (await listCapabilityCards(q)).filter((card) => card.objectRef.id === result.id);
+      return reply.status(201).send({ cards });
+    },
+  );
+  app.post(
+    "/api/config/issues",
+    { preHandler: requireCEO, schema: { body: CreateCeoIssueRequest } },
+    async (req, reply): Promise<FastifyReply> => {
+      const result = await createCeoIssue(pool, env.sessionSecret, req.body);
+      if (result.status !== 201) {
+        return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
+      }
+      // 与其他 Issue 创建路径一致：立即启动唯一深度预研，不阻塞响应
+      research.start(result.card.objectRef.id).catch((err) => console.error("research start failed", err));
+      return reply.status(201).send({ cards: [result.card] });
+    },
+  );
+  app.post(
+    "/api/config/meetings",
+    { preHandler: requireCEO, schema: { body: CreateConfigMeetingRequest } },
+    async (req, reply): Promise<FastifyReply> => {
+      const result = await createConfigMeeting(pool, companyMemory, preflight, env.sessionSecret, req.body);
+      if ("error" in result) {
+        return fail(reply, result.error.status, result.error.code, result.error.message, result.error.fieldErrors ? { fieldErrors: result.error.fieldErrors } : undefined);
+      }
+      return reply.status(201).send({ cards: [result.card] });
+    },
+  );
 
   const idParams = Type.Object({ id: Type.String({ minLength: 1 }) }, { additionalProperties: false });
   const signalImageParams = Type.Object({

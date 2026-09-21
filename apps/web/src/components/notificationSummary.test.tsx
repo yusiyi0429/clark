@@ -50,4 +50,10 @@ describe("通知卡 hover 摘要", () => {
     expect(css).toContain(".cardSummary{display:block;max-height:0;overflow:hidden;opacity:0;");
     expect(css).toContain(".card:hover .cardSummary,.head:focus-visible .cardSummary{max-height:6.8em;opacity:1;margin-top:6px}");
   });
+
+  // W5：左上角入口从登录态 Lock 换成配置入口。
+  it("左上角入口是配置按钮，不再是锁图标", () => {
+    expect(html).toContain('aria-label="配置"');
+    expect(html).not.toContain('aria-label="已登录 CEO 会话"');
+  });
 });

@@ -20,6 +20,7 @@ describe("migration", () => {
       expect(names).toContain("meetings");
       expect(names).toContain("monthly_plans");
       expect(names).toContain("battlefield_config");
+      expect(names).toContain("capability_config");
 
       const applied = await db.query<{ id: number; filename: string }>(
         "SELECT id, filename FROM schema_migrations ORDER BY id",
@@ -42,6 +43,7 @@ describe("migration", () => {
         "015_issue_restore.sql",
         "016_conversation_sessions.sql",
         "017_signal_images.sql",
+        "018_config_registries.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -49,7 +51,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(17);
+      expect(Number(again.rows[0].count)).toBe(18);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(

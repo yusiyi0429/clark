@@ -43,6 +43,22 @@ export const loadSignalCard = (cookie: string, id: string) => load("/api/cards/s
 export const loadMonthlyPlanCards = (cookie: string) => load("/api/cards/monthly-plans", cookie);
 export const loadMeetingCards = (cookie: string) => load("/api/cards/meetings", cookie);
 
+export type PersonOption = { personId: string; displayName: string; roles: string[] };
+
+/** 配置页新建 Meeting 选 lead DRI：只读 CompanyMemory 人员投影。 */
+export async function loadPeople(cookie: string): Promise<PersonOption[]> {
+  const { data, response } = await serverApi.GET("/api/people", { headers: { cookie } });
+  if (response.status === 401) redirect("/access");
+  if (!response.ok) throw new Error(`people query failed with ${response.status}`);
+  return ((data as { people?: PersonOption[] } | undefined)?.people) ?? [];
+}
+
+/** 配置页新建议题只能归属已注册战场。 */
+export async function loadBattlefieldOptions(cookie: string): Promise<{ id: string; name: string }[]> {
+  const { cards } = await load("/api/cards/battlefields", cookie);
+  return cards.map((card) => ({ id: card.objectRef.id, name: card.title }));
+}
+
 /** 关联 Issue 标题需要逐条读取：已经离开待决策区域的 Issue 仍应显示自己的标题。 */
 export async function tryLoadIssueCards(cookie: string, ids: string[]): Promise<Card[]> {
   const results = await Promise.all(

@@ -16,6 +16,7 @@ import {
   type TIssueLocation,
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
+import { getRegisteredBattlefieldIds } from "./battlefields.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import { revokeEffect } from "./effects.js";
 
@@ -63,7 +64,7 @@ export type IssueUrgency = {
 export type IssueRow = {
   id: string;
   version: number;
-  origin: "radar" | "dri";
+  origin: "radar" | "dri" | "ceo";
   origin_ref: unknown;
   external_id: string | null;
   request_fingerprint: string | null;
@@ -217,7 +218,7 @@ export function projectIssueCard(row: IssueRow, secret: string): TCard {
     kind: "issue",
     objectRef: { type: "issue", id: row.id, version: row.version },
     title: row.title,
-    badge: row.origin === "radar" ? "Radar" : "DRI",
+    badge: row.origin === "radar" ? "Radar" : row.origin === "ceo" ? "CEO" : "DRI",
     urgency: row.urgency.level === "red" ? "red" : "normal",
     payload: {
       origin: row.origin,
@@ -540,6 +541,48 @@ export async function importDriIssue(
   } finally {
     client.release();
   }
+}
+
+export type CreateCeoIssueResult =
+  | { status: 201; card: TCard }
+  | { status: 400; code: string; message: string; fieldErrors?: Record<string, string> };
+
+/**
+ * CEO 配置页直建 pending Issue：确定性输入，不走 opaque-action（尚无既有 Card version 可锚）。
+ * 战场必须先注册；未填 decisionBy 时为 gray，不自行编造紧急度理由。
+ */
+export async function createCeoIssue(
+  pool: Pool,
+  secret: string,
+  input: { title: string; battlefieldId: string; decisionBy?: string },
+): Promise<CreateCeoIssueResult> {
+  const registered = await getRegisteredBattlefieldIds(pool.query.bind(pool));
+  if (!registered.has(input.battlefieldId)) {
+    return { status: 400, code: "INVALID_LOCATION", message: "battlefieldId 未注册", fieldErrors: { battlefieldId: "unknown battlefield" } };
+  }
+  const urgency: IssueUrgency = { level: "gray" };
+  if (input.decisionBy) {
+    if (!Number.isFinite(Date.parse(input.decisionBy))) {
+      return { status: 400, code: "INVALID_INPUT", message: "decisionBy 不是可解析时间", fieldErrors: { decisionBy: "unparsable" } };
+    }
+    urgency.level = "yellow";
+    urgency.decisionBy = input.decisionBy;
+  }
+  const inserted = await pool.query<IssueRow>(
+    `INSERT INTO issues
+       (id, version, origin, origin_ref, title, location, urgency, status, research)
+     VALUES ($1, 1, 'ceo', $2::jsonb, $3, $4::jsonb, $5::jsonb, 'pending', $6::jsonb)
+     RETURNING ${issueColumns()}`,
+    [
+      randomUUID(),
+      JSON.stringify({ type: "ceo" }),
+      input.title,
+      JSON.stringify({ level: "battlefield", battlefieldId: input.battlefieldId }),
+      JSON.stringify(urgency),
+      JSON.stringify({ status: "pending", pendingSince: new Date().toISOString(), runId: null, previousRunIds: [], error: null }),
+    ],
+  );
+  return { status: 201, card: projectIssueCard(inserted.rows[0], secret) };
 }
 
 /** 已注册的 Issue Action 与其严格输入 schema；未列出的 actionType 一律 404。 */
