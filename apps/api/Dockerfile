@@ -9,7 +9,7 @@ COPY apps/api apps/api
 RUN pnpm install --frozen-lockfile
 
 ENV NODE_ENV=production
-# 非 root：node 用户只读访问代码与只读挂载的 backend/seed；镜像内不写业务文件
+# 非 root：node 用户只读访问代码与只读挂载的 seed；镜像内不写业务文件
 USER node
 EXPOSE 4000
 CMD ["pnpm", "--filter", "@warmap/api", "start"]

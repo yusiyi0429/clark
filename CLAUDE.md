@@ -62,7 +62,7 @@
 - `apps/api` 负责业务对象、Card 投影、Action、Pi Runtime、CompanyMemory MCP、外部集成、鉴权、调度和持久化。
 - `packages/contracts` 只保存 TypeBox schema 与 OpenAPI 生成入口，不依赖 React、Fastify 运行实例、Pi 或数据库实现。
 - Web 客户端类型由 OpenAPI 生成，生成文件不得手工修改；契约变化先改 schema，再重新生成。
-- 旧 `frontend/` 已在 Ticket 18 随 cutover 整体删除，未迁移其业务逻辑、数据或 localStorage；像素级视觉与交互基线保留在 `docs/visual-baseline/`，源码恢复依赖根仓库 Git 历史。
+- 旧 `frontend/` 已在 Ticket 18 随 cutover 整体删除，未迁移其业务逻辑、数据或 localStorage；像素级视觉与交互基线为根目录 `UpgradeDesign.pen`，源码恢复依赖根仓库 Git 历史。
 
 ## Agent skills
 

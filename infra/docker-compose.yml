@@ -73,8 +73,8 @@ services:
       SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-28800}
       DRI_SERVICE_TOKEN: ${DRI_SERVICE_TOKEN:?DRI_SERVICE_TOKEN required}
       COMPANY_MEMORY_MCP_TOKEN: ${COMPANY_MEMORY_MCP_TOKEN:?COMPANY_MEMORY_MCP_TOKEN required}
-      # 单一来源：backend/CompanyMemory.md 目录 + 真实人员名单，均只读挂载；生产可换 host 路径并同步覆盖
-      COMPANY_MEMORY_SEED_DIR: /repo/backend
+      # 单一来源：seed/memory/ CompanyMemory Markdown 目录 + 真实人员名单，均只读挂载；生产可换 host 路径并同步覆盖
+      COMPANY_MEMORY_SEED_DIR: /repo/seed/memory
       COMPANY_PEOPLE_SEED: /repo/seed/company-people.json
       PI_BASE_URL: ${PI_BASE_URL:?PI_BASE_URL required}
       PI_API_KEY: ${PI_API_KEY:?PI_API_KEY required}
@@ -94,7 +94,6 @@ services:
     volumes:
       - meeting_materials:/var/lib/warmap/meeting_materials
       - conversation_attachments:/var/lib/warmap/conversation_attachments
-      - ../backend:/repo/backend:ro
       - ../seed:/repo/seed:ro
     depends_on:
       postgres:

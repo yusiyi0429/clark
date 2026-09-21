@@ -7,7 +7,7 @@
 设计依据：
 
 - `需求文档.md`
-- `backend/CompanyMemory.md`
+- `seed/memory/CompanyMemory.md`
 - 根目录 `CONTEXT.md`
 - `docs/adr/` 中已确认决策
 - 当前 `frontend/src/components/ceo-warmap/` 的视觉与微交互证据

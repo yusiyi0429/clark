@@ -123,7 +123,7 @@ function loadSections(seedDir: string): MemorySection[] {
       });
     };
     for (const line of current) {
-      // backend/CompanyMemory.md 的历史 <Content> 包装行不属于任何章节
+      // seed/memory/CompanyMemory.md 的历史 <Content> 包装行不属于任何章节
       if (line.trim() === "<Content>" || line.trim() === "</Content>") continue;
       const match = /^##\s+(.+?)\s*$/.exec(line);
       if (match) {
