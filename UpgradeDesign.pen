@@ -1419,19 +1419,6 @@
                   "fontFamily": "$font",
                   "fontSize": 15,
                   "fontWeight": "600"
-                },
-                {
-                  "type": "text",
-                  "id": "B35sb",
-                  "name": "Body",
-                  "fill": "$ink3",
-                  "textGrowth": "fixed-width",
-                  "width": "fill_container",
-                  "content": "守住增长与现金流双线：增长战场聚焦东南亚渠道首批闭环，交付战场压降履约周期。",
-                  "lineHeight": 1.65,
-                  "fontFamily": "$font",
-                  "fontSize": 13,
-                  "fontWeight": "normal"
                 }
               ]
             },
@@ -1829,7 +1816,7 @@
                 {
                   "type": "frame",
                   "id": "MS0BA",
-                  "name": "Rail Lock",
+                  "name": "Config Button",
                   "width": 30,
                   "height": 30,
                   "cornerRadius": 15,
@@ -1839,7 +1826,7 @@
                     {
                       "type": "icon",
                       "id": "Io5Vx",
-                      "name": "Rail Lock Icon",
+                      "name": "Config Icon",
                       "width": 14,
                       "height": 14,
                       "icon": "settings",
@@ -4989,10 +4976,10 @@
           "type": "frame",
           "id": "Jdj5d",
           "layoutPosition": "absolute",
-          "x": 310,
+          "x": 440,
           "y": 0,
           "name": "Radar Feed",
-          "width": 1940,
+          "width": 1680,
           "height": 1440,
           "layout": "vertical",
           "padding": [
@@ -8141,10 +8128,10 @@
           "type": "frame",
           "id": "WcUp8",
           "layoutPosition": "absolute",
-          "x": 440,
+          "x": 40,
           "y": 40,
           "name": "Issue Workspace",
-          "width": 1680,
+          "width": 2480,
           "layout": "vertical",
           "gap": 22,
           "children": [
@@ -8227,92 +8214,16 @@
               "id": "S2oHFV",
               "name": "Columns",
               "width": "fill_container",
-              "gap": 28,
+              "gap": 20,
               "children": [
                 {
                   "type": "frame",
-                  "id": "LPpHp",
-                  "name": "Materials 左栏",
-                  "width": "fill_container",
+                  "id": "jp6bz",
+                  "name": "判断与路径 左栏",
+                  "width": 380,
                   "layout": "vertical",
                   "gap": 18,
                   "children": [
-                    {
-                      "type": "frame",
-                      "id": "da5pP",
-                      "name": "Tabs",
-                      "fill": "$surface-3",
-                      "cornerRadius": 12,
-                      "gap": 2,
-                      "padding": 3,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "U3U7z",
-                          "name": "Tab Active",
-                          "fill": "$surface",
-                          "cornerRadius": 10,
-                          "effect": {
-                            "type": "shadow",
-                            "shadowType": "outer",
-                            "color": "$shadow-soft",
-                            "offset": {
-                              "x": 0,
-                              "y": 2
-                            },
-                            "blur": 7
-                          },
-                          "padding": [
-                            7,
-                            16
-                          ],
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "PNCpi",
-                              "name": "Tab Label",
-                              "fill": "$ink",
-                              "content": "总结与判断",
-                              "fontFamily": "$font",
-                              "fontSize": 13,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "jbfg3",
-                          "name": "Tab Idle",
-                          "cornerRadius": 10,
-                          "padding": [
-                            7,
-                            16
-                          ],
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "Oovxr",
-                              "name": "Tab Label",
-                              "fill": "$ink4",
-                              "content": "研究与依据",
-                              "fontFamily": "$font",
-                              "fontSize": 13,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "i3EsPI",
-                      "name": "Research Note",
-                      "fill": "$ink3",
-                      "content": "预研状态：预研已完成",
-                      "fontFamily": "$font",
-                      "fontSize": 12,
-                      "fontWeight": "normal"
-                    },
                     {
                       "type": "frame",
                       "id": "AArf1",
@@ -8356,241 +8267,6 @@
                     },
                     {
                       "type": "frame",
-                      "id": "KMX6w",
-                      "name": "决定 Section",
-                      "width": "fill_container",
-                      "fill": "$surface",
-                      "cornerRadius": 20,
-                      "stroke": "$line",
-                      "strokeWidth": 1,
-                      "layout": "vertical",
-                      "gap": 14,
-                      "padding": [
-                        22,
-                        24
-                      ],
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "scIJl",
-                          "name": "决定 Header",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 4,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "FMl1n",
-                              "name": "Section Title",
-                              "fill": "$ink",
-                              "content": "决定",
-                              "fontFamily": "$font",
-                              "fontSize": 15,
-                              "fontWeight": "600"
-                            },
-                            {
-                              "type": "text",
-                              "id": "isAOR",
-                              "name": "Section Hint",
-                              "fill": "$ink2",
-                              "content": "选择建议选项或直接编辑最终决定文本；提交后立即生效并可撤回。",
-                              "lineHeight": 1.6,
-                              "fontFamily": "$font",
-                              "fontSize": 13,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "otByw",
-                          "name": "Options",
-                          "width": "fill_container",
-                          "gap": 10,
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "x4lUNZ",
-                              "name": "Option A · 选中",
-                              "fill": "$accent-tint",
-                              "cornerRadius": 12,
-                              "stroke": "$accent-glow",
-                              "strokeWidth": 1,
-                              "padding": [
-                                11,
-                                14
-                              ],
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "eauEO",
-                                  "name": "Option Label",
-                                  "fill": "$accent-ink",
-                                  "content": "两期投入：首期单仓验证",
-                                  "fontFamily": "$font",
-                                  "fontSize": 13,
-                                  "fontWeight": "500"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "d4GW4",
-                              "name": "Option B",
-                              "fill": "$surface",
-                              "cornerRadius": 12,
-                              "stroke": "$line-strong",
-                              "strokeWidth": 1,
-                              "padding": [
-                                11,
-                                14
-                              ],
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "eO662",
-                                  "name": "Option Label",
-                                  "fill": "$ink3",
-                                  "content": "一次性投满三国仓网",
-                                  "fontFamily": "$font",
-                                  "fontSize": 13,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "BLxyP",
-                          "name": "Decision Textarea",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 6,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "J6RFj",
-                              "name": "Field Label",
-                              "fill": "$ink2",
-                              "content": "最终决定文本",
-                              "fontFamily": "$font",
-                              "fontSize": 12,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "Ghawb",
-                              "name": "Textarea Box",
-                              "width": "fill_container",
-                              "fill": "$surface",
-                              "cornerRadius": 12,
-                              "stroke": "$line-strong",
-                              "strokeWidth": 1,
-                              "padding": [
-                                12,
-                                14
-                              ],
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "WEKe0",
-                                  "name": "Textarea Value",
-                                  "fill": "$ink",
-                                  "content": "按两期投入推进东南亚本地仓：首期单仓预算 480 万，90 天后凭履约时效数据决定二期。",
-                                  "lineHeight": 1.7,
-                                  "fontFamily": "$font",
-                                  "fontSize": 14,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "vASAo",
-                          "name": "Action Row",
-                          "width": "fill_container",
-                          "gap": 12,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "h4604",
-                              "name": "Primary Button",
-                              "fill": "$accent",
-                              "cornerRadius": 10,
-                              "padding": [
-                                10,
-                                20
-                              ],
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "f9h4xN",
-                                  "name": "Label",
-                                  "fill": "$on-dark",
-                                  "content": "直接决定",
-                                  "fontFamily": "$font",
-                                  "fontSize": 13,
-                                  "fontWeight": "600"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "OAFIq",
-                              "name": "Secondary Button",
-                              "fill": "$surface",
-                              "cornerRadius": 10,
-                              "stroke": "$line-strong",
-                              "strokeWidth": 1,
-                              "gap": 6,
-                              "padding": [
-                                10,
-                                16
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "icon",
-                                  "id": "VX2bl",
-                                  "name": "Refresh Icon",
-                                  "width": 13,
-                                  "height": 13,
-                                  "icon": "refresh-cw",
-                                  "library": "lucide",
-                                  "fill": "$ink3"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "vvD9w",
-                                  "name": "Label",
-                                  "fill": "$ink3",
-                                  "content": "重新预研",
-                                  "fontFamily": "$font",
-                                  "fontSize": 13,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "n0H1FP",
-                  "name": "路径 右栏",
-                  "width": 560,
-                  "layout": "vertical",
-                  "gap": 18,
-                  "children": [
-                    {
-                      "type": "frame",
                       "id": "k4G5ma",
                       "name": "决策路径 Section",
                       "width": "fill_container",
@@ -8628,7 +8304,7 @@
                               "id": "ff6ss",
                               "name": "Section Hint",
                               "fill": "$ink2",
-                              "content": "Meeting 是 pending Issue 的可选路径；也可以直接决定。",
+                              "content": "Meeting 是 pending Issue 的决策路径；会后结论逐项确认后生效。",
                               "lineHeight": 1.6,
                               "fontFamily": "$font",
                               "fontSize": 13,
@@ -9175,19 +8851,898 @@
                       ]
                     }
                   ]
+                },
+                {
+                  "type": "frame",
+                  "id": "LPpHp",
+                  "name": "研究报告 中栏",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 18,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "R2XfYR",
+                      "name": "研究报告 Section",
+                      "width": "fill_container",
+                      "fill": "$surface",
+                      "cornerRadius": 20,
+                      "layout": "vertical",
+                      "gap": 14,
+                      "padding": [
+                        22,
+                        24
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "MYzDp",
+                          "name": "Section Head",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "j8uBS",
+                              "name": "Section Title",
+                              "fill": "$ink",
+                              "content": "研究报告",
+                              "fontFamily": "Inter",
+                              "fontSize": 17,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "sk1wz",
+                              "name": "预研状态胶囊",
+                              "fill": "$success-tint",
+                              "cornerRadius": 10,
+                              "padding": [
+                                4,
+                                11
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "LwulE",
+                                  "name": "Badge",
+                                  "fill": "$success-ink",
+                                  "content": "预研已完成",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "zNfac",
+                          "name": "选择与后果",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "CpM0y",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "选择与后果",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "i6Wy6g",
+                              "name": "Option",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 12,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": [
+                                12,
+                                14
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "X7La8",
+                                  "name": "T",
+                                  "fill": "$ink",
+                                  "content": "选择 A · 两期投入，首期验证单仓模型",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "MDwPy",
+                                  "name": "C",
+                                  "fill": "$ink2",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "后果：首期占用现金流约 6%；90 天后拿到时效数据再决定二期。",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "yWUJ0",
+                              "name": "Option",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 12,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": [
+                                12,
+                                14
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "N9WCz3",
+                                  "name": "T",
+                                  "fill": "$ink",
+                                  "content": "选择 B · 一次性投满三国仓配",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "SI4PE",
+                                  "name": "C",
+                                  "fill": "$ink2",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "后果：时效最快拉平，但 Q4 现金流占用 12%，无法中途收缩。",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "SyFQQ",
+                          "name": "证据",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "iN4Ac",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "证据",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "lWxwG",
+                              "name": "Quote",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 10,
+                              "layout": "vertical",
+                              "gap": 3,
+                              "padding": [
+                                10,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "i0STtN",
+                                  "name": "Q",
+                                  "fill": "$ink2",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "“竞对在东南亚三国的履约时效已稳定领先约 2 天。”",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "qFHCH",
+                                  "name": "S",
+                                  "fill": "$ink4",
+                                  "content": "来源 · 行业周报 2025-09",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "B2g5Lr",
+                          "name": "尚不清楚",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "LUuWL",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "尚不清楚",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "qeNfm",
+                              "name": "U1",
+                              "fill": "$ink2",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "· 二期扩张后的退货逆向物流成本尚无可靠数据",
+                              "lineHeight": 1.65,
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "O0VUOt",
+                          "name": "来源",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "T4noC",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "来源",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "E6AEG",
+                              "name": "L1",
+                              "fill": "$accent-ink",
+                              "content": "行业周报 · 东南亚电商履约 2025-09",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "XOqO2",
+                  "name": "Conversation Sidebar",
+                  "width": 400,
+                  "height": 1080,
+                  "fill": "$surface",
+                  "cornerRadius": 20,
+                  "stroke": "$line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "padding": [
+                    18,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "VfsDf",
+                      "name": "Conv Header",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "E47jbj",
+                          "name": "Conv Mark",
+                          "width": 22,
+                          "height": 22,
+                          "stroke": {
+                            "type": "gradient",
+                            "gradientType": "linear",
+                            "enabled": true,
+                            "rotation": 0,
+                            "size": {
+                              "height": 1
+                            },
+                            "colors": [
+                              {
+                                "color": "$brand-a",
+                                "position": 0
+                              },
+                              {
+                                "color": "$brand-b",
+                                "position": 1
+                              }
+                            ]
+                          },
+                          "strokeWidth": 2
+                        },
+                        {
+                          "type": "text",
+                          "id": "gZMdr",
+                          "name": "Conv Title",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "议题对话 · 本条议题",
+                          "fontFamily": "$font",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Alens",
+                          "name": "Session Tools",
+                          "gap": 6,
+                          "justifyContent": "end",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "S8BWP",
+                              "name": "New Session Button",
+                              "width": 26,
+                              "height": 26,
+                              "fill": "$surface-3",
+                              "cornerRadius": 13,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "qjcw2",
+                                  "name": "Icon",
+                                  "width": 13,
+                                  "height": 13,
+                                  "icon": "plus",
+                                  "library": "lucide",
+                                  "fill": "$ink3"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ZRKFA",
+                              "name": "Session List Button",
+                              "height": 26,
+                              "fill": "$surface-3",
+                              "cornerRadius": 13,
+                              "gap": 5,
+                              "padding": [
+                                0,
+                                9
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ERnZx",
+                                  "name": "Label",
+                                  "fill": "$ink3",
+                                  "content": "会话 3",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "e5VL61",
+                                  "name": "Chevron",
+                                  "width": 12,
+                                  "height": 12,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$ink3"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Px4u2",
+                      "name": "Messages",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "pArAq",
+                          "name": "AI Message",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Ob43d",
+                              "name": "Text",
+                              "fill": "$ink3",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "这场会议需要你先定两件事：二期触发条件、现金流安全线。",
+                              "lineHeight": 1.7,
+                              "fontFamily": "$font",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "K2MNW",
+                          "name": "User Message",
+                          "width": "fill_container",
+                          "fill": "$surface-3",
+                          "cornerRadius": 12,
+                          "padding": [
+                            10,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ADMCa",
+                              "name": "Text",
+                              "fill": "$ink",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "敏感性测算我会前看一版。",
+                              "lineHeight": 1.7,
+                              "fontFamily": "$font",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mfuAV",
+                          "name": "AI Message",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "qYvXj",
+                              "name": "Text",
+                              "fill": "$ink3",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "已记录到补充请求，主责 DRI 是林晓。",
+                              "lineHeight": 1.7,
+                              "fontFamily": "$font",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "i8OtrL",
+                      "name": "Conv Input",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "$surface-2",
+                      "cornerRadius": 22,
+                      "stroke": "$line-strong",
+                      "strokeWidth": 1,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        6,
+                        0,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "k55Vv",
+                          "name": "Attach Button",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 15,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "exAuM",
+                              "name": "Attach Icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "paperclip",
+                              "library": "lucide",
+                              "fill": "$ink3"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "Lbeca",
+                          "name": "Placeholder",
+                          "fill": "$ink4",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "问点什么…",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "iJ7D1",
+                          "name": "Send Button",
+                          "width": 32,
+                          "height": 32,
+                          "fill": "$accent",
+                          "cornerRadius": 16,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "fM4Z9",
+                              "name": "Send Icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "arrow-up",
+                              "library": "lucide",
+                              "fill": "$surface"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uLr0F",
+                      "layoutPosition": "absolute",
+                      "x": 16,
+                      "y": 56,
+                      "name": "Session Popover",
+                      "enabled": false,
+                      "width": 330,
+                      "fill": "$surface",
+                      "cornerRadius": 14,
+                      "stroke": "$line",
+                      "strokeWidth": 1,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "$shadow-float",
+                        "offset": {
+                          "x": 0,
+                          "y": 10
+                        },
+                        "blur": 28
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "QDsI1",
+                          "name": "Popover Head",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "MOW5n",
+                              "name": "Title",
+                              "fill": "$ink",
+                              "content": "会话",
+                              "fontFamily": "$font",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "iWx4N",
+                              "name": "Count",
+                              "fill": "$ink4",
+                              "content": "3 个",
+                              "fontFamily": "$font",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "QTxCf",
+                          "name": "Popover List",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "e3lNfS",
+                              "name": "Session · 预算与节奏",
+                              "width": "fill_container",
+                              "fill": "$accent-tint",
+                              "cornerRadius": 9,
+                              "stroke": "$accent-line",
+                              "strokeWidth": 1,
+                              "gap": 8,
+                              "padding": [
+                                8,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "tNp7S",
+                                  "name": "Session Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "qb2yU",
+                                      "name": "Session Name",
+                                      "fill": "$accent-ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "预算与节奏",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12.5,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "dqHgy",
+                                      "name": "Session Meta",
+                                      "fill": "$ink4",
+                                      "content": "今天 09:40 · 6 轮",
+                                      "fontFamily": "$font",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "eJofZ",
+                                  "name": "Delete Icon",
+                                  "width": 13,
+                                  "height": 13,
+                                  "icon": "trash-2",
+                                  "library": "lucide",
+                                  "fill": "$ink4"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "w7fvb",
+                              "name": "Session · 现金流敏感性",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 9,
+                              "stroke": "#00000000",
+                              "strokeWidth": 1,
+                              "gap": 8,
+                              "padding": [
+                                8,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "xQ6ef",
+                                  "name": "Session Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "Hlv0C",
+                                      "name": "Session Name",
+                                      "fill": "$ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "现金流敏感性",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12.5,
+                                      "fontWeight": "500"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "vX25w",
+                                      "name": "Session Meta",
+                                      "fill": "$ink4",
+                                      "content": "昨天 18:12 · 4 轮",
+                                      "fontFamily": "$font",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "qv4U3",
+                                  "name": "Delete Icon",
+                                  "width": 13,
+                                  "height": 13,
+                                  "icon": "trash-2",
+                                  "library": "lucide",
+                                  "fill": "$ink4"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "V72gyW",
+                              "name": "Session · 竞对降价预案",
+                              "width": "fill_container",
+                              "fill": "#00000000",
+                              "cornerRadius": 9,
+                              "stroke": "#00000000",
+                              "strokeWidth": 1,
+                              "gap": 8,
+                              "padding": [
+                                8,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "azlyY",
+                                  "name": "Session Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "zE7r7",
+                                      "name": "Session Name",
+                                      "fill": "$ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "竞对降价预案",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12.5,
+                                      "fontWeight": "500"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "ruc8l",
+                                      "name": "Session Meta",
+                                      "fill": "$ink4",
+                                      "content": "09-22 · 3 轮",
+                                      "fontFamily": "$font",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "vsjjb",
+                          "name": "New Session Row",
+                          "width": "fill_container",
+                          "cornerRadius": 9,
+                          "gap": 7,
+                          "padding": [
+                            8,
+                            10
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "oSzKy",
+                              "name": "Icon",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$accent-ink"
+                            },
+                            {
+                              "type": "text",
+                              "id": "DkWOi",
+                              "name": "Label",
+                              "fill": "$accent-ink",
+                              "content": "新建会话",
+                              "fontFamily": "$font",
+                              "fontSize": 12.5,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "OMKg4",
+                          "name": "Popover Note",
+                          "width": "fill_container",
+                          "fill": "$surface-2",
+                          "cornerRadius": 9,
+                          "padding": [
+                            8,
+                            10
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "swaqo",
+                              "name": "Text",
+                              "fill": "$ink4",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "删除后该会话的消息与引用一并移除。",
+                              "lineHeight": 1.6,
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
           ]
-        },
-        {
-          "id": "Tq6z6",
-          "type": "ref",
-          "ref": "fOF4P",
-          "name": "Dock",
-          "layoutPosition": "absolute",
-          "x": 1110,
-          "y": 1352
         }
       ]
     },
@@ -9206,10 +9761,10 @@
           "type": "frame",
           "id": "S30Oc",
           "layoutPosition": "absolute",
-          "x": 440,
+          "x": 40,
           "y": 40,
           "name": "Issue Workspace",
-          "width": 1680,
+          "width": 2480,
           "layout": "vertical",
           "gap": 22,
           "children": [
@@ -9292,92 +9847,16 @@
               "id": "RUZtr",
               "name": "Columns",
               "width": "fill_container",
-              "gap": 28,
+              "gap": 20,
               "children": [
                 {
                   "type": "frame",
-                  "id": "tYV8w",
-                  "name": "Materials 左栏",
-                  "width": "fill_container",
+                  "id": "VfGEH",
+                  "name": "判断与状态 左栏",
+                  "width": 380,
                   "layout": "vertical",
                   "gap": 18,
                   "children": [
-                    {
-                      "type": "frame",
-                      "id": "nVvFk",
-                      "name": "Tabs",
-                      "fill": "$surface-3",
-                      "cornerRadius": 12,
-                      "gap": 2,
-                      "padding": 3,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "fldNc",
-                          "name": "Tab Active",
-                          "fill": "$surface",
-                          "cornerRadius": 10,
-                          "effect": {
-                            "type": "shadow",
-                            "shadowType": "outer",
-                            "color": "$shadow-soft",
-                            "offset": {
-                              "x": 0,
-                              "y": 2
-                            },
-                            "blur": 7
-                          },
-                          "padding": [
-                            7,
-                            16
-                          ],
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "SlWIa",
-                              "name": "Tab Label",
-                              "fill": "$ink",
-                              "content": "总结与判断",
-                              "fontFamily": "$font",
-                              "fontSize": 13,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "Bbtz1",
-                          "name": "Tab Idle",
-                          "cornerRadius": 10,
-                          "padding": [
-                            7,
-                            16
-                          ],
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "uZHjp",
-                              "name": "Tab Label",
-                              "fill": "$ink4",
-                              "content": "研究与依据",
-                              "fontFamily": "$font",
-                              "fontSize": 13,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "c5vUMZ",
-                      "name": "Research Note",
-                      "fill": "$ink3",
-                      "content": "预研状态：预研已完成",
-                      "fontFamily": "$font",
-                      "fontSize": 12,
-                      "fontWeight": "normal"
-                    },
                     {
                       "type": "frame",
                       "id": "XDMer",
@@ -9512,19 +9991,898 @@
                       ]
                     }
                   ]
+                },
+                {
+                  "type": "frame",
+                  "id": "tYV8w",
+                  "name": "研究报告 中栏",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 18,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "FlCv1",
+                      "name": "研究报告 Section",
+                      "width": "fill_container",
+                      "fill": "$surface",
+                      "cornerRadius": 20,
+                      "layout": "vertical",
+                      "gap": 14,
+                      "padding": [
+                        22,
+                        24
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Y5fjG2",
+                          "name": "Section Head",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "D1b4ZF",
+                              "name": "Section Title",
+                              "fill": "$ink",
+                              "content": "研究报告",
+                              "fontFamily": "Inter",
+                              "fontSize": 17,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "d2Hdhs",
+                              "name": "预研状态胶囊",
+                              "fill": "$success-tint",
+                              "cornerRadius": 10,
+                              "padding": [
+                                4,
+                                11
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "nwmih",
+                                  "name": "Badge",
+                                  "fill": "$success-ink",
+                                  "content": "预研已完成",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "qJLVR",
+                          "name": "选择与后果",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "v4EI1",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "选择与后果",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "w8a0ER",
+                              "name": "Option",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 12,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": [
+                                12,
+                                14
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "W5hwxq",
+                                  "name": "T",
+                                  "fill": "$ink",
+                                  "content": "选择 A · 两期投入，首期验证单仓模型",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "i6S0k",
+                                  "name": "C",
+                                  "fill": "$ink2",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "后果：首期占用现金流约 6%；90 天后拿到时效数据再决定二期。",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "iMwcA",
+                              "name": "Option",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 12,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": [
+                                12,
+                                14
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "fnDbe",
+                                  "name": "T",
+                                  "fill": "$ink",
+                                  "content": "选择 B · 一次性投满三国仓配",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "Pbe48",
+                                  "name": "C",
+                                  "fill": "$ink2",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "后果：时效最快拉平，但 Q4 现金流占用 12%，无法中途收缩。",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "IuHEi",
+                          "name": "证据",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "eL2EX",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "证据",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "XEU66",
+                              "name": "Quote",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 10,
+                              "layout": "vertical",
+                              "gap": 3,
+                              "padding": [
+                                10,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "xnE6e",
+                                  "name": "Q",
+                                  "fill": "$ink2",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "“竞对在东南亚三国的履约时效已稳定领先约 2 天。”",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "myAzv",
+                                  "name": "S",
+                                  "fill": "$ink4",
+                                  "content": "来源 · 行业周报 2025-09",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "R8hxa",
+                          "name": "尚不清楚",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Ai1yA",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "尚不清楚",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "GLMc6",
+                              "name": "U1",
+                              "fill": "$ink2",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "· 二期扩张后的退货逆向物流成本尚无可靠数据",
+                              "lineHeight": 1.65,
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "b76u86",
+                          "name": "来源",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "nDyXZ",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "来源",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "UmQpI",
+                              "name": "L1",
+                              "fill": "$accent-ink",
+                              "content": "行业周报 · 东南亚电商履约 2025-09",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DERp1",
+                  "name": "Conversation Sidebar",
+                  "width": 400,
+                  "height": 1080,
+                  "fill": "$surface",
+                  "cornerRadius": 20,
+                  "stroke": "$line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "padding": [
+                    18,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "eU53U",
+                      "name": "Conv Header",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "xba5D",
+                          "name": "Conv Mark",
+                          "width": 22,
+                          "height": 22,
+                          "stroke": {
+                            "type": "gradient",
+                            "gradientType": "linear",
+                            "enabled": true,
+                            "rotation": 0,
+                            "size": {
+                              "height": 1
+                            },
+                            "colors": [
+                              {
+                                "color": "$brand-a",
+                                "position": 0
+                              },
+                              {
+                                "color": "$brand-b",
+                                "position": 1
+                              }
+                            ]
+                          },
+                          "strokeWidth": 2
+                        },
+                        {
+                          "type": "text",
+                          "id": "UFVnw",
+                          "name": "Conv Title",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "议题对话 · 本条议题",
+                          "fontFamily": "$font",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "lsKiM",
+                          "name": "Session Tools",
+                          "gap": 6,
+                          "justifyContent": "end",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "cgebE",
+                              "name": "New Session Button",
+                              "width": 26,
+                              "height": 26,
+                              "fill": "$surface-3",
+                              "cornerRadius": 13,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "dU1qo",
+                                  "name": "Icon",
+                                  "width": 13,
+                                  "height": 13,
+                                  "icon": "plus",
+                                  "library": "lucide",
+                                  "fill": "$ink3"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Dqdan",
+                              "name": "Session List Button",
+                              "height": 26,
+                              "fill": "$surface-3",
+                              "cornerRadius": 13,
+                              "gap": 5,
+                              "padding": [
+                                0,
+                                9
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "SC3z8",
+                                  "name": "Label",
+                                  "fill": "$ink3",
+                                  "content": "会话 3",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "GM2k1",
+                                  "name": "Chevron",
+                                  "width": 12,
+                                  "height": 12,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$ink3"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "F8AV1",
+                      "name": "Messages",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "owqJj",
+                          "name": "AI Message",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "JcUgL",
+                              "name": "Text",
+                              "fill": "$ink3",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "这场会议需要你先定两件事：二期触发条件、现金流安全线。",
+                              "lineHeight": 1.7,
+                              "fontFamily": "$font",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ZU19K",
+                          "name": "User Message",
+                          "width": "fill_container",
+                          "fill": "$surface-3",
+                          "cornerRadius": 12,
+                          "padding": [
+                            10,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "UVnRX",
+                              "name": "Text",
+                              "fill": "$ink",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "敏感性测算我会前看一版。",
+                              "lineHeight": 1.7,
+                              "fontFamily": "$font",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ugAx5",
+                          "name": "AI Message",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "YMS3u",
+                              "name": "Text",
+                              "fill": "$ink3",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "已记录到补充请求，主责 DRI 是林晓。",
+                              "lineHeight": 1.7,
+                              "fontFamily": "$font",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "fTOol",
+                      "name": "Conv Input",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "$surface-2",
+                      "cornerRadius": 22,
+                      "stroke": "$line-strong",
+                      "strokeWidth": 1,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        6,
+                        0,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "HBnJq",
+                          "name": "Attach Button",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 15,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "NuR4i",
+                              "name": "Attach Icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "paperclip",
+                              "library": "lucide",
+                              "fill": "$ink3"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "f0IX9",
+                          "name": "Placeholder",
+                          "fill": "$ink4",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "问点什么…",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "y4TNT",
+                          "name": "Send Button",
+                          "width": 32,
+                          "height": 32,
+                          "fill": "$accent",
+                          "cornerRadius": 16,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "pU9aV",
+                              "name": "Send Icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "arrow-up",
+                              "library": "lucide",
+                              "fill": "$surface"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uiTy3",
+                      "layoutPosition": "absolute",
+                      "x": 16,
+                      "y": 56,
+                      "name": "Session Popover",
+                      "enabled": false,
+                      "width": 330,
+                      "fill": "$surface",
+                      "cornerRadius": 14,
+                      "stroke": "$line",
+                      "strokeWidth": 1,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "$shadow-float",
+                        "offset": {
+                          "x": 0,
+                          "y": 10
+                        },
+                        "blur": 28
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "QOl3Q",
+                          "name": "Popover Head",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "b3OkIo",
+                              "name": "Title",
+                              "fill": "$ink",
+                              "content": "会话",
+                              "fontFamily": "$font",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "ktuPi",
+                              "name": "Count",
+                              "fill": "$ink4",
+                              "content": "3 个",
+                              "fontFamily": "$font",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "xblIj",
+                          "name": "Popover List",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "KOOl8",
+                              "name": "Session · 预算与节奏",
+                              "width": "fill_container",
+                              "fill": "$accent-tint",
+                              "cornerRadius": 9,
+                              "stroke": "$accent-line",
+                              "strokeWidth": 1,
+                              "gap": 8,
+                              "padding": [
+                                8,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "R5UaRp",
+                                  "name": "Session Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "p6pbGE",
+                                      "name": "Session Name",
+                                      "fill": "$accent-ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "预算与节奏",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12.5,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "BuKCq",
+                                      "name": "Session Meta",
+                                      "fill": "$ink4",
+                                      "content": "今天 09:40 · 6 轮",
+                                      "fontFamily": "$font",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "DlcUf",
+                                  "name": "Delete Icon",
+                                  "width": 13,
+                                  "height": 13,
+                                  "icon": "trash-2",
+                                  "library": "lucide",
+                                  "fill": "$ink4"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "zUGtR",
+                              "name": "Session · 现金流敏感性",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 9,
+                              "stroke": "#00000000",
+                              "strokeWidth": 1,
+                              "gap": 8,
+                              "padding": [
+                                8,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "cDS1h",
+                                  "name": "Session Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "IIokO",
+                                      "name": "Session Name",
+                                      "fill": "$ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "现金流敏感性",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12.5,
+                                      "fontWeight": "500"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "Q7sWIB",
+                                      "name": "Session Meta",
+                                      "fill": "$ink4",
+                                      "content": "昨天 18:12 · 4 轮",
+                                      "fontFamily": "$font",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "vywmz",
+                                  "name": "Delete Icon",
+                                  "width": 13,
+                                  "height": 13,
+                                  "icon": "trash-2",
+                                  "library": "lucide",
+                                  "fill": "$ink4"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ZoMfL",
+                              "name": "Session · 竞对降价预案",
+                              "width": "fill_container",
+                              "fill": "#00000000",
+                              "cornerRadius": 9,
+                              "stroke": "#00000000",
+                              "strokeWidth": 1,
+                              "gap": 8,
+                              "padding": [
+                                8,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "cSk8a",
+                                  "name": "Session Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "DtMrk",
+                                      "name": "Session Name",
+                                      "fill": "$ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "竞对降价预案",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12.5,
+                                      "fontWeight": "500"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "hPmxb",
+                                      "name": "Session Meta",
+                                      "fill": "$ink4",
+                                      "content": "09-22 · 3 轮",
+                                      "fontFamily": "$font",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "nZt7d",
+                          "name": "New Session Row",
+                          "width": "fill_container",
+                          "cornerRadius": 9,
+                          "gap": 7,
+                          "padding": [
+                            8,
+                            10
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "RfQyl",
+                              "name": "Icon",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$accent-ink"
+                            },
+                            {
+                              "type": "text",
+                              "id": "HYprW",
+                              "name": "Label",
+                              "fill": "$accent-ink",
+                              "content": "新建会话",
+                              "fontFamily": "$font",
+                              "fontSize": 12.5,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "gkZ5i",
+                          "name": "Popover Note",
+                          "width": "fill_container",
+                          "fill": "$surface-2",
+                          "cornerRadius": 9,
+                          "padding": [
+                            8,
+                            10
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "iz2VK",
+                              "name": "Text",
+                              "fill": "$ink4",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "删除后该会话的消息与引用一并移除。",
+                              "lineHeight": 1.6,
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
           ]
-        },
-        {
-          "id": "mjAEp",
-          "type": "ref",
-          "ref": "fOF4P",
-          "name": "Dock",
-          "layoutPosition": "absolute",
-          "x": 1110,
-          "y": 1352
         }
       ]
     },
@@ -9543,10 +10901,10 @@
           "type": "frame",
           "id": "VvGXm",
           "layoutPosition": "absolute",
-          "x": 440,
+          "x": 40,
           "y": 40,
           "name": "Issue Workspace",
-          "width": 1680,
+          "width": 2480,
           "layout": "vertical",
           "gap": 22,
           "children": [
@@ -9629,92 +10987,16 @@
               "id": "Fs9r9",
               "name": "Columns",
               "width": "fill_container",
-              "gap": 28,
+              "gap": 20,
               "children": [
                 {
                   "type": "frame",
-                  "id": "HzT7j",
-                  "name": "Materials 左栏",
-                  "width": "fill_container",
+                  "id": "xSEpk",
+                  "name": "状态 左栏",
+                  "width": 380,
                   "layout": "vertical",
                   "gap": 18,
                   "children": [
-                    {
-                      "type": "frame",
-                      "id": "J86gYs",
-                      "name": "Tabs",
-                      "fill": "$surface-3",
-                      "cornerRadius": 12,
-                      "gap": 2,
-                      "padding": 3,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "qgD8a",
-                          "name": "Tab Active",
-                          "fill": "$surface",
-                          "cornerRadius": 10,
-                          "effect": {
-                            "type": "shadow",
-                            "shadowType": "outer",
-                            "color": "$shadow-soft",
-                            "offset": {
-                              "x": 0,
-                              "y": 2
-                            },
-                            "blur": 7
-                          },
-                          "padding": [
-                            7,
-                            16
-                          ],
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "YYyP8",
-                              "name": "Tab Label",
-                              "fill": "$ink",
-                              "content": "总结与判断",
-                              "fontFamily": "$font",
-                              "fontSize": 13,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "zmyof",
-                          "name": "Tab Idle",
-                          "cornerRadius": 10,
-                          "padding": [
-                            7,
-                            16
-                          ],
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "HY2mA",
-                              "name": "Tab Label",
-                              "fill": "$ink4",
-                              "content": "研究与依据",
-                              "fontFamily": "$font",
-                              "fontSize": 13,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "wYGFo",
-                      "name": "Research Note",
-                      "fill": "$ink3",
-                      "content": "预研状态：预研已完成",
-                      "fontFamily": "$font",
-                      "fontSize": 12,
-                      "fontWeight": "normal"
-                    },
                     {
                       "type": "frame",
                       "id": "m0rXB",
@@ -9804,19 +11086,898 @@
                       ]
                     }
                   ]
+                },
+                {
+                  "type": "frame",
+                  "id": "HzT7j",
+                  "name": "研究报告 中栏",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 18,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "eomXg",
+                      "name": "研究报告 Section",
+                      "width": "fill_container",
+                      "fill": "$surface",
+                      "cornerRadius": 20,
+                      "layout": "vertical",
+                      "gap": 14,
+                      "padding": [
+                        22,
+                        24
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "cAKqv",
+                          "name": "Section Head",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "lBqJU",
+                              "name": "Section Title",
+                              "fill": "$ink",
+                              "content": "研究报告",
+                              "fontFamily": "Inter",
+                              "fontSize": 17,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "M9KAeS",
+                              "name": "预研状态胶囊",
+                              "fill": "$success-tint",
+                              "cornerRadius": 10,
+                              "padding": [
+                                4,
+                                11
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "N3zZO",
+                                  "name": "Badge",
+                                  "fill": "$success-ink",
+                                  "content": "预研已完成",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "szvnf",
+                          "name": "选择与后果",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "wmv5i",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "选择与后果",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "l0LPDd",
+                              "name": "Option",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 12,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": [
+                                12,
+                                14
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "tMj9a",
+                                  "name": "T",
+                                  "fill": "$ink",
+                                  "content": "选择 A · 两期投入，首期验证单仓模型",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "XLNSG",
+                                  "name": "C",
+                                  "fill": "$ink2",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "后果：首期占用现金流约 6%；90 天后拿到时效数据再决定二期。",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "QItNd",
+                              "name": "Option",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 12,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": [
+                                12,
+                                14
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "PDeL5",
+                                  "name": "T",
+                                  "fill": "$ink",
+                                  "content": "选择 B · 一次性投满三国仓配",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "LTAyW",
+                                  "name": "C",
+                                  "fill": "$ink2",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "后果：时效最快拉平，但 Q4 现金流占用 12%，无法中途收缩。",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "PWhK8",
+                          "name": "证据",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "i7syNd",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "证据",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "arvNZ",
+                              "name": "Quote",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 10,
+                              "layout": "vertical",
+                              "gap": 3,
+                              "padding": [
+                                10,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "izHXV",
+                                  "name": "Q",
+                                  "fill": "$ink2",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "“竞对在东南亚三国的履约时效已稳定领先约 2 天。”",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "TKdqZ",
+                                  "name": "S",
+                                  "fill": "$ink4",
+                                  "content": "来源 · 行业周报 2025-09",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "SVsK4",
+                          "name": "尚不清楚",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "JvmWN",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "尚不清楚",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "yJq8q",
+                              "name": "U1",
+                              "fill": "$ink2",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "· 二期扩张后的退货逆向物流成本尚无可靠数据",
+                              "lineHeight": 1.65,
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "dfQre",
+                          "name": "来源",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "yJZFa",
+                              "name": "Block Label",
+                              "fill": "$ink3",
+                              "content": "来源",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "lOmWq",
+                              "name": "L1",
+                              "fill": "$accent-ink",
+                              "content": "行业周报 · 东南亚电商履约 2025-09",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MTQD7",
+                  "name": "Conversation Sidebar",
+                  "width": 400,
+                  "height": 1080,
+                  "fill": "$surface",
+                  "cornerRadius": 20,
+                  "stroke": "$line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "padding": [
+                    18,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "E5NUm",
+                      "name": "Conv Header",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "H4283n",
+                          "name": "Conv Mark",
+                          "width": 22,
+                          "height": 22,
+                          "stroke": {
+                            "type": "gradient",
+                            "gradientType": "linear",
+                            "enabled": true,
+                            "rotation": 0,
+                            "size": {
+                              "height": 1
+                            },
+                            "colors": [
+                              {
+                                "color": "$brand-a",
+                                "position": 0
+                              },
+                              {
+                                "color": "$brand-b",
+                                "position": 1
+                              }
+                            ]
+                          },
+                          "strokeWidth": 2
+                        },
+                        {
+                          "type": "text",
+                          "id": "SenFf",
+                          "name": "Conv Title",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "议题对话 · 本条议题",
+                          "fontFamily": "$font",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "S5afrV",
+                          "name": "Session Tools",
+                          "gap": 6,
+                          "justifyContent": "end",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "SOGFM",
+                              "name": "New Session Button",
+                              "width": 26,
+                              "height": 26,
+                              "fill": "$surface-3",
+                              "cornerRadius": 13,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "l7DpH",
+                                  "name": "Icon",
+                                  "width": 13,
+                                  "height": 13,
+                                  "icon": "plus",
+                                  "library": "lucide",
+                                  "fill": "$ink3"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ln3ji",
+                              "name": "Session List Button",
+                              "height": 26,
+                              "fill": "$surface-3",
+                              "cornerRadius": 13,
+                              "gap": 5,
+                              "padding": [
+                                0,
+                                9
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "CFHQN",
+                                  "name": "Label",
+                                  "fill": "$ink3",
+                                  "content": "会话 3",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "bFgZw",
+                                  "name": "Chevron",
+                                  "width": 12,
+                                  "height": 12,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$ink3"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "hhtTg",
+                      "name": "Messages",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "nDpex",
+                          "name": "AI Message",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "DnQYS",
+                              "name": "Text",
+                              "fill": "$ink3",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "这场会议需要你先定两件事：二期触发条件、现金流安全线。",
+                              "lineHeight": 1.7,
+                              "fontFamily": "$font",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "HnsSE",
+                          "name": "User Message",
+                          "width": "fill_container",
+                          "fill": "$surface-3",
+                          "cornerRadius": 12,
+                          "padding": [
+                            10,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "P0VkEd",
+                              "name": "Text",
+                              "fill": "$ink",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "敏感性测算我会前看一版。",
+                              "lineHeight": 1.7,
+                              "fontFamily": "$font",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "jTGx5",
+                          "name": "AI Message",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "x3QBx",
+                              "name": "Text",
+                              "fill": "$ink3",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "已记录到补充请求，主责 DRI 是林晓。",
+                              "lineHeight": 1.7,
+                              "fontFamily": "$font",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Db5AN",
+                      "name": "Conv Input",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "$surface-2",
+                      "cornerRadius": 22,
+                      "stroke": "$line-strong",
+                      "strokeWidth": 1,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        6,
+                        0,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "AxU6A",
+                          "name": "Attach Button",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 15,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "F6uPTP",
+                              "name": "Attach Icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "paperclip",
+                              "library": "lucide",
+                              "fill": "$ink3"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "zMHAg",
+                          "name": "Placeholder",
+                          "fill": "$ink4",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "问点什么…",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "dCHc5",
+                          "name": "Send Button",
+                          "width": 32,
+                          "height": 32,
+                          "fill": "$accent",
+                          "cornerRadius": 16,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "m7uxO",
+                              "name": "Send Icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "arrow-up",
+                              "library": "lucide",
+                              "fill": "$surface"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "JFE9U",
+                      "layoutPosition": "absolute",
+                      "x": 16,
+                      "y": 56,
+                      "name": "Session Popover",
+                      "enabled": false,
+                      "width": 330,
+                      "fill": "$surface",
+                      "cornerRadius": 14,
+                      "stroke": "$line",
+                      "strokeWidth": 1,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "$shadow-float",
+                        "offset": {
+                          "x": 0,
+                          "y": 10
+                        },
+                        "blur": 28
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "UQaXa",
+                          "name": "Popover Head",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "tfn0N",
+                              "name": "Title",
+                              "fill": "$ink",
+                              "content": "会话",
+                              "fontFamily": "$font",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "yFDHT",
+                              "name": "Count",
+                              "fill": "$ink4",
+                              "content": "3 个",
+                              "fontFamily": "$font",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "nukbZ",
+                          "name": "Popover List",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "bhoAQ",
+                              "name": "Session · 预算与节奏",
+                              "width": "fill_container",
+                              "fill": "$accent-tint",
+                              "cornerRadius": 9,
+                              "stroke": "$accent-line",
+                              "strokeWidth": 1,
+                              "gap": 8,
+                              "padding": [
+                                8,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "tuZHs",
+                                  "name": "Session Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "VRGwB",
+                                      "name": "Session Name",
+                                      "fill": "$accent-ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "预算与节奏",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12.5,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "LjgTn",
+                                      "name": "Session Meta",
+                                      "fill": "$ink4",
+                                      "content": "今天 09:40 · 6 轮",
+                                      "fontFamily": "$font",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "VjUoV",
+                                  "name": "Delete Icon",
+                                  "width": 13,
+                                  "height": 13,
+                                  "icon": "trash-2",
+                                  "library": "lucide",
+                                  "fill": "$ink4"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "TTS3y",
+                              "name": "Session · 现金流敏感性",
+                              "width": "fill_container",
+                              "fill": "$surface-2",
+                              "cornerRadius": 9,
+                              "stroke": "#00000000",
+                              "strokeWidth": 1,
+                              "gap": 8,
+                              "padding": [
+                                8,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "Yb3rn",
+                                  "name": "Session Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "wYXA3",
+                                      "name": "Session Name",
+                                      "fill": "$ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "现金流敏感性",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12.5,
+                                      "fontWeight": "500"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "O9nFF",
+                                      "name": "Session Meta",
+                                      "fill": "$ink4",
+                                      "content": "昨天 18:12 · 4 轮",
+                                      "fontFamily": "$font",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "f6he00",
+                                  "name": "Delete Icon",
+                                  "width": 13,
+                                  "height": 13,
+                                  "icon": "trash-2",
+                                  "library": "lucide",
+                                  "fill": "$ink4"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Q1gs8g",
+                              "name": "Session · 竞对降价预案",
+                              "width": "fill_container",
+                              "fill": "#00000000",
+                              "cornerRadius": 9,
+                              "stroke": "#00000000",
+                              "strokeWidth": 1,
+                              "gap": 8,
+                              "padding": [
+                                8,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "lT2qW",
+                                  "name": "Session Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "A8OKHB",
+                                      "name": "Session Name",
+                                      "fill": "$ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "竞对降价预案",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12.5,
+                                      "fontWeight": "500"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "D55RD",
+                                      "name": "Session Meta",
+                                      "fill": "$ink4",
+                                      "content": "09-22 · 3 轮",
+                                      "fontFamily": "$font",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Sjvwx",
+                          "name": "New Session Row",
+                          "width": "fill_container",
+                          "cornerRadius": 9,
+                          "gap": 7,
+                          "padding": [
+                            8,
+                            10
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "J3GsQG",
+                              "name": "Icon",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$accent-ink"
+                            },
+                            {
+                              "type": "text",
+                              "id": "X6cTIb",
+                              "name": "Label",
+                              "fill": "$accent-ink",
+                              "content": "新建会话",
+                              "fontFamily": "$font",
+                              "fontSize": 12.5,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "o1zwE",
+                          "name": "Popover Note",
+                          "width": "fill_container",
+                          "fill": "$surface-2",
+                          "cornerRadius": 9,
+                          "padding": [
+                            8,
+                            10
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "jl4Wd",
+                              "name": "Text",
+                              "fill": "$ink4",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "删除后该会话的消息与引用一并移除。",
+                              "lineHeight": 1.6,
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
           ]
-        },
-        {
-          "id": "q2dTxK",
-          "type": "ref",
-          "ref": "fOF4P",
-          "name": "Dock",
-          "layoutPosition": "absolute",
-          "x": 1110,
-          "y": 1352
         }
       ]
     },
@@ -10340,6 +12501,148 @@
                 },
                 {
                   "type": "frame",
+                  "id": "Gu5d8",
+                  "name": "关联议题",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "q8mWV",
+                      "name": "Label",
+                      "fill": "$ink3",
+                      "content": "关联议题",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "OXUtD",
+                      "name": "Issue · 是否追加东南亚渠",
+                      "width": "fill_container",
+                      "fill": "$surface-2",
+                      "cornerRadius": 10,
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "jHnxL",
+                          "name": "Level",
+                          "fill": "$ink4",
+                          "content": "战场 · growth",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "eyTzY",
+                          "name": "T",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "是否追加东南亚渠道预算 40%",
+                          "lineHeight": 1.5,
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "FpJYB",
+                          "name": "Actions",
+                          "gap": 6,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "CJ48Q",
+                              "name": "Chip · 已阅",
+                              "fill": "$surface",
+                              "cornerRadius": 8,
+                              "stroke": "$line",
+                              "strokeWidth": 1,
+                              "padding": [
+                                4,
+                                9
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "kDXd4",
+                                  "name": "L",
+                                  "fill": "$ink2",
+                                  "content": "已阅",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "J77wMo",
+                              "name": "Chip · 带到会议",
+                              "fill": "$surface",
+                              "cornerRadius": 8,
+                              "stroke": "$line",
+                              "strokeWidth": 1,
+                              "padding": [
+                                4,
+                                9
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "moJxX",
+                                  "name": "L",
+                                  "fill": "$ink2",
+                                  "content": "带到会议",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "D9JQA",
+                              "name": "Chip · 打开 Issue",
+                              "fill": "$surface",
+                              "cornerRadius": 8,
+                              "stroke": "$line",
+                              "strokeWidth": 1,
+                              "padding": [
+                                4,
+                                9
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ALdyd",
+                                  "name": "L",
+                                  "fill": "$ink2",
+                                  "content": "打开 Issue",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
                   "id": "LvGrI",
                   "name": "一号位点评要点参考",
                   "width": "fill_container",
@@ -10362,128 +12665,56 @@
                       "fontWeight": "600"
                     },
                     {
-                      "type": "frame",
-                      "id": "xbhHk",
-                      "name": "Point · 方向对不对",
+                      "type": "text",
+                      "id": "SnaF5",
+                      "name": "追问 1",
+                      "fill": "$warn-ink",
+                      "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 2,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "TgrC9",
-                          "name": "Q",
-                          "fill": "$ink2",
-                          "content": "方向对不对",
-                          "fontFamily": "$font",
-                          "fontSize": 12,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "EBW53",
-                          "name": "A",
-                          "fill": "$warn-ink",
-                          "content": "两期投入是否服务年度双主线",
-                          "lineHeight": 1.6,
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
+                      "content": "1. 两期投入如何服务年度双主线，而不是单点补洞？",
+                      "lineHeight": 1.6,
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     },
                     {
-                      "type": "frame",
-                      "id": "FHQVI",
-                      "name": "Point · 节奏稳不稳",
+                      "type": "text",
+                      "id": "AXpRj",
+                      "name": "追问 2",
+                      "fill": "$warn-ink",
+                      "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 2,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "N6O6W",
-                          "name": "Q",
-                          "fill": "$ink2",
-                          "content": "节奏稳不稳",
-                          "fontFamily": "$font",
-                          "fontSize": 12,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "u77MJf",
-                          "name": "A",
-                          "fill": "$warn-ink",
-                          "content": "安全线以下先停再议，不惯性扩投",
-                          "lineHeight": 1.6,
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
+                      "content": "2. 现金流安全线击穿时的止损动作与时限是什么？",
+                      "lineHeight": 1.6,
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     },
                     {
-                      "type": "frame",
-                      "id": "I9CUyy",
-                      "name": "Point · 依据够不够",
+                      "type": "text",
+                      "id": "lzDbk",
+                      "name": "追问 3",
+                      "fill": "$warn-ink",
+                      "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 2,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "D0h80x",
-                          "name": "Q",
-                          "fill": "$ink2",
-                          "content": "依据够不够",
-                          "fontFamily": "$font",
-                          "fontSize": 12,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "AvWzm",
-                          "name": "A",
-                          "fill": "$warn-ink",
-                          "content": "阈值口径与数据边界是否收敛",
-                          "lineHeight": 1.6,
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
+                      "content": "3. 90 天时效阈值的数据口径由谁负责核定？",
+                      "lineHeight": 1.6,
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     },
                     {
-                      "type": "frame",
-                      "id": "MKp6d",
-                      "name": "Point · 兜底在哪",
+                      "type": "text",
+                      "id": "c8DKF",
+                      "name": "追问 4",
+                      "fill": "$warn-ink",
+                      "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 2,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "YvlVM",
-                          "name": "Q",
-                          "fill": "$ink2",
-                          "content": "兜底在哪",
-                          "fontFamily": "$font",
-                          "fontSize": 12,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "wmjGE",
-                          "name": "A",
-                          "fill": "$warn-ink",
-                          "content": "止损动作与时限是否明确",
-                          "lineHeight": 1.6,
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
+                      "content": "4. 若二期数据不达标，扩张承诺如何收回？",
+                      "lineHeight": 1.6,
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -22104,6 +24335,305 @@
           ]
         },
         {
+          "type": "frame",
+          "id": "bQ6pi",
+          "name": "Group · 通知卡总结",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 12,
+          "children": [
+            {
+              "type": "text",
+              "id": "cGZzd",
+              "name": "Group Title",
+              "fill": "$ink3",
+              "content": "通知卡总结（提请 / 月度同规则）",
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "WoGku",
+              "name": "Group Row",
+              "width": "fill_container",
+              "gap": 18,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "U6GFp",
+                  "name": "Cell · 默认 · 标题与期限",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "qA6Fd",
+                      "name": "Slot",
+                      "height": 170,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "gi491",
+                          "name": "通知卡 · 默认",
+                          "width": 360,
+                          "fill": "$surface",
+                          "cornerRadius": 16,
+                          "stroke": "$line",
+                          "strokeWidth": 1,
+                          "layout": "vertical",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "Vljuz",
+                              "name": "Head",
+                              "width": "fill_container",
+                              "gap": 12,
+                              "padding": [
+                                16,
+                                18,
+                                14,
+                                18
+                              ],
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 3,
+                                  "id": "v0S5o",
+                                  "name": "Accent Bar",
+                                  "fill": "$red",
+                                  "width": 5,
+                                  "height": 40
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "y0RsF",
+                                  "name": "Left",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "L3EZV",
+                                      "name": "Title ≤25",
+                                      "fill": "$ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "是否追加东南亚渠道预算 40%",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 15,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "EB4ze",
+                                      "name": "Reason",
+                                      "fill": "$ink3",
+                                      "content": "竞对已完成本地仓布局，窗口约 6 周",
+                                      "lineHeight": 1.6,
+                                      "fontFamily": "Inter",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "u080cz",
+                                  "name": "Time Slot",
+                                  "padding": [
+                                    2,
+                                    0,
+                                    0,
+                                    0
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "pJU4r",
+                                      "name": "Time",
+                                      "fill": "$ink3",
+                                      "content": "决定期限 09-30",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "dX8GB",
+                      "name": "State Label",
+                      "fill": "$ink4",
+                      "content": "默认 · 标题≤25字，不用…截断",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "t4O4X",
+                  "name": "Cell · hover / 焦点 · 展开总结",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "WdwFv",
+                      "name": "Slot",
+                      "height": 170,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "N8lvpy",
+                          "name": "通知卡 · 展开",
+                          "width": 360,
+                          "fill": "$surface",
+                          "cornerRadius": 16,
+                          "stroke": "$line",
+                          "strokeWidth": 1,
+                          "layout": "vertical",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "Q06Y5",
+                              "name": "Head",
+                              "width": "fill_container",
+                              "gap": 12,
+                              "padding": [
+                                16,
+                                18,
+                                14,
+                                18
+                              ],
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 3,
+                                  "id": "hXj1s",
+                                  "name": "Accent Bar",
+                                  "fill": "$red",
+                                  "width": 5,
+                                  "height": 40
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "W6KdQg",
+                                  "name": "Left",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "GY8wu",
+                                      "name": "Title ≤25",
+                                      "fill": "$ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "是否追加东南亚渠道预算 40%",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 15,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "SLv1s",
+                                      "name": "Reason",
+                                      "fill": "$ink3",
+                                      "content": "竞对已完成本地仓布局，窗口约 6 周",
+                                      "lineHeight": 1.6,
+                                      "fontFamily": "Inter",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "Blwkq",
+                                  "name": "Time Slot",
+                                  "padding": [
+                                    2,
+                                    0,
+                                    0,
+                                    0
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "r1hPd9",
+                                      "name": "Time",
+                                      "fill": "$ink3",
+                                      "content": "决定期限 09-30",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "MrfV1",
+                              "name": "Summary Wrap",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "padding": [
+                                0,
+                                18,
+                                14,
+                                18
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "TuqjJ",
+                                  "name": "Summary",
+                                  "fill": "$ink3",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "预研判断：首期单仓投入在现金流安全线内，真正风险是二期扩张缺乏数据支撑，建议绑定 90 天时效复盘。",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "s7WMHu",
+                      "name": "State Label",
+                      "fill": "$ink4",
+                      "content": "hover / 焦点 · 卡内展开总结（预研判断 / 月度目标）",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
           "type": "text",
           "id": "TEblf",
           "name": "Spec Note",
@@ -28704,7 +31234,7 @@
                   "id": "b7ggOa",
                   "name": "Status Label",
                   "fill": "$ink4",
-                  "content": "配置变更会写入 CompanyMemory 并刷新 Radar 锚点",
+                  "content": "配置变更写入业务库并同步 Radar 监测范围",
                   "fontFamily": "$font",
                   "fontSize": 12,
                   "fontWeight": "normal"
