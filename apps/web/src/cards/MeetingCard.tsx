@@ -461,7 +461,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
     if (kind === "meeting" && id === card.objectRef.id) return "当前 Meeting";
     if (kind === "issue") return issueById.get(id)?.title ?? `关联 Issue · ${id}`;
     if (kind === "research") return `关联 Issue 预研 · ${issueById.get(id)?.title ?? id}`;
-    if (kind === "memory") return `CompanyMemory · ${ref.split("#").at(-1) ?? id}`;
+    if (kind === "memory") return `企业知识 · ${ref.split("#").at(-1) ?? id}`;
     if (kind === "transcript") return "关联会议 Transcript";
     if (kind === "outcome") return "关联会议 Outcome";
     return ref;

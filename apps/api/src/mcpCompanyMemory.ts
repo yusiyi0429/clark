@@ -32,7 +32,7 @@ export function createCompanyMemoryMcpServer(repo: CompanyMemoryRepository): Ser
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
-      tool("list_sections", "列出 CompanyMemory 全部章节目录", ListSectionsInput),
+      tool("list_sections", "列出企业知识全部章节目录", ListSectionsInput),
       tool("search_sections", "按相关度搜索相关章节", SearchSectionsInput),
       tool("get_passages", "读取指定章节最相关段落", GetPassagesInput),
       tool("search_people", "查询 company-people.v1 人员目录", SearchPeopleInput),
