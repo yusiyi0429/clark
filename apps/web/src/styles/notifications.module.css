@@ -39,11 +39,12 @@
 .head{display:flex;align-items:flex-start;gap:12px;width:100%;padding:20px 22px 8px;border:0;background:transparent;text-align:left}
 .card[data-notice=monthly] .head{padding-bottom:16px}
 .headLeft{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
-.card[data-notice=monthly] .headLeft{gap:6px}
 .headTitle{color:#1d1d1f;font-size:15px;font-weight:600;line-height:1.4}
 .card[data-notice=agenda] .headTitle{font-weight:400}
 .headReason{color:#4f5866;font-size:12px;font-weight:400;line-height:19px}
-.headBody{color:#4f5866;font-size:13px;font-weight:400;line-height:21px}
+/* 摘要默认收起，hover / 键盘 focus 时卡内展开（同 HomeBoard issuePreview 的 max-height 过渡）。 */
+.cardSummary{display:block;max-height:0;overflow:hidden;opacity:0;color:#3c4350;font-size:13px;font-weight:400;line-height:1.7;transition:max-height 180ms ease,opacity 180ms ease,margin 180ms ease}
+.card:hover .cardSummary,.head:focus-visible .cardSummary{max-height:6.8em;opacity:1;margin-top:6px}
 .headTime{flex:none;padding-top:2px;color:#4f5866;font-size:12px;font-weight:400;font-variant-numeric:tabular-nums}
 
 /* Actions：padding 0 22 20、gap 10；CTA 白底描边、Later 透明描边，均 h40 r10 13px。 */
@@ -96,7 +97,7 @@
  .meetingRow{padding:18px 17px}
  .noticeOverlay{padding:14px}
 }
-@media(prefers-reduced-motion:reduce){.overlayBackdrop{animation:none!important}.homeCapsule{transition:none}}
+@media(prefers-reduced-motion:reduce){.overlayBackdrop{animation:none!important}.homeCapsule{transition:none}.cardSummary{transition:none}}
 @media(prefers-contrast:more){.rail{border-color:#737b88}.card,.floatingCard{border-color:#1d1d1f}.railFoot{color:#35404e}}
 
 /* ≤690 首页堆叠态：全局 Dock 浮在通知栏底部，列表预留一个 Dock 高度让最后一条通知可滚出遮挡。 */

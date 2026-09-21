@@ -200,7 +200,7 @@ export const RadarDecisionKind = Type.Union([
 
 export const RadarPromotionCandidate = Type.Object({
   decisionKind: RadarDecisionKind,
-  decisionQuestion: Type.String({ minLength: 1, maxLength: 1000 }),
+  decisionQuestion: Type.String({ minLength: 1, maxLength: 25 }),
   options: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { minItems: 2, maxItems: 4 }),
   location: IssueLocation,
   urgency: Type.Object({

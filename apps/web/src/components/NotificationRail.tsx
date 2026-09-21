@@ -191,15 +191,17 @@ export function NotificationRail({ cards, onNavigate }: { cards: Card[]; onNavig
                   className={n.head}
                   aria-haspopup="dialog"
                   aria-expanded={openId === notice.id}
+                  {...(notice.body ? { "aria-describedby": `notice-summary-${notice.id}` } : {})}
                   onClick={(event) => openNotice(notice, event.currentTarget)}
                 >
                   <span className={n.accentBar} aria-hidden="true" />
                   <span className={n.headLeft}>
                     <strong className={n.headTitle}>{notice.title}</strong>
-                    {notice.kind === "monthly" ? (
-                      <span className={n.headBody}>{notice.body}</span>
-                    ) : notice.reason ? (
-                      <span className={n.headReason}>{notice.reason}</span>
+                    {notice.reason ? <span className={n.headReason}>{notice.reason}</span> : null}
+                    {notice.body ? (
+                      <span id={`notice-summary-${notice.id}`} className={n.cardSummary} role="tooltip">
+                        {notice.body}
+                      </span>
                     ) : null}
                   </span>
                   <time className={n.headTime}>{notice.time}</time>

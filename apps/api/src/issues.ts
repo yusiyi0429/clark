@@ -209,12 +209,6 @@ export function assessPromotion(input: {
   };
 }
 
-/** Signal 自动升级的 Issue 以短问题占据卡片标题；完整决策问题仍保留在数据库 title。 */
-export function shortRadarIssueTitle(title: string): string {
-  const chars = Array.from(title);
-  return chars.length > 25 ? `${chars.slice(0, 24).join("")}…` : title;
-}
-
 export function projectIssueCard(row: IssueRow, secret: string): TCard {
   return {
     schemaVersion: 1,
@@ -222,7 +216,7 @@ export function projectIssueCard(row: IssueRow, secret: string): TCard {
     version: row.version,
     kind: "issue",
     objectRef: { type: "issue", id: row.id, version: row.version },
-    title: row.origin === "radar" ? shortRadarIssueTitle(row.title) : row.title,
+    title: row.title,
     badge: row.origin === "radar" ? "Radar" : "DRI",
     urgency: row.urgency.level === "red" ? "red" : "normal",
     payload: {
