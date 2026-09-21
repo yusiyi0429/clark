@@ -21849,6 +21849,261 @@
           ]
         },
         {
+          "type": "frame",
+          "id": "B1g728",
+          "name": "Group · Issue 卡摘要",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 12,
+          "children": [
+            {
+              "type": "text",
+              "id": "FRNcR",
+              "name": "Group Title",
+              "fill": "$ink3",
+              "content": "Issue 卡摘要",
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "ceFZa",
+              "name": "Group Row",
+              "width": "fill_container",
+              "gap": 18,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "j6EpJ",
+                  "name": "Cell · 默认 · 仅标题",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "bUvqP",
+                      "name": "Slot",
+                      "height": 150,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "v84p5m",
+                          "name": "List · Issue 默认",
+                          "width": 360,
+                          "fill": "$surface",
+                          "cornerRadius": 12,
+                          "stroke": "$line",
+                          "strokeWidth": 1,
+                          "layout": "vertical",
+                          "padding": [
+                            6,
+                            10
+                          ],
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "d5Gac",
+                              "name": "Issue · 是否把履约网",
+                              "width": "fill_container",
+                              "gap": 10,
+                              "padding": [
+                                10,
+                                2
+                              ],
+                              "children": [
+                                {
+                                  "type": "ellipse",
+                                  "id": "n3wJU",
+                                  "name": "Dot",
+                                  "fill": "$red",
+                                  "width": 6,
+                                  "height": 6
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "XuvOI",
+                                  "name": "Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 1,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "o9vRTi",
+                                      "name": "Title",
+                                      "fill": "$ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "是否把履约网络整体外包给区域合作伙伴",
+                                      "lineHeight": 1.55,
+                                      "fontFamily": "Inter",
+                                      "fontSize": 15,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "EP7ww",
+                                      "name": "Due",
+                                      "fill": "$danger-ink",
+                                      "content": "决定期限 2025-09-26",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "h3UCE7",
+                      "name": "State Label",
+                      "fill": "$ink4",
+                      "content": "默认 · 仅标题与决定期限",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "IRXAY",
+                  "name": "Cell · hover / 焦点 · 展开摘要",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "awLul",
+                      "name": "Slot",
+                      "height": 150,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Sl6w1",
+                          "name": "List · Issue 展开",
+                          "width": 360,
+                          "fill": "$surface",
+                          "cornerRadius": 12,
+                          "stroke": "$line",
+                          "strokeWidth": 1,
+                          "layout": "vertical",
+                          "padding": [
+                            6,
+                            10
+                          ],
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "rXzcK",
+                              "name": "Issue · 是否把履约网",
+                              "width": "fill_container",
+                              "gap": 10,
+                              "padding": [
+                                10,
+                                2
+                              ],
+                              "children": [
+                                {
+                                  "type": "ellipse",
+                                  "id": "xGSJX",
+                                  "name": "Dot",
+                                  "fill": "$red",
+                                  "width": 6,
+                                  "height": 6
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "Wcg5b",
+                                  "name": "Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 1,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "Rn4ib",
+                                      "name": "Title",
+                                      "fill": "$ink",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "是否把履约网络整体外包给区域合作伙伴",
+                                      "lineHeight": 1.55,
+                                      "fontFamily": "Inter",
+                                      "fontSize": 15,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "FqAPr",
+                                      "name": "Due",
+                                      "fill": "$danger-ink",
+                                      "content": "决定期限 2025-09-26",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "naYHI",
+                                      "name": "Summary Wrap",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "padding": [
+                                        5,
+                                        0,
+                                        0,
+                                        0
+                                      ],
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "Yi6qA",
+                                          "name": "Summary",
+                                          "fill": "$ink3",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "该变化直接涉及企业 Agent 在授权、工具调用和执行阶段的安全边界，可能影响面向企业长期运行的产品要求与交付方式。",
+                                          "lineHeight": 1.65,
+                                          "fontFamily": "Inter",
+                                          "fontSize": 12,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "gEq40",
+                      "name": "State Label",
+                      "fill": "$ink4",
+                      "content": "hover / 焦点 · 卡内展开摘要，最多 4 行",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
           "type": "text",
           "id": "TEblf",
           "name": "Spec Note",
@@ -29721,102 +29976,6 @@
               ]
             }
           ]
-        }
-      ]
-    },
-    {
-      "type": "frame",
-      "id": "BVD7Z",
-      "x": 5701,
-      "y": 0,
-      "name": "Card / Issue · Hover 摘要",
-      "width": 380,
-      "fill": "$surface",
-      "cornerRadius": 16,
-      "stroke": "$line",
-      "strokeWidth": 1,
-      "layout": "vertical",
-      "gap": 8,
-      "padding": [
-        16,
-        18
-      ],
-      "children": [
-        {
-          "type": "text",
-          "id": "UN43V",
-          "name": "State Label",
-          "fill": "$ink5",
-          "content": "Hover / Focus 状态",
-          "fontFamily": "Inter",
-          "fontSize": 11,
-          "fontWeight": "600"
-        },
-        {
-          "type": "frame",
-          "id": "oZ5eX",
-          "name": "Issue Row",
-          "width": "fill_container",
-          "gap": 10,
-          "children": [
-            {
-              "type": "ellipse",
-              "id": "YywpW",
-              "name": "Dot",
-              "fill": "$yellow",
-              "width": 6,
-              "height": 6
-            },
-            {
-              "type": "frame",
-              "id": "cFqqZ",
-              "name": "Text",
-              "width": "fill_container",
-              "layout": "vertical",
-              "gap": 5,
-              "children": [
-                {
-                  "type": "text",
-                  "id": "niSt2",
-                  "name": "Title ≤25",
-                  "fill": "$ink",
-                  "textGrowth": "fixed-width",
-                  "width": "fill_container",
-                  "content": "是否将 Agent 安全控制纳入首期产品核？",
-                  "lineHeight": 1.55,
-                  "fontFamily": "Inter",
-                  "fontSize": 14,
-                  "fontWeight": "600"
-                },
-                {
-                  "type": "text",
-                  "id": "xm8KD",
-                  "name": "Hover Summary",
-                  "fill": "$ink3",
-                  "textGrowth": "fixed-width",
-                  "width": "fill_container",
-                  "content": "该变化直接涉及企业 Agent 在授权、工具调用和执行阶段的安全边界，可能影响 TKOS 面向企业长期运行的产品要求与交付方式。",
-                  "lineHeight": 1.65,
-                  "fontFamily": "Inter",
-                  "fontSize": 12,
-                  "fontWeight": "normal"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "text",
-          "id": "X3oVcS",
-          "name": "Interaction Note",
-          "fill": "$ink5",
-          "textGrowth": "fixed-width",
-          "width": "fill_container",
-          "content": "默认仅显示标题；hover 或键盘 focus 后在卡片内展开摘要。",
-          "lineHeight": 1.5,
-          "fontFamily": "Inter",
-          "fontSize": 11,
-          "fontWeight": "normal"
         }
       ]
     },
