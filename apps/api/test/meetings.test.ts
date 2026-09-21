@@ -109,6 +109,56 @@ async function readyMeeting(t: TestApp, externalId: string): Promise<{
   return { cookie, issueId: issue.id, meetingId: created.json().cards[0].objectRef.id as string, card: created.json().cards[0] };
 }
 
+describe("会前材料替换后的预审 Context", () => {
+  it("上传新材料后预审只用 新材料+Issue 标题，不再注入旧研究结果", async () => {
+    const agent = fakeAgent();
+    const t = await createTestApp({}, undefined, { preflightAgent: agent });
+    try {
+      const issue = await createIssue(t, "dri-preflight-ctx");
+      await t.sql("UPDATE issues SET research = $2::jsonb WHERE id = $1", [
+        issue.id,
+        JSON.stringify({ status: "ready", pendingSince: null, runId: "run-old", previousRunIds: [], error: null, doc: { summary: "旧研究结论", options: [], evidence: [], unknowns: [], sources: [] } }),
+      ]);
+      const cookie = await t.loginCookie();
+      const created = await execute(t, cookie, await issueAction(t, cookie, issue.id, "issue.create_meeting"), {
+        ...MEETING_INPUT,
+        issueIds: [issue.id],
+      });
+      expect(created.statusCode).toBe(200);
+      const meetingId = created.json().cards[0].objectRef.id as string;
+
+      // 无材料时：旧研究结果进入 Context
+      expect(agent.calls[0].materials).toHaveLength(0);
+      expect((agent.calls[0].issues[0].research as { doc?: unknown }).doc).toBeTruthy();
+
+      // 真实替换链路：预审 ready 后先「返回编辑材料」解锁，再上传新材料
+      const unlocked = await execute(t, cookie, await meetingAction(t, cookie, meetingId, "meeting.edit_materials"), {});
+      expect(unlocked.statusCode).toBe(200);
+      const boundary = "----preflight-ctx";
+      const res = await t.app.inject({
+        method: "POST",
+        url: `/api/meetings/${meetingId}/materials`,
+        headers: { cookie, origin: t.publicOrigin, "content-type": `multipart/form-data; boundary=${boundary}` },
+        payload: Buffer.concat([
+          Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="新材料.md"\r\nContent-Type: text/markdown\r\n\r\n`),
+          Buffer.from("替换后的会前材料正文"),
+          Buffer.from(`\r\n--${boundary}--\r\n`),
+        ]),
+      });
+      expect(res.statusCode).toBe(200);
+      const rerun = await execute(t, cookie, await meetingAction(t, cookie, meetingId, "meeting.run_preflight"), {});
+      expect(rerun.statusCode).toBe(200);
+      const last = agent.calls.at(-1)!;
+      expect(last.materials.length).toBeGreaterThan(0);
+      expect(last.materials[0].extractedText).toContain("替换后的会前材料正文");
+      expect(last.issues[0].title).toContain("渠道投入");
+      expect(last.issues[0].research).toBeNull();
+    } finally {
+      await t.close();
+    }
+  });
+});
+
 describe("Issue → Meeting Card/Action user journey", () => {
   it("creates a scheduled Meeting from an Issue and projects the same object on the card, notification and conversation", async () => {
     const agent = fakeAgent();

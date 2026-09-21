@@ -973,6 +973,9 @@ export async function runPreflight(
       relatedMeeting: relatedMeeting ? "available" : "missing",
     };
 
+    // CEO 已上传会前材料时，预审源材料以新材料为准：Issue 只保留标题等基本事实，
+    // 不再注入旧 ResearchDoc，避免预审锚定过期研究结论。
+    const useUploadedMaterials = meeting.materials.length > 0;
     const allowedSourceRefs = new Set<string>([
       `meeting:${meeting.id}`,
       ...issues.map((issue) => `issue:${issue.id}`),
@@ -981,12 +984,12 @@ export async function runPreflight(
     for (const section of companyMemory.listSections()) allowedSourceRefs.add(`memory:${section.id}`);
     for (const ref of relatedMeeting?.sourceRefs ?? []) allowedSourceRefs.add(ref);
     for (const issue of issues) {
-      if (issue.research && (issue.research as { doc?: unknown }).doc) allowedSourceRefs.add(`research:${issue.id}`);
+      if (!useUploadedMaterials && issue.research && (issue.research as { doc?: unknown }).doc) allowedSourceRefs.add(`research:${issue.id}`);
     }
 
     const input: PreflightAgentInput = {
       meeting: { id: meeting.id, title: meeting.title, scheduledAt: meeting.scheduled_at.toISOString(), participants: meeting.participants },
-      issues: issues.map((issue) => ({ id: issue.id, title: issue.title, location: issue.location, urgency: issue.urgency, research: issue.research })),
+      issues: issues.map((issue) => ({ id: issue.id, title: issue.title, location: issue.location, urgency: issue.urgency, research: useUploadedMaterials ? null : issue.research })),
       materials: meeting.materials.map((material) => ({ id: material.id, fileName: material.fileName, mimeType: material.mimeType, extractedText: material.extractedText, sourceRef: `material:${material.id}` })),
       inputCoverage,
       relatedMeeting,
