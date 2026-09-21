@@ -360,7 +360,6 @@ export function IssueCard({ card, collection, onCard, onNavigate }: CardRenderPr
               </>
             ) : (
               <>
-                <p className={s.note}>唯一预研深度：判断、选择、后果、证据、未知与来源只存在这份 ResearchDoc。</p>
                 {doc ? (
                   <div className={s.prose}>
                     <h3>摘要</h3>

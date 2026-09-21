@@ -24,6 +24,13 @@ export function HomeBoard(props: Props) {
   );
 }
 
+/** Radar promotion 把战略影响保存在 originRef；只对 Radar Issue 显示，DRI 不虚构摘要。 */
+export function radarIssueSummary(origin: IssuePayload["originRef"]): string | null {
+  if (!origin || typeof origin !== "object") return null;
+  const strategicImpact = (origin as { strategicImpact?: unknown }).strategicImpact;
+  return typeof strategicImpact === "string" && strategicImpact.trim() ? strategicImpact.trim() : null;
+}
+
 function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
   const display = useBattlefieldDisplay();
   const radar = cards.find((card) => card.kind === "radar");
@@ -44,6 +51,8 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
 
   function issueRow(card: Card) {
     const payload = payloadOf<IssuePayload>(card);
+    const summary = payload.origin === "radar" ? radarIssueSummary(payload.originRef) : null;
+    const summaryId = `issue-summary-${card.objectRef.id}`;
     return (
       <button
         key={card.id}
@@ -52,11 +61,13 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
         data-urgency={payload.urgency.level}
         onClick={() => onNavigate(`/issues/${card.objectRef.id}`)}
         aria-label={`${payload.urgency.level === "red" ? "需要尽快决策" : "待决策"}：${card.title}`}
+        {...(summary ? { "aria-describedby": summaryId } : {})}
       >
         <span className={`${b.dot} ${b[payload.urgency.level]}`} aria-hidden="true" />
         <span className={b.issueText}>
           <span>{card.title}</span>
           {payload.urgency.decisionBy ? <small>决定期限 {payload.urgency.decisionBy.slice(0, 10)}</small> : null}
+          {summary ? <span id={summaryId} className={b.issuePreview} role="tooltip">{summary}</span> : null}
         </span>
         <ChevronRight size={14} className={b.issueArrow} aria-hidden="true" />
       </button>

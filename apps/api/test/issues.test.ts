@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { Card, type TRadarCandidateSubmission, type TRadarSourceItem } from "@warmap/contracts";
 import { buildApp } from "../src/app.js";
-import { recoverInterruptedResearch } from "../src/issues.js";
+import { recoverInterruptedResearch, shortRadarIssueTitle } from "../src/issues.js";
 import { createRadarService, type RadarAssessor } from "../src/radar.js";
 import { migrate } from "../src/migrate.js";
 import { createTestDb, testEnv, TEST_PASSWORD } from "./helpers.js";
@@ -99,6 +99,10 @@ async function setup(
 }
 
 describe("Signal promotion creates one pending Issue", () => {
+  it("Radar Issue 卡片标题最多显示 25 个字符，DRI 不走此截断", () => {
+    expect(Array.from(shortRadarIssueTitle("是否将身份授权、Skill 准入与运行期控制纳入首期产品核？")).length).toBe(25);
+    expect(shortRadarIssueTitle("短问题？")).toBe("短问题？");
+  });
   it("atomically links the Signal and exposes an immediately queryable pending Issue Card", async () => {
     await createTestDb(async ({ db, pool }) => {
       await migrate(db);
