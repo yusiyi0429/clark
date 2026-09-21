@@ -58,14 +58,27 @@ function decodeHtml(value: string): string {
 
 /**
  * 文章页正文提取（量子位 WordPress：`<div class="article">…</div>`）。
- * 块级标签转空行保留段落；拿不到容器时返回空串，由调用方诚实退回 feed 摘要。
+ * 块级标签转空行保留段落；同时按文档顺序收集 https 配图及其段落位置（after = 前一段索引）。
+ * 拿不到容器时返回空结果，由调用方诚实退回 feed 摘要。
  */
-export function extractArticleText(html: string): string {
+export function extractArticleContent(html: string): { text: string; images: { src: string; after: number }[] } {
   const container = html.match(/<div[^>]*class="[^"]*\barticle\b[^"]*"[^>]*>/i);
-  if (!container) return "";
+  if (!container) return { text: "", images: [] };
   const start = container.index! + container[0].length;
   const body = html.slice(start, start + 300_000);
-  return decodeHtml(body)
+  // 配图位置：图片前出现过的块级闭合数 − 1 ≈ 它跟在第几段之后
+  const closeRe = /<\/(?:p|div|h[1-6]|li|blockquote|figcaption)>/gi;
+  const imgRe = /<img[^>]+src="(https:\/\/[^"\s]+)"[^>]*>/gi;
+  const images: { src: string; after: number }[] = [];
+  let seen: RegExpExecArray | null;
+  for (const match of body.matchAll(imgRe)) {
+    if (images.length >= 12) break;
+    closeRe.lastIndex = 0;
+    let closes = 0;
+    while ((seen = closeRe.exec(body)) && seen.index < match.index) closes += 1;
+    images.push({ src: match[1].slice(0, 1000), after: Math.max(0, closes - 1) });
+  }
+  const text = decodeHtml(body)
     .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<\/(p|div|h[1-6]|li|blockquote|figcaption)>/gi, "\n\n")
     .replace(/<br\s*\/?>/gi, "\n")
@@ -75,23 +88,24 @@ export function extractArticleText(html: string): string {
     .split("\n").map((line) => line.trim()).join("\n")
     .replace(/^\n+|\n+$/g, "")
     .slice(0, 10_000);
+  return { text, images };
 }
 
-/** fullText outlet：逐条抓文章页提取全文；失败或无正文时诚实退回 feed 摘要，不用抓取时间或标题冒充。 */
+/** fullText outlet：逐条抓文章页提取全文与配图；失败或无正文时诚实退回 feed 摘要，不用抓取时间或标题冒充。 */
 async function fetchFullText(
   fetchImpl: typeof fetch,
   url: string,
   signal: AbortSignal | undefined,
-): Promise<string> {
+): Promise<{ text: string; images: { src: string; after: number }[] }> {
   try {
     const response = await fetchImpl(url, {
       signal,
       headers: { "user-agent": "Mozilla/5.0 (compatible; WarMapRadar/1.0)" },
     });
-    if (!response.ok) return "";
-    return extractArticleText(await response.text());
+    if (!response.ok) return { text: "", images: [] };
+    return extractArticleContent(await response.text());
   } catch {
-    return "";
+    return { text: "", images: [] };
   }
 }
 
@@ -169,7 +183,10 @@ export function createOutletFeedAdapter(options: {
           for (const item of picked) {
             if (signal?.aborted) break;
             const full = await fetchFullText(fetchImpl, item.url, signal);
-            if (full) item.excerpt = full;
+            if (full.text) {
+              item.excerpt = full.text;
+              if (full.images.length) item.images = full.images;
+            }
           }
         }
         items.push(...picked);

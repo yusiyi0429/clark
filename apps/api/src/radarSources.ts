@@ -124,9 +124,12 @@ export function createWechatMcpAdapter({
           continue;
         }
         let excerpt = "";
+        let images: { src: string; after: number }[] | undefined;
         if (fullTextReads < 15) {
           fullTextReads += 1;
-          excerpt = await readArticleText(call, Number(article.id), signal);
+          const full = await readArticleText(call, Number(article.id), signal);
+          excerpt = full.text;
+          if (full.images.length) images = full.images;
         }
         excerpt = excerpt || str(article.digest);
         items.push({
@@ -136,6 +139,7 @@ export function createWechatMcpAdapter({
           publishedAt: new Date(publishTime * 1000).toISOString(),
           excerpt: excerpt.slice(0, 10_000) || title,
           sourceRef: { type: "wechat-account", provider: "wechat-mcp", accountId, accountName },
+          ...(images ? { images } : {}),
         });
       }
       return items;
@@ -143,23 +147,45 @@ export function createWechatMcpAdapter({
   };
 }
 
+/**
+ * 公众号全文：去 YAML frontmatter；markdown 图片行 `![](https://…)` 提为按位配图（after = 前一段索引），
+ * 其余保留段落换行（Signal 阅读页 pre-wrap 渲染），压平行内空白。
+ */
 async function readArticleText(
   call: WechatMcpCallTool,
   articleId: number,
   signal: AbortSignal,
-): Promise<string> {
-  if (!Number.isFinite(articleId)) return "";
+): Promise<{ text: string; images: { src: string; after: number }[] }> {
+  if (!Number.isFinite(articleId)) return { text: "", images: [] };
   try {
-    const text = await call("read_article", { article_id: articleId }, signal);
-    if (typeof text !== "string") return "";
-    // 去 YAML frontmatter；保留段落换行（Signal 阅读页 pre-wrap 渲染），压平行内空白
-    return text
-      .replace(/^---\n[\s\S]*?\n---\n/, "")
-      .split("\n").map((line) => line.replace(/\s+/g, " ").trim()).join("\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .replace(/^\n+|\n+$/g, "")
-      .slice(0, 10_000);
+    const raw = await call("read_article", { article_id: articleId }, signal);
+    if (typeof raw !== "string") return { text: "", images: [] };
+    const lines = raw.replace(/^---\n[\s\S]*?\n---\n/, "").split("\n");
+    const images: { src: string; after: number }[] = [];
+    const out: string[] = [];
+    let separators = 0;
+    let pendingBlank = false;
+    for (const line of lines) {
+      const img = line.match(/^!\[[^\]]*\]\((https:\/\/[^)\s]+)\)\s*$/);
+      if (img) {
+        if (images.length < 12) images.push({ src: img[1].slice(0, 1000), after: Math.max(0, separators - 1) });
+        continue;
+      }
+      const trimmed = line.replace(/\s+/g, " ").trim();
+      if (!trimmed) {
+        pendingBlank = out.length > 0;
+        continue;
+      }
+      if (pendingBlank) {
+        out.push("");
+        separators += 1;
+        pendingBlank = false;
+      }
+      out.push(trimmed);
+    }
+    const text = out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+|\n+$/g, "").slice(0, 10_000);
+    return { text, images };
   } catch {
-    return "";
+    return { text: "", images: [] };
   }
 }

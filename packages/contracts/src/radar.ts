@@ -174,6 +174,12 @@ export const RadarSourceRef = Type.Union([
   }, { additionalProperties: false }),
 ]);
 
+/** 原文配图：src 仅限 https，after = 图片跟在第几段（0 起）之后，用于原文内按位插入。 */
+export const RadarSourceImage = Type.Object({
+  src: Type.String({ minLength: 8, maxLength: 1000 }),
+  after: Type.Integer({ minimum: 0, maximum: 9_999 }),
+}, { additionalProperties: false });
+
 export const RadarSourceItem = Type.Object({
   sourceType: Type.Union([Type.Literal("web"), Type.Literal("wechat-account"), Type.Literal("outlet")]),
   title: Type.String({ minLength: 1, maxLength: 500 }),
@@ -181,6 +187,7 @@ export const RadarSourceItem = Type.Object({
   publishedAt: Type.String({ format: "date-time" }),
   excerpt: Type.String({ minLength: 1, maxLength: 10_000 }),
   sourceRef: RadarSourceRef,
+  images: Type.Optional(Type.Array(RadarSourceImage, { maxItems: 12 })),
 }, { additionalProperties: false });
 
 export const RadarDecisionKind = Type.Union([

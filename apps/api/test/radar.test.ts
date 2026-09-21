@@ -9,6 +9,7 @@ import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "../src/radar
 import { createRadarAgentAssessor } from "../src/radarAgent.js";
 import { createRadarScheduler } from "../src/radarScheduler.js";
 import { loadCompanyMemory } from "../src/companyMemory.js";
+import { shortSignalTitle } from "../src/signals.js";
 import { migrate } from "../src/migrate.js";
 import { createTestDb, testEnv, TEST_PASSWORD } from "./helpers.js";
 
@@ -95,6 +96,10 @@ async function login(app: Awaited<ReturnType<typeof buildApp>>): Promise<string>
 }
 
 describe("Radar source adapter public seam", () => {
+  it("核心观点作为标题时最多显示 30 个字符", () => {
+    expect(Array.from(shortSignalTitle("出现覆盖企业智能体授权、Skill 安全、运行控制与审计复盘的全生命周期安全治理方案。")).length).toBe(30);
+    expect(shortSignalTitle("短观点")).toBe("短观点");
+  });
   it("normalizes recorded Bocha Web and account-level WeChat MCP responses without keyword substitution", async () => {
     const requests: { url: string; authorization: string | null; body: Record<string, unknown> }[] = [];
     const fakeFetch: typeof fetch = async (input, init) => {
@@ -174,7 +179,7 @@ describe("Radar source adapter public seam", () => {
         }
         if (name === "read_article") {
           reads += 1;
-          return `---\ntitle: x\n---\n\n全文段落一\n\n${"内".repeat(30)}\n\n全文段落二`;
+          return `---\ntitle: x\n---\n\n全文段落一\n\n![配图](https://mmbiz.qpic.cn/example.jpg)\n\n${"内".repeat(30)}\n\n全文段落二`;
         }
         throw new Error(`unexpected tool ${name}`);
       },
@@ -182,6 +187,7 @@ describe("Radar source adapter public seam", () => {
     const items = await wechat.fetchLatest({ accountId: "acc-1", accountName: "机器之心" }, new AbortController().signal);
     expect(reads).toBe(15);
     expect(items[0].excerpt).toBe(`全文段落一\n\n${"内".repeat(30)}\n\n全文段落二`);
+    expect(items[0].images).toEqual([{ src: "https://mmbiz.qpic.cn/example.jpg", after: 0 }]);
     expect(items[15].excerpt).toBe("digest-16");
     expect(items[16].excerpt).toBe("digest-17");
   });
@@ -864,6 +870,7 @@ describe("publisher outlet Signal persistence", () => {
               url,
               publishedAt: "2026-05-01T08:00:00.000Z",
               excerpt,
+              images: [{ src: "https://assets.bloomberg.com/chart.jpg", after: 0 }],
               sourceRef: { type: "outlet", provider: "publisher-feed", outletId: "bloomberg", outletName: "彭博" },
             }];
           },
@@ -889,8 +896,8 @@ describe("publisher outlet Signal persistence", () => {
       });
 
       expect(await radar.runManual()).toMatchObject({ status: "completed", createdSignals: 1 });
-      expect((await db.query("SELECT source_type, source_title FROM signals")).rows)
-        .toEqual([{ source_type: "outlet", source_title: "Treasury basis trade" }]);
+      expect((await db.query("SELECT source_type, source_title, source_images FROM signals")).rows)
+        .toEqual([{ source_type: "outlet", source_title: "Treasury basis trade", source_images: [{ src: "https://assets.bloomberg.com/chart.jpg", after: 0 }] }]);
       expect(webCalls).toBe(0);
     });
   });

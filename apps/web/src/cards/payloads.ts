@@ -62,7 +62,7 @@ export type RadarPayload = {
 };
 
 export type SignalPayload = {
-  source: { type: string; title: string; url: string; publishedAt: string; excerpt: string };
+  source: { type: string; title: string; url: string; publishedAt: string; excerpt: string; images?: { src: string; after: number }[] };
   assessment: {
     anchorId: string;
     location: { type: string; id?: string };

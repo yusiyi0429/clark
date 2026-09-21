@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
-import { RadarSources, RADAR_OUTLETS, type TRadarSourceItem } from "@warmap/contracts";import { createOutletFeedAdapter, extractArticleText, resolveConfiguredOutletIds } from "../src/outletSources.js";
+import { RadarSources, RADAR_OUTLETS, type TRadarSourceItem } from "@warmap/contracts";
+import { createOutletFeedAdapter, extractArticleContent, resolveConfiguredOutletIds } from "../src/outletSources.js";
 
 const RSS = `<?xml version="1.0"?><rss version="2.0"><channel>
 <item><title> <![CDATA[Nvidia quarterly results beat forecasts]]></title>
@@ -148,7 +149,7 @@ describe("发布方级来源 outlets", () => {
   <pubDate>Mon, 21 Sep 2026 09:00:00 GMT</pubDate>
   <description><![CDATA[摘要 teaser]]></description></item>
 </channel></rss>`;
-    const article = `<html><body><div class="article"><p>第一段：具身智能体进展。</p><p>第二段：开源社区反响。</p></div></body></html>`;
+    const article = `<html><body><div class="article"><p>第一段：具身智能体进展。</p><img src="https://cdn.qbitai.com/one.jpg"><p>第二段：开源社区反响。</p><img src="https://cdn.qbitai.com/two.jpg"></div></body></html>`;
     const badArticle = `<html><body><div>无正文容器</div></body></html>`;
     let articleFetches = 0;
     const runtime = createOutletFeedAdapter({
@@ -185,15 +186,20 @@ describe("发布方级来源 outlets", () => {
       new AbortController().signal,
     );
     expect(full[0].excerpt).toBe("第一段：具身智能体进展。\n\n第二段：开源社区反响。");
+    expect(full[0].images).toEqual([
+      { src: "https://cdn.qbitai.com/one.jpg", after: 0 },
+      { src: "https://cdn.qbitai.com/two.jpg", after: 1 },
+    ]);
     expect(articleFetches).toBeGreaterThanOrEqual(1);
   });
 
-  it("extractArticleText：段落保留、script 剔除、10k 截断", () => {
-    const html = `<div class="article"><p>段落一</p><script>alert(1)</script><p>段落二</p>${"长".repeat(20_000)}</div>`;
-    const text = extractArticleText(html);
-    expect(text).not.toContain("alert");
-    expect(text.startsWith("段落一\n\n段落二")).toBe(true);
-    expect(text.length).toBeLessThanOrEqual(10_000);
+  it("extractArticleContent：段落保留、script 剔除、只取 https 图、10k 截断", () => {
+    const html = `<div class="article"><p>段落一</p><img src="https://cdn.example/a.jpg"><script>alert(1)</script><p>段落二</p><img src="http://bad.example/b.jpg">${"长".repeat(20_000)}</div>`;
+    const content = extractArticleContent(html);
+    expect(content.text).not.toContain("alert");
+    expect(content.text.startsWith("段落一\n\n段落二")).toBe(true);
+    expect(content.text.length).toBeLessThanOrEqual(10_000);
+    expect(content.images).toEqual([{ src: "https://cdn.example/a.jpg", after: 0 }]);
   });
 });
 

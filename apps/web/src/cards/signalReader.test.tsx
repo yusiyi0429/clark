@@ -35,8 +35,8 @@ describe("Signal 阅读", () => {
     expect(signalSourceLabel("outlet")).toBe("发布方级媒体来源");
     expect(signalSourceLabel("web")).toBe("Web");
     // 发布方级来源带真实媒体名；Web 搜索没有可核验发布方，只显示类型。
-    expect(render(signalCard("outlet", "CNBC"))).toContain("发布方级媒体来源 · CNBC · 采集于 2025-09-17 09:40");
-    expect(render(signalCard("web", "Web"))).toContain("Web · 采集于 2025-09-17 09:40");
+    expect(render(signalCard("outlet", "CNBC"))).toContain("发布方级媒体来源 · CNBC · 发布 2025-09-17");
+    expect(render(signalCard("web", "Web"))).toContain("Web · 发布 2025-09-17");
   });
 
   it("右侧栏复用同一个 Conversation，不另建对话入口", () => {
@@ -47,11 +47,13 @@ describe("Signal 阅读", () => {
     expect(html).toContain('data-testid="conversation-dock"');
   });
 
-  it("渲染真实抓到的来源文本，且不宣称已内嵌全文", () => {
+  it("原文默认折叠：首屏只保留字数与原始标题链接，不重复展示摘录", () => {
     const html = render(signalCard("outlet", "CNBC"));
     expect(html).toContain('aria-label="原文"');
-    expect(html).toContain("摘录");
-    expect(html).not.toContain("原文全文");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("原文 · 2 字");
+    expect(html).toContain('aria-label="打开原文：标题"');
+    expect(html).not.toContain(">摘录<");
   });
 
   it("浅色侧栏收起时用指向左的箭头还原，不用消息图标", () => {

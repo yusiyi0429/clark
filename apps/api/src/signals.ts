@@ -36,14 +36,33 @@ type SignalRow = {
   saved_at: Date | null;
   dismissed_at: Date | null;
   collected_at: Date;
+  source_images: unknown;
 };
 
 const SIGNAL_COLUMNS = [
   "id", "version", "source_type", "source_fingerprint", "source_title", "source_url", "published_at",
   "excerpt", "source_ref", "anchor_id", "location", "summary", "strategic_impact", "evidence_quote", "unknowns", "score",
-  "read_at", "saved_at", "dismissed_at", "collected_at",
+  "read_at", "saved_at", "dismissed_at", "collected_at", "source_images",
 ];
 const signalColumns = (prefix = "") => SIGNAL_COLUMNS.map((column) => `${prefix}${column}`).join(", ");
+
+type SourceImage = { src: string; after: number };
+function sourceImages(value: unknown): SourceImage[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((image) => {
+    if (!image || typeof image !== "object") return [];
+    const { src, after } = image as { src?: unknown; after?: unknown };
+    return typeof src === "string" && src.startsWith("https://") && typeof after === "number" && Number.isInteger(after) && after >= 0
+      ? [{ src, after }]
+      : [];
+  }).slice(0, 12);
+}
+
+/** 核心观点是 Signal 的卡片标题；UI 统一限制 30 个字符，避免长研判吞掉阅读首屏。 */
+export function shortSignalTitle(summary: string): string {
+  const chars = Array.from(summary);
+  return chars.length > 30 ? `${chars.slice(0, 29).join("")}…` : summary;
+}
 
 /** 发布方来源的徽标用中文媒体名，如实标注归属，避免用站点搜索冒充发布方。 */
 function outletBadge(sourceRef: unknown): string {
@@ -111,7 +130,7 @@ export function projectSignalCard(row: SignalRow): TCard {
     version: row.version,
     kind: "signal",
     objectRef: { type: "signal", id: row.id, version: row.version },
-    title: row.summary,
+    title: shortSignalTitle(row.summary),
     badge: row.source_type === "wechat-account" ? "公众号" : row.source_type === "outlet" ? outletBadge(row.source_ref) : "Web",
     payload: {
       source: {
@@ -122,6 +141,7 @@ export function projectSignalCard(row: SignalRow): TCard {
         publishedAt: row.published_at.toISOString(),
         excerpt: row.excerpt,
         sourceRef: row.source_ref,
+        images: sourceImages(row.source_images),
       },
       assessment: {
         anchorId: row.anchor_id,
@@ -157,6 +177,21 @@ export async function getSignalCard(q: Query, id: string): Promise<TCard | null>
   if (!UUID_PATTERN.test(id)) return null;
   const result = await q(`SELECT ${signalColumns()} FROM signals WHERE id = $1`, [id]);
   return result.rowCount === 1 ? projectSignalCard(result.rows[0] as SignalRow) : null;
+}
+
+/** 图片只可来自已持久化的 Signal 原文，路由不接收 URL，避免成为开放代理。 */
+export async function getSignalImageSource(q: Query, id: string, index: number): Promise<{ url: string; referer: string } | null> {
+  if (!UUID_PATTERN.test(id) || !Number.isInteger(index) || index < 0 || index >= 12) return null;
+  const result = await q("SELECT source_url, source_images FROM signals WHERE id = $1", [id]);
+  const row = result.rows[0] as { source_url: string; source_images: unknown } | undefined;
+  const image = row && sourceImages(row.source_images)[index];
+  if (!image || !row) return null;
+  try {
+    if (new URL(row.source_url).protocol !== "https:") return null;
+  } catch {
+    return null;
+  }
+  return { url: image.src, referer: row.source_url };
 }
 
 export async function setSignalState(q: Query, id: string, state: TSignalStateRequest): Promise<TCard | null> {

@@ -273,15 +273,15 @@ export function createRadarService({
             const inserted = await client.query(
               `INSERT INTO signals
                  (id, version, source_type, source_fingerprint, source_title, source_url, published_at, excerpt,
-                  source_ref, anchor_id, location, summary, strategic_impact, evidence_quote, unknowns, score)
-               VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14::jsonb, $15::jsonb)
+                  source_ref, anchor_id, location, summary, strategic_impact, evidence_quote, unknowns, score, source_images)
+               VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14::jsonb, $15::jsonb, $16::jsonb)
                ON CONFLICT (source_fingerprint) DO NOTHING
                RETURNING id`,
               [
                 randomUUID(), source.sourceType, source.sourceFingerprint, source.title, source.url, source.publishedAt,
                 source.excerpt, JSON.stringify(source.sourceRef), candidate.anchorId, JSON.stringify(anchor.location),
                 candidate.summary, candidate.strategicImpact, candidate.evidenceQuote, JSON.stringify(candidate.unknowns),
-                JSON.stringify(candidate.score),
+                JSON.stringify(candidate.score), JSON.stringify(source.images ?? []),
               ],
             );
             const signalInserted = inserted.rowCount === 1;

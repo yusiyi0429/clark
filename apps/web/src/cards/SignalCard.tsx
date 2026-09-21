@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronLeft, ExternalLink } from "lucide-react";
+import { Fragment, useState } from "react";
+import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type SignalPayload } from "./payloads";
@@ -23,6 +23,7 @@ export function SignalCard({ card, collection, onCard, onNavigate }: CardRenderP
   const publisher = payload.source.type === "outlet" ? card.badge : null;
   const [state, setState] = useState(payload.state);
   const [pending, setPending] = useState(false);
+  const [originalOpen, setOriginalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [last, setLast] = useState<SignalState | null>(null);
 
@@ -56,43 +57,10 @@ export function SignalCard({ card, collection, onCard, onNavigate }: CardRenderP
         返回 Radar
       </button>
       <p className={s.meta}>
-        {sourceLabel}
-        {publisher ? ` · ${publisher}` : ""} · 采集于 {payload.collectedAt.slice(0, 16).replace("T", " ")}
-        {state.read ? " · 已读" : " · 未读"}
-        {state.saved ? " · 已收藏" : ""}
-        {state.dismissed ? " · 已隐藏" : ""}
+        {sourceLabel}{publisher ? ` · ${publisher}` : ""} · 发布 {payload.source.publishedAt.slice(0, 10)}
       </p>
-      <h2 id="signal-title">{payload.assessment.summary}</h2>
+      <h2 id="signal-title">{card.title}</h2>
       <p className={`${s.lead} ${s.signalLead}`}>{payload.assessment.strategicImpact}</p>
-
-      <blockquote className={s.signalQuote}>
-        <p>{payload.assessment.evidenceQuote}</p>
-        <footer>
-          <a href={payload.source.url} target="_blank" rel="noreferrer noopener">
-            {payload.source.title}
-            <ExternalLink size={12} aria-hidden="true" />
-          </a>
-          <span>
-            {sourceLabel} · 发布 {payload.source.publishedAt.slice(0, 10)}
-          </span>
-          {payload.source.excerpt ? <span>已内嵌原文</span> : null}
-        </footer>
-      </blockquote>
-
-      {/* 只渲染真实抓到的来源文本；抓取失败时如实退回摘要，不编造原文。CEO 2026-09-21：Signal 存完整原文。 */}
-      {payload.source.excerpt ? (
-        <section className={s.sourceText} aria-label="原文">
-          <header>
-            <strong>原文</strong>
-            <span>
-              {publisher ? `${publisher} · ` : ""}
-              {payload.source.publishedAt.slice(0, 10)}
-            </span>
-          </header>
-          <p>{payload.source.excerpt}</p>
-        </section>
-      ) : null}
-
       {payload.assessment.unknowns.length ? (
         <section className={s.clarify}>
           <strong>尚未弄清</strong>
@@ -103,6 +71,42 @@ export function SignalCard({ card, collection, onCard, onNavigate }: CardRenderP
           </ul>
         </section>
       ) : null}
+
+      {/* 原文默认折叠：CEO 先看研判，需要时再展开自行核验。 */}
+      {payload.source.excerpt ? (() => {
+        const paragraphs = payload.source.excerpt.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
+        const images = payload.source.images ?? [];
+        const quote = payload.assessment.evidenceQuote;
+        const highlighted = (paragraph: string) => paragraph.length >= 20 && (quote.includes(paragraph) || paragraph.includes(quote));
+        return (
+          <section className={s.original} aria-label="原文">
+            <div className={s.originalHeader}>
+              <button type="button" aria-expanded={originalOpen} onClick={() => setOriginalOpen((open) => !open)}>
+                <ChevronRight className={originalOpen ? s.originalChevronOpen : s.originalChevron} size={15} aria-hidden="true" />
+                原文 · {payload.source.excerpt.length.toLocaleString()} 字
+              </button>
+              <a href={payload.source.url} target="_blank" rel="noreferrer noopener" aria-label={`打开原文：${payload.source.title}`}>
+                {payload.source.title}
+                <ExternalLink size={12} aria-hidden="true" />
+              </a>
+            </div>
+            {originalOpen ? (
+              <div className={s.originalBody}>
+                {paragraphs.map((paragraph, index) => (
+                  <Fragment key={`${index}:${paragraph.slice(0, 24)}`}>
+                    <p data-highlight={highlighted(paragraph) || undefined}>{paragraph}</p>
+                    {images.map((image, imageIndex) => ({ image, imageIndex }))
+                      .filter(({ image }) => image.after === index || (index === paragraphs.length - 1 && image.after >= index))
+                      .map(({ image, imageIndex }) => (
+                        <img key={image.src} className={s.originalImage} src={`/api/signals/${card.objectRef.id}/images/${imageIndex}`} alt="原文配图" loading="lazy" />
+                      ))}
+                  </Fragment>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        );
+      })() : null}
 
       <div className={s.signalStates}>
         <button type="button" data-state={state.read ? "read" : "unread"} disabled={pending} onClick={() => void update({ read: !state.read })}>

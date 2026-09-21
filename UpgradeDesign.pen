@@ -1842,7 +1842,7 @@
                       "name": "Rail Lock Icon",
                       "width": 14,
                       "height": 14,
-                      "icon": "lock",
+                      "icon": "settings",
                       "library": "lucide",
                       "fill": "$ink4"
                     }
@@ -2960,7 +2960,7 @@
                       "name": "Rail Lock Icon",
                       "width": 14,
                       "height": 14,
-                      "icon": "lock",
+                      "icon": "settings",
                       "library": "lucide",
                       "fill": "$ink4"
                     }
@@ -4084,7 +4084,7 @@
                       "name": "Rail Lock Icon",
                       "width": 14,
                       "height": 14,
-                      "icon": "lock",
+                      "icon": "settings",
                       "library": "lucide",
                       "fill": "$ink4"
                     }
@@ -10220,110 +10220,100 @@
               "type": "frame",
               "id": "L076K",
               "name": "Header Right",
-              "gap": 16,
+              "gap": 12,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "ixE1O",
-                  "name": "Header Meta",
-                  "layout": "vertical",
-                  "gap": 2,
-                  "alignItems": "end",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "WC5vJ",
-                      "name": "DRI",
-                      "fill": "$ink2",
-                      "content": "主责 DRI · 林晓",
-                      "fontFamily": "$font",
-                      "fontSize": 12,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "text",
-                      "id": "dLVle",
-                      "name": "Count",
-                      "fill": "$ink2",
-                      "content": "4 人参会",
-                      "fontFamily": "$font",
-                      "fontSize": 12,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "n8y3D",
-                  "name": "重新预审 Button",
+                  "id": "fe2np",
+                  "name": "Secondary Seg Group",
                   "fill": "$surface",
                   "cornerRadius": 10,
                   "stroke": "$line-strong",
                   "strokeWidth": 1,
-                  "gap": 6,
-                  "padding": [
-                    9,
-                    14
-                  ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "icon",
-                      "id": "RWQjE",
-                      "name": "Refresh Icon",
-                      "width": 13,
-                      "height": 13,
-                      "icon": "refresh-cw",
-                      "library": "lucide",
-                      "fill": "$ink3"
+                      "type": "frame",
+                      "id": "n8y3D",
+                      "name": "返回编辑材料 Button",
+                      "fill": "#00000000",
+                      "cornerRadius": 10,
+                      "stroke": "#00000000",
+                      "strokeWidth": 1,
+                      "gap": 6,
+                      "padding": [
+                        9,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "RWQjE",
+                          "name": "Refresh Icon",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "refresh-cw",
+                          "library": "lucide",
+                          "fill": "$ink3"
+                        },
+                        {
+                          "type": "text",
+                          "id": "I0UgSJ",
+                          "name": "Label",
+                          "fill": "$ink3",
+                          "content": "返回编辑材料",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     },
                     {
-                      "type": "text",
-                      "id": "I0UgSJ",
-                      "name": "Label",
-                      "fill": "$ink3",
-                      "content": "重新预审",
-                      "fontFamily": "$font",
-                      "fontSize": 13,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "X67KP",
-                  "name": "查看原始材料 Button",
-                  "fill": "$surface",
-                  "cornerRadius": 10,
-                  "stroke": "$line-strong",
-                  "strokeWidth": 1,
-                  "gap": 6,
-                  "padding": [
-                    9,
-                    14
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon",
-                      "id": "NT4zI",
-                      "name": "Icon",
-                      "width": 13,
-                      "height": 13,
-                      "icon": "files",
-                      "library": "lucide",
-                      "fill": "$ink3"
+                      "type": "rectangle",
+                      "id": "orLOK",
+                      "name": "Seg Divider",
+                      "fill": "$line-strong",
+                      "width": 1,
+                      "height": 18
                     },
                     {
-                      "type": "text",
-                      "id": "WchN1",
-                      "name": "Label",
-                      "fill": "$ink3",
-                      "content": "查看原始材料",
-                      "fontFamily": "$font",
-                      "fontSize": 13,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "X67KP",
+                      "name": "查看原始材料 Button",
+                      "fill": "#00000000",
+                      "cornerRadius": 10,
+                      "stroke": "#00000000",
+                      "strokeWidth": 1,
+                      "gap": 6,
+                      "padding": [
+                        9,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "NT4zI",
+                          "name": "Icon",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "files",
+                          "library": "lucide",
+                          "fill": "$ink3"
+                        },
+                        {
+                          "type": "text",
+                          "id": "WchN1",
+                          "name": "Label",
+                          "fill": "$ink3",
+                          "content": "查看原始材料",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -10604,7 +10594,7 @@
                   "id": "xv1Cz",
                   "name": "Stage Status",
                   "fill": "$ink3",
-                  "content": "材料 4 份已解析 · 预审可提交",
+                  "content": "材料 3 份已解析 · 预审已就绪 · 材料只读",
                   "fontFamily": "$font",
                   "fontSize": 12,
                   "fontWeight": "normal"
@@ -10675,7 +10665,7 @@
                           "id": "v1zGp",
                           "name": "Badge",
                           "fill": "$success-ink",
-                          "content": "可提交",
+                          "content": "已就绪 · 材料只读",
                           "fontFamily": "$font",
                           "fontSize": 12,
                           "fontWeight": "600"
@@ -11679,6 +11669,7 @@
                           "type": "frame",
                           "id": "bWTcB",
                           "name": "Q Actions",
+                          "width": "fill_container",
                           "gap": 8,
                           "children": [
                             {
@@ -11709,10 +11700,13 @@
                             {
                               "type": "frame",
                               "id": "sZMb7",
-                              "name": "Supplement Btn",
-                              "fill": "$surface",
+                              "x": 67,
+                              "y": 0,
+                              "name": "Supplement Request Sent",
+                              "enabled": false,
+                              "fill": "$surface-2",
                               "cornerRadius": 10,
-                              "stroke": "$line-strong",
+                              "stroke": "$line",
                               "strokeWidth": 1,
                               "padding": [
                                 6,
@@ -11724,57 +11718,10 @@
                                   "id": "CY6F0",
                                   "name": "Label",
                                   "fill": "$ink3",
-                                  "content": "请求补充材料",
+                                  "content": "已向林晓请求补充信息",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "J5dxg",
-                              "name": "补充材料 Chip",
-                              "fill": "$success-tint",
-                              "cornerRadius": 10,
-                              "stroke": "$success-line",
-                              "strokeWidth": 1,
-                              "gap": 7,
-                              "padding": [
-                                6,
-                                11
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "icon",
-                                  "id": "pxqZj",
-                                  "name": "Icon",
-                                  "width": 13,
-                                  "height": 13,
-                                  "icon": "file-check",
-                                  "library": "lucide",
-                                  "fill": "$success-ink"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "wP0Qq",
-                                  "name": "Text",
-                                  "fill": "$success-ink",
-                                  "content": "已收到补充材料 1 份 · 林晓 09-23 上传 · 二期触发条件阈值草案.docx",
-                                  "fontFamily": "$font",
-                                  "fontSize": 12,
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "f85N8",
-                                  "name": "查看 Link",
-                                  "fill": "$accent",
-                                  "content": "查看",
-                                  "fontFamily": "$font",
-                                  "fontSize": 12,
-                                  "fontWeight": "500"
                                 }
                               ]
                             }
@@ -11854,6 +11801,7 @@
                           "type": "frame",
                           "id": "U28smC",
                           "name": "Q Actions",
+                          "width": "fill_container",
                           "gap": 8,
                           "children": [
                             {
@@ -11884,10 +11832,13 @@
                             {
                               "type": "frame",
                               "id": "WdgVI",
-                              "name": "Supplement Btn",
-                              "fill": "$surface",
+                              "x": 91,
+                              "y": 0,
+                              "name": "Supplement Request Sent",
+                              "enabled": false,
+                              "fill": "$surface-2",
                               "cornerRadius": 10,
-                              "stroke": "$line-strong",
+                              "stroke": "$line",
                               "strokeWidth": 1,
                               "padding": [
                                 6,
@@ -11899,44 +11850,7 @@
                                   "id": "k260HJ",
                                   "name": "Label",
                                   "fill": "$ink3",
-                                  "content": "请求补充材料",
-                                  "fontFamily": "$font",
-                                  "fontSize": 12,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "OzJqq",
-                              "name": "补充材料 Chip",
-                              "fill": "$warn-tint",
-                              "cornerRadius": 10,
-                              "stroke": "$warn-line",
-                              "strokeWidth": 1,
-                              "gap": 7,
-                              "padding": [
-                                6,
-                                11
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "icon",
-                                  "id": "xz3nK",
-                                  "name": "Icon",
-                                  "width": 13,
-                                  "height": 13,
-                                  "icon": "hourglass",
-                                  "library": "lucide",
-                                  "fill": "$yellow"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "T6sKIb",
-                                  "name": "Text",
-                                  "fill": "$warn-ink",
-                                  "content": "已请求补充材料 · 等待陈珂上传（09-25 前）",
+                                  "content": "已向陈珂请求补充信息",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -12019,6 +11933,7 @@
                           "type": "frame",
                           "id": "kanbA",
                           "name": "Q Actions",
+                          "width": "fill_container",
                           "gap": 8,
                           "children": [
                             {
@@ -12049,10 +11964,13 @@
                             {
                               "type": "frame",
                               "id": "vMsqv",
-                              "name": "Supplement Btn",
-                              "fill": "$surface",
+                              "x": 91,
+                              "y": 0,
+                              "name": "Supplement Request Sent",
+                              "enabled": false,
+                              "fill": "$surface-2",
                               "cornerRadius": 10,
-                              "stroke": "$line-strong",
+                              "stroke": "$line",
                               "strokeWidth": 1,
                               "padding": [
                                 6,
@@ -12064,7 +11982,7 @@
                                   "id": "Gidpv",
                                   "name": "Label",
                                   "fill": "$ink3",
-                                  "content": "请求补充材料",
+                                  "content": "已向王昀请求补充信息",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -12863,13 +12781,13 @@
           "strokeWidth": {
             "bottom": 1
           },
+          "gap": 12,
           "padding": [
             28,
             40,
             20,
             40
           ],
-          "justifyContent": "space_between",
           "children": [
             {
               "type": "frame",
@@ -12884,7 +12802,7 @@
                   "id": "y5BkN5",
                   "name": "Meta",
                   "fill": "$ink2",
-                  "content": "会前预审 · 2025-09-24 14:00",
+                  "content": "会前预审 · 2025-09-24 14:00 · 主责 DRI 林晓 · 4 人参会",
                   "fontFamily": "$font",
                   "fontSize": 13,
                   "fontWeight": "normal"
@@ -12904,105 +12822,95 @@
             },
             {
               "type": "frame",
-              "id": "PFhuU",
-              "name": "Header Right",
-              "layout": "vertical",
-              "gap": 2,
-              "alignItems": "end",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "oUHHF",
-                  "name": "DRI",
-                  "fill": "$ink2",
-                  "content": "主责 DRI · 林晓",
-                  "fontFamily": "$font",
-                  "fontSize": 12,
-                  "fontWeight": "normal"
-                },
-                {
-                  "type": "text",
-                  "id": "UdvLv",
-                  "name": "Count",
-                  "fill": "$ink2",
-                  "content": "4 人参会",
-                  "fontFamily": "$font",
-                  "fontSize": 12,
-                  "fontWeight": "normal"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "mQICu",
-              "name": "查看原始材料 Button",
+              "id": "WxIxf",
+              "name": "Secondary Seg Group",
               "fill": "$surface",
               "cornerRadius": 10,
               "stroke": "$line-strong",
               "strokeWidth": 1,
-              "gap": 6,
-              "padding": [
-                9,
-                14
-              ],
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "gNUij",
-                  "name": "Icon",
-                  "width": 13,
-                  "height": 13,
-                  "icon": "files",
-                  "library": "lucide",
-                  "fill": "$ink3"
+                  "type": "frame",
+                  "id": "G73W0f",
+                  "name": "查看会前预审 Button",
+                  "fill": "#00000000",
+                  "cornerRadius": 10,
+                  "stroke": "#00000000",
+                  "strokeWidth": 1,
+                  "gap": 6,
+                  "padding": [
+                    9,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "aEd4P",
+                      "name": "Icon",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "chevron-left",
+                      "library": "lucide",
+                      "fill": "$ink3"
+                    },
+                    {
+                      "type": "text",
+                      "id": "H92S2",
+                      "name": "Label",
+                      "fill": "$ink3",
+                      "content": "查看会前预审",
+                      "fontFamily": "$font",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
                 },
                 {
-                  "type": "text",
-                  "id": "JAlHG",
-                  "name": "Label",
-                  "fill": "$ink3",
-                  "content": "查看原始材料",
-                  "fontFamily": "$font",
-                  "fontSize": 13,
-                  "fontWeight": "normal"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "G73W0f",
-              "name": "查看会前预审 Button",
-              "fill": "$surface",
-              "cornerRadius": 10,
-              "stroke": "$line-strong",
-              "strokeWidth": 1,
-              "gap": 6,
-              "padding": [
-                9,
-                14
-              ],
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "icon",
-                  "id": "aEd4P",
-                  "name": "Icon",
-                  "width": 13,
-                  "height": 13,
-                  "icon": "chevron-left",
-                  "library": "lucide",
-                  "fill": "$ink3"
+                  "type": "rectangle",
+                  "id": "CFxJj",
+                  "name": "Seg Divider",
+                  "fill": "$line-strong",
+                  "width": 1,
+                  "height": 18
                 },
                 {
-                  "type": "text",
-                  "id": "H92S2",
-                  "name": "Label",
-                  "fill": "$ink3",
-                  "content": "查看会前预审",
-                  "fontFamily": "$font",
-                  "fontSize": 13,
-                  "fontWeight": "normal"
+                  "type": "frame",
+                  "id": "mQICu",
+                  "name": "查看原始材料 Button",
+                  "fill": "#00000000",
+                  "cornerRadius": 10,
+                  "stroke": "#00000000",
+                  "strokeWidth": 1,
+                  "gap": 6,
+                  "padding": [
+                    9,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "gNUij",
+                      "name": "Icon",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "files",
+                      "library": "lucide",
+                      "fill": "$ink3"
+                    },
+                    {
+                      "type": "text",
+                      "id": "JAlHG",
+                      "name": "Label",
+                      "fill": "$ink3",
+                      "content": "查看原始材料",
+                      "fontFamily": "$font",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
                 }
               ]
             },
@@ -18760,7 +18668,7 @@
                       "name": "Rail Lock Icon",
                       "width": 14,
                       "height": 14,
-                      "icon": "lock",
+                      "icon": "settings",
                       "library": "lucide",
                       "fill": "$ink4"
                     }
@@ -20169,7 +20077,7 @@
                       "name": "Rail Lock Icon",
                       "width": 14,
                       "height": 14,
-                      "icon": "lock",
+                      "icon": "settings",
                       "library": "lucide",
                       "fill": "$ink4"
                     }
@@ -22960,7 +22868,7 @@
           },
           "gap": 14,
           "padding": [
-            20,
+            14,
             24
           ],
           "alignItems": "center",
@@ -22971,7 +22879,7 @@
               "name": "Header Text",
               "width": "fill_container",
               "layout": "vertical",
-              "gap": 4,
+              "gap": 2,
               "children": [
                 {
                   "type": "text",
@@ -22980,7 +22888,7 @@
                   "fill": "$ink",
                   "content": "会议原始材料",
                   "fontFamily": "$font",
-                  "fontSize": 18,
+                  "fontSize": 17,
                   "fontWeight": "600"
                 },
                 {
@@ -22988,9 +22896,19 @@
                   "id": "u1DCHY",
                   "name": "Modal Sub",
                   "fill": "$ink3",
-                  "content": "只读依据 · 不参与判断与抽取，原始材料不会自动改写预审结论",
+                  "content": "东南亚渠道预算决策会 · 2025-09-24 14:00 · 主责 DRI 林晓",
                   "fontFamily": "$font",
-                  "fontSize": 12,
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "pFNo2",
+                  "name": "Meeting Material Status",
+                  "fill": "$ink3",
+                  "content": "会前预审 · 已就绪 · 材料只读 · 3 份 · 最近更新 09-22",
+                  "fontFamily": "$font",
+                  "fontSize": 11,
                   "fontWeight": "normal"
                 }
               ]
@@ -23005,8 +22923,8 @@
               "strokeWidth": 1,
               "gap": 6,
               "padding": [
-                9,
-                13
+                8,
+                12
               ],
               "alignItems": "center",
               "children": [
@@ -23036,10 +22954,10 @@
               "type": "frame",
               "id": "eHXqk",
               "name": "Close",
-              "width": 38,
-              "height": 38,
+              "width": 34,
+              "height": 34,
               "fill": "$surface",
-              "cornerRadius": 19,
+              "cornerRadius": 17,
               "stroke": "$line-strong",
               "strokeWidth": 1,
               "justifyContent": "center",
@@ -23097,7 +23015,7 @@
                       "id": "zPQqi",
                       "name": "Group Head",
                       "width": "fill_container",
-                      "gap": 7,
+                      "gap": 9,
                       "justifyContent": "space_between",
                       "alignItems": "center",
                       "children": [
@@ -23135,10 +23053,47 @@
                           "id": "tJ72u",
                           "name": "Count",
                           "fill": "$ink3",
-                          "content": "4 份",
+                          "content": "3 份",
                           "fontFamily": "$font",
                           "fontSize": 11,
                           "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "h6eRqH",
+                          "name": "返回编辑材料 Button",
+                          "fill": "$surface",
+                          "cornerRadius": 8,
+                          "stroke": "$line-strong",
+                          "strokeWidth": 1,
+                          "gap": 5,
+                          "padding": [
+                            6,
+                            9
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "P2v6g",
+                              "name": "Edit Icon",
+                              "width": 12,
+                              "height": 12,
+                              "icon": "pencil",
+                              "library": "lucide",
+                              "fill": "$ink3"
+                            },
+                            {
+                              "type": "text",
+                              "id": "XVl7D",
+                              "name": "Label",
+                              "fill": "$ink3",
+                              "content": "返回编辑材料",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "500"
+                            }
+                          ]
                         }
                       ]
                     },
@@ -23215,7 +23170,7 @@
                     {
                       "type": "frame",
                       "id": "kWdi5",
-                      "name": "File · 竞对本地仓布局调研.pptx",
+                      "name": "File · 竞对本地仓布局调研.docx",
                       "width": "fill_container",
                       "fill": "$surface",
                       "cornerRadius": 10,
@@ -23244,7 +23199,7 @@
                               "id": "WtkOn",
                               "name": "Type Label",
                               "fill": "$accent-ink",
-                              "content": "PPT",
+                              "content": "DOCX",
                               "fontFamily": "$font",
                               "fontSize": 10,
                               "fontWeight": "600"
@@ -23263,7 +23218,7 @@
                               "id": "MgPrF",
                               "name": "File Name",
                               "fill": "$ink",
-                              "content": "竞对本地仓布局调研.pptx",
+                              "content": "竞对本地仓布局调研.docx",
                               "fontFamily": "$font",
                               "fontSize": 12.5,
                               "fontWeight": "500"
@@ -23344,136 +23299,6 @@
                               "name": "File Meta",
                               "fill": "$ink3",
                               "content": "09-22 · 系统同步",
-                              "fontFamily": "$font",
-                              "fontSize": 11,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "M7nYxF",
-                  "name": "Group · 补充材料",
-                  "width": "fill_container",
-                  "layout": "vertical",
-                  "gap": 8,
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "wau6S",
-                      "name": "Group Head",
-                      "width": "fill_container",
-                      "gap": 7,
-                      "justifyContent": "space_between",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "rFGEG",
-                          "name": "Group Label",
-                          "gap": 7,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "EcxQ4",
-                              "name": "Chevron",
-                              "width": 14,
-                              "height": 14,
-                              "icon": "chevron-down",
-                              "library": "lucide",
-                              "fill": "$ink4"
-                            },
-                            {
-                              "type": "text",
-                              "id": "ZxzZT",
-                              "name": "Label",
-                              "fill": "$ink",
-                              "content": "补充材料",
-                              "fontFamily": "$font",
-                              "fontSize": 13,
-                              "fontWeight": "600"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "text",
-                          "id": "Ojrvv",
-                          "name": "Count",
-                          "fill": "$ink3",
-                          "content": "1 份",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "R7U4wo",
-                      "name": "File · 二期触发条件阈值草案.docx",
-                      "width": "fill_container",
-                      "fill": "$surface",
-                      "cornerRadius": 10,
-                      "stroke": "$surface-3",
-                      "strokeWidth": 1,
-                      "gap": 10,
-                      "padding": [
-                        10,
-                        11
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "lMBqI",
-                          "name": "Type",
-                          "width": 34,
-                          "height": 26,
-                          "fill": "$accent-tint-2",
-                          "cornerRadius": 6,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "zK6D4",
-                              "name": "Type Label",
-                              "fill": "$accent-ink",
-                              "content": "DOCX",
-                              "fontFamily": "$font",
-                              "fontSize": 10,
-                              "fontWeight": "600"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "gunAE",
-                          "name": "Info",
-                          "layout": "vertical",
-                          "gap": 2,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "WAB8f",
-                              "name": "File Name",
-                              "fill": "$ink",
-                              "content": "二期触发条件阈值草案.docx",
-                              "fontFamily": "$font",
-                              "fontSize": 12.5,
-                              "fontWeight": "500"
-                            },
-                            {
-                              "type": "text",
-                              "id": "JlAJ9",
-                              "name": "File Meta",
-                              "fill": "$ink3",
-                              "content": "林晓 · 09-23 上传 · 回应「请求补充材料」",
                               "fontFamily": "$font",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -23784,47 +23609,10 @@
                       "fill": "$ink3",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "原始材料仅作依据查阅，不会改变预审结论；替换整份材料需二次确认，会使旧的预审结论与引用失效并重跑分析。",
+                      "content": "当前预审已就绪，材料只读。请先返回编辑材料；这会使当前预审结论与引用失效，随后可替换整份材料并手动重新预审。",
                       "fontFamily": "$font",
                       "fontSize": 12,
                       "fontWeight": "normal"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "bSH5Z",
-                      "name": "Replace Button",
-                      "fill": "$surface",
-                      "cornerRadius": 10,
-                      "stroke": "$danger-line",
-                      "strokeWidth": 1,
-                      "gap": 6,
-                      "padding": [
-                        8,
-                        13
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "a8NSqO",
-                          "name": "Icon",
-                          "width": 13,
-                          "height": 13,
-                          "icon": "refresh-cw",
-                          "library": "lucide",
-                          "fill": "$danger-ink"
-                        },
-                        {
-                          "type": "text",
-                          "id": "Lt8B0",
-                          "name": "Label",
-                          "fill": "$danger-ink",
-                          "content": "替换整份材料",
-                          "fontFamily": "$font",
-                          "fontSize": 12,
-                          "fontWeight": "500"
-                        }
-                      ]
                     }
                   ]
                 }
@@ -23897,110 +23685,100 @@
               "type": "frame",
               "id": "aZxAy",
               "name": "Header Right",
-              "gap": 16,
+              "gap": 12,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "orNir",
-                  "name": "Header Meta",
-                  "layout": "vertical",
-                  "gap": 2,
-                  "alignItems": "end",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "w7B2k",
-                      "name": "DRI",
-                      "fill": "$ink2",
-                      "content": "主责 DRI · 林晓",
-                      "fontFamily": "$font",
-                      "fontSize": 12,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "text",
-                      "id": "uHjZg",
-                      "name": "Count",
-                      "fill": "$ink2",
-                      "content": "4 人参会",
-                      "fontFamily": "$font",
-                      "fontSize": 12,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "X5jGG",
-                  "name": "重新预审 Button",
+                  "id": "W0YLD",
+                  "name": "Secondary Seg Group",
                   "fill": "$surface",
                   "cornerRadius": 10,
                   "stroke": "$line-strong",
                   "strokeWidth": 1,
-                  "gap": 6,
-                  "padding": [
-                    9,
-                    14
-                  ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "icon",
-                      "id": "TPTf4",
-                      "name": "Refresh Icon",
-                      "width": 13,
-                      "height": 13,
-                      "icon": "refresh-cw",
-                      "library": "lucide",
-                      "fill": "$ink3"
+                      "type": "frame",
+                      "id": "X5jGG",
+                      "name": "重新预审 Button",
+                      "fill": "#00000000",
+                      "cornerRadius": 10,
+                      "stroke": "#00000000",
+                      "strokeWidth": 1,
+                      "gap": 6,
+                      "padding": [
+                        9,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "TPTf4",
+                          "name": "Refresh Icon",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "refresh-cw",
+                          "library": "lucide",
+                          "fill": "$ink3"
+                        },
+                        {
+                          "type": "text",
+                          "id": "D3jW7",
+                          "name": "Label",
+                          "fill": "$ink3",
+                          "content": "重新预审",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     },
                     {
-                      "type": "text",
-                      "id": "D3jW7",
-                      "name": "Label",
-                      "fill": "$ink3",
-                      "content": "重新预审",
-                      "fontFamily": "$font",
-                      "fontSize": 13,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "z2JxqE",
-                  "name": "查看原始材料 Button",
-                  "fill": "$surface",
-                  "cornerRadius": 10,
-                  "stroke": "$line-strong",
-                  "strokeWidth": 1,
-                  "gap": 6,
-                  "padding": [
-                    9,
-                    14
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon",
-                      "id": "vyLtk",
-                      "name": "Icon",
-                      "width": 13,
-                      "height": 13,
-                      "icon": "files",
-                      "library": "lucide",
-                      "fill": "$ink3"
+                      "type": "rectangle",
+                      "id": "Ga33l",
+                      "name": "Seg Divider",
+                      "fill": "$line-strong",
+                      "width": 1,
+                      "height": 18
                     },
                     {
-                      "type": "text",
-                      "id": "uTQNc",
-                      "name": "Label",
-                      "fill": "$ink3",
-                      "content": "查看原始材料",
-                      "fontFamily": "$font",
-                      "fontSize": 13,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "z2JxqE",
+                      "name": "查看原始材料 Button",
+                      "fill": "#00000000",
+                      "cornerRadius": 10,
+                      "stroke": "#00000000",
+                      "strokeWidth": 1,
+                      "gap": 6,
+                      "padding": [
+                        9,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "vyLtk",
+                          "name": "Icon",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "files",
+                          "library": "lucide",
+                          "fill": "$ink3"
+                        },
+                        {
+                          "type": "text",
+                          "id": "uTQNc",
+                          "name": "Label",
+                          "fill": "$ink3",
+                          "content": "查看原始材料",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -26563,13 +26341,13 @@
           "strokeWidth": {
             "bottom": 1
           },
+          "gap": 12,
           "padding": [
             28,
             40,
             20,
             40
           ],
-          "justifyContent": "space_between",
           "children": [
             {
               "type": "frame",
@@ -26584,7 +26362,7 @@
                   "id": "aGcd6",
                   "name": "Meta",
                   "fill": "$ink2",
-                  "content": "会前预审 · 2025-09-24 14:00",
+                  "content": "会前预审 · 2025-09-24 14:00 · 主责 DRI 林晓 · 4 人参会",
                   "fontFamily": "$font",
                   "fontSize": 13,
                   "fontWeight": "normal"
@@ -26604,105 +26382,95 @@
             },
             {
               "type": "frame",
-              "id": "eFwJO",
-              "name": "Header Right",
-              "layout": "vertical",
-              "gap": 2,
-              "alignItems": "end",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "E8Ins0",
-                  "name": "DRI",
-                  "fill": "$ink2",
-                  "content": "主责 DRI · 林晓",
-                  "fontFamily": "$font",
-                  "fontSize": 12,
-                  "fontWeight": "normal"
-                },
-                {
-                  "type": "text",
-                  "id": "dC2gX",
-                  "name": "Count",
-                  "fill": "$ink2",
-                  "content": "4 人参会",
-                  "fontFamily": "$font",
-                  "fontSize": 12,
-                  "fontWeight": "normal"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "Mqprp",
-              "name": "查看原始材料 Button",
+              "id": "OyDs5",
+              "name": "Secondary Seg Group",
               "fill": "$surface",
               "cornerRadius": 10,
               "stroke": "$line-strong",
               "strokeWidth": 1,
-              "gap": 6,
-              "padding": [
-                9,
-                14
-              ],
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "f5Zz4",
-                  "name": "Icon",
-                  "width": 13,
-                  "height": 13,
-                  "icon": "files",
-                  "library": "lucide",
-                  "fill": "$ink3"
+                  "type": "frame",
+                  "id": "Y77DB",
+                  "name": "查看会前预审 Button",
+                  "fill": "#00000000",
+                  "cornerRadius": 10,
+                  "stroke": "#00000000",
+                  "strokeWidth": 1,
+                  "gap": 6,
+                  "padding": [
+                    9,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "wLAp1",
+                      "name": "Icon",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "chevron-left",
+                      "library": "lucide",
+                      "fill": "$ink3"
+                    },
+                    {
+                      "type": "text",
+                      "id": "pGgoy",
+                      "name": "Label",
+                      "fill": "$ink3",
+                      "content": "查看会前预审",
+                      "fontFamily": "$font",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
                 },
                 {
-                  "type": "text",
-                  "id": "mmj94",
-                  "name": "Label",
-                  "fill": "$ink3",
-                  "content": "查看原始材料",
-                  "fontFamily": "$font",
-                  "fontSize": 13,
-                  "fontWeight": "normal"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "Y77DB",
-              "name": "查看会前预审 Button",
-              "fill": "$surface",
-              "cornerRadius": 10,
-              "stroke": "$line-strong",
-              "strokeWidth": 1,
-              "gap": 6,
-              "padding": [
-                9,
-                14
-              ],
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "icon",
-                  "id": "wLAp1",
-                  "name": "Icon",
-                  "width": 13,
-                  "height": 13,
-                  "icon": "chevron-left",
-                  "library": "lucide",
-                  "fill": "$ink3"
+                  "type": "rectangle",
+                  "id": "Rr7E6",
+                  "name": "Seg Divider",
+                  "fill": "$line-strong",
+                  "width": 1,
+                  "height": 18
                 },
                 {
-                  "type": "text",
-                  "id": "pGgoy",
-                  "name": "Label",
-                  "fill": "$ink3",
-                  "content": "查看会前预审",
-                  "fontFamily": "$font",
-                  "fontSize": 13,
-                  "fontWeight": "normal"
+                  "type": "frame",
+                  "id": "Mqprp",
+                  "name": "查看原始材料 Button",
+                  "fill": "#00000000",
+                  "cornerRadius": 10,
+                  "stroke": "#00000000",
+                  "strokeWidth": 1,
+                  "gap": 6,
+                  "padding": [
+                    9,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "f5Zz4",
+                      "name": "Icon",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "files",
+                      "library": "lucide",
+                      "fill": "$ink3"
+                    },
+                    {
+                      "type": "text",
+                      "id": "mmj94",
+                      "name": "Label",
+                      "fill": "$ink3",
+                      "content": "查看原始材料",
+                      "fontFamily": "$font",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
                 }
               ]
             },
@@ -28725,6 +28493,9 @@
           "x": 500,
           "y": 230,
           "descendants": {
+            "h6eRqH": {
+              "enabled": false
+            },
             "x7VoL": {
               "fill": "#FFFFFF",
               "stroke": "#EDEFF3"
@@ -29441,6 +29212,135 @@
                   "fontWeight": "normal"
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "V5MyUN",
+      "x": 1,
+      "y": 220,
+      "name": "Dock / 引用选择器",
+      "width": 420,
+      "fill": "#292D35F7",
+      "cornerRadius": 14,
+      "stroke": "#FFFFFF26",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "gap": 4,
+      "padding": 8,
+      "children": [
+        {
+          "type": "frame",
+          "id": "j0o81",
+          "name": "Ref · 在当前优先形成 L1/C",
+          "width": "fill_container",
+          "fill": "#0A84FF38",
+          "cornerRadius": 9,
+          "layout": "vertical",
+          "padding": [
+            8,
+            10
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "Ksz8X",
+              "name": "Label",
+              "fill": "#FFFFFF",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "在当前优先形成 L1/CEO 场景下的最小 ENO 产品核时，是否应为统一 Data、Harness 与 Model 改进闭环的 RSI 方法投入预研资源？ v12",
+              "lineHeight": 1.55,
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "c1D6v3",
+          "name": "Ref · 面对 Moonshot ",
+          "width": "fill_container",
+          "fill": "#FFFFFF0C",
+          "cornerRadius": 9,
+          "layout": "vertical",
+          "padding": [
+            8,
+            10
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "n5HVht",
+              "name": "Label",
+              "fill": "#D7DDE8",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "面对 Moonshot 宣称签下从中金公司到风投机构的金融业巨头，是否需要将金融机构数据接入纳入预研优先级？ v9",
+              "lineHeight": 1.55,
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "RcHa8",
+          "name": "Ref · [staging smo",
+          "width": "fill_container",
+          "fill": "#FFFFFF0C",
+          "cornerRadius": 9,
+          "layout": "vertical",
+          "padding": [
+            8,
+            10
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "d4r6n3",
+              "name": "Label",
+              "fill": "#D7DDE8",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "[staging smoke] 材料上传链路验证 v8",
+              "lineHeight": 1.55,
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "gX954",
+          "name": "Ref · 月度计划 2026-09",
+          "width": "fill_container",
+          "fill": "#FFFFFF0C",
+          "cornerRadius": 9,
+          "layout": "vertical",
+          "padding": [
+            8,
+            10
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "fNyDc",
+              "name": "Label",
+              "fill": "#D7DDE8",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "月度计划 2026-09 v4",
+              "lineHeight": 1.55,
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "normal"
             }
           ]
         }
