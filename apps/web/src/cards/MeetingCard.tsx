@@ -651,15 +651,42 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
                   {READINESS_LABEL[payload.preflight.readiness ?? ""] ?? "会前材料"}
                 </span>
               </div>
+              {payload.issueIds.length ? (
+                <div className={s.sidebarIssues} aria-label="关联议题">
+                  <small>关联议题{payload.issueIds.length > 1 ? ` · ${payload.issueIds.length} 项` : ""}</small>
+                  {payload.issueIds.map((issueId) => {
+                    const issue = issueById.get(issueId);
+                    const read = payload.draft.readIssueIds.includes(issueId);
+                    const carried = payload.draft.carriedIssueIds.includes(issueId);
+                    return (
+                      <article key={issueId} className={s.linkedIssue} data-read={read}>
+                        <small>{issue ? (issue.payload as IssuePayload).location.level : "Issue"}</small>
+                        <h4 title={issue?.title ?? issueId}>{issue?.title ?? issueId}</h4>
+                        <div className={s.briefActions}>
+                          <button type="button" aria-pressed={read} disabled={pending} onClick={() => toggle("readIssueIds", issueId)}>
+                            <Check size={12} aria-hidden="true" />
+                            已阅
+                          </button>
+                          <button type="button" aria-pressed={carried} disabled={pending} onClick={() => toggle("carriedIssueIds", issueId)}>
+                            带到会议
+                          </button>
+                          <button type="button" onClick={() => onNavigate(`/issues/${issueId}`)}>
+                            打开 Issue
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : null}
               {lensEntries.length ? (
                 <div className={s.leaderLens}>
-                  <small>一号位点评要点参考</small>
-                  {lensEntries.map((entry) => (
-                    <div key={entry.id} className={s.lensPoint}>
-                      <strong>{entry.title}</strong>
-                      <p>{entry.body}</p>
-                    </div>
-                  ))}
+                  <small>一号位追问</small>
+                  <ol>
+                    {lensEntries.map((entry) => (
+                      <li key={entry.id}>{entry.body}</li>
+                    ))}
+                  </ol>
                 </div>
               ) : null}
               {payload.preflight.inputCoverage ? (
@@ -758,38 +785,6 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
                 <div><small>本材料非目标</small><p>{payload.preflight.taskDefinition.nonGoal}</p></div>
                 <div><small>证据边界</small><p>{payload.preflight.basis}</p></div>
               </details>
-            ) : null}
-
-            {payload.issueIds.length ? (
-              <section className={s.reviewSection} data-section="issues">
-                <header>
-                  <h3>关联议题</h3>
-                  {payload.issueIds.length > 1 ? <span className={s.count}>{payload.issueIds.length} 项</span> : null}
-                </header>
-                {payload.issueIds.map((issueId) => {
-                  const issue = issueById.get(issueId);
-                  const read = payload.draft.readIssueIds.includes(issueId);
-                  const carried = payload.draft.carriedIssueIds.includes(issueId);
-                  return (
-                    <article key={issueId} className={s.linkedIssue} data-read={read}>
-                      <small>{issue ? (issue.payload as IssuePayload).location.level : "Issue"}</small>
-                      <h4 title={issue?.title ?? issueId}>{issue?.title ?? issueId}</h4>
-                      <div className={s.briefActions}>
-                        <button type="button" aria-pressed={read} disabled={pending} onClick={() => toggle("readIssueIds", issueId)}>
-                          <Check size={12} aria-hidden="true" />
-                          已阅
-                        </button>
-                        <button type="button" aria-pressed={carried} disabled={pending} onClick={() => toggle("carriedIssueIds", issueId)}>
-                          带到会议
-                        </button>
-                        <button type="button" onClick={() => onNavigate(`/issues/${issueId}`)}>
-                          打开 Issue
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </section>
             ) : null}
 
             {beforePair.map(renderGroup)}

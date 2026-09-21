@@ -15,6 +15,9 @@ function entry(id: string, kind: string, title: string, body: string) {
   return { id, kind, title, body, sourceRefs: [`memory:${id}`] };
 }
 
+/** W4：leader_lens 已是 3–5 条陈述性追问，不再是带免责声明的单条点评。 */
+const LEADER_QUESTIONS = ["为什么现在必须选择渠道投入？", "如果只能保留一个战场，砍掉哪个？", "什么证据会推翻当前推荐？"];
+
 export function meetingCard(payloadOverrides: Record<string, unknown>, actions: Card["actions"] = []): Card {
   return {
     schemaVersion: 1,
@@ -38,7 +41,9 @@ export function meetingCard(payloadOverrides: Record<string, unknown>, actions: 
         entries: [
           entry("e1", "core_judgment", "预算可以批", "但必须绑定 90 天时效复盘"),
           entry("e2", "strategic_alignment", "与双主线一致", "东南亚渠道是关键落子"),
-          entry("e3", "leader_lens", "先问是否增强战略证明", "视角预判，非权威发言"),
+          entry("e3", "leader_lens", "一号位追问一", LEADER_QUESTIONS[0]),
+          entry("e4", "leader_lens", "一号位追问二", LEADER_QUESTIONS[1]),
+          entry("e5", "leader_lens", "一号位追问三", LEADER_QUESTIONS[2]),
         ],
         basis: "证据边界",
         brief: "简报",
@@ -81,14 +86,25 @@ function render(card: Card): string {
 }
 
 describe("Meeting 会前预审", () => {
-  it("一号位点评进左侧参考盒，正文目录不再重复列出", () => {
+  it("一号位追问进左侧参考盒，按陈述列表编号，正文目录不再重复列出", () => {
     const html = render(meetingCard({}));
-    expect(html).toContain("一号位点评要点参考");
-    expect(html).toContain("先问是否增强战略证明");
-    expect(html).toContain("视角预判，非权威发言");
-    // 同一条目只出现一次：目录里不再有 leader_lens 章节。
-    expect(html.split("先问是否增强战略证明")).toHaveLength(2);
+    expect(html).toContain("一号位追问");
+    for (const question of LEADER_QUESTIONS) expect(html.split(question)).toHaveLength(2);
+    expect(html).toContain("<ol>");
+    expect(html).not.toContain("视角预判");
+    expect(html).not.toContain("一号位追问一");
     expect(html).toContain("战略一致性判断");
+  });
+
+  it("关联议题移到左侧预审状态之后，保留三个 chips", () => {
+    const html = render(meetingCard({ issueIds: ["issue:1"] }));
+    expect(html).toContain('aria-label="关联议题"');
+    expect(html).not.toContain('data-section="issues"');
+    // 左栏在正文之前：关联议题必须排在正文的「战略一致性判断」之前。
+    expect(html.indexOf("关联议题")).toBeLessThan(html.indexOf("战略一致性判断"));
+    expect(html).toContain("已阅");
+    expect(html).toContain("带到会议");
+    expect(html).toContain("打开 Issue");
   });
 
   it("对话栏默认展开为 pen 的浅色 400px 列，仍可折叠", () => {

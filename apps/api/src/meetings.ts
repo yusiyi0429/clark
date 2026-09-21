@@ -843,7 +843,7 @@ type RelatedMeetingSnapshotRow = {
 function preflightStructureError(candidate: TPreflightCandidate): string | null {
   const count = (kind: TPreflightCandidate["entries"][number]["kind"]) =>
     candidate.entries.filter((entry) => entry.kind === kind).length;
-  for (const kind of ["core_judgment", "strategic_alignment", "leader_lens"] as const) {
+  for (const kind of ["core_judgment", "strategic_alignment"] as const) {
     if (count(kind) !== 1) return `${kind} 必须恰好 1 条`;
   }
   for (const kind of ["positive_signal", "risk_calibration", "next_step"] as const) {
@@ -851,9 +851,12 @@ function preflightStructureError(candidate: TPreflightCandidate): string | null 
   }
   const questions = count("meeting_question");
   if (questions < 3 || questions > 5) return "meeting_question 必须为 3–5 条";
-  const lens = candidate.entries.find((entry) => entry.kind === "leader_lens")!;
-  if (!lens.body.includes("视角预判") || !lens.body.includes("非权威发言")) {
-    return "leader_lens 必须标明“视角预判，非权威发言”";
+  const lenses = candidate.entries.filter((entry) => entry.kind === "leader_lens");
+  if (lenses.length < 3 || lenses.length > 5) return "leader_lens 必须为 3–5 条";
+  for (const lens of lenses) {
+    if (lens.body.includes("视角预判") || lens.body.includes("非权威发言")) {
+      return "leader_lens 不得出现“视角预判”“非权威发言”";
+    }
   }
   if (candidate.taskDefinition.secondaryRole === candidate.taskDefinition.primaryRole) {
     return "secondaryRole 不能与 primaryRole 相同";

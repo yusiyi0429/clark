@@ -131,7 +131,7 @@ describe("Issue → Meeting Card/Action user journey", () => {
       expect(payload.issueIds).toEqual([issue.id]);
       expect(payload.preflight.status).toBe("ready");
       expect(payload.preflight.entries.map((entry: { id: string }) => entry.id)).toEqual([
-        "entry-1", "entry-2", "entry-3", "entry-4", "entry-5", "entry-6", "entry-7", "entry-8", "entry-9",
+        "entry-1", "entry-2", "entry-3", "entry-4", "entry-5", "entry-6", "entry-7", "entry-8", "entry-9", "entry-10", "entry-11",
       ]);
       expect(payload.preflight).toMatchObject({
         readiness: "revise",
@@ -558,7 +558,7 @@ describe("Candidate Preflight", () => {
   });
 });
 
-  it("rejects an advisor candidate that omits one of the required seven sections", async () => {
+  it("rejects an advisor candidate whose leader_lens block is missing", async () => {
     const agent: PreflightAgent = {
       async generate(input) {
         const candidate = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
@@ -571,7 +571,29 @@ describe("Candidate Preflight", () => {
       const { card } = await readyMeeting(t, "dri-meeting-invalid-structure");
       expect(card.payload.preflight).toMatchObject({
         status: "failed",
-        error: { code: "invalid_preflight_candidate", message: "leader_lens 必须恰好 1 条" },
+        error: { code: "invalid_preflight_candidate", message: "leader_lens 必须为 3–5 条" },
+      });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("rejects a leader_lens statement that falls back to disclaimer wording", async () => {
+    const agent: PreflightAgent = {
+      async generate(input) {
+        const candidate = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
+        candidate.entries = candidate.entries.map((entry) =>
+          entry.kind === "leader_lens" ? { ...entry, body: "视角预判，非权威发言：首先追问代价" } : entry,
+        );
+        return { candidate };
+      },
+    };
+    const t = await createTestApp({}, undefined, { preflightAgent: agent });
+    try {
+      const { card } = await readyMeeting(t, "dri-meeting-lens-disclaimer");
+      expect(card.payload.preflight).toMatchObject({
+        status: "failed",
+        error: { code: "invalid_preflight_candidate", message: "leader_lens 不得出现“视角预判”“非权威发言”" },
       });
     } finally {
       await t.close();

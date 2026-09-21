@@ -10,7 +10,7 @@ const SECTION_LABEL: [string, string, string][] = [
   ["risk_calibration", "潜在风险 & 待校准问题", "潜在风险与待校准"],
   ["meeting_question", "建议会议重点追问的问题", "建议追问问题"],
   ["next_step", "下阶段推动建议", "下阶段推动建议"],
-  ["leader_lens", "一号位点评要点参考", "一号位点评要点参考"],
+  ["leader_lens", "一号位追问", "一号位追问"],
 ];
 
 /** 七段结果按固定顺序分组；核心判断单独作为 Hero，不进目录。旧 preflight 没有 taskDefinition，平铺为单组。 */

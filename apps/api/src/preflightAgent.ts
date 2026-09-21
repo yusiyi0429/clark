@@ -30,8 +30,8 @@ export const PREFLIGHT_PROMPT = `CEO WarMap Advisor Preflight v2
 只能调用 submit_candidate 提交一次严格候选：
 - readiness 只能是 ready、revise、blocked。
 - entries 只允许七类：core_judgment、strategic_alignment、positive_signal、risk_calibration、meeting_question、next_step、leader_lens。
-- core_judgment、strategic_alignment、leader_lens 各恰好 1 条；positive_signal、risk_calibration、next_step 各至少 1 条；meeting_question 必须 3–5 条。每条简短直给。
-- leader_lens 必须明确写“视角预判，非权威发言”，只预判 CEO 最可能首先关注或质疑的一点。
+- core_judgment、strategic_alignment 各恰好 1 条；positive_signal、risk_calibration、next_step 各至少 1 条；meeting_question 必须 3–5 条；leader_lens 必须 3–5 条。每条简短直给。
+- leader_lens 是 3–5 条陈述性追问问题：站在一号位视角把要追问的事直接陈述成问句，不写免责或元评述，禁止出现“视角预判”“非权威发言”。
 - 每条 entry 必须给非空 sourceRefs。只可使用输入显式出现的 issue:<id>、research:<id>、material:<id>、meeting:<id>、transcript:<id>、outcome:<id>，以及通过 MCP 查到的 memory:<sectionId>。
 - basis 说明本轮实际使用的输入与证据边界；brief 是一句核心判断；summary 只写“最关键的一处问题”和“最优先的一个动作”。
 - 无来源事实标“待核实”；缺输入标“待补”；不得声称已批准、确认、分派、签发或形成组织事实。`;
