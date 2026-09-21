@@ -49,7 +49,7 @@ describe("Signal 阅读", () => {
 
   it("渲染真实抓到的来源文本，且不宣称已内嵌全文", () => {
     const html = render(signalCard("outlet", "CNBC"));
-    expect(html).toContain('aria-label="原文摘录"');
+    expect(html).toContain('aria-label="原文"');
     expect(html).toContain("摘录");
     expect(html).not.toContain("原文全文");
   });

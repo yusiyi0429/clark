@@ -109,8 +109,9 @@ export function createWechatMcpAdapter({
       const payload = obj(await call("get_recent_articles", { since: 0, limit, source_id: accountId }, signal));
       const articles = Array.isArray(payload.articles) ? payload.articles : [];
       const items: TRadarSourceItem[] = [];
-      // 正文摘要缺失时才读全文；限制次数，避免对 sidecar 触发大量抓取
-      let excerptFallbacks = 0;
+      // CEO 2026-09-21 裁决：Signal 存完整原文而非摘录；digest 是 teaser，不能代表原文。
+      // read_article 每次都是真实抓取：单账号单次扫描至多 15 次全文读取，其余退回 digest，避免对 sidecar 触发大量抓取。
+      let fullTextReads = 0;
       for (const raw of articles) {
         const article = obj(raw);
         const title = str(article.title);
@@ -122,17 +123,18 @@ export function createWechatMcpAdapter({
         } catch {
           continue;
         }
-        let excerpt = str(article.digest);
-        if (!excerpt && excerptFallbacks < 5) {
-          excerptFallbacks += 1;
-          excerpt = await readArticleExcerpt(call, Number(article.id), signal);
+        let excerpt = "";
+        if (fullTextReads < 15) {
+          fullTextReads += 1;
+          excerpt = await readArticleText(call, Number(article.id), signal);
         }
+        excerpt = excerpt || str(article.digest);
         items.push({
           sourceType: "wechat-account",
           title,
           url: link,
           publishedAt: new Date(publishTime * 1000).toISOString(),
-          excerpt: excerpt || title,
+          excerpt: excerpt.slice(0, 10_000) || title,
           sourceRef: { type: "wechat-account", provider: "wechat-mcp", accountId, accountName },
         });
       }
@@ -141,7 +143,7 @@ export function createWechatMcpAdapter({
   };
 }
 
-async function readArticleExcerpt(
+async function readArticleText(
   call: WechatMcpCallTool,
   articleId: number,
   signal: AbortSignal,
@@ -150,8 +152,13 @@ async function readArticleExcerpt(
   try {
     const text = await call("read_article", { article_id: articleId }, signal);
     if (typeof text !== "string") return "";
-    // 去掉 YAML frontmatter，压平空白后取前 800 字作为摘录
-    return text.replace(/^---\n[\s\S]*?\n---\n/, "").replace(/\s+/g, " ").trim().slice(0, 800);
+    // 去 YAML frontmatter；保留段落换行（Signal 阅读页 pre-wrap 渲染），压平行内空白
+    return text
+      .replace(/^---\n[\s\S]*?\n---\n/, "")
+      .split("\n").map((line) => line.replace(/\s+/g, " ").trim()).join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/^\n+|\n+$/g, "")
+      .slice(0, 10_000);
   } catch {
     return "";
   }

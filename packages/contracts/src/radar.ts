@@ -52,12 +52,14 @@ export const RadarOutlet = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 200 }),
   articleDomains: Type.Array(Type.String({ minLength: 1, maxLength: 253 }), { minItems: 1, maxItems: 10 }),
   channels: Type.Array(RadarOutletChannel, { minItems: 1, maxItems: 5 }),
+  /** feed 只给摘要时，逐条抓文章页提取全文（CEO 2026-09-21 裁决：Signal 存完整原文而非摘录）。 */
+  fullText: Type.Optional(Type.Boolean()),
 }, { additionalProperties: false });
 
 export type TRadarOutlet = Static<typeof RadarOutlet>;
 
 /**
- * 7 家白名单媒体 → 8 个域名（BBC 占两个）。纯数据，不是运营配置。
+ * 8 家白名单媒体。纯数据，不是运营配置。
  * cnbctv18.com 是被许可方（印度 CNBC-TV18）、bloomberglaw.com 是独立产品线、
  * bloomberg.co.jp 与 jp.reuters.com 是独立日文版、ftchinese.com 是独立中文品牌——都刻意不纳入。
  * 不要把「漏配的域名」补进去；它们属于别的编辑部。
@@ -124,6 +126,16 @@ export const RADAR_OUTLETS = [
       { kind: "rss", url: "https://www.economist.com/latest/rss.xml" },
       { kind: "rss", url: "https://www.economist.com/finance-and-economics/rss.xml" },
     ],
+  },
+  {
+    outletId: "qbitai",
+    name: "量子位",
+    articleDomains: ["qbitai.com"],
+    channels: [
+      { kind: "rss", url: "https://www.qbitai.com/feed" },
+    ],
+    // WordPress feed 只有 20-30 字摘要；Signal 要完整原文，需逐条抓文章页提取
+    fullText: true,
   },
 ] satisfies Static<typeof RadarOutlet>[];
 

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
-import { RadarSources, RADAR_OUTLETS, type TRadarSourceItem } from "@warmap/contracts";import { createOutletFeedAdapter, resolveConfiguredOutletIds } from "../src/outletSources.js";
+import { RadarSources, RADAR_OUTLETS, type TRadarSourceItem } from "@warmap/contracts";import { createOutletFeedAdapter, extractArticleText, resolveConfiguredOutletIds } from "../src/outletSources.js";
 
 const RSS = `<?xml version="1.0"?><rss version="2.0"><channel>
 <item><title> <![CDATA[Nvidia quarterly results beat forecasts]]></title>
@@ -65,13 +65,11 @@ describe("发布方级来源 outlets", () => {
     })).toBe(false);
   });
 
-  it("白名单目录：7 家 → 8 个域名（BBC 占两个），每家都配了渠道", () => {
+  it("白名单目录：8 家，每家都配了渠道；量子位标记全文抓取", () => {
     expect(RADAR_OUTLETS.map((outlet) => outlet.outletId)).toEqual([
-      "bbc", "wsj", "bloomberg", "reuters", "ft", "cnbc", "economist",
+      "bbc", "wsj", "bloomberg", "reuters", "ft", "cnbc", "economist", "qbitai",
     ]);
-    const domains = RADAR_OUTLETS.flatMap((outlet) => outlet.articleDomains);
-    expect(domains).toHaveLength(8);
-    expect(domains).toContain("bbc.co.uk");
+    expect(RADAR_OUTLETS.find((outlet) => outlet.outletId === "qbitai")?.fullText).toBe(true);
     for (const outlet of RADAR_OUTLETS) {
       expect(outlet.articleDomains.length).toBeGreaterThan(0);
       expect(outlet.channels.length).toBeGreaterThan(0);
@@ -141,6 +139,61 @@ describe("发布方级来源 outlets", () => {
     });
     const items = await runtime.fetchLatest({ outletIds: ["bbc"], lookbackHours: WINDOW_HOURS }, new AbortController().signal);
     expect(items).toEqual([]);
+  });
+
+  it("fullText outlet：入选条目抓文章页提取全文，抓取失败诚实退回 feed 摘要", async () => {
+    const qbitaiRss = `<?xml version="1.0"?><rss version="2.0"><channel>
+<item><title><![CDATA[GPT-6 开源]]></title>
+  <link>https://www.qbitai.com/2026/09/493218.html</link>
+  <pubDate>Mon, 21 Sep 2026 09:00:00 GMT</pubDate>
+  <description><![CDATA[摘要 teaser]]></description></item>
+</channel></rss>`;
+    const article = `<html><body><div class="article"><p>第一段：具身智能体进展。</p><p>第二段：开源社区反响。</p></div></body></html>`;
+    const badArticle = `<html><body><div>无正文容器</div></body></html>`;
+    let articleFetches = 0;
+    const runtime = createOutletFeedAdapter({
+      fetch: (async (url: string | URL | globalThis.Request) => {
+        const target = String(url);
+        articleFetches += 1;
+        const body = target.endsWith("/feed")
+          ? qbitaiRss
+          : target.endsWith("ok.html") ? article : badArticle;
+        return { ok: true, status: 200, text: async () => body } as Response;
+      }) as typeof fetch,
+    });
+    const items = await runtime.fetchLatest(
+      { outletIds: ["qbitai"], lookbackHours: WINDOW_HOURS },
+      new AbortController().signal,
+    );
+    // 目录里的真实 URL 抓不到（测试 fetch 返回 badArticle）→ 退回摘要，不冒充
+    expect(items[0].excerpt).toBe("摘要 teaser");
+    expect(items[0].title).toBe("GPT-6 开源");
+
+    const qbitai = RADAR_OUTLETS.find((outlet) => outlet.outletId === "qbitai")!;
+    const runtimeOk = createOutletFeedAdapter({
+      outlets: [{ ...qbitai, channels: [{ kind: "rss", url: "https://www.qbitai.com/feed" }] }],
+      fetch: (async (url: string | URL | globalThis.Request) => {
+        const target = String(url);
+        const body = target.endsWith("/feed")
+          ? qbitaiRss.replace("493218.html", "ok.html")
+          : article;
+        return { ok: true, status: 200, text: async () => body } as Response;
+      }) as typeof fetch,
+    });
+    const full = await runtimeOk.fetchLatest(
+      { outletIds: ["qbitai"], lookbackHours: WINDOW_HOURS },
+      new AbortController().signal,
+    );
+    expect(full[0].excerpt).toBe("第一段：具身智能体进展。\n\n第二段：开源社区反响。");
+    expect(articleFetches).toBeGreaterThanOrEqual(1);
+  });
+
+  it("extractArticleText：段落保留、script 剔除、10k 截断", () => {
+    const html = `<div class="article"><p>段落一</p><script>alert(1)</script><p>段落二</p>${"长".repeat(20_000)}</div>`;
+    const text = extractArticleText(html);
+    expect(text).not.toContain("alert");
+    expect(text.startsWith("段落一\n\n段落二")).toBe(true);
+    expect(text.length).toBeLessThanOrEqual(10_000);
   });
 });
 

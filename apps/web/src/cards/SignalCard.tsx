@@ -79,11 +79,11 @@ export function SignalCard({ card, collection, onCard, onNavigate }: CardRenderP
         </footer>
       </blockquote>
 
-      {/* 只渲染真实抓到的来源文本（摘要/描述/阅读摘录）；不编造原文全文。 */}
+      {/* 只渲染真实抓到的来源文本；抓取失败时如实退回摘要，不编造原文。CEO 2026-09-21：Signal 存完整原文。 */}
       {payload.source.excerpt ? (
-        <section className={s.sourceText} aria-label="原文摘录">
+        <section className={s.sourceText} aria-label="原文">
           <header>
-            <strong>原文摘录</strong>
+            <strong>原文</strong>
             <span>
               {publisher ? `${publisher} · ` : ""}
               {payload.source.publishedAt.slice(0, 10)}

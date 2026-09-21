@@ -158,6 +158,34 @@ describe("Radar source adapter public seam", () => {
     expect(calls[1].args).toEqual({ since: 0, limit: 30, source_id: "wx-account-42" });
   });
 
+  it("公众号全文：digest 不再代表原文；单次扫描全文读取至多 15 次，超出退回 digest", async () => {
+    let reads = 0;
+    const wechat = createWechatMcpAdapter({
+      callTool: async (name, args) => {
+        if (name === "list_subscriptions") return [{ fakeid: "acc-1", nickname: "机器之心" }];
+        if (name === "get_recent_articles") {
+          return { articles: Array.from({ length: 17 }, (_, index) => ({
+            id: index + 1,
+            title: `文章 ${index + 1}`,
+            digest: `digest-${index + 1}`,
+            link: `https://mp.weixin.qq.com/s/a-${index + 1}`,
+            publish_time: 1777626000 + index,
+          })) };
+        }
+        if (name === "read_article") {
+          reads += 1;
+          return `---\ntitle: x\n---\n\n全文段落一\n\n${"内".repeat(30)}\n\n全文段落二`;
+        }
+        throw new Error(`unexpected tool ${name}`);
+      },
+    });
+    const items = await wechat.fetchLatest({ accountId: "acc-1", accountName: "机器之心" }, new AbortController().signal);
+    expect(reads).toBe(15);
+    expect(items[0].excerpt).toBe(`全文段落一\n\n${"内".repeat(30)}\n\n全文段落二`);
+    expect(items[15].excerpt).toBe("digest-16");
+    expect(items[16].excerpt).toBe("digest-17");
+  });
+
   it("rejects an unsubscribed WeChat account instead of substituting keyword search", async () => {
     const wechat = createWechatMcpAdapter({
       url: "http://wechat:5000/mcp",

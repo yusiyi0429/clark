@@ -49,6 +49,52 @@ function iso(value: string): string {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : "";
 }
 
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+/**
+ * 文章页正文提取（量子位 WordPress：`<div class="article">…</div>`）。
+ * 块级标签转空行保留段落；拿不到容器时返回空串，由调用方诚实退回 feed 摘要。
+ */
+export function extractArticleText(html: string): string {
+  const container = html.match(/<div[^>]*class="[^"]*\barticle\b[^"]*"[^>]*>/i);
+  if (!container) return "";
+  const start = container.index! + container[0].length;
+  const body = html.slice(start, start + 300_000);
+  return decodeHtml(body)
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<\/(p|div|h[1-6]|li|blockquote|figcaption)>/gi, "\n\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[ \t\r\f\v]+/g, " ")
+    .replace(/\n ?\n(?: ?\n)+/g, "\n\n")
+    .split("\n").map((line) => line.trim()).join("\n")
+    .replace(/^\n+|\n+$/g, "")
+    .slice(0, 10_000);
+}
+
+/** fullText outlet：逐条抓文章页提取全文；失败或无正文时诚实退回 feed 摘要，不用抓取时间或标题冒充。 */
+async function fetchFullText(
+  fetchImpl: typeof fetch,
+  url: string,
+  signal: AbortSignal | undefined,
+): Promise<string> {
+  try {
+    const response = await fetchImpl(url, {
+      signal,
+      headers: { "user-agent": "Mozilla/5.0 (compatible; WarMapRadar/1.0)" },
+    });
+    if (!response.ok) return "";
+    return extractArticleText(await response.text());
+  } catch {
+    return "";
+  }
+}
+
 /**
  * 发布方级来源（方案 A）：直取这 7 家自己的 RSS / news-sitemap，在本地做归属校验与时间窗过滤。
  * 博查实测不支持 site:/includeDomains，且索引里没有这 7 家（299 条命中 0 条），
@@ -115,9 +161,18 @@ export function createOutletFeedAdapter(options: {
         }
         // 渠道给的是整份最新列表而非检索结果：每家只保留窗口内最新的 limit 条，
         // 避免 economist 的 300 条把 assess 批次数顶穿。窗口外条目直接丢弃，不逐条报 warning。
-        items.push(...[...perOutlet.values()]
+        // fullText outlet 只对入选条目抓文章页（每家至多 limit 次），丢弃条目不产生抓取。
+        const picked = [...perOutlet.values()]
           .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
-          .slice(0, limit));
+          .slice(0, limit);
+        if (outlet.fullText) {
+          for (const item of picked) {
+            if (signal?.aborted) break;
+            const full = await fetchFullText(fetchImpl, item.url, signal);
+            if (full) item.excerpt = full;
+          }
+        }
+        items.push(...picked);
       }
       return items;
     },
