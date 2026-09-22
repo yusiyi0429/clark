@@ -113,6 +113,17 @@ describe("openapi contract", () => {
       $ref: "#/components/schemas/ApiError",
     });
   });
+
+  it("documents the Miaoji transcript candidate upload as a single-file multipart endpoint", () => {
+    const upload = doc.paths["/api/meetings/{id}/transcript-candidate"]?.post;
+    expect(upload).toBeDefined();
+    expect(upload.operationId).toBe("uploadMeetingTranscriptCandidate");
+    expect(upload.requestBody.content["multipart/form-data"].schema).toMatchObject({
+      required: ["file"],
+      properties: { file: { type: "string", format: "binary" } },
+    });
+    expect(Object.keys(upload.responses)).toEqual(expect.arrayContaining(["200", "400", "401", "404", "409", "413"]));
+  });
 });
 
 describe("card envelope schema", () => {

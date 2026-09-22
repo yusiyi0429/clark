@@ -432,7 +432,7 @@ export async function executeCancelMeeting(
     const updated = await updateMeeting(
       client,
       row.id,
-      "status = 'cancelled', version = version + 1, action_fingerprints = $2::jsonb",
+      "status = 'cancelled', transcript_candidate = NULL, version = version + 1, action_fingerprints = $2::jsonb",
       [JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
     );
     return commit(client, updated, secret);

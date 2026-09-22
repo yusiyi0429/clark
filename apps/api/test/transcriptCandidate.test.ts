@@ -247,6 +247,36 @@ describe("妙记 Markdown Transcript 候选", () => {
       await t.close();
     }
   });
+
+  it("clears the candidate when the scheduled Meeting is cancelled, leaving the rest of the Meeting intact", async () => {
+    const t = await newApp();
+    try {
+      const { cookie, meetingId } = await readyMeeting(t, "cancel-clears-candidate");
+      await upload(t, cookie, meetingId, MARKDOWN);
+      const before = (await t.sql("SELECT title, scheduled_at, participants, issue_ids, preflight, draft, materials FROM meetings WHERE id = $1", [meetingId]))[0];
+
+      const cancel = await actionId(t, cookie, meetingId, "meeting.cancel");
+      expect(cancel).toBeTruthy();
+      const res = await execute(t, cookie, cancel);
+      expect(res.statusCode).toBe(200);
+      const card = res.json().cards[0];
+      expect(card.payload.status).toBe("cancelled");
+      expect(card.payload.transcriptCandidate).toBeNull();
+      expect(card.actions).toEqual([]);
+
+      const row = (await t.sql("SELECT status, transcript, transcript_candidate, title, scheduled_at, participants, issue_ids, preflight, draft, materials FROM meetings WHERE id = $1", [meetingId]))[0];
+      expect(row).toMatchObject({ status: "cancelled", transcript: null, transcript_candidate: null });
+      expect(row.title).toBe(before.title);
+      expect(row.scheduled_at).toEqual(before.scheduled_at);
+      expect(row.participants).toEqual(before.participants);
+      expect(row.issue_ids).toEqual(before.issue_ids);
+      expect(row.preflight).toEqual(before.preflight);
+      expect(row.draft).toEqual(before.draft);
+      expect(row.materials).toEqual(before.materials);
+    } finally {
+      await t.close();
+    }
+  });
 });
 
 describe("meeting.confirm_transcript_candidate", () => {

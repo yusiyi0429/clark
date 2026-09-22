@@ -762,6 +762,33 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/meetings/{id}/transcript-candidate": {
+        post: {
+          operationId: "uploadMeetingTranscriptCandidate",
+          summary: "CEO Web 上传妙记 Markdown，生成待确认的 Transcript 候选（multipart 单文件，不改状态、不跑会后抽取）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "multipart/form-data": {
+                schema: {
+                  type: "object",
+                  required: ["file"],
+                  properties: { file: { type: "string", format: "binary" } },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "生成候选后的 scheduled Meeting Card（含 transcriptCandidate 投影）", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+            "413": errorResponse,
+          },
+        },
+      },
       "/api/meetings/{id}/materials": {
         post: {
           operationId: "replaceMeetingMaterials",
