@@ -202,6 +202,8 @@ export function RadarCard({ card, collection, onNavigate }: CardRenderProps) {
         </div>
       )}
 
+      {/* 遮罩与卡片分开渲染：卡片自带 fixed 居中，遮罩盖住整屏。 */}
+      {configOpen ? <div className={a.backdrop} aria-hidden="true" /> : null}
       {configOpen ? (
         <div className={a.dialog} role="dialog" aria-modal="true" aria-label="监测范围">
           <header className={a.header}>

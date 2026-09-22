@@ -66,6 +66,14 @@ describe("responsive workspace CSS", () => {
     expect(source).toContain(".feed{max-width:1680px;margin:auto;padding:0 40px 80px;");
   });
 
+  it("gives the 监测范围 dialog a scrim and a bounded scroll region", () => {
+    const source = css("./radar-config.module.css");
+    expect(source).toContain(".backdrop{position:fixed;inset:0;z-index:70;background:#0B0F1673;");
+    expect(source).toContain(".dialog{position:fixed;inset:0;z-index:71;display:flex;flex-direction:column;");
+    expect(source).toContain(".scroll{padding:24px 32px 30px;overflow-y:auto;overscroll-behavior:contain;flex:1;min-height:0;");
+    expect(source).not.toContain("::backdrop");
+  });
+
   it("preserves compact Access geometry and 42px coarse-pointer notification controls", () => {
     expect(css("./access.module.css")).toContain("@media (min-width: 561px) {");
     expect(css("./notifications.module.css")).toContain("@media(pointer:coarse){.railLock button{width:42px;height:42px}}");
