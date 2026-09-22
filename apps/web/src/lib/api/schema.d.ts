@@ -405,7 +405,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** 战场管理页数据：战场列表与可选议题（仅 pending，排除 capability 级） */
+        get: operations["getBattlefieldManagement"];
         put?: never;
         /** CEO 注册战场（slug id，写入 Organization Fact 注册表） */
         post: operations["createBattlefield"];
@@ -1069,6 +1070,21 @@ export interface components {
         };
         AssignBattlefieldIssueRequest: {
             issueId: string;
+        };
+        BattlefieldManagementResponse: {
+            battlefields: {
+                id: string;
+                name: string;
+                owner: string;
+                pendingIssueCount: number;
+            }[];
+            issues: {
+                id: string;
+                title: string;
+                urgencyLevel: "red" | "yellow" | "gray";
+                decisionBy?: string;
+                battlefieldIds: string[];
+            }[];
         };
         ConversationAttachment: {
             id: string;
@@ -2533,6 +2549,35 @@ export interface operations {
             };
             /** @description version 冲突，携带 latestCard */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getBattlefieldManagement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 整页展示数据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BattlefieldManagementResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

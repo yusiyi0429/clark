@@ -1246,6 +1246,32 @@
             }
           }
         }
+      },
+      "get": {
+        "operationId": "getBattlefieldManagement",
+        "summary": "战场管理页数据：战场列表与可选议题（仅 pending，排除 capability 级）",
+        "responses": {
+          "200": {
+            "description": "整页展示数据",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BattlefieldManagementResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/config/capabilities": {
@@ -3986,6 +4012,96 @@
             "minLength": 1,
             "maxLength": 100,
             "type": "string"
+          }
+        }
+      },
+      "BattlefieldManagementResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "battlefields",
+          "issues"
+        ],
+        "properties": {
+          "battlefields": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "owner",
+                "pendingIssueCount"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "pendingIssueCount": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "urgencyLevel",
+                "battlefieldIds"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "urgencyLevel": {
+                  "anyOf": [
+                    {
+                      "const": "red",
+                      "type": "string"
+                    },
+                    {
+                      "const": "yellow",
+                      "type": "string"
+                    },
+                    {
+                      "const": "gray",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "decisionBy": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "battlefieldIds": {
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         }
       },

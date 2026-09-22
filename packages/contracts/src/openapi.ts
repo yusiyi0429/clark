@@ -18,6 +18,7 @@ import {
   CreateCapabilityRequest,
   CreateCeoIssueRequest,
   AssignBattlefieldIssueRequest,
+  BattlefieldManagementResponse,
   CreateConfigMeetingRequest,
   CreateMeetingRequest,
   DriIssueImportRequest,
@@ -434,6 +435,14 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "409": errorResponse,
           },
         },
+        get: {
+          operationId: "getBattlefieldManagement",
+          summary: "战场管理页数据：战场列表与可选议题（仅 pending，排除 capability 级）",
+          responses: {
+            "200": { description: "整页展示数据", content: { "application/json": { schema: { $ref: "#/components/schemas/BattlefieldManagementResponse" } } } },
+            "401": errorResponse,
+          },
+        },
       },
       "/api/config/capabilities": {
         post: {
@@ -799,6 +808,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         CreateCeoIssueRequest: CreateCeoIssueRequest as JsonSchema,
         CreateConfigMeetingRequest: CreateConfigMeetingRequest as JsonSchema,
         AssignBattlefieldIssueRequest: AssignBattlefieldIssueRequest as JsonSchema,
+        BattlefieldManagementResponse: BattlefieldManagementResponse as JsonSchema,
         ConversationAttachment: ConversationAttachment as JsonSchema,
         ConversationAttachmentInfo: ConversationAttachmentInfo as JsonSchema,
         ConversationAttachmentUploadResponse: ConversationAttachmentUploadResponse as JsonSchema,

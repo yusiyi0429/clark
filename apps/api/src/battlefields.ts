@@ -3,6 +3,7 @@ import type { Pool, QueryResult } from "pg";
 import type {
   TCard,
   TBattlefieldCardPayload,
+  TBattlefieldManagementResponse,
   TBattlefieldTodo,
   TIssueLocation,
   TMonthlyPlanBattlefield,
@@ -136,6 +137,34 @@ export async function registerBattlefield(
   );
   if (result.rowCount !== 1) return { ok: false, code: "BATTLEFIELD_EXISTS", message: `战场 ${id} 已注册` };
   return { ok: true, id };
+}
+
+/**
+ * 战场管理页投影：一次返回战场列表与可选议题。
+ * 议题只取 pending 且非 capability 级；battlefieldIds 即归一化集合，未归属为空数组，
+ * 因此同一议题可以同时出现在多个战场的关联列表里。
+ */
+export async function projectBattlefieldManagement(q: Query): Promise<TBattlefieldManagementResponse> {
+  const battlefields = await q("SELECT id, name, owner FROM battlefield_config ORDER BY name, id");
+  const issues = await q(
+    `SELECT id, title, urgency, location FROM issues
+      WHERE status = 'pending' AND location->>'level' <> 'capability'
+      ORDER BY created_at DESC, id`,
+  );
+  const pending = (issues.rows as { id: string; title: string; urgency: { level: string; decisionBy?: string }; location: TIssueLocation }[]).map((row) => ({
+    id: row.id,
+    title: row.title,
+    urgencyLevel: row.urgency.level as TBattlefieldManagementResponse["issues"][number]["urgencyLevel"],
+    ...(row.urgency.decisionBy ? { decisionBy: row.urgency.decisionBy } : {}),
+    battlefieldIds: battlefieldSetOf(row.location) ?? [],
+  }));
+  return {
+    battlefields: (battlefields.rows as { id: string; name: string; owner: string }[]).map((row) => ({
+      ...row,
+      pendingIssueCount: pending.filter((issue) => issue.battlefieldIds.includes(row.id)).length,
+    })),
+    issues: pending,
+  };
 }
 
 /** 依据每个待办/feedback 自己的 battlefieldId 归属；空值表示公司级，不能通过 owner 反推。 */

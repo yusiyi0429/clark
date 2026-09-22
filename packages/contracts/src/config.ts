@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { IssueUrgencyLevel } from "./issues.js";
 
 /**
  * CEO 配置页写入的 Organization Fact 请求契约。
@@ -27,6 +28,37 @@ export const CreateCapabilityRequest = Type.Object(
 export const AssignBattlefieldIssueRequest = Type.Object(
   {
     issueId: Type.String({ minLength: 1, maxLength: 100 }),
+  },
+  { additionalProperties: false },
+);
+
+/** 战场管理页一次拉取整页数据：展示态，不做任何业务写入。 */
+export const BattlefieldManagementResponse = Type.Object(
+  {
+    battlefields: Type.Array(
+      Type.Object(
+        {
+          id: Type.String({ minLength: 1 }),
+          name: Type.String({ minLength: 1 }),
+          owner: Type.String(),
+          pendingIssueCount: Type.Integer({ minimum: 0 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    /** 仅 pending、排除 capability 级；battlefieldIds 是归一化后的集合，未归属为空数组。 */
+    issues: Type.Array(
+      Type.Object(
+        {
+          id: Type.String({ minLength: 1 }),
+          title: Type.String({ minLength: 1 }),
+          urgencyLevel: IssueUrgencyLevel,
+          decisionBy: Type.Optional(Type.String({ minLength: 1 })),
+          battlefieldIds: Type.Array(Type.String({ minLength: 1 })),
+        },
+        { additionalProperties: false },
+      ),
+    ),
   },
   { additionalProperties: false },
 );
@@ -67,5 +99,6 @@ export type TCreateBattlefieldRequest = Static<typeof CreateBattlefieldRequest>;
 export type TAssignBattlefieldIssueRequest = Static<typeof AssignBattlefieldIssueRequest>;
 export type TCreateCapabilityRequest = Static<typeof CreateCapabilityRequest>;
 export type TCapabilityCardPayload = Static<typeof CapabilityCardPayload>;
+export type TBattlefieldManagementResponse = Static<typeof BattlefieldManagementResponse>;
 export type TCreateCeoIssueRequest = Static<typeof CreateCeoIssueRequest>;
 export type TCreateConfigMeetingRequest = Static<typeof CreateConfigMeetingRequest>;

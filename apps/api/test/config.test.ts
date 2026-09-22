@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
-import { Card, MeetingCardPayload, type TPreflightCandidate } from "@warmap/contracts";
+import { Card, BattlefieldManagementResponse, MeetingCardPayload, type TPreflightCandidate } from "@warmap/contracts";
 import { createTestApp, preflightCandidate, type TestApp } from "./helpers.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetings.js";
 
@@ -339,6 +339,41 @@ describe("CEO 配置页 create 路由", () => {
 
       const missing = await t.app.inject({ method: "DELETE", url: "/api/config/battlefields/growth", headers });
       expect(missing.statusCode).toBe(404);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("projects the battlefield management page from one endpoint", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name: "渠道战场", owner: "张三", goal: "目标" } });
+      const assigned = await t.createIssue({ title: "增长战场议题" });
+      const shared = await t.createIssue({ title: "跨战场议题", urgency: { level: "red", decisionBy: "2026-09-30", reason: "窗口关闭" } });
+      await t.app.inject({ method: "POST", url: "/api/config/battlefields/渠道战场/issues", headers, payload: { issueId: shared.objectRef.id } });
+      const orphan = await t.createIssue({ title: "未归属议题", location: { level: "company", relatedBattlefieldIds: [] } });
+      const capability = await t.createIssue({ location: { level: "capability", capabilityId: "cap-delivery" } });
+      const decided = await t.createIssue();
+      await t.sql("UPDATE issues SET status = 'decided' WHERE id = $1", [decided.objectRef.id]);
+
+      const res = await t.app.inject({ method: "GET", url: "/api/config/battlefields", headers: { cookie: headers.cookie! } });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(Value.Check(BattlefieldManagementResponse, body)).toBe(true);
+      expect(body.battlefields).toEqual([
+        { id: "growth", name: "增长战场", owner: "", pendingIssueCount: 2 },
+        { id: "渠道战场", name: "渠道战场", owner: "张三", pendingIssueCount: 1 },
+      ]);
+      const byId = new Map(body.issues.map((issue: { id: string }) => [issue.id, issue]));
+      expect([...byId.keys()].sort()).toEqual([assigned.objectRef.id, shared.objectRef.id, orphan.objectRef.id].sort());
+      expect(byId.get(assigned.objectRef.id)).toEqual({ id: assigned.objectRef.id, title: "增长战场议题", urgencyLevel: "gray", battlefieldIds: ["growth"] });
+      expect(byId.get(shared.objectRef.id)).toEqual({ id: shared.objectRef.id, title: "跨战场议题", urgencyLevel: "red", decisionBy: "2026-09-30", battlefieldIds: ["growth", "渠道战场"] });
+      expect(byId.get(orphan.objectRef.id)).toEqual({ id: orphan.objectRef.id, title: "未归属议题", urgencyLevel: "gray", battlefieldIds: [] });
+      expect(body.issues.some((issue: { id: string }) => issue.id === capability.objectRef.id)).toBe(false);
+
+      const anonymous = await t.app.inject({ method: "GET", url: "/api/config/battlefields" });
+      expect(anonymous.statusCode).toBe(401);
     } finally {
       await t.close();
     }

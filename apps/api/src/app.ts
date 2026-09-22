@@ -15,6 +15,7 @@ import {
   CreateCeoIssueRequest,
   CreateConfigMeetingRequest,
   AssignBattlefieldIssueRequest,
+  type TBattlefieldManagementResponse,
   CreateMeetingRequest,
   PeopleDirectoryResponse,
   DriIssueImportRequest,
@@ -122,7 +123,7 @@ import {
   mutateMonthlyExport,
   projectMonthlyPlanCard,
 } from "./monthlyPlans.js";
-import { deleteBattlefield, listBattlefieldCards, registerBattlefield } from "./battlefields.js";
+import { deleteBattlefield, listBattlefieldCards, projectBattlefieldManagement, registerBattlefield } from "./battlefields.js";
 import { listCapabilityCards, registerCapability } from "./capabilities.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
 import { recoverInterruptedOutcome, type PostMeetingAgent } from "./outcome.js";
@@ -506,6 +507,13 @@ export async function buildApp({
       if (!result.ok) return fail(reply, result.status, result.code, result.message);
       return reply.code(204).send();
     },
+  );
+
+  // 战场管理页：一次返回整页展示数据，无业务写入。
+  app.get(
+    "/api/config/battlefields",
+    { preHandler: requireCEO },
+    async (): Promise<TBattlefieldManagementResponse> => projectBattlefieldManagement(q),
   );
 
   // CEO 配置页的议题↔战场关联集合：确定性配置语义，不走 opaque-action。
