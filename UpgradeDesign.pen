@@ -12320,6 +12320,43 @@
                       "fill": "$ink4"
                     }
                   ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Q9AKBh",
+                  "name": "编辑会议 Button",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 10,
+                  "stroke": "#D9DDE5",
+                  "strokeWidth": 1,
+                  "gap": 6,
+                  "padding": [
+                    9,
+                    13
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "u5vAA",
+                      "name": "Edit Icon",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "pencil",
+                      "library": "lucide",
+                      "fill": "#4F5866"
+                    },
+                    {
+                      "type": "text",
+                      "id": "IXK3r",
+                      "name": "Label",
+                      "fill": "#1D1D1F",
+                      "content": "编辑会议",
+                      "fontFamily": "Inter",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
                 }
               ]
             }
@@ -14765,6 +14802,248 @@
                           "fontWeight": "normal"
                         }
                       ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "XLsny",
+          "layoutPosition": "absolute",
+          "x": 2050,
+          "y": 130,
+          "name": "Edit Meeting Popover",
+          "width": 320,
+          "fill": "#FFFFFF",
+          "cornerRadius": 14,
+          "stroke": "#E6E9ED",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 10,
+          "padding": [
+            14,
+            16
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "o0pMCA",
+              "name": "Popover Title",
+              "fill": "#1D1D1F",
+              "content": "编辑会议",
+              "fontFamily": "Inter",
+              "fontSize": 13.5,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "Kvy8D",
+              "name": "Field · 会议标题",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Rlubg",
+                  "name": "Label",
+                  "fill": "#3C4350",
+                  "content": "会议标题",
+                  "fontFamily": "Inter",
+                  "fontSize": 11.5,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "gsRXT",
+                  "name": "Input Box",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "#F7F8FA",
+                  "cornerRadius": 9,
+                  "stroke": "#D9DDE5",
+                  "strokeWidth": 1,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "plI8x",
+                      "name": "Input Value",
+                      "fill": "#1D1D1F",
+                      "content": "东南亚渠道预算决策会",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "B2LtIm",
+              "name": "Field · 时间",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "vWHKX",
+                  "name": "Label",
+                  "fill": "#3C4350",
+                  "content": "时间",
+                  "fontFamily": "Inter",
+                  "fontSize": 11.5,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "ySzEk",
+                  "name": "Input Box",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "#F7F8FA",
+                  "cornerRadius": 9,
+                  "stroke": "#D9DDE5",
+                  "strokeWidth": 1,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "tFeyW",
+                      "name": "Input Value",
+                      "fill": "#1D1D1F",
+                      "content": "2025-09-24 14:00",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "G1ZYX",
+              "name": "Field · 主持 DRI",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "nZBTa",
+                  "name": "Label",
+                  "fill": "#3C4350",
+                  "content": "主持 DRI",
+                  "fontFamily": "Inter",
+                  "fontSize": 11.5,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "anARv",
+                  "name": "Input Box",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "#F7F8FA",
+                  "cornerRadius": 9,
+                  "stroke": "#D9DDE5",
+                  "strokeWidth": 1,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "vYiOq",
+                      "name": "Input Value",
+                      "fill": "#1D1D1F",
+                      "content": "林晓",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "FQ8zB",
+                      "name": "Chevron",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "#6E6E73"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "M2Ok5G",
+              "name": "Popover Actions",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "f3qNA",
+                  "name": "Cancel",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 9,
+                  "stroke": "#D9DDE5",
+                  "strokeWidth": 1,
+                  "padding": [
+                    8,
+                    13
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "QAAmx",
+                      "name": "Label",
+                      "fill": "#4F5866",
+                      "content": "取消",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "fxacU",
+                  "name": "Save",
+                  "fill": "#007AFF",
+                  "cornerRadius": 9,
+                  "padding": [
+                    8,
+                    13
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "jFRz1",
+                      "name": "Label",
+                      "fill": "#FFFFFF",
+                      "content": "保存",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "500"
                     }
                   ]
                 }
@@ -32673,36 +32952,72 @@
                 },
                 {
                   "type": "frame",
-                  "id": "sakWa",
-                  "name": "Primary Button",
-                  "fill": "$accent",
-                  "cornerRadius": 11,
-                  "gap": 8,
-                  "padding": [
-                    11,
-                    17
-                  ],
-                  "alignItems": "center",
+                  "id": "ezaIp",
+                  "name": "Footer Actions",
+                  "gap": 10,
                   "children": [
                     {
-                      "type": "text",
-                      "id": "E2YvtQ",
-                      "name": "Label",
-                      "fill": "$on-dark",
-                      "content": "新建能力",
-                      "fontFamily": "$font",
-                      "fontSize": 14,
-                      "fontWeight": "600"
+                      "type": "frame",
+                      "id": "c5Nvq",
+                      "name": "管理能力 Button",
+                      "height": 42,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "stroke": "#D9DDE5",
+                      "strokeWidth": 1,
+                      "padding": [
+                        10,
+                        14
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "VYLUZ",
+                          "name": "CTA Label",
+                          "fill": "#1D1D1F",
+                          "content": "管理能力",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
                     },
                     {
-                      "type": "icon",
-                      "id": "Xs5Dt",
-                      "name": "Arrow",
-                      "width": 15,
-                      "height": 15,
-                      "icon": "arrow-right",
-                      "library": "lucide",
-                      "fill": "$surface"
+                      "type": "frame",
+                      "id": "sakWa",
+                      "name": "Primary Button",
+                      "fill": "$accent",
+                      "cornerRadius": 11,
+                      "gap": 8,
+                      "padding": [
+                        11,
+                        17
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "E2YvtQ",
+                          "name": "Label",
+                          "fill": "$on-dark",
+                          "content": "新建能力",
+                          "fontFamily": "$font",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "Xs5Dt",
+                          "name": "Arrow",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "arrow-right",
+                          "library": "lucide",
+                          "fill": "$surface"
+                        }
+                      ]
                     }
                   ]
                 }
@@ -33244,6 +33559,16 @@
                             },
                             {
                               "type": "icon",
+                              "id": "UxX62",
+                              "name": "Edit Icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "pencil",
+                              "library": "lucide",
+                              "fill": "#6E6E73"
+                            },
+                            {
+                              "type": "icon",
                               "id": "RUXMM",
                               "name": "Arrow",
                               "width": 14,
@@ -33305,6 +33630,16 @@
                                   "fontWeight": "normal"
                                 }
                               ]
+                            },
+                            {
+                              "type": "icon",
+                              "id": "cmFjR",
+                              "name": "Edit Icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "pencil",
+                              "library": "lucide",
+                              "fill": "#6E6E73"
                             },
                             {
                               "type": "icon",
@@ -33372,6 +33707,16 @@
                             },
                             {
                               "type": "icon",
+                              "id": "xhBEl",
+                              "name": "Edit Icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "pencil",
+                              "library": "lucide",
+                              "fill": "#6E6E73"
+                            },
+                            {
+                              "type": "icon",
                               "id": "j7z9u",
                               "name": "Arrow",
                               "width": 14,
@@ -33433,6 +33778,16 @@
                                   "fontWeight": "normal"
                                 }
                               ]
+                            },
+                            {
+                              "type": "icon",
+                              "id": "uMrFp",
+                              "name": "Edit Icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "pencil",
+                              "library": "lucide",
+                              "fill": "#6E6E73"
                             },
                             {
                               "type": "icon",
@@ -33500,6 +33855,16 @@
                             },
                             {
                               "type": "icon",
+                              "id": "gNK7v",
+                              "name": "Edit Icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "pencil",
+                              "library": "lucide",
+                              "fill": "#6E6E73"
+                            },
+                            {
+                              "type": "icon",
                               "id": "jtDkl",
                               "name": "Arrow",
                               "width": 14,
@@ -33561,6 +33926,16 @@
                                   "fontWeight": "normal"
                                 }
                               ]
+                            },
+                            {
+                              "type": "icon",
+                              "id": "z9YS7",
+                              "name": "Edit Icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "pencil",
+                              "library": "lucide",
+                              "fill": "#6E6E73"
                             },
                             {
                               "type": "icon",
@@ -33761,6 +34136,237 @@
                                   "fill": "$on-dark",
                                   "content": "删除",
                                   "fontFamily": "$font",
+                                  "fontSize": 12.5,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wYsAI",
+                      "layoutPosition": "absolute",
+                      "x": 310,
+                      "y": 330,
+                      "name": "Edit Battlefield Popover",
+                      "width": 300,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 14,
+                      "stroke": "#E6E9ED",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "gap": 10,
+                      "padding": [
+                        14,
+                        16
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "r1cgzS",
+                          "name": "Popover Title",
+                          "fill": "#1D1D1F",
+                          "content": "编辑战场",
+                          "fontFamily": "Inter",
+                          "fontSize": 13.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Go53x",
+                          "name": "Field · 战场名称",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "FEIJJ",
+                              "name": "Label",
+                              "fill": "#3C4350",
+                              "content": "战场名称",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "I7X5bj",
+                              "name": "Input Box",
+                              "width": "fill_container",
+                              "height": 36,
+                              "fill": "#F7F8FA",
+                              "cornerRadius": 9,
+                              "stroke": "#D9DDE5",
+                              "strokeWidth": 1,
+                              "padding": [
+                                0,
+                                12
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "CALyc",
+                                  "name": "Input Value",
+                                  "fill": "#1D1D1F",
+                                  "content": "增长战场",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12.5,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Z0fXUC",
+                          "name": "Field · 负责人",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "BwXzb",
+                              "name": "Label",
+                              "fill": "#3C4350",
+                              "content": "负责人",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "yr1Ie",
+                              "name": "Input Box",
+                              "width": "fill_container",
+                              "height": 36,
+                              "fill": "#F7F8FA",
+                              "cornerRadius": 9,
+                              "stroke": "#D9DDE5",
+                              "strokeWidth": 1,
+                              "padding": [
+                                0,
+                                12
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Nbo8O",
+                                  "name": "Input Value",
+                                  "fill": "#1D1D1F",
+                                  "content": "陈珂",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12.5,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Er00y",
+                          "name": "Field · 目标一句话",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "PCyE5",
+                              "name": "Label",
+                              "fill": "#3C4350",
+                              "content": "目标一句话",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Wl9vF",
+                              "name": "Input Box",
+                              "width": "fill_container",
+                              "height": 36,
+                              "fill": "#F7F8FA",
+                              "cornerRadius": 9,
+                              "stroke": "#D9DDE5",
+                              "strokeWidth": 1,
+                              "padding": [
+                                0,
+                                12
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "J4R4tZ",
+                                  "name": "Input Value",
+                                  "fill": "#1D1D1F",
+                                  "content": "验证渠道结构与交付节奏，形成可复制的增长路径。",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12.5,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Srtkn",
+                          "name": "Popover Actions",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "DNees",
+                              "name": "Cancel",
+                              "fill": "#FFFFFF",
+                              "cornerRadius": 9,
+                              "stroke": "#D9DDE5",
+                              "strokeWidth": 1,
+                              "padding": [
+                                8,
+                                13
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Tc4xY",
+                                  "name": "Label",
+                                  "fill": "#4F5866",
+                                  "content": "取消",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12.5,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "U26N9r",
+                              "name": "Save",
+                              "fill": "#007AFF",
+                              "cornerRadius": 9,
+                              "padding": [
+                                8,
+                                13
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "m70G9",
+                                  "name": "Label",
+                                  "fill": "#FFFFFF",
+                                  "content": "保存",
+                                  "fontFamily": "Inter",
                                   "fontSize": 12.5,
                                   "fontWeight": "500"
                                 }
@@ -34558,6 +35164,674 @@
                               "fill": "$surface"
                             }
                           ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "TjL2X",
+      "x": 23970,
+      "y": 560,
+      "name": "页面 / 能力管理",
+      "clip": true,
+      "width": 2560,
+      "height": 1440,
+      "fill": "#F5F5F7",
+      "layout": "vertical",
+      "gap": 24,
+      "padding": [
+        36,
+        56
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "qUHUp",
+          "name": "Top Navigation",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "QEFzD",
+              "name": "Back to Config",
+              "gap": 7,
+              "padding": [
+                9,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "eo6AR",
+                  "name": "Back Icon",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "chevron-left",
+                  "library": "lucide",
+                  "fill": "#6E6E73"
+                },
+                {
+                  "type": "text",
+                  "id": "MAX4k",
+                  "name": "Back Label",
+                  "fill": "#6E6E73",
+                  "content": "返回配置",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "p6amlD",
+              "name": "Scope Chip",
+              "fill": "#F0F4FA",
+              "cornerRadius": 10,
+              "padding": [
+                7,
+                11
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Ukpyq",
+                  "name": "Chip Label",
+                  "fill": "#6E6E73",
+                  "content": "配置变更写入业务库并同步 Radar 监测范围",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "j5IS6D",
+          "name": "Page Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 8,
+          "children": [
+            {
+              "type": "text",
+              "id": "BUYUE",
+              "name": "Eyebrow",
+              "fill": "#007AFF",
+              "content": "CAPABILITY",
+              "fontFamily": "Inter",
+              "fontSize": 11,
+              "fontWeight": "600",
+              "letterSpacing": 1.4
+            },
+            {
+              "type": "text",
+              "id": "cZNfn",
+              "name": "Title",
+              "fill": "#1D1D1F",
+              "content": "能力管理",
+              "fontFamily": "Inter",
+              "fontSize": 30,
+              "fontWeight": "600",
+              "letterSpacing": -0.6
+            },
+            {
+              "type": "text",
+              "id": "K9iPAu",
+              "name": "Subtitle",
+              "fill": "#3C4350",
+              "content": "编辑已登记的组织能力：名称、分组与说明。修改后首页能力面板立即更新。",
+              "lineHeight": 1.7,
+              "fontFamily": "Inter",
+              "fontSize": 15,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "GMQW2",
+          "name": "Card · 能力列表",
+          "width": 1212,
+          "fill": "#FFFFFF",
+          "cornerRadius": 20,
+          "stroke": "#E6E9ED",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 14,
+          "padding": [
+            22,
+            24
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "HSrxy",
+              "name": "Card Head",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "h8qYr",
+                  "name": "Card Title",
+                  "fill": "#1D1D1F",
+                  "content": "能力",
+                  "fontFamily": "Inter",
+                  "fontSize": 17,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "fYMtd",
+                  "name": "Card Desc",
+                  "fill": "#3C4350",
+                  "content": "3 项已登记能力 · 点击编辑",
+                  "lineHeight": 1.6,
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "OJT5u",
+              "name": "Capability List",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "BN10I",
+                  "name": "Capability · 区域仓配服务",
+                  "width": "fill_container",
+                  "fill": "#E8F1FF",
+                  "cornerRadius": 10,
+                  "gap": 10,
+                  "padding": [
+                    12,
+                    14
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "aft43",
+                      "name": "Dot",
+                      "width": 6,
+                      "height": 6,
+                      "fill": "#007AFF",
+                      "cornerRadius": 3
+                    },
+                    {
+                      "type": "frame",
+                      "id": "tpJnm",
+                      "name": "Text",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "kIuKB",
+                          "name": "Title",
+                          "fill": "#1D1D1F",
+                          "content": "区域仓配服务",
+                          "lineHeight": 1.55,
+                          "fontFamily": "Inter",
+                          "fontSize": 15,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PJ1Zs",
+                          "name": "Meta",
+                          "fill": "#6E6E73",
+                          "content": "供应链能力 · 覆盖三国本地仓的仓配与退货能力",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "UNyRd",
+                      "name": "Edit Icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "pencil",
+                      "library": "lucide",
+                      "fill": "#6E6E73"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "aESnP",
+                  "name": "Capability · Agent 安全基线",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": 10,
+                  "gap": 10,
+                  "padding": [
+                    12,
+                    14
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "I7eWI",
+                      "name": "Dot",
+                      "width": 6,
+                      "height": 6,
+                      "fill": "#8A8A90",
+                      "cornerRadius": 3
+                    },
+                    {
+                      "type": "frame",
+                      "id": "DlUbA",
+                      "name": "Text",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "u49OpL",
+                          "name": "Title",
+                          "fill": "#1D1D1F",
+                          "content": "Agent 安全基线",
+                          "lineHeight": 1.55,
+                          "fontFamily": "Inter",
+                          "fontSize": 15,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "w08A8q",
+                          "name": "Meta",
+                          "fill": "#6E6E73",
+                          "content": "平台能力 · 权限限制、审批留痕与紧急停机",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "Vso53",
+                      "name": "Edit Icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "pencil",
+                      "library": "lucide",
+                      "fill": "#6E6E73"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "u0mwjO",
+                  "name": "Capability · 渠道数据看板",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": 10,
+                  "gap": 10,
+                  "padding": [
+                    12,
+                    14
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "X0KypL",
+                      "name": "Dot",
+                      "width": 6,
+                      "height": 6,
+                      "fill": "#8A8A90",
+                      "cornerRadius": 3
+                    },
+                    {
+                      "type": "frame",
+                      "id": "a11qC",
+                      "name": "Text",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "k1yGL",
+                          "name": "Title",
+                          "fill": "#1D1D1F",
+                          "content": "渠道数据看板",
+                          "lineHeight": 1.55,
+                          "fontFamily": "Inter",
+                          "fontSize": 15,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "QPpS5",
+                          "name": "Meta",
+                          "fill": "#6E6E73",
+                          "content": "增长能力 · 渠道转化与交付周期的日度可视化",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "m7Ilr4",
+                      "name": "Edit Icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "pencil",
+                      "library": "lucide",
+                      "fill": "#6E6E73"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Rb3ul",
+              "name": "Card Footer",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Uezgt",
+                  "name": "Footer Hint",
+                  "fill": "#4F5866",
+                  "content": "修改后立即生效，影响首页分组与议题归属显示",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "b2NUp",
+                  "name": "Primary Button",
+                  "fill": "#007AFF",
+                  "cornerRadius": 11,
+                  "gap": 8,
+                  "padding": [
+                    11,
+                    17
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "OigNB",
+                      "name": "Label",
+                      "fill": "#FFFFFF",
+                      "content": "完成",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "i2ePi",
+                      "name": "Arrow",
+                      "width": 15,
+                      "height": 15,
+                      "icon": "arrow-right",
+                      "library": "lucide",
+                      "fill": "#FFFFFF"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "WUR01",
+              "layoutPosition": "absolute",
+              "x": 640,
+              "y": 120,
+              "name": "Edit Capability Popover",
+              "width": 320,
+              "fill": "#FFFFFF",
+              "cornerRadius": 14,
+              "stroke": "#E6E9ED",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 10,
+              "padding": [
+                14,
+                16
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Bumn4",
+                  "name": "Popover Title",
+                  "fill": "#1D1D1F",
+                  "content": "编辑能力",
+                  "fontFamily": "Inter",
+                  "fontSize": 13.5,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "mnyPN",
+                  "name": "Field · 能力名称",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "GoXBN",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "能力名称",
+                      "fontFamily": "Inter",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Ikam3",
+                      "name": "Input Box",
+                      "width": "fill_container",
+                      "height": 36,
+                      "fill": "#F7F8FA",
+                      "cornerRadius": 9,
+                      "stroke": "#D9DDE5",
+                      "strokeWidth": 1,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "v7AtWs",
+                          "name": "Input Value",
+                          "fill": "#1D1D1F",
+                          "content": "区域仓配服务",
+                          "fontFamily": "Inter",
+                          "fontSize": 12.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "fo2PH",
+                  "name": "Field · 所属分组",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "V29YBd",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "所属分组",
+                      "fontFamily": "Inter",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Xgb6o",
+                      "name": "Input Box",
+                      "width": "fill_container",
+                      "height": 36,
+                      "fill": "#F7F8FA",
+                      "cornerRadius": 9,
+                      "stroke": "#D9DDE5",
+                      "strokeWidth": 1,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lGgde",
+                          "name": "Input Value",
+                          "fill": "#1D1D1F",
+                          "content": "供应链能力",
+                          "fontFamily": "Inter",
+                          "fontSize": 12.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "yicMP",
+                  "name": "Field · 能力说明",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "aeQSI",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "能力说明",
+                      "fontFamily": "Inter",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Zl93L",
+                      "name": "Input Box",
+                      "width": "fill_container",
+                      "height": 36,
+                      "fill": "#F7F8FA",
+                      "cornerRadius": 9,
+                      "stroke": "#D9DDE5",
+                      "strokeWidth": 1,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "wzhR1",
+                          "name": "Input Value",
+                          "fill": "#1D1D1F",
+                          "content": "覆盖三国本地仓的仓配与退货能力",
+                          "fontFamily": "Inter",
+                          "fontSize": 12.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "N8ZLw",
+                  "name": "Popover Actions",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "G3iHZJ",
+                      "name": "Cancel",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 9,
+                      "stroke": "#D9DDE5",
+                      "strokeWidth": 1,
+                      "padding": [
+                        8,
+                        13
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "dOzpg",
+                          "name": "Label",
+                          "fill": "#4F5866",
+                          "content": "取消",
+                          "fontFamily": "Inter",
+                          "fontSize": 12.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wlSii",
+                      "name": "Save",
+                      "fill": "#007AFF",
+                      "cornerRadius": 9,
+                      "padding": [
+                        8,
+                        13
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "s7YY0Z",
+                          "name": "Label",
+                          "fill": "#FFFFFF",
+                          "content": "保存",
+                          "fontFamily": "Inter",
+                          "fontSize": 12.5,
+                          "fontWeight": "500"
                         }
                       ]
                     }
