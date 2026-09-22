@@ -5259,20 +5259,20 @@
                           "fontWeight": "normal"
                         }
                       ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "zoKnV",
+                      "name": "Hint Icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "info",
+                      "library": "lucide",
+                      "fill": "$ink4"
                     }
                   ]
                 }
               ]
-            },
-            {
-              "type": "text",
-              "id": "Gc1dL",
-              "name": "Status",
-              "fill": "$ink4",
-              "content": "扫描中 · 已检索 2 / 4 个锚点 · 定时扫描 2025-09-17 · 上次完成 06:00",
-              "fontFamily": "$font",
-              "fontSize": 12,
-              "fontWeight": "normal"
             },
             {
               "type": "frame",
@@ -5375,6 +5375,36 @@
                       }
                     }
                   ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "kjSeS",
+              "layoutPosition": "absolute",
+              "x": 1440,
+              "y": 69,
+              "name": "Hover Tip · hover 后显示",
+              "width": 240,
+              "fill": "$ink",
+              "cornerRadius": 8,
+              "padding": [
+                8,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "wAyaT",
+                  "name": "Tip Text",
+                  "fill": "$on-dark",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "1 条未读 · 定时扫描 2026-09-22 · 最近一次手动补扫：completed · 上次启动 2026-09-21 16:06",
+                  "lineHeight": 1.6,
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -5675,20 +5705,50 @@
                           "fontWeight": "normal"
                         }
                       ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "E2R8X",
+                      "name": "Hint Icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "info",
+                      "library": "lucide",
+                      "fill": "$ink4"
                     }
                   ]
                 }
               ]
             },
             {
-              "type": "text",
-              "id": "Nl0fP",
-              "name": "Status",
-              "fill": "$ink4",
-              "content": "2 条未读 · 定时扫描 2025-09-17 · 最近一次定时扫描：ok · 上次启动 2025-09-17 06:00",
-              "fontFamily": "$font",
-              "fontSize": 12,
-              "fontWeight": "normal"
+              "type": "frame",
+              "id": "zAqfD",
+              "layoutPosition": "absolute",
+              "x": 1700,
+              "y": 69,
+              "name": "Hover Tip · hover 后显示",
+              "width": 240,
+              "fill": "$ink",
+              "cornerRadius": 8,
+              "padding": [
+                8,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "hScDe",
+                  "name": "Tip Text",
+                  "fill": "$on-dark",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "2 条未读 · 定时扫描 2025-09-17 · 最近一次定时扫描：ok · 上次启动 2025-09-17 06:00",
+                  "lineHeight": 1.6,
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
             }
           ]
         },
@@ -6068,20 +6128,20 @@
                           "fontWeight": "normal"
                         }
                       ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "JLJIc",
+                      "name": "Hint Icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "info",
+                      "library": "lucide",
+                      "fill": "$ink4"
                     }
                   ]
                 }
               ]
-            },
-            {
-              "type": "text",
-              "id": "aaiN5",
-              "name": "Status",
-              "fill": "$ink4",
-              "content": "2 条未读 · 定时扫描 2025-09-17 · 最近一次定时扫描：ok · 上次启动 2025-09-17 06:00",
-              "fontFamily": "$font",
-              "fontSize": 12,
-              "fontWeight": "normal"
             },
             {
               "type": "frame",
@@ -6185,6 +6245,36 @@
                       }
                     }
                   ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "qFyqK",
+              "layoutPosition": "absolute",
+              "x": 1700,
+              "y": 69,
+              "name": "Hover Tip · hover 后显示",
+              "width": 240,
+              "fill": "$ink",
+              "cornerRadius": 8,
+              "padding": [
+                8,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Uy2HG",
+                  "name": "Tip Text",
+                  "fill": "$on-dark",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "2 条未读 · 定时扫描 2025-09-17 · 最近一次定时扫描：ok · 上次启动 2025-09-17 06:00",
+                  "lineHeight": 1.6,
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             }
