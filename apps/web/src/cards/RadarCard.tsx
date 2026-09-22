@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ExternalLink, Radar } from "lucide-react";
+import { ChevronLeft, ExternalLink, Info, Radar } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type RadarPayload, type SignalPayload } from "./payloads";
@@ -103,6 +103,8 @@ export function RadarCard({ card, collection, onNavigate }: CardRenderProps) {
     setScanError(response.status === 409 ? "Radar 正在运行，请稍后再试。" : body.message ?? "手动补扫失败");
   }
 
+  const statusText = `${scanPending ? "扫描中 · " : ""}${payload.unreadCount} 条未读 · 定时扫描 ${payload.lastRun?.companyDay ?? "尚未运行"}${payload.lastRun ? ` · 最近一次${payload.lastRun.trigger === "manual" ? "手动补扫" : "定时扫描"}：${payload.lastRun.status}` : ""}${payload.lastScheduledAt ? ` · 上次启动 ${payload.lastScheduledAt.slice(0, 16).replace("T", " ")}` : ""}`;
+
   return (
     <div className={f.feed} data-testid="radar-view">
       <div className={f.toolbar}>
@@ -136,15 +138,14 @@ export function RadarCard({ card, collection, onNavigate }: CardRenderProps) {
           <button type="button" disabled={scanPending} onClick={() => void runScan()}>
             {scanPending ? "扫描中…" : "手动补扫"}
           </button>
+          <span className={f.hintTip} tabIndex={0} aria-label="扫描状态" aria-describedby="radar-scan-status">
+            <Info size={14} aria-hidden="true" />
+            <span id="radar-scan-status" role="tooltip" className={f.hintBubble}>
+              {statusText}
+            </span>
+          </span>
         </div>
       </div>
-
-      <p className={f.status}>
-        {scanPending ? "扫描中 · " : ""}
-        {payload.unreadCount} 条未读 · 定时扫描 {payload.lastRun?.companyDay ?? "尚未运行"}
-        {payload.lastRun ? ` · 最近一次${payload.lastRun.trigger === "manual" ? "手动补扫" : "定时扫描"}：${payload.lastRun.status}` : ""}
-        {payload.lastScheduledAt ? ` · 上次启动 ${payload.lastScheduledAt.slice(0, 16).replace("T", " ")}` : ""}
-      </p>
       {payload.lastRun && splitWarnings(payload.lastRun.warnings ?? []).notable.length ? (
         <p className={f.error} role="status">
           {splitWarnings(payload.lastRun.warnings ?? []).notable.join("；")}
