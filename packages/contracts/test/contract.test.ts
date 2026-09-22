@@ -3,10 +3,16 @@ import { buildOpenApiDocument } from "../src/openapi.js";
 import {
   ApiError,
   ActionDescriptor,
+  BattlefieldCardPayload,
+  BattlefieldManagementResponse,
+  CapabilityManagementResponse,
+  CapabilitySupportRef,
   Card,
   ConversationMessageRequest,
   ConversationScope,
   ConversationSseEvent,
+  CreateBattlefieldRequest,
+  CreateCapabilityRequest,
   CreateMeetingRequest,
   DriIssueImportRequest,
   DriMonthlyPlanFeedbackRequest,
@@ -15,12 +21,15 @@ import {
   MeetingConfirmItemInput,
   MeetingDismissItemInput,
   MeetingRevokeEffectInput,
+  MissionValue,
   MonthlyDraftCandidate,
   MonthlyPlanCardPayload,
   MonthlyPlanExport,
-  BattlefieldCardPayload,
   MeetingOutcomeState,
   OutcomeReview,
+  PatchBattlefieldRequest,
+  PatchCapabilityRequest,
+  PatchStrategyConfigRequest,
   PostMeetingCandidate,
   PreflightCandidate,
   ReplaceTranscriptRequest,
@@ -31,6 +40,7 @@ import {
   ResearchDoc,
   RequestSupplementRequest,
   SignalStateRequest,
+  StrategyConfigResponse,
   UpdateMeetingDraftRequest,
   UpdateMonthlyPlanDraftRequest,
   WarmapTranscript,
@@ -453,6 +463,7 @@ describe("monthly plan public contract", () => {
   const candidate = {
     companyOutcome: "完成渠道结构切换",
     battlefields: [{ battlefieldId: "growth", outcome: "增长战场完成渠道切换" }],
+    capabilities: [{ capabilityId: "re-architecture", outcome: "能力完成真实客户进入" }],
     todos: [{ title: "完成渠道合同复核", ownerId: "person-002", sourceRef: "issue:decision-1" }],
   };
 
@@ -468,6 +479,8 @@ describe("monthly plan public contract", () => {
 
   it("accepts partial CEO edits, including company-level todos without a battlefield", () => {
     expect(Value.Check(UpdateMonthlyPlanDraftRequest, { companyOutcome: "CEO 结果" })).toBe(true);
+    expect(Value.Check(UpdateMonthlyPlanDraftRequest, { capabilities: [{ capabilityId: "re-architecture", outcome: "能力结果" }] })).toBe(true);
+    expect(Value.Check(UpdateMonthlyPlanDraftRequest, { capabilities: [{ capabilityId: "re-architecture" }] })).toBe(false);
     expect(Value.Check(UpdateMonthlyPlanDraftRequest, {
       todos: [{ title: "公司级待办", ownerId: "person-002", sourceRef: "monthly-plan:2026-05" }],
       checkedItemIds: ["company"],
@@ -482,6 +495,7 @@ describe("monthly plan public contract", () => {
       status: "negotiating",
       companyOutcome: "公司结果",
       battlefields: [{ battlefieldId: "growth", outcome: "战场结果" }],
+      capabilities: [{ capabilityId: "re-architecture", outcome: "能力结果" }],
       todos: [{ id: "todo-1", title: "待办", ownerId: "person-002", sourceRef: "issue:1" }],
       exports: [
         {
@@ -567,8 +581,13 @@ describe("monthly plan public contract", () => {
 
     const battlefield = {
       battlefieldId: "growth",
+      code: "01",
+      sortOrder: 10,
       name: "增长战场",
-      positioning: "验证渠道结构",
+      ownerId: "person-002",
+      ownerDisplayName: "陈珂",
+      sixMonthOutcome: "验证渠道结构",
+      missions: [{ code: "01-1", title: "未来组织范式设计与确认" }],
       period: "2026-06",
       target: "增长战场完成渠道切换",
       pendingIssues: [
@@ -580,12 +599,78 @@ describe("monthly plan public contract", () => {
       latestFeedback: { text: "渠道复核已完成", observedAt: "2026-06-10T00:00:00.000Z", sourceRef: "dri://retro/1", evidenceRef: null },
     };
     expect(Value.Check(BattlefieldCardPayload, battlefield)).toBe(true);
+    // 负责人只存 personId，投影现查 displayName
+    expect(Value.Check(BattlefieldCardPayload, { ...battlefield, ownerId: "", ownerDisplayName: "待指派" })).toBe(true);
+    expect(Value.Check(BattlefieldCardPayload, { ...battlefield, positioning: "旧字段" })).toBe(false);
     // 不展示 Agent 推测的完成百分比与执行状态
     expect(Value.Check(BattlefieldCardPayload, { ...battlefield, progress: 0.5 })).toBe(false);
     expect(Value.Check(BattlefieldCardPayload, {
       ...battlefield,
       todos: [{ ...battlefield.todos[0], status: "done" }],
     })).toBe(false);
+  });
+});
+
+describe("strategy map config contracts", () => {
+  it("keeps Mission a plain value object with no execution fields", () => {
+    expect(Value.Check(MissionValue, { code: "01-1", title: "未来组织范式设计与确认" })).toBe(true);
+    expect(Value.Check(MissionValue, { code: "01-1", title: "x", status: "done" })).toBe(false);
+    expect(Value.Check(MissionValue, { title: "缺少编号" })).toBe(false);
+  });
+
+  it("models capability support refs as a three-way union", () => {
+    expect(Value.Check(CapabilitySupportRef, { type: "mission", missionCode: "02-1" })).toBe(true);
+    expect(Value.Check(CapabilitySupportRef, { type: "battlefield", battlefieldId: "growth" })).toBe(true);
+    expect(Value.Check(CapabilitySupportRef, { type: "all-battlefields" })).toBe(true);
+    expect(Value.Check(CapabilitySupportRef, { type: "mission" })).toBe(false);
+    expect(Value.Check(CapabilitySupportRef, { type: "all-battlefields", battlefieldId: "growth" })).toBe(false);
+  });
+
+  it("requires code and integer sortOrder on battlefield/capability writes", () => {
+    const battlefield = { code: "01", sortOrder: 10, name: "灯塔项目", sixMonthOutcome: "六个月目标" };
+    expect(Value.Check(CreateBattlefieldRequest, battlefield)).toBe(true);
+    expect(Value.Check(CreateBattlefieldRequest, { ...battlefield, code: undefined })).toBe(false);
+    expect(Value.Check(CreateBattlefieldRequest, { ...battlefield, sortOrder: 10.5 })).toBe(false);
+    expect(Value.Check(CreateBattlefieldRequest, { ...battlefield, ownerId: "" })).toBe(true);
+    expect(Value.Check(CreateBattlefieldRequest, {
+      ...battlefield,
+      missions: [{ code: "01-1", title: "未来组织范式设计与确认" }],
+    })).toBe(true);
+
+    const capability = { code: "02", sortOrder: 20, name: "Re-architecture", sixMonthOutcome: "六个月目标" };
+    expect(Value.Check(CreateCapabilityRequest, capability)).toBe(true);
+    expect(Value.Check(CreateCapabilityRequest, { ...capability, group: "" })).toBe(true);
+    expect(Value.Check(CreateCapabilityRequest, {
+      ...capability,
+      supportRefs: [{ type: "mission", missionCode: "01-1" }, { type: "all-battlefields" }],
+    })).toBe(true);
+
+    // PATCH 至少一项，且 ownerId/group 允许清空
+    expect(Value.Check(PatchBattlefieldRequest, {})).toBe(false);
+    expect(Value.Check(PatchBattlefieldRequest, { ownerId: "" })).toBe(true);
+    expect(Value.Check(PatchCapabilityRequest, { group: "" })).toBe(true);
+    expect(Value.Check(PatchCapabilityRequest, { sixMonthOutcome: "新目标" })).toBe(true);
+  });
+
+  it("exposes the LTCO strategy config and structured management projections", () => {
+    expect(Value.Check(StrategyConfigResponse, { version: 1, ltco: "春节前…" })).toBe(true);
+    expect(Value.Check(PatchStrategyConfigRequest, { ltco: "" })).toBe(true);
+    expect(Value.Check(PatchStrategyConfigRequest, { version: 2, ltco: "x" })).toBe(false);
+
+    expect(Value.Check(CapabilityManagementResponse, {
+      capabilities: [{
+        id: "re-architecture", version: 1, code: "02", sortOrder: 20, name: "Re-architecture",
+        group: "", sixMonthOutcome: "目标", supportRefs: [{ type: "all-battlefields" }],
+      }],
+    })).toBe(true);
+
+    expect(Value.Check(BattlefieldManagementResponse, {
+      battlefields: [{
+        id: "growth", version: 1, code: "01", sortOrder: 10, name: "灯塔项目",
+        ownerId: "", ownerDisplayName: "待指派", sixMonthOutcome: "目标", missions: [], pendingIssueCount: 0,
+      }],
+      issues: [],
+    })).toBe(true);
   });
 });
 

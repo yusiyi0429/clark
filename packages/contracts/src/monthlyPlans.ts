@@ -30,6 +30,15 @@ export const MonthlyPlanBattlefield = Type.Object(
   { additionalProperties: false },
 );
 
+/** 当月能力 PCO：与战场结果同构；六个月目标来自 CapabilityConfig，不在这里复制。 */
+export const MonthlyPlanCapability = Type.Object(
+  {
+    capabilityId: Type.String({ minLength: 1, maxLength: 100 }),
+    outcome: Type.String({ minLength: 1, maxLength: 4000 }),
+  },
+  { additionalProperties: false },
+);
+
 /** DRI 叙述性 feedback：只有文本、证据和 observedAt，不携带 todo 执行状态。 */
 export const MonthlyPlanFeedback = Type.Object(
   {
@@ -117,6 +126,7 @@ export const MonthlyPlanCardPayload = Type.Object(
     status: MonthlyPlanStatus,
     companyOutcome: Type.String(),
     battlefields: Type.Array(MonthlyPlanBattlefield),
+    capabilities: Type.Array(MonthlyPlanCapability),
     todos: Type.Array(MonthlyPlanTodo),
     exports: Type.Array(MonthlyPlanExport),
     negotiation: MonthlyPlanNegotiation,
@@ -143,6 +153,7 @@ export const MonthlyDraftCandidate = Type.Object(
   {
     companyOutcome: Type.String({ minLength: 1, maxLength: 4000 }),
     battlefields: Type.Array(MonthlyPlanBattlefield, { maxItems: 20 }),
+    capabilities: Type.Array(MonthlyPlanCapability, { maxItems: 30 }),
     todos: Type.Array(MonthlyDraftTodo, { maxItems: 50 }),
   },
   { additionalProperties: false },
@@ -153,6 +164,7 @@ export const UpdateMonthlyPlanDraftRequest = Type.Object(
   {
     companyOutcome: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
     battlefields: Type.Optional(Type.Array(MonthlyPlanBattlefield, { maxItems: 20 })),
+    capabilities: Type.Optional(Type.Array(MonthlyPlanCapability, { maxItems: 30 })),
     todos: Type.Optional(
       Type.Array(
         Type.Object(
@@ -228,6 +240,7 @@ export type TMonthlyPlanStatus = Static<typeof MonthlyPlanStatus>;
 export type TMonthlyPlanPeriod = Static<typeof MonthlyPlanPeriod>;
 export type TMonthlyPlanTodo = Static<typeof MonthlyPlanTodo>;
 export type TMonthlyPlanBattlefield = Static<typeof MonthlyPlanBattlefield>;
+export type TMonthlyPlanCapability = Static<typeof MonthlyPlanCapability>;
 export type TMonthlyPlanFeedback = Static<typeof MonthlyPlanFeedback>;
 export type TMonthlyPlanEdit = Static<typeof MonthlyPlanEdit>;
 export type TMonthlyPlanNegotiation = Static<typeof MonthlyPlanNegotiation>;

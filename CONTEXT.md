@@ -57,8 +57,24 @@ CompanyMemory 人员目录中具有稳定 personId 的人。显示姓名和角�
 _Avoid_: 由姓名临时生成的身份、自由文本参与人
 
 **Monthly Plan**:
-系统在每月 1 日按 Company Day 自动生成、经 CEO 与 DRI 协商后签发的单月公司结果、战场结果和普通待办集合，是当月目标的唯一来源。待办不是 Mission，不在 WarMap 中跟踪执行状态。
-_Avoid_: 通知卡草稿、前端本地计划、Mission 对象
+系统在每月 1 日按 Company Day 自动生成、经 CEO 与 DRI 协商后签发的单月公司结果、战场结果、能力结果（PCO）和普通待办集合，是当月目标的唯一来源。待办不是 Mission 执行实体，不在 WarMap 中跟踪执行状态；当月结果不写回长期配置。
+_Avoid_: 通知卡草稿、前端本地计划、Mission 执行实体
+
+**Company Strategy Config**:
+CEO 维护的跨月公司长期目标（LTCO）。它是长期配置而不是当月结果，MonthlyPlan 据此生成当月 PCO；MVP 只有一行配置。
+_Avoid_: 当月公司结果、月度计划草稿
+
+**Battlefield Config**:
+CEO 维护的长期战场注册表：稳定 id、显示编号 code、排序 sortOrder、名称、负责人 personId、六个月目标与内嵌 Mission 列表。当月战场结果只属于 MonthlyPlan。
+_Avoid_: 当月战场结果、任务分组、项目管理单元
+
+**Capability Config**:
+CEO 维护的长期公司能力注册表：稳定 id、显示编号 code、排序 sortOrder、名称、可选分组、六个月目标与主要支撑引用。当月能力结果（PCO）只属于 MonthlyPlan。
+_Avoid_: 技能库、执行能力评估、当月能力结果
+
+**Mission**:
+战场配置里的只读战略映射值对象 `{code,title}`，可被能力的主要支撑引用。它没有表、状态机、进度、负责人或执行 UI。
+_Avoid_: Mission 执行实体、任务、里程碑、可跟踪进度
 
 **Candidate Material**:
 Agent 生成并可由系统自动保存的研究、预审或会后草稿；它不是已生效的组织事实。ResearchDoc 不被对话局部修改；只有 pending Issue 可由 CEO 显式重跑预研并整份替换当前版本。

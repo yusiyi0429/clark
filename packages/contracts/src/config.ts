@@ -6,33 +6,71 @@ import { IssueUrgencyLevel } from "./issues.js";
  * 表单是确定性输入，但仍走 CEO session 鉴权；这些路由创建新对象，没有既有 Card version 可锚，所以不是 opaque-action。
  */
 
-export const CreateBattlefieldRequest = Type.Object(
+/** 战场配置里的 Mission 是只读战略映射值对象：没有表、状态机、进度或执行 UI。 */
+export const MissionValue = Type.Object(
   {
-    name: Type.String({ minLength: 1, maxLength: 100 }),
-    owner: Type.String({ minLength: 1, maxLength: 100 }),
-    goal: Type.String({ minLength: 1, maxLength: 1000 }),
+    code: Type.String({ minLength: 1, maxLength: 40 }),
+    title: Type.String({ minLength: 1, maxLength: 200 }),
   },
   { additionalProperties: false },
 );
 
+/** 能力的主要支撑：单个 Mission、单个战场，或全部战场。 */
+export const CapabilitySupportRef = Type.Union([
+  Type.Object(
+    { type: Type.Literal("mission"), missionCode: Type.String({ minLength: 1, maxLength: 40 }) },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { type: Type.Literal("battlefield"), battlefieldId: Type.String({ minLength: 1, maxLength: 100 }) },
+    { additionalProperties: false },
+  ),
+  Type.Object({ type: Type.Literal("all-battlefields") }, { additionalProperties: false }),
+]);
+
+const DisplayCode = Type.String({ minLength: 1, maxLength: 40 });
+const SortOrder = Type.Integer({ minimum: 0, maximum: 9999 });
+const Missions = Type.Array(MissionValue, { maxItems: 20 });
+const SupportRefs = Type.Array(CapabilitySupportRef, { maxItems: 50 });
+
+/** CEO 新建战场：code/sortOrder 与名称独立，ownerId 可省略（界面显示“待指派”）。 */
+export const CreateBattlefieldRequest = Type.Object(
+  {
+    code: DisplayCode,
+    sortOrder: SortOrder,
+    name: Type.String({ minLength: 1, maxLength: 100 }),
+    ownerId: Type.Optional(Type.String({ maxLength: 200 })),
+    sixMonthOutcome: Type.String({ minLength: 1, maxLength: 4000 }),
+    missions: Type.Optional(Missions),
+  },
+  { additionalProperties: false },
+);
+
+/** CEO 新建能力：group 可省略，supportRefs 省略表示没有登记主要支撑。 */
 export const CreateCapabilityRequest = Type.Object(
   {
+    code: DisplayCode,
+    sortOrder: SortOrder,
     name: Type.String({ minLength: 1, maxLength: 100 }),
-    group: Type.String({ minLength: 1, maxLength: 100 }),
-    description: Type.String({ minLength: 1, maxLength: 1000 }),
+    group: Type.Optional(Type.String({ maxLength: 100 })),
+    sixMonthOutcome: Type.String({ minLength: 1, maxLength: 4000 }),
+    supportRefs: Type.Optional(SupportRefs),
   },
   { additionalProperties: false },
 );
 
 /**
- * CEO 编辑战场：只提交要改的字段（至少一项），id 稳定、version+1；改名 slug 冲突返回 409。
- * owner 允许空串（注册表 owner NOT NULL DEFAULT ''，空值在界面显示为“待指派”）。
+ * CEO 编辑战场：只提交要改的字段（至少一项），id 稳定、version+1；code 或改名 slug 冲突返回 409。
+ * ownerId 允许空串（注册表 owner_id NOT NULL DEFAULT ''，空值在界面显示为“待指派”）。
  */
 export const PatchBattlefieldRequest = Type.Object(
   {
+    code: Type.Optional(DisplayCode),
+    sortOrder: Type.Optional(SortOrder),
     name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
-    owner: Type.Optional(Type.String({ maxLength: 100 })),
-    goal: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+    ownerId: Type.Optional(Type.String({ maxLength: 200 })),
+    sixMonthOutcome: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
+    missions: Type.Optional(Missions),
   },
   { additionalProperties: false, minProperties: 1 },
 );
@@ -40,12 +78,23 @@ export const PatchBattlefieldRequest = Type.Object(
 /** CEO 编辑能力：同战场模式，能力表无 updated_at 列，只 version+1。 */
 export const PatchCapabilityRequest = Type.Object(
   {
+    code: Type.Optional(DisplayCode),
+    sortOrder: Type.Optional(SortOrder),
     name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
-    group: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
-    description: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+    group: Type.Optional(Type.String({ maxLength: 100 })),
+    sixMonthOutcome: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
+    supportRefs: Type.Optional(SupportRefs),
   },
   { additionalProperties: false, minProperties: 1 },
 );
+
+/** 公司长期目标（LTCO）：跨月稳定，月度草案据此生成当月 PCO。 */
+export const StrategyConfigResponse = Type.Object(
+  { version: Type.Integer({ minimum: 1 }), ltco: Type.String() },
+  { additionalProperties: false },
+);
+
+export const PatchStrategyConfigRequest = Type.Object({ ltco: Type.String({ maxLength: 8000 }) }, { additionalProperties: false });
 
 /** 能力管理页轻量列表投影：只读注册表行，不经过首页 Card 组合。 */
 export const CapabilityManagementResponse = Type.Object(
@@ -55,9 +104,12 @@ export const CapabilityManagementResponse = Type.Object(
         {
           id: Type.String({ minLength: 1 }),
           version: Type.Integer({ minimum: 1 }),
+          code: Type.String(),
+          sortOrder: Type.Integer(),
           name: Type.String({ minLength: 1 }),
           group: Type.String(),
-          description: Type.String(),
+          sixMonthOutcome: Type.String(),
+          supportRefs: SupportRefs,
         },
         { additionalProperties: false },
       ),
@@ -81,10 +133,15 @@ export const BattlefieldManagementResponse = Type.Object(
       Type.Object(
         {
           id: Type.String({ minLength: 1 }),
+          version: Type.Integer({ minimum: 1 }),
+          code: Type.String(),
+          sortOrder: Type.Integer(),
           name: Type.String({ minLength: 1 }),
-          owner: Type.String(),
-          /** 注册表里的 positioning：编辑弹层要回填目标一句话。 */
-          goal: Type.String(),
+          ownerId: Type.String(),
+          /** 投影时现查 company-people.v1；空 ownerId 显示为“待指派”。 */
+          ownerDisplayName: Type.String(),
+          sixMonthOutcome: Type.String(),
+          missions: Missions,
           pendingIssueCount: Type.Integer({ minimum: 0 }),
         },
         { additionalProperties: false },
@@ -111,9 +168,12 @@ export const BattlefieldManagementResponse = Type.Object(
 export const CapabilityCardPayload = Type.Object(
   {
     capabilityId: Type.String(),
+    code: Type.String(),
+    sortOrder: Type.Integer(),
     name: Type.String(),
     group: Type.String(),
-    description: Type.String(),
+    sixMonthOutcome: Type.String(),
+    supportRefs: SupportRefs,
   },
   { additionalProperties: false },
 );
@@ -139,9 +199,13 @@ export const CreateConfigMeetingRequest = Type.Object(
   { additionalProperties: false },
 );
 
+export type TMissionValue = Static<typeof MissionValue>;
+export type TCapabilitySupportRef = Static<typeof CapabilitySupportRef>;
 export type TCreateBattlefieldRequest = Static<typeof CreateBattlefieldRequest>;
 export type TPatchBattlefieldRequest = Static<typeof PatchBattlefieldRequest>;
 export type TPatchCapabilityRequest = Static<typeof PatchCapabilityRequest>;
+export type TStrategyConfigResponse = Static<typeof StrategyConfigResponse>;
+export type TPatchStrategyConfigRequest = Static<typeof PatchStrategyConfigRequest>;
 export type TCapabilityManagementResponse = Static<typeof CapabilityManagementResponse>;
 export type TAssignBattlefieldIssueRequest = Static<typeof AssignBattlefieldIssueRequest>;
 export type TCreateCapabilityRequest = Static<typeof CreateCapabilityRequest>;

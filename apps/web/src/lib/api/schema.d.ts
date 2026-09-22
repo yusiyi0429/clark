@@ -398,6 +398,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/config/strategy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** CEO 读取公司长期目标（LTCO）配置 */
+        get: operations["getStrategyConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** CEO 更新公司长期目标（LTCO），version+1 */
+        patch: operations["patchStrategyConfig"];
+        trace?: never;
+    };
     "/api/config/battlefields": {
         parameters: {
             query?: never;
@@ -1067,32 +1085,109 @@ export interface components {
             title?: string;
         };
         CreateBattlefieldRequest: {
+            code: string;
+            sortOrder: number;
             name: string;
-            owner: string;
-            goal: string;
+            ownerId?: string;
+            sixMonthOutcome: string;
+            missions?: {
+                code: string;
+                title: string;
+            }[];
         };
         PatchBattlefieldRequest: {
+            code?: string;
+            sortOrder?: number;
             name?: string;
-            owner?: string;
-            goal?: string;
+            ownerId?: string;
+            sixMonthOutcome?: string;
+            missions?: {
+                code: string;
+                title: string;
+            }[];
         };
         CreateCapabilityRequest: {
+            code: string;
+            sortOrder: number;
             name: string;
-            group: string;
-            description: string;
+            group?: string;
+            sixMonthOutcome: string;
+            supportRefs?: ({
+                /** @constant */
+                type: "mission";
+                missionCode: string;
+            } | {
+                /** @constant */
+                type: "battlefield";
+                battlefieldId: string;
+            } | {
+                /** @constant */
+                type: "all-battlefields";
+            })[];
         };
         PatchCapabilityRequest: {
+            code?: string;
+            sortOrder?: number;
             name?: string;
             group?: string;
-            description?: string;
+            sixMonthOutcome?: string;
+            supportRefs?: ({
+                /** @constant */
+                type: "mission";
+                missionCode: string;
+            } | {
+                /** @constant */
+                type: "battlefield";
+                battlefieldId: string;
+            } | {
+                /** @constant */
+                type: "all-battlefields";
+            })[];
+        };
+        StrategyConfigResponse: {
+            version: number;
+            ltco: string;
+        };
+        PatchStrategyConfigRequest: {
+            ltco: string;
+        };
+        MissionValue: {
+            code: string;
+            title: string;
+        };
+        CapabilitySupportRef: {
+            /** @constant */
+            type: "mission";
+            missionCode: string;
+        } | {
+            /** @constant */
+            type: "battlefield";
+            battlefieldId: string;
+        } | {
+            /** @constant */
+            type: "all-battlefields";
         };
         CapabilityManagementResponse: {
             capabilities: {
                 id: string;
                 version: number;
+                code: string;
+                sortOrder: number;
                 name: string;
                 group: string;
-                description: string;
+                sixMonthOutcome: string;
+                supportRefs: ({
+                    /** @constant */
+                    type: "mission";
+                    missionCode: string;
+                } | {
+                    /** @constant */
+                    type: "battlefield";
+                    battlefieldId: string;
+                } | {
+                    /** @constant */
+                    type: "all-battlefields";
+                })[];
             }[];
         };
         CreateCeoIssueRequest: {
@@ -1112,9 +1207,17 @@ export interface components {
         BattlefieldManagementResponse: {
             battlefields: {
                 id: string;
+                version: number;
+                code: string;
+                sortOrder: number;
                 name: string;
-                owner: string;
-                goal: string;
+                ownerId: string;
+                ownerDisplayName: string;
+                sixMonthOutcome: string;
+                missions: {
+                    code: string;
+                    title: string;
+                }[];
                 pendingIssueCount: number;
             }[];
             issues: {
@@ -1302,6 +1405,10 @@ export interface components {
                 battlefieldId: string;
                 outcome: string;
             }[];
+            capabilities: {
+                capabilityId: string;
+                outcome: string;
+            }[];
             todos: {
                 id: string;
                 battlefieldId?: string;
@@ -1355,6 +1462,10 @@ export interface components {
             };
             confirmedAt: string | null;
         };
+        MonthlyPlanCapability: {
+            capabilityId: string;
+            outcome: string;
+        };
         MonthlyPlanExport: {
             effectRef: string;
             todoId: string;
@@ -1392,8 +1503,16 @@ export interface components {
         };
         BattlefieldCardPayload: {
             battlefieldId: string;
+            code: string;
+            sortOrder: number;
             name: string;
-            positioning: string;
+            ownerId: string;
+            ownerDisplayName: string;
+            sixMonthOutcome: string;
+            missions: {
+                code: string;
+                title: string;
+            }[];
             period: string | null;
             target: string | null;
             pendingIssues: {
@@ -1436,6 +1555,10 @@ export interface components {
                 battlefieldId: string;
                 outcome: string;
             }[];
+            capabilities: {
+                capabilityId: string;
+                outcome: string;
+            }[];
             todos: {
                 battlefieldId?: string;
                 title: string;
@@ -1448,6 +1571,10 @@ export interface components {
             companyOutcome?: string;
             battlefields?: {
                 battlefieldId: string;
+                outcome: string;
+            }[];
+            capabilities?: {
+                capabilityId: string;
                 outcome: string;
             }[];
             todos?: {
@@ -2593,6 +2720,77 @@ export interface operations {
             };
             /** @description version 冲突，携带 latestCard */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getStrategyConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 长期目标配置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyConfigResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    patchStrategyConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchStrategyConfigRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的长期目标配置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyConfigResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
