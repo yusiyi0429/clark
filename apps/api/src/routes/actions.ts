@@ -1,7 +1,9 @@
 import type { FastifyReply } from "fastify";
 import { Value } from "@sinclair/typebox/value";
 import {
+  ConfirmTranscriptCandidateRequest,
   CreateMeetingRequest,
+  DiscardTranscriptCandidateRequest,
   EditMeetingDetailsRequest,
   ExecuteActionRequest,
   JoinMeetingRequest,
@@ -23,6 +25,7 @@ import { executeEditMaterials } from "../meetingMaterials.js";
 import { executeRegeneratePreflight, executeRetryPreflight, executeRunPreflight } from "../meetingPreflight.js";
 import { executeRetryMonthlyPlanDraft, executeSignMonthlyPlan, executeUpdateMonthlyPlanDraft } from "../monthlyPlans.js";
 import { executeConfirmItem, executeDismissItem, executeReplaceTranscript, executeRetryOutcome, executeRevokeEffect } from "../outcome.js";
+import { executeConfirmTranscriptCandidate, executeDiscardTranscriptCandidate } from "../transcriptCandidate.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -83,6 +86,16 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       }
       if (scope.actionType === "meeting.retry_outcome") {
         return respond(reply, await executeRetryOutcome(pool, outcome, env.sessionSecret, scope, fingerprint));
+      }
+      // Ticket 27：妙记 Markdown 候选确认/清除；speakerMappings 是确认 Action 的全部输入
+      if (scope.actionType === "meeting.confirm_transcript_candidate") {
+        if (!Value.Check(ConfirmTranscriptCandidateRequest, input)) return invalidInput(reply, ConfirmTranscriptCandidateRequest, input);
+        return respond(reply, await executeConfirmTranscriptCandidate(pool, companyMemory, outcome, env.sessionSecret, scope, input, fingerprint));
+      }
+      if (scope.actionType === "meeting.discard_transcript_candidate") {
+        const discardInput = input ?? {};
+        if (!Value.Check(DiscardTranscriptCandidateRequest, discardInput)) return invalidInput(reply, DiscardTranscriptCandidateRequest, discardInput);
+        return respond(reply, await executeDiscardTranscriptCandidate(pool, env.sessionSecret, scope, fingerprint));
       }
       // Ticket 11：逐项确认/忽略/撤回；itemId 由签名 actionId 携带
       if (scope.actionType === "meeting.confirm_item") {

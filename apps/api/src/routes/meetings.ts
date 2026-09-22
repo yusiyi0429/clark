@@ -6,10 +6,11 @@ import { renderMaterialPreview } from "../materialPreview.js";
 import { appendSupplementMaterial, replaceMeetingMaterials } from "../meetingMaterials.js";
 import { getMeetingRow } from "../meetingStore.js";
 import { importTranscript } from "../outcome.js";
+import { createTranscriptCandidate } from "../transcriptCandidate.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
 export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requireCEO, outcome, materialStorageDir, materialMultipartLimitError, respond, respondTranscriptImport, maxTranscriptBytes } = ctx;
+  const { pool, q, env, companyMemory, fail, requireCEO, outcome, materialStorageDir, materialMultipartLimitError, respond, respondTranscriptImport, maxTranscriptBytes } = ctx;
 
   app.post(
     "/api/meetings/:id/transcript",
@@ -35,6 +36,30 @@ export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void
         return fail(reply, 400, encoding ? "INVALID_TRANSCRIPT_ENCODING" : "INVALID_TRANSCRIPT", encoding ? "Transcript 不是合法 UTF-8" : "Transcript 不是合法 JSON");
       }
       return respondTranscriptImport(reply, await importTranscript(pool, outcome, env.sessionSecret, req.params.id, parsed));
+    },
+  );
+
+  // 妙记 Markdown 只生成 Meeting 内嵌候选；确认是独立 opaque Action，不在此直接写 Transcript。
+  app.post(
+    "/api/meetings/:id/transcript-candidate",
+    { preHandler: requireCEO, schema: { params: idParams }, bodyLimit: maxTranscriptBytes * 2 },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      let file: { fileName: string; buffer: Buffer } | null = null;
+      try {
+        const upload = await req.file({ limits: { fileSize: maxTranscriptBytes, files: 1 } });
+        if (!upload) return fail(reply, 400, "INVALID_TRANSCRIPT", "multipart 缺少会议记录文件");
+        if (!/\.md$/i.test(upload.filename ?? "")) return fail(reply, 400, "INVALID_TRANSCRIPT", "会议记录候选只接受 .md 妙记 Markdown");
+        file = { fileName: upload.filename, buffer: await upload.toBuffer() };
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        if (code === "FST_REQ_FILE_TOO_LARGE" || code === "FST_FILES_LIMIT") {
+          return fail(reply, 413, "TRANSCRIPT_TOO_LARGE", `会议记录超过 ${maxTranscriptBytes} 字节上限`);
+        }
+        throw err;
+      }
+      const result = await createTranscriptCandidate(pool, companyMemory, env.sessionSecret, req.params.id, file);
+      if (result.status === 200) return { cards: [result.card] };
+      return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
     },
   );
 
