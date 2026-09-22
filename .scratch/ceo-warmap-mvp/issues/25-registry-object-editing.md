@@ -1,6 +1,6 @@
 # Ticket 25 · 注册表对象编辑（战场 / 能力 / 会议基本字段）
 
-状态: planned
+状态: resolved
 来源: assessment-2026-09-22.md 缺口 #1（对象只能建不能改）
 视觉基线（已提交）:
 - `页面 / 战场管理`（T8oOAH）：战场行 pencil 图标（Edit Icon）+ `Edit Battlefield Popover`（wYsAI，
@@ -61,3 +61,24 @@
 
 - 不做删除能力、不做会议参与人编辑（lead 之外）、不做议题编辑（另议）。
 - 不改 CompanyMemory 人员目录。
+
+## Comments
+
+- W1 `c291c8e`、W2 `0630e82`、W3 `c5184d8`；W4 验证后追加修复 `da96838`（见下）。
+- W4 在 staging 发现两处缺陷，用户拍板后修复：
+  - **改名去重只看 id**：migration 种下的行用手写 id（`growth` 的显示名是「增长战场」），
+    只比 `id` 时把它改名成「增长战场」返回 200，违背「避免显示重名」。
+    改为 `hasNameSlugConflict`：其他行的 id 或名称 slug 命中新 slug 一律 409
+    （战场与能力两个 PATCH 都走这条判定；原子 UPDATE 的 id 守卫保留为并发兜底）。
+  - **负责人为空的行无法保存**：`PatchBattlefieldRequest.owner` 原本 `minLength: 1`，
+    而 `owner TEXT NOT NULL DEFAULT ''`（seed 行就是空值），弹层每次都提交全部字段，
+    于是「增长战场」点保存必然 400 `INVALID_INPUT`。放宽 owner 为空串（maxLength 100），
+    并把战场弹层改成只提交改动字段（照会议弹层写法）。
+- 验证：typecheck ×3 ✅；contracts 28 ✅；web 108 ✅；API 323 ✅（一次全量跑出
+  `conversationAttachmentMove` 5s 超时，单跑 3/3 通过，属负载抖动）。
+- staging（api+web 重建）：改名到 seed 显示名 → 409 `BATTLEFIELD_NAME_CONFLICT`、新名 → 200、
+  空 owner → 200（原 400）；浏览器在 owner 为空的「增长战场」上直接保存不再报错，
+  只改目标保存成功且 owner 保持空。验证对象（临时战场/能力）已删，会议内容已恢复原值。
+- 遗留：`battlefield_config.growth` 的 `version` 由 1 涨到 3、会议 `version` 由 9 涨到 15
+  （验证写入不可逆，未回滚计数器，避免旧 actionId 重新有效）；`capability_config` 无删除 API，
+  验证用的能力行经 SQL 清理。
