@@ -4,15 +4,18 @@ import { Value } from "@sinclair/typebox/value";
 import {
   AssignBattlefieldIssueRequest,
   CreateBattlefieldRequest,
+  PatchBattlefieldRequest,
   CreateCapabilityRequest,
+  PatchCapabilityRequest,
   CreateCeoIssueRequest,
   CreateConfigMeetingRequest,
   type TBattlefieldManagementResponse,
+  type TCapabilityManagementResponse,
   type TCardCollection,
   type TCreateConfigMeetingRequest,
 } from "@warmap/contracts";
-import { deleteBattlefield, listBattlefieldCards, projectBattlefieldManagement, registerBattlefield } from "../battlefields.js";
-import { listCapabilityCards, registerCapability } from "../capabilities.js";
+import { deleteBattlefield, listBattlefieldCards, projectBattlefieldManagement, registerBattlefield, updateBattlefield } from "../battlefields.js";
+import { listCapabilityCards, listCapabilityRows, registerCapability, updateCapability } from "../capabilities.js";
 import { assignIssueBattlefield, createCeoIssue, unassignIssueBattlefield } from "../issues.js";
 import { createConfigMeeting } from "../meetings.js";
 import { companyPeriod } from "../monthlyPlans.js";
@@ -62,6 +65,22 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
       if (!result.ok) return fail(reply, 409, result.code, result.message);
       const cards = (await listCapabilityCards(q)).filter((card) => card.objectRef.id === result.id);
       return reply.status(201).send({ cards });
+    },
+  );
+  // 能力管理页：轻量列表投影，只读注册表行。
+  app.get(
+    "/api/config/capabilities",
+    { preHandler: requireCEO },
+    async (): Promise<TCapabilityManagementResponse> => ({ capabilities: await listCapabilityRows(q) }),
+  );
+  app.patch(
+    "/api/config/capabilities/:id",
+    { preHandler: requireCEO, schema: { params: idParams, body: PatchCapabilityRequest } },
+    async (req, reply): Promise<FastifyReply> => {
+      const result = await updateCapability(q, req.params.id, req.body);
+      if (!result.ok) return fail(reply, result.status, result.code, result.message);
+      const cards = (await listCapabilityCards(q)).filter((card) => card.objectRef.id === result.id);
+      return reply.status(200).send({ cards });
     },
   );
   app.post(
@@ -134,6 +153,16 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
       const result = await deleteBattlefield(pool, req.params.id);
       if (!result.ok) return fail(reply, result.status, result.code, result.message);
       return reply.code(204).send();
+    },
+  );
+  app.patch(
+    "/api/config/battlefields/:id",
+    { preHandler: requireCEO, schema: { params: idParams, body: PatchBattlefieldRequest } },
+    async (req, reply): Promise<FastifyReply> => {
+      const result = await updateBattlefield(q, req.params.id, req.body);
+      if (!result.ok) return fail(reply, result.status, result.code, result.message);
+      const cards = (await listBattlefieldCards(q, companyPeriod(now()))).filter((card) => card.objectRef.id === result.id);
+      return reply.status(200).send({ cards });
     },
   );
 

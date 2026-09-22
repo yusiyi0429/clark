@@ -423,7 +423,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** 能力管理页列表投影（只读注册表行） */
+        get: operations["getCapabilityManagement"];
         put?: never;
         /** CEO 注册公司能力（写入 Organization Fact 注册表） */
         post: operations["createCapability"];
@@ -431,6 +432,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/config/capabilities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** CEO 编辑能力（部分字段，id 稳定，version+1，改名 slug 冲突 409） */
+        patch: operations["patchCapability"];
         trace?: never;
     };
     "/api/config/issues": {
@@ -481,7 +499,8 @@ export interface paths {
         delete: operations["deleteBattlefield"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** CEO 编辑战场（部分字段，id 稳定，version+1，改名 slug 冲突 409） */
+        patch: operations["patchBattlefield"];
         trace?: never;
     };
     "/api/config/battlefields/{id}/issues": {
@@ -1052,10 +1071,29 @@ export interface components {
             owner: string;
             goal: string;
         };
+        PatchBattlefieldRequest: {
+            name?: string;
+            owner?: string;
+            goal?: string;
+        };
         CreateCapabilityRequest: {
             name: string;
             group: string;
             description: string;
+        };
+        PatchCapabilityRequest: {
+            name?: string;
+            group?: string;
+            description?: string;
+        };
+        CapabilityManagementResponse: {
+            capabilities: {
+                id: string;
+                version: number;
+                name: string;
+                group: string;
+                description: string;
+            }[];
         };
         CreateCeoIssueRequest: {
             title: string;
@@ -2638,6 +2676,35 @@ export interface operations {
             };
         };
     };
+    getCapabilityManagement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 能力列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityManagementResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     createCapability: {
         parameters: {
             query?: never;
@@ -2671,6 +2738,68 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    patchCapability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchCapabilityRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的 Capability Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2817,6 +2946,68 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    patchBattlefield: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchBattlefieldRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的 Battlefield Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

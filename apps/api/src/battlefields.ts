@@ -139,6 +139,33 @@ export async function registerBattlefield(
   return { ok: true, id };
 }
 
+export type UpdateBattlefieldResult =
+  | { ok: true; id: string }
+  | { ok: false; status: 404; code: "BATTLEFIELD_NOT_FOUND"; message: string }
+  | { ok: false; status: 409; code: "BATTLEFIELD_NAME_CONFLICT"; message: string };
+
+/** CEO 编辑战场：id 稳定，只改显示字段并 version+1；新名 slug 撞到其他行时 409。 */
+export async function updateBattlefield(
+  q: Query,
+  id: string,
+  input: { name?: string; owner?: string; goal?: string },
+): Promise<UpdateBattlefieldResult> {
+  const nextSlug = input.name !== undefined ? slugId(input.name) || null : null;
+  const updated = await q(
+    `UPDATE battlefield_config
+        SET name = COALESCE($2, name), owner = COALESCE($3, owner), positioning = COALESCE($4, positioning),
+            version = version + 1, updated_at = now()
+      WHERE id = $1
+        AND ($5::text IS NULL OR $5 = id OR NOT EXISTS (SELECT 1 FROM battlefield_config WHERE id = $5))
+      RETURNING id`,
+    [id, input.name ?? null, input.owner ?? null, input.goal ?? null, nextSlug],
+  );
+  if (updated.rowCount === 1) return { ok: true, id };
+  const exists = await q("SELECT id FROM battlefield_config WHERE id = $1", [id]);
+  if (exists.rowCount !== 1) return { ok: false, status: 404, code: "BATTLEFIELD_NOT_FOUND", message: "战场不存在" };
+  return { ok: false, status: 409, code: "BATTLEFIELD_NAME_CONFLICT", message: `战场名称与已有战场冲突（${nextSlug}）` };
+}
+
 /**
  * 战场管理页投影：一次返回战场列表与可选议题。
  * 议题只取 pending 且非 capability 级；battlefieldIds 即归一化集合，未归属为空数组，

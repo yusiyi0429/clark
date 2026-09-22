@@ -24,6 +24,45 @@ export const CreateCapabilityRequest = Type.Object(
   { additionalProperties: false },
 );
 
+/** CEO 编辑战场：只提交要改的字段（至少一项），id 稳定、version+1；改名 slug 冲突返回 409。 */
+export const PatchBattlefieldRequest = Type.Object(
+  {
+    name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    owner: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    goal: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+  },
+  { additionalProperties: false, minProperties: 1 },
+);
+
+/** CEO 编辑能力：同战场模式，能力表无 updated_at 列，只 version+1。 */
+export const PatchCapabilityRequest = Type.Object(
+  {
+    name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    group: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    description: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+  },
+  { additionalProperties: false, minProperties: 1 },
+);
+
+/** 能力管理页轻量列表投影：只读注册表行，不经过首页 Card 组合。 */
+export const CapabilityManagementResponse = Type.Object(
+  {
+    capabilities: Type.Array(
+      Type.Object(
+        {
+          id: Type.String({ minLength: 1 }),
+          version: Type.Integer({ minimum: 1 }),
+          name: Type.String({ minLength: 1 }),
+          group: Type.String(),
+          description: Type.String(),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
 /** 议题↔战场关联集合：Action 只接受单个 battlefieldId，集合归一化由服务端确定。 */
 export const AssignBattlefieldIssueRequest = Type.Object(
   {
@@ -96,6 +135,9 @@ export const CreateConfigMeetingRequest = Type.Object(
 );
 
 export type TCreateBattlefieldRequest = Static<typeof CreateBattlefieldRequest>;
+export type TPatchBattlefieldRequest = Static<typeof PatchBattlefieldRequest>;
+export type TPatchCapabilityRequest = Static<typeof PatchCapabilityRequest>;
+export type TCapabilityManagementResponse = Static<typeof CapabilityManagementResponse>;
 export type TAssignBattlefieldIssueRequest = Static<typeof AssignBattlefieldIssueRequest>;
 export type TCreateCapabilityRequest = Static<typeof CreateCapabilityRequest>;
 export type TCapabilityCardPayload = Static<typeof CapabilityCardPayload>;

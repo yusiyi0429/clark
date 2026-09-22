@@ -413,3 +413,104 @@ describe("CEO 配置页 create 路由", () => {
 
   // Receipt schema 仍然只由 Meeting Outcome 写入；配置页不产生 Receipt。
 });
+
+describe("CEO 配置页编辑路由", () => {
+  it("patches a battlefield in place: id stable, version+1, projection reflects", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name: "供应战场", owner: "张三", goal: "锁定供应" } });
+
+      const patched = await t.app.inject({
+        method: "PATCH",
+        url: "/api/config/battlefields/供应战场",
+        headers,
+        payload: { name: "供应链战场", owner: "李四", goal: "锁定关键器件" },
+      });
+      expect(patched.statusCode).toBe(200);
+      const card = patched.json().cards[0];
+      expect(card.objectRef.id).toBe("供应战场");
+      expect(card.objectRef.version).toBe(2);
+      expect(card.title).toBe("供应链战场");
+      expect(card.payload.positioning).toBe("锁定关键器件");
+
+      const rows = await t.sql("SELECT id, version, name, owner, positioning FROM battlefield_config WHERE id = $1", ["供应战场"]);
+      expect(rows[0]).toMatchObject({ id: "供应战场", version: 2, name: "供应链战场", owner: "李四", positioning: "锁定关键器件" });
+
+      const management = await t.app.inject({ method: "GET", url: "/api/config/battlefields", headers: { cookie: headers.cookie! } });
+      expect(management.json().battlefields.find((item: { id: string }) => item.id === "供应战场")).toEqual({
+        id: "供应战场",
+        name: "供应链战场",
+        owner: "李四",
+        pendingIssueCount: 0,
+      });
+
+      const missing = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/不存在", headers, payload: { name: "新名" } });
+      expect(missing.statusCode).toBe(404);
+      const empty = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers, payload: {} });
+      expect(empty.statusCode).toBe(400);
+      const anonymous = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers: { origin: t.publicOrigin }, payload: { name: "新名" } });
+      expect(anonymous.statusCode).toBe(401);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("rejects a battlefield rename whose slug collides, but allows renaming to itself", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      for (const name of ["渠道战场", "供应战场"]) {
+        await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name, owner: "张三", goal: "目标" } });
+      }
+
+      const conflict = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers, payload: { name: "渠道战场" } });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json().code).toBe("BATTLEFIELD_NAME_CONFLICT");
+
+      const self = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers, payload: { name: "供应战场" } });
+      expect(self.statusCode).toBe(200);
+      expect(self.json().cards[0].objectRef.version).toBe(2);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("patches a capability and lists registered capabilities for the management page", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      await t.app.inject({ method: "POST", url: "/api/config/capabilities", headers, payload: { name: "供应链能力", group: "交付组织", description: "端到端交付" } });
+      await t.app.inject({ method: "POST", url: "/api/config/capabilities", headers, payload: { name: "渠道能力", group: "增长组织", description: "渠道数据" } });
+
+      const list = await t.app.inject({ method: "GET", url: "/api/config/capabilities", headers: { cookie: headers.cookie! } });
+      expect(list.statusCode).toBe(200);
+      expect(list.json().capabilities).toEqual([
+        { id: "供应链能力", version: 1, name: "供应链能力", group: "交付组织", description: "端到端交付" },
+        { id: "渠道能力", version: 1, name: "渠道能力", group: "增长组织", description: "渠道数据" },
+      ]);
+
+      const patched = await t.app.inject({ method: "PATCH", url: "/api/config/capabilities/供应链能力", headers, payload: { name: "区域仓配服务", group: "平台能力" } });
+      expect(patched.statusCode).toBe(200);
+      const card = patched.json().cards[0];
+      expect(card.objectRef.id).toBe("供应链能力");
+      expect(card.objectRef.version).toBe(2);
+      expect(card.payload).toEqual({ capabilityId: "供应链能力", name: "区域仓配服务", group: "平台能力", description: "端到端交付" });
+
+      const home = await t.app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie: headers.cookie! } });
+      const capabilityCard = home.json().cards.find((candidate: { id: string }) => candidate.id === "capability:供应链能力");
+      expect(capabilityCard.title).toBe("区域仓配服务");
+
+      const conflict = await t.app.inject({ method: "PATCH", url: "/api/config/capabilities/渠道能力", headers, payload: { name: "供应链能力" } });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json().code).toBe("CAPABILITY_NAME_CONFLICT");
+
+      const empty = await t.app.inject({ method: "PATCH", url: "/api/config/capabilities/供应链能力", headers, payload: {} });
+      expect(empty.statusCode).toBe(400);
+      const missing = await t.app.inject({ method: "PATCH", url: "/api/config/capabilities/不存在", headers, payload: { name: "新名" } });
+      expect(missing.statusCode).toBe(404);
+    } finally {
+      await t.close();
+    }
+  });
+});

@@ -5,11 +5,17 @@ import { slugId } from "./slug.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
+export type CapabilityRow = { id: string; version: number; name: string; group: string; description: string };
+
+/** 能力注册表行：首页 Card 投影与能力管理页列表共用同一份读取。 */
+export async function listCapabilityRows(q: Query): Promise<CapabilityRow[]> {
+  const result = await q(`SELECT id, version, name, "group", description FROM capability_config ORDER BY created_at, id`);
+  return result.rows as CapabilityRow[];
+}
+
 /** 能力注册表 Card：首页能力面板用它补齐尚未有 Issue 的注册分组。 */
 export async function listCapabilityCards(q: Query): Promise<TCard[]> {
-  const result = await q(`SELECT id, version, name, "group", description FROM capability_config ORDER BY created_at, id`);
-  return result.rows.map((raw) => {
-    const row = raw as { id: string; version: number; name: string; group: string; description: string };
+  return (await listCapabilityRows(q)).map((row) => {
     const payload: TCapabilityCardPayload = {
       capabilityId: row.id,
       name: row.name,
@@ -52,4 +58,31 @@ export async function registerCapability(
   );
   if (result.rowCount !== 1) return { ok: false, code: "CAPABILITY_EXISTS", message: `能力 ${id} 已注册` };
   return { ok: true, id };
+}
+
+export type UpdateCapabilityResult =
+  | { ok: true; id: string }
+  | { ok: false; status: 404; code: "CAPABILITY_NOT_FOUND"; message: string }
+  | { ok: false; status: 409; code: "CAPABILITY_NAME_CONFLICT"; message: string };
+
+/** CEO 编辑能力：id 稳定，只改显示字段并 version+1；新名 slug 撞到其他行时 409。 */
+export async function updateCapability(
+  q: Query,
+  id: string,
+  input: { name?: string; group?: string; description?: string },
+): Promise<UpdateCapabilityResult> {
+  const nextSlug = input.name !== undefined ? slugId(input.name) || null : null;
+  const updated = await q(
+    `UPDATE capability_config
+        SET name = COALESCE($2, name), "group" = COALESCE($3, "group"), description = COALESCE($4, description),
+            version = version + 1
+      WHERE id = $1
+        AND ($5::text IS NULL OR $5 = id OR NOT EXISTS (SELECT 1 FROM capability_config WHERE id = $5))
+      RETURNING id`,
+    [id, input.name ?? null, input.group ?? null, input.description ?? null, nextSlug],
+  );
+  if (updated.rowCount === 1) return { ok: true, id };
+  const exists = await q("SELECT id FROM capability_config WHERE id = $1", [id]);
+  if (exists.rowCount !== 1) return { ok: false, status: 404, code: "CAPABILITY_NOT_FOUND", message: "能力不存在" };
+  return { ok: false, status: 409, code: "CAPABILITY_NAME_CONFLICT", message: `能力名称与已有能力冲突（${nextSlug}）` };
 }
