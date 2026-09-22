@@ -36,7 +36,7 @@
     { "id": "conversation-scope-edge", "from": "conversation", "to": "meeting", "label": "对象作用域", "variant": "dashed" }
   ],
   "cards": [
-    { "dot": "emerald", "title": "配置内嵌关系", "items": ["BattlefieldConfig 保存 code、顺序、六个月目标、ownerId 与 Mission[]", "CapabilityConfig 保存 code、顺序、六个月目标与 supportMissionCodes[]", "Mission 不建立实体或执行状态机"] },
+    { "dot": "emerald", "title": "配置内嵌关系", "items": ["BattlefieldConfig 保存 code、顺序、六个月目标、ownerId 与 Mission[]", "CapabilityConfig 保存 code、顺序、六个月目标与 supportRefs[]", "Mission 不建立实体或执行状态机"] },
     { "dot": "cyan", "title": "时间尺度", "items": ["Company LTCO 与六个月目标进入战略配置", "当月公司、战场、能力 PCO 只进入 MonthlyPlan", "Card 只做投影，不保存第二份事实"] },
     { "dot": "amber", "title": "边界不变", "items": ["核心实体仍为 Issue、Signal、Meeting、MeetingOutcome、MonthlyPlan、Conversation", "普通 todo 继续内嵌于 MonthlyPlan", "负责人引用使用企业知识 personId"] }
   ]

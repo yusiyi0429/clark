@@ -9,6 +9,7 @@
 
 ## 架构图
 
+- `docs/diagrams/CEOwarmap_业务对象关系.html`
 - `docs/diagrams/CEOwarmap_技术架构.html`
 - `docs/diagrams/CEOwarmap_六实体生命周期.html`
 - `docs/diagrams/CEOwarmap_雷达自动升级时序.html`

@@ -1,7 +1,7 @@
 # Ticket 26 · 战场图结构化模型（A+B）
 
 Type: feature
-Status: planned
+Status: resolved
 Blocked by: none
 来源: 词元云集《战场图 V1》图片导入 + 用户选择 A+B
 视觉基线: `UpgradeDesign.pen`
@@ -105,3 +105,32 @@ Blocked by: none
 - Mission 只有配置引用，无执行状态。
 - 关系图与代码一致且通过 Archify 验证。
 - 工作区干净，未 push。
+
+## Comments
+
+### W5 完成记录（2026-09-22）
+
+提交：W1 `bd3fd29`、W2 `762b918`、W3 `520f6ed`、W4 `3b9a1da`、W5（本次）。
+
+**迁移与对象关系**：migration `019_strategy_map_config.sql` 只改结构（`battlefield_config` 增加 `code/sort_order/owner_id/six_month_outcome/missions`，唯一索引 `battlefield_config_code_key … WHERE code <> ''`，CHECK `sort_order BETWEEN 0 AND 9999`；新建 `company_strategy_config`，仅插入 `('default',1,'')`；`capability_config` 增加 `code/sort_order/group/support_refs`），不写任何图片业务数据。数据由 W5 通过 API 与受控 SQL 事务导入。
+
+**数据导入（全部经 API，未直写业务表）**：
+- `PATCH /api/config/strategy` → `{version:2, ltco:春节前…真实价值。}`。
+- `PATCH /api/config/battlefields/{id}`：`01-灯塔项目`（code 01/10、4 个 Mission）、`02-token-ops`（code 02/20、1 个 Mission）、`03-002-客户`（code 03/30、无 Mission）；`ownerId` 未设置，保持「待指派」。
+- `PATCH /api/config/capabilities/{id}`：7 项，`code/sortOrder` 为 02/20…09/90，`group` 清空，`supportRefs` 按 ticket 事实写入。
+- `DELETE /api/config/battlefields/growth`（走 `deleteBattlefield`）：删除前用 SQL 记录受影响议题 = **0**（`detachedIssues = 0`，无 `growth` 引用），响应 204；删除后战场 = 3。
+- 已签发 2026-09 MonthlyPlan（id `ffc24db5-8b4e-4766-ac64-4a7cdaf00aeb`）经授权用受控 SQL 事务修订：`version 5 → 6`，写入 3 个战场 PCO + 7 个能力 PCO，`negotiation.checkedItemIds` 补全为 11 项；`company_outcome` 占位、`todos`/`feedback`/`exports` 未动。API 对已签发计划返回 409 `MONTHLY_PLAN_CONFIRMED`，故必须走受控事务。
+
+**测试**：typecheck ×3 通过；contracts 32；web 21 文件 / 123；API 27 文件 / 328（326 通过，`outletSources.test.ts` 2 项为与本次无关的既有时间窗波动）。
+
+**staging（重建 api+web、迁移 019 已应用）**：
+- `GET /api/config/battlefields` → 3 项，code/sortOrder 01/10、02/20、03/30，负责人均为空（待指派），Mission 4/1/0。
+- `GET /api/config/capabilities` → 7 项，02/20…09/90，`group` 空，`supportRefs` 与 ticket 一致。
+- `GET /api/cards/home` → 3 张 battlefield + 7 张 capability，顺序与图片一致。
+- `GET /api/cards/monthly-plans` → 2026-09 confirmed v6，3 战场 PCO + 7 能力 PCO，已核对 11 项。
+
+**浏览器验收（Chrome DevTools MCP，1440 / 2560 宽）**：首页 3 战场（灯塔项目/Token Ops/002 客户，负责人「待指派」、六个月目标全文）+ 7 能力（02…09 按 sortOrder）；列数 1440=3、1200=2、800=1，四页均无横向溢出。配置页 LTCO 文本与「保存长期目标」可见。战场管理 3 行（`负责人 待指派 · 0 个议题`）；能力管理 7 行（02/03/04/05/07/08/09）。月度计划页 `已签发`，显示 3 战场 PCO + 7 能力 PCO 与「已核对 11 项」。截图与 OCR 文本已核对（截图存于临时目录，未入库）。
+
+**关系图**：`docs/diagrams/CEOwarmap_业务对象关系.architecture.json` 的 `supportMissionCodes[]` 改为 `supportRefs[]`；Archify `validate --quality showcase` 9/9 通过（composition 0 error/0 warning），`deliver` 产物 sha256 `297ff9b3…e652a6`，`visual-check` 在 1440x900/1600x1000/1920x1080/2048x1320 明暗两套下 status pass、containment pass、无溢出；`rg supportMissionCodes docs/diagrams/` 已无残留。README 架构图列表已加入该 HTML。
+
+**未做/限制**：`growth` 删除只清结构，历史 MonthlyPlan JSONB 快照不重写（按 `deleteBattlefield` 既有语义）；2026-09 计划的 `company_outcome` 仍是占位文本（无已确认公司结果材料，未编造）；`outletSources.test.ts` 2 项既有波动未修（超出本 ticket 范围）；未 push。
