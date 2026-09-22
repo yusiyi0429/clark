@@ -37,7 +37,7 @@ CEO 上传并归属到 Meeting 的会前文件。MVP 只接受可抽取文字的
 _Avoid_: Transcript、DRI 直接上传、自动生效的会议结论、通用文件库
 
 **Transcript**:
-外部按 `warmap-transcript.v1` 结构提供并挂到 Meeting 的逐字发言段集合；每个 speakerId 必须匹配 Meeting 已有 participant，任一条不合规则整份拒绝。WarMap 不负责录音、语音转写、格式转换或说话人映射。
+外部按 `warmap-transcript.v1` 结构提供并挂到 Meeting 的逐字发言段集合；每个 speakerId 必须匹配 Meeting 已有 participant，任一条不合规则整份拒绝。CEO 也可以上传妙记导出的 Markdown：服务端只按固定 `### 文字记录` + `姓名 mm:ss`/`hh:mm:ss` 结构做确定性转换，speaker 按人员目录 displayName 精确匹配，0 或 ≥2 命中交由 CEO 手工映射；上传只生成 Meeting 内嵌候选（`transcript_candidate`），不改 status、不跑会后抽取，只有 `meeting.confirm_transcript_candidate` 确认后才写入标准 Transcript、置 held 并启动既有 Outcome Agent。候选与最终 Transcript 都只保存既定结构，原始 Markdown 不复制进 Card/Action JSON，也不落独立文件库；确认后可带可选 `source` 元数据留痕。WarMap 仍不负责录音、语音转写、OCR、通用格式转换或说话人猜测。
 _Avoid_: 自动可信的会议纪要、WarMap 录音能力、说话人猜测、部分导入
 
 **Meeting Outcome**:

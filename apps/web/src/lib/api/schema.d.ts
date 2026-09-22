@@ -1633,6 +1633,14 @@ export interface components {
                 text: string;
             }[];
             importedAt: string;
+            source?: {
+                format: "miaoji_markdown" | "warmap_json";
+                fileName: string;
+                sizeBytes: number;
+                sha256: string;
+                parserVersion: string;
+                timeAnchor: string | null;
+            };
         };
         PostMeetingCandidate: {
             summary: string;

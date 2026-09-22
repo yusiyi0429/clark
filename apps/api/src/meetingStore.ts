@@ -9,6 +9,8 @@ import type {
   TMeetingParticipant,
   TMeetingPreflight,
   TStoredTranscript,
+  TStoredTranscriptCandidate,
+  TTranscriptCandidateProjection,
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 
@@ -31,6 +33,7 @@ export type MeetingRow = {
   draft: TMeetingDraft;
   materials: StoredMeetingMaterial[];
   transcript: TStoredTranscript | null;
+  transcript_candidate: TStoredTranscriptCandidate | null;
   outcome: TMeetingOutcomeState | null;
   origin_ref: unknown;
   external_id: string | null;
@@ -42,7 +45,7 @@ export type MeetingRow = {
 
 const MEETING_COLUMNS = [
   "id", "version", "title", "status", "scheduled_at", "lead_dri_id", "ceo_participant_id",
-  "participants", "issue_ids", "preflight", "draft", "materials", "transcript", "outcome", "origin_ref", "external_id",
+  "participants", "issue_ids", "preflight", "draft", "materials", "transcript", "transcript_candidate", "outcome", "origin_ref", "external_id",
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
 ];
 export const meetingColumns = (prefix = "") => MEETING_COLUMNS.map((column) => `${prefix}${column}`).join(", ");
@@ -99,6 +102,25 @@ function parentConfirmed(outcome: TMeetingOutcomeState, item: TMeetingOutcomeIte
   return parent?.review?.status === "confirmed";
 }
 
+/** 候选只向 Card 投影摘要与抽样；完整 turns 留在服务端 JSONB。 */
+export function projectTranscriptCandidate(candidate: TStoredTranscriptCandidate | null): TTranscriptCandidateProjection | null {
+  if (!candidate || candidate.turns.length === 0) return null;
+  const first = candidate.turns[0].offsetSeconds;
+  const last = candidate.turns[candidate.turns.length - 1].offsetSeconds;
+  return {
+    source: candidate.source,
+    createdAt: candidate.createdAt,
+    turnCount: candidate.turns.length,
+    speakerCount: candidate.speakers.length,
+    durationSeconds: last - first,
+    firstOffsetSeconds: first,
+    lastOffsetSeconds: last,
+    speakers: candidate.speakers,
+    sampleTurns: candidate.turns.slice(0, 8),
+    warnings: candidate.warnings,
+  };
+}
+
 export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
   const action = (actionType: string, label: string, itemId?: string): TActionDescriptor => {
     const scope: ActionScope = { actionType, objectType: "meeting", objectId: row.id, objectVersion: row.version, itemId };
@@ -116,6 +138,12 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
     );
     if (row.preflight.status === "failed") actions.push(action("meeting.retry_preflight", "重试预审"));
     if (row.preflight.status === "ready") actions.push(action("meeting.regenerate_preflight", "重新预审"));
+  }
+  if (row.status === "scheduled" && row.transcript_candidate) {
+    actions.push(
+      action("meeting.confirm_transcript_candidate", "确认会议记录映射"),
+      action("meeting.discard_transcript_candidate", "清除会议记录候选"),
+    );
   }
   // Ticket 10：held 后只能显式重试失败的抽取；无 confirmed effect 时才允许危险替换 Transcript（reviewed 同样适用）
   if (row.status === "held" && row.outcome?.status === "failed") actions.push(action("meeting.retry_outcome", "重试会后抽取"));
@@ -160,6 +188,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
       draft: row.draft,
       materials: row.materials.map(projectMaterial),
       transcript: row.transcript,
+      transcriptCandidate: projectTranscriptCandidate(row.transcript_candidate),
       outcome: row.outcome,
     },
     navigation: [{ href: `/meetings/${row.id}`, label: "Meeting" }],

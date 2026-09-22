@@ -1,5 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
-import { MeetingOutcomeState, StoredTranscript } from "./transcript.js";
+import { MeetingOutcomeState, StoredTranscript, TranscriptCandidateProjection } from "./transcript.js";
 
 export const MeetingStatus = Type.Union([
   Type.Literal("scheduled"),
@@ -218,6 +218,8 @@ export const MeetingCardPayload = Type.Object(
     draft: MeetingDraft,
     materials: Type.Array(MeetingMaterial, { maxItems: 10 }),
     transcript: Type.Union([StoredTranscript, Type.Null()]),
+    /** 妙记 Markdown 候选：未确认或已清除时为 null；完整 turns 不进 Card。 */
+    transcriptCandidate: Type.Union([TranscriptCandidateProjection, Type.Null()]),
     outcome: Type.Union([MeetingOutcomeState, Type.Null()]),
   },
   { additionalProperties: false },

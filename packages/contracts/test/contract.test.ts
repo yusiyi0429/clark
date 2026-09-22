@@ -33,6 +33,11 @@ import {
   PostMeetingCandidate,
   PreflightCandidate,
   ReplaceTranscriptRequest,
+  StoredTranscript,
+  StoredTranscriptCandidate,
+  TranscriptCandidateProjection,
+  ConfirmTranscriptCandidateRequest,
+  DiscardTranscriptCandidateRequest,
   IssueReceipt,
   RadarCandidateSubmission,
   RadarAnchor,
@@ -340,6 +345,7 @@ describe("meeting public contract", () => {
       draft: { readIssueIds: [], carriedIssueIds: [], checkedEntryIds: [], editsByEntryId: {}, supplementRequests: [], note: "" },
       materials: [],
       transcript: null,
+      transcriptCandidate: null,
       outcome: null,
     };
     expect(Value.Check(MeetingCardPayload, payload)).toBe(true);
@@ -367,6 +373,45 @@ describe("meeting public contract", () => {
     // 危险替换必须携带服务端可验证的二次确认
     expect(Value.Check(ReplaceTranscriptRequest, { transcript: file, confirmReplace: true })).toBe(true);
     expect(Value.Check(ReplaceTranscriptRequest, { transcript: file })).toBe(false);
+  });
+
+  it("types the Miaoji transcript candidate as a projection with an explicit speaker mapping Action", () => {
+    const source = {
+      format: "miaoji_markdown",
+      fileName: "meeting.md",
+      sizeBytes: 1024,
+      sha256: "a".repeat(64),
+      parserVersion: "miaoji-markdown.v1",
+      timeAnchor: "2026-09-22T12:24:00.000Z",
+    };
+    const speaker = { speakerName: "测试乙", turnCount: 2, suggestedPersonId: "person-fixture-002", suggestedDisplayName: "测试乙" };
+    const turn = { speakerName: "测试乙", offsetSeconds: 1, text: "我来跟进" };
+    expect(Value.Check(StoredTranscriptCandidate, { source, createdAt: "2026-09-22T12:30:00.000Z", speakers: [speaker], turns: [turn], warnings: [] })).toBe(true);
+    expect(Value.Check(StoredTranscriptCandidate, { source, createdAt: "x", speakers: [speaker], turns: [], warnings: [] })).toBe(false);
+    const projection = {
+      source,
+      createdAt: "2026-09-22T12:30:00.000Z",
+      turnCount: 1,
+      speakerCount: 1,
+      durationSeconds: 0,
+      firstOffsetSeconds: 1,
+      lastOffsetSeconds: 1,
+      speakers: [speaker],
+      sampleTurns: [turn],
+      warnings: [],
+    };
+    expect(Value.Check(TranscriptCandidateProjection, projection)).toBe(true);
+    // 投影不带完整 turns
+    expect(Value.Check(TranscriptCandidateProjection, { ...projection, turns: [turn] })).toBe(false);
+    // 已落库 Transcript 可带 source，旧行缺省仍合法
+    expect(Value.Check(StoredTranscript, { schemaVersion: "warmap-transcript.v1", meetingId: "m", turns: [{ id: "turn-0001", speakerId: "person-fixture-002", text: "x" }], importedAt: "now", source })).toBe(true);
+    expect(Value.Check(StoredTranscript, { schemaVersion: "warmap-transcript.v1", meetingId: "m", turns: [{ id: "turn-0001", speakerId: "person-fixture-002", text: "x" }], importedAt: "now" })).toBe(true);
+    // 确认必须覆盖映射且显式确认加入参与人；discard 无输入
+    expect(Value.Check(ConfirmTranscriptCandidateRequest, { speakerMappings: [{ speakerName: "测试乙", personId: "person-fixture-002" }], confirmAddParticipants: true })).toBe(true);
+    expect(Value.Check(ConfirmTranscriptCandidateRequest, { speakerMappings: [{ speakerName: "测试乙", personId: "person-fixture-002" }] })).toBe(false);
+    expect(Value.Check(ConfirmTranscriptCandidateRequest, { speakerMappings: [], confirmAddParticipants: true })).toBe(false);
+    expect(Value.Check(DiscardTranscriptCandidateRequest, {})).toBe(true);
+    expect(Value.Check(DiscardTranscriptCandidateRequest, { extra: true })).toBe(false);
   });
 
   it("types the extracted MeetingOutcome items with turn-bound quotes and per-item review", () => {

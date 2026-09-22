@@ -24,6 +24,25 @@ export const WarmapTranscript = Type.Object(
   { additionalProperties: false },
 );
 
+/** Transcript 来源元数据：只用于追溯，不参与会后抽取；旧 JSON/历史行缺省即合法。 */
+export const TranscriptSourceFormat = Type.Union([
+  Type.Literal("miaoji_markdown"),
+  Type.Literal("warmap_json"),
+]);
+
+export const TranscriptSource = Type.Object(
+  {
+    format: TranscriptSourceFormat,
+    fileName: Type.String({ minLength: 1, maxLength: 300 }),
+    sizeBytes: Type.Integer({ minimum: 1, maximum: 1024 * 1024 }),
+    sha256: Type.String({ minLength: 1, maxLength: 200 }),
+    parserVersion: Type.String({ minLength: 1, maxLength: 50 }),
+    /** 绝对时间锚点：生成 turns 时采用的 Meeting scheduledAt；无锚点时为 null。 */
+    timeAnchor: Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 /** 已落库的 Transcript：原始 turns 加导入时间，不复制 participant。 */
 export const StoredTranscript = Type.Object(
   {
@@ -31,9 +50,80 @@ export const StoredTranscript = Type.Object(
     meetingId: Type.String({ minLength: 1, maxLength: 200 }),
     turns: Type.Array(TranscriptTurn, { minItems: 1 }),
     importedAt: Type.String({ minLength: 1 }),
+    /** 来源留痕；原始 Markdown 不落库，只看正文已进入 turns。 */
+    source: Type.Optional(TranscriptSource),
   },
   { additionalProperties: false },
 );
+
+/** 候选内单个 turn：只在服务端保存，确认 Action 不回传全量 turns。 */
+export const TranscriptCandidateTurn = Type.Object(
+  {
+    speakerName: Type.String({ minLength: 1, maxLength: 200 }),
+    offsetSeconds: Type.Integer({ minimum: 0 }),
+    text: Type.String({ minLength: 1, maxLength: 20000 }),
+  },
+  { additionalProperties: false },
+);
+
+/** speaker 映射建议：唯一精确命中人员目录时给出 personId，0 或 ≥2 命中为 null 由 CEO 手选。 */
+export const TranscriptCandidateSpeaker = Type.Object(
+  {
+    speakerName: Type.String({ minLength: 1, maxLength: 200 }),
+    turnCount: Type.Integer({ minimum: 1 }),
+    suggestedPersonId: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
+    suggestedDisplayName: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+/** Meeting 内嵌 Candidate Material：完整 turns 只存服务端 JSONB，不是新实体。 */
+export const StoredTranscriptCandidate = Type.Object(
+  {
+    source: TranscriptSource,
+    createdAt: Type.String({ minLength: 1 }),
+    speakers: Type.Array(TranscriptCandidateSpeaker, { minItems: 1, maxItems: 50 }),
+    turns: Type.Array(TranscriptCandidateTurn, { minItems: 1, maxItems: 2000 }),
+    warnings: Type.Array(Type.String({ minLength: 1, maxLength: 500 })),
+  },
+  { additionalProperties: false },
+);
+
+/** Card 投影：只给摘要、抽样与映射建议，不含完整 turns。 */
+export const TranscriptCandidateProjection = Type.Object(
+  {
+    source: TranscriptSource,
+    createdAt: Type.String({ minLength: 1 }),
+    turnCount: Type.Integer({ minimum: 1 }),
+    speakerCount: Type.Integer({ minimum: 1 }),
+    durationSeconds: Type.Integer({ minimum: 0 }),
+    firstOffsetSeconds: Type.Integer({ minimum: 0 }),
+    lastOffsetSeconds: Type.Integer({ minimum: 0 }),
+    speakers: Type.Array(TranscriptCandidateSpeaker, { minItems: 1, maxItems: 50 }),
+    sampleTurns: Type.Array(TranscriptCandidateTurn, { maxItems: 8 }),
+    warnings: Type.Array(Type.String({ minLength: 1, maxLength: 500 })),
+  },
+  { additionalProperties: false },
+);
+
+/** CEO 确认候选时的 speaker 映射：覆盖全部唯一 speakerName，personId 必须命中人员目录。 */
+export const TranscriptSpeakerMapping = Type.Object(
+  {
+    speakerName: Type.String({ minLength: 1, maxLength: 200 }),
+    personId: Type.String({ minLength: 1, maxLength: 200 }),
+  },
+  { additionalProperties: false },
+);
+
+export const ConfirmTranscriptCandidateRequest = Type.Object(
+  {
+    speakerMappings: Type.Array(TranscriptSpeakerMapping, { minItems: 1, maxItems: 50 }),
+    confirmAddParticipants: Type.Literal(true),
+  },
+  { additionalProperties: false },
+);
+
+export const DiscardTranscriptCandidateRequest = Type.Object({}, { additionalProperties: false });
 
 export const OutcomeItemKind = Type.Union([
   Type.Literal("decision"),
@@ -186,7 +276,16 @@ export const MeetingRevokeEffectInput = Type.Object(
 export type TTranscriptSchemaVersion = Static<typeof TranscriptSchemaVersion>;
 export type TTranscriptTurn = Static<typeof TranscriptTurn>;
 export type TWarmapTranscript = Static<typeof WarmapTranscript>;
+export type TTranscriptSourceFormat = Static<typeof TranscriptSourceFormat>;
+export type TTranscriptSource = Static<typeof TranscriptSource>;
 export type TStoredTranscript = Static<typeof StoredTranscript>;
+export type TTranscriptCandidateTurn = Static<typeof TranscriptCandidateTurn>;
+export type TTranscriptCandidateSpeaker = Static<typeof TranscriptCandidateSpeaker>;
+export type TStoredTranscriptCandidate = Static<typeof StoredTranscriptCandidate>;
+export type TTranscriptCandidateProjection = Static<typeof TranscriptCandidateProjection>;
+export type TTranscriptSpeakerMapping = Static<typeof TranscriptSpeakerMapping>;
+export type TConfirmTranscriptCandidateRequest = Static<typeof ConfirmTranscriptCandidateRequest>;
+export type TDiscardTranscriptCandidateRequest = Static<typeof DiscardTranscriptCandidateRequest>;
 export type TOutcomeItemKind = Static<typeof OutcomeItemKind>;
 export type TCeoJudgmentKind = Static<typeof CeoJudgmentKind>;
 export type TPostMeetingItem = Static<typeof PostMeetingItem>;

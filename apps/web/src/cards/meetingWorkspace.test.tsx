@@ -72,6 +72,7 @@ export function meetingCard(payloadOverrides: Record<string, unknown>, actions: 
         note: "",
       },
       transcript: null,
+      transcriptCandidate: null,
       outcome: null,
       materials: [],
       ...payloadOverrides,
