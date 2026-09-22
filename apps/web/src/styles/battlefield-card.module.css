@@ -2,7 +2,11 @@
 .rotor{display:grid;height:100%;min-height:0;border:1px solid #1d1d1f1f;border-radius:inherit;background:#fff;box-shadow:0 2px 6px #1d1d1f08,inset 0 1px 0 #fff;transform:translateZ(0);transform-style:preserve-3d;will-change:transform;transition:transform 380ms cubic-bezier(.22,.72,.18,1),border-color 180ms,box-shadow 180ms}
 .rotor[data-flipped=true]{transform:translateZ(0) rotateY(180deg)}
 .face{grid-area:1/1;min-width:0;min-height:0;overflow:clip;contain:paint;border:0;border-radius:21px;padding:21px 22px;background:#fff;box-shadow:none;backface-visibility:hidden;-webkit-backface-visibility:hidden;clip-path:inset(0 round 21px)}
-.front{transform:rotateY(0deg)}
+.front{transform:rotateY(0deg);display:flex;flex-direction:column}
+/* 正面战略上下文：负责人 + 两行六个月目标，始终在待决策列表之上。 */
+.context{display:flex;flex-direction:column;gap:3px;margin-top:7px}
+.contextOwner{font-size:var(--type-meta,12px);line-height:1.6;color:#6e6e73}
+.outcome{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin:0;font-size:var(--type-meta,12px);line-height:1.6;color:#5b6472}
 .back{transform:rotateY(180deg);background:linear-gradient(155deg,#fff 50%,#f5f8fc);position:relative}
 /* Ambient light belongs to the progress face, never to a status or metric.
    The clear middle protects the charts; transform-only motion stays inexpensive. */
@@ -48,7 +52,7 @@
 
 /* 新 Web：正面议题列表与背面真实待办/反馈。不引入进度百分比或第二套 token。 */
 .staticTitle{font-size:var(--type-title,20px);font-weight:600;line-height:1.4;letter-spacing:-.025em;margin:0;color:#1d1d1f}
-.list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;min-height:0;overflow:auto;scrollbar-width:thin}
+.list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:auto;scrollbar-width:thin}
 .list li+li{border-top:1px solid #1d1d1f0d}
 .listButton{display:flex;align-items:flex-start;gap:10px;width:100%;padding:9px 0;border:0;background:none;text-align:left;font:inherit;font-size:var(--type-body,14px);line-height:1.6;color:#1d1d1f;cursor:pointer;border-radius:9px;transition:background 150ms}
 .listButton:hover{background:#f5f5f7}

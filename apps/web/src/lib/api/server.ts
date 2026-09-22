@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
-import type { TBattlefieldManagementResponse, TCapabilityManagementResponse } from "@warmap/contracts";
+import type { TBattlefieldManagementResponse, TCapabilityManagementResponse, TStrategyConfigResponse } from "@warmap/contracts";
 import type { Card } from "./client";
 import { serverApi } from "./client";
 
@@ -52,6 +52,14 @@ export async function loadPeople(cookie: string): Promise<PersonOption[]> {
   if (response.status === 401) redirect("/access");
   if (!response.ok) throw new Error(`people query failed with ${response.status}`);
   return ((data as { people?: PersonOption[] } | undefined)?.people) ?? [];
+}
+
+/** 配置页公司长期目标卡：GET 读当前版本，PATCH 由 ConfigScreen 发出。 */
+export async function loadStrategyConfig(cookie: string): Promise<TStrategyConfigResponse> {
+  const { data, response } = await serverApi.GET("/api/config/strategy", { headers: { cookie } });
+  if (response.status === 401) redirect("/access");
+  if (!response.ok) throw new Error(`strategy query failed with ${response.status}`);
+  return (data as TStrategyConfigResponse | undefined) ?? { version: 1, ltco: "" };
 }
 
 /** 配置页新建议题只能归属已注册战场。 */

@@ -1,17 +1,30 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BattlefieldScreen, battlefieldEditPatch } from "./BattlefieldScreen";
+import { BattlefieldScreen, battlefieldDraft, battlefieldEditPatch, formatMissions, parseMissions } from "./BattlefieldScreen";
 import type { TBattlefieldManagementResponse } from "@warmap/contracts";
+import type { PersonOption } from "@/lib/api/server";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 
 type Issue = TBattlefieldManagementResponse["issues"][number];
 
 const battlefields: TBattlefieldManagementResponse["battlefields"] = [
-  { id: "growth", name: "增长战场", owner: "陈珂", goal: "验证渠道结构与交付节奏", pendingIssueCount: 2 },
-  { id: "delivery", name: "交付战场", owner: "", goal: "", pendingIssueCount: 1 },
+  {
+    id: "growth",
+    version: 2,
+    code: "01",
+    sortOrder: 10,
+    name: "增长战场",
+    ownerId: "person-fixture-002",
+    ownerDisplayName: "陈珂",
+    sixMonthOutcome: "验证渠道结构与交付节奏",
+    missions: [{ code: "01-1", title: "未来组织范式设计与确认" }],
+    pendingIssueCount: 2,
+  },
+  { id: "delivery", version: 1, code: "02", sortOrder: 20, name: "交付战场", ownerId: "", ownerDisplayName: "", sixMonthOutcome: "", missions: [], pendingIssueCount: 1 },
 ];
+const people: PersonOption[] = [{ personId: "person-fixture-002", displayName: "陈珂", roles: ["dri", "participant"] }];
 const issues: Issue[] = [
   { id: "i1", title: "是否追加东南亚渠道预算 40%", urgencyLevel: "red", decisionBy: "2025-09-30", battlefieldIds: ["growth"] },
   { id: "i2", title: "明年研发预算向平台还是应用倾斜", urgencyLevel: "yellow", battlefieldIds: ["growth", "delivery"] },
@@ -20,7 +33,7 @@ const issues: Issue[] = [
 
 /** W6：战场管理页投影渲染冒烟（写入链路由 API config.test.ts 覆盖）。 */
 describe("战场管理页渲染", () => {
-  const html = renderToStaticMarkup(<BattlefieldScreen battlefields={battlefields} issues={issues} />);
+  const html = renderToStaticMarkup(<BattlefieldScreen battlefields={battlefields} issues={issues} people={people} />);
 
   it("渲染页头与战场列表，默认选中第一个战场", () => {
     expect(html).toContain("战场管理");
@@ -90,20 +103,54 @@ describe("战场管理页 CSS 基线", () => {
     expect(source).toContain("box-shadow:0 10px 28px #0a0f1e33");
     expect(source).toContain(".danger{background:#a1443c");
   });
+
+  it("编辑弹层 420 宽，含 Mission 文本域与编号/顺序双列", () => {
+    expect(source).toContain(".wide{left:186px;width:420px}");
+    expect(source).toContain(".pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}");
+    expect(source).toContain(".field textarea{box-sizing:border-box;width:100%;min-height:72px");
+  });
 });
 
 /** 编辑弹层只提交改动字段：负责人可能是空串，未改动时不能把它当新值发出去（会被 400 拒）。 */
 describe("战场编辑弹层提交字段", () => {
-  const current = { name: "增长战场", owner: "", goal: "验证渠道结构" };
+  const current = battlefieldDraft(battlefields[1]);
 
-  it("未改动的空负责人不进 patch，只改目标时只发 goal", () => {
+  it("未改动的空负责人不进 patch，只改六个月目标时只发 sixMonthOutcome", () => {
     expect(battlefieldEditPatch(current, current)).toEqual({});
-    expect(battlefieldEditPatch(current, { ...current, goal: "锁定关键器件" })).toEqual({ goal: "锁定关键器件" });
+    expect(battlefieldEditPatch(current, { ...current, sixMonthOutcome: "锁定关键器件" })).toEqual({ sixMonthOutcome: "锁定关键器件" });
   });
 
-  it("主动清空负责人提交空串，改名发去空格后的名字", () => {
-    expect(battlefieldEditPatch({ ...current, owner: "陈珂" }, current)).toEqual({ owner: "" });
+  it("主动指定负责人提交 personId，改名发去空格后的名字", () => {
+    expect(battlefieldEditPatch(current, { ...current, ownerId: "person-fixture-002" })).toEqual({ ownerId: "person-fixture-002" });
     expect(battlefieldEditPatch(current, { ...current, name: " 供应链战场 " })).toEqual({ name: "供应链战场" });
     expect(battlefieldEditPatch(current, { ...current, name: "   " })).toEqual({});
+  });
+
+  it("编号/顺序以文本编辑，改动才转成数字下发", () => {
+    expect(battlefieldEditPatch(current, { ...current, code: "07" })).toEqual({ code: "07" });
+    expect(battlefieldEditPatch(current, { ...current, sortOrder: "70" })).toEqual({ sortOrder: 70 });
+    expect(battlefieldEditPatch(current, { ...current, sortOrder: "abc" })).toEqual({});
+  });
+});
+
+/** Mission 只以「编号 标题」逐行文本编辑：存储仍是结构化 {code,title}。 */
+describe("Mission 文本与结构化值互转", () => {
+  it("格式化与解析对齐设计里的两行示例", () => {
+    const missions = [
+      { code: "01-1", title: "未来组织范式设计与确认" },
+      { code: "01-2", title: "CEO Agent 常态化使用" },
+    ];
+    expect(formatMissions(missions)).toBe("01-1 未来组织范式设计与确认\n01-2 CEO Agent 常态化使用");
+    expect(parseMissions(formatMissions(missions))).toEqual(missions);
+  });
+
+  it("丢弃空行与缺少标题的行，标题里的空格保留", () => {
+    expect(parseMissions("\n01-1  未来 组织范式 \n\n孤儿编号\n")).toEqual([{ code: "01-1", title: "未来 组织范式" }]);
+  });
+
+  it("编辑弹层比较文本：改一行才发 missions", () => {
+    const current = battlefieldDraft(battlefields[0]);
+    expect(battlefieldEditPatch(current, { ...current, missions: formatMissions(battlefields[0].missions) })).toEqual({});
+    expect(battlefieldEditPatch(current, { ...current, missions: "01-1 改过的标题" })).toEqual({ missions: [{ code: "01-1", title: "改过的标题" }] });
   });
 });

@@ -30,7 +30,7 @@
 .gray { background:#8e8e93; }
 .issueArrow { flex:none; margin-top:5px; margin-left:auto; opacity:0; color:#7c8a9b; transition:opacity 180ms; }
 .issue:hover .issueArrow,.issue:focus-visible .issueArrow { opacity:.8; }
-.battlefields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:auto; gap:13px; flex:1 0 auto; }
+.battlefields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:auto; gap:13px; flex:1 0 auto; }
 .battlefieldToolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none;padding:0 3px;margin-bottom:-4px}
 .battlefieldToolbar>span{font-size:12px;color:#7c8088}
 .modeSwitch{position:relative;display:grid;grid-template-columns:1fr 1fr;border-radius:10px;background:#e9ebef;padding:3px;isolation:isolate}
@@ -86,7 +86,7 @@
 .strategy,.capabilities{transition:box-shadow 200ms ease,border-color 200ms ease}
 .strategy:focus-within,.capabilities:focus-within{border-color:#bdd0e9}
 @media(min-width:1800px){.board .capabilities{grid-template-columns:150px minmax(0,1fr);padding:24px 28px}.board .capabilities>.heading h2{font-size:17px}.board .capabilities :global([data-capability-category]) h3{font-size:14px}}
-@media(max-width:1250px){.board .capabilities{grid-template-columns:1fr;gap:13px;padding:19px 20px}.capabilities :global([data-capability-category]){padding-left:0;border-left:0}.board .capabilities>.heading h2{font-size:16px}}
+@media(max-width:1250px){.board .battlefields{grid-template-columns:repeat(2,minmax(0,1fr))}.board .capabilities{grid-template-columns:1fr;gap:13px;padding:19px 20px}.capabilities :global([data-capability-category]){padding-left:0;border-left:0}.board .capabilities>.heading h2{font-size:16px}}
 @media(max-width:690px){.strategy .issue{padding:9px 0}.board .strategy .heading h2{font-size:18px}.board .capabilities{padding:18px}}
 @media(prefers-reduced-motion:reduce){.strategy,.capabilities{transition:none}}
 @media(prefers-contrast:more){.board .strategy,.board .capabilities{border-color:#777}.board .capabilities :global([data-capability-category]) h3{color:#444}.capabilities :global([data-capability-category]){border-color:#aaa}}
@@ -94,8 +94,11 @@
 /* 新 Web：公司能力按 capabilityId 分组，沿用原能力面板的视觉语言。 */
 .capabilityItems{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px 24px;min-width:0;width:100%}
 .capabilityGroup{min-width:0;padding-left:20px;border-left:1px solid #ccd2dc66}
-.capabilityGroup h3{margin:0 0 5px;color:#73777e;font-size:12px;font-weight:500}
+.capabilityGroup h3{display:flex;align-items:baseline;gap:5px;margin:0 0 5px;color:#73777e;font-size:12px;font-weight:500}
+.capabilityCode{flex:none;border-radius:6px;background:#eef1f6;padding:0 5px;color:#5b6472;font-size:11px}
 .capabilityCategory{margin-left:6px;color:#9aa0a8;font-size:10px;font-weight:500;letter-spacing:.02em}
+/* 六个月目标固定两行，保证能力面板行高一致。 */
+.capabilityOutcome{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin:0 0 4px;font-size:12px;line-height:1.6;color:#5b6472}
 @media(max-width:1250px){.capabilityGroup{padding-left:0;border-left:0}}
 
 /* 基线以 2K 视口的面板比例为准；低高度时由 board 自身滚动，不强迫内容继续压缩。 */
@@ -161,6 +164,7 @@
 }
 @media(max-width:850px) {
   .top { grid-template-columns:minmax(0,1fr) minmax(112px,.45fr); }
+  .board .battlefields { grid-template-columns:minmax(0,1fr); }
   .board .top { height:auto; min-height:230px; }
   .board .battlefields > .battlefield, .board .battlefield { height:auto; min-height:250px; }
 }

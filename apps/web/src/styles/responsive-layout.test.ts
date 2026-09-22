@@ -15,12 +15,19 @@ describe("responsive workspace CSS", () => {
     expect(source).toContain("max-width:2448px");
     expect(source).toContain(".grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;max-width:2448px;align-items:start}");
     expect(source).toContain("height:44px;border:0;outline:1px solid #d9dde5;border-radius:10px");
-    expect(source).toContain("@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}");
+    expect(source).toContain("@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}.tall,.ltco{height:auto}}");
   });
 
   it("stacks the battlefield management columns below 1100px", () => {
     const source = css("./battlefield-management.module.css");
     expect(source).toContain("@media(max-width:1100px){.body{flex-direction:column}.left{width:100%}.listCard,.relatedCard,.pickCard{height:auto}.confirm{right:24px;left:auto}}");
+  });
+
+  it("lays the home battlefield grid as 3/2/1 columns across breakpoints", () => {
+    const source = css("./home-board.module.css");
+    expect(source).toContain(".battlefields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr))");
+    expect(source).toContain("@media(max-width:1250px){.board .battlefields{grid-template-columns:repeat(2,minmax(0,1fr))}");
+    expect(source).toContain(".board .battlefields { grid-template-columns:minmax(0,1fr); }");
   });
 
   it("keeps both scheduled-meeting side panels reachable below 1000px", () => {

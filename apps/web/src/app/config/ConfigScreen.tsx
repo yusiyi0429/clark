@@ -3,6 +3,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Calendar, ChevronDown, ChevronLeft, FileUp, Flag, Layers, Target } from "lucide-react";
+import type { TStrategyConfigResponse } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import c from "@/styles/config.module.css";
 
@@ -15,14 +16,15 @@ const MATERIAL_ACCEPT = ".pdf,.docx,.md";
 const MAX_MATERIALS = 10;
 
 /**
- * 配置页只做确定性表单写入 Organization Fact：注册战场/能力、直接新建 Issue 与 Meeting。
+ * 配置页只做确定性表单写入 Organization Fact：登记长期目标、战场/能力、直接新建 Issue 与 Meeting。
  * 会议卡内嵌会前材料拖拽区，一次 multipart 建会；成功后进入对应决策流程页面。
  */
-export function ConfigScreen({ people, battlefields }: { people: Person[]; battlefields: Battlefield[] }) {
+export function ConfigScreen({ people, battlefields, strategy }: { people: Person[]; battlefields: Battlefield[]; strategy: TStrategyConfigResponse }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
-  const [battlefield, setBattlefield] = useState({ name: "", owner: "", goal: "" });
-  const [capability, setCapability] = useState({ name: "", group: "", description: "" });
+  const [ltco, setLtco] = useState(strategy.ltco);
+  const [battlefield, setBattlefield] = useState({ code: "", sortOrder: "10", name: "", ownerId: "", sixMonthOutcome: "" });
+  const [capability, setCapability] = useState({ code: "", sortOrder: "20", name: "", group: "", sixMonthOutcome: "" });
   const [issue, setIssue] = useState({ title: "", battlefieldId: battlefields[0]?.id ?? "", decisionBy: "" });
   const [meeting, setMeeting] = useState({ title: "", scheduledAt: "", leadDriId: "" });
   const [materials, setMaterials] = useState<File[]>([]);
@@ -55,11 +57,18 @@ export function ConfigScreen({ people, battlefields }: { people: Person[]; battl
   async function createBattlefield(event: React.FormEvent) {
     event.preventDefault();
     setBusy("battlefield");
-    const { data, error, response } = await browserApi.POST("/api/config/battlefields", { body: battlefield });
+    const body = {
+      code: battlefield.code,
+      sortOrder: Number(battlefield.sortOrder),
+      name: battlefield.name,
+      ...(battlefield.ownerId ? { ownerId: battlefield.ownerId } : {}),
+      sixMonthOutcome: battlefield.sixMonthOutcome,
+    };
+    const { data, error, response } = await browserApi.POST("/api/config/battlefields", { body });
     const id = await finish("battlefield", response, data, error);
     setBusy(null);
     if (id) {
-      setBattlefield({ name: "", owner: "", goal: "" });
+      setBattlefield({ code: "", sortOrder: "10", name: "", ownerId: "", sixMonthOutcome: "" });
       router.push("/config/battlefields");
     }
   }
@@ -67,9 +76,33 @@ export function ConfigScreen({ people, battlefields }: { people: Person[]; battl
   async function createCapability(event: React.FormEvent) {
     event.preventDefault();
     setBusy("capability");
-    const { data, error, response } = await browserApi.POST("/api/config/capabilities", { body: capability });
-    if (await finish("capability", response, data, error)) setCapability({ name: "", group: "", description: "" });
+    const body = {
+      code: capability.code,
+      sortOrder: Number(capability.sortOrder),
+      name: capability.name,
+      group: capability.group,
+      sixMonthOutcome: capability.sixMonthOutcome,
+    };
+    const { data, error, response } = await browserApi.POST("/api/config/capabilities", { body });
+    if (await finish("capability", response, data, error)) setCapability({ code: "", sortOrder: "20", name: "", group: "", sixMonthOutcome: "" });
     setBusy(null);
+  }
+
+  /** LTCO 没有对象 id，只 version+1：写作后下一次月度草案即可读到新版本。 */
+  async function saveStrategy(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy("strategy");
+    const { response, error } = await browserApi.PATCH("/api/config/strategy", { body: { ltco } });
+    setBusy(null);
+    if (response.status === 401) {
+      router.push("/access?next=/config");
+      return;
+    }
+    if (response.ok) {
+      set("strategy")({ kind: "ok", message: "已保存" });
+      return;
+    }
+    set("strategy")({ kind: "error", message: (error as { message?: string } | undefined)?.message ?? `保存失败（${response.status}）` });
   }
 
   async function createIssue(event: React.FormEvent) {
@@ -138,6 +171,20 @@ export function ConfigScreen({ people, battlefields }: { people: Person[]; battl
       </header>
 
       <div className={c.grid}>
+        <form className={`${c.card} ${c.ltco}`} onSubmit={saveStrategy}>
+          <CardHead title="公司长期目标（LTCO）" desc="定义跨月稳定的公司结果方向，月度计划据此生成当月 PCO。" />
+          <textarea
+            className={c.ltcoInput}
+            aria-label="公司长期目标"
+            placeholder="例如：春节前，完成从战略与产品定义到核心业务第一次被真实证明的跨越。"
+            value={ltco}
+            onChange={(event) => setLtco(event.target.value)}
+          />
+          <CardFooter hint="长期目标更新后，下一次月度草案使用新版本" status={status.strategy}>
+            {primary("strategy", "保存长期目标")}
+          </CardFooter>
+        </form>
+
         <form className={c.card} onSubmit={createMeeting}>
           <CardHead title="新建会议" desc="拉起一场有准备的会：上传材料 → 会前预审 → 会后复盘。" icon={<Calendar aria-hidden="true" />} />
           <Fields>
@@ -217,23 +264,44 @@ export function ConfigScreen({ people, battlefields }: { people: Person[]; battl
           </CardFooter>
         </form>
 
-        <form className={c.card} onSubmit={createBattlefield}>
+        <form className={`${c.card} ${c.tall}`} onSubmit={createBattlefield}>
           <CardHead title="新建战场" desc="定义一块要打赢的战场：目标、负责人与推进节奏。" icon={<Flag aria-hidden="true" />} />
           <Fields>
+            <Field label="显示编号 / 顺序">
+              <span className={c.pair}>
+                <input value={battlefield.code} placeholder="例如：01" maxLength={40} onChange={(e) => setBattlefield({ ...battlefield, code: e.target.value })} required />
+                <input
+                  type="number"
+                  min={0}
+                  max={9999}
+                  value={battlefield.sortOrder}
+                  aria-label="排序"
+                  onChange={(e) => setBattlefield({ ...battlefield, sortOrder: e.target.value })}
+                  required
+                />
+              </span>
+            </Field>
             <Field label="战场名称">
               <input value={battlefield.name} placeholder="例如：东南亚交付战场" onChange={(e) => setBattlefield({ ...battlefield, name: e.target.value })} required />
             </Field>
-            <Field label="负责人">
-              <Select value={battlefield.owner} onChange={(value) => setBattlefield({ ...battlefield, owner: value })} placeholder="选择负责人">
+            <Field label="负责人（可待指派）">
+              <Select value={battlefield.ownerId} onChange={(value) => setBattlefield({ ...battlefield, ownerId: value })} placeholder="待指派" required={false}>
+                <option value="">待指派</option>
                 {people.map((person) => (
-                  <option key={person.personId} value={person.displayName}>
+                  <option key={person.personId} value={person.personId}>
                     {person.displayName}
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field label="目标一句话">
-              <input value={battlefield.goal} placeholder="例如：双十一前履约周期压降 18%" onChange={(e) => setBattlefield({ ...battlefield, goal: e.target.value })} required />
+            <Field label="六个月目标">
+              <textarea
+                className={c.textarea}
+                placeholder="描述春节前需要形成的真实经营结果"
+                value={battlefield.sixMonthOutcome}
+                onChange={(e) => setBattlefield({ ...battlefield, sixMonthOutcome: e.target.value })}
+                required
+              />
             </Field>
           </Fields>
           <CardFooter hint="创建后进入战场管理" status={status.battlefield}>
@@ -246,17 +314,37 @@ export function ConfigScreen({ people, battlefields }: { people: Person[]; battl
           </CardFooter>
         </form>
 
-        <form className={c.card} onSubmit={createCapability}>
+        <form className={`${c.card} ${c.tall}`} onSubmit={createCapability}>
           <CardHead title="新建能力" desc="登记一项可复用的组织能力，供议题与计划引用。" icon={<Layers aria-hidden="true" />} />
           <Fields>
+            <Field label="显示编号 / 顺序">
+              <span className={c.pair}>
+                <input value={capability.code} placeholder="例如：02" maxLength={40} onChange={(e) => setCapability({ ...capability, code: e.target.value })} required />
+                <input
+                  type="number"
+                  min={0}
+                  max={9999}
+                  value={capability.sortOrder}
+                  aria-label="排序"
+                  onChange={(e) => setCapability({ ...capability, sortOrder: e.target.value })}
+                  required
+                />
+              </span>
+            </Field>
             <Field label="能力名称">
               <input value={capability.name} placeholder="例如：区域仓配服务" onChange={(e) => setCapability({ ...capability, name: e.target.value })} required />
             </Field>
-            <Field label="所属分组">
-              <input value={capability.group} placeholder="例如：供应链能力" onChange={(e) => setCapability({ ...capability, group: e.target.value })} required />
+            <Field label="所属分组（可选）">
+              <input value={capability.group} placeholder="例如：供应链能力" onChange={(e) => setCapability({ ...capability, group: e.target.value })} />
             </Field>
-            <Field label="能力说明">
-              <input value={capability.description} placeholder="例如：覆盖三国本地仓的仓配与退货能力" onChange={(e) => setCapability({ ...capability, description: e.target.value })} required />
+            <Field label="六个月目标">
+              <textarea
+                className={c.textarea}
+                placeholder="描述该能力在真实经营中的成熟结果"
+                value={capability.sixMonthOutcome}
+                onChange={(e) => setCapability({ ...capability, sixMonthOutcome: e.target.value })}
+                required
+              />
             </Field>
           </Fields>
           <CardFooter hint="出现在首页公司能力面板" status={status.capability}>
@@ -273,14 +361,14 @@ export function ConfigScreen({ people, battlefields }: { people: Person[]; battl
   );
 }
 
-function CardHead({ title, desc, icon }: { title: string; desc: string; icon: ReactNode }) {
+function CardHead({ title, desc, icon }: { title: string; desc: string; icon?: ReactNode }) {
   return (
     <>
       <div className={c.cardHead}>
         <h2>{title}</h2>
         <p>{desc}</p>
       </div>
-      <span className={c.iconChip}>{icon}</span>
+      {icon ? <span className={c.iconChip}>{icon}</span> : null}
     </>
   );
 }
@@ -298,11 +386,11 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Select({ value, onChange, placeholder, children }: { value: string; onChange: (value: string) => void; placeholder: string; children: ReactNode }) {
+function Select({ value, onChange, placeholder, required = true, children }: { value: string; onChange: (value: string) => void; placeholder: string; required?: boolean; children: ReactNode }) {
   return (
     <span className={c.selectWrap}>
-      <select value={value} onChange={(event) => onChange(event.target.value)} required>
-        <option value="" disabled>
+      <select value={value} onChange={(event) => onChange(event.target.value)} required={required}>
+        <option value="" disabled={required}>
           {placeholder}
         </option>
         {children}

@@ -39,22 +39,31 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
 
   const strategy = issues.filter((card) => payloadOf<IssuePayload>(card).location.level === "company");
   const capabilities = issues.filter((card) => payloadOf<IssuePayload>(card).location.level === "capability");
-  /** 首页能力面板 = 注册能力分组 ∪ Issue 派生分组；注册分组即使还没有 Issue 也要出现。 */
-  const capabilityGroups = useMemo(() => {
-    const groups = new Map<string, { id: string; name: string; group?: string; issues: Card[] }>();
+  type CapabilityItem = { id: string; code: string; sortOrder: number; name: string; group: string; outcome: string; issues: Card[] };
+  /** 首页能力面板 = 注册能力（按 sortOrder）∪ Issue 派生分组；注册能力即使还没有 Issue 也要出现。 */
+  const capabilityItems = useMemo(() => {
+    const items = new Map<string, CapabilityItem>();
     for (const card of cards) {
       if (card.kind !== "capability") continue;
       const payload = payloadOf<CapabilityPayload>(card);
-      groups.set(payload.capabilityId, { id: payload.capabilityId, name: payload.name, group: payload.group, issues: [] });
+      items.set(payload.capabilityId, {
+        id: payload.capabilityId,
+        code: payload.code,
+        sortOrder: payload.sortOrder,
+        name: payload.name,
+        group: payload.group,
+        outcome: payload.sixMonthOutcome,
+        issues: [],
+      });
     }
     for (const card of capabilities) {
       const location = payloadOf<IssuePayload>(card).location;
       const key = location.level === "capability" ? location.capabilityId : "其他";
-      const group = groups.get(key) ?? { id: key, name: key, issues: [] };
-      group.issues.push(card);
-      groups.set(key, group);
+      const item = items.get(key) ?? { id: key, code: "", sortOrder: Number.MAX_SAFE_INTEGER, name: key, group: "", outcome: "", issues: [] };
+      item.issues.push(card);
+      items.set(key, item);
     }
-    return [...groups.values()];
+    return [...items.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   }, [cards, capabilities]);
 
   function issueRow(card: Card) {
@@ -142,15 +151,17 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
       <section className={`${b.panel} ${b.capabilities}`} data-origin="capabilities">
         <h2>公司能力</h2>
         <div className={b.divider} aria-hidden="true" />
-        {capabilityGroups.length ? (
+        {capabilityItems.length ? (
           <div className={b.capabilityItems}>
-            {capabilityGroups.map((group) => (
-              <section key={group.id} className={b.capabilityGroup} data-capability-category={group.id}>
+            {capabilityItems.map((item) => (
+              <section key={item.id} className={b.capabilityGroup} data-capability-category={item.id}>
                 <h3>
-                  {group.name}
-                  {group.group ? <small className={b.capabilityCategory}>{group.group}</small> : null}
+                  {item.code ? <span className={b.capabilityCode}>{item.code}</span> : null}
+                  {item.name}
+                  {item.group ? <small className={b.capabilityCategory}>{item.group}</small> : null}
                 </h3>
-                {group.issues.length ? group.issues.map(issueRow) : <p className={b.empty}>暂无待决策议题</p>}
+                {item.outcome ? <p className={b.capabilityOutcome}>{item.outcome}</p> : null}
+                {item.issues.length ? item.issues.map(issueRow) : <p className={b.empty}>暂无待决策议题</p>}
               </section>
             ))}
           </div>

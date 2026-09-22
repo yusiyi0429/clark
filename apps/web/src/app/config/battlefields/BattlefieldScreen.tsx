@@ -3,8 +3,9 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronLeft, ChevronRight, Flag, Pencil, Plus, Target, Trash2 } from "lucide-react";
-import type { TBattlefieldManagementResponse } from "@warmap/contracts";
+import type { TMissionValue, TBattlefieldManagementResponse } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
+import type { PersonOption } from "@/lib/api/server";
 import b from "@/styles/battlefield-management.module.css";
 // 顶栏与页头复用配置页同一套设计常量（UpgradeDesign.pen 两页共享 Top Navigation 与 Page Header）。
 import c from "@/styles/config.module.css";
@@ -13,16 +14,49 @@ type Issue = TBattlefieldManagementResponse["issues"][number];
 type Battlefield = TBattlefieldManagementResponse["battlefields"][number];
 type Status = { kind: "ok" | "error"; message: string } | null;
 
+/** 编辑草稿：编号/顺序以文本编辑，Mission 以「编号 标题」逐行文本编辑，存储仍是结构化值。 */
+export type BattlefieldDraft = { code: string; sortOrder: string; name: string; ownerId: string; sixMonthOutcome: string; missions: string };
+
+export function formatMissions(missions: TMissionValue[]): string {
+  return missions.map((mission) => `${mission.code} ${mission.title}`).join("\n");
+}
+
+export function parseMissions(text: string): TMissionValue[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const split = line.indexOf(" ");
+      return split < 0 ? { code: line, title: "" } : { code: line.slice(0, split), title: line.slice(split + 1).trim() };
+    })
+    .filter((mission) => mission.code && mission.title)
+    .slice(0, 20);
+}
+
+export function battlefieldDraft(item: Battlefield): BattlefieldDraft {
+  return { code: item.code, sortOrder: String(item.sortOrder), name: item.name, ownerId: item.ownerId, sixMonthOutcome: item.sixMonthOutcome, missions: formatMissions(item.missions) };
+}
+
 /** 编辑弹层只提交真正改动的字段：未动的负责人（可能是空串）不重写，避免被当成新值。 */
-export function battlefieldEditPatch(
-  current: { name: string; owner: string; goal: string },
-  draft: { name: string; owner: string; goal: string },
-): { name?: string; owner?: string; goal?: string } {
-  const patch: { name?: string; owner?: string; goal?: string } = {};
+export function battlefieldEditPatch(current: BattlefieldDraft, draft: BattlefieldDraft) {
+  const patch: {
+    code?: string;
+    sortOrder?: number;
+    name?: string;
+    ownerId?: string;
+    sixMonthOutcome?: string;
+    missions?: TMissionValue[];
+  } = {};
   const name = draft.name.trim();
+  const code = draft.code.trim();
   if (name && name !== current.name) patch.name = name;
-  if (draft.owner !== current.owner) patch.owner = draft.owner;
-  if (draft.goal !== current.goal) patch.goal = draft.goal;
+  if (code && code !== current.code) patch.code = code;
+  const sortOrder = Number(draft.sortOrder);
+  if (draft.sortOrder.trim() !== "" && Number.isInteger(sortOrder) && draft.sortOrder !== current.sortOrder) patch.sortOrder = sortOrder;
+  if (draft.ownerId !== current.ownerId) patch.ownerId = draft.ownerId;
+  if (draft.sixMonthOutcome !== current.sixMonthOutcome) patch.sixMonthOutcome = draft.sixMonthOutcome;
+  if (draft.missions !== current.missions) patch.missions = parseMissions(draft.missions);
   return patch;
 }
 
@@ -41,12 +75,12 @@ function ownerLabel(issue: Issue, names: Map<string, string>) {
  * 战场管理页只消费 GET /api/config/battlefields 一次投影：
  * 左侧选战场并删除，右侧看关联议题、增删议题归属，写完用 router.refresh 重读投影。
  */
-export function BattlefieldScreen({ battlefields, issues }: TBattlefieldManagementResponse) {
+export function BattlefieldScreen({ battlefields, issues, people }: TBattlefieldManagementResponse & { people: PersonOption[] }) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState(battlefields[0]?.id ?? "");
   const [confirming, setConfirming] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({ name: "", owner: "", goal: "" });
+  const [draft, setDraft] = useState<BattlefieldDraft>({ code: "", sortOrder: "", name: "", ownerId: "", sixMonthOutcome: "", missions: "" });
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Record<"list" | "pick", Status>>({ list: null, pick: null });
 
@@ -71,17 +105,17 @@ export function BattlefieldScreen({ battlefields, issues }: TBattlefieldManageme
     return false;
   }
 
-  /** 编辑弹层回填当前注册表行；id 不变，改名撞到其他行由后端 409 拒绝。 */
+  /** 编辑弹层回填当前注册表行；id 不变，改名或改编号撞到其他行由后端 409 拒绝。 */
   function openEdit(item: Battlefield) {
     setSelectedId(item.id);
     setConfirming(false);
-    setDraft({ name: item.name, owner: item.owner, goal: item.goal });
+    setDraft(battlefieldDraft(item));
     setEditing(true);
   }
 
   async function saveBattlefield() {
     if (!selected || busy) return;
-    const patch = battlefieldEditPatch(selected, draft);
+    const patch = battlefieldEditPatch(battlefieldDraft(selected), draft);
     if (!Object.keys(patch).length) {
       setEditing(false);
       return;
@@ -151,7 +185,7 @@ export function BattlefieldScreen({ battlefields, issues }: TBattlefieldManageme
                     <span className={b.dot} />
                     <span className={b.rowText}>
                       <span className={b.rowTitle}>{item.name}</span>
-                      <span className={b.rowMeta}>负责人 {item.owner || "待指派"} · {item.pendingIssueCount} 个议题</span>
+                      <span className={b.rowMeta}>负责人 {item.ownerDisplayName || "待指派"} · {item.pendingIssueCount} 个议题</span>
                     </span>
                   </button>
                   <button type="button" className={b.rowIcon} aria-label={`编辑${item.name}`} onClick={() => openEdit(item)}>
@@ -187,19 +221,37 @@ export function BattlefieldScreen({ battlefields, issues }: TBattlefieldManageme
               </div>
             ) : null}
             {editing && selected ? (
-              <div className={b.confirm} role="dialog" aria-label="编辑战场">
+              <div className={`${b.confirm} ${b.wide}`} role="dialog" aria-label="编辑战场">
                 <p className={b.confirmTitle}>编辑战场</p>
+                <label className={b.field}>
+                  <span>显示编号 / 顺序</span>
+                  <span className={b.pair}>
+                    <input value={draft.code} maxLength={40} onChange={(event) => setDraft({ ...draft, code: event.target.value })} />
+                    <input type="number" min={0} max={9999} aria-label="排序" value={draft.sortOrder} onChange={(event) => setDraft({ ...draft, sortOrder: event.target.value })} />
+                  </span>
+                </label>
                 <label className={b.field}>
                   <span>战场名称</span>
                   <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
                 </label>
                 <label className={b.field}>
-                  <span>负责人</span>
-                  <input value={draft.owner} onChange={(event) => setDraft({ ...draft, owner: event.target.value })} />
+                  <span>负责人（可待指派）</span>
+                  <select value={draft.ownerId} onChange={(event) => setDraft({ ...draft, ownerId: event.target.value })}>
+                    <option value="">待指派</option>
+                    {people.map((person) => (
+                      <option key={person.personId} value={person.personId}>
+                        {person.displayName}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label className={b.field}>
-                  <span>目标一句话</span>
-                  <input value={draft.goal} onChange={(event) => setDraft({ ...draft, goal: event.target.value })} />
+                  <span>六个月目标</span>
+                  <textarea value={draft.sixMonthOutcome} onChange={(event) => setDraft({ ...draft, sixMonthOutcome: event.target.value })} />
+                </label>
+                <label className={b.field}>
+                  <span>Mission（每行：编号 + 标题）</span>
+                  <textarea value={draft.missions} onChange={(event) => setDraft({ ...draft, missions: event.target.value })} />
                 </label>
                 <span className={b.confirmActions}>
                   <button type="button" className={b.cancel} onClick={() => setEditing(false)}>

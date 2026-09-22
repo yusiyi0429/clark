@@ -28,6 +28,17 @@
 .selectWrap select{appearance:none;padding-right:36px}
 .chevron{position:absolute;top:50%;right:14px;width:14px;height:14px;transform:translateY(-50%);color:#6e6e73;pointer-events:none}
 
+.field textarea{box-sizing:border-box;width:100%;min-height:82px;border:0;outline:1px solid #d9dde5;border-radius:10px;background:#f7f8fa;padding:10px 14px;font:inherit;font-size:13px;line-height:1.5;color:#1d1d1f;resize:vertical}
+.field textarea::placeholder{color:#6e6e73}
+.field textarea:focus{outline:2px solid #4989d6;background:#fff}
+.pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+
+/* 战场/能力卡多一行六个月目标，按 pen 抬到 610；LTCO 整行 236。 */
+.tall{height:610px}
+.ltco{grid-column:1/-1;height:236px}
+.ltcoInput{box-sizing:border-box;width:100%;min-height:82px;border:0;outline:1px solid #d9dde5;border-radius:10px;background:#f7f8fa;padding:10px 14px;font:inherit;font-size:13px;line-height:1.5;color:#1d1d1f;resize:vertical}
+.ltcoInput:focus{outline:2px solid #4989d6;background:#fff}
+
 .upload{position:absolute;top:322px;left:24px;right:24px;box-sizing:border-box;display:flex;align-items:center;gap:12px;height:62px;border-radius:14px;background:#f7f8fa;outline:1px solid #b9d6f8;padding:0 20px;cursor:pointer}
 .upload[data-dragging]{background:#eef5ff;outline-color:#007aff}
 .uploadIcon{flex-shrink:0;width:26px;height:26px;color:#007aff}
@@ -47,6 +58,6 @@
 .primary:disabled{opacity:.5;cursor:default}
 .primary svg{width:15px;height:15px}
 
-@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}.tall,.ltco{height:auto}}
 @media(max-width:690px){.shell{padding:20px 20px 40px}}
-@media(prefers-contrast:more){.card{outline-color:#777}.field input,.field select{outline-color:#777}}
+@media(prefers-contrast:more){.card{outline-color:#777}.field input,.field select,.field textarea,.ltcoInput{outline-color:#777}}

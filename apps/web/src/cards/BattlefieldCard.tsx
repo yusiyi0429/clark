@@ -51,6 +51,10 @@ export function BattlefieldCard({ card, onNavigate }: CardRenderProps) {
               <span>进展</span>
             </button>
           </header>
+          <div className={s.context}>
+            <span className={s.contextOwner}>负责人 · {payload.ownerDisplayName || "待指派"}</span>
+            {payload.sixMonthOutcome ? <p className={s.outcome}>六个月目标 · {payload.sixMonthOutcome}</p> : null}
+          </div>
           {payload.pendingIssues.length ? (
             <ul className={s.list}>
               {payload.pendingIssues.map((issue) => (
