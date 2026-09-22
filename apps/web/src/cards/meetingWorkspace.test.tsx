@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
-import { MeetingCard } from "./MeetingCard";
+import type { TTranscriptCandidateProjection } from "@warmap/contracts";
+import { MeetingCard, confirmTranscriptInput, offsetLabel, speakerMappingError, speakerMappingRows } from "./MeetingCard";
 
 // useCardAction 需要 Next 路由上下文；这里只渲染静态标记。
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
@@ -86,6 +87,39 @@ function render(card: Card): string {
     <MeetingCard card={card} collection={[card]} onCard={() => undefined} onNavigate={() => undefined} />,
   );
 }
+
+/** 取按钮自身标记，用于检查 disabled 等属性而不依赖 CSS Module 类名。 */
+function buttonMarkup(html: string, label: string): string {
+  const index = html.indexOf(label);
+  return html.slice(html.lastIndexOf("<button", index), index);
+}
+
+const candidateBase: TTranscriptCandidateProjection = {
+  source: {
+    format: "miaoji_markdown",
+    fileName: "本体建模 Part 2.md",
+    sizeBytes: 40960,
+    sha256: "a".repeat(64),
+    parserVersion: "miaoji-markdown.v1",
+    timeAnchor: "2025-09-24T14:00:00.000Z",
+  },
+  createdAt: "2025-09-24T15:00:00.000Z",
+  turnCount: 12,
+  speakerCount: 3,
+  durationSeconds: 3540,
+  firstOffsetSeconds: 1,
+  lastOffsetSeconds: 3541,
+  speakers: [
+    { speakerName: "林晓", turnCount: 5, suggestedPersonId: "p1", suggestedDisplayName: "林晓" },
+    { speakerName: "陈珂", turnCount: 4, suggestedPersonId: "p2", suggestedDisplayName: "陈珂" },
+    { speakerName: "外部顾问", turnCount: 3, suggestedPersonId: null, suggestedDisplayName: null },
+  ],
+  sampleTurns: [
+    { speakerName: "林晓", offsetSeconds: 1, text: "先把结论说清楚。" },
+    { speakerName: "陈珂", offsetSeconds: 12, text: "预算分两期投入。" },
+  ],
+  warnings: ["“外部顾问”未匹配到人员，请手动选择。"],
+};
 
 describe("Meeting 会前预审", () => {
   it("一号位追问进左侧参考盒，按陈述列表编号，正文目录不再重复列出", () => {
@@ -184,5 +218,86 @@ describe("Meeting Outcome 复核", () => {
     expect(html).toContain("确认");
     expect(html).toContain("忽略");
     expect(html).toContain("会议材料对话");
+  });
+});
+
+describe("妙记 Markdown 候选预览", () => {
+  it("Header 入口同时接受 .md 与 .json，文案改为导入会议记录", () => {
+    const html = render(meetingCard({}));
+    expect(html).toContain('accept=".md,.json,application/json,text/markdown"');
+    expect(html).toContain("导入会议记录");
+    expect(html).not.toContain("上传会议逐字稿");
+  });
+
+  it("候选存在时自动打开预览：来源摘要、时间锚点、抽样发言与告警", () => {
+    const html = render(meetingCard({ transcriptCandidate: candidateBase }));
+    expect(html).toContain("确认妙记会议记录");
+    expect(html).toContain("本体建模 Part 2.md");
+    expect(html).toContain("40 KB");
+    expect(html).toContain("12 条发言 · 3 位说话人 · 时长 59:00");
+    expect(html).toContain("首段 +00:01");
+    expect(html).toContain("末段 +59:01");
+    expect(html).toContain("先把结论说清楚。");
+    expect(html).toContain("“外部顾问”未匹配到人员，请手动选择。");
+    // 有候选时 Header 切到重新导入文案。
+    expect(html).toContain("重新导入会议记录");
+  });
+
+  it("未映射说话人时给出行内错误并禁用确认，全部唯一映射后放行", () => {
+    const confirmAction = { actionId: "c1", actionType: "meeting.confirm_transcript_candidate", label: "确认会议记录" };
+    const unresolved = render(meetingCard({ transcriptCandidate: candidateBase }, [confirmAction]));
+    expect(unresolved).toContain("还有 1 位说话人未映射，确认不可用");
+    expect(unresolved).toContain('data-status="unmapped"');
+    expect(buttonMarkup(unresolved, "确认并写入 Transcript")).toContain("disabled");
+
+    const resolved = { ...candidateBase, speakers: candidateBase.speakers.map((speaker) => ({ ...speaker, suggestedPersonId: speaker.suggestedPersonId ?? "p3" })) };
+    const html = render(meetingCard({ transcriptCandidate: resolved }, [confirmAction]));
+    expect(html).not.toContain("未映射，确认不可用");
+    expect(html).not.toContain('data-status="unmapped"');
+    expect(buttonMarkup(html, "确认并写入 Transcript")).not.toContain("disabled");
+  });
+
+  it("清除与确认按钮只按服务端下发的 opaque action 渲染", () => {
+    const withActions = render(
+      meetingCard({ transcriptCandidate: candidateBase }, [
+        { actionId: "c1", actionType: "meeting.confirm_transcript_candidate", label: "确认会议记录" },
+        { actionId: "d1", actionType: "meeting.discard_transcript_candidate", label: "清除候选" },
+      ]),
+    );
+    expect(withActions).toContain("确认并写入 Transcript");
+    expect(withActions).toContain("清除候选");
+
+    const withoutActions = render(meetingCard({ transcriptCandidate: candidateBase }));
+    expect(withoutActions).not.toContain("确认并写入 Transcript");
+    expect(withoutActions).not.toContain("清除候选");
+  });
+
+  it("行状态按已参与/待加入/未映射标注", () => {
+    const rows = speakerMappingRows(candidateBase, ["p1"], {});
+    expect(rows.map((row) => row.status)).toEqual(["existing", "add", "unmapped"]);
+    expect(speakerMappingError(rows)).toContain("未映射");
+
+    const duplicated = speakerMappingRows(candidateBase, ["p1"], { 外部顾问: "p1" });
+    expect(speakerMappingError(duplicated)).toBe("同一个人不能映射多个说话人");
+    expect(speakerMappingRows({ ...candidateBase, speakers: candidateBase.speakers.slice(0, 2) }, ["p1", "p2"], {})).toHaveLength(2);
+  });
+
+  it("offsetLabel 覆盖分与小时跨度", () => {
+    expect(offsetLabel(0)).toBe("00:00");
+    expect(offsetLabel(65)).toBe("01:05");
+    expect(offsetLabel(4591)).toBe("1:16:31");
+  });
+
+  it("确认 Action input 只带 speakerMappings 与显式标记，不回传全量 turns", () => {
+    const input = confirmTranscriptInput(candidateBase, { 林晓: "p1", 陈珂: "p2", 外部顾问: "p3" });
+    expect(input).toEqual({
+      speakerMappings: [
+        { speakerName: "林晓", personId: "p1" },
+        { speakerName: "陈珂", personId: "p2" },
+        { speakerName: "外部顾问", personId: "p3" },
+      ],
+      confirmAddParticipants: true,
+    });
+    expect(JSON.stringify(input)).not.toContain("turns");
   });
 });

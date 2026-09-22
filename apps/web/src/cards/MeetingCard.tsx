@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, ChevronRight, FileUp, Files, Pencil, RefreshCw, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
+import type { TTranscriptCandidateProjection } from "@warmap/contracts";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
-import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
+import { ActionFeedback, useCardAction, type ActionState } from "@/lib/useCardAction";
 import { groupPreflight, pickActiveSection } from "./preflightOutline";
 import { ConversationDock } from "@/conversation/ConversationDock";
 import s from "@/styles/meeting-workspace.module.css";
@@ -81,8 +82,8 @@ export type MaterialPreview =
 
 const MATERIAL_ACCEPT = "application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,text/markdown,.md";
 
-/** 人员目录投影：编辑会议的主持 DRI 下拉只读这一份。 */
-type DriOption = { personId: string; displayName: string; roles: string[] };
+/** 人员目录投影：人员映射下拉与编辑会议的主持 DRI 下拉共用这一份结构。 */
+export type DirectoryOption = { personId: string; displayName: string; roles: string[] };
 
 /** 长文本截断：回应出处与 aria-label 用。 */
 export function truncateText(text: string, max: number): string {
@@ -266,8 +267,215 @@ export function MaterialReaderModal({
   );
 }
 
-/** Meeting 页面：会前预审、Transcript 导入/替换与 MeetingOutcome 逐项确认都在这里。 */
-export function MeetingCard({ card, collection, onCard, onNavigate }: CardRenderProps) {
+export type SpeakerMappingRow = {
+  speakerName: string;
+  turnCount: number;
+  personId: string;
+  suggestedPersonId: string | null;
+  suggestedDisplayName: string | null;
+  status: "existing" | "add" | "unmapped";
+};
+
+/** 映射表状态：已参与 / 确认后加入 / 未映射；同一个人不能映射多个说话人。 */
+export function speakerMappingRows(
+  candidate: TTranscriptCandidateProjection,
+  participantIds: string[],
+  mappings: Record<string, string>,
+): SpeakerMappingRow[] {
+  return candidate.speakers.map((speaker) => {
+    const personId = mappings[speaker.speakerName] ?? speaker.suggestedPersonId ?? "";
+    return {
+      speakerName: speaker.speakerName,
+      turnCount: speaker.turnCount,
+      personId,
+      suggestedPersonId: speaker.suggestedPersonId,
+      suggestedDisplayName: speaker.suggestedDisplayName,
+      status: personId ? (participantIds.includes(personId) ? "existing" : "add") : "unmapped",
+    };
+  });
+}
+
+export function speakerMappingError(rows: SpeakerMappingRow[]): string | null {
+  const unmapped = rows.filter((row) => !row.personId).length;
+  if (unmapped > 0) return `还有 ${unmapped} 位说话人未映射，确认不可用`;
+  const ids = rows.map((row) => row.personId);
+  if (new Set(ids).size !== ids.length) return "同一个人不能映射多个说话人";
+  return null;
+}
+
+/** 相对时间：秒 → mm:ss 或 h:mm:ss。 */
+export function offsetLabel(seconds: number): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return hours ? `${hours}:${pad(minutes)}:${pad(secs)}` : `${pad(minutes)}:${pad(secs)}`;
+}
+
+const MAPPING_STATUS_LABEL = { existing: "已是参与人", add: "确认后加入", unmapped: "未映射" } as const;
+
+/** 确认 Action input：只含 speakerName→personId 与显式标记，全量 turns 留在服务端。 */
+export function confirmTranscriptInput(
+  candidate: TTranscriptCandidateProjection,
+  mappings: Record<string, string>,
+): { speakerMappings: { speakerName: string; personId: string }[]; confirmAddParticipants: true } {
+  return {
+    speakerMappings: candidate.speakers.map((speaker) => ({
+      speakerName: speaker.speakerName,
+      personId: mappings[speaker.speakerName],
+    })),
+    confirmAddParticipants: true,
+  };
+}
+
+/**
+ * 妙记 Markdown 候选预览（设计 aB4pK）：只读来源摘要 + 说话人映射 + 时间锚点 + 抽样发言；
+ * 确认把 mapping 交给 opaque Action，全量 turns 不进入浏览器 Action input。
+ */
+export function TranscriptCandidateDialog({
+  dialogRef,
+  candidate,
+  scheduledAt,
+  participants,
+  directory,
+  directoryError,
+  pending,
+  state,
+  hasConfirm,
+  hasDiscard,
+  onRetry,
+  onClose,
+  onConfirm,
+  onDiscard,
+}: {
+  dialogRef: { current: HTMLDialogElement | null };
+  candidate: TTranscriptCandidateProjection;
+  scheduledAt: string;
+  participants: { personId: string }[];
+  directory: DirectoryOption[];
+  directoryError: string | null;
+  pending: boolean;
+  state: ActionState;
+  hasConfirm: boolean;
+  hasDiscard: boolean;
+  onRetry: () => void;
+  onClose: () => void;
+  onConfirm: (mappings: Record<string, string>) => void;
+  onDiscard: () => void;
+}) {
+  const [mappings, setMappings] = useState<Record<string, string>>(() =>
+    Object.fromEntries(candidate.speakers.map((speaker) => [speaker.speakerName, speaker.suggestedPersonId ?? ""])),
+  );
+  const rows = speakerMappingRows(candidate, participants.map((person) => person.personId), mappings);
+  const error = speakerMappingError(rows);
+  return (
+    <dialog ref={dialogRef} className={s.candidateDialog} aria-label="妙记会议记录候选">
+      <header className={s.candidateHeader}>
+        <div>
+          <h2>确认妙记会议记录</h2>
+          <p>
+            {candidate.source.fileName} · {Math.ceil(candidate.source.sizeBytes / 1024)} KB · SHA-256 {candidate.source.sha256.slice(0, 12)}…
+          </p>
+          <p>
+            {candidate.turnCount} 条发言 · {candidate.speakerCount} 位说话人 · 时长 {offsetLabel(candidate.durationSeconds)} · 解析器 {candidate.source.parserVersion}
+          </p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="关闭会议记录预览">
+          <X size={16} aria-hidden="true" />
+        </button>
+      </header>
+      <div className={s.candidateBody}>
+        <section className={s.candidateSection}>
+          <h3>时间锚点</h3>
+          <p>
+            会议时间 {scheduledAt.slice(0, 16).replace("T", " ")} · 首段 +{offsetLabel(candidate.firstOffsetSeconds)} · 末段 +
+            {offsetLabel(candidate.lastOffsetSeconds)}
+          </p>
+        </section>
+        <section className={s.candidateSection}>
+          <h3>说话人映射</h3>
+          <table className={s.mappingTable}>
+            <thead>
+              <tr>
+                <th>来源说话人</th>
+                <th>发言数</th>
+                <th>对应人员</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.speakerName} data-status={row.status}>
+                  <td>{row.speakerName}</td>
+                  <td>{row.turnCount}</td>
+                  <td>
+                    <select
+                      aria-label={`映射 ${row.speakerName}`}
+                      value={row.personId}
+                      disabled={pending}
+                      onChange={(event) => setMappings({ ...mappings, [row.speakerName]: event.target.value })}
+                    >
+                      <option value="">请选择人员</option>
+                      {row.suggestedPersonId && !directory.some((person) => person.personId === row.suggestedPersonId) ? (
+                        <option value={row.suggestedPersonId}>{row.suggestedDisplayName ?? row.suggestedPersonId}</option>
+                      ) : null}
+                      {directory.map((person) => (
+                        <option key={person.personId} value={person.personId}>
+                          {person.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>{MAPPING_STATUS_LABEL[row.status]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {directoryError ? <p className={s.error} role="alert">{directoryError}</p> : null}
+          {error ? <p className={s.error} role="alert">{error}</p> : null}
+        </section>
+        <section className={s.candidateSection}>
+          <h3>抽样发言</h3>
+          <ol className={s.sampleTurns}>
+            {candidate.sampleTurns.map((turn, index) => (
+              <li key={`${turn.offsetSeconds}-${index}`}>
+                <span>{offsetLabel(turn.offsetSeconds)} · {turn.speakerName}</span>
+                <p>{turn.text}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+        {candidate.warnings.length ? (
+          <section className={s.candidateSection}>
+            <h3>提示</h3>
+            <ul className={s.warnings}>
+              {candidate.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+            </ul>
+          </section>
+        ) : null}
+        <ActionFeedback state={state} onRetry={onRetry} />
+      </div>
+      <footer className={s.candidateFooter}>
+        {hasDiscard ? (
+          <button type="button" className={s.candidateDiscard} disabled={pending} onClick={onDiscard}>
+            清除候选
+          </button>
+        ) : null}
+        <span className={s.candidateSpacer} />
+        <button type="button" className={s.candidateCancel} onClick={onClose}>
+          关闭
+        </button>
+        {hasConfirm ? (
+          <button type="button" className={s.candidateConfirm} disabled={pending || Boolean(error)} onClick={() => onConfirm(mappings)}>
+            {pending ? "确认中…" : "确认并写入 Transcript"}
+          </button>
+        ) : null}
+      </footer>
+    </dialog>
+  );
+}
+
+/** Meeting 页面：会前预审、Transcript 导入/替换与 MeetingOutcome 逐项确认都在这里。 */export function MeetingCard({ card, collection, onCard, onNavigate }: CardRenderProps) {
   const payload = payloadOf<MeetingPayload>(card);
   const { state, run, retry, pending } = useCardAction(onCard);
   const [note, setNote] = useState(payload.draft.note);
@@ -286,8 +494,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   // 编辑会议弹层：只提交改动字段，写入走 opaque action meeting.edit_details。
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({ title: card.title, scheduledAt: payload.scheduledAt.slice(0, 16), leadDriId: payload.leadDriId });
-  const [driOptions, setDriOptions] = useState<DriOption[]>([]);
+  const [driOptions, setDriOptions] = useState<DirectoryOption[]>([]);
   const [driError, setDriError] = useState<string | null>(null);
+  // 妙记候选：全量人员目录 + 预览弹层；候选变化（重上传）时靠 key 重置映射。
+  const [candidateOpen, setCandidateOpen] = useState(Boolean(payload.transcriptCandidate));
+  const [directory, setDirectory] = useState<DirectoryOption[]>([]);
+  const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [readerOpen, setReaderOpen] = useState(false);
   const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
   const [preview, setPreview] = useState<MaterialPreview>({ state: "idle" });
@@ -298,6 +510,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   const uploadRef = useRef<HTMLInputElement>(null);
   const replaceRef = useRef<HTMLInputElement>(null);
   const materialRef = useRef<HTMLInputElement>(null);
+  const candidateDialog = useRef<HTMLDialogElement>(null);
 
   const actions = card.actions;
   const actionOf = (type: string) => actions.find((action) => action.actionType === type);
@@ -371,6 +584,45 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
     return () => controller.abort();
   }, [readerOpen, selectedMaterialId, card.objectRef.id]);
 
+  const candidateKey = payload.transcriptCandidate?.createdAt ?? null;
+
+  // 候选出现或重上传后自动打开预览；关闭只收起，不回滚服务端候选。
+  useEffect(() => {
+    if (candidateKey) setCandidateOpen(true);
+  }, [candidateKey]);
+
+  useEffect(() => {
+    if (!candidateOpen) return;
+    const dialog = candidateDialog.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    const onClose = () => setCandidateOpen(false);
+    dialog.addEventListener("close", onClose);
+    return () => {
+      dialog.removeEventListener("close", onClose);
+      if (dialog.open) dialog.close();
+    };
+  }, [candidateOpen]);
+
+  // 映射下拉需要完整人员目录（不限 DRI）；加载失败时确认保持不可用。
+  useEffect(() => {
+    if (!candidateKey) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, response } = await browserApi.GET("/api/people");
+      if (cancelled) return;
+      if (!response.ok) {
+        setDirectoryError("人员目录加载失败，无法完成说话人映射");
+        return;
+      }
+      setDirectoryError(null);
+      setDirectory((data as { people?: DirectoryOption[] } | undefined)?.people ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [candidateKey]);
+
   function toggle(field: "readIssueIds" | "checkedEntryIds" | "carriedIssueIds", id: string) {
     const current = payload.draft[field];
     const next = current.includes(id) ? current.filter((value) => value !== id) : [...current, id];
@@ -388,7 +640,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
       setDriError("人员目录加载失败，暂时只能保留当前主持 DRI");
       return;
     }
-    setDriOptions((((data as { people?: DriOption[] } | undefined)?.people ?? []).filter((person) => person.roles.includes("dri"))));
+    setDriOptions((((data as { people?: DirectoryOption[] } | undefined)?.people ?? []).filter((person) => person.roles.includes("dri"))));
   }
 
   /** 只提交真正改动的字段：未改的时间不重写，避免本地输入被重新解析成另一个瞬间。 */
@@ -407,13 +659,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
     if (await run(action, patch)) setEditOpen(false);
   }
 
-  /** 首次导入：multipart 单文件；与 DRI service API 共用同一校验边界。 */
-  async function uploadTranscript() {
-    const file = uploadRef.current?.files?.[0];
-    if (!file) {
-      setUploadError("请先选择 warmap-transcript.v1 JSON 文件。");
-      return;
-    }
+  /** JSON 直导：multipart 单文件；与 DRI service API 共用同一校验边界。 */
+  async function uploadTranscript(file: File) {
     setUploading(true);
     setUploadError(null);
     const form = new FormData();
@@ -430,6 +677,36 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
       return;
     }
     setUploadError(body.message ?? "Transcript 整份被拒绝");
+  }
+
+  /** Header 入口按扩展名分流：.md 只生成候选，.json 走既有 immediate import。 */
+  async function importTranscriptFile(file: File) {
+    if (!/\.md$/i.test(file.name)) return uploadTranscript(file);
+    setUploading(true);
+    setUploadError(null);
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(`/api/meetings/${card.objectRef.id}/transcript-candidate`, { method: "POST", body: form });
+    setUploading(false);
+    if (response.status === 401) {
+      onNavigate("/access");
+      return;
+    }
+    const body = (await response.json().catch(() => ({}))) as { message?: string; cards?: typeof collection };
+    if (response.ok && body.cards?.[0]) return onCard(body.cards[0]);
+    setUploadError(body.message ?? "妙记 Markdown 整份被拒绝");
+  }
+
+  /** 确认候选：只提交 speakerMappings 与显式标记，全量 turns 留在服务端。 */
+  function confirmCandidate(mappings: Record<string, string>) {
+    const action = actionOf("meeting.confirm_transcript_candidate");
+    if (!action || !payload.transcriptCandidate) return;
+    void run(action, confirmTranscriptInput(payload.transcriptCandidate, mappings));
+  }
+
+  function discardCandidate() {
+    const action = actionOf("meeting.discard_transcript_candidate");
+    if (action) void run(action, {});
   }
 
   async function replaceMaterials() {
@@ -581,7 +858,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
 
   const stageLine = materialStateLine(payload.status, payload.preflight.readiness, payload.materials);
   /* 下拉永远包含当前主持 DRI：目录加载失败也不会把值改成空。 */
-  const editDriOptions: DriOption[] = driOptions.length
+  const editDriOptions: DirectoryOption[] = driOptions.length
     ? driOptions
     : [{ personId: payload.leadDriId, displayName: people.get(payload.leadDriId) ?? payload.leadDriId, roles: [] }];
 
@@ -660,15 +937,21 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
           ) : null}
           {payload.status === "scheduled" ? (
             <>
+              {payload.transcriptCandidate && !candidateOpen ? (
+                <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>
+                  查看会议记录候选
+                </button>
+              ) : null}
               <input
                 ref={uploadRef}
                 type="file"
-                accept="application/json,.json"
+                accept=".md,.json,application/json,text/markdown"
                 className={s.hiddenInput}
-                aria-label="选择 Transcript 文件"
+                aria-label="选择会议记录文件"
                 onChange={(event) => {
-                  if (event.target.files?.length) void uploadTranscript();
+                  const file = event.target.files?.[0];
                   event.target.value = "";
+                  if (file) void importTranscriptFile(file);
                 }}
               />
               <button
@@ -678,7 +961,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
                 onClick={() => uploadRef.current?.click()}
               >
                 <FileUp size={13} aria-hidden="true" />
-                {uploading ? "上传中…" : "上传会议逐字稿 · 进入复盘"}
+                {uploading ? "上传中…" : payload.transcriptCandidate ? "重新导入会议记录" : "导入会议记录"}
               </button>
             </>
           ) : null}
@@ -1153,6 +1436,25 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
             }
             onClose={closeMaterialReader}
             onSelect={(id) => setSelectedMaterialId(id)}
+          />
+        ) : null}
+        {payload.transcriptCandidate && candidateOpen ? (
+          <TranscriptCandidateDialog
+            key={payload.transcriptCandidate.createdAt}
+            dialogRef={candidateDialog}
+            candidate={payload.transcriptCandidate}
+            scheduledAt={payload.scheduledAt}
+            participants={payload.participants}
+            directory={directory}
+            directoryError={directoryError}
+            pending={pending}
+            state={state}
+            hasConfirm={Boolean(actionOf("meeting.confirm_transcript_candidate"))}
+            hasDiscard={Boolean(actionOf("meeting.discard_transcript_candidate"))}
+            onRetry={retry}
+            onClose={() => setCandidateOpen(false)}
+            onConfirm={confirmCandidate}
+            onDiscard={discardCandidate}
           />
         ) : null}
       </div>
