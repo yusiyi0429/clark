@@ -27,6 +27,14 @@ const TURN_PHRASE_LABELS = [...TURN_PHRASE_PATTERNS.map(({ label }) => label), .
   .map((label) => `“${label}”`)
   .join("");
 
+/** 命中翻案句时返回其标签，末命中返回 null。与风格段引用同一份 pattern。 */
+export function findForbiddenPhrase(text: string): string | null {
+  for (const { label, pattern } of TURN_PHRASE_PATTERNS) {
+    if (pattern.test(text)) return label;
+  }
+  return null;
+}
+
 export const HUMAN_WRITING_STYLE = `# 表达要求（自然中文）
 
 面向 CEO 的文字用自然中文写，判断从正面直接下：先给判断，再给依据。以下写法一律不用，禁的是修辞动作，换一套字做同一个动作仍然算命中。

@@ -21,6 +21,7 @@ import {
   PREFLIGHT_AT_LEAST_ONE_KINDS,
   PREFLIGHT_EXACTLY_ONE_KINDS,
 } from "./promptRules.js";
+import { findForbiddenPhrase } from "./promptStyle.js";
 import {
   appendFingerprint,
   commit,
@@ -164,6 +165,21 @@ function preflightStructureError(candidate: TPreflightCandidate): string | null 
   return null;
 }
 
+/** 只检查用户可见的散文：entries.body、brief、summary 两段。 */
+function findForbiddenPhraseInPreflight(candidate: TPreflightCandidate): string | null {
+  const fields = [
+    ...candidate.entries.map((entry) => entry.body),
+    candidate.brief,
+    candidate.summary.criticalIssue,
+    candidate.summary.priorityAction,
+  ];
+  for (const text of fields) {
+    const hit = findForbiddenPhrase(text);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 /** 运行一次会前预审：严格候选校验失败可见，Agent 失败不自动重试。 */
 export async function runPreflight(
   pool: Pool,
@@ -265,6 +281,11 @@ export async function runPreflight(
     const structureError = preflightStructureError(generated.candidate);
     if (structureError) {
       await fail(INVALID_PREFLIGHT_CANDIDATE, structureError);
+      return;
+    }
+    const forbiddenPhrase = findForbiddenPhraseInPreflight(generated.candidate);
+    if (forbiddenPhrase) {
+      await fail(INVALID_PREFLIGHT_CANDIDATE, `Preflight 出现翻案句：${forbiddenPhrase}`);
       return;
     }
     for (const entry of generated.candidate.entries) {

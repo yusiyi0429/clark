@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { Value } from "@sinclair/typebox/value";
-import { ResearchDoc } from "@warmap/contracts";
+import { ResearchDoc, type TResearchDoc } from "@warmap/contracts";
 import { getIssueRow, type IssueRow } from "./issues.js";
+import { findForbiddenPhrase } from "./promptStyle.js";
 
 export type ResearchInput = {
   issue: {
@@ -28,6 +29,16 @@ export type ResearchService = {
 
 export const RESEARCH_FAILED = "research_failed";
 export const INVALID_RESEARCH_DOC = "invalid_research_doc";
+
+/** 只检查用户可见的散文字段；evidence 逐字引文与 sources 不受限。 */
+function findForbiddenPhraseInResearchDoc(doc: TResearchDoc): string | null {
+  const fields = [doc.summary, ...doc.options.flatMap((option) => option.consequences), ...doc.unknowns];
+  for (const text of fields) {
+    const hit = findForbiddenPhrase(text);
+    if (hit) return hit;
+  }
+  return null;
+}
 
 /**
  * 预研生命周期：pending/failed/ready → running（version 条件）→ ready 或 failed。
@@ -69,6 +80,10 @@ export function createResearchService({
       );
       if (!Value.Check(ResearchDoc, candidate)) {
         throw Object.assign(new Error("ResearchDoc candidate 不符合严格 schema"), { code: INVALID_RESEARCH_DOC });
+      }
+      const forbidden = findForbiddenPhraseInResearchDoc(candidate);
+      if (forbidden) {
+        throw Object.assign(new Error(`ResearchDoc 出现翻案句：${forbidden}`), { code: INVALID_RESEARCH_DOC });
       }
       await q(
         `UPDATE issues
