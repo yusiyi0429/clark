@@ -31666,7 +31666,7 @@
                   "id": "svIcA",
                   "name": "Upload Hint",
                   "fill": "$ink3",
-                  "content": "PDF、PPT、Markdown、DOCX · 可拖拽多个文件至此",
+                  "content": "PDF、DOCX、Markdown · 可拖拽多个文件至此",
                   "fontFamily": "$font",
                   "fontSize": 12,
                   "fontWeight": "normal"
