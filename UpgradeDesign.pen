@@ -12354,7 +12354,7 @@
                 {
                   "type": "frame",
                   "id": "DVAos",
-                  "name": "上传逐字稿 Button",
+                  "name": "导入会议记录 Button",
                   "fill": "$accent",
                   "cornerRadius": 10,
                   "gap": 6,
@@ -12379,7 +12379,7 @@
                       "id": "YajwP",
                       "name": "Label",
                       "fill": "$on-dark",
-                      "content": "上传会议逐字稿 · 进入复盘",
+                      "content": "导入会议记录",
                       "fontFamily": "$font",
                       "fontSize": 13,
                       "fontWeight": "500"
@@ -15134,6 +15134,817 @@
                       "fontFamily": "Inter",
                       "fontSize": 12.5,
                       "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ZeV65",
+          "layoutPosition": "absolute",
+          "x": 0,
+          "y": 0,
+          "name": "Transcript Import Overlay",
+          "width": 2560,
+          "height": 1440,
+          "fill": "#10151F4D",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "aB4pK",
+              "name": "Transcript Import Preview",
+              "width": 1120,
+              "height": 980,
+              "fill": "#FFFFFF",
+              "cornerRadius": 20,
+              "layout": "vertical",
+              "gap": 16,
+              "padding": [
+                22,
+                24
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "BPOfx",
+                  "name": "Preview Header",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "XKHqd",
+                      "name": "Header Text",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Q9vOV",
+                          "name": "Title",
+                          "fill": "#1D1D1F",
+                          "content": "确认会议记录",
+                          "fontFamily": "Inter",
+                          "fontSize": 20,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "wQBQJ",
+                          "name": "Subtitle",
+                          "fill": "#4F5866",
+                          "content": "妙记 Markdown 已解析为标准 Transcript；确认后会议进入 Outcome 复核。",
+                          "fontFamily": "Inter",
+                          "fontSize": 12.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "CxtLd",
+                      "name": "Close",
+                      "width": 34,
+                      "height": 34,
+                      "fill": "#F1F3F6",
+                      "cornerRadius": 17,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "n3iAa",
+                          "name": "Close Icon",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "close",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#6E6E73"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "W7SvHz",
+                  "name": "Import Summary",
+                  "width": "fill_container",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "lqXCD",
+                      "name": "Summary Chip",
+                      "fill": "#E8F1FF",
+                      "cornerRadius": 9,
+                      "padding": [
+                        7,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Tegrn",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "396 条发言",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ox2kX",
+                      "name": "Summary Chip",
+                      "fill": "#E8F6EC",
+                      "cornerRadius": 9,
+                      "padding": [
+                        7,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "umFsS",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "4 位说话人",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "K4vz7G",
+                      "name": "Summary Chip",
+                      "fill": "#FDF4E4",
+                      "cornerRadius": 9,
+                      "padding": [
+                        7,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "e2TGS",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "时长 01:16:31",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "rZIT5",
+                      "name": "Summary Chip",
+                      "fill": "#F1F3F6",
+                      "cornerRadius": 9,
+                      "padding": [
+                        7,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "MNejw",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "79 KB · SHA-256 已记录",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "CIY4f",
+                  "name": "Preview Grid",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "gap": 18,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "HGLnE",
+                      "name": "Participant Mapping",
+                      "width": 430,
+                      "height": "fill_container",
+                      "fill": "#F7F8FA",
+                      "cornerRadius": 14,
+                      "layout": "vertical",
+                      "gap": 10,
+                      "padding": [
+                        16,
+                        18
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "B0ptPs",
+                          "name": "Title",
+                          "fill": "#1D1D1F",
+                          "content": "参与人映射",
+                          "fontFamily": "Inter",
+                          "fontSize": 15,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "tbPz9",
+                          "name": "Hint",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "姓名精确匹配企业知识人员目录；未在本次会议中的人员将在确认时加入。",
+                          "lineHeight": 1.45,
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "owVOW",
+                          "name": "Person · 刘明华",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "padding": [
+                            10,
+                            0
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "X7qLse",
+                              "name": "Dot",
+                              "fill": "#2F7A44",
+                              "width": 7,
+                              "height": 7
+                            },
+                            {
+                              "type": "frame",
+                              "id": "N2awo",
+                              "name": "Text",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "B6BFpf",
+                                  "name": "Name",
+                                  "fill": "#1D1D1F",
+                                  "content": "刘明华",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "zvzYX",
+                                  "name": "Meta",
+                                  "fill": "#6E6E73",
+                                  "content": "179 条发言 · 已是参与人",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "IRrFG",
+                          "name": "Person · 刘人豪",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "padding": [
+                            10,
+                            0
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "WcspM",
+                              "name": "Dot",
+                              "fill": "#007AFF",
+                              "width": 7,
+                              "height": 7
+                            },
+                            {
+                              "type": "frame",
+                              "id": "SKZQX",
+                              "name": "Text",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "rtzij",
+                                  "name": "Name",
+                                  "fill": "#1D1D1F",
+                                  "content": "刘人豪",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "j1zsP",
+                                  "name": "Meta",
+                                  "fill": "#6E6E73",
+                                  "content": "125 条发言 · 确认后加入会议",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "G7Rp8j",
+                          "name": "Person · 白田田",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "padding": [
+                            10,
+                            0
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "G6uat",
+                              "name": "Dot",
+                              "fill": "#007AFF",
+                              "width": 7,
+                              "height": 7
+                            },
+                            {
+                              "type": "frame",
+                              "id": "M1OLA8",
+                              "name": "Text",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "M4w81X",
+                                  "name": "Name",
+                                  "fill": "#1D1D1F",
+                                  "content": "白田田",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "LFdIo",
+                                  "name": "Meta",
+                                  "fill": "#6E6E73",
+                                  "content": "66 条发言 · 确认后加入会议",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "CQHz2",
+                          "name": "Person · 于斯一",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "padding": [
+                            10,
+                            0
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "QYp9a",
+                              "name": "Dot",
+                              "fill": "#007AFF",
+                              "width": 7,
+                              "height": 7
+                            },
+                            {
+                              "type": "frame",
+                              "id": "UnoeY",
+                              "name": "Text",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "R0HCKC",
+                                  "name": "Name",
+                                  "fill": "#1D1D1F",
+                                  "content": "于斯一",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "t3Ma7",
+                                  "name": "Meta",
+                                  "fill": "#6E6E73",
+                                  "content": "26 条发言 · 确认后加入会议",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "QbG0e",
+                          "name": "Time Anchor",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "padding": [
+                            12,
+                            0
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "zoanG",
+                              "name": "Label",
+                              "fill": "#4F5866",
+                              "content": "时间锚点",
+                              "fontFamily": "Inter",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "F31Xqc",
+                              "name": "Value",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "会议时间 2026-09-22 20:24 + 相对时间\n首段 20:24:01 · 末段 21:40:31",
+                              "lineHeight": 1.55,
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "eUV9e",
+                      "name": "Turn Preview",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "i9kWI",
+                          "name": "Title",
+                          "fill": "#1D1D1F",
+                          "content": "发言抽样",
+                          "fontFamily": "Inter",
+                          "fontSize": 15,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "mmp1d",
+                          "name": "Source",
+                          "fill": "#6E6E73",
+                          "content": "来源 · 26_09_22 本体建模 Part 2.md · 妙记 Markdown",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "L5PXay",
+                          "name": "Turn · 00:01",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 12,
+                          "stroke": "#E6E9ED",
+                          "strokeWidth": 1,
+                          "layout": "vertical",
+                          "gap": 6,
+                          "padding": [
+                            12,
+                            14
+                          ],
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "AN5J2",
+                              "name": "Meta",
+                              "width": "fill_container",
+                              "justifyContent": "space_between",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "CqgO7",
+                                  "name": "Speaker",
+                                  "fill": "#1D1D1F",
+                                  "content": "于斯一",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "Ozfga",
+                                  "name": "Time",
+                                  "fill": "#6E6E73",
+                                  "content": "00:01",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "rkdul",
+                              "name": "Text",
+                              "fill": "#3C4350",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "那个授权对他，去年做本体就是病急乱投医。",
+                              "lineHeight": 1.55,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "AeZLi",
+                          "name": "Turn · 00:16",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 12,
+                          "stroke": "#E6E9ED",
+                          "strokeWidth": 1,
+                          "layout": "vertical",
+                          "gap": 6,
+                          "padding": [
+                            12,
+                            14
+                          ],
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "Dfrth",
+                              "name": "Meta",
+                              "width": "fill_container",
+                              "justifyContent": "space_between",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "k5HJug",
+                                  "name": "Speaker",
+                                  "fill": "#1D1D1F",
+                                  "content": "刘人豪",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "N2ytc",
+                                  "name": "Time",
+                                  "fill": "#6E6E73",
+                                  "content": "00:16",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "FpvPN",
+                              "name": "Text",
+                              "fill": "#3C4350",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "对，先对这张表。L1。只需要对这张表。",
+                              "lineHeight": 1.55,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "nE02a",
+                          "name": "Turn · 01:15:23",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 12,
+                          "stroke": "#E6E9ED",
+                          "strokeWidth": 1,
+                          "layout": "vertical",
+                          "gap": 6,
+                          "padding": [
+                            12,
+                            14
+                          ],
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "e186bs",
+                              "name": "Meta",
+                              "width": "fill_container",
+                              "justifyContent": "space_between",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "sbeXc",
+                                  "name": "Speaker",
+                                  "fill": "#1D1D1F",
+                                  "content": "刘明华",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "V1DJyG",
+                                  "name": "Time",
+                                  "fill": "#6E6E73",
+                                  "content": "01:15:23",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "NP3Kr",
+                              "name": "Text",
+                              "fill": "#3C4350",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "任何一个事情都要在结构里有清晰的对应和保存点；它应以数据为基础，并服务于 Agent 的上下文提取。",
+                              "lineHeight": 1.55,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "msM7X",
+                          "name": "Validation",
+                          "width": "fill_container",
+                          "fill": "#E8F6EC",
+                          "cornerRadius": 10,
+                          "gap": 8,
+                          "padding": [
+                            10,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "eOItm",
+                              "name": "Check",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "check",
+                              "library": "Material Symbols Rounded",
+                              "fill": "#2F7A44"
+                            },
+                            {
+                              "type": "text",
+                              "id": "E7AERd",
+                              "name": "Text",
+                              "fill": "#2F7A44",
+                              "content": "396 段时间顺序有效 · 4 人全部精确匹配 · 无空发言",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "cU2wJ",
+                  "name": "Preview Actions",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "NbRxz",
+                      "name": "Note",
+                      "fill": "#6E6E73",
+                      "content": "确认后将补齐参与人、保存标准 Transcript 并启动 Outcome 抽取。",
+                      "fontFamily": "Inter",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "FFXcL",
+                      "name": "Buttons",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "aFU2i",
+                          "name": "Cancel",
+                          "cornerRadius": 10,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            10,
+                            15
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "dh7ik",
+                              "name": "Label",
+                              "fill": "#4F5866",
+                              "content": "取消",
+                              "fontFamily": "Inter",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "OdeEm",
+                          "name": "Confirm",
+                          "fill": "#007AFF",
+                          "cornerRadius": 10,
+                          "padding": [
+                            10,
+                            16
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "weLOb",
+                              "name": "Label",
+                              "fill": "#FFFFFF",
+                              "content": "确认导入并进入复盘",
+                              "fontFamily": "Inter",
+                              "fontSize": 13,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
                 }
