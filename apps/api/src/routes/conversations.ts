@@ -1,0 +1,451 @@
+import { createHash, randomUUID } from "node:crypto";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { Type } from "@sinclair/typebox";
+import {
+  ConversationMessageRequest,
+  ConversationScope,
+  ConversationSessionId,
+  CreateConversationSessionRequest,
+  type TConversationAttachment,
+  type TConversationMessageRequest,
+  type TConversationScope,
+} from "@warmap/contracts";
+import {
+  conversationAttachmentInfo,
+  createConversationSession,
+  getConversationHistory,
+  getConversationSession,
+  getConversationSessionHistory,
+  getScopeObject,
+  listConversationSessions,
+  loadConversationAttachments,
+  removeConversationAttachmentFiles,
+  resolveReferenceSnapshots,
+  storeConversationAttachments,
+} from "../conversations.js";
+import { recordAgentTrace } from "../langsmith.js";
+import { MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch } from "../materialParser.js";
+import { logEvent } from "../observability.js";
+import type { AppInstance, RouteContext } from "./shared.js";
+
+export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
+  const { pool, q, env, fail, requireCEO, requestContext, runtime, conversationAttachmentStorageDir, conversationTurnTimeoutMs } = ctx;
+
+  const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
+  const conversationSessionParams = Type.Object(
+    { scope: ConversationScope, sessionId: ConversationSessionId },
+    { additionalProperties: false },
+  );
+  const conversationScopeVisible = async (scope: TConversationScope) =>
+    (await getScopeObject(q, scope, env.sessionSecret)).visible;
+
+  app.get(
+    "/api/conversations/:scope/messages",
+    { preHandler: requireCEO, schema: { params: conversationParams } },
+    async (req, reply) => {
+      const object = await getScopeObject(q, req.params.scope, env.sessionSecret);
+      if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      return getConversationHistory(q, req.params.scope);
+    },
+  );
+
+  /** 一轮对话的完整流程；conversationId 为 null 时走 legacy 默认会话语义。 */
+  const sendConversationTurn = async (
+    req: FastifyRequest<{ Params: { scope: TConversationScope }; Body: TConversationMessageRequest }>,
+    reply: FastifyReply,
+    conversationId: string | null,
+  ): Promise<void> => {
+      const object = await getScopeObject(q, req.params.scope, env.sessionSecret);
+      if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret);
+      if (!("snapshots" in references)) {
+        return fail(reply, references.status, references.code, references.message);
+      }
+
+      const client = await pool.connect();
+      const locked = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtext($1)) AS locked", [req.params.scope]);
+      if (!locked.rows[0]?.locked) {
+        client.release();
+        return fail(reply, 409, "TURN_IN_PROGRESS", "该 Conversation 正在运行");
+      }
+
+      let scopeLockHeld = true;
+      const runId = randomUUID();
+      requestContext.set(req, { runId, scope: req.params.scope });
+      const runStartedAt = Date.now();
+      const abort = new AbortController();
+      let streamFinished = false;
+      let eventSequence = 0;
+      const runToolEvents: { name: string; isError?: boolean }[] = [];
+      let runStatus = "aborted";
+      let runError: string | undefined;
+      let runOutput: unknown;
+      try {
+        let row: { id: string; pi_session_id: string; runtime_entries: unknown[] };
+        if (conversationId) {
+          const found = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[] }>(
+            "SELECT id, pi_session_id, runtime_entries FROM conversations WHERE id = $1::uuid AND scope = $2 AND deleted_at IS NULL",
+            [conversationId, req.params.scope],
+          );
+          if (!found.rows[0]) {
+            return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
+          }
+          row = found.rows[0];
+        } else {
+          // legacy 路由：默认会话 = 最早未删除；不存在则在锁内惰性创建（scope 唯一约束已随会话化移除）。
+          const existing = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[] }>(
+            "SELECT id, pi_session_id, runtime_entries FROM conversations WHERE scope = $1 AND deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1",
+            [req.params.scope],
+          );
+          if (existing.rows[0]) {
+            row = existing.rows[0];
+          } else {
+            row = { id: randomUUID(), pi_session_id: randomUUID(), runtime_entries: [] };
+            await client.query(
+              "INSERT INTO conversations (id, scope, pi_session_id) VALUES ($1, $2, $3)",
+              [row.id, req.params.scope, row.pi_session_id],
+            );
+          }
+        }
+        // 附件：只信服务端 sidecar（客户端只能传 id）；原件不进入 Runtime，只拼接有界抽取文本。
+        let attachments: TConversationAttachment[] = [];
+        if (req.body.attachments?.length) {
+          try {
+            attachments = await loadConversationAttachments(
+              conversationAttachmentStorageDir,
+              row.id,
+              req.body.attachments.map((item) => item.id),
+            );
+          } catch (error) {
+            if ((error as { code?: string }).code === "ATTACHMENT_NOT_FOUND") {
+              return fail(reply, 400, "ATTACHMENT_NOT_FOUND", (error as Error).message);
+            }
+            throw error;
+          }
+        }
+        const runtimeMessage = attachments.length
+          ? `${req.body.message}\n\n${attachments.map((attachment) => `[附件 ${attachment.fileName}]\n${attachment.extractedText}`).join("\n\n")}`
+          : req.body.message;
+        const next = await client.query<{ sequence: number }>(
+          `SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence
+             FROM conversation_messages WHERE conversation_id = $1`,
+          [row.id],
+        );
+        const userSequence = next.rows[0].sequence;
+        await client.query(
+          `INSERT INTO conversation_messages
+             (conversation_id, sequence, role, content, references_snapshot, attachments, run_id)
+           VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
+          [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
+        );
+        const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
+          `SELECT role, content, created_at
+             FROM conversation_messages
+            WHERE conversation_id = $1 AND run_id <> $2
+            ORDER BY sequence DESC LIMIT 20`,
+          [row.id, runId],
+        );
+        await client.query(
+          `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
+           VALUES ($1, 'conversation', $2::jsonb, 'running', $3, $4, $5::jsonb)`,
+          [
+            runId,
+            JSON.stringify(object.snapshot?.objectRef ?? null),
+            runtime.modelSlot ?? "light",
+            runtime.promptHash ?? createHash("sha256").update("conversation-runtime").digest("hex"),
+            JSON.stringify({
+              scope: req.params.scope,
+              conversationId: row.id,
+              message: req.body.message,
+              currentObject: object.snapshot,
+              references: references.snapshots,
+              attachments: attachments.map(conversationAttachmentInfo),
+            }),
+          ],
+        );
+
+        reply.hijack();
+        reply.raw.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache, no-transform",
+          connection: "keep-alive",
+          "x-accel-buffering": "no",
+        });
+        reply.raw.on("close", () => {
+          if (!streamFinished) abort.abort(Object.assign(new Error("Conversation client disconnected"), { code: "CLIENT_DISCONNECTED" }));
+        });
+        let runUsage: Record<string, unknown> | null = null;
+        const emit = (event: Record<string, unknown>) => {
+          if (event.type === "usage") {
+            const { type: _type, ...usage } = event;
+            runUsage = usage;
+          }
+          if (event.type === "tool" && event.phase === "completed") {
+            runToolEvents.push({ name: String(event.name), isError: event.isError === true });
+          }
+          if (reply.raw.destroyed) return;
+          const data = { ...event, runId, scope: req.params.scope, sequence: ++eventSequence };
+          reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
+        };
+
+        const timeout = setTimeout(() => {
+          abort.abort(Object.assign(new Error("Conversation turn exceeded 180 seconds"), { code: "TURN_TIMEOUT" }));
+        }, conversationTurnTimeoutMs);
+        timeout.unref();
+        try {
+          const result = await runtime.run({
+            scope: req.params.scope,
+            message: runtimeMessage,
+            currentObject: object.snapshot,
+            referencesSnapshot: references.snapshots,
+            recentMessages: recent.rows.reverse().map((message) => ({
+              role: message.role,
+              content: message.content,
+              createdAt: message.created_at.toISOString(),
+            })),
+            runtimeEntries: row.runtime_entries,
+            piSessionId: row.pi_session_id,
+            signal: abort.signal,
+            emit,
+            checkpoint: async (runtimeEntries) => {
+              await client.query(
+                "UPDATE conversations SET runtime_entries = $2::jsonb, runtime_updated_at = now() WHERE id = $1",
+                [row.id, JSON.stringify(runtimeEntries)],
+              );
+            },
+          });
+          if (abort.signal.aborted) {
+            const reason = abort.signal.reason as { code?: string; message?: string } | undefined;
+            await client.query(
+              "UPDATE agent_runs SET status = 'aborted', error = $2, usage = $3::jsonb, completed_at = now() WHERE id = $1",
+              [runId, reason?.message ?? "Conversation aborted", JSON.stringify(runUsage)],
+            );
+            runError = reason?.message ?? "Conversation aborted";
+            if (reason?.code === "TURN_TIMEOUT") emit({ type: "error", code: "TURN_TIMEOUT", message: reason.message });
+            else emit({ type: "done", status: "aborted" });
+          } else {
+            await client.query("BEGIN");
+            await client.query(
+              `INSERT INTO conversation_messages
+                 (conversation_id, sequence, role, content, references_snapshot, run_id)
+               VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4)`,
+              [row.id, userSequence + 1, result.assistantMessage, runId],
+            );
+            await client.query(
+              `UPDATE conversations
+                  SET runtime_entries = $2::jsonb,
+                      pi_session_id = $3,
+                      runtime_updated_at = now(),
+                      recreated_at = CASE WHEN $4::boolean THEN now() ELSE recreated_at END,
+                      runtime_warning = COALESCE($5, runtime_warning)
+                WHERE id = $1`,
+              [
+                row.id,
+                JSON.stringify(result.runtimeEntries),
+                result.piSessionId ?? row.pi_session_id,
+                result.recovery?.recreated === true,
+                result.recovery?.warning ?? null,
+              ],
+            );
+            await client.query(
+              `UPDATE agent_runs
+                  SET status = 'succeeded', candidate_output = $2::jsonb, usage = $3::jsonb, completed_at = now()
+                WHERE id = $1`,
+              [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage)],
+            );
+            await client.query("COMMIT");
+            runStatus = "succeeded";
+            runOutput = { assistantMessage: result.assistantMessage };
+            emit({ type: "done", status: "completed" });
+          }
+        } catch (err) {
+          await client.query("ROLLBACK").catch(() => undefined);
+          const reason = abort.signal.reason as { code?: string; message?: string } | undefined;
+          await client.query(
+            "UPDATE agent_runs SET status = $2, error = $3, usage = $4::jsonb, completed_at = now() WHERE id = $1",
+            [
+              runId,
+              abort.signal.aborted ? "aborted" : "failed",
+              reason?.message ?? (err as Error).message ?? "Pi Runtime 失败",
+              JSON.stringify(runUsage),
+            ],
+          );
+          runStatus = abort.signal.aborted ? "aborted" : "failed";
+          runError = reason?.message ?? (err as Error).message ?? "Pi Runtime 失败";
+          if (reason?.code === "TURN_TIMEOUT") {
+            emit({ type: "error", code: "TURN_TIMEOUT", message: reason.message ?? "Conversation turn exceeded 180 seconds" });
+          } else if (!abort.signal.aborted) {
+            const code = (err as { code?: string }).code === "SEARCH_BUDGET_EXHAUSTED"
+              ? "SEARCH_BUDGET_EXHAUSTED"
+              : "RUNTIME_FAILED";
+            emit({ type: "error", code, message: (err as Error).message || "Pi Runtime 失败" });
+          }
+        } finally {
+          clearTimeout(timeout);
+        }
+        const durationMs = Date.now() - runStartedAt;
+        const provider = "warmap";
+        const model = runtime.modelId ?? env.lightModel;
+        logEvent({
+          event: "agent.run",
+          requestId: String(req.id),
+          runId,
+          agentKind: "conversation",
+          scope: req.params.scope,
+          objectRef: object.snapshot ? `${object.snapshot.objectRef.type}:${object.snapshot.objectRef.id}` : undefined,
+          provider,
+          model,
+          durationMs,
+          status: runStatus,
+          errorCode: runError ? (runStatus === "aborted" ? "ABORTED" : "RUNTIME_FAILED") : undefined,
+          error: runError,
+        });
+        void recordAgentTrace({
+          runId,
+          name: "conversation",
+          agentKind: "conversation",
+          promptHash: runtime.promptHash,
+          objectRef: object.snapshot?.objectRef ?? { type: "global", id: "global" },
+          inputs: { message: req.body.message, currentObject: object.snapshot, references: references.snapshots },
+          outputs: runOutput,
+          toolEvents: runToolEvents,
+          usage: runUsage,
+          error: runError,
+          status: runStatus,
+          startedAt: runStartedAt,
+          durationMs,
+        });
+        streamFinished = true;
+        // Fastify inject/browser may observe SSE end before this function's finally runs.
+        // Release first so an immediate next turn/delete cannot spuriously see TURN_IN_PROGRESS.
+        await client.query("SELECT pg_advisory_unlock(hashtext($1))", [req.params.scope]).catch(() => undefined);
+        scopeLockHeld = false;
+        reply.raw.end();
+      } finally {
+        if (scopeLockHeld) await client.query("SELECT pg_advisory_unlock(hashtext($1))", [req.params.scope]).catch(() => undefined);
+        client.release();
+      }
+    };
+
+  // legacy 路由：读写默认会话，老调用方与既有测试行为不变。
+  app.post(
+    "/api/conversations/:scope/messages",
+    {
+      preHandler: requireCEO,
+      schema: { params: conversationParams, body: ConversationMessageRequest },
+    },
+    async (req: FastifyRequest<{ Params: { scope: TConversationScope }; Body: TConversationMessageRequest }>, reply) =>
+      sendConversationTurn(req, reply, null),
+  );
+
+  app.get(
+    "/api/conversations/:scope/sessions",
+    { preHandler: requireCEO, schema: { params: conversationParams } },
+    async (req, reply) => {
+      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      return listConversationSessions(q, req.params.scope);
+    },
+  );
+
+  app.post(
+    "/api/conversations/:scope/sessions",
+    { preHandler: requireCEO, schema: { params: conversationParams, body: CreateConversationSessionRequest } },
+    async (req, reply) => {
+      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      const session = await createConversationSession(q, req.params.scope, req.body.title);
+      return reply.code(201).send(session);
+    },
+  );
+
+  app.get(
+    "/api/conversations/:scope/sessions/:sessionId/messages",
+    { preHandler: requireCEO, schema: { params: conversationSessionParams } },
+    async (req, reply) => {
+      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      const session = await getConversationSession(q, req.params.scope, req.params.sessionId);
+      if (!session) return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
+      return getConversationSessionHistory(q, req.params.scope, req.params.sessionId);
+    },
+  );
+
+  app.post(
+    "/api/conversations/:scope/sessions/:sessionId/messages",
+    {
+      preHandler: requireCEO,
+      schema: { params: conversationSessionParams, body: ConversationMessageRequest },
+    },
+    async (req: FastifyRequest<{ Params: { scope: TConversationScope; sessionId: string }; Body: TConversationMessageRequest }>, reply) => {
+      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      const session = await getConversationSession(q, req.params.scope, req.params.sessionId);
+      if (!session) return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
+      return sendConversationTurn(req, reply, session.id);
+    },
+  );
+
+  // 会话附件：复用 Meeting 材料的受限解析器（PDF/DOCX/Markdown、同一大小/数量/超时限制），API 卷独立。
+  app.post(
+    "/api/conversations/:scope/sessions/:sessionId/attachments",
+    { preHandler: requireCEO, schema: { params: conversationSessionParams }, bodyLimit: 101 * 1024 * 1024 },
+    async (req, reply) => {
+      let parsed: Awaited<ReturnType<typeof parseMaterialBatch>> | undefined;
+      try {
+        if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+        const session = await getConversationSession(q, req.params.scope, req.params.sessionId);
+        if (!session) return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
+        const files: { filename: string; mimetype: string; buffer: Buffer }[] = [];
+        for await (const part of req.files({ limits: { fileSize: MAX_MATERIAL_FILE_BYTES, files: MAX_MATERIAL_FILES } })) {
+          if (part.type !== "file" || part.fieldname !== "files") return fail(reply, 400, "INVALID_ATTACHMENT", "multipart 只接受 files 文件字段");
+          files.push({ filename: part.filename, mimetype: part.mimetype, buffer: await part.toBuffer() });
+        }
+        if (!files.length) return fail(reply, 400, "INVALID_ATTACHMENT", "缺少附件文件");
+        parsed = await parseMaterialBatch(files);
+        const stored = await storeConversationAttachments(conversationAttachmentStorageDir, session.id, parsed.materials);
+        return { attachments: stored.map(conversationAttachmentInfo) };
+      } catch (error) {
+        if (error instanceof MaterialParseError) return fail(reply, 400, error.code, error.message);
+        const code = (error as { code?: string }).code;
+        if (code === "FST_REQ_FILE_TOO_LARGE" || code === "FST_FILES_LIMIT") return fail(reply, 413, "MATERIAL_BATCH_TOO_LARGE", "附件文件或数量超出上限");
+        throw error;
+      } finally {
+        if (parsed) await cleanupMaterialTemp(parsed.directory);
+      }
+    },
+  );
+
+  // 删除会话：与轮次共用 scope 级 advisory lock，拿到锁即可保证没有进行中的轮次。
+  app.delete(
+    "/api/conversations/:scope/sessions/:sessionId",
+    { preHandler: requireCEO, schema: { params: conversationSessionParams } },
+    async (req, reply): Promise<FastifyReply> => {
+      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      const client = await pool.connect();
+      let locked = false;
+      try {
+        const lock = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtext($1)) AS locked", [req.params.scope]);
+        locked = lock.rows[0]?.locked === true;
+        if (!locked) return fail(reply, 409, "SESSION_BUSY", "会话正在运行一轮对话，稍后再删");
+        await client.query("BEGIN");
+        const row = await client.query<{ id: string }>(
+          "SELECT id FROM conversations WHERE id = $1::uuid AND scope = $2 AND deleted_at IS NULL FOR UPDATE",
+          [req.params.sessionId, req.params.scope],
+        );
+        if (!row.rows[0]) {
+          await client.query("ROLLBACK");
+          return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
+        }
+        await client.query("DELETE FROM conversation_messages WHERE conversation_id = $1", [row.rows[0].id]);
+        await client.query("UPDATE conversations SET deleted_at = now() WHERE id = $1", [row.rows[0].id]);
+        await client.query("COMMIT");
+        // DB 删除已提交后才清文件；清理失败只留孤儿文件，不影响删除语义。
+        await removeConversationAttachmentFiles(conversationAttachmentStorageDir, row.rows[0].id);
+        return reply.code(204).send();
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally {
+        if (locked) await client.query("SELECT pg_advisory_unlock(hashtext($1))", [req.params.scope]).catch(() => undefined);
+        client.release();
+      }
+    },
+  );
+}
