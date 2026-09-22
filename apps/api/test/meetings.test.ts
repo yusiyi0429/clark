@@ -651,6 +651,28 @@ describe("Candidate Preflight", () => {
     }
   });
 
+  it("rejects a candidate whose visible prose uses a turn phrase", async () => {
+    const agent: PreflightAgent = {
+      async generate(input) {
+        const candidate = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
+        candidate.entries = candidate.entries.map((entry) =>
+          entry.kind === "core_judgment" ? { ...entry, body: "这不是材料问题，而是决策节奏问题" } : entry,
+        );
+        return { candidate };
+      },
+    };
+    const t = await createTestApp({}, undefined, { preflightAgent: agent });
+    try {
+      const { card } = await readyMeeting(t, "dri-meeting-turn-phrase");
+      expect(card.payload.preflight).toMatchObject({
+        status: "failed",
+        error: { code: "invalid_preflight_candidate", message: "Preflight 出现翻案句：不是……而是……" },
+      });
+    } finally {
+      await t.close();
+    }
+  });
+
   describe("persistent read/checked/carry state", () => {
   it("persists read, carried, checked and note state across page visits", async () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });

@@ -227,6 +227,27 @@ describe("Issue research lifecycle", () => {
       }
     });
   });
+
+  it("rejects a ResearchDoc whose visible prose uses a turn phrase", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      const forbidden = { ...structuredClone(RESEARCH_DOC), summary: "问题不是投入多少，而是何时投入" };
+      expect(Value.Check(ResearchDoc, forbidden)).toBe(true);
+      const queue = queueRunner([forbidden]);
+      const { app, research } = await setupWithResearch(pool, queue.runner);
+      try {
+        const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket24-turn-phrase" });
+        const id = created.json().cards[0].objectRef.id as string;
+        await research.idle();
+        const cookie = await login(app);
+        const card = await issueCard(app, cookie, id);
+        expect(card.payload.research).toMatchObject({ status: "failed", error: { code: "invalid_research_doc" } });
+        expect(card.payload.research.doc).toBeUndefined();
+      } finally {
+        await app.close();
+      }
+    });
+  });
 });
 
 describe("explicit whole-document re-research", () => {
