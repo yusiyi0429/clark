@@ -10,7 +10,7 @@ import {
 } from "@warmap/contracts";
 import { createTestApp, createTestDb, preflightCandidate, testEnv, type TestApp } from "./helpers.js";
 import { recoverInterruptedOutcome, type PostMeetingAgent, type PostMeetingAgentInput } from "../src/outcome.js";
-import type { PreflightAgent, PreflightAgentInput } from "../src/meetings.js";
+import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { migrate } from "../src/migrate.js";
 import { signActionId } from "../src/actionToken.js";
 

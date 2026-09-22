@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
-import { moveStagedFile } from "../src/meetings.js";
+import { moveStagedFile } from "../src/meetingMaterials.js";
 import { createTestApp } from "./helpers.js";
 
 // 容器部署里 TMPDIR（overlay）与材料卷（命名卷）分属不同文件系统，rename 必然 EXDEV。

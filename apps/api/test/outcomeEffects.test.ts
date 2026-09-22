@@ -3,7 +3,8 @@ import { Value } from "@sinclair/typebox/value";
 import { Card, MeetingCardPayload, MeetingOutcomeState, type TPostMeetingCandidate } from "@warmap/contracts";
 import { createTestApp, preflightCandidate, testEnv, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
-import type { DriExportRequest, DriExporter, PreflightAgent, PreflightAgentInput } from "../src/meetings.js";
+import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
+import type { DriExportRequest, DriExporter } from "../src/meetingStore.js";
 import { signActionId } from "../src/actionToken.js";
 
 const MEETING_INPUT = {

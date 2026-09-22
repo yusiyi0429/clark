@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg";
 import type { TMeetingOutcomeItem, TMeetingOutcomeState, TRadarAnchor } from "@warmap/contracts";
 import type { IssueReceiptRow, IssueRow } from "./issues.js";
-import type { MeetingRow } from "./meetings.js";
+import type { MeetingRow } from "./meetingStore.js";
 
 export type EffectRevokeOutcome =
   | { ok: true; receipts: IssueReceiptRow[] }

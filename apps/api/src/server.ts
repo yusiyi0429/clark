@@ -12,7 +12,7 @@ import { recoverInterruptedResearch } from "./issues.js";
 import { loadCompanyMemory } from "./companyMemory.js";
 import { createResearchService } from "./research.js";
 import { createResearchAgentRunner } from "./researchAgent.js";
-import { recoverInterruptedPreflight } from "./meetings.js";
+import { recoverInterruptedPreflight } from "./meetingPreflight.js";
 import { createMonthlyPlanService } from "./monthlyDraft.js";
 import { createMonthlyDraftAgent } from "./monthlyDraftAgent.js";
 import { createMonthlyPlanScheduler } from "./monthlyPlanScheduler.js";

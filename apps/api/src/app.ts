@@ -83,33 +83,17 @@ import { getSignalCard, getSignalImageSource, listSignalCards, projectRadarCard,
 import { getIssueRow, executeIssueAction, createCeoIssue, importDriIssue, listPendingIssueCards, projectIssueCard, assignIssueBattlefield, unassignIssueBattlefield } from "./issues.js";
 import type { ResearchService } from "./research.js";
 import {
-  executeCancelMeeting,
-  executeConfirmItem,
   createConfigMeeting,
+  executeCancelMeeting,
   executeCreateMeeting,
-  executeDismissItem,
-  executeEditMaterials,
   executeJoinMeeting,
-  executeReplaceTranscript,
   executeRequestSupplement,
-  executeRetryOutcome,
-  executeRegeneratePreflight,
-  executeRetryPreflight,
-  executeRunPreflight,
-  executeRevokeEffect,
   executeUpdateDraft,
-  getMeetingRow,
   importDriMeeting,
-  importTranscript,
-  listMeetingRows,
-  projectMeetingCard,
-  replaceMeetingMaterials,
-  appendSupplementMaterial,
-  type DriExporter,
-  type MeetingActionOutcome,
-  type PreflightAgent,
-  type TranscriptImportResult,
 } from "./meetings.js";
+import { appendSupplementMaterial, executeEditMaterials, replaceMeetingMaterials } from "./meetingMaterials.js";
+import { executeRegeneratePreflight, executeRetryPreflight, executeRunPreflight, type PreflightAgent } from "./meetingPreflight.js";
+import { getMeetingRow, listMeetingRows, projectMeetingCard, type DriExporter, type MeetingActionOutcome } from "./meetingStore.js";
 import { createPreflightAgent } from "./preflightAgent.js";
 import {
   appendDriMonthlyFeedback,
@@ -127,7 +111,17 @@ import {
 import { deleteBattlefield, listBattlefieldCards, projectBattlefieldManagement, registerBattlefield } from "./battlefields.js";
 import { listCapabilityCards, registerCapability } from "./capabilities.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
-import { recoverInterruptedOutcome, type PostMeetingAgent } from "./outcome.js";
+import {
+  executeConfirmItem,
+  executeDismissItem,
+  executeReplaceTranscript,
+  executeRetryOutcome,
+  executeRevokeEffect,
+  importTranscript,
+  recoverInterruptedOutcome,
+  type PostMeetingAgent,
+  type TranscriptImportResult,
+} from "./outcome.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import multipart from "@fastify/multipart";
 import { logEvent } from "./observability.js";

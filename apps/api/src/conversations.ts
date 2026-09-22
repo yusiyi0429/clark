@@ -13,7 +13,8 @@ import type {
 } from "@warmap/contracts";
 import type { ParsedMaterial } from "./materialParser.js";
 import { getIssueRow, projectIssueCard } from "./issues.js";
-import { getMeetingRow, moveStagedFile, projectMeetingCard } from "./meetings.js";
+import { moveStagedFile } from "./meetingMaterials.js";
+import { getMeetingRow, projectMeetingCard } from "./meetingStore.js";
 import { getMonthlyPlanRow, projectMonthlyPlanCard } from "./monthlyPlans.js";
 import { getSignalCard } from "./signals.js";
 

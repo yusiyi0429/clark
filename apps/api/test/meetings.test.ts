@@ -7,7 +7,8 @@ import { buildApp } from "../src/app.js";
 import { loadCompanyMemory } from "../src/companyMemory.js";
 import { migrate } from "../src/migrate.js";
 import { createTestApp, createTestDb, preflightCandidate, testEnv, TEST_PASSWORD, type TestApp } from "./helpers.js";
-import { recoverInterruptedPreflight, runPreflight, type DriExportRequest, type PreflightAgent, type PreflightAgentInput } from "../src/meetings.js";
+import { recoverInterruptedPreflight, runPreflight, type PreflightAgent, type PreflightAgentInput } from "../src/meetingPreflight.js";
+import type { DriExportRequest } from "../src/meetingStore.js";
 
 const MEETING_INPUT = {
   title: "渠道投入决策会",

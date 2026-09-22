@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { Card, BattlefieldManagementResponse, MeetingCardPayload, type TPreflightCandidate } from "@warmap/contracts";
 import { createTestApp, preflightCandidate, type TestApp } from "./helpers.js";
-import type { PreflightAgent, PreflightAgentInput } from "../src/meetings.js";
+import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 
 /** 配置页建会的 multipart 组装：文本字段 + 可选 files 文件字段。 */
 function configMeetingMultipart(fields: Record<string, string>, files: { filename: string; mimeType: string; body: string }[] = []) {

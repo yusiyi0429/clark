@@ -12,7 +12,7 @@ import {
 import { runCandidateAgent } from "./candidateAgentRuntime.js";
 import { createCompanyMemoryMcpServer } from "./mcpCompanyMemory.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
-import type { PreflightAgent, PreflightAgentInput } from "./meetings.js";
+import type { PreflightAgent, PreflightAgentInput } from "./meetingPreflight.js";
 
 /**
  * advisor-review 的后端场景版本：方法固化在 Prompt；公司事实只从当前输入和 CompanyMemory MCP 读取。

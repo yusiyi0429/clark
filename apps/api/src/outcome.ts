@@ -3,15 +3,36 @@ import type { Pool, QueryResult } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import {
   PostMeetingCandidate,
+  type TCard,
+  type TIssueLocation,
   type TMeetingOutcomeItem,
   type TMeetingOutcomeState,
   type TMeetingParticipant,
+  type TOutcomeHandoff,
   type TOutcomeWarning,
+  type TRadarAnchor,
+  type TStoredTranscript,
   type TTranscriptTurn,
   type TWarmapTranscript,
   WarmapTranscript,
 } from "@warmap/contracts";
-import { deriveMeetingStatus } from "./effects.js";
+import type { ActionScope } from "./actionToken.js";
+import { buildReopenAnchor, deriveMeetingStatus, meetingEffectRef, revokeEffect, upsertRadarAnchor } from "./effects.js";
+import type { IssueReceiptRow, IssueResearch, IssueRow } from "./issues.js";
+import {
+  appendFingerprint,
+  commit,
+  decisionIssueId,
+  getMeetingRow,
+  hasConfirmedEffect,
+  meetingColumns,
+  projectMeetingCard,
+  updateMeeting,
+  withMeetingLock,
+  type DriExporter,
+  type MeetingActionOutcome,
+  type MeetingRow,
+} from "./meetingStore.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -47,11 +68,6 @@ export function pendingOutcome(now = new Date()): TMeetingOutcomeState {
     warnings: [],
     extractedAt: null,
   };
-}
-
-/** 只有 confirmed 的 item 才能真正阻止替换；pending/dismissed 不算已生效效果。 */
-export function hasConfirmedEffect(outcome: TMeetingOutcomeState | null): boolean {
-  return outcome?.items.some((item) => item.review?.status === "confirmed" || item.review?.effectRef != null) ?? false;
 }
 
 export type TranscriptInvalid = { ok: false; code: string; message: string; fieldErrors?: Record<string, string> };
@@ -351,3 +367,371 @@ export async function recoverInterruptedOutcome(
   );
   return result.rowCount ?? 0;
 }
+export type TranscriptImportResult =
+  | { status: 200; card: TCard }
+  | { status: 400 | 404 | 409; code: string; message: string; fieldErrors?: Record<string, string> };
+/**
+ * 唯一 Transcript 导入边界：Web multipart 与 service API 都走这里做整份校验。
+ * 校验成功后单事务保存 JSONB 并把 scheduled Meeting 改 held，提交后才启动 Outcome 抽取。
+ */
+export async function importTranscript(
+  pool: Pool,
+  outcomeAgent: PostMeetingAgent,
+  secret: string,
+  meetingId: string,
+  raw: unknown,
+): Promise<TranscriptImportResult> {
+  const meeting = await getMeetingRow(pool.query.bind(pool), meetingId);
+  if (!meeting) return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
+  const validated = validateTranscript(raw, meeting);
+  if (!validated.ok) return { status: 400, code: validated.code, message: validated.message, fieldErrors: validated.fieldErrors };
+
+  const now = new Date().toISOString();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query<MeetingRow>(`SELECT ${meetingColumns()} FROM meetings WHERE id = $1 FOR UPDATE`, [meetingId]);
+    if (locked.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
+    }
+    const row = locked.rows[0];
+    if (row.transcript) {
+      await client.query("ROLLBACK");
+      return { status: 409, code: "TRANSCRIPT_ALREADY_IMPORTED", message: "Transcript 已存在，替换必须走危险 Action" };
+    }
+    if (row.status !== "scheduled") {
+      await client.query("ROLLBACK");
+      return { status: 409, code: "MEETING_NOT_SCHEDULED", message: "只有 scheduled Meeting 可以导入 Transcript" };
+    }
+    const transcript: TStoredTranscript = { ...validated.value, importedAt: now };
+    await client.query(
+      `UPDATE meetings
+          SET transcript = $2::jsonb, outcome = $3::jsonb, status = 'held', version = version + 1, updated_at = now()
+        WHERE id = $1`,
+      [meetingId, JSON.stringify(transcript), JSON.stringify(pendingOutcome(new Date(now)))],
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  await runOutcome(pool, outcomeAgent, meetingId);
+  return { status: 200, card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), meetingId))!, secret) };
+}
+/**
+ * 危险 Action：仅在 held 且没有 confirmed effect 时整份替换 Transcript。
+ * 替换清空旧 candidate、bump version 使旧 actionId 失效，提交后强制重跑抽取。
+ */
+export async function executeReplaceTranscript(
+  pool: Pool,
+  outcomeAgent: PostMeetingAgent,
+  secret: string,
+  scope: ActionScope,
+  input: { transcript: unknown },
+  fingerprint: string,
+): Promise<MeetingActionOutcome> {
+  const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+    if (row.status !== "held" && row.status !== "reviewed") {
+      return { error: { status: 409, code: "MEETING_NOT_HELD", message: "只有 held/reviewed Meeting 可以替换 Transcript" } };
+    }
+    if (hasConfirmedEffect(row.outcome)) {
+      return { error: { status: 409, code: "OUTCOME_HAS_CONFIRMED_EFFECT", message: "已有 confirmed effect，禁止替换 Transcript" } };
+    }
+    const validated = validateTranscript(input.transcript, row);
+    if (!validated.ok) {
+      return { error: { status: 400, code: validated.code, message: validated.message, fieldErrors: validated.fieldErrors } };
+    }
+    const now = new Date().toISOString();
+    const transcript: TStoredTranscript = { ...validated.value, importedAt: now };
+    const updated = await updateMeeting(
+      client,
+      row.id,
+      // 新 Transcript 使旧 Outcome 失效，Meeting 回到 held 等待重新处理
+      "transcript = $2::jsonb, outcome = $3::jsonb, status = 'held', version = version + 1, action_fingerprints = $4::jsonb",
+      [JSON.stringify(transcript), JSON.stringify(pendingOutcome(new Date(now))), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+    );
+    return commit(client, updated, secret);
+  });
+  if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
+  await runOutcome(pool, outcomeAgent, scope.objectId);
+  return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
+}
+/** 显式重试：只有 held 且抽取失败时可用；失败保留 Transcript，不自动 retry。 */
+export async function executeRetryOutcome(
+  pool: Pool,
+  outcomeAgent: PostMeetingAgent,
+  secret: string,
+  scope: ActionScope,
+  fingerprint: string,
+): Promise<MeetingActionOutcome> {
+  const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+    if (row.status !== "held" || !row.transcript) return { error: { status: 409, code: "MEETING_NOT_HELD", message: "只有已导入 Transcript 的 held Meeting 可以重试抽取" } };
+    if (row.outcome?.status !== "failed") return { error: { status: 409, code: "MEETING_OUTCOME_NOT_FAILED", message: "只有失败的会后抽取可以显式重试" } };
+    const updated = await updateMeeting(
+      client,
+      row.id,
+      "version = version + 1, action_fingerprints = $2::jsonb",
+      [JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+    );
+    return commit(client, updated, secret);
+  });
+  if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
+  await runOutcome(pool, outcomeAgent, scope.objectId);
+  return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
+}
+function radarLocation(location: TIssueLocation | null | undefined): TRadarAnchor["location"] {
+  if (location?.level === "battlefield") return { type: "battlefield", id: location.battlefieldId };
+  if (location?.level === "capability") return { type: "capability", id: location.capabilityId };
+  return { type: "company" };
+}
+function clonedItems(state: TMeetingOutcomeState): TMeetingOutcomeItem[] {
+  return state.items.map((item) => structuredClone(item));
+}
+/**
+ * 逐项确认：写对应数据库 effect、effectRef 与 review，派生 Meeting reviewed。
+ * 不同条目仍由 Meeting 行 version 串行，fingerprint 重放不产生第二个 effect。
+ */
+export async function executeConfirmItem(
+  pool: Pool,
+  exporter: DriExporter | undefined,
+  secret: string,
+  scope: ActionScope,
+  fingerprint: string,
+): Promise<MeetingActionOutcome> {
+  const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+    if (row.status !== "held" && row.status !== "reviewed") {
+      return { error: { status: 409, code: "MEETING_NOT_REVIEWABLE", message: "只有 held/reviewed Meeting 可以处理会后条目" } };
+    }
+    const state = row.outcome;
+    if (!state || state.status !== "ready") {
+      return { error: { status: 409, code: "OUTCOME_NOT_READY", message: "会后抽取尚未完成" } };
+    }
+    const items = clonedItems(state);
+    const item = scope.itemId ? items.find((candidate) => candidate.id === scope.itemId) : undefined;
+    if (!item) return { error: { status: 404, code: "OUTCOME_ITEM_NOT_FOUND", message: "Outcome item 不存在" } };
+    if (!item.review) return { error: { status: 409, code: "OPEN_ITEM_NOT_REVIEWABLE", message: "open item 只展示，不能创建效果" } };
+    if (item.review.status !== "pending") return { error: { status: 409, code: "ITEM_ALREADY_REVIEWED", message: "该条目已处理" } };
+    const effectRef = meetingEffectRef(row.id, item.kind, item.id);
+    if (!effectRef) return { error: { status: 409, code: "OPEN_ITEM_NOT_REVIEWABLE", message: "open item 只展示，不能创建效果" } };
+    const now = new Date().toISOString();
+
+    if (item.kind === "decision") {
+      const issueId = decisionIssueId(row, item);
+      if (!issueId) {
+        return { error: { status: 409, code: "DECISION_ITEM_WITHOUT_ISSUE", message: "该 decision 没有关联 Issue，无法创建 Receipt" } };
+      }
+      const locked = await client.query<IssueRow>("SELECT * FROM issues WHERE id = $1 FOR UPDATE", [issueId]);
+      if (locked.rowCount !== 1) return { error: { status: 404, code: "ISSUE_NOT_FOUND", message: "关联 Issue 不存在" } };
+      const issue = locked.rows[0];
+      if (issue.status === "dismissed") return { error: { status: 409, code: "ISSUE_DISMISSED", message: "dismissed Issue 不能写入 Receipt" } };
+      const receipt: IssueReceiptRow = {
+        id: randomUUID(),
+        actionType: "meeting.confirm_item",
+        actionFingerprint: fingerprint,
+        effectRef,
+        decisionText: item.text,
+        researchStatusAtDecision: (issue.research as IssueResearch).status,
+        override: false,
+        source: { kind: "meeting-item", meetingId: row.id, outcomeItemId: item.id },
+        createdAt: now,
+      };
+      await client.query(
+        "UPDATE issues SET status = 'decided', receipts = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1",
+        [issue.id, JSON.stringify([...issue.receipts, receipt])],
+      );
+      item.review = { status: "confirmed", effectRef };
+    } else if (item.kind === "todo") {
+      item.review = { status: "confirmed", effectRef, handoff: { exportStatus: "pending_export", exportRef: null, error: null } };
+    } else if (item.kind === "ceoJudgment") {
+      // CEO 判断只保留在 MeetingOutcome，不直接写 CompanyMemory
+      item.review = { status: "confirmed", effectRef };
+    } else {
+      const parent = item.parentItemId ? items.find((candidate) => candidate.id === item.parentItemId) : undefined;
+      if (!parent || parent.review?.status !== "confirmed") {
+        return { error: { status: 409, code: "PARENT_DECISION_NOT_CONFIRMED", message: "父 decision 尚未确认" } };
+      }
+      const parentIssueId = decisionIssueId(row, parent);
+      let location: TRadarAnchor["location"] = { type: "company" };
+      if (parentIssueId) {
+        const parentIssue = await client.query<{ location: TIssueLocation }>("SELECT location FROM issues WHERE id = $1", [parentIssueId]);
+        if (parentIssue.rowCount === 1) location = radarLocation(parentIssue.rows[0].location);
+      }
+      const anchor = buildReopenAnchor({ meetingId: row.id, itemId: item.id, text: item.text, location, effectRef });
+      await upsertRadarAnchor(client, anchor);
+      item.review = { status: "confirmed", effectRef, anchorId: anchor.id };
+    }
+
+    const nextState: TMeetingOutcomeState = { ...state, items };
+    const status = deriveMeetingStatus(row.status, items);
+    const updated = await updateMeeting(
+      client,
+      row.id,
+      "outcome = $2::jsonb, status = $3, version = version + 1, action_fingerprints = $4::jsonb",
+      [JSON.stringify(nextState), status, JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+    );
+    return commit(client, updated, secret);
+  });
+  if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
+  await exportPendingTodoHandoff(pool, scope.objectId, scope.itemId, exporter);
+  return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
+}
+/** 忽略一项只记录状态与原因，不产生 effect；父 decision 被忽略时同一事务内处理其子条件。 */
+export async function executeDismissItem(
+  pool: Pool,
+  secret: string,
+  scope: ActionScope,
+  fingerprint: string,
+  reason?: string,
+): Promise<MeetingActionOutcome> {
+  return withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+    if (row.status !== "held" && row.status !== "reviewed") {
+      return { error: { status: 409, code: "MEETING_NOT_REVIEWABLE", message: "只有 held/reviewed Meeting 可以处理会后条目" } };
+    }
+    const state = row.outcome;
+    if (!state || state.status !== "ready") {
+      return { error: { status: 409, code: "OUTCOME_NOT_READY", message: "会后抽取尚未完成" } };
+    }
+    const items = clonedItems(state);
+    const item = scope.itemId ? items.find((candidate) => candidate.id === scope.itemId) : undefined;
+    if (!item) return { error: { status: 404, code: "OUTCOME_ITEM_NOT_FOUND", message: "Outcome item 不存在" } };
+    if (!item.review) return { error: { status: 409, code: "OPEN_ITEM_NOT_REVIEWABLE", message: "open item 只展示，不能忽略" } };
+    if (item.review.status !== "pending") return { error: { status: 409, code: "ITEM_ALREADY_REVIEWED", message: "该条目已处理" } };
+
+    item.review = { status: "dismissed", effectRef: null, reason: reason ?? null };
+    // 父 decision 被忽略时，其未处理的子条件在同一事务内自动 dismissed（不会存在已确认锚点：
+    // 撤回父时已同步清理）。
+    if (item.kind === "decision") {
+      for (const child of items) {
+        if (child.kind !== "reopenWhen" || child.parentItemId !== item.id) continue;
+        if (child.review?.status === "pending") {
+          child.review = { status: "dismissed", effectRef: null, reason: "parent_dismissed" };
+        }
+      }
+    }
+
+    const nextState: TMeetingOutcomeState = { ...state, items };
+    const status = deriveMeetingStatus(row.status, items);
+    const updated = await updateMeeting(
+      client,
+      row.id,
+      "outcome = $2::jsonb, status = $3, version = version + 1, action_fingerprints = $4::jsonb",
+      [JSON.stringify(nextState), status, JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+    );
+    return commit(client, updated, secret);
+  });
+}
+/**
+ * 撤回已确认效果：统一走 revokeEffect，同步 Outcome item、Receipt、Radar anchor 与 Meeting 状态。
+ * delivered 的外部效果禁用撤回：Card 不提供该 Action，服务端也返回明确 warning。
+ */
+export async function executeRevokeEffect(
+  pool: Pool,
+  secret: string,
+  scope: ActionScope,
+  fingerprint: string,
+  reason?: string,
+): Promise<MeetingActionOutcome> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query<MeetingRow>(
+      `SELECT ${meetingColumns()} FROM meetings WHERE id = $1 FOR UPDATE`,
+      [scope.objectId],
+    );
+    if (locked.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return { error: { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" } };
+    }
+    const row = locked.rows[0];
+    // fingerprint 已产生撤回：幂等返回当前 Card，不要求 item 仍处于 confirmed
+    if (row.action_fingerprints.includes(fingerprint)) {
+      await client.query("COMMIT");
+      return { card: projectMeetingCard(row, secret), replayed: true };
+    }
+    const item = scope.itemId ? row.outcome?.items.find((candidate) => candidate.id === scope.itemId) : undefined;
+    const effectRef = item?.review?.effectRef;
+    if (!effectRef) {
+      await client.query("ROLLBACK");
+      return { error: { status: 409, code: "ITEM_NOT_CONFIRMED", message: "只有已确认的条目可以撤回" } };
+    }
+    const result = await revokeEffect(client, effectRef, fingerprint, { expectedVersion: scope.objectVersion, reason });
+    if (!result.ok) {
+      await client.query("ROLLBACK");
+      if ("conflict" in result && result.conflict) {
+        return { conflict: true, latestCard: projectMeetingCard(result.latestMeeting!, secret) };
+      }
+      return { error: { status: 409, code: result.code, message: result.message } };
+    }
+    // 本 Action 只处理会议条目效果，effectRef 必为 meeting 前缀
+    if (result.target !== "meeting") {
+      await client.query("ROLLBACK");
+      return { error: { status: 409, code: "UNKNOWN_EFFECT", message: "该 Action 只能撤回 meeting effect" } };
+    }
+    await client.query("COMMIT");
+    return { card: projectMeetingCard(result.meeting, secret) };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+/** 提交确认后才尝试真实外发；失败不改回 confirmed，只写可见 failed。 */
+async function exportPendingTodoHandoff(
+  pool: Pool,
+  meetingId: string,
+  itemId: string | undefined,
+  exporter: DriExporter | undefined,
+): Promise<void> {
+  if (!exporter || !itemId) return;
+  const meeting = await getMeetingRow(pool.query.bind(pool), meetingId);
+  const item = meeting?.outcome?.items.find((candidate) => candidate.id === itemId);
+  if (!item || item.kind !== "todo" || item.review?.status !== "confirmed") return;
+  if (item.review.handoff?.exportStatus !== "pending_export" || !item.ownerPersonId) return;
+  try {
+    const result = await exporter.export(
+      { effectRef: item.review.effectRef!, targetDriId: item.ownerPersonId, text: item.text },
+      new AbortController().signal,
+    );
+    await updateOutcomeHandoff(pool, meetingId, itemId, { exportStatus: "delivered", exportRef: result.exportRef, error: null });
+  } catch (err) {
+    await updateOutcomeHandoff(pool, meetingId, itemId, { exportStatus: "failed", exportRef: null, error: (err as Error).message || "export failed" });
+  }
+}
+/** Handoff 状态与其它 Outcome 写入一样持行锁，避免整份 outcome 被并发覆盖。 */
+async function updateOutcomeHandoff(
+  pool: Pool,
+  meetingId: string,
+  itemId: string,
+  handoff: TOutcomeHandoff,
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT id FROM meetings WHERE id = $1 FOR UPDATE", [meetingId]);
+    await client.query(
+      `UPDATE meetings
+          SET outcome = jsonb_set(outcome, '{items}', (
+                SELECT jsonb_agg(
+                  CASE WHEN item->>'id' = $2 THEN jsonb_set(item, '{review,handoff}', $3::jsonb) ELSE item END
+                )
+                FROM jsonb_array_elements(outcome->'items') AS item
+              )),
+              version = version + 1,
+              updated_at = now()
+        WHERE id = $1 AND outcome->'items' @> jsonb_build_array(jsonb_build_object('id', $2::text))`,
+      [meetingId, itemId, JSON.stringify(handoff)],
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
