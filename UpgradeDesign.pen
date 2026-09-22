@@ -352,6 +352,45 @@
           ]
         },
         {
+          "type": "frame",
+          "id": "WJa3q",
+          "name": "Strategic Context",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 3,
+          "padding": [
+            0,
+            0,
+            8,
+            0
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "dmARh",
+              "name": "Owner",
+              "fill": "#000000",
+              "content": "负责人 · 待指派",
+              "fontFamily": "$font",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "Yxo2O",
+              "name": "Six Month Outcome",
+              "fill": "#000000",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "六个月目标 · 真正跑通，从目标组织范式设计进入真实经营。",
+              "lineHeight": 1.45,
+              "fontFamily": "$font",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
           "type": "rectangle",
           "id": "WwwXi",
           "name": "Divider",
@@ -2440,23 +2479,74 @@
                   "id": "jg5Nz",
                   "type": "ref",
                   "ref": "JN2eQ",
-                  "name": "战场卡 · 增长战场",
+                  "name": "战场卡 · 01 灯塔项目",
                   "width": "fill_container",
-                  "height": "fill_container"
+                  "height": "fill_container",
+                  "descendants": {
+                    "XmdH1": {
+                      "content": "01 灯塔项目"
+                    },
+                    "dmARh": {
+                      "content": "负责人 · 待指派"
+                    },
+                    "Yxo2O": {
+                      "content": "六个月目标 · 真正跑通，从目标组织范式设计进入真实经营。"
+                    },
+                    "VPsQg": {
+                      "enabled": false
+                    },
+                    "V0WBng": {
+                      "enabled": false
+                    }
+                  }
                 },
                 {
                   "id": "xK27O",
                   "type": "ref",
                   "ref": "JN2eQ",
-                  "name": "战场卡 · 交付战场",
+                  "name": "战场卡 · 02 Token Ops",
                   "width": "fill_container",
                   "height": "fill_container",
                   "descendants": {
                     "XmdH1": {
-                      "content": "交付战场"
+                      "content": "02 Token Ops"
+                    },
+                    "dmARh": {
+                      "content": "负责人 · 待指派"
+                    },
+                    "Yxo2O": {
+                      "content": "六个月目标 · 形成一条真正开始规模运行的 Token 业务。"
+                    },
+                    "VPsQg": {
+                      "enabled": false
                     },
                     "PDxlx": {
                       "content": "两班制排班是否在双十一前全面推开"
+                    },
+                    "V0WBng": {
+                      "enabled": false
+                    }
+                  }
+                },
+                {
+                  "id": "zxIdn",
+                  "type": "ref",
+                  "ref": "JN2eQ",
+                  "name": "战场卡 · 03 002 客户",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "descendants": {
+                    "XmdH1": {
+                      "content": "03 002 客户"
+                    },
+                    "dmARh": {
+                      "content": "负责人 · 待指派"
+                    },
+                    "Yxo2O": {
+                      "content": "六个月目标 · 形成第二个实质客户进入案例。"
+                    },
+                    "VPsQg": {
+                      "enabled": false
                     },
                     "V0WBng": {
                       "enabled": false
@@ -17212,7 +17302,7 @@
       "name": "页面 / 月度计划 · 协商中",
       "clip": true,
       "width": 2560,
-      "height": 1440,
+      "height": 2100,
       "fill": "$bg",
       "layout": "vertical",
       "children": [
@@ -17289,7 +17379,7 @@
                       "id": "cQkwP",
                       "name": "Title",
                       "fill": "$ink",
-                      "content": "月度计划 2025-09",
+                      "content": "月度计划 2026-09",
                       "fontFamily": "$font",
                       "fontSize": 24,
                       "fontWeight": "600",
@@ -17498,7 +17588,7 @@
                           "id": "K6Pgb",
                           "name": "Section Title",
                           "fill": "$ink",
-                          "content": "增长战场结果",
+                          "content": "灯塔项目 · 当月 PCO",
                           "fontFamily": "$font",
                           "fontSize": 15,
                           "fontWeight": "600"
@@ -17526,7 +17616,7 @@
                           "fill": "$ink2",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "新签中腰部客户 22 家，续费率 86%，东南亚渠道跑通首批 3 个闭环订单。",
+                          "content": "完成从“设计/部署”向“真实运行”的关键跨越。",
                           "lineHeight": 1.7,
                           "fontFamily": "$font",
                           "fontSize": 13,
@@ -17619,7 +17709,7 @@
                           "id": "gdJ42",
                           "name": "Section Title",
                           "fill": "$ink",
-                          "content": "交付战场结果",
+                          "content": "Token Ops · 当月 PCO",
                           "fontFamily": "$font",
                           "fontSize": 15,
                           "fontWeight": "600"
@@ -17647,7 +17737,7 @@
                           "fill": "$ink2",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "履约周期压降 18%，两班制排班覆盖全部核心仓，客诉率不超过 1.2%。",
+                          "content": "TokenHub 从启动建设进入可以真实接入和使用的阶段。",
                           "lineHeight": 1.7,
                           "fontFamily": "$font",
                           "fontSize": 13,
@@ -17684,6 +17774,555 @@
                           "fontFamily": "$font",
                           "fontSize": 12,
                           "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "E4DS5",
+                  "name": "Section · 002 客户当月 PCO",
+                  "width": "fill_container",
+                  "fill": "$surface",
+                  "cornerRadius": 20,
+                  "stroke": "$line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    20,
+                    22
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "yLDx0",
+                      "name": "Section Heading",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "S8H0FQ",
+                          "name": "Index",
+                          "fill": "#000000",
+                          "content": "03",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "fUrZo",
+                          "name": "Section Title",
+                          "fill": "$ink",
+                          "content": "002 客户 · 当月 PCO",
+                          "fontFamily": "$font",
+                          "fontSize": 15,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "PJAvF",
+                      "name": "Textarea Box",
+                      "width": "fill_container",
+                      "fill": "$surface-2",
+                      "cornerRadius": 10,
+                      "stroke": "$line",
+                      "strokeWidth": 1,
+                      "padding": [
+                        12,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "apps9",
+                          "name": "Value",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "形成明确客户推进节点，完成关键高层沟通与合作路径确认。",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "JvVbk",
+                      "name": "Check Row · 002 客户 PCO",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "e7TyI",
+                          "name": "Checkbox",
+                          "width": 14,
+                          "height": 14,
+                          "cornerRadius": 4,
+                          "stroke": "$line-strong",
+                          "strokeWidth": 1
+                        },
+                        {
+                          "type": "text",
+                          "id": "Z0bloj",
+                          "name": "Label",
+                          "fill": "#000000",
+                          "content": "已核对 002 客户 PCO",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "NaMmJ",
+                  "name": "Section · 能力 PCO",
+                  "width": "fill_container",
+                  "fill": "$surface",
+                  "cornerRadius": 20,
+                  "stroke": "$line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    20,
+                    22
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Txo3D",
+                      "name": "Section Title",
+                      "fill": "$ink",
+                      "content": "能力 PCO",
+                      "fontFamily": "$font",
+                      "fontSize": 15,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "PnNaY",
+                      "name": "Section Desc",
+                      "fill": "#000000",
+                      "content": "七项能力的当月结果；长期六个月目标来自能力注册表。",
+                      "fontFamily": "$font",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "i9MEmY",
+                      "name": "Capability PCO · Re-architecture",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "padding": [
+                        9,
+                        0
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RUb3T",
+                          "name": "Code",
+                          "fill": "#000000",
+                          "content": "02",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "k3Qk5",
+                          "name": "Name",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": 180,
+                          "content": "Re-architecture",
+                          "fontFamily": "$font",
+                          "fontSize": 12.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "aXEeC",
+                          "name": "Outcome",
+                          "fill": "#000000",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "推动 01 部署与 002 推进",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "HvhYc",
+                          "name": "Checkbox",
+                          "width": 14,
+                          "height": 14,
+                          "cornerRadius": 4,
+                          "stroke": "$line-strong",
+                          "strokeWidth": 1
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wH3GM",
+                      "name": "Capability PCO · Method",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "padding": [
+                        9,
+                        0
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "VBLlp",
+                          "name": "Code",
+                          "fill": "#000000",
+                          "content": "03",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "keQiN",
+                          "name": "Name",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": 180,
+                          "content": "Method",
+                          "fontFamily": "$font",
+                          "fontSize": 12.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "a9l6i",
+                          "name": "Outcome",
+                          "fill": "#000000",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "M1-A 至 M3 稳定运行",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "oG9H5",
+                          "name": "Checkbox",
+                          "width": 14,
+                          "height": 14,
+                          "cornerRadius": 4,
+                          "stroke": "$line-strong",
+                          "strokeWidth": 1
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "kPgQg",
+                      "name": "Capability PCO · Agents",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "padding": [
+                        9,
+                        0
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "UFyZE",
+                          "name": "Code",
+                          "fill": "#000000",
+                          "content": "04",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "u9IoG",
+                          "name": "Name",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": 180,
+                          "content": "Agents",
+                          "fontFamily": "$font",
+                          "fontSize": 12.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "im3ky",
+                          "name": "Outcome",
+                          "fill": "#000000",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "多角色 Agent 达到常态使用",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "iWVXj",
+                          "name": "Checkbox",
+                          "width": 14,
+                          "height": 14,
+                          "cornerRadius": 4,
+                          "stroke": "$line-strong",
+                          "strokeWidth": 1
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "u4938d",
+                      "name": "Capability PCO · E&O",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "padding": [
+                        9,
+                        0
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "EHSn5",
+                          "name": "Code",
+                          "fill": "#000000",
+                          "content": "05",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "NumLL",
+                          "name": "Name",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": 180,
+                          "content": "E&O",
+                          "fontFamily": "$font",
+                          "fontSize": 12.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "N5wSCv",
+                          "name": "Outcome",
+                          "fill": "#000000",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "核心本体逐步稳定",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "kXBsa",
+                          "name": "Checkbox",
+                          "width": 14,
+                          "height": 14,
+                          "cornerRadius": 4,
+                          "stroke": "$line-strong",
+                          "strokeWidth": 1
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "nTXtc",
+                      "name": "Capability PCO · TokenHub",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "padding": [
+                        9,
+                        0
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "K3q69D",
+                          "name": "Code",
+                          "fill": "#000000",
+                          "content": "07",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "zvyka",
+                          "name": "Name",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": 180,
+                          "content": "TokenHub",
+                          "fontFamily": "$font",
+                          "fontSize": 12.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "KeNWy",
+                          "name": "Outcome",
+                          "fill": "#000000",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "核心工程正式推进",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mmq3O",
+                          "name": "Checkbox",
+                          "width": 14,
+                          "height": 14,
+                          "cornerRadius": 4,
+                          "stroke": "$line-strong",
+                          "strokeWidth": 1
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "pO4kn",
+                      "name": "Capability PCO · Talent & Organization",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "padding": [
+                        9,
+                        0
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "NDarJ",
+                          "name": "Code",
+                          "fill": "#000000",
+                          "content": "08",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PuQwu",
+                          "name": "Name",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": 180,
+                          "content": "Talent & Organization",
+                          "fontFamily": "$font",
+                          "fontSize": 12.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "JWtr6",
+                          "name": "Outcome",
+                          "fill": "#000000",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "识别关键人才与能力 Gap",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Rh5Qq",
+                          "name": "Checkbox",
+                          "width": 14,
+                          "height": 14,
+                          "cornerRadius": 4,
+                          "stroke": "$line-strong",
+                          "strokeWidth": 1
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "tT4uN",
+                      "name": "Capability PCO · Finance / Compliance / Ops",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "padding": [
+                        9,
+                        0
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "NeeaY",
+                          "name": "Code",
+                          "fill": "#000000",
+                          "content": "09",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "wKTOS",
+                          "name": "Name",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": 180,
+                          "content": "Finance / Compliance / Ops",
+                          "fontFamily": "$font",
+                          "fontSize": 12.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "G8pssU",
+                          "name": "Outcome",
+                          "fill": "#000000",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "形成 Token 市场、供应和合规边界",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "f1Qyp",
+                          "name": "Checkbox",
+                          "width": 14,
+                          "height": 14,
+                          "cornerRadius": 4,
+                          "stroke": "$line-strong",
+                          "strokeWidth": 1
                         }
                       ]
                     }
@@ -18337,7 +18976,7 @@
                   "id": "RsutJ",
                   "name": "Sub",
                   "fill": "$ink3",
-                  "content": "已核对 6 项 · 签发前必须核对企业结果、战场结果与普通待办",
+                  "content": "已核对公司结果、3 个战场 PCO、7 个能力 PCO 与普通待办",
                   "fontFamily": "$font",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -31566,7 +32205,7 @@
       "name": "页面 / 配置",
       "clip": true,
       "width": 2560,
-      "height": 1440,
+      "height": 1780,
       "fill": "$bg",
       "layout": "vertical",
       "gap": 24,
@@ -31694,7 +32333,7 @@
           "id": "TKSZu",
           "layoutPosition": "absolute",
           "x": 56,
-          "y": 310,
+          "y": 570,
           "name": "Card · 新建会议",
           "width": 1212,
           "height": 460,
@@ -32049,7 +32688,7 @@
           "id": "nNVAc",
           "layoutPosition": "absolute",
           "x": 1292,
-          "y": 310,
+          "y": 570,
           "name": "Card · 新建议题",
           "width": 1212,
           "height": 460,
@@ -32352,10 +32991,10 @@
           "id": "O8ZWsI",
           "layoutPosition": "absolute",
           "x": 56,
-          "y": 794,
+          "y": 1054,
           "name": "Card · 新建战场",
           "width": 1212,
-          "height": 460,
+          "height": 610,
           "fill": "$surface",
           "cornerRadius": 20,
           "stroke": "$line",
@@ -32406,6 +33045,54 @@
               "layout": "vertical",
               "gap": 14,
               "children": [
+                {
+                  "type": "frame",
+                  "id": "vmd4F",
+                  "name": "Field · 显示编号 / 顺序",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 5,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "IRO3S",
+                      "name": "Label",
+                      "fill": "#000000",
+                      "content": "显示编号 / 顺序",
+                      "fontFamily": "$font",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "i4R1K9",
+                      "name": "Input Box",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "$surface-2",
+                      "cornerRadius": 10,
+                      "stroke": "$line-strong",
+                      "strokeWidth": 1,
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "FaJKZ",
+                          "name": "Input Value",
+                          "fill": "#000000",
+                          "content": "例如：01 · 顺序 10",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
                 {
                   "type": "frame",
                   "id": "xVg9C",
@@ -32467,7 +33154,7 @@
                       "id": "FoigQ",
                       "name": "Label",
                       "fill": "$ink2",
-                      "content": "负责人",
+                      "content": "负责人（可待指派）",
                       "fontFamily": "$font",
                       "fontSize": 12,
                       "fontWeight": "normal"
@@ -32517,7 +33204,7 @@
                 {
                   "type": "frame",
                   "id": "fKFEO",
-                  "name": "Field · 目标一句话",
+                  "name": "Field · 六个月目标",
                   "width": "fill_container",
                   "layout": "vertical",
                   "gap": 5,
@@ -32527,7 +33214,7 @@
                       "id": "iOy3x",
                       "name": "Label",
                       "fill": "$ink2",
-                      "content": "目标一句话",
+                      "content": "六个月目标",
                       "fontFamily": "$font",
                       "fontSize": 12,
                       "fontWeight": "normal"
@@ -32535,25 +33222,26 @@
                     {
                       "type": "frame",
                       "id": "Y3CAw",
-                      "name": "Input Box",
+                      "name": "Textarea",
                       "width": "fill_container",
-                      "height": 44,
+                      "height": 82,
                       "fill": "$surface-2",
                       "cornerRadius": 10,
                       "stroke": "$line-strong",
                       "strokeWidth": 1,
                       "padding": [
-                        0,
+                        10,
                         14
                       ],
-                      "alignItems": "center",
                       "children": [
                         {
                           "type": "text",
                           "id": "kx9oR",
                           "name": "Input Value",
                           "fill": "$ink4",
-                          "content": "例如：双十一前履约周期压降 18%",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "描述春节前需要形成的真实经营结果",
                           "fontFamily": "$font",
                           "fontSize": 13,
                           "fontWeight": "normal"
@@ -32691,10 +33379,10 @@
           "id": "Z3DON",
           "layoutPosition": "absolute",
           "x": 1292,
-          "y": 794,
+          "y": 1054,
           "name": "Card · 新建能力",
           "width": 1212,
-          "height": 460,
+          "height": 610,
           "fill": "$surface",
           "cornerRadius": 20,
           "stroke": "$line",
@@ -32745,6 +33433,54 @@
               "layout": "vertical",
               "gap": 14,
               "children": [
+                {
+                  "type": "frame",
+                  "id": "E4VZFb",
+                  "name": "Field · 显示编号 / 顺序",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 5,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "E5n4U",
+                      "name": "Label",
+                      "fill": "#000000",
+                      "content": "显示编号 / 顺序",
+                      "fontFamily": "$font",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "x3TyCh",
+                      "name": "Input Box",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "$surface-2",
+                      "cornerRadius": 10,
+                      "stroke": "$line-strong",
+                      "strokeWidth": 1,
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "XB06n",
+                          "name": "Input Value",
+                          "fill": "#000000",
+                          "content": "例如：01 · 顺序 10",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
                 {
                   "type": "frame",
                   "id": "HHEHg",
@@ -32806,7 +33542,7 @@
                       "id": "ySYlZ",
                       "name": "Label",
                       "fill": "$ink2",
-                      "content": "所属分组",
+                      "content": "所属分组（可选）",
                       "fontFamily": "$font",
                       "fontSize": 12,
                       "fontWeight": "normal"
@@ -32856,7 +33592,7 @@
                 {
                   "type": "frame",
                   "id": "HN9E2",
-                  "name": "Field · 能力说明",
+                  "name": "Field · 六个月目标",
                   "width": "fill_container",
                   "layout": "vertical",
                   "gap": 5,
@@ -32866,7 +33602,7 @@
                       "id": "AaVFC",
                       "name": "Label",
                       "fill": "$ink2",
-                      "content": "能力说明",
+                      "content": "六个月目标",
                       "fontFamily": "$font",
                       "fontSize": 12,
                       "fontWeight": "normal"
@@ -32874,25 +33610,26 @@
                     {
                       "type": "frame",
                       "id": "ENhEW",
-                      "name": "Input Box",
+                      "name": "Textarea",
                       "width": "fill_container",
-                      "height": 44,
+                      "height": 82,
                       "fill": "$surface-2",
                       "cornerRadius": 10,
                       "stroke": "$line-strong",
                       "strokeWidth": 1,
                       "padding": [
-                        0,
+                        10,
                         14
                       ],
-                      "alignItems": "center",
                       "children": [
                         {
                           "type": "text",
                           "id": "u15ccp",
                           "name": "Input Value",
                           "fill": "$ink4",
-                          "content": "例如：覆盖三国本地仓的仓配与退货能力",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "描述该能力在真实经营中的成熟结果",
                           "fontFamily": "$font",
                           "fontSize": 13,
                           "fontWeight": "normal"
@@ -33018,6 +33755,121 @@
                           "fill": "$surface"
                         }
                       ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Sbqss",
+          "layoutPosition": "absolute",
+          "x": 56,
+          "y": 310,
+          "name": "Card · 公司长期目标",
+          "width": 2448,
+          "height": 236,
+          "fill": "$surface",
+          "cornerRadius": 20,
+          "stroke": "$line",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 14,
+          "padding": [
+            22,
+            24
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "Xtyzs",
+              "name": "Card Title",
+              "fill": "$ink",
+              "content": "公司长期目标（LTCO）",
+              "fontFamily": "$font",
+              "fontSize": 18,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "J8EgB",
+              "name": "Card Desc",
+              "fill": "#000000",
+              "content": "定义跨月稳定的公司结果方向，月度计划据此生成当月 PCO。",
+              "fontFamily": "$font",
+              "fontSize": 12.5,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "nXYeB",
+              "name": "LTCO Textarea",
+              "width": "fill_container",
+              "height": 92,
+              "fill": "$surface-2",
+              "cornerRadius": 10,
+              "stroke": "$line-strong",
+              "strokeWidth": 1,
+              "padding": [
+                12,
+                14
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "UDNtp",
+                  "name": "Value",
+                  "fill": "$ink",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "春节前，完成词元云集从“战略与产品定义”到“核心业务第一次被真实证明”的跨越。",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "dwEdk",
+              "name": "Card Footer",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "deYYS",
+                  "name": "Hint",
+                  "fill": "#000000",
+                  "content": "长期目标更新后，下一次月度草案使用新版本",
+                  "fontFamily": "$font",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "H9OL3u",
+                  "name": "Save Strategy",
+                  "fill": "#000000",
+                  "cornerRadius": 10,
+                  "padding": [
+                    10,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "BtzZm",
+                      "name": "Label",
+                      "fill": "#FFFFFF",
+                      "content": "保存长期目标",
+                      "fontFamily": "$font",
+                      "fontSize": 13,
+                      "fontWeight": "600"
                     }
                   ]
                 }
@@ -34152,7 +35004,7 @@
                       "x": 310,
                       "y": 330,
                       "name": "Edit Battlefield Popover",
-                      "width": 300,
+                      "width": 420,
                       "fill": "#FFFFFF",
                       "cornerRadius": 14,
                       "stroke": "#E6E9ED",
@@ -34173,6 +35025,57 @@
                           "fontFamily": "Inter",
                           "fontSize": 13.5,
                           "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "g0p0q",
+                          "name": "Field · 显示编号 / 顺序",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "vZHGS",
+                              "name": "Label",
+                              "fill": "#3C4350",
+                              "content": "显示编号 / 顺序",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ilRmU",
+                              "name": "Input Box",
+                              "width": "fill_container",
+                              "height": 36,
+                              "fill": "#F7F8FA",
+                              "cornerRadius": 9,
+                              "stroke": "#D9DDE5",
+                              "strokeWidth": 1,
+                              "padding": [
+                                0,
+                                12
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "wMi5L",
+                                  "name": "Input Value",
+                                  "fill": "#1D1D1F",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "01 · 顺序 10",
+                                  "lineHeight": 1.4,
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12.5,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
                         },
                         {
                           "type": "frame",
@@ -34235,7 +35138,7 @@
                               "id": "BwXzb",
                               "name": "Label",
                               "fill": "#3C4350",
-                              "content": "负责人",
+                              "content": "负责人（可待指派）",
                               "fontFamily": "Inter",
                               "fontSize": 11.5,
                               "fontWeight": "normal"
@@ -34273,7 +35176,7 @@
                         {
                           "type": "frame",
                           "id": "Er00y",
-                          "name": "Field · 目标一句话",
+                          "name": "Field · 六个月目标",
                           "width": "fill_container",
                           "layout": "vertical",
                           "gap": 4,
@@ -34283,7 +35186,7 @@
                               "id": "PCyE5",
                               "name": "Label",
                               "fill": "#3C4350",
-                              "content": "目标一句话",
+                              "content": "六个月目标",
                               "fontFamily": "Inter",
                               "fontSize": 11.5,
                               "fontWeight": "normal"
@@ -34291,25 +35194,76 @@
                             {
                               "type": "frame",
                               "id": "Wl9vF",
-                              "name": "Input Box",
+                              "name": "Textarea",
                               "width": "fill_container",
-                              "height": 36,
+                              "height": 72,
                               "fill": "#F7F8FA",
                               "cornerRadius": 9,
                               "stroke": "#D9DDE5",
                               "strokeWidth": 1,
                               "padding": [
-                                0,
+                                9,
                                 12
                               ],
-                              "alignItems": "center",
                               "children": [
                                 {
                                   "type": "text",
                                   "id": "J4R4tZ",
                                   "name": "Input Value",
                                   "fill": "#1D1D1F",
-                                  "content": "验证渠道结构与交付节奏，形成可复制的增长路径。",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "真正跑通，从目标组织范式设计进入真实经营。",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12.5,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pyfhs",
+                          "name": "Field · Mission",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "AHrVT",
+                              "name": "Label",
+                              "fill": "#3C4350",
+                              "content": "Mission（每行：编号 + 标题）",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "e3DZ3K",
+                              "name": "Textarea",
+                              "width": "fill_container",
+                              "height": 72,
+                              "fill": "#F7F8FA",
+                              "cornerRadius": 9,
+                              "stroke": "#D9DDE5",
+                              "strokeWidth": 1,
+                              "padding": [
+                                9,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "UnWco",
+                                  "name": "Input Value",
+                                  "fill": "#1D1D1F",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "01-1 未来组织范式设计与确认\n01-2 CEO Agent 常态化使用",
+                                  "lineHeight": 1.4,
                                   "fontFamily": "Inter",
                                   "fontSize": 12.5,
                                   "fontWeight": "normal"
@@ -35615,7 +36569,7 @@
               "x": 640,
               "y": 120,
               "name": "Edit Capability Popover",
-              "width": 320,
+              "width": 440,
               "fill": "#FFFFFF",
               "cornerRadius": 14,
               "stroke": "#E6E9ED",
@@ -35636,6 +36590,57 @@
                   "fontFamily": "Inter",
                   "fontSize": 13.5,
                   "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "Ir9yG",
+                  "name": "Field · 显示编号 / 顺序",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "LnSab",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "显示编号 / 顺序",
+                      "fontFamily": "Inter",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "bud5G",
+                      "name": "Input Box",
+                      "width": "fill_container",
+                      "height": 36,
+                      "fill": "#F7F8FA",
+                      "cornerRadius": 9,
+                      "stroke": "#D9DDE5",
+                      "strokeWidth": 1,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "JA9PY",
+                          "name": "Input Value",
+                          "fill": "#1D1D1F",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "02 · 顺序 20",
+                          "lineHeight": 1.4,
+                          "fontFamily": "Inter",
+                          "fontSize": 12.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "type": "frame",
@@ -35698,7 +36703,7 @@
                       "id": "V29YBd",
                       "name": "Label",
                       "fill": "#3C4350",
-                      "content": "所属分组",
+                      "content": "所属分组（可选）",
                       "fontFamily": "Inter",
                       "fontSize": 11.5,
                       "fontWeight": "normal"
@@ -35736,7 +36741,7 @@
                 {
                   "type": "frame",
                   "id": "yicMP",
-                  "name": "Field · 能力说明",
+                  "name": "Field · 六个月目标",
                   "width": "fill_container",
                   "layout": "vertical",
                   "gap": 4,
@@ -35746,7 +36751,7 @@
                       "id": "aeQSI",
                       "name": "Label",
                       "fill": "#3C4350",
-                      "content": "能力说明",
+                      "content": "六个月目标",
                       "fontFamily": "Inter",
                       "fontSize": 11.5,
                       "fontWeight": "normal"
@@ -35754,25 +36759,76 @@
                     {
                       "type": "frame",
                       "id": "Zl93L",
-                      "name": "Input Box",
+                      "name": "Textarea",
                       "width": "fill_container",
-                      "height": 36,
+                      "height": 72,
                       "fill": "#F7F8FA",
                       "cornerRadius": 9,
                       "stroke": "#D9DDE5",
                       "strokeWidth": 1,
                       "padding": [
-                        0,
+                        9,
                         12
                       ],
-                      "alignItems": "center",
                       "children": [
                         {
                           "type": "text",
                           "id": "wzhR1",
                           "name": "Input Value",
                           "fill": "#1D1D1F",
-                          "content": "覆盖三国本地仓的仓配与退货能力",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "九步法经过 01 和 002 的真实实践，形成可重复的客户进入能力。",
+                          "fontFamily": "Inter",
+                          "fontSize": 12.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "A84UI",
+                  "name": "Field · 主要支撑",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "pig5j",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "主要支撑（Mission / 战场）",
+                      "fontFamily": "Inter",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "q15c4",
+                      "name": "Textarea",
+                      "width": "fill_container",
+                      "height": 52,
+                      "fill": "#F7F8FA",
+                      "cornerRadius": 9,
+                      "stroke": "#D9DDE5",
+                      "strokeWidth": 1,
+                      "padding": [
+                        9,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "tnOWc",
+                          "name": "Input Value",
+                          "fill": "#1D1D1F",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "01-1 · 03 002 客户",
+                          "lineHeight": 1.4,
                           "fontFamily": "Inter",
                           "fontSize": 12.5,
                           "fontWeight": "normal"
