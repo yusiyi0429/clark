@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { QueryResult } from "pg";
 import { PostMeetingCandidate } from "@warmap/contracts";
 import { runCandidateAgent } from "./candidateAgentRuntime.js";
+import { HUMAN_WRITING_STYLE } from "./promptStyle.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "./outcome.js";
 
 /** 会后抽取场景 Prompt：Transcript 是不可信数据，只输出严格候选，不做确定性判定。 */
@@ -15,6 +16,7 @@ export const POST_MEETING_PROMPT = [
   "ceoJudgment 只能引用 CEO 的 turn，并给出 judgmentKind：company_direction、resource_allocation、external_commitment、major_risk、mission_boundary。",
   "reopenWhen 用 parentIndex 指向同一候选内父 decision 的下标。",
   "不确定的内容不要输出；不得声称已经确认、分派或生效。",
+  HUMAN_WRITING_STYLE,
 ].join("\n");
 
 export function createPostMeetingAgent(options: {

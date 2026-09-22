@@ -18,6 +18,7 @@ import {
   PREFLIGHT_ENTRY_KINDS,
   PREFLIGHT_EXACTLY_ONE_KINDS,
 } from "./promptRules.js";
+import { HUMAN_WRITING_STYLE } from "./promptStyle.js";
 
 /**
  * advisor-review 的后端场景版本：方法固化在 Prompt；公司事实只从当前输入和 CompanyMemory MCP 读取。
@@ -39,7 +40,9 @@ export const PREFLIGHT_PROMPT = `CEO WarMap Advisor Preflight v2
 - leader_lens 是 ${LEADER_LENS_MIN}–${LEADER_LENS_MAX} 条陈述性追问问题：站在一号位视角把要追问的事直接陈述成问句，不写免责或元评述，禁止出现${LEADER_LENS_FORBIDDEN_TEXT}。
 - 每条 entry 必须给非空 sourceRefs。只可使用输入显式出现的 issue:<id>、research:<id>、material:<id>、meeting:<id>、transcript:<id>、outcome:<id>，以及通过 MCP 查到的 memory:<sectionId>。
 - basis 说明本轮实际使用的输入与证据边界；brief 是一句核心判断；summary 只写“最关键的一处问题”和“最优先的一个动作”。
-- 无来源事实标“待核实”；缺输入标“待补”；不得声称已批准、确认、分派、签发或形成组织事实。`;
+- 无来源事实标“待核实”；缺输入标“待补”；不得声称已批准、确认、分派、签发或形成组织事实。
+
+${HUMAN_WRITING_STYLE}`;
 
 export async function createPreflightAgent(options: {
   query: (sql: string, params?: unknown[]) => Promise<QueryResult>;

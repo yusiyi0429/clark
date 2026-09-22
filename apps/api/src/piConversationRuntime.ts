@@ -32,6 +32,7 @@ import type { CompanyMemoryRepository } from "./companyMemory.js";
 import type { ConversationRuntime } from "./conversations.js";
 import { makeMemoryTools } from "./memoryTools.js";
 import { createCompanyMemoryMcpServer } from "./mcpCompanyMemory.js";
+import { HUMAN_WRITING_STYLE } from "./promptStyle.js";
 import { unavailableWebSearchAdapter, type WebSearchAdapter } from "./webSearch.js";
 
 const SYSTEM_PROMPT = `# 角色
@@ -82,20 +83,7 @@ web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，�
 
 没有来源、样本或可复核计算时，不给竞争重叠率、成功概率和置信度写精确百分比；可以使用定性等级，并说明判断依据。
 
-# 表达禁令
-
-覆盖对话和产出。禁的是修辞动作，不是字面：换一套字做同一个动作仍算命中。原话命中时改成转述或省略，不能靠引号保留。
-
-1. 翻案腔。先立一个读者并没有的误解再推翻它抬价。外衣包括"不是……而是……""并非……而是……""不在于……而在于……""与其说……不如说……""表面/看似……实际/实则……""你以为……其实……""说到底""答案恰恰相反""A不重要，重要的是B"及一切变形。判断从正面直接下。
-2. 三项以上同构排比。两项为限，第三项换说法或删掉。
-3. 给抽象名词配具体动词抒情（"时间不会保管细节"）。写具体事物时不受影响。
-4. 动词名词化。"完成了对流程的优化"写成"把流程改顺了"，"实现了效率的提升"写成"快了多少、省了几个人"。
-5. 破折号 —、——、–。
-6. 提示性冒号（"核心是："）。冒号只用于引出直接原话；网址、代码、机器字段除外。
-7. "说白了""说穿了""先说结论"。
-8. 洞察路标："更微妙的是""还有一层""只说对了一半""值得注意的是""需要指出的是""从某种意义上说"。说本义时不受影响。
-9. 商业与模型黑话（赋能、抱团、闭环、拉齐、彻底重塑、重新定义等）。
-10. 非虚构中用借喻包装抽象概念（仓库、抽屉、温度、死亡、坍塌、浪潮、钥匙、底座等）。真写这些东西时不受影响。`;
+${HUMAN_WRITING_STYLE}`;
 
 const resourceLoader: ResourceLoader = {
   getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
