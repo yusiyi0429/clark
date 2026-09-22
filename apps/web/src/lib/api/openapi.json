@@ -1402,6 +1402,47 @@
         }
       }
     },
+    "/api/config/battlefields/{id}": {
+      "delete": {
+        "operationId": "deleteBattlefield",
+        "summary": "CEO 删除战场：关联议题移出并归一化，同步删除指向它的 ontology anchor",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已删除"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/config/battlefields/{id}/issues": {
       "post": {
         "operationId": "assignBattlefieldIssue",

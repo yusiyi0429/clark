@@ -472,6 +472,18 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/config/battlefields/{id}": {
+        delete: {
+          operationId: "deleteBattlefield",
+          summary: "CEO 删除战场：关联议题移出并归一化，同步删除指向它的 ontology anchor",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "204": { description: "已删除" },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
       "/api/config/battlefields/{id}/issues": {
         post: {
           operationId: "assignBattlefieldIssue",

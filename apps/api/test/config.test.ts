@@ -300,5 +300,49 @@ describe("CEO 配置页 create 路由", () => {
     }
   });
 
+  it("deletes a battlefield, detaching Issues and dropping its ontology anchors", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      for (const name of ["渠道战场", "供应战场"]) {
+        const created = await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name, owner: "张三", goal: "目标" } });
+        expect(created.statusCode).toBe(201);
+      }
+      // company[A,B]：两个战场都指向同一议题
+      const shared = await t.createIssue();
+      for (const id of ["growth", "渠道战场"]) {
+        const res = await t.app.inject({ method: "POST", url: `/api/config/battlefields/${id}/issues`, headers, payload: { issueId: shared.objectRef.id } });
+        expect(res.statusCode).toBe(200);
+      }
+      // battlefield:A：单独归属另一个议题
+      const solo = await t.createIssue();
+      await t.app.inject({ method: "POST", url: "/api/config/battlefields/growth/issues", headers, payload: { issueId: solo.objectRef.id } });
+      await t.sql("UPDATE radar_config SET anchors = $1::jsonb WHERE id = 'default'", [JSON.stringify([
+        { id: "ontology:growth", title: "增长战场", query: "增长", location: { type: "battlefield", id: "growth" }, source: "ontology", originRef: "monthly-plan:2026-09" },
+        { id: "manual:keep", title: "手工", query: "手工", location: { type: "battlefield", id: "growth" }, source: "manual" },
+        { id: "ontology:company", title: "公司目标", query: "公司", location: { type: "company" }, source: "ontology", originRef: "monthly-plan:2026-09" },
+      ])]);
+
+      const deleted = await t.app.inject({ method: "DELETE", url: "/api/config/battlefields/growth", headers });
+      expect(deleted.statusCode).toBe(204);
+      expect(await t.sql("SELECT id FROM battlefield_config WHERE id = $1", ["growth"])).toEqual([]);
+
+      // company[A,B] 删 A → 自动降级回 battlefield:B；battlefield:A 删 A → 未归属
+      const rows = await t.sql("SELECT id, location FROM issues WHERE id = ANY($1::uuid[])", [[shared.objectRef.id, solo.objectRef.id]]);
+      const byId = new Map(rows.map((row) => [row.id as string, row.location]));
+      expect(byId.get(shared.objectRef.id)).toEqual({ level: "battlefield", battlefieldId: "渠道战场" });
+      expect(byId.get(solo.objectRef.id)).toEqual({ level: "company", relatedBattlefieldIds: [] });
+
+      // anchors：只删指向该战场的 ontology anchor，manual 与公司级 ontology 保留
+      const anchors = (await t.sql("SELECT anchors FROM radar_config WHERE id = 'default'"))[0].anchors as { id: string }[];
+      expect(anchors.map((anchor) => anchor.id).sort()).toEqual(["manual:keep", "ontology:company"]);
+
+      const missing = await t.app.inject({ method: "DELETE", url: "/api/config/battlefields/growth", headers });
+      expect(missing.statusCode).toBe(404);
+    } finally {
+      await t.close();
+    }
+  });
+
   // Receipt schema 仍然只由 Meeting Outcome 写入；配置页不产生 Receipt。
 });

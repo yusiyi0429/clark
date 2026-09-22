@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { QueryResult } from "pg";
+import type { Pool, QueryResult } from "pg";
 import type {
   TCard,
   TBattlefieldCardPayload,
@@ -9,6 +9,7 @@ import type {
   TMonthlyPlanExport,
   TMonthlyPlanFeedback,
   TMonthlyPlanTodo,
+  TRadarAnchor,
 } from "@warmap/contracts";
 import { slugId } from "./slug.js";
 
@@ -37,8 +38,7 @@ export async function listBattlefieldRows(q: Query): Promise<BattlefieldRow[]> {
   return result.rows as BattlefieldRow[];
 }
 
-/** BattlefieldConfig 是 battlefieldId 的确定性校验来源。 */
-export async function getRegisteredBattlefieldIds(q: Query): Promise<Set<string>> {
+/** 已注册的战场 id 集合；BattlefieldConfig 是 battlefieldId 的确定性校验来源。 */export async function getRegisteredBattlefieldIds(q: Query): Promise<Set<string>> {
   const result = await q("SELECT id FROM battlefield_config");
   return new Set(result.rows.map((row) => (row as { id: string }).id));
 }
@@ -63,6 +63,58 @@ export function normalizeBattlefieldSet(ids: string[]): TIssueLocation {
   if (unique.length === 0) return { level: "company", relatedBattlefieldIds: [] };
   if (unique.length === 1) return { level: "battlefield", battlefieldId: unique[0] };
   return { level: "company", relatedBattlefieldIds: unique };
+}
+
+export type DeleteBattlefieldResult =
+  | { ok: true; detachedIssues: number }
+  | { ok: false; status: 404; code: "BATTLEFIELD_NOT_FOUND"; message: string };
+
+/**
+ * 删除战场：单事务内把所有受影响议题移出该战场并归一化，再删注册行。
+ * radar_config.anchors 只删指向该战场的 ontology anchor（不重建，与月度计划签发时的重建逻辑对称）；
+ * 月度计划是自包含 JSONB 快照，不回改。
+ */
+export async function deleteBattlefield(pool: Pool, id: string): Promise<DeleteBattlefieldResult> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query("SELECT id FROM battlefield_config WHERE id = $1 FOR UPDATE", [id]);
+    if (locked.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return { ok: false, status: 404, code: "BATTLEFIELD_NOT_FOUND", message: "战场不存在" };
+    }
+    // 受影响议题：battlefield 级正好是该战场，或 company 集合包含该战场（capability 级主归属是能力，不参与）
+    const affected = await client.query<{ id: string; location: TIssueLocation }>(
+      `SELECT id, location FROM issues
+        WHERE (location->>'level' = 'battlefield' AND location->>'battlefieldId' = $1)
+           OR (location->>'level' = 'company' AND location->'relatedBattlefieldIds' @> $2::jsonb)
+        FOR UPDATE`,
+      [id, JSON.stringify([id])],
+    );
+    for (const row of affected.rows) {
+      const remaining = (battlefieldSetOf(row.location) ?? []).filter((candidate) => candidate !== id);
+      await client.query(
+        "UPDATE issues SET location = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1",
+        [row.id, JSON.stringify(normalizeBattlefieldSet(remaining))],
+      );
+    }
+    await client.query("DELETE FROM battlefield_config WHERE id = $1", [id]);
+    const config = await client.query<{ anchors: TRadarAnchor[] }>("SELECT anchors FROM radar_config WHERE id = 'default' FOR UPDATE");
+    if (config.rowCount === 1) {
+      const anchors = config.rows[0].anchors ?? [];
+      const kept = anchors.filter((anchor) => !(anchor.source === "ontology" && anchor.location.type === "battlefield" && anchor.location.id === id));
+      if (kept.length !== anchors.length) {
+        await client.query("UPDATE radar_config SET anchors = $1::jsonb, version = version + 1, updated_at = now() WHERE id = 'default'", [JSON.stringify(kept)]);
+      }
+    }
+    await client.query("COMMIT");
+    return { ok: true, detachedIssues: affected.rows.length };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export type RegisterBattlefieldResult =

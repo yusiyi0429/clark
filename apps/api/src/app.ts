@@ -122,7 +122,7 @@ import {
   mutateMonthlyExport,
   projectMonthlyPlanCard,
 } from "./monthlyPlans.js";
-import { listBattlefieldCards, registerBattlefield } from "./battlefields.js";
+import { deleteBattlefield, listBattlefieldCards, registerBattlefield } from "./battlefields.js";
 import { listCapabilityCards, registerCapability } from "./capabilities.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
 import { recoverInterruptedOutcome, type PostMeetingAgent } from "./outcome.js";
@@ -497,6 +497,16 @@ export async function buildApp({
   );
 
   const idParams = Type.Object({ id: Type.String({ minLength: 1 }) }, { additionalProperties: false });
+
+  app.delete(
+    "/api/config/battlefields/:id",
+    { preHandler: requireCEO, schema: { params: idParams } },
+    async (req, reply): Promise<FastifyReply> => {
+      const result = await deleteBattlefield(pool, req.params.id);
+      if (!result.ok) return fail(reply, result.status, result.code, result.message);
+      return reply.code(204).send();
+    },
+  );
 
   // CEO 配置页的议题↔战场关联集合：确定性配置语义，不走 opaque-action。
   app.post(
