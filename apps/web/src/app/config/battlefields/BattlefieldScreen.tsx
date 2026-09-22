@@ -235,7 +235,7 @@ export function BattlefieldScreen({ battlefields, issues, people }: TBattlefield
                   <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
                 </label>
                 <label className={b.field}>
-                  <span>负责人（可待指派）</span>
+                  <span>负责人</span>
                   <select value={draft.ownerId} onChange={(event) => setDraft({ ...draft, ownerId: event.target.value })}>
                     <option value="">待指派</option>
                     {people.map((person) => (

@@ -38,7 +38,7 @@ describe("配置页渲染", () => {
   it("战场/能力表单按设计收编号、顺序、六个月目标", () => {
     expect(html).toContain("显示编号 / 顺序");
     expect(html).toContain("六个月目标");
-    expect(html).toContain("负责人（可待指派）");
+    expect(html).toContain("负责人");
     expect(html).toContain("所属分组（可选）");
     expect(html).toContain("长期目标更新后，下一次月度草案使用新版本");
     expect(html).toContain("春节前完成核心业务第一次被真实证明");

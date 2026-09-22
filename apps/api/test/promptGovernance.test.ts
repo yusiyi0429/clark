@@ -39,6 +39,10 @@ describe("shared rules reach the prompts", () => {
     expect(RADAR_PROMPT).toContain(`decisionQuestion 写成不超过 ${DECISION_QUESTION_MAX_LENGTH} 个汉字`);
   });
 
+  it("monthly draft prompt carries the long-term strategy constraint", () => {
+    expect(MONTHLY_DRAFT_PROMPT).toContain("不得把长期表述原样复制成当月结果");
+  });
+
   it("every candidate prompt carries the shared style block", () => {
     for (const prompt of [PREFLIGHT_PROMPT, RADAR_PROMPT, RESEARCH_PROMPT, POST_MEETING_PROMPT, MONTHLY_DRAFT_PROMPT]) {
       expect(prompt).toContain(HUMAN_WRITING_STYLE);

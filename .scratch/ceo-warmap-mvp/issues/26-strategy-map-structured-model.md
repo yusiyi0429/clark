@@ -133,4 +133,18 @@ Blocked by: none
 
 **关系图**：`docs/diagrams/CEOwarmap_业务对象关系.architecture.json` 的 `supportMissionCodes[]` 改为 `supportRefs[]`；Archify `validate --quality showcase` 9/9 通过（composition 0 error/0 warning），`deliver` 产物 sha256 `297ff9b3…e652a6`，`visual-check` 在 1440x900/1600x1000/1920x1080/2048x1320 明暗两套下 status pass、containment pass、无溢出；`rg supportMissionCodes docs/diagrams/` 已无残留。README 架构图列表已加入该 HTML。
 
-**未做/限制**：`growth` 删除只清结构，历史 MonthlyPlan JSONB 快照不重写（按 `deleteBattlefield` 既有语义）；2026-09 计划的 `company_outcome` 仍是占位文本（无已确认公司结果材料，未编造）；`outletSources.test.ts` 2 项既有波动未修（超出本 ticket 范围）；未 push。
+**未做/限制**：`growth` 删除只清结构，历史 MonthlyPlan JSONB 快照不重写（按 `deleteBattlefield` 既有语义）；2026-09 计划的 `company_outcome` 仍是占位文本（无已确认公司结果材料，未编造）；未 push。
+
+### W6 收尾修复（2026-09-22，方案 A + T1）
+
+W5 复核后确认 4 个遗留缺陷，按用户选定的方案 A（追根因、最小改动）修复：
+
+1. **A1 长期约束没有真正进 Agent**：`MonthlyDraftAgentInput` 补 `ltco` 与按 `sort_order, code, id` 的 `battlefields[]`（`battlefieldId/code/name/sixMonthOutcome/missions`），`buildInput` 从 `company_strategy_config` 与 `battlefield_config` 现查；prompt 增加一句明确它们是长期约束、不得原样复制成当月结果。根因是此前只有 `capabilities` 进了 input，长期目标从未到达模型（`runCandidateAgent` 只把 `input` 序列化进会话）。
+2. **A2 删战场留下悬空 supportRefs**：`deleteBattlefield` 在同一事务内、删除注册行之前清掉 `capability_config.support_refs` 中 `{type:"battlefield",battlefieldId:<id>}` 与 `{type:"mission",missionCode:<该战场 missions>}` 的 ref，只有真正被改的能力 `version + 1`；返回值与对外行为不变，历史 MonthlyPlan 快照不回写。
+3. **A3 保存计划会清掉无关核对**：`MonthlyPlanCard` 新增 `monthlyDraftPatch(payload, draft)`，保存只提交真正改动的 `companyOutcome/battlefields/capabilities/todos/note`（无改动则补丁为空、按钮禁用、不发请求），`checkedItemIds` 仍只由 checkbox Action 提交。服务端按「请求里出现了哪些字段」取消该字段的核对，原先的全量提交会把已核对的公司/战场项一并清空。
+4. **T1 测试时间窗随真实日历漂移**：`createOutletFeedAdapter` 增加 `now?: () => number`（默认真实 `Date.now`，生产行为不变），测试注入 `FIXED_NOW = 2026-09-21T12:00:00Z` 与 fixture 时间对齐；不再靠放大 lookback 掩盖。
+5. 顺带移除负责人 Select 重复的「待指派」：编辑弹层与配置页表单的标签由「负责人（可待指派）」改为「负责人」，下拉里的「待指派」选项保留。
+
+**验证**：typecheck ×3 通过；contracts 32；web 21 文件 / 126；API 27 文件 / **331 全过**（含此前 2 项 `outletSources.test.ts` 时间窗波动，现已消除）。staging 重建 api+web 后 `healthz` 200，`/api/config/battlefields` 3、`/api/config/capabilities` 7、`/api/cards/home` 14（3 战场 + 7 能力）、2026-09 计划 confirmed v6 且已核对 11 项，均未改动 staging 业务内容。浏览器复验：战场编辑弹层标签为「负责人」+ 单个「待指派」选项（OCR 截图核对），月度计划页 11 个核对项全部勾选且只读，首页 1440 宽 3 列无溢出。
+
+**限制**：`monthlyDraftPatch` 的「只提交改动字段」由单元测试覆盖（web 侧无 DOM 测试环境，不引入新依赖）；已签发的 2026-09 计划在浏览器里无法验证保存按钮的启用态（该计划是只读终态，服务端不下发编辑 Action）；未 push。

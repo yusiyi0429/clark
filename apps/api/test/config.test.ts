@@ -396,6 +396,50 @@ describe("CEO 配置页 create 路由", () => {
     }
   });
 
+  it("deletes a battlefield, pruning capability supportRefs to it and its Missions", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields",
+        headers,
+        payload: battlefieldBody("灯塔项目", "01", { missions: [{ code: "01-1", title: "未来组织范式设计与确认" }] }),
+      });
+      // 引用该战场与它的 Mission
+      await t.app.inject({
+        method: "POST",
+        url: "/api/config/capabilities",
+        headers,
+        payload: capabilityBody("Method", "03", {
+          supportRefs: [{ type: "mission", missionCode: "01-1" }, { type: "battlefield", battlefieldId: "灯塔项目" }, { type: "all-battlefields" }],
+        }),
+      });
+      // 只引用别的战场：不受影响，version 不动
+      await t.app.inject({
+        method: "POST",
+        url: "/api/config/capabilities",
+        headers,
+        payload: capabilityBody("Agents", "04", { supportRefs: [{ type: "battlefield", battlefieldId: "growth" }] }),
+      });
+      expect(await t.sql("SELECT code, version FROM capability_config ORDER BY code")).toEqual([
+        { code: "03", version: 1 },
+        { code: "04", version: 1 },
+      ]);
+
+      const deleted = await t.app.inject({ method: "DELETE", url: "/api/config/battlefields/灯塔项目", headers });
+      expect(deleted.statusCode).toBe(204);
+
+      // 指向被删战场与它 Mission 的 ref 被清掉，其余 ref 保留；只有受影响能力 version+1
+      expect(await t.sql("SELECT code, version, support_refs FROM capability_config ORDER BY code")).toEqual([
+        { code: "03", version: 2, support_refs: [{ type: "all-battlefields" }] },
+        { code: "04", version: 1, support_refs: [{ type: "battlefield", battlefieldId: "growth" }] },
+      ]);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("projects the battlefield management page from one endpoint", async () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {

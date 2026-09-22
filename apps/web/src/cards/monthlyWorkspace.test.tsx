@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
-import { MonthlyPlanCard } from "./MonthlyPlanCard";
+import type { MonthlyPlanPayload } from "./payloads";
+import { MonthlyPlanCard, monthlyDraftPatch, type MonthlyDraftState } from "./MonthlyPlanCard";
 
 // useCardAction 需要 Next 路由上下文；这里只渲染静态标记。
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
@@ -104,5 +105,54 @@ describe("月度计划 · 正文两列", () => {
     expect(html).toContain("九月跑通第一个客户交付");
     expect(html).toContain("已核对 Re-architecture 能力 PCO");
     expect(html).toContain("能力结果");
+  });
+});
+
+describe("月度计划 · 保存只提交真正改动的字段", () => {
+  function planPayload(): MonthlyPlanPayload {
+    return planCard({
+      status: "negotiating",
+      confirmedAt: null,
+      companyOutcome: "守住毛利",
+      battlefields: [{ battlefieldId: "growth", outcome: "跑通首单" }],
+      capabilities: [{ capabilityId: "Re-architecture", outcome: "第一个客户交付" }],
+      todos: [{ id: "t1", title: "复核合同", ownerId: "p1", sourceRef: "issue:9" }],
+      negotiation: {
+        edits: [],
+        checkedItemIds: ["company", "battlefield:growth", "capability:Re-architecture", "todo:t1"],
+        note: "九月不再开新战场",
+        feedback: [],
+      },
+    }).payload as MonthlyPlanPayload;
+  }
+
+  function draftOf(payload: MonthlyPlanPayload): MonthlyDraftState {
+    return {
+      companyOutcome: payload.companyOutcome,
+      battlefields: payload.battlefields,
+      capabilities: payload.capabilities,
+      todos: payload.todos,
+      note: payload.negotiation.note,
+    };
+  }
+
+  it("内容未改动时补丁为空：已核对的四项不会被无关保存清空", () => {
+    const payload = planPayload();
+    expect(monthlyDraftPatch(payload, draftOf(payload))).toEqual({});
+  });
+
+  it("只改一个能力 PCO 时只提交 capabilities，核对项仍由 checkbox Action 单独提交", () => {
+    const payload = planPayload();
+    const patch = monthlyDraftPatch(payload, {
+      ...draftOf(payload),
+      capabilities: [{ capabilityId: "Re-architecture", outcome: "改成第二个客户交付" }],
+    });
+    expect(Object.keys(patch)).toEqual(["capabilities"]);
+    expect(patch).not.toHaveProperty("checkedItemIds");
+  });
+
+  it("备注改动也只提交 note", () => {
+    const payload = planPayload();
+    expect(Object.keys(monthlyDraftPatch(payload, { ...draftOf(payload), note: "新增一句" }))).toEqual(["note"]);
   });
 });

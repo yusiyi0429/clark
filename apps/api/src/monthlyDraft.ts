@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, QueryResult } from "pg";
 import { Value } from "@sinclair/typebox/value";
-import { MonthlyDraftCandidate, type TMonthlyDraftCandidate, type TMonthlyPlanFeedback, type TMonthlyPlanTodo } from "@warmap/contracts";
+import {
+  MonthlyDraftCandidate,
+  type TMissionValue,
+  type TMonthlyDraftCandidate,
+  type TMonthlyPlanFeedback,
+  type TMonthlyPlanTodo,
+} from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import { getRegisteredBattlefieldIds, findUnregisteredBattlefieldId } from "./battlefields.js";
 import { getRegisteredCapabilityIds, findUnregisteredCapabilityId } from "./capabilities.js";
@@ -27,6 +33,10 @@ export type MonthlyDraftAgentInput = {
   driFeedback: TMonthlyPlanFeedback[];
   /** 已登记能力：Agent 只能引用这些 capabilityId，六个月目标只作为背景，不复制到当月 PCO。 */
   capabilities: { capabilityId: string; name: string; sixMonthOutcome: string }[];
+  /** Company LTCO：长期目标，是本月公司结果的长期约束，不作为当月结果原样复制。 */
+  ltco: string;
+  /** 按 sortOrder 的战场长期配置（含 Mission）：本月战场结果的长期约束，不作为当月结果原样复制。 */
+  battlefields: { battlefieldId: string; code: string; name: string; sixMonthOutcome: string; missions: TMissionValue[] }[];
   companyMemory: { sectionId: string; title: string; sourceRef: string; passages: { id: string; text: string; sourceRef: string }[] }[];
 };
 
@@ -149,6 +159,19 @@ export function createMonthlyPlanService({
         (row) => {
           const capability = row as { id: string; name: string; six_month_outcome: string };
           return { capabilityId: capability.id, name: capability.name, sixMonthOutcome: capability.six_month_outcome };
+        },
+      ),
+      ltco: ((await q("SELECT ltco FROM company_strategy_config WHERE id = 'default'")).rows[0]?.ltco as string | undefined) ?? "",
+      battlefields: (await q("SELECT id, code, name, six_month_outcome, missions FROM battlefield_config ORDER BY sort_order, code, id")).rows.map(
+        (row) => {
+          const battlefield = row as { id: string; code: string; name: string; six_month_outcome: string; missions: TMissionValue[] };
+          return {
+            battlefieldId: battlefield.id,
+            code: battlefield.code,
+            name: battlefield.name,
+            sixMonthOutcome: battlefield.six_month_outcome,
+            missions: battlefield.missions ?? [],
+          };
         },
       ),
       companyMemory: memory.slice(0, 6),

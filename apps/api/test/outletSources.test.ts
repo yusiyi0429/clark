@@ -33,10 +33,13 @@ const NEWS_SITEMAP = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns:news="
 </urlset>`;
 
 const WINDOW_HOURS = 168;
+// fixture 的时间是固定的绝对时间；把 adapter 时钟钉在同一天，否则时间窗会随真实日历漂移出窗口。
+const FIXED_NOW = Date.parse("2026-09-21T12:00:00Z");
 
 function adapter(rss = RSS, sitemap = NEWS_SITEMAP, limit?: number) {
   return createOutletFeedAdapter({
     ...(limit === undefined ? {} : { limit }),
+    now: () => FIXED_NOW,
     fetch: (async (url: string | URL | globalThis.Request) => {
       const target = String(url);
       const body = target.includes("ft.com") ? rss : target.includes("reuters.com") ? sitemap : "";
@@ -153,6 +156,7 @@ describe("发布方级来源 outlets", () => {
     const badArticle = `<html><body><div>无正文容器</div></body></html>`;
     let articleFetches = 0;
     const runtime = createOutletFeedAdapter({
+      now: () => FIXED_NOW,
       fetch: (async (url: string | URL | globalThis.Request) => {
         const target = String(url);
         articleFetches += 1;
@@ -173,6 +177,7 @@ describe("发布方级来源 outlets", () => {
     const qbitai = RADAR_OUTLETS.find((outlet) => outlet.outletId === "qbitai")!;
     const runtimeOk = createOutletFeedAdapter({
       outlets: [{ ...qbitai, channels: [{ kind: "rss", url: "https://www.qbitai.com/feed" }] }],
+      now: () => FIXED_NOW,
       fetch: (async (url: string | URL | globalThis.Request) => {
         const target = String(url);
         const body = target.endsWith("/feed")
@@ -217,6 +222,7 @@ describe("真实渠道快照", () => {
     const runtime = createOutletFeedAdapter({
       outlets: RADAR_OUTLETS.filter((outlet) => ["ft", "reuters"].includes(outlet.outletId)),
       limit: 20,
+      now: () => FIXED_NOW,
       fetch: (async (url: string | URL | globalThis.Request) => {
         const target = String(url);
         const body = target.includes("ft.com") ? rss : target.includes("reuters.com") ? sitemap : "";

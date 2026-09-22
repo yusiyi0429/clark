@@ -5,6 +5,7 @@ import type {
   TBattlefieldCardPayload,
   TBattlefieldManagementResponse,
   TBattlefieldTodo,
+  TCapabilitySupportRef,
   TIssueLocation,
   TMissionValue,
   TMonthlyPlanBattlefield,
@@ -78,7 +79,7 @@ export type DeleteBattlefieldResult =
   | { ok: false; status: 404; code: "BATTLEFIELD_NOT_FOUND"; message: string };
 
 /**
- * 删除战场：单事务内把所有受影响议题移出该战场并归一化，再删注册行。
+ * 删除战场：单事务内把所有受影响议题移出该战场并归一化，清掉能力里指向该战场及其 Mission 的 supportRefs，再删注册行。
  * radar_config.anchors 只删指向该战场的 ontology anchor（不重建，与月度计划签发时的重建逻辑对称）；
  * 月度计划是自包含 JSONB 快照，不回改。
  */
@@ -86,7 +87,10 @@ export async function deleteBattlefield(pool: Pool, id: string): Promise<DeleteB
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const locked = await client.query("SELECT id FROM battlefield_config WHERE id = $1 FOR UPDATE", [id]);
+    const locked = await client.query<{ id: string; missions: TMissionValue[] }>(
+      "SELECT id, missions FROM battlefield_config WHERE id = $1 FOR UPDATE",
+      [id],
+    );
     if (locked.rowCount !== 1) {
       await client.query("ROLLBACK");
       return { ok: false, status: 404, code: "BATTLEFIELD_NOT_FOUND", message: "战场不存在" };
@@ -105,6 +109,24 @@ export async function deleteBattlefield(pool: Pool, id: string): Promise<DeleteB
         "UPDATE issues SET location = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1",
         [row.id, JSON.stringify(normalizeBattlefieldSet(remaining))],
       );
+    }
+    // 能力 supportRefs 只能指向已登记战场与 Mission：同一事务内清掉指向该战场及其 Mission code 的 ref，只有真正被改的能力 version+1
+    const missionCodes = new Set((locked.rows[0].missions ?? []).map((mission) => mission.code));
+    const capabilities = await client.query<{ id: string; support_refs: TCapabilitySupportRef[] }>(
+      "SELECT id, support_refs FROM capability_config FOR UPDATE",
+    );
+    for (const row of capabilities.rows) {
+      const refs = row.support_refs ?? [];
+      const kept = refs.filter(
+        (ref) =>
+          !(ref.type === "battlefield" && ref.battlefieldId === id) && !(ref.type === "mission" && missionCodes.has(ref.missionCode)),
+      );
+      if (kept.length !== refs.length) {
+        await client.query(
+          "UPDATE capability_config SET support_refs = $2::jsonb, version = version + 1 WHERE id = $1",
+          [row.id, JSON.stringify(kept)],
+        );
+      }
     }
     await client.query("DELETE FROM battlefield_config WHERE id = $1", [id]);
     const config = await client.query<{ anchors: TRadarAnchor[] }>("SELECT anchors FROM radar_config WHERE id = 'default' FOR UPDATE");

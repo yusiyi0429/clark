@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import type { CardRenderProps } from "./registry";
+import type { TUpdateMonthlyPlanDraftRequest } from "@warmap/contracts";
 import { payloadOf, type MonthlyPlanPayload } from "./payloads";
 import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
 import s from "@/styles/monthly-workspace.module.css";
@@ -21,6 +22,28 @@ const EXPORT_LABEL: Record<string, string> = {
 };
 
 type TodoDraft = { id?: string; battlefieldId?: string; title: string; ownerId: string; dueAt?: string; sourceRef: string };
+
+export type MonthlyDraftState = {
+  companyOutcome: string;
+  battlefields: NonNullable<TUpdateMonthlyPlanDraftRequest["battlefields"]>;
+  capabilities: NonNullable<TUpdateMonthlyPlanDraftRequest["capabilities"]>;
+  todos: TodoDraft[];
+  note: string;
+};
+
+/**
+ * 只提交真正改动的字段：服务端按「请求里出现了哪些字段」取消该字段的核对，
+ * 全量提交会让无关编辑把已核对的项一起清空。核对项由独立 checkbox Action 提交，不在这里。
+ */
+export function monthlyDraftPatch(payload: MonthlyPlanPayload, draft: MonthlyDraftState): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  if (draft.companyOutcome !== payload.companyOutcome) patch.companyOutcome = draft.companyOutcome;
+  if (JSON.stringify(draft.battlefields) !== JSON.stringify(payload.battlefields)) patch.battlefields = draft.battlefields;
+  if (JSON.stringify(draft.capabilities) !== JSON.stringify(payload.capabilities)) patch.capabilities = draft.capabilities;
+  if (JSON.stringify(draft.todos) !== JSON.stringify(payload.todos)) patch.todos = draft.todos;
+  if (draft.note !== payload.negotiation.note) patch.note = draft.note;
+  return patch;
+}
 
 /** MonthlyPlan：CEO 编辑公司/战场结果与普通待办，签发后生效；不跟踪待办执行状态。 */
 export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
@@ -52,6 +75,8 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
   const actions = card.actions;
   const actionOf = (type: string) => actions.find((action) => action.actionType === type);
   const locked = payload.status === "confirmed" || payload.generation.status === "pending" || payload.generation.status === "running";
+  const patch = monthlyDraftPatch(payload, { companyOutcome, battlefields, capabilities, todos, note });
+  const dirty = Object.keys(patch).length > 0;
 
   /**
    * 核对项必须有稳定 id：company、battlefield:<id>、capability:<id>、todo:<id>；签发前要求全部核对。
@@ -240,8 +265,8 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
             <button
               type="button"
               className={s.save}
-              disabled={pending || locked}
-              onClick={() => void run(actionOf("monthly-plan.update_draft")!, { companyOutcome, battlefields, capabilities, todos, checkedItemIds: checked, note })}
+              disabled={pending || locked || !dirty}
+              onClick={() => void run(actionOf("monthly-plan.update_draft")!, patch)}
             >
               {pending ? "保存中…" : "保存计划"}
             </button>

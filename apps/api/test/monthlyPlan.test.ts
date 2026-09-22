@@ -222,6 +222,44 @@ describe("MonthlyDraft Agent", () => {
       await t.close();
     }
   });
+
+  it("把 Company LTCO 与按 sortOrder 的战场长期目标/Mission 注入 Draft Agent input", async () => {
+    const agent = fakeAgent();
+    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    try {
+      await t.sql("UPDATE company_strategy_config SET ltco = $1 WHERE id = 'default'", ["用 Agent 重做组织结构，让每块战场都有负责人。"]);
+      await t.sql("UPDATE battlefield_config SET code = '02', sort_order = 20, missions = $1::jsonb WHERE id = 'growth'", [
+        JSON.stringify([{ code: "02-1", title: "TokenHub 进入生产化使用" }]),
+      ]);
+      await t.sql(
+        `INSERT INTO battlefield_config (id, version, code, sort_order, name, six_month_outcome, missions)
+         VALUES ('north', 1, '01', 10, '北方战场', '北方战场六个月目标', $1::jsonb)`,
+        [JSON.stringify([{ code: "01-1", title: "未来组织范式设计与确认" }])],
+      );
+      await readyPlan(t);
+      const input = agent.calls[0];
+      expect(input.ltco).toBe("用 Agent 重做组织结构，让每块战场都有负责人。");
+      // 按 sortOrder 升序，Mission 一并进入 input（真实进入 Agent 而不是只写在 prompt 里）
+      expect(input.battlefields).toEqual([
+        {
+          battlefieldId: "north",
+          code: "01",
+          name: "北方战场",
+          sixMonthOutcome: "北方战场六个月目标",
+          missions: [{ code: "01-1", title: "未来组织范式设计与确认" }],
+        },
+        {
+          battlefieldId: "growth",
+          code: "02",
+          name: "增长战场",
+          sixMonthOutcome: "验证渠道结构与交付节奏，形成可复制的增长路径。",
+          missions: [{ code: "02-1", title: "TokenHub 进入生产化使用" }],
+        },
+      ]);
+    } finally {
+      await t.close();
+    }
+  });
 });
 
 describe("MonthlyPlan negotiation", () => {

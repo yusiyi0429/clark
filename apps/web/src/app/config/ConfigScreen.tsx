@@ -284,7 +284,7 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
             <Field label="战场名称">
               <input value={battlefield.name} placeholder="例如：东南亚交付战场" onChange={(e) => setBattlefield({ ...battlefield, name: e.target.value })} required />
             </Field>
-            <Field label="负责人（可待指派）">
+            <Field label="负责人">
               <Select value={battlefield.ownerId} onChange={(value) => setBattlefield({ ...battlefield, ownerId: value })} placeholder="待指派" required={false}>
                 <option value="">待指派</option>
                 {people.map((person) => (

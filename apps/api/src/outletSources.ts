@@ -119,16 +119,19 @@ export function createOutletFeedAdapter(options: {
   /** 单家单次扫描的条数上限；防止 economist 300 条把 assess 批次数顶穿。 */
   limit?: number;
   fetch?: typeof fetch;
+  /** 时间窗基准时钟；默认真实时钟，测试注入固定时间以对齐 fixture。 */
+  now?: () => number;
 }): RadarOutletAdapter {
   const catalog = options.outlets ?? RADAR_OUTLETS;
   // 3 × 7 家 = 21；Radar 再设全局 20 条硬上限，至多 4 个 assess batch。
   const limit = options.limit ?? 3;
   const fetchImpl = options.fetch ?? fetch;
+  const now = options.now ?? Date.now;
   return {
     configured: true,
     async fetchLatest({ outletIds, lookbackHours }, signal): Promise<TRadarSourceItem[]> {
       const wanted = catalog.filter((outlet) => outletIds.includes(outlet.outletId));
-      const earliest = Date.now() - lookbackHours * 60 * 60 * 1000;
+      const earliest = now() - lookbackHours * 60 * 60 * 1000;
       const items: TRadarSourceItem[] = [];
       for (const outlet of wanted) {
         const perOutlet = new Map<string, TRadarSourceItem>();
