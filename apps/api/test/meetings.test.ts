@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Pool } from "pg";
 import { Value } from "@sinclair/typebox/value";
@@ -880,6 +883,97 @@ describe("cancel a scheduled Meeting", () => {
       expect((await execute(t, cookie, cancelAction)).statusCode).toBe(200);
       expect((await execute(t, cookie, draftAction, { note: "x" })).statusCode).toBe(409);
       expect((await execute(t, cookie, supplementAction, { targetDriId: "person-fixture-002", text: "x" })).statusCode).toBe(409);
+    } finally {
+      await t.close();
+    }
+  });
+});
+
+describe("edit a scheduled Meeting", () => {
+  // 默认 fixture 只有一个 dri，换主持需要第二个合法 DRI；写一份临时人员目录，不动共享 fixture。
+  async function peopleSeedDir(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "warmap-people-"));
+    await writeFile(
+      join(dir, "company-people.json"),
+      JSON.stringify({
+        schemaVersion: "company-people.v1",
+        people: [
+          { personId: "person-fixture-001", displayName: "测试甲", roles: ["ceo"] },
+          { personId: "person-fixture-002", displayName: "测试乙", roles: ["dri", "participant"] },
+          { personId: "person-fixture-003", displayName: "测试丙", roles: ["dri", "participant"] },
+        ],
+      }),
+    );
+    return dir;
+  }
+
+  async function setup(t: TestApp) {
+    const { cookie, meetingId, card } = await readyMeeting(t, `dri-edit-${randomUUID().slice(0, 8)}`);
+    const descriptor = card.actions.find((a: { actionType: string }) => a.actionType === "meeting.edit_details");
+    expect(descriptor, "scheduled Meeting 应提供 meeting.edit_details").toBeTruthy();
+    return { cookie, meetingId, version: card.objectRef.version as number, editAction: (descriptor as { actionId: string }).actionId };
+  }
+
+  it("edits title, time and lead DRI in place: id stable, version+1, participants follow the new lead", async () => {
+    const seedDir = await peopleSeedDir();
+    const t = await createTestApp({ companyPeopleSeed: join(seedDir, "company-people.json") }, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { cookie, meetingId, version, editAction } = await setup(t);
+      const input = { title: "渠道投入决策会（改）", scheduledAt: "2026-07-02T09:30:00.000+08:00", leadDriId: "person-fixture-003" };
+
+      const edited = await execute(t, cookie, editAction, input);
+      expect(edited.statusCode).toBe(200);
+      const card = edited.json().cards[0];
+      expect(card.objectRef).toMatchObject({ id: meetingId, version: version + 1 });
+      expect(card.title).toBe("渠道投入决策会（改）");
+      expect(card.payload.leadDriId).toBe("person-fixture-003");
+      expect(new Date(card.payload.scheduledAt).toISOString()).toBe("2026-07-02T01:30:00.000Z");
+      // 原主持仍保留为参会人，新主持排在 ceo 之后
+      expect(card.payload.participants.map((p: { personId: string }) => p.personId)).toEqual(["person-fixture-001", "person-fixture-003", "person-fixture-002"]);
+
+      const row = (await t.sql("SELECT title, lead_dri_id, participants, version FROM meetings WHERE id = $1", [meetingId]))[0];
+      expect(row).toMatchObject({ title: "渠道投入决策会（改）", lead_dri_id: "person-fixture-003", version: version + 1 });
+      expect((row.participants as { personId: string }[]).map((p) => p.personId)).toEqual(["person-fixture-001", "person-fixture-003", "person-fixture-002"]);
+
+      // 同一 actionId 重放：幂等，不再 version+1
+      const replay = await execute(t, cookie, editAction, input);
+      expect(replay.statusCode).toBe(200);
+      expect(replay.json().cards[0].objectRef.version).toBe(version + 1);
+    } finally {
+      await t.close();
+      await rm(seedDir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to edit a non-scheduled Meeting and keeps it unchanged", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { cookie, meetingId, editAction } = await setup(t);
+      await t.sql("UPDATE meetings SET status = 'held' WHERE id = $1", [meetingId]);
+      const res = await execute(t, cookie, editAction, { title: "不该生效" });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().code).toBe("MEETING_NOT_SCHEDULED");
+      expect((await t.sql("SELECT title FROM meetings WHERE id = $1", [meetingId]))[0].title).toBe("渠道投入决策会");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("rejects an illegal lead DRI, an unparsable time and an empty body", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { cookie, editAction } = await setup(t);
+      const notDri = await execute(t, cookie, editAction, { leadDriId: "person-fixture-001" });
+      expect(notDri.statusCode).toBe(400);
+      expect(notDri.json().code).toBe("INVALID_LEAD_DRI");
+
+      const badTime = await execute(t, cookie, editAction, { scheduledAt: "不是时间" });
+      expect(badTime.statusCode).toBe(400);
+      expect(badTime.json().code).toBe("INVALID_INPUT");
+
+      const empty = await execute(t, cookie, editAction, {});
+      expect(empty.statusCode).toBe(400);
+      expect(empty.json().code).toBe("INVALID_INPUT");
     } finally {
       await t.close();
     }

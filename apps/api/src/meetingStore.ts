@@ -109,6 +109,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
     if (row.preflight.status === "ready") actions.push(action("meeting.edit_materials", "返回编辑材料"));
     if (row.preflight.status === "pending") actions.push(action("meeting.run_preflight", "运行预审"));
     actions.push(
+      action("meeting.edit_details", "编辑会议"),
       action("meeting.update_draft", "保存准备状态"),
       action("meeting.request_supplement", "请求补充材料"),
       action("meeting.cancel", "取消会议"),

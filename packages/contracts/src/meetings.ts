@@ -273,6 +273,16 @@ export const UpdateMeetingDraftRequest = Type.Object(
   { additionalProperties: false },
 );
 
+/** Meeting Action：编辑会议基本字段（至少一项）；仅 scheduled 可执行，换 lead 时同步 participants。 */
+export const EditMeetingDetailsRequest = Type.Object(
+  {
+    title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+    scheduledAt: Type.Optional(IsoDateTime),
+    leadDriId: Type.Optional(PersonId),
+  },
+  { additionalProperties: false, minProperties: 1 },
+);
+
 export const RequestSupplementRequest = Type.Object(
   {
     entryId: Type.Optional(Type.String({ minLength: 1 })),

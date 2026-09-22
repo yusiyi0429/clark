@@ -5285,6 +5285,28 @@
           }
         }
       },
+      "EditMeetingDetailsRequest": {
+        "additionalProperties": false,
+        "minProperties": 1,
+        "type": "object",
+        "properties": {
+          "title": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "scheduledAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "leadDriId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
       "RequestSupplementRequest": {
         "additionalProperties": false,
         "type": "object",

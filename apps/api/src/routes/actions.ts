@@ -2,6 +2,7 @@ import type { FastifyReply } from "fastify";
 import { Value } from "@sinclair/typebox/value";
 import {
   CreateMeetingRequest,
+  EditMeetingDetailsRequest,
   ExecuteActionRequest,
   JoinMeetingRequest,
   MeetingConfirmItemInput,
@@ -17,7 +18,7 @@ import {
 } from "@warmap/contracts";
 import { actionFingerprint, verifyActionId } from "../actionToken.js";
 import { executeIssueAction } from "../issues.js";
-import { executeCancelMeeting, executeCreateMeeting, executeJoinMeeting, executeRequestSupplement, executeUpdateDraft } from "../meetings.js";
+import { executeCancelMeeting, executeCreateMeeting, executeEditMeetingDetails, executeJoinMeeting, executeRequestSupplement, executeUpdateDraft } from "../meetings.js";
 import { executeEditMaterials } from "../meetingMaterials.js";
 import { executeRegeneratePreflight, executeRetryPreflight, executeRunPreflight } from "../meetingPreflight.js";
 import { executeRetryMonthlyPlanDraft, executeSignMonthlyPlan, executeUpdateMonthlyPlanDraft } from "../monthlyPlans.js";
@@ -51,6 +52,10 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       if (scope.actionType === "meeting.update_draft") {
         if (!Value.Check(UpdateMeetingDraftRequest, input)) return invalidInput(reply, UpdateMeetingDraftRequest, input);
         return respond(reply, await executeUpdateDraft(pool, env.sessionSecret, scope, input, fingerprint));
+      }
+      if (scope.actionType === "meeting.edit_details") {
+        if (!Value.Check(EditMeetingDetailsRequest, input)) return invalidInput(reply, EditMeetingDetailsRequest, input);
+        return respond(reply, await executeEditMeetingDetails(pool, companyMemory, env.sessionSecret, scope, input, fingerprint));
       }
       if (scope.actionType === "meeting.request_supplement") {
         if (!Value.Check(RequestSupplementRequest, input)) return invalidInput(reply, RequestSupplementRequest, input);

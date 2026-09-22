@@ -277,6 +277,51 @@ export async function executeUpdateDraft(
   });
 }
 
+/**
+ * 编辑 scheduled Meeting 基本字段：title/scheduledAt/leadDriId 至少一项。
+ * 换主持 DRI 时按 createConfigMeeting 的同一构造方式重建 participants（ceo 在首位，新 lead 其次，其余保持）。
+ */
+export async function executeEditMeetingDetails(
+  pool: Pool,
+  companyMemory: CompanyMemoryRepository,
+  secret: string,
+  scope: ActionScope,
+  input: { title?: string; scheduledAt?: string; leadDriId?: string },
+  fingerprint: string,
+): Promise<MeetingActionOutcome> {
+  let scheduledAt: Date | null = null;
+  if (input.scheduledAt !== undefined) {
+    scheduledAt = parseScheduledAt(input.scheduledAt);
+    if (!scheduledAt) return { error: { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } } };
+  }
+  return withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+    if (row.status !== "scheduled") return { error: { status: 409, code: "MEETING_NOT_SCHEDULED", message: "只有 scheduled Meeting 可以编辑" } };
+    let participants: TMeetingParticipant[] | null = null;
+    if (input.leadDriId !== undefined && input.leadDriId !== row.lead_dri_id) {
+      // 保留原参会人（含原主持，换主持不等于把人移出会议），新主持由 resolveParticipants 去重并排在 ceo 之后。
+      const attendees = row.participants.map((participant) => participant.personId).filter((id) => id !== row.ceo_participant_id);
+      const resolved = resolveParticipants(companyMemory, { leadDriId: input.leadDriId, ceoParticipantId: row.ceo_participant_id, participants: attendees });
+      if ("error" in resolved) return { error: resolved.error };
+      participants = resolved.participants;
+    }
+    const updated = await updateMeeting(
+      client,
+      row.id,
+      `title = COALESCE($3, title), scheduled_at = COALESCE($4, scheduled_at),
+       lead_dri_id = COALESCE($5, lead_dri_id), participants = COALESCE($6::jsonb, participants),
+       version = version + 1, action_fingerprints = $2::jsonb`,
+      [
+        JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint)),
+        input.title ?? null,
+        scheduledAt,
+        input.leadDriId ?? null,
+        participants ? JSON.stringify(participants) : null,
+      ],
+    );
+    return commit(client, updated, secret);
+  });
+}
+
 export async function executeRequestSupplement(
   pool: Pool,
   companyMemory: CompanyMemoryRepository,

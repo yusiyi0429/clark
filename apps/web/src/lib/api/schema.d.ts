@@ -1283,6 +1283,11 @@ export interface components {
             };
             note?: string;
         };
+        EditMeetingDetailsRequest: {
+            title?: string;
+            scheduledAt?: string;
+            leadDriId?: string;
+        };
         RequestSupplementRequest: {
             entryId?: string;
             targetDriId: string;
