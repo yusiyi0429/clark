@@ -8286,8 +8286,8 @@
                           "id": "Y44F0",
                           "name": "决策路径 Header",
                           "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 4,
+                          "gap": 6,
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "text",
@@ -8300,15 +8300,14 @@
                               "fontWeight": "600"
                             },
                             {
-                              "type": "text",
-                              "id": "ff6ss",
-                              "name": "Section Hint",
-                              "fill": "$ink2",
-                              "content": "Meeting 是 pending Issue 的决策路径；会后结论逐项确认后生效。",
-                              "lineHeight": 1.6,
-                              "fontFamily": "$font",
-                              "fontSize": 13,
-                              "fontWeight": "normal"
+                              "type": "icon",
+                              "id": "ky7QB",
+                              "name": "Hint Icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "info",
+                              "library": "lucide",
+                              "fill": "$ink4"
                             }
                           ]
                         },
@@ -8736,6 +8735,36 @@
                                   ]
                                 }
                               ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "lz1mc",
+                          "layoutPosition": "absolute",
+                          "x": 96,
+                          "y": 46,
+                          "name": "Hover Tip · hover 后显示",
+                          "width": 280,
+                          "fill": "$ink",
+                          "cornerRadius": 8,
+                          "padding": [
+                            8,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Z2iNQ",
+                              "name": "Tip Text",
+                              "fill": "$on-dark",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "会议是待决策议题的可选路径；决定由会后结论确认生效。",
+                              "lineHeight": 1.6,
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -31474,10 +31503,12 @@
                       "cornerRadius": 10,
                       "stroke": "$line-strong",
                       "strokeWidth": 1,
+                      "gap": 8,
                       "padding": [
                         0,
                         14
                       ],
+                      "justifyContent": "space_between",
                       "alignItems": "center",
                       "children": [
                         {
@@ -31489,6 +31520,16 @@
                           "fontFamily": "$font",
                           "fontSize": 13,
                           "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "Q20zn",
+                          "name": "Chevron",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$ink4"
                         }
                       ]
                     }
@@ -31585,10 +31626,10 @@
               "id": "d5dCK",
               "layoutPosition": "absolute",
               "x": 24,
-              "y": 310,
+              "y": 322,
               "name": "Materials Upload",
               "width": 1164,
-              "height": 76,
+              "height": 62,
               "fill": "$surface-2",
               "cornerRadius": 14,
               "stroke": "$accent-line",
@@ -31769,10 +31810,12 @@
                       "cornerRadius": 10,
                       "stroke": "$line-strong",
                       "strokeWidth": 1,
+                      "gap": 8,
                       "padding": [
                         0,
                         14
                       ],
+                      "justifyContent": "space_between",
                       "alignItems": "center",
                       "children": [
                         {
@@ -31784,6 +31827,16 @@
                           "fontFamily": "$font",
                           "fontSize": 13,
                           "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "i4WP6K",
+                          "name": "Chevron",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$ink4"
                         }
                       ]
                     }
@@ -32060,10 +32113,12 @@
                       "cornerRadius": 10,
                       "stroke": "$line-strong",
                       "strokeWidth": 1,
+                      "gap": 8,
                       "padding": [
                         0,
                         14
                       ],
+                      "justifyContent": "space_between",
                       "alignItems": "center",
                       "children": [
                         {
@@ -32075,6 +32130,16 @@
                           "fontFamily": "$font",
                           "fontSize": 13,
                           "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "eNqF3",
+                          "name": "Chevron",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$ink4"
                         }
                       ]
                     }
@@ -32172,43 +32237,79 @@
                   "id": "ERpQM",
                   "name": "Footer Hint",
                   "fill": "$ink3",
-                  "content": "同步 Radar 监测范围",
+                  "content": "创建后进入战场管理",
                   "fontFamily": "$font",
                   "fontSize": 12,
                   "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
-                  "id": "sp30Y",
-                  "name": "Primary Button",
-                  "fill": "$accent",
-                  "cornerRadius": 11,
-                  "gap": 8,
-                  "padding": [
-                    11,
-                    17
-                  ],
-                  "alignItems": "center",
+                  "id": "BbLE8",
+                  "name": "Footer Actions",
+                  "gap": 10,
                   "children": [
                     {
-                      "type": "text",
-                      "id": "H4u49S",
-                      "name": "Label",
-                      "fill": "$on-dark",
-                      "content": "新建战场",
-                      "fontFamily": "$font",
-                      "fontSize": 14,
-                      "fontWeight": "600"
+                      "type": "frame",
+                      "id": "haMJR",
+                      "name": "管理战场 Button",
+                      "height": 42,
+                      "fill": "$surface",
+                      "cornerRadius": 10,
+                      "stroke": "$line-strong",
+                      "strokeWidth": 1,
+                      "padding": [
+                        10,
+                        14
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "oYyaz",
+                          "name": "CTA Label",
+                          "fill": "$ink",
+                          "content": "管理战场",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
                     },
                     {
-                      "type": "icon",
-                      "id": "k20GE",
-                      "name": "Arrow",
-                      "width": 15,
-                      "height": 15,
-                      "icon": "arrow-right",
-                      "library": "lucide",
-                      "fill": "$surface"
+                      "type": "frame",
+                      "id": "sp30Y",
+                      "name": "Primary Button",
+                      "fill": "$accent",
+                      "cornerRadius": 11,
+                      "gap": 8,
+                      "padding": [
+                        11,
+                        17
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "H4u49S",
+                          "name": "Label",
+                          "fill": "$on-dark",
+                          "content": "创建并进入战场管理",
+                          "fontFamily": "$font",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "k20GE",
+                          "name": "Arrow",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "arrow-right",
+                          "library": "lucide",
+                          "fill": "$surface"
+                        }
+                      ]
                     }
                   ]
                 }
@@ -32351,10 +32452,12 @@
                       "cornerRadius": 10,
                       "stroke": "$line-strong",
                       "strokeWidth": 1,
+                      "gap": 8,
                       "padding": [
                         0,
                         14
                       ],
+                      "justifyContent": "space_between",
                       "alignItems": "center",
                       "children": [
                         {
@@ -32366,6 +32469,16 @@
                           "fontFamily": "$font",
                           "fontSize": 13,
                           "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "sxUGp",
+                          "name": "Chevron",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$ink4"
                         }
                       ]
                     }
@@ -32790,7 +32903,6 @@
       "width": 2560,
       "height": 1440,
       "fill": "$bg",
-      "placeholder": true,
       "layout": "vertical",
       "gap": 24,
       "padding": [
@@ -32842,7 +32954,7 @@
             {
               "type": "frame",
               "id": "jiRYm",
-              "name": "Draft Status",
+              "name": "Scope Chip",
               "fill": "$accent-tint-2",
               "cornerRadius": 10,
               "padding": [
@@ -32853,7 +32965,7 @@
                 {
                   "type": "text",
                   "id": "FjdFX",
-                  "name": "Status Label",
+                  "name": "Chip Label",
                   "fill": "$ink4",
                   "content": "配置变更写入业务库并同步 Radar 监测范围",
                   "fontFamily": "$font",
@@ -32917,16 +33029,16 @@
           "id": "lLSxa",
           "layoutPosition": "absolute",
           "x": 56,
-          "y": 300,
+          "y": 290,
           "name": "Body",
           "width": 2448,
-          "height": 1060,
+          "height": 1120,
           "gap": 20,
           "children": [
             {
               "type": "frame",
               "id": "RIUef",
-              "name": "判断与路径 左栏",
+              "name": "Left Column",
               "width": 620,
               "height": "fill_container",
               "layout": "vertical",
@@ -32935,9 +33047,6 @@
                 {
                   "type": "frame",
                   "id": "t1SbJS",
-                  "layoutPosition": "absolute",
-                  "x": 56,
-                  "y": 310,
                   "name": "Card · 战场列表",
                   "width": 620,
                   "height": 1050,
@@ -32975,7 +33084,7 @@
                           "id": "vp43D",
                           "name": "Card Desc",
                           "fill": "$ink2",
-                          "content": "3 个战场 · 选择后管理关联议题",
+                          "content": "6 个战场 · 选择后管理关联议题",
                           "lineHeight": 1.6,
                           "fontFamily": "$font",
                           "fontSize": 13,
@@ -33246,6 +33355,134 @@
                               "fill": "$ink4"
                             }
                           ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "R4rlVe",
+                          "name": "Battlefield · 客户战场",
+                          "width": 572,
+                          "fill": "#00000000",
+                          "cornerRadius": 10,
+                          "gap": 10,
+                          "padding": [
+                            12,
+                            14
+                          ],
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "UQse7",
+                              "name": "Dot",
+                              "fill": "$ink5",
+                              "width": 6,
+                              "height": 6
+                            },
+                            {
+                              "type": "frame",
+                              "id": "jsPkZ",
+                              "name": "Text",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 1,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Wx0H1",
+                                  "name": "Title",
+                                  "fill": "$ink",
+                                  "content": "客户战场",
+                                  "lineHeight": 1.55,
+                                  "fontFamily": "$font",
+                                  "fontSize": 15,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "Vu5f5",
+                                  "name": "Due",
+                                  "fill": "$danger-ink",
+                                  "content": "负责人 赵一鸣 · 2 个议题",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "icon",
+                              "id": "jtDkl",
+                              "name": "Arrow",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "trash-2",
+                              "library": "lucide",
+                              "fill": "$ink4"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "PEWye",
+                          "name": "Battlefield · 供应链战场",
+                          "width": 572,
+                          "fill": "#00000000",
+                          "cornerRadius": 10,
+                          "gap": 10,
+                          "padding": [
+                            12,
+                            14
+                          ],
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "oQIuC",
+                              "name": "Dot",
+                              "fill": "$ink5",
+                              "width": 6,
+                              "height": 6
+                            },
+                            {
+                              "type": "frame",
+                              "id": "DKbto",
+                              "name": "Text",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 1,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "nwQZM",
+                                  "name": "Title",
+                                  "fill": "$ink",
+                                  "content": "供应链战场",
+                                  "lineHeight": 1.55,
+                                  "fontFamily": "$font",
+                                  "fontSize": 15,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "n7omS",
+                                  "name": "Due",
+                                  "fill": "$danger-ink",
+                                  "content": "负责人 陈珂 · 1 个议题",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "icon",
+                              "id": "YvwMo",
+                              "name": "Arrow",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "trash-2",
+                              "library": "lucide",
+                              "fill": "$ink4"
+                            }
+                          ]
                         }
                       ]
                     },
@@ -33280,7 +33517,7 @@
                       "id": "Pvtes",
                       "layoutPosition": "absolute",
                       "x": 24,
-                      "y": 396,
+                      "y": 986,
                       "name": "Card Footer",
                       "width": 572,
                       "justifyContent": "space_between",
@@ -33338,8 +33575,8 @@
                       "id": "FIoqZ",
                       "layoutPosition": "absolute",
                       "x": 310,
-                      "y": 130,
-                      "name": "Delete Confirm",
+                      "y": 95,
+                      "name": "Delete Battlefield Confirm",
                       "width": 300,
                       "fill": "$surface",
                       "cornerRadius": 14,
@@ -33367,7 +33604,7 @@
                           "id": "Jsbe2",
                           "name": "Confirm Title",
                           "fill": "$ink",
-                          "content": "删除该会话？",
+                          "content": "删除该战场？",
                           "fontFamily": "$font",
                           "fontSize": 13.5,
                           "fontWeight": "600"
@@ -33379,7 +33616,7 @@
                           "fill": "$ink3",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "会话内的消息与引用会一并移除，无法恢复。",
+                          "content": "删除后战场下的议题会解除关联，议题本身不会被删除。",
                           "lineHeight": 1.6,
                           "fontFamily": "$font",
                           "fontSize": 12,
@@ -33450,7 +33687,7 @@
             {
               "type": "frame",
               "id": "Ahj6I",
-              "name": "研究报告 中栏",
+              "name": "Right Column",
               "width": "fill_container",
               "height": "fill_container",
               "layout": "vertical",
@@ -33459,12 +33696,9 @@
                 {
                   "type": "frame",
                   "id": "zINOQ",
-                  "layoutPosition": "absolute",
-                  "x": 56,
-                  "y": 310,
                   "name": "Card · 关联议题",
                   "width": 1808,
-                  "height": 460,
+                  "height": 400,
                   "fill": "$surface",
                   "cornerRadius": 20,
                   "stroke": "$line",
@@ -33499,7 +33733,7 @@
                           "id": "LedGc",
                           "name": "Card Desc",
                           "fill": "$ink2",
-                          "content": "增长战场 · 2 个议题 · 议题可同时关联多个战场",
+                          "content": "增长战场 · 3 个议题",
                           "lineHeight": 1.6,
                           "fontFamily": "$font",
                           "fontSize": 13,
@@ -33734,9 +33968,9 @@
                       "id": "n37q16",
                       "layoutPosition": "absolute",
                       "x": 24,
-                      "y": 396,
+                      "y": 361,
                       "name": "Card Footer",
-                      "width": 1756,
+                      "width": 1760,
                       "justifyContent": "space_between",
                       "alignItems": "center",
                       "children": [
@@ -33757,12 +33991,9 @@
                 {
                   "type": "frame",
                   "id": "kAHkI",
-                  "layoutPosition": "absolute",
-                  "x": 56,
-                  "y": 310,
                   "name": "Card · 添加议题",
                   "width": 1808,
-                  "height": 580,
+                  "height": 630,
                   "fill": "$surface",
                   "cornerRadius": 20,
                   "stroke": "$line",
@@ -33797,7 +34028,7 @@
                           "id": "Vti3L",
                           "name": "Card Desc",
                           "fill": "$ink2",
-                          "content": "新建议题，或从已有议题中选择加入本战场",
+                          "content": "从已有议题中选择加入本战场",
                           "lineHeight": 1.6,
                           "fontFamily": "$font",
                           "fontSize": 13,
@@ -33814,166 +34045,343 @@
                       "gap": 12,
                       "children": [
                         {
+                          "type": "text",
+                          "id": "So7pp",
+                          "name": "Picker Label",
+                          "fill": "$ink3",
+                          "content": "已有议题（5）",
+                          "lineHeight": 1.6,
+                          "fontFamily": "$font",
+                          "fontSize": 12.5,
+                          "fontWeight": "600"
+                        },
+                        {
                           "type": "frame",
-                          "id": "LvTSi",
-                          "name": "Mode Switch",
-                          "width": 340,
-                          "fill": "$surface-3",
+                          "id": "Z4Jkb",
+                          "name": "Pick · 是否追加东南亚渠道预算 40%",
+                          "width": 1760,
+                          "fill": "$accent-tint",
                           "cornerRadius": 10,
-                          "gap": 2,
-                          "padding": 3,
+                          "gap": 10,
+                          "padding": [
+                            12,
+                            14
+                          ],
                           "children": [
                             {
+                              "type": "ellipse",
+                              "id": "f0ouZ",
+                              "name": "Dot",
+                              "fill": "$accent",
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$line-strong",
+                              "strokeWidth": 1
+                            },
+                            {
                               "type": "frame",
-                              "id": "iD47o",
-                              "name": "Mode · 新建议题",
-                              "fill": "$surface",
-                              "cornerRadius": 6,
-                              "effect": {
-                                "type": "shadow",
-                                "shadowType": "outer",
-                                "enabled": false,
-                                "color": "#000000"
-                              },
-                              "padding": [
-                                6,
-                                18
-                              ],
-                              "justifyContent": "center",
-                              "alignItems": "center",
+                              "id": "Q1wojb",
+                              "name": "Text",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 1,
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "WDSD7",
-                                  "name": "Mode Label",
+                                  "id": "gqF90",
+                                  "name": "Title",
                                   "fill": "$ink",
-                                  "content": "新建议题",
+                                  "content": "是否追加东南亚渠道预算 40%",
+                                  "lineHeight": 1.55,
+                                  "fontFamily": "$font",
+                                  "fontSize": 15,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "SXrLE",
+                                  "name": "Due",
+                                  "fill": "$danger-ink",
+                                  "content": "未归属 · 期限 09-30",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
-                                  "fontWeight": "600"
+                                  "fontWeight": "normal"
                                 }
                               ]
                             },
                             {
-                              "type": "frame",
-                              "id": "GPGVO",
-                              "name": "Mode · 从已有议题选择",
+                              "type": "icon",
+                              "id": "XsbxO",
+                              "name": "Arrow",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$accent-ink"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "KbOmA",
+                          "name": "Pick · 董事会年度审计窗口与责任人确认",
+                          "width": 1760,
+                          "fill": "#00000000",
+                          "cornerRadius": 10,
+                          "gap": 10,
+                          "padding": [
+                            12,
+                            14
+                          ],
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "DACDz",
+                              "name": "Dot",
                               "fill": "#00000000",
-                              "cornerRadius": 6,
-                              "padding": [
-                                6,
-                                18
-                              ],
-                              "justifyContent": "center",
-                              "alignItems": "center",
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$line-strong",
+                              "strokeWidth": 1
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ikvSX",
+                              "name": "Text",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 1,
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "KX683",
-                                  "name": "Mode Label",
-                                  "fill": "$ink3",
-                                  "content": "从已有议题选择",
+                                  "id": "iWYyJ",
+                                  "name": "Title",
+                                  "fill": "$ink",
+                                  "content": "董事会年度审计窗口与责任人确认",
+                                  "lineHeight": 1.55,
+                                  "fontFamily": "$font",
+                                  "fontSize": 15,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "I7mzu",
+                                  "name": "Due",
+                                  "fill": "$danger-ink",
+                                  "content": "组织战场 · 期限 10-24",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
-                                  "fontWeight": "500"
+                                  "fontWeight": "normal"
                                 }
                               ]
+                            },
+                            {
+                              "type": "icon",
+                              "id": "p6rnvm",
+                              "name": "Arrow",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$accent-ink"
                             }
                           ]
                         },
                         {
                           "type": "frame",
-                          "id": "lplzA",
-                          "name": "Field · 会议名称",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 5,
+                          "id": "ugmUT",
+                          "name": "Pick · 二期触发条件阈值口径",
+                          "width": 1760,
+                          "fill": "#00000000",
+                          "cornerRadius": 10,
+                          "gap": 10,
+                          "padding": [
+                            12,
+                            14
+                          ],
                           "children": [
                             {
-                              "type": "text",
-                              "id": "iH6IC",
-                              "name": "Label",
-                              "fill": "$ink2",
-                              "content": "议题标题",
-                              "fontFamily": "$font",
-                              "fontSize": 12,
-                              "fontWeight": "normal"
+                              "type": "ellipse",
+                              "id": "lhi2t",
+                              "name": "Dot",
+                              "fill": "#00000000",
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$line-strong",
+                              "strokeWidth": 1
                             },
                             {
                               "type": "frame",
-                              "id": "WHfyG",
-                              "name": "Input Box",
+                              "id": "DgaeJ",
+                              "name": "Text",
                               "width": "fill_container",
-                              "height": 44,
-                              "fill": "$surface-2",
-                              "cornerRadius": 10,
-                              "stroke": "$line-strong",
-                              "strokeWidth": 1,
-                              "padding": [
-                                0,
-                                14
-                              ],
-                              "alignItems": "center",
+                              "layout": "vertical",
+                              "gap": 1,
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "FkTzi",
-                                  "name": "Input Value",
-                                  "fill": "$ink4",
-                                  "content": "例如：是否追加东南亚渠道预算 40%",
+                                  "id": "lbXvd",
+                                  "name": "Title",
+                                  "fill": "$ink",
+                                  "content": "二期触发条件阈值口径",
+                                  "lineHeight": 1.55,
                                   "fontFamily": "$font",
-                                  "fontSize": 13,
+                                  "fontSize": 15,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "LbUzz",
+                                  "name": "Due",
+                                  "fill": "$danger-ink",
+                                  "content": "未归属 · 期限 10-10",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
                                   "fontWeight": "normal"
                                 }
                               ]
+                            },
+                            {
+                              "type": "icon",
+                              "id": "cPC89",
+                              "name": "Arrow",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$accent-ink"
                             }
                           ]
                         },
                         {
                           "type": "frame",
-                          "id": "wGyiI",
-                          "name": "Field · 时间",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 5,
+                          "id": "OKg2z",
+                          "name": "Pick · 区域伙伴数据边界责任归属",
+                          "width": 1760,
+                          "fill": "#00000000",
+                          "cornerRadius": 10,
+                          "gap": 10,
+                          "padding": [
+                            12,
+                            14
+                          ],
                           "children": [
                             {
-                              "type": "text",
-                              "id": "p4XTR",
-                              "name": "Label",
-                              "fill": "$ink2",
-                              "content": "决定期限",
-                              "fontFamily": "$font",
-                              "fontSize": 12,
-                              "fontWeight": "normal"
+                              "type": "ellipse",
+                              "id": "M0mlzR",
+                              "name": "Dot",
+                              "fill": "#00000000",
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$line-strong",
+                              "strokeWidth": 1
                             },
                             {
                               "type": "frame",
-                              "id": "T7nBYO",
-                              "name": "Input Box",
+                              "id": "pHdD3",
+                              "name": "Text",
                               "width": "fill_container",
-                              "height": 44,
-                              "fill": "$surface-2",
-                              "cornerRadius": 10,
-                              "stroke": "$line-strong",
-                              "strokeWidth": 1,
-                              "padding": [
-                                0,
-                                14
-                              ],
-                              "alignItems": "center",
+                              "layout": "vertical",
+                              "gap": 1,
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "P27LT",
-                                  "name": "Input Value",
-                                  "fill": "$ink4",
-                                  "content": "2025-09-30",
+                                  "id": "stwJT",
+                                  "name": "Title",
+                                  "fill": "$ink",
+                                  "content": "区域伙伴数据边界责任归属",
+                                  "lineHeight": 1.55,
                                   "fontFamily": "$font",
-                                  "fontSize": 13,
+                                  "fontSize": 15,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "IB3ua",
+                                  "name": "Due",
+                                  "fill": "$danger-ink",
+                                  "content": "增长战场 · 待校准",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
                                   "fontWeight": "normal"
                                 }
                               ]
+                            },
+                            {
+                              "type": "icon",
+                              "id": "f6D96a",
+                              "name": "Arrow",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$accent-ink"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "zF0mC",
+                          "name": "Pick · 交付战场 DRI 值班机制",
+                          "width": 1760,
+                          "fill": "#00000000",
+                          "cornerRadius": 10,
+                          "gap": 10,
+                          "padding": [
+                            12,
+                            14
+                          ],
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "a6Hx6H",
+                              "name": "Dot",
+                              "fill": "#00000000",
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$line-strong",
+                              "strokeWidth": 1
+                            },
+                            {
+                              "type": "frame",
+                              "id": "W29od8",
+                              "name": "Text",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 1,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ZfMkN",
+                                  "name": "Title",
+                                  "fill": "$ink",
+                                  "content": "交付战场 DRI 值班机制",
+                                  "lineHeight": 1.55,
+                                  "fontFamily": "$font",
+                                  "fontSize": 15,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "U80If",
+                                  "name": "Due",
+                                  "fill": "$danger-ink",
+                                  "content": "交付战场 · 期限 10-15",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "icon",
+                              "id": "gogmz",
+                              "name": "Arrow",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$accent-ink"
                             }
                           ]
                         }
@@ -34010,9 +34418,9 @@
                       "id": "WGO7Q",
                       "layoutPosition": "absolute",
                       "x": 24,
-                      "y": 396,
+                      "y": 566,
                       "name": "Card Footer",
-                      "width": 1164,
+                      "width": 1760,
                       "justifyContent": "space_between",
                       "alignItems": "center",
                       "children": [
@@ -34021,7 +34429,7 @@
                           "id": "deV2Z",
                           "name": "Footer Hint",
                           "fill": "$ink3",
-                          "content": "创建后进入会前预审",
+                          "content": "加入后议题会出现在该战场的关联议题中",
                           "fontFamily": "$font",
                           "fontSize": 12,
                           "fontWeight": "normal"
@@ -34044,7 +34452,7 @@
                               "id": "v4M7y",
                               "name": "Label",
                               "fill": "$on-dark",
-                              "content": "创建并进入会前预审",
+                              "content": "完成",
                               "fontFamily": "$font",
                               "fontSize": 14,
                               "fontWeight": "600"

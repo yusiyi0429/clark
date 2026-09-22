@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, RefreshCw, Trash2, Undo2 } from "lucide-react";
+import { ChevronDown, Info, RefreshCw, Trash2, Undo2 } from "lucide-react";
 import { ConversationDock } from "@/conversation/ConversationDock";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type IssuePayload } from "./payloads";
@@ -163,8 +163,15 @@ export function IssueCard({ card, collection, onCard, onNavigate }: CardRenderPr
                 <>
                   <section className={s.discussion} data-issue-side="path">
                     <header>
-                      <h2>决策路径</h2>
-                      <p>Meeting 是 pending Issue 的可选路径；决定由会后 Outcome 确认生效。</p>
+                      <h2>
+                        决策路径
+                        <span className={s.hintTip} tabIndex={0} aria-describedby="issue-path-hint">
+                          <Info size={14} aria-hidden="true" />
+                          <span id="issue-path-hint" role="tooltip" className={s.hintBubble}>
+                            会议是待决策议题的可选路径；决定由会后结论确认生效。
+                          </span>
+                        </span>
+                      </h2>
                     </header>
                     {canCreateMeeting ? (
                       <div className={s.meetingForm}>
