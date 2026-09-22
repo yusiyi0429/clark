@@ -67,5 +67,6 @@ Spec: `spec.md`
 - 19 blocked：Q30/Q31/Q32 已收口为 Meeting 内嵌会前材料、scheduled-only 的确认回退和 Outcome 只读视图；新增 ADR 0017，规格、部署及验收文档已同步。待验证 Node 22/Alpine 的 PDF、DOCX、Markdown 受限解析与 DOCX 安全 HTML 后实施。
 - 17 resolved：2026-09-21 用户在 `https://localhost` 完成像素级交互验收（“前端交互目前没什么问题”），并以明确文字批准 cutover、观察窗口与整体删除旧 `frontend/`。记录与口径说明见 ticket 17 Comments。
 - 18 resolved：2026-09-21 生产入口为 Caddy → `apps/web`（无旧前端路由、未加兼容路由）；整体删除 `frontend/`（905 MB、41 262 文件、883 个跟踪文件），未迁移业务逻辑、localStorage、兼容路由或旧 Agent；清理 `.dockerignore`、`apps/api/src/webSearch.ts` 注释、`CLAUDE.md`、`docs/visual-baseline/README.md` 的旧前端引用，workspace/Compose/Caddy/CI 原本无引用；docs 历史性提及与视觉基线证据保留。验证：`pnpm install --frozen-lockfile`、`@warmap/web` 与 `@warmap/api` typecheck、`docker compose -f infra/docker-compose.yml config` 均通过。运行期 smoke、观察窗口与最终回归未在本 ticket 重跑（依据 ticket 16 证据与 CEO 人工验收）。
+- 23 resolved：2026-09-22 纯机械拆分 `meetings.ts`（1564→492）与 `app.ts`（1540→270）。W1 `c3bdc97` 抽出 `meetingStore/meetingPreflight/meetingMaterials`；W2 `9651641` 将 52 条路由拆入 `routes/` 域模块 + `routes/shared.ts`，`buildApp` 签名不变。仅整函数搬移，未改逻辑/错误码/契约/测试断言。`pnpm -r typecheck` 通过，contracts 28 + web 94 + API 307 测试全过，staging 重建 api 后 `/healthz` 200。
 
 ## Comments

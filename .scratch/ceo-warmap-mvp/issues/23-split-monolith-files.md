@@ -1,6 +1,6 @@
 # Ticket 23 · 拆分巨石文件（纯机械重构，零行为变化）
 
-状态: planned（先于 Ticket 24 执行——Ticket 24 要改 preflight 校验，等它落到新文件后再动）
+状态: resolved（2026-09-22）
 来源: assessment-2026-09-22.md 维度 5
 
 ## 目标
@@ -39,3 +39,12 @@ app.ts 变组装根（env 解析、服务装配、插件注册），路由按域
 
 - 不顺手改逻辑、不改名、不加抽象；发现疑似 bug 只记录不修。
 - 不动 apps/web、packages/contracts。
+
+## Comments
+
+- 2026-09-22 resolved（W1 `c3bdc97`，W2 `9651641`，W3 验证）：
+  - W1：`meetings.ts` 1564 → 492 行；新增 `meetingStore.ts`（238）、`meetingPreflight.ts`（317）、`meetingMaterials.ts`（182），outcome 编排移入 `outcome.ts`（737）。仓内 import 全改，无 re-export 兼容层。
+  - W2：`app.ts` 1540 → 270 行；52 条路由按域拆入 `routes/{auth,cards,config,radar,conversations,meetings,actions,dri,system}.ts` 与共享 `routes/shared.ts`；`buildApp` 签名与行为不变。
+  - 零行为变化：整函数/整块搬移，未改逻辑、错误码、契约、测试断言（测试只改 import 路径）。
+  - 验证：`pnpm -r typecheck` 通过；contracts 28、web 94、API 全量 307 用例全过；staging 重建 api 后 `/healthz` 返回 200。
+  - 拆分过程未发现需记录的疑似 bug。
