@@ -24,11 +24,14 @@ export const CreateCapabilityRequest = Type.Object(
   { additionalProperties: false },
 );
 
-/** CEO 编辑战场：只提交要改的字段（至少一项），id 稳定、version+1；改名 slug 冲突返回 409。 */
+/**
+ * CEO 编辑战场：只提交要改的字段（至少一项），id 稳定、version+1；改名 slug 冲突返回 409。
+ * owner 允许空串（注册表 owner NOT NULL DEFAULT ''，空值在界面显示为“待指派”）。
+ */
 export const PatchBattlefieldRequest = Type.Object(
   {
     name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
-    owner: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    owner: Type.Optional(Type.String({ maxLength: 100 })),
     goal: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
   },
   { additionalProperties: false, minProperties: 1 },

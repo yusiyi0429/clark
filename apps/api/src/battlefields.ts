@@ -12,7 +12,7 @@ import type {
   TMonthlyPlanTodo,
   TRadarAnchor,
 } from "@warmap/contracts";
-import { slugId } from "./slug.js";
+import { hasNameSlugConflict, slugId } from "./slug.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -144,13 +144,19 @@ export type UpdateBattlefieldResult =
   | { ok: false; status: 404; code: "BATTLEFIELD_NOT_FOUND"; message: string }
   | { ok: false; status: 409; code: "BATTLEFIELD_NAME_CONFLICT"; message: string };
 
-/** CEO 编辑战场：id 稳定，只改显示字段并 version+1；新名 slug 撞到其他行时 409。 */
+/** CEO 编辑战场：id 稳定，只改显示字段并 version+1；新名 slug 撞到其他行的 id 或显示名时 409。 */
 export async function updateBattlefield(
   q: Query,
   id: string,
   input: { name?: string; owner?: string; goal?: string },
 ): Promise<UpdateBattlefieldResult> {
   const nextSlug = input.name !== undefined ? slugId(input.name) || null : null;
+  if (nextSlug) {
+    const rows = await q("SELECT id, name FROM battlefield_config");
+    if (hasNameSlugConflict(rows.rows as { id: string; name: string }[], id, nextSlug)) {
+      return { ok: false, status: 409, code: "BATTLEFIELD_NAME_CONFLICT", message: `战场名称与已有战场冲突（${nextSlug}）` };
+    }
+  }
   const updated = await q(
     `UPDATE battlefield_config
         SET name = COALESCE($2, name), owner = COALESCE($3, owner), positioning = COALESCE($4, positioning),

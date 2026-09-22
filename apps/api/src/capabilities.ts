@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { QueryResult } from "pg";
 import type { TCapabilityCardPayload, TCard } from "@warmap/contracts";
-import { slugId } from "./slug.js";
+import { hasNameSlugConflict, slugId } from "./slug.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -72,6 +72,12 @@ export async function updateCapability(
   input: { name?: string; group?: string; description?: string },
 ): Promise<UpdateCapabilityResult> {
   const nextSlug = input.name !== undefined ? slugId(input.name) || null : null;
+  if (nextSlug) {
+    const rows = await q("SELECT id, name FROM capability_config");
+    if (hasNameSlugConflict(rows.rows as { id: string; name: string }[], id, nextSlug)) {
+      return { ok: false, status: 409, code: "CAPABILITY_NAME_CONFLICT", message: `能力名称与已有能力冲突（${nextSlug}）` };
+    }
+  }
   const updated = await q(
     `UPDATE capability_config
         SET name = COALESCE($2, name), "group" = COALESCE($3, "group"), description = COALESCE($4, description),

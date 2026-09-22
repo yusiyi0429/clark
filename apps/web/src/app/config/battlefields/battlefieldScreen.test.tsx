@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BattlefieldScreen } from "./BattlefieldScreen";
+import { BattlefieldScreen, battlefieldEditPatch } from "./BattlefieldScreen";
 import type { TBattlefieldManagementResponse } from "@warmap/contracts";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
@@ -89,5 +89,21 @@ describe("战场管理页 CSS 基线", () => {
     expect(source).toContain(".confirm{position:absolute;top:95px;left:310px;");
     expect(source).toContain("box-shadow:0 10px 28px #0a0f1e33");
     expect(source).toContain(".danger{background:#a1443c");
+  });
+});
+
+/** 编辑弹层只提交改动字段：负责人可能是空串，未改动时不能把它当新值发出去（会被 400 拒）。 */
+describe("战场编辑弹层提交字段", () => {
+  const current = { name: "增长战场", owner: "", goal: "验证渠道结构" };
+
+  it("未改动的空负责人不进 patch，只改目标时只发 goal", () => {
+    expect(battlefieldEditPatch(current, current)).toEqual({});
+    expect(battlefieldEditPatch(current, { ...current, goal: "锁定关键器件" })).toEqual({ goal: "锁定关键器件" });
+  });
+
+  it("主动清空负责人提交空串，改名发去空格后的名字", () => {
+    expect(battlefieldEditPatch({ ...current, owner: "陈珂" }, current)).toEqual({ owner: "" });
+    expect(battlefieldEditPatch(current, { ...current, name: " 供应链战场 " })).toEqual({ name: "供应链战场" });
+    expect(battlefieldEditPatch(current, { ...current, name: "   " })).toEqual({});
   });
 });

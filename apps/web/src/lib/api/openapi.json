@@ -4142,7 +4142,6 @@
             "type": "string"
           },
           "owner": {
-            "minLength": 1,
             "maxLength": 100,
             "type": "string"
           },

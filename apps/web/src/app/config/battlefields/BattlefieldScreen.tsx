@@ -13,6 +13,19 @@ type Issue = TBattlefieldManagementResponse["issues"][number];
 type Battlefield = TBattlefieldManagementResponse["battlefields"][number];
 type Status = { kind: "ok" | "error"; message: string } | null;
 
+/** 编辑弹层只提交真正改动的字段：未动的负责人（可能是空串）不重写，避免被当成新值。 */
+export function battlefieldEditPatch(
+  current: { name: string; owner: string; goal: string },
+  draft: { name: string; owner: string; goal: string },
+): { name?: string; owner?: string; goal?: string } {
+  const patch: { name?: string; owner?: string; goal?: string } = {};
+  const name = draft.name.trim();
+  if (name && name !== current.name) patch.name = name;
+  if (draft.owner !== current.owner) patch.owner = draft.owner;
+  if (draft.goal !== current.goal) patch.goal = draft.goal;
+  return patch;
+}
+
 /** 期限只显示月日（设计：期限 09-30）；缺 decisionBy 时显示待校准。 */
 function dueLabel(issue: Issue) {
   return issue.decisionBy ? `期限 ${issue.decisionBy.slice(5, 10)}` : "待校准";
@@ -68,10 +81,15 @@ export function BattlefieldScreen({ battlefields, issues }: TBattlefieldManageme
 
   async function saveBattlefield() {
     if (!selected || busy) return;
+    const patch = battlefieldEditPatch(selected, draft);
+    if (!Object.keys(patch).length) {
+      setEditing(false);
+      return;
+    }
     setBusy(true);
     const { response, error } = await browserApi.PATCH("/api/config/battlefields/{id}", {
       params: { path: { id: selected.id } },
-      body: draft,
+      body: patch,
     });
     setBusy(false);
     if (await settle("list", response, error, "已保存")) setEditing(false);

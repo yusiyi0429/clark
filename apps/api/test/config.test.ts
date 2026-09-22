@@ -514,4 +514,45 @@ describe("CEO 配置页编辑路由", () => {
       await t.close();
     }
   });
+
+  it("rejects a battlefield rename onto a display name whose row id is not its slug", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name: "供应战场", owner: "张三", goal: "锁定供应" } });
+
+      // migration 种下的行是手写 id：growth 的显示名是增长战场，只比 id 会漏掉这个重名。
+      const conflict = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers, payload: { name: "增长战场" } });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json().code).toBe("BATTLEFIELD_NAME_CONFLICT");
+
+      const fresh = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers, payload: { name: "供应链战场" } });
+      expect(fresh.statusCode).toBe(200);
+      expect(fresh.json().cards[0].objectRef).toMatchObject({ id: "供应战场", version: 2 });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("rejects a capability rename onto a display name of a hand-written id, and accepts clearing the owner", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      await t.sql(`INSERT INTO capability_config (id, version, name, "group", description) VALUES ('cap-legacy', 1, '渠道能力', '增长组织', '渠道数据')`);
+      await t.app.inject({ method: "POST", url: "/api/config/capabilities", headers, payload: { name: "供应能力", group: "交付组织", description: "端到端交付" } });
+
+      const conflict = await t.app.inject({ method: "PATCH", url: "/api/config/capabilities/供应能力", headers, payload: { name: "渠道能力" } });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json().code).toBe("CAPABILITY_NAME_CONFLICT");
+
+      // 负责人允许清空（owner NOT NULL DEFAULT ''，界面显示“待指派”）。
+      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name: "供应战场", owner: "张三", goal: "锁定供应" } });
+      const cleared = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers, payload: { owner: "" } });
+      expect(cleared.statusCode).toBe(200);
+      const management = await t.app.inject({ method: "GET", url: "/api/config/battlefields", headers: { cookie: headers.cookie! } });
+      expect(management.json().battlefields.find((item: { id: string }) => item.id === "供应战场")).toMatchObject({ owner: "" });
+    } finally {
+      await t.close();
+    }
+  });
 });
