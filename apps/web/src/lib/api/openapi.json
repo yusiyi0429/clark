@@ -4335,6 +4335,7 @@
                 "id",
                 "name",
                 "owner",
+                "goal",
                 "pendingIssueCount"
               ],
               "properties": {
@@ -4347,6 +4348,9 @@
                   "type": "string"
                 },
                 "owner": {
+                  "type": "string"
+                },
+                "goal": {
                   "type": "string"
                 },
                 "pendingIssueCount": {

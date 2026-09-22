@@ -80,6 +80,8 @@ export const BattlefieldManagementResponse = Type.Object(
           id: Type.String({ minLength: 1 }),
           name: Type.String({ minLength: 1 }),
           owner: Type.String(),
+          /** 注册表里的 positioning：编辑弹层要回填目标一句话。 */
+          goal: Type.String(),
           pendingIssueCount: Type.Integer({ minimum: 0 }),
         },
         { additionalProperties: false },

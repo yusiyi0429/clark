@@ -1,0 +1,31 @@
+/* 能力管理页基线（UpgradeDesign.pen 页面/能力管理）：单张 1212 能力列表卡 + 编辑弹层。 */
+.card{position:relative;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;width:1212px;max-width:100%;background:#fff;border-radius:20px;outline:1px solid #e6e9ed;padding:22px 24px}
+.list{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;align-items:flex-start;gap:10px;width:100%;border-radius:10px;background:transparent;padding:12px 14px}
+.row[data-editing]{background:#e8f1ff}
+.row:not([data-editing]):hover{background:#f7f8fa}
+.rowText{display:flex;flex:1;flex-direction:column;gap:1px;min-width:0}
+.rowTitle{overflow:hidden;font-size:15px;line-height:23px;color:#1d1d1f;text-overflow:ellipsis;white-space:nowrap}
+.rowMeta{overflow:hidden;font-size:12px;color:#6e6e73;text-overflow:ellipsis;white-space:nowrap}
+.dot{flex:none;width:6px;height:6px;margin-top:8px;border-radius:50%;background:#8a8a90}
+.row[data-editing] .dot{background:#007aff}
+.edit{display:grid;place-items:center;flex:none;width:24px;height:24px;border:0;border-radius:8px;background:transparent;color:#6e6e73;cursor:pointer}
+.edit svg{width:14px;height:14px}
+.edit:hover{background:#1d1d1f0f}
+
+.popover{position:absolute;top:95px;right:24px;z-index:4;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;width:320px;background:#fff;border-radius:14px;outline:1px solid #e6e9ed;box-shadow:0 10px 28px #0a0f1e33;padding:14px 16px}
+.popoverTitle{margin:0;font-size:13.5px;font-weight:600;color:#1d1d1f}
+.field{display:flex;flex-direction:column;gap:4px}
+.field>span{font-size:11.5px;color:#3c4350}
+.field input{box-sizing:border-box;width:100%;height:36px;border:0;outline:1px solid #d9dde5;border-radius:9px;background:#f7f8fa;padding:0 12px;font:inherit;font-size:12.5px;color:#1d1d1f}
+.field input:focus{outline:2px solid #4989d6;background:#fff}
+.actions{display:flex;gap:8px}
+.cancel,.save{border:0;border-radius:9px;padding:8px 13px;font:inherit;font-size:12.5px;cursor:pointer}
+.cancel{background:#fff;outline:1px solid #d9dde5;color:#4f5866}
+.save{background:#007aff;font-weight:500;color:#fff}
+.save:disabled{opacity:.5;cursor:default}
+
+.footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto}
+.footerHint{font-size:12px;color:#4f5866}
+.footerHint[data-kind=ok]{color:#2f7a44}
+.footerHint[data-kind=error]{color:#a1443c}

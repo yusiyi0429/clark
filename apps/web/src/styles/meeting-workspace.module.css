@@ -18,6 +18,25 @@
 .primaryAction{display:flex;align-items:center;gap:6px;padding:9px 14px;border:0;border-radius:10px;background:#007aff;color:#fff;font-size:13px;font-weight:500}
 .primaryAction:hover{background:#0069db}
 .primaryAction:disabled{opacity:.55}
+.editAction{display:flex;align-items:center;gap:6px;padding:9px 13px;border:1px solid #d9dde5;border-radius:10px;background:#fff;font:inherit;font-size:13px;font-weight:500;color:#1d1d1f;cursor:pointer}
+.editAction svg{color:#4f5866}
+.editAction:hover{background:#f7f8fa}
+.editAction:disabled{opacity:.55}
+/* 编辑会议弹层（pen Edit Meeting Popover）：绝对定位在 Header 右侧下方。 */
+.editPopover{position:absolute;top:78px;right:96px;z-index:6;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;width:320px;padding:14px 16px;border:1px solid #e6e9ed;border-radius:14px;background:#fff;box-shadow:0 10px 28px #0a0f1e33}
+.editTitle{margin:0;font-size:13.5px;font-weight:600;color:#1d1d1f}
+.editField{display:flex;flex-direction:column;gap:4px}
+.editField>span{font-size:11.5px;color:#3c4350}
+.editField input,.editField select{box-sizing:border-box;width:100%;height:36px;border:1px solid #d9dde5;border-radius:9px;background:#f7f8fa;padding:0 12px;font:inherit;font-size:12.5px;color:#1d1d1f}
+.editSelectWrap{position:relative;display:block}
+.editSelectWrap select{appearance:none;padding-right:32px}
+.editChevron{position:absolute;top:50%;right:12px;transform:translateY(-50%);color:#6e6e73;pointer-events:none}
+.editHint{margin:0;font-size:11px;color:#8a6220}
+.editActions{display:flex;gap:8px}
+.editCancel,.editSave{border:0;border-radius:9px;padding:8px 13px;font:inherit;font-size:12.5px;cursor:pointer}
+.editCancel{background:#fff;outline:1px solid #d9dde5;color:#4f5866}
+.editSave{background:#007aff;font-weight:500;color:#fff}
+.editSave:disabled{opacity:.5;cursor:default}
 .close{display:grid;place-items:center;width:38px;height:38px;flex:none;border:1px solid #d9dde5;border-radius:19px;background:#fff;color:#6e6e73}
 .close:hover{background:#f1f3f6}
 .hiddenInput{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -173,6 +192,7 @@
 @media(max-width:1400px){.materials .advisorShell{grid-template-columns:minmax(0,1fr);padding:16px 20px 64px;overflow:auto}.materials .advisorMain{overflow:visible}.prioritySidebar{width:auto}.materials .advisorShell>:global([data-testid="meeting-chat-sidebar"])[data-open=true]{position:static;inset:auto;width:100%;min-width:0;height:auto;min-height:480px;box-shadow:none}.pairRow{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:1300px){.advisorShell{--rail-left:280px}.materials{--rail-right:320px}}
 @media(max-width:1000px){.stageStatus{display:none}.header{flex-wrap:wrap}.headerRight{flex-wrap:wrap}}
+@media(max-width:1000px){.editPopover{right:24px;left:24px;width:auto}}
 @media(max-width:690px){.header{padding:15px}.header h1{font-size:17px}.stageRow{padding:8px 15px 0;overflow-x:auto}.advisorShell,.review{padding:14px 15px 80px}}
 @media(max-height:879px){.header{padding:13px 22px}.stageRow{padding-top:6px}.advisorShell,.review{padding-top:12px}}
 @media(prefers-reduced-motion:reduce){.workspace *{scroll-behavior:auto!important;transition:none!important}}

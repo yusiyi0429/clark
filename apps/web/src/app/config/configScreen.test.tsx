@@ -30,6 +30,8 @@ describe("配置页渲染", () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(html).toContain('maxLength="25"');
     expect(html.match(/type="submit"/g)).toHaveLength(4);
+    // 返回首页 + 管理战场 + 管理能力：三个次级入口，都不提交表单
+    expect(html.match(/type="button"/g)).toHaveLength(3);
   });
 
   it("卡片页脚提示与主按钮文案照设计", () => {
@@ -39,6 +41,7 @@ describe("配置页渲染", () => {
     expect(html).toContain("创建后进入战场管理");
     expect(html).toContain("出现在首页公司能力面板");
     expect(html).toContain("管理战场");
+    expect(html).toContain("管理能力");
   });
 
   it("会议卡内嵌会前材料上传区，说明只收 PDF/DOCX/Markdown", () => {

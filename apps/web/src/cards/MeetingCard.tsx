@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronRight, FileUp, Files, RefreshCw, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, FileUp, Files, Pencil, RefreshCw, X } from "lucide-react";
+import { browserApi } from "@/lib/api/client";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
 import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
@@ -79,6 +80,9 @@ export type MaterialPreview =
   | { state: "error"; error: string };
 
 const MATERIAL_ACCEPT = "application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,text/markdown,.md";
+
+/** 人员目录投影：编辑会议的主持 DRI 下拉只读这一份。 */
+type DriOption = { personId: string; displayName: string; roles: string[] };
 
 /** 长文本截断：回应出处与 aria-label 用。 */
 export function truncateText(text: string, max: number): string {
@@ -279,6 +283,11 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   const [supplementError, setSupplementError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState("core");
   // 原始材料只读弹窗：选择 + 预览取自 preview endpoint；不在弹窗内提供任何编辑。
+  // 编辑会议弹层：只提交改动字段，写入走 opaque action meeting.edit_details。
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ title: card.title, scheduledAt: payload.scheduledAt.slice(0, 16), leadDriId: payload.leadDriId });
+  const [driOptions, setDriOptions] = useState<DriOption[]>([]);
+  const [driError, setDriError] = useState<string | null>(null);
   const [readerOpen, setReaderOpen] = useState(false);
   const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
   const [preview, setPreview] = useState<MaterialPreview>({ state: "idle" });
@@ -367,6 +376,35 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
     const next = current.includes(id) ? current.filter((value) => value !== id) : [...current, id];
     const action = actionOf("meeting.update_draft");
     if (action) void run(action, { [field]: next });
+  }
+
+  /** 编辑弹层回填当前 Card 事实；主持 DRI 只列人员目录里的 DRI，目录不可用时保留当前值。 */
+  async function openEditDetails() {
+    setEditForm({ title: card.title, scheduledAt: payload.scheduledAt.slice(0, 16), leadDriId: payload.leadDriId });
+    setDriError(null);
+    setEditOpen(true);
+    const { data, response } = await browserApi.GET("/api/people");
+    if (!response.ok) {
+      setDriError("人员目录加载失败，暂时只能保留当前主持 DRI");
+      return;
+    }
+    setDriOptions((((data as { people?: DriOption[] } | undefined)?.people ?? []).filter((person) => person.roles.includes("dri"))));
+  }
+
+  /** 只提交真正改动的字段：未改的时间不重写，避免本地输入被重新解析成另一个瞬间。 */
+  async function saveMeetingDetails() {
+    const action = actionOf("meeting.edit_details");
+    if (!action) return;
+    const patch: { title?: string; scheduledAt?: string; leadDriId?: string } = {};
+    const title = editForm.title.trim();
+    if (title && title !== card.title) patch.title = title;
+    if (editForm.scheduledAt && editForm.scheduledAt !== payload.scheduledAt.slice(0, 16)) patch.scheduledAt = editForm.scheduledAt;
+    if (editForm.leadDriId && editForm.leadDriId !== payload.leadDriId) patch.leadDriId = editForm.leadDriId;
+    if (!Object.keys(patch).length) {
+      setEditOpen(false);
+      return;
+    }
+    if (await run(action, patch)) setEditOpen(false);
   }
 
   /** 首次导入：multipart 单文件；与 DRI service API 共用同一校验边界。 */
@@ -542,6 +580,10 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   }
 
   const stageLine = materialStateLine(payload.status, payload.preflight.readiness, payload.materials);
+  /* 下拉永远包含当前主持 DRI：目录加载失败也不会把值改成空。 */
+  const editDriOptions: DriOption[] = driOptions.length
+    ? driOptions
+    : [{ personId: payload.leadDriId, displayName: people.get(payload.leadDriId) ?? payload.leadDriId, roles: [] }];
 
   /* pen Signals & Risks Row：积极信号与潜在风险两卡并排；其余章节整宽。 */
   const isPairKey = (key: string) => key === "positive_signal" || key === "risk_calibration";
@@ -600,6 +642,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
           <h1 id="meeting-title">{card.title}</h1>
         </div>
         <div className={s.headerRight}>
+          {payload.status === "scheduled" && actionOf("meeting.edit_details") ? (
+            <button type="button" className={s.editAction} disabled={pending} onClick={() => void openEditDetails()}>
+              <Pencil size={13} aria-hidden="true" />
+              编辑会议
+            </button>
+          ) : null}
           {segments.length ? (
             <div className={s.segGroup}>
               {segments.map((segment, index) => (
@@ -640,6 +688,46 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
         </div>
       </header>
       <StageBar status={payload.status} statusLine={stageLine} />
+
+      {editOpen ? (
+        <div className={s.editPopover} role="dialog" aria-label="编辑会议">
+          <p className={s.editTitle}>编辑会议</p>
+          <label className={s.editField}>
+            <span>会议标题</span>
+            <input value={editForm.title} onChange={(event) => setEditForm({ ...editForm, title: event.target.value })} />
+          </label>
+          <label className={s.editField}>
+            <span>时间</span>
+            <input
+              type="datetime-local"
+              value={editForm.scheduledAt}
+              onChange={(event) => setEditForm({ ...editForm, scheduledAt: event.target.value })}
+            />
+          </label>
+          <label className={s.editField}>
+            <span>主持 DRI</span>
+            <span className={s.editSelectWrap}>
+              <select value={editForm.leadDriId} onChange={(event) => setEditForm({ ...editForm, leadDriId: event.target.value })}>
+                {editDriOptions.map((person) => (
+                  <option key={person.personId} value={person.personId}>
+                    {person.displayName}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={13} aria-hidden="true" className={s.editChevron} />
+            </span>
+          </label>
+          {driError ? <p className={s.editHint}>{driError}</p> : null}
+          <div className={s.editActions}>
+            <button type="button" className={s.editCancel} onClick={() => setEditOpen(false)}>
+              取消
+            </button>
+            <button type="button" className={s.editSave} disabled={pending || !editForm.title.trim()} onClick={() => void saveMeetingDetails()}>
+              保存
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className={s.materials}>
         {payload.status === "scheduled" ? (

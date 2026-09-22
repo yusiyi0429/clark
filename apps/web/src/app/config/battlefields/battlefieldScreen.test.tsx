@@ -9,8 +9,8 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 type Issue = TBattlefieldManagementResponse["issues"][number];
 
 const battlefields: TBattlefieldManagementResponse["battlefields"] = [
-  { id: "growth", name: "增长战场", owner: "陈珂", pendingIssueCount: 2 },
-  { id: "delivery", name: "交付战场", owner: "", pendingIssueCount: 1 },
+  { id: "growth", name: "增长战场", owner: "陈珂", goal: "验证渠道结构与交付节奏", pendingIssueCount: 2 },
+  { id: "delivery", name: "交付战场", owner: "", goal: "", pendingIssueCount: 1 },
 ];
 const issues: Issue[] = [
   { id: "i1", title: "是否追加东南亚渠道预算 40%", urgencyLevel: "red", decisionBy: "2025-09-30", battlefieldIds: ["growth"] },
@@ -51,10 +51,17 @@ describe("战场管理页渲染", () => {
     expect(html).toContain("加入后议题会出现在该战场的关联议题中");
   });
 
-  it("默认不展开删除确认，页脚给出两条完成出口", () => {
+  it("默认不展开删除确认与编辑弹层，页脚给出两条完成出口", () => {
     expect(html).not.toContain("删除该战场？");
+    expect(html).not.toContain("编辑战场");
     expect(html).toContain("删除战场会解除其议题关联");
     expect(html.match(/完成/g)).toHaveLength(2);
+  });
+
+  it("每行给出铅笔编辑入口，删除仍独立", () => {
+    expect(html).toContain('aria-label="编辑增长战场"');
+    expect(html).toContain('aria-label="编辑交付战场"');
+    expect(html).toContain('aria-label="删除增长战场"');
   });
 });
 
@@ -67,6 +74,12 @@ describe("战场管理页 CSS 基线", () => {
     expect(source).toContain(".listCard{height:1050px}");
     expect(source).toContain(".relatedCard{height:400px}");
     expect(source).toContain(".pickCard{height:630px}");
+  });
+
+  it("行内编辑/删除图标与编辑弹层取设计色值", () => {
+    expect(source).toContain(".rowIcon{display:grid;place-items:center;flex:none;width:24px;height:24px");
+    expect(source).toContain(".save{background:#007aff");
+    expect(source).toContain("height:36px;border:0;outline:1px solid #d9dde5;border-radius:9px;background:#f7f8fa");
   });
 
   it("选中态、紧急度圆点与删除确认弹层取设计色值", () => {

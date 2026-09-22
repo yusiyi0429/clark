@@ -394,8 +394,8 @@ describe("CEO 配置页 create 路由", () => {
       const body = res.json();
       expect(Value.Check(BattlefieldManagementResponse, body)).toBe(true);
       expect(body.battlefields).toEqual([
-        { id: "growth", name: "增长战场", owner: "", pendingIssueCount: 2 },
-        { id: "渠道战场", name: "渠道战场", owner: "张三", pendingIssueCount: 1 },
+        { id: "growth", name: "增长战场", owner: "", goal: "验证渠道结构与交付节奏，形成可复制的增长路径。", pendingIssueCount: 2 },
+        { id: "渠道战场", name: "渠道战场", owner: "张三", goal: "目标", pendingIssueCount: 1 },
       ]);
       const byId = new Map(body.issues.map((issue: { id: string }) => [issue.id, issue]));
       expect([...byId.keys()].sort()).toEqual([assigned.objectRef.id, shared.objectRef.id, orphan.objectRef.id].sort());
@@ -442,6 +442,7 @@ describe("CEO 配置页编辑路由", () => {
         id: "供应战场",
         name: "供应链战场",
         owner: "李四",
+        goal: "锁定关键器件",
         pendingIssueCount: 0,
       });
 

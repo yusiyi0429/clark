@@ -260,7 +260,12 @@ export function ConfigScreen({ people, battlefields }: { people: Person[]; battl
             </Field>
           </Fields>
           <CardFooter hint="出现在首页公司能力面板" status={status.capability}>
-            {primary("capability", "新建能力")}
+            <span className={c.footerActions}>
+              <button type="button" className={c.secondary} onClick={() => router.push("/config/capabilities")}>
+                管理能力
+              </button>
+              {primary("capability", "新建能力")}
+            </span>
           </CardFooter>
         </form>
       </div>

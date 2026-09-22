@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
-import type { TBattlefieldManagementResponse } from "@warmap/contracts";
+import type { TBattlefieldManagementResponse, TCapabilityManagementResponse } from "@warmap/contracts";
 import type { Card } from "./client";
 import { serverApi } from "./client";
 
@@ -66,6 +66,14 @@ export async function loadBattlefieldManagement(cookie: string): Promise<TBattle
   if (response.status === 401) redirect("/access");
   if (!response.ok) throw new Error(`battlefield management query failed with ${response.status}`);
   return (data as TBattlefieldManagementResponse | undefined) ?? { battlefields: [], issues: [] };
+}
+
+/** 能力管理页一次读全部已登记能力，编辑写回 PATCH /api/config/capabilities/{id}。 */
+export async function loadCapabilityManagement(cookie: string): Promise<TCapabilityManagementResponse> {
+  const { data, response } = await serverApi.GET("/api/config/capabilities", { headers: { cookie } });
+  if (response.status === 401) redirect("/access");
+  if (!response.ok) throw new Error(`capability management query failed with ${response.status}`);
+  return (data as TCapabilityManagementResponse | undefined) ?? { capabilities: [] };
 }
 
 /** 关联 Issue 标题需要逐条读取：已经离开待决策区域的 Issue 仍应显示自己的标题。 */

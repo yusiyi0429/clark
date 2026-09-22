@@ -172,7 +172,7 @@ export async function updateBattlefield(
  * 因此同一议题可以同时出现在多个战场的关联列表里。
  */
 export async function projectBattlefieldManagement(q: Query): Promise<TBattlefieldManagementResponse> {
-  const battlefields = await q("SELECT id, name, owner FROM battlefield_config ORDER BY name, id");
+  const battlefields = await q("SELECT id, name, owner, positioning FROM battlefield_config ORDER BY name, id");
   const issues = await q(
     `SELECT id, title, urgency, location FROM issues
       WHERE status = 'pending' AND location->>'level' <> 'capability'
@@ -186,8 +186,11 @@ export async function projectBattlefieldManagement(q: Query): Promise<TBattlefie
     battlefieldIds: battlefieldSetOf(row.location) ?? [],
   }));
   return {
-    battlefields: (battlefields.rows as { id: string; name: string; owner: string }[]).map((row) => ({
-      ...row,
+    battlefields: (battlefields.rows as { id: string; name: string; owner: string; positioning: string }[]).map((row) => ({
+      id: row.id,
+      name: row.name,
+      owner: row.owner,
+      goal: row.positioning,
       pendingIssueCount: pending.filter((issue) => issue.battlefieldIds.includes(row.id)).length,
     })),
     issues: pending,

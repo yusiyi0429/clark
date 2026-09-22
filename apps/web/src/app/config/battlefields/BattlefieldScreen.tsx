@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronLeft, ChevronRight, Flag, Plus, Target, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Flag, Pencil, Plus, Target, Trash2 } from "lucide-react";
 import type { TBattlefieldManagementResponse } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import b from "@/styles/battlefield-management.module.css";
@@ -10,6 +10,7 @@ import b from "@/styles/battlefield-management.module.css";
 import c from "@/styles/config.module.css";
 
 type Issue = TBattlefieldManagementResponse["issues"][number];
+type Battlefield = TBattlefieldManagementResponse["battlefields"][number];
 type Status = { kind: "ok" | "error"; message: string } | null;
 
 /** 期限只显示月日（设计：期限 09-30）；缺 decisionBy 时显示待校准。 */
@@ -31,6 +32,8 @@ export function BattlefieldScreen({ battlefields, issues }: TBattlefieldManageme
   const router = useRouter();
   const [selectedId, setSelectedId] = useState(battlefields[0]?.id ?? "");
   const [confirming, setConfirming] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ name: "", owner: "", goal: "" });
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Record<"list" | "pick", Status>>({ list: null, pick: null });
 
@@ -53,6 +56,25 @@ export function BattlefieldScreen({ battlefields, issues }: TBattlefieldManageme
     const message = (error as { message?: string } | undefined)?.message ?? `操作失败（${response.status}）`;
     report(slot, { kind: "error", message });
     return false;
+  }
+
+  /** 编辑弹层回填当前注册表行；id 不变，改名撞到其他行由后端 409 拒绝。 */
+  function openEdit(item: Battlefield) {
+    setSelectedId(item.id);
+    setConfirming(false);
+    setDraft({ name: item.name, owner: item.owner, goal: item.goal });
+    setEditing(true);
+  }
+
+  async function saveBattlefield() {
+    if (!selected || busy) return;
+    setBusy(true);
+    const { response, error } = await browserApi.PATCH("/api/config/battlefields/{id}", {
+      params: { path: { id: selected.id } },
+      body: draft,
+    });
+    setBusy(false);
+    if (await settle("list", response, error, "已保存")) setEditing(false);
   }
 
   async function removeBattlefield() {
@@ -105,6 +127,7 @@ export function BattlefieldScreen({ battlefields, issues }: TBattlefieldManageme
                     onClick={() => {
                       setSelectedId(item.id);
                       setConfirming(false);
+                      setEditing(false);
                     }}
                   >
                     <span className={b.dot} />
@@ -113,13 +136,17 @@ export function BattlefieldScreen({ battlefields, issues }: TBattlefieldManageme
                       <span className={b.rowMeta}>负责人 {item.owner || "待指派"} · {item.pendingIssueCount} 个议题</span>
                     </span>
                   </button>
+                  <button type="button" className={b.rowIcon} aria-label={`编辑${item.name}`} onClick={() => openEdit(item)}>
+                    <Pencil aria-hidden="true" />
+                  </button>
                   <button
                     type="button"
-                    className={b.trash}
+                    className={b.rowIcon}
                     aria-label={`删除${item.name}`}
                     onClick={() => {
                       setSelectedId(item.id);
                       setConfirming(true);
+                      setEditing(false);
                     }}
                   >
                     <Trash2 aria-hidden="true" />
@@ -137,6 +164,31 @@ export function BattlefieldScreen({ battlefields, issues }: TBattlefieldManageme
                   </button>
                   <button type="button" className={b.danger} onClick={removeBattlefield} disabled={busy}>
                     删除
+                  </button>
+                </span>
+              </div>
+            ) : null}
+            {editing && selected ? (
+              <div className={b.confirm} role="dialog" aria-label="编辑战场">
+                <p className={b.confirmTitle}>编辑战场</p>
+                <label className={b.field}>
+                  <span>战场名称</span>
+                  <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+                </label>
+                <label className={b.field}>
+                  <span>负责人</span>
+                  <input value={draft.owner} onChange={(event) => setDraft({ ...draft, owner: event.target.value })} />
+                </label>
+                <label className={b.field}>
+                  <span>目标一句话</span>
+                  <input value={draft.goal} onChange={(event) => setDraft({ ...draft, goal: event.target.value })} />
+                </label>
+                <span className={b.confirmActions}>
+                  <button type="button" className={b.cancel} onClick={() => setEditing(false)}>
+                    取消
+                  </button>
+                  <button type="button" className={b.save} onClick={saveBattlefield} disabled={busy || !draft.name.trim()}>
+                    保存
                   </button>
                 </span>
               </div>

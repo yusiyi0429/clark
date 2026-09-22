@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
 import { MeetingCard } from "./MeetingCard";
@@ -107,6 +108,15 @@ describe("Meeting 会前预审", () => {
     expect(html).toContain("打开 Issue");
   });
 
+  it("scheduled 会议在 Header 给出编辑会议入口，只有服务端下发了 opaque action 才渲染", () => {
+    const withAction = render(meetingCard({}, [{ actionId: "a1", actionType: "meeting.edit_details", label: "编辑会议" }]));
+    expect(withAction).toContain("编辑会议");
+    expect(render(meetingCard({}))).not.toContain("编辑会议");
+    // 编辑弹层默认收起；非 scheduled 的会议不提供入口
+    expect(withAction).not.toContain('aria-label="编辑会议"');
+    expect(render(meetingCard({ status: "held" }, [{ actionId: "a1", actionType: "meeting.edit_details", label: "编辑会议" }]))).not.toContain("编辑会议");
+  });
+
   it("对话栏默认展开为 pen 的浅色 400px 列，仍可折叠", () => {
     const html = render(meetingCard({}));
     expect(html).toContain('data-testid="meeting-chat-sidebar"');
@@ -115,6 +125,17 @@ describe("Meeting 会前预审", () => {
     expect(html).toContain("会前对话 · 本场会议");
     expect(html).toContain("问点什么…");
     expect(html).toContain('aria-label="折叠会前对话 · 本场会议"');
+  });
+});
+
+describe("Meeting 编辑会议弹层 CSS 基线", () => {
+  const source = readFileSync(new URL("../styles/meeting-workspace.module.css", import.meta.url), "utf8");
+
+  it("Header 白底铅笔按钮与 320 宽弹层取设计色值", () => {
+    expect(source).toContain(".editAction{display:flex;align-items:center;gap:6px;padding:9px 13px;border:1px solid #d9dde5;border-radius:10px;background:#fff");
+    expect(source).toContain("width:320px;padding:14px 16px;border:1px solid #e6e9ed;border-radius:14px");
+    expect(source).toContain("height:36px;border:1px solid #d9dde5;border-radius:9px;background:#f7f8fa");
+    expect(source).toContain(".editSave{background:#007aff");
   });
 });
 

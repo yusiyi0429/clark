@@ -26,9 +26,9 @@
 .row[data-selected] .dot{background:#007aff}
 .dot[data-urgency=red]{background:#e34b43}
 .dot[data-urgency=yellow]{background:#c79624}
-.trash{display:grid;place-items:center;flex:none;width:24px;height:24px;border:0;border-radius:8px;background:transparent;color:#6e6e73;cursor:pointer}
-.trash svg{width:14px;height:14px}
-.trash:hover{background:#1d1d1f0f}
+.rowIcon{display:grid;place-items:center;flex:none;width:24px;height:24px;border:0;border-radius:8px;background:transparent;color:#6e6e73;cursor:pointer}
+.rowIcon svg{width:14px;height:14px}
+.rowIcon:hover{background:#1d1d1f0f}
 .chevron{flex:none;width:14px;height:14px;margin-top:5px;color:#8a8a90}
 
 .pickBody{display:flex;flex:1;flex-direction:column;gap:12px;min-height:0}
@@ -46,6 +46,12 @@
 .cancel{background:#fff;outline:1px solid #d9dde5;color:#4f5866}
 .danger{background:#a1443c;font-weight:500;color:#fff}
 .danger:disabled{opacity:.5;cursor:default}
+.save{background:#007aff;font-weight:500;color:#fff}
+.save:disabled{opacity:.5;cursor:default}
+.field{display:flex;flex-direction:column;gap:4px}
+.field>span{font-size:11.5px;color:#3c4350}
+.field input{box-sizing:border-box;width:100%;height:36px;border:0;outline:1px solid #d9dde5;border-radius:9px;background:#f7f8fa;padding:0 12px;font:inherit;font-size:12.5px;color:#1d1d1f}
+.field input:focus{outline:2px solid #4989d6;background:#fff}
 
 .cardFooter{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto}
 .footerHint{font-size:12px;color:#4f5866}

@@ -1114,6 +1114,7 @@ export interface components {
                 id: string;
                 name: string;
                 owner: string;
+                goal: string;
                 pendingIssueCount: number;
             }[];
             issues: {
