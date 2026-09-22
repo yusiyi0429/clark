@@ -6,6 +6,7 @@ import type {
   TBattlefieldManagementResponse,
   TBattlefieldTodo,
   TIssueLocation,
+  TMissionValue,
   TMonthlyPlanBattlefield,
   TMonthlyPlanExport,
   TMonthlyPlanFeedback,
@@ -19,8 +20,12 @@ type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 export type BattlefieldRow = {
   id: string;
   version: number;
+  code: string;
+  sort_order: number;
   name: string;
-  positioning: string;
+  owner_id: string;
+  six_month_outcome: string;
+  missions: TMissionValue[];
 };
 
 /** 已签发计划的最小结构：战场投影只读这一份持久对象，不保存第二份目标。 */
@@ -35,7 +40,9 @@ type ConfirmedPlanRow = {
 };
 
 export async function listBattlefieldRows(q: Query): Promise<BattlefieldRow[]> {
-  const result = await q("SELECT id, version, name, positioning FROM battlefield_config ORDER BY id");
+  const result = await q(
+    "SELECT id, version, code, sort_order, name, owner_id, six_month_outcome, missions FROM battlefield_config ORDER BY sort_order, code, id",
+  );
   return result.rows as BattlefieldRow[];
 }
 
@@ -120,35 +127,57 @@ export async function deleteBattlefield(pool: Pool, id: string): Promise<DeleteB
 
 export type RegisterBattlefieldResult =
   | { ok: true; id: string }
-  | { ok: false; code: "BATTLEFIELD_EXISTS"; message: string };
+  | { ok: false; status: 409; code: "BATTLEFIELD_EXISTS" | "BATTLEFIELD_NAME_CONFLICT" | "BATTLEFIELD_CODE_CONFLICT"; message: string };
 
-/** CEO 注册战场：goal 写入既有 positioning，owner 是 migration 018 新增列；同 slug 名称返回 409。 */
-export async function registerBattlefield(
-  q: Query,
-  input: { name: string; owner: string; goal: string },
-): Promise<RegisterBattlefieldResult> {
+export type BattlefieldWriteInput = {
+  code: string;
+  sortOrder: number;
+  name: string;
+  ownerId?: string;
+  sixMonthOutcome: string;
+  missions?: TMissionValue[];
+};
+
+/** code 非空时同表唯一；空 code 是迁移期未编号的旧行，不参与冲突。 */
+async function battlefieldCodeTaken(q: Query, code: string, selfId: string): Promise<boolean> {
+  const rows = await q("SELECT id FROM battlefield_config WHERE code = $1 AND id <> $2", [code, selfId]);
+  return (rows.rowCount ?? 0) > 0;
+}
+
+/** CEO 注册战场：显示编号与排序独立于名称；同 slug 显示名或同 code 返回 409。 */
+export async function registerBattlefield(q: Query, input: BattlefieldWriteInput): Promise<RegisterBattlefieldResult> {
   const id = slugId(input.name) || randomUUID();
+  const nextSlug = slugId(input.name) || null;
+  if (nextSlug) {
+    const rows = await q("SELECT id, name FROM battlefield_config");
+    if (hasNameSlugConflict(rows.rows as { id: string; name: string }[], id, nextSlug)) {
+      return { ok: false, status: 409, code: "BATTLEFIELD_NAME_CONFLICT", message: `战场名称与已有战场冲突（${nextSlug}）` };
+    }
+  }
+  if (await battlefieldCodeTaken(q, input.code, id)) {
+    return { ok: false, status: 409, code: "BATTLEFIELD_CODE_CONFLICT", message: `战场编号 ${input.code} 已被占用` };
+  }
   const result = await q(
-    `INSERT INTO battlefield_config (id, version, name, positioning, owner)
-     VALUES ($1, 1, $2, $3, $4)
+    `INSERT INTO battlefield_config (id, version, code, sort_order, name, owner_id, six_month_outcome, missions)
+     VALUES ($1, 1, $2, $3, $4, $5, $6, $7::jsonb)
      ON CONFLICT (id) DO NOTHING
      RETURNING id`,
-    [id, input.name, input.goal, input.owner],
+    [id, input.code, input.sortOrder, input.name, input.ownerId ?? "", input.sixMonthOutcome, JSON.stringify(input.missions ?? [])],
   );
-  if (result.rowCount !== 1) return { ok: false, code: "BATTLEFIELD_EXISTS", message: `战场 ${id} 已注册` };
+  if (result.rowCount !== 1) return { ok: false, status: 409, code: "BATTLEFIELD_EXISTS", message: `战场 ${id} 已注册` };
   return { ok: true, id };
 }
 
 export type UpdateBattlefieldResult =
   | { ok: true; id: string }
   | { ok: false; status: 404; code: "BATTLEFIELD_NOT_FOUND"; message: string }
-  | { ok: false; status: 409; code: "BATTLEFIELD_NAME_CONFLICT"; message: string };
+  | { ok: false; status: 409; code: "BATTLEFIELD_NAME_CONFLICT" | "BATTLEFIELD_CODE_CONFLICT"; message: string };
 
-/** CEO 编辑战场：id 稳定，只改显示字段并 version+1；新名 slug 撞到其他行的 id 或显示名时 409。 */
+/** CEO 编辑战场：id 稳定，只改显示字段并 version+1；新名 slug 或 code 撞到其他行时 409。 */
 export async function updateBattlefield(
   q: Query,
   id: string,
-  input: { name?: string; owner?: string; goal?: string },
+  input: Partial<BattlefieldWriteInput>,
 ): Promise<UpdateBattlefieldResult> {
   const nextSlug = input.name !== undefined ? slugId(input.name) || null : null;
   if (nextSlug) {
@@ -157,14 +186,28 @@ export async function updateBattlefield(
       return { ok: false, status: 409, code: "BATTLEFIELD_NAME_CONFLICT", message: `战场名称与已有战场冲突（${nextSlug}）` };
     }
   }
+  if (input.code !== undefined && (await battlefieldCodeTaken(q, input.code, id))) {
+    return { ok: false, status: 409, code: "BATTLEFIELD_CODE_CONFLICT", message: `战场编号 ${input.code} 已被占用` };
+  }
   const updated = await q(
     `UPDATE battlefield_config
-        SET name = COALESCE($2, name), owner = COALESCE($3, owner), positioning = COALESCE($4, positioning),
+        SET code = COALESCE($2, code), sort_order = COALESCE($3, sort_order), name = COALESCE($4, name),
+            owner_id = COALESCE($5, owner_id), six_month_outcome = COALESCE($6, six_month_outcome),
+            missions = COALESCE($7::jsonb, missions),
             version = version + 1, updated_at = now()
       WHERE id = $1
-        AND ($5::text IS NULL OR $5 = id OR NOT EXISTS (SELECT 1 FROM battlefield_config WHERE id = $5))
+        AND ($8::text IS NULL OR $8 = id OR NOT EXISTS (SELECT 1 FROM battlefield_config WHERE id = $8))
       RETURNING id`,
-    [id, input.name ?? null, input.owner ?? null, input.goal ?? null, nextSlug],
+    [
+      id,
+      input.code ?? null,
+      input.sortOrder ?? null,
+      input.name ?? null,
+      input.ownerId ?? null,
+      input.sixMonthOutcome ?? null,
+      input.missions === undefined ? null : JSON.stringify(input.missions),
+      nextSlug,
+    ],
   );
   if (updated.rowCount === 1) return { ok: true, id };
   const exists = await q("SELECT id FROM battlefield_config WHERE id = $1", [id]);
@@ -177,8 +220,10 @@ export async function updateBattlefield(
  * 议题只取 pending 且非 capability 级；battlefieldIds 即归一化集合，未归属为空数组，
  * 因此同一议题可以同时出现在多个战场的关联列表里。
  */
-export async function projectBattlefieldManagement(q: Query): Promise<TBattlefieldManagementResponse> {
-  const battlefields = await q("SELECT id, name, owner, positioning FROM battlefield_config ORDER BY name, id");
+export async function projectBattlefieldManagement(q: Query, ownerNames: Map<string, string>): Promise<TBattlefieldManagementResponse> {
+  const battlefields = await q(
+    "SELECT id, version, code, sort_order, name, owner_id, six_month_outcome, missions FROM battlefield_config ORDER BY sort_order, code, id",
+  );
   const issues = await q(
     `SELECT id, title, urgency, location FROM issues
       WHERE status = 'pending' AND location->>'level' <> 'capability'
@@ -192,11 +237,16 @@ export async function projectBattlefieldManagement(q: Query): Promise<TBattlefie
     battlefieldIds: battlefieldSetOf(row.location) ?? [],
   }));
   return {
-    battlefields: (battlefields.rows as { id: string; name: string; owner: string; positioning: string }[]).map((row) => ({
+    battlefields: (battlefields.rows as BattlefieldRow[]).map((row) => ({
       id: row.id,
+      version: row.version,
+      code: row.code,
+      sortOrder: row.sort_order,
       name: row.name,
-      owner: row.owner,
-      goal: row.positioning,
+      ownerId: row.owner_id,
+      ownerDisplayName: ownerNames.get(row.owner_id) ?? "",
+      sixMonthOutcome: row.six_month_outcome,
+      missions: row.missions ?? [],
       pendingIssueCount: pending.filter((issue) => issue.battlefieldIds.includes(row.id)).length,
     })),
     issues: pending,
@@ -231,7 +281,7 @@ function latestFeedback(
  * 战场 Card：正面读当前公司月已签发计划的目标，背面按时段内 todo/feedback 的 battlefieldId 投影。
  * 不计算百分比、健康分，也没有 BattlefieldProgress 对象。
  */
-export async function listBattlefieldCards(q: Query, period: string): Promise<TCard[]> {
+export async function listBattlefieldCards(q: Query, period: string, ownerNames: Map<string, string>): Promise<TCard[]> {
   const battlefields = await listBattlefieldRows(q);
   const planResult = await q(
     `SELECT version, period, company_outcome, battlefields, todos, negotiation, exports
@@ -265,8 +315,13 @@ export async function listBattlefieldCards(q: Query, period: string): Promise<TC
     const target = plan?.battlefields.find((candidate) => candidate.battlefieldId === battlefield.id)?.outcome ?? null;
     const payload: TBattlefieldCardPayload = {
       battlefieldId: battlefield.id,
+      code: battlefield.code,
+      sortOrder: battlefield.sort_order,
       name: battlefield.name,
-      positioning: battlefield.positioning,
+      ownerId: battlefield.owner_id,
+      ownerDisplayName: ownerNames.get(battlefield.owner_id) ?? "",
+      sixMonthOutcome: battlefield.six_month_outcome,
+      missions: battlefield.missions ?? [],
       period: plan?.period ?? null,
       target,
       pendingIssues: (issues.rows as { id: string; title: string; urgency: string; location: unknown }[])

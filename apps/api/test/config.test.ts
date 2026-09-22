@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
-import { Card, BattlefieldManagementResponse, MeetingCardPayload, type TPreflightCandidate } from "@warmap/contracts";
+import { Card, BattlefieldManagementResponse, MeetingCardPayload, StrategyConfigResponse, type TPreflightCandidate } from "@warmap/contracts";
 import { createTestApp, preflightCandidate, type TestApp } from "./helpers.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 
@@ -42,13 +42,22 @@ async function authed(t: TestApp): Promise<{ cookie: string; headers: Record<str
   return { cookie, headers: { cookie, origin: t.publicOrigin } };
 }
 
+/** 结构化战场写入：code/sortOrder 与名称独立，ownerId 用 fixture 里的 dri。 */
+function battlefieldBody(name: string, code: string, overrides: Record<string, unknown> = {}) {
+  return { code, sortOrder: Number(code) * 10, name, ownerId: "person-fixture-002", sixMonthOutcome: `${name}六个月目标`, ...overrides };
+}
+
+function capabilityBody(name: string, code: string, overrides: Record<string, unknown> = {}) {
+  return { code, sortOrder: Number(code) * 10, name, group: "", sixMonthOutcome: `${name}六个月目标`, ...overrides };
+}
+
 describe("CEO 配置页 create 路由", () => {
   it("rejects unauthenticated writes on all four routes", async () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {
       for (const [url, payload] of [
-        ["/api/config/battlefields", { name: "供应战场", owner: "张三", goal: "锁定供应" }],
-        ["/api/config/capabilities", { name: "供应链能力", group: "组织", description: "端到端交付" }],
+        ["/api/config/battlefields", battlefieldBody("供应战场", "01")],
+        ["/api/config/capabilities", capabilityBody("供应链能力", "01", { group: "组织" })],
         ["/api/config/issues", { title: "标题", battlefieldId: "growth" }],
         ["/api/config/meetings", { title: "会议", scheduledAt: "2026-06-01T10:00:00.000+08:00", leadDriId: "person-fixture-002" }],
       ] as const) {
@@ -68,7 +77,7 @@ describe("CEO 配置页 create 路由", () => {
         method: "POST",
         url: "/api/config/battlefields",
         headers,
-        payload: { name: "供应战场", owner: "张三", goal: "锁定关键器件的供应与价格" },
+        payload: battlefieldBody("供应战场", "01", { sixMonthOutcome: "锁定关键器件的供应与价格" }),
       });
       expect(created.statusCode).toBe(201);
       const card = created.json().cards[0];
@@ -76,22 +85,30 @@ describe("CEO 配置页 create 路由", () => {
       expect(card.kind).toBe("battlefield");
       expect(card.objectRef.id).toBe("供应战场");
 
-      const row = await t.sql("SELECT name, positioning, owner FROM battlefield_config WHERE id = $1", ["供应战场"]);
-      expect(row).toEqual([{ name: "供应战场", positioning: "锁定关键器件的供应与价格", owner: "张三" }]);
+      const row = await t.sql("SELECT name, code, sort_order, six_month_outcome, owner_id, missions FROM battlefield_config WHERE id = $1", ["供应战场"]);
+      expect(row).toEqual([{
+        name: "供应战场",
+        code: "01",
+        sort_order: 10,
+        six_month_outcome: "锁定关键器件的供应与价格",
+        owner_id: "person-fixture-002",
+        missions: [],
+      }]);
 
       const duplicate = await t.app.inject({
         method: "POST",
         url: "/api/config/battlefields",
         headers,
-        payload: { name: "供应战场", owner: "李四", goal: "另一套目标" },
+        payload: battlefieldBody("供应战场", "02"),
       });
       expect(duplicate.statusCode).toBe(409);
+      expect(duplicate.json().code).toBe("BATTLEFIELD_EXISTS");
 
       const missingField = await t.app.inject({
         method: "POST",
         url: "/api/config/battlefields",
         headers,
-        payload: { name: "空白战场", owner: "张三" },
+        payload: { code: "03", sortOrder: 30, name: "空白战场", ownerId: "person-fixture-002" },
       });
       expect(missingField.statusCode).toBe(400);
     } finally {
@@ -107,7 +124,7 @@ describe("CEO 配置页 create 路由", () => {
         method: "POST",
         url: "/api/config/capabilities",
         headers,
-        payload: { name: "供应链能力", group: "交付组织", description: "把关键器件从寻源到交付串成一条线" },
+        payload: capabilityBody("供应链能力", "01", { group: "交付组织", sixMonthOutcome: "把关键器件从寻源到交付串成一条线" }),
       });
       expect(created.statusCode).toBe(201);
       const card = created.json().cards[0];
@@ -115,9 +132,12 @@ describe("CEO 配置页 create 路由", () => {
       expect(card.kind).toBe("capability");
       expect(card.payload).toEqual({
         capabilityId: "供应链能力",
+        code: "01",
+        sortOrder: 10,
         name: "供应链能力",
         group: "交付组织",
-        description: "把关键器件从寻源到交付串成一条线",
+        sixMonthOutcome: "把关键器件从寻源到交付串成一条线",
+        supportRefs: [],
       });
 
       const home = await t.app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie: headers.cookie! } });
@@ -246,7 +266,7 @@ describe("CEO 配置页 create 路由", () => {
         method: "POST",
         url: "/api/config/battlefields",
         headers,
-        payload: { name: "渠道战场", owner: "张三", goal: "拿下东南亚渠道" },
+        payload: battlefieldBody("渠道战场", "02"),
       });
       expect(battlefield.statusCode).toBe(201);
       const extra = battlefield.json().cards[0].objectRef.id as string;
@@ -336,8 +356,8 @@ describe("CEO 配置页 create 路由", () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {
       const { headers } = await authed(t);
-      for (const name of ["渠道战场", "供应战场"]) {
-        const created = await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name, owner: "张三", goal: "目标" } });
+      for (const [code, name] of [["02", "渠道战场"], ["03", "供应战场"]] as const) {
+        const created = await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: battlefieldBody(name, code) });
         expect(created.statusCode).toBe(201);
       }
       // company[A,B]：两个战场都指向同一议题
@@ -380,7 +400,7 @@ describe("CEO 配置页 create 路由", () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {
       const { headers } = await authed(t);
-      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name: "渠道战场", owner: "张三", goal: "目标" } });
+      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: battlefieldBody("渠道战场", "02") });
       const assigned = await t.createIssue({ title: "增长战场议题" });
       const shared = await t.createIssue({ title: "跨战场议题", urgency: { level: "red", decisionBy: "2026-09-30", reason: "窗口关闭" } });
       await t.app.inject({ method: "POST", url: "/api/config/battlefields/渠道战场/issues", headers, payload: { issueId: shared.objectRef.id } });
@@ -394,8 +414,14 @@ describe("CEO 配置页 create 路由", () => {
       const body = res.json();
       expect(Value.Check(BattlefieldManagementResponse, body)).toBe(true);
       expect(body.battlefields).toEqual([
-        { id: "growth", name: "增长战场", owner: "", goal: "验证渠道结构与交付节奏，形成可复制的增长路径。", pendingIssueCount: 2 },
-        { id: "渠道战场", name: "渠道战场", owner: "张三", goal: "目标", pendingIssueCount: 1 },
+        {
+          id: "growth", version: 1, code: "", sortOrder: 0, name: "增长战场", ownerId: "", ownerDisplayName: "",
+          sixMonthOutcome: "验证渠道结构与交付节奏，形成可复制的增长路径。", missions: [], pendingIssueCount: 2,
+        },
+        {
+          id: "渠道战场", version: 1, code: "02", sortOrder: 20, name: "渠道战场", ownerId: "person-fixture-002",
+          ownerDisplayName: "测试乙", sixMonthOutcome: "渠道战场六个月目标", missions: [], pendingIssueCount: 1,
+        },
       ]);
       const byId = new Map(body.issues.map((issue: { id: string }) => [issue.id, issue]));
       expect([...byId.keys()].sort()).toEqual([assigned.objectRef.id, shared.objectRef.id, orphan.objectRef.id].sort());
@@ -414,35 +440,205 @@ describe("CEO 配置页 create 路由", () => {
   // Receipt schema 仍然只由 Meeting Outcome 写入；配置页不产生 Receipt。
 });
 
+describe("CEO 长期配置与结构化引用", () => {
+  it("reads and updates the company LTCO with version+1", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      const initial = await t.app.inject({ method: "GET", url: "/api/config/strategy", headers: { cookie: headers.cookie! } });
+      expect(initial.statusCode).toBe(200);
+      expect(Value.Check(StrategyConfigResponse, initial.json())).toBe(true);
+      expect(initial.json()).toEqual({ version: 1, ltco: "" });
+
+      const patched = await t.app.inject({ method: "PATCH", url: "/api/config/strategy", headers, payload: { ltco: "春节前完成核心业务第一次被真实证明。" } });
+      expect(patched.statusCode).toBe(200);
+      expect(patched.json()).toEqual({ version: 2, ltco: "春节前完成核心业务第一次被真实证明。" });
+      expect((await t.sql("SELECT version, ltco FROM company_strategy_config WHERE id = 'default'"))[0]).toEqual({
+        version: 2,
+        ltco: "春节前完成核心业务第一次被真实证明。",
+      });
+
+      const empty = await t.app.inject({ method: "PATCH", url: "/api/config/strategy", headers, payload: {} });
+      expect(empty.statusCode).toBe(400);
+      const anonymous = await t.app.inject({ method: "PATCH", url: "/api/config/strategy", headers: { origin: t.publicOrigin }, payload: { ltco: "x" } });
+      expect(anonymous.statusCode).toBe(401);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("validates ownerId against company-people.v1 and allows 待指派", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      const unknown = await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields",
+        headers,
+        payload: battlefieldBody("供应战场", "01", { ownerId: "person-unknown" }),
+      });
+      expect(unknown.statusCode).toBe(400);
+      expect(unknown.json().code).toBe("INVALID_OWNER");
+
+      const unassigned = await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields",
+        headers,
+        payload: { code: "01", sortOrder: 10, name: "供应战场", sixMonthOutcome: "锁定供应" },
+      });
+      expect(unassigned.statusCode).toBe(201);
+      expect(unassigned.json().cards[0].payload).toMatchObject({ ownerId: "", ownerDisplayName: "" });
+
+      const badPatch = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers, payload: { ownerId: "person-unknown" } });
+      expect(badPatch.statusCode).toBe(400);
+      expect(badPatch.json().code).toBe("INVALID_OWNER");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("rejects duplicate codes and keeps battlefield/capability lists in sortOrder, code, id order", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      for (const [code, name] of [["02", "灯塔项目"], ["01", "Token Ops"], ["03", "002 客户"]] as const) {
+        const created = await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: battlefieldBody(name, code) });
+        expect(created.statusCode).toBe(201);
+      }
+      const duplicateCode = await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: battlefieldBody("重复编号战场", "01") });
+      expect(duplicateCode.statusCode).toBe(409);
+      expect(duplicateCode.json().code).toBe("BATTLEFIELD_CODE_CONFLICT");
+
+      const management = await t.app.inject({ method: "GET", url: "/api/config/battlefields", headers: { cookie: headers.cookie! } });
+      // growth 是迁移期未编号行（sort_order 0, code ""），排在最前
+      expect(management.json().battlefields.map((item: { code: string }) => item.code)).toEqual(["", "01", "02", "03"]);
+
+      for (const [code, name] of [["03", "Method"], ["02", "Re-architecture"], ["04", "Agents"]] as const) {
+        expect((await t.app.inject({ method: "POST", url: "/api/config/capabilities", headers, payload: capabilityBody(name, code) })).statusCode).toBe(201);
+      }
+      const duplicateCapabilityCode = await t.app.inject({ method: "POST", url: "/api/config/capabilities", headers, payload: capabilityBody("重复能力", "02") });
+      expect(duplicateCapabilityCode.statusCode).toBe(409);
+      expect(duplicateCapabilityCode.json().code).toBe("CAPABILITY_CODE_CONFLICT");
+
+      const list = await t.app.inject({ method: "GET", url: "/api/config/capabilities", headers: { cookie: headers.cookie! } });
+      expect(list.json().capabilities.map((item: { code: string }) => item.code)).toEqual(["02", "03", "04"]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("validates capability supportRefs against registered battlefields and mission codes", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields",
+        headers,
+        payload: battlefieldBody("灯塔项目", "01", {
+          missions: [
+            { code: "01-1", title: "未来组织范式设计与确认" },
+            { code: "01-2", title: "CEO Agent 常态化使用" },
+          ],
+        }),
+      });
+
+      const unknownMission = await t.app.inject({
+        method: "POST",
+        url: "/api/config/capabilities",
+        headers,
+        payload: capabilityBody("Method", "03", { supportRefs: [{ type: "mission", missionCode: "09-9" }] }),
+      });
+      expect(unknownMission.statusCode).toBe(400);
+      expect(unknownMission.json().code).toBe("UNKNOWN_MISSION_CODE");
+
+      const unknownBattlefield = await t.app.inject({
+        method: "POST",
+        url: "/api/config/capabilities",
+        headers,
+        payload: capabilityBody("Method", "03", { supportRefs: [{ type: "battlefield", battlefieldId: "no-such" }] }),
+      });
+      expect(unknownBattlefield.statusCode).toBe(400);
+      expect(unknownBattlefield.json().code).toBe("UNKNOWN_BATTLEFIELD");
+
+      const created = await t.app.inject({
+        method: "POST",
+        url: "/api/config/capabilities",
+        headers,
+        payload: capabilityBody("Method", "03", {
+          supportRefs: [{ type: "mission", missionCode: "01-1" }, { type: "battlefield", battlefieldId: "灯塔项目" }, { type: "all-battlefields" }],
+        }),
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json().cards[0].payload.supportRefs).toEqual([
+        { type: "mission", missionCode: "01-1" },
+        { type: "battlefield", battlefieldId: "灯塔项目" },
+        { type: "all-battlefields" },
+      ]);
+
+      const badPatch = await t.app.inject({
+        method: "PATCH",
+        url: "/api/config/capabilities/Method",
+        headers,
+        payload: { supportRefs: [{ type: "mission", missionCode: "01-3" }] },
+      });
+      expect(badPatch.statusCode).toBe(400);
+      expect(badPatch.json().code).toBe("UNKNOWN_MISSION_CODE");
+
+      // 战场 missions 与 ownerDisplayName 一起投影到 Card 正面
+      const home = await t.app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie: headers.cookie! } });
+      const battlefieldCard = home.json().cards.find((candidate: { id: string }) => candidate.id === "battlefield:灯塔项目");
+      expect(battlefieldCard.payload).toMatchObject({
+        code: "01",
+        sortOrder: 10,
+        ownerId: "person-fixture-002",
+        ownerDisplayName: "测试乙",
+        missions: [
+          { code: "01-1", title: "未来组织范式设计与确认" },
+          { code: "01-2", title: "CEO Agent 常态化使用" },
+        ],
+      });
+      expect(battlefieldCard.payload.positioning).toBeUndefined();
+    } finally {
+      await t.close();
+    }
+  });
+});
+
 describe("CEO 配置页编辑路由", () => {
   it("patches a battlefield in place: id stable, version+1, projection reflects", async () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {
       const { headers } = await authed(t);
-      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name: "供应战场", owner: "张三", goal: "锁定供应" } });
+      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: battlefieldBody("供应战场", "01", { sixMonthOutcome: "锁定供应" }) });
 
       const patched = await t.app.inject({
         method: "PATCH",
         url: "/api/config/battlefields/供应战场",
         headers,
-        payload: { name: "供应链战场", owner: "李四", goal: "锁定关键器件" },
+        payload: { name: "供应链战场", code: "05", sortOrder: 50, ownerId: "", sixMonthOutcome: "锁定关键器件", missions: [{ code: "05-1", title: "关键器件寻源" }] },
       });
       expect(patched.statusCode).toBe(200);
       const card = patched.json().cards[0];
       expect(card.objectRef.id).toBe("供应战场");
       expect(card.objectRef.version).toBe(2);
       expect(card.title).toBe("供应链战场");
-      expect(card.payload.positioning).toBe("锁定关键器件");
+      expect(card.payload).toMatchObject({ code: "05", sortOrder: 50, sixMonthOutcome: "锁定关键器件", ownerId: "", ownerDisplayName: "", missions: [{ code: "05-1", title: "关键器件寻源" }] });
 
-      const rows = await t.sql("SELECT id, version, name, owner, positioning FROM battlefield_config WHERE id = $1", ["供应战场"]);
-      expect(rows[0]).toMatchObject({ id: "供应战场", version: 2, name: "供应链战场", owner: "李四", positioning: "锁定关键器件" });
+      const rows = await t.sql("SELECT id, version, code, sort_order, name, owner_id, six_month_outcome FROM battlefield_config WHERE id = $1", ["供应战场"]);
+      expect(rows[0]).toMatchObject({ id: "供应战场", version: 2, code: "05", sort_order: 50, name: "供应链战场", owner_id: "", six_month_outcome: "锁定关键器件" });
 
       const management = await t.app.inject({ method: "GET", url: "/api/config/battlefields", headers: { cookie: headers.cookie! } });
       expect(management.json().battlefields.find((item: { id: string }) => item.id === "供应战场")).toEqual({
         id: "供应战场",
+        version: 2,
+        code: "05",
+        sortOrder: 50,
         name: "供应链战场",
-        owner: "李四",
-        goal: "锁定关键器件",
+        ownerId: "",
+        ownerDisplayName: "",
+        sixMonthOutcome: "锁定关键器件",
+        missions: [{ code: "05-1", title: "关键器件寻源" }],
         pendingIssueCount: 0,
       });
 
@@ -461,8 +657,8 @@ describe("CEO 配置页编辑路由", () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {
       const { headers } = await authed(t);
-      for (const name of ["渠道战场", "供应战场"]) {
-        await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name, owner: "张三", goal: "目标" } });
+      for (const [code, name] of [["02", "渠道战场"], ["03", "供应战场"]] as const) {
+        await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: battlefieldBody(name, code) });
       }
 
       const conflict = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers, payload: { name: "渠道战场" } });
@@ -481,22 +677,30 @@ describe("CEO 配置页编辑路由", () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {
       const { headers } = await authed(t);
-      await t.app.inject({ method: "POST", url: "/api/config/capabilities", headers, payload: { name: "供应链能力", group: "交付组织", description: "端到端交付" } });
-      await t.app.inject({ method: "POST", url: "/api/config/capabilities", headers, payload: { name: "渠道能力", group: "增长组织", description: "渠道数据" } });
+      await t.app.inject({ method: "POST", url: "/api/config/capabilities", headers, payload: capabilityBody("供应链能力", "01", { group: "交付组织" }) });
+      await t.app.inject({ method: "POST", url: "/api/config/capabilities", headers, payload: capabilityBody("渠道能力", "02", { group: "增长组织" }) });
 
       const list = await t.app.inject({ method: "GET", url: "/api/config/capabilities", headers: { cookie: headers.cookie! } });
       expect(list.statusCode).toBe(200);
       expect(list.json().capabilities).toEqual([
-        { id: "供应链能力", version: 1, name: "供应链能力", group: "交付组织", description: "端到端交付" },
-        { id: "渠道能力", version: 1, name: "渠道能力", group: "增长组织", description: "渠道数据" },
+        { id: "供应链能力", version: 1, code: "01", sortOrder: 10, name: "供应链能力", group: "交付组织", sixMonthOutcome: "供应链能力六个月目标", supportRefs: [] },
+        { id: "渠道能力", version: 1, code: "02", sortOrder: 20, name: "渠道能力", group: "增长组织", sixMonthOutcome: "渠道能力六个月目标", supportRefs: [] },
       ]);
 
-      const patched = await t.app.inject({ method: "PATCH", url: "/api/config/capabilities/供应链能力", headers, payload: { name: "区域仓配服务", group: "平台能力" } });
+      const patched = await t.app.inject({ method: "PATCH", url: "/api/config/capabilities/供应链能力", headers, payload: { name: "区域仓配服务", group: "", code: "09", sortOrder: 90 } });
       expect(patched.statusCode).toBe(200);
       const card = patched.json().cards[0];
       expect(card.objectRef.id).toBe("供应链能力");
       expect(card.objectRef.version).toBe(2);
-      expect(card.payload).toEqual({ capabilityId: "供应链能力", name: "区域仓配服务", group: "平台能力", description: "端到端交付" });
+      expect(card.payload).toEqual({
+        capabilityId: "供应链能力",
+        code: "09",
+        sortOrder: 90,
+        name: "区域仓配服务",
+        group: "",
+        sixMonthOutcome: "供应链能力六个月目标",
+        supportRefs: [],
+      });
 
       const home = await t.app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie: headers.cookie! } });
       const capabilityCard = home.json().cards.find((candidate: { id: string }) => candidate.id === "capability:供应链能力");
@@ -519,7 +723,7 @@ describe("CEO 配置页编辑路由", () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {
       const { headers } = await authed(t);
-      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name: "供应战场", owner: "张三", goal: "锁定供应" } });
+      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: battlefieldBody("供应战场", "01") });
 
       // migration 种下的行是手写 id：growth 的显示名是增长战场，只比 id 会漏掉这个重名。
       const conflict = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers, payload: { name: "增长战场" } });
@@ -538,19 +742,19 @@ describe("CEO 配置页编辑路由", () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {
       const { headers } = await authed(t);
-      await t.sql(`INSERT INTO capability_config (id, version, name, "group", description) VALUES ('cap-legacy', 1, '渠道能力', '增长组织', '渠道数据')`);
-      await t.app.inject({ method: "POST", url: "/api/config/capabilities", headers, payload: { name: "供应能力", group: "交付组织", description: "端到端交付" } });
+      await t.sql(`INSERT INTO capability_config (id, version, code, sort_order, name, "group", six_month_outcome) VALUES ('cap-legacy', 1, '07', 70, '渠道能力', '增长组织', '渠道数据')`);
+      await t.app.inject({ method: "POST", url: "/api/config/capabilities", headers, payload: capabilityBody("供应能力", "01", { group: "交付组织" }) });
 
       const conflict = await t.app.inject({ method: "PATCH", url: "/api/config/capabilities/供应能力", headers, payload: { name: "渠道能力" } });
       expect(conflict.statusCode).toBe(409);
       expect(conflict.json().code).toBe("CAPABILITY_NAME_CONFLICT");
 
-      // 负责人允许清空（owner NOT NULL DEFAULT ''，界面显示“待指派”）。
-      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: { name: "供应战场", owner: "张三", goal: "锁定供应" } });
-      const cleared = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers, payload: { owner: "" } });
+      // 负责人允许清空（owner_id NOT NULL DEFAULT ''，界面显示“待指派”）。
+      await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers, payload: battlefieldBody("供应战场", "01") });
+      const cleared = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers, payload: { ownerId: "" } });
       expect(cleared.statusCode).toBe(200);
       const management = await t.app.inject({ method: "GET", url: "/api/config/battlefields", headers: { cookie: headers.cookie! } });
-      expect(management.json().battlefields.find((item: { id: string }) => item.id === "供应战场")).toMatchObject({ owner: "" });
+      expect(management.json().battlefields.find((item: { id: string }) => item.id === "供应战场")).toMatchObject({ ownerId: "", ownerDisplayName: "" });
     } finally {
       await t.close();
     }

@@ -7,6 +7,7 @@ import {
   PatchBattlefieldRequest,
   CreateCapabilityRequest,
   PatchCapabilityRequest,
+  PatchStrategyConfigRequest,
   CreateCeoIssueRequest,
   CreateConfigMeetingRequest,
   type TBattlefieldManagementResponse,
@@ -15,10 +16,12 @@ import {
   type TCreateConfigMeetingRequest,
 } from "@warmap/contracts";
 import { deleteBattlefield, listBattlefieldCards, projectBattlefieldManagement, registerBattlefield, updateBattlefield } from "../battlefields.js";
-import { listCapabilityCards, listCapabilityRows, registerCapability, updateCapability } from "../capabilities.js";
+import { listCapabilityCards, listCapabilityRows, registerCapability, updateCapability, validateSupportRefs } from "../capabilities.js";
 import { assignIssueBattlefield, createCeoIssue, unassignIssueBattlefield } from "../issues.js";
 import { createConfigMeeting } from "../meetings.js";
 import { companyPeriod } from "../monthlyPlans.js";
+import { isKnownOwner, personDisplayNames } from "../people.js";
+import { getStrategyConfig, updateStrategyConfig } from "../strategy.js";
 import { MAX_MATERIAL_BATCH_BYTES, MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch } from "../materialParser.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
@@ -47,13 +50,21 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
   if (invalid) return { error: `字段 ${invalid.path.replace(/^\//, "") || "body"} 不合法` };
   return { value: body as TCreateConfigMeetingRequest };
 }
+  app.get("/api/config/strategy", { preHandler: requireCEO }, async () => getStrategyConfig(q));
+  app.patch(
+    "/api/config/strategy",
+    { preHandler: requireCEO, schema: { body: PatchStrategyConfigRequest } },
+    async (req) => updateStrategyConfig(q, req.body.ltco),
+  );
   app.post(
     "/api/config/battlefields",
     { preHandler: requireCEO, schema: { body: CreateBattlefieldRequest } },
     async (req, reply): Promise<FastifyReply> => {
+      const ownerNames = personDisplayNames(companyMemory);
+      if (!isKnownOwner(ownerNames, req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
       const result = await registerBattlefield(q, req.body);
-      if (!result.ok) return fail(reply, 409, result.code, result.message);
-      const cards = await listBattlefieldCards(q, companyPeriod(now()));
+      if (!result.ok) return fail(reply, result.status, result.code, result.message);
+      const cards = await listBattlefieldCards(q, companyPeriod(now()), ownerNames);
       return reply.status(201).send({ cards: cards.filter((card) => card.objectRef.id === result.id) });
     },
   );
@@ -61,8 +72,11 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     "/api/config/capabilities",
     { preHandler: requireCEO, schema: { body: CreateCapabilityRequest } },
     async (req, reply): Promise<FastifyReply> => {
+      const refs = req.body.supportRefs ?? [];
+      const refsValid = await validateSupportRefs(q, refs);
+      if (!refsValid.ok) return fail(reply, 400, refsValid.code, refsValid.message);
       const result = await registerCapability(q, req.body);
-      if (!result.ok) return fail(reply, 409, result.code, result.message);
+      if (!result.ok) return fail(reply, result.status, result.code, result.message);
       const cards = (await listCapabilityCards(q)).filter((card) => card.objectRef.id === result.id);
       return reply.status(201).send({ cards });
     },
@@ -77,6 +91,10 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     "/api/config/capabilities/:id",
     { preHandler: requireCEO, schema: { params: idParams, body: PatchCapabilityRequest } },
     async (req, reply): Promise<FastifyReply> => {
+      if (req.body.supportRefs !== undefined) {
+        const refsValid = await validateSupportRefs(q, req.body.supportRefs);
+        if (!refsValid.ok) return fail(reply, 400, refsValid.code, refsValid.message);
+      }
       const result = await updateCapability(q, req.params.id, req.body);
       if (!result.ok) return fail(reply, result.status, result.code, result.message);
       const cards = (await listCapabilityCards(q)).filter((card) => card.objectRef.id === result.id);
@@ -159,9 +177,11 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     "/api/config/battlefields/:id",
     { preHandler: requireCEO, schema: { params: idParams, body: PatchBattlefieldRequest } },
     async (req, reply): Promise<FastifyReply> => {
+      const ownerNames = personDisplayNames(companyMemory);
+      if (!isKnownOwner(ownerNames, req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
       const result = await updateBattlefield(q, req.params.id, req.body);
       if (!result.ok) return fail(reply, result.status, result.code, result.message);
-      const cards = (await listBattlefieldCards(q, companyPeriod(now()))).filter((card) => card.objectRef.id === result.id);
+      const cards = (await listBattlefieldCards(q, companyPeriod(now()), ownerNames)).filter((card) => card.objectRef.id === result.id);
       return reply.status(200).send({ cards });
     },
   );
@@ -170,7 +190,7 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
   app.get(
     "/api/config/battlefields",
     { preHandler: requireCEO },
-    async (): Promise<TBattlefieldManagementResponse> => projectBattlefieldManagement(q),
+    async (): Promise<TBattlefieldManagementResponse> => projectBattlefieldManagement(q, personDisplayNames(companyMemory)),
   );
 
   // CEO 配置页的议题↔战场关联集合：确定性配置语义，不走 opaque-action。

@@ -5,6 +5,7 @@ import { listCapabilityCards } from "../capabilities.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "../issues.js";
 import { getMeetingRow, listMeetingRows, projectMeetingCard } from "../meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice, getMonthlyPlanRow, listMonthlyPlanRows, projectMonthlyPlanCard } from "../monthlyPlans.js";
+import { personDisplayNames } from "../people.js";
 import { projectRadarCard } from "../signals.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
@@ -21,7 +22,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
   app.get("/api/cards/home", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
     const [radarCard, battlefields, issues, capabilities, meetingRows, monthlyNotice] = await Promise.all([
       projectRadarCard(q, radar.providerStatus),
-      listBattlefieldCards(q, companyPeriod(now())),
+      listBattlefieldCards(q, companyPeriod(now()), personDisplayNames(companyMemory)),
       listPendingIssueCards(q, env.sessionSecret),
       listCapabilityCards(q),
       listMeetingRows(q),
@@ -85,6 +86,6 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
 
   // 战场 Card：正面读已签发计划目标，背面按 battlefieldId 投影 todo/feedback，与通知同源。
   app.get("/api/cards/battlefields", { preHandler: requireCEO }, async (): Promise<TCardCollection> => ({
-    cards: await listBattlefieldCards(q, companyPeriod(now())),
+    cards: await listBattlefieldCards(q, companyPeriod(now()), personDisplayNames(companyMemory)),
   }));
 }
