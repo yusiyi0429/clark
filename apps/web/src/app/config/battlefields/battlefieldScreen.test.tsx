@@ -116,20 +116,20 @@ describe("战场编辑弹层提交字段", () => {
   const current = battlefieldDraft(battlefields[1]);
 
   it("未改动的空负责人不进 patch，只改六个月目标时只发 sixMonthOutcome", () => {
-    expect(battlefieldEditPatch(current, current)).toEqual({});
-    expect(battlefieldEditPatch(current, { ...current, sixMonthOutcome: "锁定关键器件" })).toEqual({ sixMonthOutcome: "锁定关键器件" });
+    expect(battlefieldEditPatch(current, current)).toEqual({ ok: true, patch: {} });
+    expect(battlefieldEditPatch(current, { ...current, sixMonthOutcome: "锁定关键器件" })).toEqual({ ok: true, patch: { sixMonthOutcome: "锁定关键器件" } });
   });
 
   it("主动指定负责人提交 personId，改名发去空格后的名字", () => {
-    expect(battlefieldEditPatch(current, { ...current, ownerId: "person-fixture-002" })).toEqual({ ownerId: "person-fixture-002" });
-    expect(battlefieldEditPatch(current, { ...current, name: " 供应链战场 " })).toEqual({ name: "供应链战场" });
-    expect(battlefieldEditPatch(current, { ...current, name: "   " })).toEqual({});
+    expect(battlefieldEditPatch(current, { ...current, ownerId: "person-fixture-002" })).toEqual({ ok: true, patch: { ownerId: "person-fixture-002" } });
+    expect(battlefieldEditPatch(current, { ...current, name: " 供应链战场 " })).toEqual({ ok: true, patch: { name: "供应链战场" } });
+    expect(battlefieldEditPatch(current, { ...current, name: "   " })).toEqual({ ok: true, patch: {} });
   });
 
   it("编号/顺序以文本编辑，改动才转成数字下发", () => {
-    expect(battlefieldEditPatch(current, { ...current, code: "07" })).toEqual({ code: "07" });
-    expect(battlefieldEditPatch(current, { ...current, sortOrder: "70" })).toEqual({ sortOrder: 70 });
-    expect(battlefieldEditPatch(current, { ...current, sortOrder: "abc" })).toEqual({});
+    expect(battlefieldEditPatch(current, { ...current, code: "07" })).toEqual({ ok: true, patch: { code: "07" } });
+    expect(battlefieldEditPatch(current, { ...current, sortOrder: "70" })).toEqual({ ok: true, patch: { sortOrder: 70 } });
+    expect(battlefieldEditPatch(current, { ...current, sortOrder: "abc" })).toEqual({ ok: true, patch: {} });
   });
 });
 
@@ -141,16 +141,27 @@ describe("Mission 文本与结构化值互转", () => {
       { code: "01-2", title: "CEO Agent 常态化使用" },
     ];
     expect(formatMissions(missions)).toBe("01-1 未来组织范式设计与确认\n01-2 CEO Agent 常态化使用");
-    expect(parseMissions(formatMissions(missions))).toEqual(missions);
+    expect(parseMissions(formatMissions(missions))).toEqual({ ok: true, missions });
   });
 
-  it("丢弃空行与缺少标题的行，标题里的空格保留", () => {
-    expect(parseMissions("\n01-1  未来 组织范式 \n\n孤儿编号\n")).toEqual([{ code: "01-1", title: "未来 组织范式" }]);
+  it("空文本与空行合法，标题里的空格保留", () => {
+    expect(parseMissions("")).toEqual({ ok: true, missions: [] });
+    expect(parseMissions("\n  \n")).toEqual({ ok: true, missions: [] });
+    expect(parseMissions("01-1  未来 组织范式 ")).toEqual({ ok: true, missions: [{ code: "01-1", title: "未来 组织范式" }] });
+  });
+
+  it("缺编号、缺标题、编号重复都报错并阻止下发", () => {
+    expect(parseMissions("01-1 标题\n孤儿编号")).toEqual({ ok: false, error: "第 2 行缺少编号或标题：每行需为「编号 空格 标题」" });
+    expect(parseMissions(" 只有标题")).toEqual({ ok: false, error: "第 1 行缺少编号" });
+    expect(parseMissions("01-1 ")).toEqual({ ok: false, error: "第 1 行缺少标题" });
+    expect(parseMissions("01-1 标题\n01-1 另一标题")).toEqual({ ok: false, error: "第 2 行编号 01-1 重复" });
+    const current = battlefieldDraft(battlefields[0]);
+    expect(battlefieldEditPatch(current, { ...current, missions: "01-1 标题\n01-1 重复" })).toEqual({ ok: false, error: "第 2 行编号 01-1 重复" });
   });
 
   it("编辑弹层比较文本：改一行才发 missions", () => {
     const current = battlefieldDraft(battlefields[0]);
-    expect(battlefieldEditPatch(current, { ...current, missions: formatMissions(battlefields[0].missions) })).toEqual({});
-    expect(battlefieldEditPatch(current, { ...current, missions: "01-1 改过的标题" })).toEqual({ missions: [{ code: "01-1", title: "改过的标题" }] });
+    expect(battlefieldEditPatch(current, { ...current, missions: formatMissions(battlefields[0].missions) })).toEqual({ ok: true, patch: {} });
+    expect(battlefieldEditPatch(current, { ...current, missions: "01-1 改过的标题" })).toEqual({ ok: true, patch: { missions: [{ code: "01-1", title: "改过的标题" }] } });
   });
 });

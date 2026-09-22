@@ -804,3 +804,114 @@ describe("CEO 配置页编辑路由", () => {
     }
   });
 });
+
+describe("Mission code 全表唯一与旧引用清理", () => {
+  it("rejects duplicate Mission codes inside one payload and across battlefields", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      const samePayload = await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields",
+        headers,
+        payload: battlefieldBody("灯塔项目", "01", { missions: [{ code: "01-1", title: "A" }, { code: "01-1", title: "B" }] }),
+      });
+      expect(samePayload.statusCode).toBe(409);
+      expect(samePayload.json().code).toBe("MISSION_CODE_CONFLICT");
+
+      expect(
+        (await t.app.inject({
+          method: "POST",
+          url: "/api/config/battlefields",
+          headers,
+          payload: battlefieldBody("灯塔项目", "01", { missions: [{ code: "01-1", title: "A" }] }),
+        })).statusCode,
+      ).toBe(201);
+      const cross = await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields",
+        headers,
+        payload: battlefieldBody("Token Ops", "02", { missions: [{ code: "01-1", title: "占用同一编号" }] }),
+      });
+      expect(cross.statusCode).toBe(409);
+      expect(cross.json().code).toBe("MISSION_CODE_CONFLICT");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("rejects a patch that duplicates a Mission code, and clears removed refs with version+1", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields",
+        headers,
+        payload: battlefieldBody("灯塔项目", "01", { missions: [{ code: "01-1", title: "未来组织范式" }, { code: "01-2", title: "CEO Agent" }] }),
+      });
+      await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields",
+        headers,
+        payload: battlefieldBody("Token Ops", "02", { missions: [{ code: "02-1", title: "TokenHub 生产化" }] }),
+      });
+      const capability = await t.app.inject({
+        method: "POST",
+        url: "/api/config/capabilities",
+        headers,
+        payload: capabilityBody("Method", "03", {
+          supportRefs: [
+            { type: "mission", missionCode: "01-1" },
+            { type: "mission", missionCode: "01-2" },
+            { type: "battlefield", battlefieldId: "灯塔项目" },
+            { type: "all-battlefields" },
+          ],
+        }),
+      });
+      expect(capability.statusCode).toBe(201);
+
+      const crossConflict = await t.app.inject({
+        method: "PATCH",
+        url: "/api/config/battlefields/token-ops",
+        headers,
+        payload: { missions: [{ code: "02-1", title: "TokenHub 生产化" }, { code: "01-1", title: "撞号" }] },
+      });
+      expect(crossConflict.statusCode).toBe(409);
+      expect(crossConflict.json().code).toBe("MISSION_CODE_CONFLICT");
+
+      const sameConflict = await t.app.inject({
+        method: "PATCH",
+        url: "/api/config/battlefields/token-ops",
+        headers,
+        payload: { missions: [{ code: "02-1", title: "A" }, { code: "02-1", title: "B" }] },
+      });
+      expect(sameConflict.statusCode).toBe(409);
+      expect(sameConflict.json().code).toBe("MISSION_CODE_CONFLICT");
+
+      const patched = await t.app.inject({
+        method: "PATCH",
+        url: "/api/config/battlefields/灯塔项目",
+        headers,
+        payload: { missions: [{ code: "01-1", title: "未来组织范式" }] },
+      });
+      expect(patched.statusCode).toBe(200);
+      expect(patched.json().cards[0].objectRef.version).toBe(2);
+      expect(patched.json().cards[0].payload.missions).toEqual([{ code: "01-1", title: "未来组织范式" }]);
+
+      const capRow = await t.sql("SELECT version, support_refs FROM capability_config WHERE id = $1", ["method"]);
+      expect(capRow[0]).toEqual({
+        version: 2,
+        support_refs: [
+          { type: "mission", missionCode: "01-1" },
+          { type: "battlefield", battlefieldId: "灯塔项目" },
+          { type: "all-battlefields" },
+        ],
+      });
+      const untouched = await t.sql("SELECT version FROM battlefield_config WHERE id = $1", ["token-ops"]);
+      expect(untouched[0]).toEqual({ version: 1 });
+    } finally {
+      await t.close();
+    }
+  });
+});

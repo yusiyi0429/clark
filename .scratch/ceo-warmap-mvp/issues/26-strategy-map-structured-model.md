@@ -148,3 +148,13 @@ W5 复核后确认 4 个遗留缺陷，按用户选定的方案 A（追根因、
 **验证**：typecheck ×3 通过；contracts 32；web 21 文件 / 126；API 27 文件 / **331 全过**（含此前 2 项 `outletSources.test.ts` 时间窗波动，现已消除）。staging 重建 api+web 后 `healthz` 200，`/api/config/battlefields` 3、`/api/config/capabilities` 7、`/api/cards/home` 14（3 战场 + 7 能力）、2026-09 计划 confirmed v6 且已核对 11 项，均未改动 staging 业务内容。浏览器复验：战场编辑弹层标签为「负责人」+ 单个「待指派」选项（OCR 截图核对），月度计划页 11 个核对项全部勾选且只读，首页 1440 宽 3 列无溢出。
 
 **限制**：`monthlyDraftPatch` 的「只提交改动字段」由单元测试覆盖（web 侧无 DOM 测试环境，不引入新依赖）；已签发的 2026-09 计划在浏览器里无法验证保存按钮的启用态（该计划是只读终态，服务端不下发编辑 Action）；未 push。
+
+### Mission 编号唯一与解析收口（2026-09-22，本次）
+
+- **API 全局唯一**：`battlefields.ts` 新增 `missionCodeConflict()`，create/patch 都拒绝同一 payload 内重复与跨战场重复的 Mission code，返回 `409 MISSION_CODE_CONFLICT`（`RegisterBattlefieldResult`/`UpdateBattlefieldResult` 的 code 联合新增该值）。
+- **同事务清理旧引用**：`updateBattlefield` 改为接收 `Pool` 并开启事务，`SELECT … FOR UPDATE` 锁定战场行；本次 patch 删除或改名旧 Mission 时，用 `dropMissionSupportRefs()` 在同一事务内清掉 `capability_config.support_refs` 中指向这些旧 code 的 `{type:"mission"}`，只有真正被改的能力 `version+1`，随战场更新一起 COMMIT。`deleteBattlefield` 既有逻辑不动。
+- **Web 不静默丢行**：`parseMissions` 改为返回 `{ok:true,missions}|{ok:false,error}`，逐行校验「编号 空格 标题」；缺编号、缺标题、编号重复都给出具体行号错误。`battlefieldEditPatch` 返回同样结构，非法文本时阻止 PATCH；弹层实时显示错误并禁用「保存」。空文本仍合法（`missions: []`）。
+- **测试**：API `config.test.ts` 新增同 payload 重复、跨战场重复、patch 冲突、patch 移除同事务清 ref 且 version+1；web `battlefieldScreen.test.tsx` 覆盖缺编号、缺标题、重复编号与 patch 阻止。
+- **验证**：typecheck ×3；contracts 32；web 21 文件 / 127；API 27 文件 / 333 全过（`--maxWorkers=1`）。staging 重建 api+web（镜像内已确认含 `MISSION_CODE_CONFLICT` 与 web 侧「缺少编号」文案），`healthz` 200。
+- **staging 临时对象 journey（做完即清理）**：建临时战场（Mission `ZZ-1`/`ZZ-2`）与临时能力（引用这两个 Mission + all-battlefields）；同 payload 重复与跨战场重复在 create 与 patch 上都得到 `409 MISSION_CODE_CONFLICT`；PATCH 移除 `ZZ-1` 后同一事务里该能力 `v2` 且 refs 只剩 `ZZ-2 + all-battlefields`，另 7 个能力 version 全部不变；再 PATCH 把 `ZZ-2` 改名为 `ZZ-3` 后该能力 `v3` 且 refs 只剩 `all-battlefields`。随后删临时战场（API 204）与临时能力（受控 SQL，能力无 DELETE 路由），逐字段对比 journey 前后快照：3 个战场（01/10 四 Mission、02/20 一 Mission、03/30 无）、7 个能力（v2 与 supportRefs 全同）、LTCO v2、首页 14 卡（3 战场 + 7 能力）、2026-09 计划 confirmed v6 已核对 11 项，全部未变。
+- **限制**：Mission code 唯一性只在 API 层强制（无 DB 约束，与既有 `code` 冲突检查一致，单一 CEO 写入方）；Mission 文本超过 20 条时不静默截断，而是由契约 `maxItems: 20` 返回 400（文案为通用「字段 missions 不合法」）；「非法行不能保存」由 `battlefieldEditPatch` 返回错误覆盖（web 无 DOM 测试环境，未断言按钮 disabled 属性）；未 push。

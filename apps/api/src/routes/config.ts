@@ -179,7 +179,7 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     async (req, reply): Promise<FastifyReply> => {
       const ownerNames = personDisplayNames(companyMemory);
       if (!isKnownOwner(ownerNames, req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
-      const result = await updateBattlefield(q, req.params.id, req.body);
+      const result = await updateBattlefield(pool, req.params.id, req.body);
       if (!result.ok) return fail(reply, result.status, result.code, result.message);
       const cards = (await listBattlefieldCards(q, companyPeriod(now()), ownerNames)).filter((card) => card.objectRef.id === result.id);
       return reply.status(200).send({ cards });

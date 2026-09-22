@@ -149,7 +149,7 @@ export async function deleteBattlefield(pool: Pool, id: string): Promise<DeleteB
 
 export type RegisterBattlefieldResult =
   | { ok: true; id: string }
-  | { ok: false; status: 409; code: "BATTLEFIELD_EXISTS" | "BATTLEFIELD_NAME_CONFLICT" | "BATTLEFIELD_CODE_CONFLICT"; message: string };
+  | { ok: false; status: 409; code: "BATTLEFIELD_EXISTS" | "BATTLEFIELD_NAME_CONFLICT" | "BATTLEFIELD_CODE_CONFLICT" | "MISSION_CODE_CONFLICT"; message: string };
 
 export type BattlefieldWriteInput = {
   code: string;
@@ -166,6 +166,39 @@ async function battlefieldCodeTaken(q: Query, code: string, selfId: string): Pro
   return (rows.rowCount ?? 0) > 0;
 }
 
+/** Mission code 全表唯一：同一次 payload 内重复与跨战场重复都算冲突，返回第一个冲突 code。 */
+async function missionCodeConflict(q: Query, missions: TMissionValue[], selfId: string): Promise<string | undefined> {
+  const seen = new Set<string>();
+  for (const mission of missions) {
+    if (seen.has(mission.code)) return mission.code;
+    seen.add(mission.code);
+  }
+  if (seen.size === 0) return undefined;
+  const rows = await q("SELECT missions FROM battlefield_config WHERE id <> $1", [selfId]);
+  for (const row of rows.rows as { missions: TMissionValue[] }[]) {
+    for (const mission of row.missions ?? []) {
+      if (seen.has(mission.code)) return mission.code;
+    }
+  }
+  return undefined;
+}
+
+/** 清掉能力里指向这些 Mission code 的 supportRefs，只有真正被改的能力 version+1。 */
+async function dropMissionSupportRefs(q: Query, missionCodes: Set<string>): Promise<void> {
+  if (missionCodes.size === 0) return;
+  const capabilities = await q("SELECT id, support_refs FROM capability_config FOR UPDATE");
+  for (const row of capabilities.rows as { id: string; support_refs: TCapabilitySupportRef[] }[]) {
+    const refs = row.support_refs ?? [];
+    const kept = refs.filter((ref) => !(ref.type === "mission" && missionCodes.has(ref.missionCode)));
+    if (kept.length !== refs.length) {
+      await q("UPDATE capability_config SET support_refs = $2::jsonb, version = version + 1 WHERE id = $1", [
+        row.id,
+        JSON.stringify(kept),
+      ]);
+    }
+  }
+}
+
 /** CEO 注册战场：显示编号与排序独立于名称；同 slug 显示名或同 code 返回 409。 */
 export async function registerBattlefield(q: Query, input: BattlefieldWriteInput): Promise<RegisterBattlefieldResult> {
   const id = slugId(input.name) || randomUUID();
@@ -178,6 +211,10 @@ export async function registerBattlefield(q: Query, input: BattlefieldWriteInput
   }
   if (await battlefieldCodeTaken(q, input.code, id)) {
     return { ok: false, status: 409, code: "BATTLEFIELD_CODE_CONFLICT", message: `战场编号 ${input.code} 已被占用` };
+  }
+  const missionConflict = await missionCodeConflict(q, input.missions ?? [], id);
+  if (missionConflict) {
+    return { ok: false, status: 409, code: "MISSION_CODE_CONFLICT", message: `Mission 编号 ${missionConflict} 已被占用` };
   }
   const result = await q(
     `INSERT INTO battlefield_config (id, version, code, sort_order, name, owner_id, six_month_outcome, missions)
@@ -193,48 +230,86 @@ export async function registerBattlefield(q: Query, input: BattlefieldWriteInput
 export type UpdateBattlefieldResult =
   | { ok: true; id: string }
   | { ok: false; status: 404; code: "BATTLEFIELD_NOT_FOUND"; message: string }
-  | { ok: false; status: 409; code: "BATTLEFIELD_NAME_CONFLICT" | "BATTLEFIELD_CODE_CONFLICT"; message: string };
+  | { ok: false; status: 409; code: "BATTLEFIELD_NAME_CONFLICT" | "BATTLEFIELD_CODE_CONFLICT" | "MISSION_CODE_CONFLICT"; message: string };
 
-/** CEO 编辑战场：id 稳定，只改显示字段并 version+1；新名 slug 或 code 撞到其他行时 409。 */
+/**
+ * CEO 编辑战场：id 稳定，只改显示字段并 version+1；新名 slug、code 或 Mission code 撞到其他行时 409。
+ * 一次事务内完成战场更新与旧 Mission code 的 supportRefs 清理，避免悬空引用。
+ */
 export async function updateBattlefield(
-  q: Query,
+  pool: Pool,
   id: string,
   input: Partial<BattlefieldWriteInput>,
 ): Promise<UpdateBattlefieldResult> {
-  const nextSlug = input.name !== undefined ? slugId(input.name) || null : null;
-  if (nextSlug) {
-    const rows = await q("SELECT id, name FROM battlefield_config");
-    if (hasNameSlugConflict(rows.rows as { id: string; name: string }[], id, nextSlug)) {
+  const client = await pool.connect();
+  try {
+    const q: Query = (sql, params) => client.query(sql, params);
+    await client.query("BEGIN");
+    const locked = await client.query<{ id: string; missions: TMissionValue[] }>(
+      "SELECT id, missions FROM battlefield_config WHERE id = $1 FOR UPDATE",
+      [id],
+    );
+    if (locked.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return { ok: false, status: 404, code: "BATTLEFIELD_NOT_FOUND", message: "战场不存在" };
+    }
+    const nextSlug = input.name !== undefined ? slugId(input.name) || null : null;
+    if (nextSlug) {
+      const rows = await client.query("SELECT id, name FROM battlefield_config");
+      if (hasNameSlugConflict(rows.rows as { id: string; name: string }[], id, nextSlug)) {
+        await client.query("ROLLBACK");
+        return { ok: false, status: 409, code: "BATTLEFIELD_NAME_CONFLICT", message: `战场名称与已有战场冲突（${nextSlug}）` };
+      }
+    }
+    if (input.code !== undefined && (await battlefieldCodeTaken(q, input.code, id))) {
+      await client.query("ROLLBACK");
+      return { ok: false, status: 409, code: "BATTLEFIELD_CODE_CONFLICT", message: `战场编号 ${input.code} 已被占用` };
+    }
+    if (input.missions !== undefined) {
+      const missionConflict = await missionCodeConflict(q, input.missions, id);
+      if (missionConflict) {
+        await client.query("ROLLBACK");
+        return { ok: false, status: 409, code: "MISSION_CODE_CONFLICT", message: `Mission 编号 ${missionConflict} 已被占用` };
+      }
+    }
+    const updated = await client.query(
+      `UPDATE battlefield_config
+          SET code = COALESCE($2, code), sort_order = COALESCE($3, sort_order), name = COALESCE($4, name),
+              owner_id = COALESCE($5, owner_id), six_month_outcome = COALESCE($6, six_month_outcome),
+              missions = COALESCE($7::jsonb, missions),
+              version = version + 1, updated_at = now()
+        WHERE id = $1
+          AND ($8::text IS NULL OR $8 = id OR NOT EXISTS (SELECT 1 FROM battlefield_config WHERE id = $8))
+        RETURNING id`,
+      [
+        id,
+        input.code ?? null,
+        input.sortOrder ?? null,
+        input.name ?? null,
+        input.ownerId ?? null,
+        input.sixMonthOutcome ?? null,
+        input.missions === undefined ? null : JSON.stringify(input.missions),
+        nextSlug,
+      ],
+    );
+    if (updated.rowCount !== 1) {
+      await client.query("ROLLBACK");
       return { ok: false, status: 409, code: "BATTLEFIELD_NAME_CONFLICT", message: `战场名称与已有战场冲突（${nextSlug}）` };
     }
+    // 删除或改名旧 Mission：同事务清掉指向这些 code 的 supportRefs，受影响能力 version+1
+    if (input.missions !== undefined) {
+      const nextCodes = new Set(input.missions.map((mission) => mission.code));
+      const removed = new Set((locked.rows[0].missions ?? []).map((mission) => mission.code).filter((code) => !nextCodes.has(code)));
+      await dropMissionSupportRefs(q, removed);
+    }
+    await client.query("COMMIT");
+    return { ok: true, id };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
   }
-  if (input.code !== undefined && (await battlefieldCodeTaken(q, input.code, id))) {
-    return { ok: false, status: 409, code: "BATTLEFIELD_CODE_CONFLICT", message: `战场编号 ${input.code} 已被占用` };
-  }
-  const updated = await q(
-    `UPDATE battlefield_config
-        SET code = COALESCE($2, code), sort_order = COALESCE($3, sort_order), name = COALESCE($4, name),
-            owner_id = COALESCE($5, owner_id), six_month_outcome = COALESCE($6, six_month_outcome),
-            missions = COALESCE($7::jsonb, missions),
-            version = version + 1, updated_at = now()
-      WHERE id = $1
-        AND ($8::text IS NULL OR $8 = id OR NOT EXISTS (SELECT 1 FROM battlefield_config WHERE id = $8))
-      RETURNING id`,
-    [
-      id,
-      input.code ?? null,
-      input.sortOrder ?? null,
-      input.name ?? null,
-      input.ownerId ?? null,
-      input.sixMonthOutcome ?? null,
-      input.missions === undefined ? null : JSON.stringify(input.missions),
-      nextSlug,
-    ],
-  );
-  if (updated.rowCount === 1) return { ok: true, id };
-  const exists = await q("SELECT id FROM battlefield_config WHERE id = $1", [id]);
-  if (exists.rowCount !== 1) return { ok: false, status: 404, code: "BATTLEFIELD_NOT_FOUND", message: "战场不存在" };
-  return { ok: false, status: 409, code: "BATTLEFIELD_NAME_CONFLICT", message: `战场名称与已有战场冲突（${nextSlug}）` };
 }
 
 /**

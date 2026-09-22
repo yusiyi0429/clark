@@ -21,17 +21,29 @@ export function formatMissions(missions: TMissionValue[]): string {
   return missions.map((mission) => `${mission.code} ${mission.title}`).join("\n");
 }
 
-export function parseMissions(text: string): TMissionValue[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const split = line.indexOf(" ");
-      return split < 0 ? { code: line, title: "" } : { code: line.slice(0, split), title: line.slice(split + 1).trim() };
-    })
-    .filter((mission) => mission.code && mission.title)
-    .slice(0, 20);
+export type MissionParse = { ok: true; missions: TMissionValue[] } | { ok: false; error: string };
+
+/**
+ * 「编号 空格 标题」逐行解析：空文本合法；缺编号、缺标题或编号重复返回错误，不静默丢行。
+ */
+export function parseMissions(text: string): MissionParse {
+  const missions: TMissionValue[] = [];
+  const seen = new Set<string>();
+  const lines = text.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim() === "") continue;
+    const split = line.indexOf(" ");
+    if (split < 0) return { ok: false, error: `第 ${index + 1} 行缺少编号或标题：每行需为「编号 空格 标题」` };
+    const code = line.slice(0, split).trim();
+    const title = line.slice(split + 1).trim();
+    if (!code) return { ok: false, error: `第 ${index + 1} 行缺少编号` };
+    if (!title) return { ok: false, error: `第 ${index + 1} 行缺少标题` };
+    if (seen.has(code)) return { ok: false, error: `第 ${index + 1} 行编号 ${code} 重复` };
+    seen.add(code);
+    missions.push({ code, title });
+  }
+  return { ok: true, missions };
 }
 
 export function battlefieldDraft(item: Battlefield): BattlefieldDraft {
@@ -39,15 +51,20 @@ export function battlefieldDraft(item: Battlefield): BattlefieldDraft {
 }
 
 /** 编辑弹层只提交真正改动的字段：未动的负责人（可能是空串）不重写，避免被当成新值。 */
-export function battlefieldEditPatch(current: BattlefieldDraft, draft: BattlefieldDraft) {
-  const patch: {
-    code?: string;
-    sortOrder?: number;
-    name?: string;
-    ownerId?: string;
-    sixMonthOutcome?: string;
-    missions?: TMissionValue[];
-  } = {};
+export type BattlefieldPatch = {
+  code?: string;
+  sortOrder?: number;
+  name?: string;
+  ownerId?: string;
+  sixMonthOutcome?: string;
+  missions?: TMissionValue[];
+};
+
+export function battlefieldEditPatch(
+  current: BattlefieldDraft,
+  draft: BattlefieldDraft,
+): { ok: true; patch: BattlefieldPatch } | { ok: false; error: string } {
+  const patch: BattlefieldPatch = {};
   const name = draft.name.trim();
   const code = draft.code.trim();
   if (name && name !== current.name) patch.name = name;
@@ -56,8 +73,12 @@ export function battlefieldEditPatch(current: BattlefieldDraft, draft: Battlefie
   if (draft.sortOrder.trim() !== "" && Number.isInteger(sortOrder) && draft.sortOrder !== current.sortOrder) patch.sortOrder = sortOrder;
   if (draft.ownerId !== current.ownerId) patch.ownerId = draft.ownerId;
   if (draft.sixMonthOutcome !== current.sixMonthOutcome) patch.sixMonthOutcome = draft.sixMonthOutcome;
-  if (draft.missions !== current.missions) patch.missions = parseMissions(draft.missions);
-  return patch;
+  if (draft.missions !== current.missions) {
+    const parsed = parseMissions(draft.missions);
+    if (!parsed.ok) return { ok: false, error: parsed.error };
+    patch.missions = parsed.missions;
+  }
+  return { ok: true, patch };
 }
 
 /** 期限只显示月日（设计：期限 09-30）；缺 decisionBy 时显示待校准。 */
@@ -86,6 +107,8 @@ export function BattlefieldScreen({ battlefields, issues, people }: TBattlefield
 
   const names = new Map(battlefields.map((item) => [item.id, item.name]));
   const selected = battlefields.find((item) => item.id === selectedId) ?? battlefields[0];
+  const missionParse = parseMissions(draft.missions);
+  const missionError = missionParse.ok ? null : missionParse.error;
   const related = selected ? issues.filter((issue) => issue.battlefieldIds.includes(selected.id)) : [];
   const report = (slot: "list" | "pick", value: Status) => setStatus((prev) => ({ ...prev, [slot]: value }));
 
@@ -115,7 +138,12 @@ export function BattlefieldScreen({ battlefields, issues, people }: TBattlefield
 
   async function saveBattlefield() {
     if (!selected || busy) return;
-    const patch = battlefieldEditPatch(battlefieldDraft(selected), draft);
+    const result = battlefieldEditPatch(battlefieldDraft(selected), draft);
+    if (!result.ok) {
+      report("list", { kind: "error", message: result.error });
+      return;
+    }
+    const patch = result.patch;
     if (!Object.keys(patch).length) {
       setEditing(false);
       return;
@@ -252,12 +280,13 @@ export function BattlefieldScreen({ battlefields, issues, people }: TBattlefield
                 <label className={b.field}>
                   <span>Mission（每行：编号 + 标题）</span>
                   <textarea value={draft.missions} onChange={(event) => setDraft({ ...draft, missions: event.target.value })} />
+                  {missionError ? <span className={b.fieldError} role="alert">{missionError}</span> : null}
                 </label>
                 <span className={b.confirmActions}>
                   <button type="button" className={b.cancel} onClick={() => setEditing(false)}>
                     取消
                   </button>
-                  <button type="button" className={b.save} onClick={saveBattlefield} disabled={busy || !draft.name.trim()}>
+                  <button type="button" className={b.save} onClick={saveBattlefield} disabled={busy || !draft.name.trim() || Boolean(missionError)}>
                     保存
                   </button>
                 </span>
