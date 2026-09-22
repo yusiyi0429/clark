@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Pool, QueryResult } from "pg";
+import type { Pool, PoolClient, QueryResult } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import {
   IssueDecideInput,
@@ -16,7 +16,7 @@ import {
   type TIssueLocation,
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
-import { getRegisteredBattlefieldIds } from "./battlefields.js";
+import { battlefieldSetOf, getRegisteredBattlefieldIds, normalizeBattlefieldSet } from "./battlefields.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import { revokeEffect } from "./effects.js";
 
@@ -583,6 +583,76 @@ export async function createCeoIssue(
     ],
   );
   return { status: 201, card: projectIssueCard(inserted.rows[0], secret) };
+}
+
+export type BattlefieldMembershipOutcome =
+  | { ok: true; card: TCard }
+  | { ok: false; status: 400 | 404 | 409; code: string; message: string };
+
+/** 集合写回：行锁串行，仅 pending 可调整，capability 级不参与；location 未变化时不升 version。 */
+async function writeBattlefieldSet(
+  pool: Pool,
+  secret: string,
+  issueId: string,
+  operation: (client: PoolClient, current: string[]) => Promise<string[] | BattlefieldMembershipOutcome> | string[] | BattlefieldMembershipOutcome,
+): Promise<BattlefieldMembershipOutcome> {
+  // 路径/输入参数先做形状校验：非 UUID 直接视为不存在，不让 PostgreSQL 报类型错误
+  if (!UUID_PATTERN.test(issueId)) return { ok: false, status: 404, code: "ISSUE_NOT_FOUND", message: "Issue 不存在" };
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query<IssueRow>(`SELECT ${issueColumns()} FROM issues WHERE id = $1 FOR UPDATE`, [issueId]);
+    if (locked.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return { ok: false, status: 404, code: "ISSUE_NOT_FOUND", message: "Issue 不存在" };
+    }
+    const row = locked.rows[0];
+    if (row.status !== "pending") {
+      await client.query("ROLLBACK");
+      return { ok: false, status: 409, code: "ISSUE_NOT_PENDING", message: "只有 pending 议题可以调整战场关联" };
+    }
+    const current = battlefieldSetOf(row.location);
+    if (!current) {
+      await client.query("ROLLBACK");
+      return { ok: false, status: 400, code: "INVALID_LOCATION", message: "capability 级议题不参与战场关联" };
+    }
+    const outcome = await operation(client, current);
+    if (Array.isArray(outcome)) {
+      const location = normalizeBattlefieldSet(outcome);
+      if (JSON.stringify(location) === JSON.stringify(row.location)) {
+        await client.query("COMMIT");
+        return { ok: true, card: projectIssueCard(row, secret) };
+      }
+      const updated = await client.query<IssueRow>(
+        "UPDATE issues SET location = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1 RETURNING *",
+        [row.id, JSON.stringify(location)],
+      );
+      await client.query("COMMIT");
+      return { ok: true, card: projectIssueCard(updated.rows[0], secret) };
+    }
+    await client.query("ROLLBACK");
+    return outcome;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** 把 pending 议题加入战场：集合语义，写回时归一化回既有 IssueLocation。 */
+export function assignIssueBattlefield(pool: Pool, secret: string, battlefieldId: string, issueId: string): Promise<BattlefieldMembershipOutcome> {
+  return writeBattlefieldSet(pool, secret, issueId, async (client, current) => {
+    if (current.includes(battlefieldId)) return current;
+    const registered = await client.query("SELECT id FROM battlefield_config WHERE id = $1", [battlefieldId]);
+    if (registered.rowCount !== 1) return { ok: false, status: 404, code: "BATTLEFIELD_NOT_FOUND", message: "战场不存在" };
+    return [...current, battlefieldId];
+  });
+}
+
+/** 从战场移出 pending 议题：2→1 自动降级为 battlefield 级，1→0 变未归属。 */
+export function unassignIssueBattlefield(pool: Pool, secret: string, battlefieldId: string, issueId: string): Promise<BattlefieldMembershipOutcome> {
+  return writeBattlefieldSet(pool, secret, issueId, (_client, current) => current.filter((id) => id !== battlefieldId));
 }
 
 /** 已注册的 Issue Action 与其严格输入 schema；未列出的 actionType 一律 404。 */

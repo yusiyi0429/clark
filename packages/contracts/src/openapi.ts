@@ -17,6 +17,7 @@ import {
   CreateBattlefieldRequest,
   CreateCapabilityRequest,
   CreateCeoIssueRequest,
+  AssignBattlefieldIssueRequest,
   CreateConfigMeetingRequest,
   CreateMeetingRequest,
   DriIssueImportRequest,
@@ -471,6 +472,35 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/config/battlefields/{id}/issues": {
+        post: {
+          operationId: "assignBattlefieldIssue",
+          summary: "CEO 把 pending 议题加入战场（集合归一化）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/AssignBattlefieldIssueRequest" }),
+          responses: {
+            "200": { description: "更新后的 Issue Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/config/battlefields/{id}/issues/{issueId}": {
+        delete: {
+          operationId: "unassignBattlefieldIssue",
+          summary: "CEO 把 pending 议题移出战场（集合归一化）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }, { name: "issueId", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "更新后的 Issue Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
       "/api/dri/issues": {
         post: {
           operationId: "importDriIssue",
@@ -756,6 +786,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         CreateCapabilityRequest: CreateCapabilityRequest as JsonSchema,
         CreateCeoIssueRequest: CreateCeoIssueRequest as JsonSchema,
         CreateConfigMeetingRequest: CreateConfigMeetingRequest as JsonSchema,
+        AssignBattlefieldIssueRequest: AssignBattlefieldIssueRequest as JsonSchema,
         ConversationAttachment: ConversationAttachment as JsonSchema,
         ConversationAttachmentInfo: ConversationAttachmentInfo as JsonSchema,
         ConversationAttachmentUploadResponse: ConversationAttachmentUploadResponse as JsonSchema,

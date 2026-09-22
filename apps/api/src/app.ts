@@ -14,6 +14,7 @@ import {
   CreateCapabilityRequest,
   CreateCeoIssueRequest,
   CreateConfigMeetingRequest,
+  AssignBattlefieldIssueRequest,
   CreateMeetingRequest,
   PeopleDirectoryResponse,
   DriIssueImportRequest,
@@ -77,7 +78,7 @@ import {
 import type { RadarOutletAdapter, RadarService } from "./radar.js";
 import { resolveConfiguredOutletIds } from "./outletSources.js";
 import { getSignalCard, getSignalImageSource, listSignalCards, projectRadarCard, setSignalState } from "./signals.js";
-import { getIssueRow, executeIssueAction, createCeoIssue, importDriIssue, listPendingIssueCards, projectIssueCard } from "./issues.js";
+import { getIssueRow, executeIssueAction, createCeoIssue, importDriIssue, listPendingIssueCards, projectIssueCard, assignIssueBattlefield, unassignIssueBattlefield } from "./issues.js";
 import type { ResearchService } from "./research.js";
 import {
   executeCancelMeeting,
@@ -496,6 +497,24 @@ export async function buildApp({
   );
 
   const idParams = Type.Object({ id: Type.String({ minLength: 1 }) }, { additionalProperties: false });
+
+  // CEO 配置页的议题↔战场关联集合：确定性配置语义，不走 opaque-action。
+  app.post(
+    "/api/config/battlefields/:id/issues",
+    { preHandler: requireCEO, schema: { params: idParams, body: AssignBattlefieldIssueRequest } },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      const result = await assignIssueBattlefield(pool, env.sessionSecret, req.params.id, req.body.issueId);
+      return result.ok ? { cards: [result.card] } : fail(reply, result.status, result.code, result.message);
+    },
+  );
+  app.delete(
+    "/api/config/battlefields/:id/issues/:issueId",
+    { preHandler: requireCEO, schema: { params: Type.Object({ id: Type.String({ minLength: 1 }), issueId: Type.String({ minLength: 1 }) }, { additionalProperties: false }) } },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      const result = await unassignIssueBattlefield(pool, env.sessionSecret, req.params.id, req.params.issueId);
+      return result.ok ? { cards: [result.card] } : fail(reply, result.status, result.code, result.message);
+    },
+  );
   const signalImageParams = Type.Object({
     id: Type.String({ minLength: 1 }),
     index: Type.String({ pattern: "^[0-9]+$" }),

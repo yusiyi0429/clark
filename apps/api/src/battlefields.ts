@@ -4,6 +4,7 @@ import type {
   TCard,
   TBattlefieldCardPayload,
   TBattlefieldTodo,
+  TIssueLocation,
   TMonthlyPlanBattlefield,
   TMonthlyPlanExport,
   TMonthlyPlanFeedback,
@@ -48,6 +49,20 @@ export function findUnregisteredBattlefieldId(
   battlefieldIds: (string | undefined)[],
 ): string | undefined {
   return battlefieldIds.find((id): id is string => id !== undefined && !registered.has(id));
+}
+
+/** 议题的战场归属是一个集合：capability 级主归属是能力，不参与战场集合（返回 null）。 */
+export function battlefieldSetOf(location: TIssueLocation): string[] | null {
+  if (location.level === "capability") return null;
+  return location.level === "battlefield" ? [location.battlefieldId] : [...location.relatedBattlefieldIds];
+}
+
+/** 方案 A 归一化：0 个 = 未归属，1 个 = battlefield 级，≥2 个 = 排序去重的 company 级。 */
+export function normalizeBattlefieldSet(ids: string[]): TIssueLocation {
+  const unique = [...new Set(ids)].sort();
+  if (unique.length === 0) return { level: "company", relatedBattlefieldIds: [] };
+  if (unique.length === 1) return { level: "battlefield", battlefieldId: unique[0] };
+  return { level: "company", relatedBattlefieldIds: unique };
 }
 
 export type RegisterBattlefieldResult =

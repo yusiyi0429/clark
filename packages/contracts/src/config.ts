@@ -23,6 +23,14 @@ export const CreateCapabilityRequest = Type.Object(
   { additionalProperties: false },
 );
 
+/** 议题↔战场关联集合：Action 只接受单个 battlefieldId，集合归一化由服务端确定。 */
+export const AssignBattlefieldIssueRequest = Type.Object(
+  {
+    issueId: Type.String({ minLength: 1, maxLength: 100 }),
+  },
+  { additionalProperties: false },
+);
+
 /** 能力正面：首页能力面板用注册分组补齐尚未有 Issue 的能力；不保存第二份事实。 */
 export const CapabilityCardPayload = Type.Object(
   {
@@ -56,6 +64,7 @@ export const CreateConfigMeetingRequest = Type.Object(
 );
 
 export type TCreateBattlefieldRequest = Static<typeof CreateBattlefieldRequest>;
+export type TAssignBattlefieldIssueRequest = Static<typeof AssignBattlefieldIssueRequest>;
 export type TCreateCapabilityRequest = Static<typeof CreateCapabilityRequest>;
 export type TCapabilityCardPayload = Static<typeof CapabilityCardPayload>;
 export type TCreateCeoIssueRequest = Static<typeof CreateCeoIssueRequest>;

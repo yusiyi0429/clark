@@ -204,5 +204,101 @@ describe("CEO 配置页 create 路由", () => {
     }
   });
 
+  it("assigns and unassigns pending Issues with deterministic set normalization", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { cookie, headers } = await authed(t);
+      const issue = await t.createIssue();
+      const issueId = issue.objectRef.id;
+      const battlefield = await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields",
+        headers,
+        payload: { name: "渠道战场", owner: "张三", goal: "拿下东南亚渠道" },
+      });
+      expect(battlefield.statusCode).toBe(201);
+      const extra = battlefield.json().cards[0].objectRef.id as string;
+
+      // 未注册战场：404
+      const unknown = await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields/unknown-zone/issues",
+        headers,
+        payload: { issueId },
+      });
+      expect(unknown.statusCode).toBe(404);
+
+      const assigned = await t.app.inject({ method: "POST", url: `/api/config/battlefields/${extra}/issues`, headers, payload: { issueId } });
+      expect(assigned.statusCode).toBe(200);
+      const assignedCard = assigned.json().cards[0];
+      expect(Value.Check(Card, assignedCard)).toBe(true);
+      // 2 个战场：归一化为排序后的 company 集合
+      expect(assignedCard.payload.location).toEqual({ level: "company", relatedBattlefieldIds: ["growth", extra].sort() });
+      expect(assignedCard.objectRef.version).toBe(issue.version + 1);
+
+      // 重复加入同一战场：集合不变，不升 version
+      const again = await t.app.inject({ method: "POST", url: `/api/config/battlefields/${extra}/issues`, headers, payload: { issueId } });
+      expect(again.statusCode).toBe(200);
+      expect(again.json().cards[0].objectRef.version).toBe(assignedCard.objectRef.version);
+
+      // 2 → 1：自动降级回 battlefield 级
+      const downgraded = await t.app.inject({ method: "DELETE", url: `/api/config/battlefields/${extra}/issues/${issueId}`, headers });
+      expect(downgraded.statusCode).toBe(200);
+      expect(downgraded.json().cards[0].payload.location).toEqual({ level: "battlefield", battlefieldId: "growth" });
+
+      // 1 → 0：未归属（company + 空集合）
+      const orphaned = await t.app.inject({ method: "DELETE", url: `/api/config/battlefields/growth/issues/${issueId}`, headers });
+      expect(orphaned.statusCode).toBe(200);
+      expect(orphaned.json().cards[0].payload.location).toEqual({ level: "company", relatedBattlefieldIds: [] });
+      const rows = await t.sql("SELECT location, version FROM issues WHERE id = $1", [issueId]);
+      expect(rows[0].location).toEqual({ level: "company", relatedBattlefieldIds: [] });
+      expect(rows[0].version).toBe(assignedCard.objectRef.version + 2);
+      expect(cookie).toBeTruthy();
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("rejects battlefield membership changes on capability Issues and on non-pending Issues", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      const capability = await t.createIssue({ location: { level: "capability", capabilityId: "cap-delivery" } });
+      const capabilityAssign = await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields/growth/issues",
+        headers,
+        payload: { issueId: capability.objectRef.id },
+      });
+      expect(capabilityAssign.statusCode).toBe(400);
+      expect(capabilityAssign.json().code).toBe("INVALID_LOCATION");
+
+      const decided = await t.createIssue();
+      await t.sql("UPDATE issues SET status = 'decided' WHERE id = $1", [decided.objectRef.id]);
+      const decidedAssign = await t.app.inject({
+        method: "POST",
+        url: "/api/config/battlefields/growth/issues",
+        headers,
+        payload: { issueId: decided.objectRef.id },
+      });
+      expect(decidedAssign.statusCode).toBe(409);
+      expect(decidedAssign.json().code).toBe("ISSUE_NOT_PENDING");
+      const decidedUnassign = await t.app.inject({
+        method: "DELETE",
+        url: `/api/config/battlefields/growth/issues/${decided.objectRef.id}`,
+        headers,
+      });
+      expect(decidedUnassign.statusCode).toBe(409);
+
+      const missing = await t.app.inject({ method: "POST", url: "/api/config/battlefields/growth/issues", headers, payload: { issueId: "no-such-issue" } });
+      expect(missing.statusCode).toBe(404);
+
+      const anonymous = await t.app.inject({ method: "POST", url: "/api/config/battlefields/growth/issues", headers: { origin: t.publicOrigin }, payload: { issueId: capability.objectRef.id } });
+      expect(anonymous.statusCode).toBe(401);
+    } finally {
+      await t.close();
+    }
+  });
+
   // Receipt schema 仍然只由 Meeting Outcome 写入；配置页不产生 Receipt。
 });
