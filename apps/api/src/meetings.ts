@@ -415,14 +415,15 @@ export async function executeCreateMeeting(
 
 /**
  * CEO 配置页独立新建 Meeting：不锚定任何既有 Issue（issueIds 允许为空），
- * CEO 从人员目录解析，participants 默认只有 lead DRI。创建后照常触发会前预审。
+ * CEO 从人员目录解析，participants 默认只有 lead DRI。
+ * 可选会前材料：落盘后再跑首次预审（有材料时预审 Context 只用材料 + 议题标题）。
  */
 export async function createConfigMeeting(
   pool: Pool,
   companyMemory: CompanyMemoryRepository,
   preflightAgent: PreflightAgent,
   secret: string,
-  input: { title: string; scheduledAt: string; leadDriId: string; issueIds?: string[] },
+  input: { title: string; scheduledAt: string; leadDriId: string; issueIds?: string[]; materials?: ParsedMaterial[]; materialStorageDir: string },
 ): Promise<{ card: TCard } | { error: MeetingActionError }> {
   const scheduledAt = parseScheduledAt(input.scheduledAt);
   if (!scheduledAt) return { error: { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } } };
@@ -454,6 +455,10 @@ export async function createConfigMeeting(
     ],
   );
   const created = inserted.rows[0];
+  if (input.materials?.length) {
+    const stored = await replaceMeetingMaterials(pool, secret, created.id, input.materials, input.materialStorageDir);
+    if ("error" in stored) return stored;
+  }
   await runPreflight(pool, companyMemory, preflightAgent, created.id);
   const row = await getMeetingRow(pool.query.bind(pool), created.id);
   return { card: projectMeetingCard(row ?? created, secret) };

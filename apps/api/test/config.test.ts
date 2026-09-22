@@ -4,10 +4,33 @@ import { Card, BattlefieldManagementResponse, MeetingCardPayload, type TPrefligh
 import { createTestApp, preflightCandidate, type TestApp } from "./helpers.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetings.js";
 
+/** 配置页建会的 multipart 组装：文本字段 + 可选 files 文件字段。 */
+function configMeetingMultipart(fields: Record<string, string>, files: { filename: string; mimeType: string; body: string }[] = []) {
+  const boundary = "----config-meeting";
+  const chunks: Buffer[] = [];
+  for (const [name, value] of Object.entries(fields)) {
+    chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`));
+  }
+  for (const file of files) {
+    chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="${file.filename}"\r\nContent-Type: ${file.mimeType}\r\n\r\n`));
+    chunks.push(Buffer.from(file.body), Buffer.from("\r\n"));
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`));
+  return { contentType: `multipart/form-data; boundary=${boundary}`, payload: Buffer.concat(chunks) };
+}
+
+async function postConfigMeeting(t: TestApp, headers: Record<string, string>, fields: Record<string, string>, files?: { filename: string; mimeType: string; body: string }[]) {
+  const { contentType, payload } = configMeetingMultipart(fields, files);
+  return t.app.inject({ method: "POST", url: "/api/config/meetings", headers: { ...headers, "content-type": contentType }, payload });
+}
+
 /** 预审只引用 Meeting 自身来源：独立新建的 Meeting 可以没有任何关联 Issue。 */
-function fakeAgent(): PreflightAgent {
+function fakeAgent(): PreflightAgent & { calls: PreflightAgentInput[] } {
+  const calls: PreflightAgentInput[] = [];
   return {
+    calls,
     async generate(input: PreflightAgentInput) {
+      calls.push(input);
       const candidate: TPreflightCandidate = preflightCandidate([`meeting:${input.meeting.id}`]);
       return { candidate, runId: "preflight-run-config" };
     },
@@ -155,12 +178,7 @@ describe("CEO 配置页 create 路由", () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {
       const { headers } = await authed(t);
-      const empty = await t.app.inject({
-        method: "POST",
-        url: "/api/config/meetings",
-        headers,
-        payload: { title: "季度经营复盘", scheduledAt: "2026-06-01T10:00:00.000+08:00", leadDriId: "person-fixture-002" },
-      });
+      const empty = await postConfigMeeting(t, headers, { title: "季度经营复盘", scheduledAt: "2026-06-01T10:00:00.000+08:00", leadDriId: "person-fixture-002" });
       expect(empty.statusCode).toBe(201);
       const emptyCard = empty.json().cards[0];
       expect(Value.Check(Card, emptyCard)).toBe(true);
@@ -170,35 +188,49 @@ describe("CEO 配置页 create 路由", () => {
       expect(emptyCard.payload.leadDriId).toBe("person-fixture-002");
 
       const issue = await t.createIssue();
-      const linked = await t.app.inject({
-        method: "POST",
-        url: "/api/config/meetings",
-        headers,
-        payload: {
-          title: "渠道投入决策会",
-          scheduledAt: "2026-06-02T10:00:00.000+08:00",
-          leadDriId: "person-fixture-002",
-          issueIds: [issue.objectRef.id],
-        },
+      const linked = await postConfigMeeting(t, headers, {
+        title: "渠道投入决策会",
+        scheduledAt: "2026-06-02T10:00:00.000+08:00",
+        leadDriId: "person-fixture-002",
+        issueIds: JSON.stringify([issue.objectRef.id]),
       });
       expect(linked.statusCode).toBe(201);
       expect(linked.json().cards[0].payload.issueIds).toEqual([issue.objectRef.id]);
 
-      const badDri = await t.app.inject({
-        method: "POST",
-        url: "/api/config/meetings",
-        headers,
-        payload: { title: "非法负责人", scheduledAt: "2026-06-03T10:00:00.000+08:00", leadDriId: "person-fixture-001" },
-      });
+      const badDri = await postConfigMeeting(t, headers, { title: "非法负责人", scheduledAt: "2026-06-03T10:00:00.000+08:00", leadDriId: "person-fixture-001" });
       expect(badDri.statusCode).toBe(400);
 
-      const badTime = await t.app.inject({
-        method: "POST",
-        url: "/api/config/meetings",
-        headers,
-        payload: { title: "非法时间", scheduledAt: "不是时间", leadDriId: "person-fixture-002" },
-      });
+      const badTime = await postConfigMeeting(t, headers, { title: "非法时间", scheduledAt: "不是时间", leadDriId: "person-fixture-002" });
       expect(badTime.statusCode).toBe(400);
+
+      const badIssueIds = await postConfigMeeting(t, headers, { title: "非法议题", scheduledAt: "2026-06-04T10:00:00.000+08:00", leadDriId: "person-fixture-002", issueIds: "not-json" });
+      expect(badIssueIds.statusCode).toBe(400);
+
+      const missingTitle = await postConfigMeeting(t, headers, { scheduledAt: "2026-06-05T10:00:00.000+08:00", leadDriId: "person-fixture-002" });
+      expect(missingTitle.statusCode).toBe(400);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("lands pre-meeting materials on creation so the first preflight reads them instead of research", async () => {
+    const agent = fakeAgent();
+    const t = await createTestApp({}, undefined, { preflightAgent: agent });
+    try {
+      const { headers } = await authed(t);
+      const created = await postConfigMeeting(t, headers, { title: "带材料建会", scheduledAt: "2026-06-06T10:00:00.000+08:00", leadDriId: "person-fixture-002" }, [
+        { filename: "会前材料.md", mimeType: "text/markdown", body: "会前材料正文：渠道毛利下降" },
+      ]);
+      expect(created.statusCode).toBe(201);
+      const card = created.json().cards[0];
+      expect(Value.Check(Card, card)).toBe(true);
+      expect(card.payload.materials).toHaveLength(1);
+      expect(card.payload.materials[0].fileName).toBe("会前材料.md");
+      expect(card.payload.preflight.status).toBe("ready");
+
+      const call = agent.calls.at(-1)!;
+      expect(call.materials.map((material) => material.extractedText).join("")).toContain("会前材料正文：渠道毛利下降");
+      expect(call.issues.every((issue) => issue.research === null)).toBe(true);
     } finally {
       await t.close();
     }

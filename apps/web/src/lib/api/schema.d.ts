@@ -459,7 +459,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** CEO 独立新建 scheduled Meeting（issueIds 可为空） */
+        /** CEO 新建 scheduled Meeting（multipart：字段 + 可选会前材料 files） */
         post: operations["createConfigMeeting"];
         delete?: never;
         options?: never;
@@ -2740,7 +2740,13 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateConfigMeetingRequest"];
+                "multipart/form-data": {
+                    title: string;
+                    scheduledAt: string;
+                    leadDriId: string;
+                    issueIds?: string;
+                    files?: string[];
+                };
             };
         };
         responses: {
@@ -2764,6 +2770,15 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };

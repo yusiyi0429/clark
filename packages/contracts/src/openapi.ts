@@ -472,12 +472,31 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/config/meetings": {
         post: {
           operationId: "createConfigMeeting",
-          summary: "CEO 独立新建 scheduled Meeting（issueIds 可为空）",
-          requestBody: jsonBody({ $ref: "#/components/schemas/CreateConfigMeetingRequest" }),
+          summary: "CEO 新建 scheduled Meeting（multipart：字段 + 可选会前材料 files）",
+          requestBody: {
+            required: true,
+            content: {
+              "multipart/form-data": {
+                schema: {
+                  type: "object",
+                  required: ["title", "scheduledAt", "leadDriId"],
+                  properties: {
+                    title: { type: "string" },
+                    scheduledAt: { type: "string" },
+                    leadDriId: { type: "string" },
+                    /** 议题 id 的 JSON 字符串数组；省略或空串表示不并入议题。 */
+                    issueIds: { type: "string" },
+                    files: { type: "array", items: { type: "string", format: "binary" } },
+                  },
+                },
+              },
+            },
+          },
           responses: {
             "201": { description: "创建的 scheduled Meeting Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
             "400": errorResponse,
             "401": errorResponse,
+            "413": errorResponse,
           },
         },
       },

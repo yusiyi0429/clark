@@ -14,6 +14,7 @@ import {
   CreateCapabilityRequest,
   CreateCeoIssueRequest,
   CreateConfigMeetingRequest,
+  type TCreateConfigMeetingRequest,
   AssignBattlefieldIssueRequest,
   type TBattlefieldManagementResponse,
   CreateMeetingRequest,
@@ -131,13 +132,37 @@ import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import multipart from "@fastify/multipart";
 import { logEvent } from "./observability.js";
 import { configureLangSmith, recordAgentTrace } from "./langsmith.js";
-import { cleanupMaterialTemp, ensureMaterialStorage, MAX_MATERIAL_FILE_BYTES, MAX_MATERIAL_FILES, MaterialParseError, parseMaterialBatch, readStoredMaterial } from "./materialParser.js";
+import { cleanupMaterialTemp, ensureMaterialStorage, MAX_MATERIAL_BATCH_BYTES, MAX_MATERIAL_FILE_BYTES, MAX_MATERIAL_FILES, MaterialParseError, parseMaterialBatch, readStoredMaterial } from "./materialParser.js";
 import { renderMaterialPreview } from "./materialPreview.js";
 
 export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
 /** warmap-transcript.v1 单文件上限；Web multipart 与 service API 共用。 */
 export const MAX_TRANSCRIPT_BYTES = 1024 * 1024;
 const DEFAULT_MATERIAL_STORAGE_DIR = "/tmp/warmap-meeting-materials";
+
+/** 配置页建会的 multipart 文本字段 → CreateConfigMeetingRequest；issueIds 以 JSON 字符串传输。 */
+function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreateConfigMeetingRequest } | { error: string } {
+  const body: Record<string, unknown> = {};
+  for (const key of ["title", "scheduledAt", "leadDriId"] as const) {
+    const value = fields.get(key)?.trim();
+    if (!value) return { error: `${key} 必填` };
+    body[key] = value;
+  }
+  const issueIds = fields.get("issueIds");
+  if (issueIds !== undefined && issueIds.trim() !== "") {
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(issueIds);
+    } catch {
+      return { error: "issueIds 不是合法 JSON 数组" };
+    }
+    if (!Array.isArray(decoded) || decoded.some((id) => typeof id !== "string")) return { error: "issueIds 不是合法 JSON 数组" };
+    body.issueIds = decoded;
+  }
+  const invalid = [...Value.Errors(CreateConfigMeetingRequest, body)][0];
+  if (invalid) return { error: `字段 ${invalid.path.replace(/^\//, "") || "body"} 不合法` };
+  return { value: body as TCreateConfigMeetingRequest };
+}
 const DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR = "/tmp/warmap-conversation-attachments";
 
 export type AppEnv = {
@@ -485,15 +510,54 @@ export async function buildApp({
       return reply.status(201).send({ cards: [result.card] });
     },
   );
+  // 配置页建会：multipart（title/scheduledAt/leadDriId + 可选 issueIds JSON 字符串 + 可选 files[]），
+  // 有材料时创建后先落材料再跑首次预审；无材料等价于原来的 JSON 建会。
   app.post(
     "/api/config/meetings",
-    { preHandler: requireCEO, schema: { body: CreateConfigMeetingRequest } },
+    { preHandler: requireCEO, bodyLimit: 101 * 1024 * 1024 },
     async (req, reply): Promise<FastifyReply> => {
-      const result = await createConfigMeeting(pool, companyMemory, preflight, env.sessionSecret, req.body);
-      if ("error" in result) {
-        return fail(reply, result.error.status, result.error.code, result.error.message, result.error.fieldErrors ? { fieldErrors: result.error.fieldErrors } : undefined);
+      let parsed: Awaited<ReturnType<typeof parseMaterialBatch>> | undefined;
+      try {
+        const fields = new Map<string, string>();
+        const files: { filename: string; mimetype: string; buffer: Buffer }[] = [];
+        let totalBytes = 0;
+        for await (const part of req.parts({ limits: { fileSize: MAX_MATERIAL_FILE_BYTES, files: MAX_MATERIAL_FILES } })) {
+          if (part.type === "file") {
+            if (part.fieldname !== "files") return fail(reply, 400, "INVALID_MATERIAL", "multipart 只接受 files 文件字段");
+            const buffer = await part.toBuffer();
+            totalBytes += buffer.length;
+            if (totalBytes > MAX_MATERIAL_BATCH_BYTES) return fail(reply, 413, "MATERIAL_BATCH_TOO_LARGE", "材料总大小超过 100 MiB");
+            files.push({ filename: part.filename, mimetype: part.mimetype, buffer });
+            continue;
+          }
+          if (typeof part.value !== "string") return fail(reply, 400, "INVALID_INPUT", `${part.fieldname} 不是文本字段`);
+          fields.set(part.fieldname, part.value);
+        }
+        const body = parseConfigMeetingFields(fields);
+        if ("error" in body) return fail(reply, 400, "INVALID_INPUT", body.error);
+        if (files.length) parsed = await parseMaterialBatch(files);
+        const result = await createConfigMeeting(pool, companyMemory, preflight, env.sessionSecret, {
+          ...body.value,
+          materials: parsed?.materials,
+          materialStorageDir,
+        });
+        if ("error" in result) {
+          return fail(reply, result.error.status, result.error.code, result.error.message, result.error.fieldErrors ? { fieldErrors: result.error.fieldErrors } : undefined);
+        }
+        return reply.status(201).send({ cards: [result.card] });
+      } catch (error) {
+        if (error instanceof MaterialParseError) return fail(reply, 400, error.code, error.message);
+        const limited = materialMultipartLimitError(
+          error,
+          { status: 413, code: "MATERIAL_BATCH_TOO_LARGE", message: "材料文件或数量超出上限" },
+          { status: 400, code: "MATERIAL_BATCH_TOO_LARGE", message: `每批最多 ${MAX_MATERIAL_FILES} 份材料文件` },
+          { status: 400, code: "MATERIAL_BATCH_TOO_LARGE", message: `每批最多 ${MAX_MATERIAL_FILES} 份材料文件` },
+        );
+        if (limited) return fail(reply, limited.status, limited.code, limited.message);
+        throw error;
+      } finally {
+        if (parsed) await cleanupMaterialTemp(parsed.directory);
       }
-      return reply.status(201).send({ cards: [result.card] });
     },
   );
 
