@@ -6,6 +6,7 @@ import {
   type TDriMonthlyPlanFeedbackRequest,
   type TDriMonthlyPlanTodoFeedbackRequest,
   type TMonthlyPlanBattlefield,
+  type TMonthlyPlanCapability,
   type TMonthlyPlanExport,
   type TMonthlyPlanExportStatus,
   type TMonthlyPlanFeedback,
@@ -17,6 +18,7 @@ import {
 } from "@warmap/contracts";
 import { canonicalJson, signActionId, type ActionScope } from "./actionToken.js";
 import { getRegisteredBattlefieldIds, findUnregisteredBattlefieldId } from "./battlefields.js";
+import { getRegisteredCapabilityIds, findUnregisteredCapabilityId } from "./capabilities.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
@@ -36,6 +38,7 @@ export type MonthlyPlanRow = {
   status: MonthlyPlanStatus;
   company_outcome: string;
   battlefields: TMonthlyPlanBattlefield[];
+  capabilities: TMonthlyPlanCapability[];
   todos: TMonthlyPlanTodo[];
   exports: TMonthlyPlanExport[];
   negotiation: StoredMonthlyNegotiation;
@@ -47,7 +50,7 @@ export type MonthlyPlanRow = {
 };
 
 const MONTHLY_PLAN_COLUMNS = [
-  "id", "version", "period", "status", "company_outcome", "battlefields", "todos", "exports",
+  "id", "version", "period", "status", "company_outcome", "battlefields", "capabilities", "todos", "exports",
   "negotiation", "generation", "action_fingerprints", "confirmed_at", "created_at", "updated_at",
 ];
 const monthlyPlanColumns = (prefix = "") => MONTHLY_PLAN_COLUMNS.map((column) => `${prefix}${column}`).join(", ");
@@ -99,11 +102,12 @@ export async function getMonthlyPlanNotice(q: Query, secret: string, now = new D
   return row ? projectMonthlyPlanCard(row, secret) : null;
 }
 
-/** checkable item 稳定 id：company、battlefield:<id>、todo:<id>。 */
-function checkableItemIds(row: Pick<MonthlyPlanRow, "battlefields" | "todos">): string[] {
+/** checkable item 稳定 id：company、battlefield:<id>、capability:<id>、todo:<id>。 */
+function checkableItemIds(row: Pick<MonthlyPlanRow, "battlefields" | "capabilities" | "todos">): string[] {
   return [
     "company",
     ...row.battlefields.map((battlefield) => `battlefield:${battlefield.battlefieldId}`),
+    ...row.capabilities.map((capability) => `capability:${capability.capabilityId}`),
     ...row.todos.map((todo) => `todo:${todo.id}`),
   ];
 }
@@ -140,6 +144,7 @@ export function projectMonthlyPlanCard(row: MonthlyPlanRow, secret: string): TCa
       status: row.status,
       companyOutcome: row.company_outcome,
       battlefields: row.battlefields,
+      capabilities: row.capabilities,
       todos: row.todos,
       exports: row.exports,
       negotiation: {
@@ -274,14 +279,21 @@ export async function executeUpdateMonthlyPlanDraft(
     if (unknownBattlefield) {
       return planError(400, "INVALID_BATTLEFIELD", `battlefieldId 未在 BattlefieldConfig 注册: ${unknownBattlefield}`, { battlefieldId: "unknown battlefield" });
     }
+    // capabilityId 必须来自 CapabilityConfig 注册表；不接受任意字符串
+    const registeredCapabilities = await getRegisteredCapabilityIds((sql, params) => client.query(sql, params));
+    const unknownCapability = findUnregisteredCapabilityId(registeredCapabilities, (input.capabilities ?? []).map((capability) => capability.capabilityId));
+    if (unknownCapability) {
+      return planError(400, "INVALID_CAPABILITY", `capabilityId 未在 CapabilityConfig 注册: ${unknownCapability}`, { capabilityId: "unknown capability" });
+    }
     const nextTodos: TMonthlyPlanTodo[] | undefined = input.todos?.map((todo) => {
       const { id, ...fields } = todo;
       return { id: id ?? `todo-${randomUUID()}`, ...fields };
     });
 
     const battlefields = input.battlefields ?? row.battlefields;
+    const capabilities = input.capabilities ?? row.capabilities;
     const effectiveTodos = nextTodos ?? row.todos;
-    const allowed = new Set(checkableItemIds({ battlefields, todos: effectiveTodos }));
+    const allowed = new Set(checkableItemIds({ battlefields, capabilities, todos: effectiveTodos }));
     if (input.checkedItemIds) {
       const bad = input.checkedItemIds.find((itemId) => !allowed.has(itemId));
       if (bad) {
@@ -292,6 +304,7 @@ export async function executeUpdateMonthlyPlanDraft(
     const clearedPrefixes = [
       ...(input.companyOutcome !== undefined ? ["company"] : []),
       ...(input.battlefields !== undefined ? ["battlefield:"] : []),
+      ...(input.capabilities !== undefined ? ["capability:"] : []),
       ...(input.todos !== undefined ? ["todo:"] : []),
     ];
     const checkedItemIds = (input.checkedItemIds ?? row.negotiation.checkedItemIds)
@@ -302,6 +315,7 @@ export async function executeUpdateMonthlyPlanDraft(
     const fields: string[] = [];
     if (input.companyOutcome !== undefined) fields.push("companyOutcome");
     if (input.battlefields !== undefined) fields.push("battlefields");
+    if (input.capabilities !== undefined) fields.push("capabilities");
     if (input.todos !== undefined) fields.push("todos");
     if (input.checkedItemIds !== undefined) fields.push("checkedItemIds");
     if (input.note !== undefined) fields.push("note");
@@ -315,11 +329,12 @@ export async function executeUpdateMonthlyPlanDraft(
     const updated = await updatePlan(
       client,
       row.id,
-      `company_outcome = $2, battlefields = $3::jsonb, todos = $4::jsonb, negotiation = $5::jsonb,
-       status = $6, version = version + 1, action_fingerprints = $7::jsonb`,
+      `company_outcome = $2, battlefields = $3::jsonb, capabilities = $4::jsonb, todos = $5::jsonb, negotiation = $6::jsonb,
+       status = $7, version = version + 1, action_fingerprints = $8::jsonb`,
       [
         input.companyOutcome ?? row.company_outcome,
         JSON.stringify(battlefields),
+        JSON.stringify(capabilities),
         JSON.stringify(effectiveTodos),
         JSON.stringify(negotiation),
         status,
@@ -546,7 +561,7 @@ export async function executeSignMonthlyPlan(
     const checked = new Set(row.negotiation.checkedItemIds);
     const missing = checkableItemIds(row).filter((itemId) => !checked.has(itemId));
     if (missing.length > 0) {
-      return planError(400, "MONTHLY_PLAN_UNCHECKED_ITEMS", "签发前必须核对企业结果、战场结果与普通待办", {
+      return planError(400, "MONTHLY_PLAN_UNCHECKED_ITEMS", "签发前必须核对企业结果、战场结果、能力结果与普通待办", {
         missingItemIds: missing.join(", "),
       });
     }
@@ -556,6 +571,10 @@ export async function executeSignMonthlyPlan(
     const emptyBattlefield = row.battlefields.find((battlefield) => battlefield.outcome.trim().length === 0);
     if (emptyBattlefield) {
       return planError(400, "INVALID_PLAN_CONTENT", `战场结果不能为空: ${emptyBattlefield.battlefieldId}`, { battlefields: "outcome required" });
+    }
+    const emptyCapability = row.capabilities.find((capability) => capability.outcome.trim().length === 0);
+    if (emptyCapability) {
+      return planError(400, "INVALID_PLAN_CONTENT", `能力结果不能为空: ${emptyCapability.capabilityId}`, { capabilities: "outcome required" });
     }
     const emptyTodo = row.todos.find((todo) => todo.title.trim().length === 0 || todo.sourceRef.trim().length === 0);
     if (emptyTodo) {
@@ -575,6 +594,11 @@ export async function executeSignMonthlyPlan(
     ]);
     if (unknownBattlefield) {
       return planError(400, "INVALID_BATTLEFIELD", `battlefieldId 未在 BattlefieldConfig 注册: ${unknownBattlefield}`, { battlefieldId: "unknown battlefield" });
+    }
+    const registeredCapabilities = await getRegisteredCapabilityIds((sql, params) => client.query(sql, params));
+    const unknownCapability = findUnregisteredCapabilityId(registeredCapabilities, row.capabilities.map((capability) => capability.capabilityId));
+    if (unknownCapability) {
+      return planError(400, "INVALID_CAPABILITY", `capabilityId 未在 CapabilityConfig 注册: ${unknownCapability}`, { capabilityId: "unknown capability" });
     }
 
     const at = new Date().toISOString();

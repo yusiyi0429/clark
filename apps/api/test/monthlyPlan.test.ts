@@ -13,10 +13,22 @@ import { createTestApp, createTestDb, testEnv, TEST_PASSWORD, type TestApp } fro
 
 type FakeAgent = MonthlyDraftAgent & { calls: MonthlyDraftAgentInput[] };
 
+const CAPABILITY_ID = "cap-delivery";
+
+/** 当月能力 PCO 只能引用已登记能力，所以测试先落一条 CapabilityConfig。 */
+async function seedCapability(t: TestApp): Promise<void> {
+  await t.sql(
+    `INSERT INTO capability_config (id, version, code, sort_order, name, "group", six_month_outcome)
+     VALUES ($1, 1, '01', 10, '交付能力', '交付组织', '端到端交付六个月目标') ON CONFLICT (id) DO NOTHING`,
+    [CAPABILITY_ID],
+  );
+}
+
 function validCandidate(): TMonthlyDraftCandidate {
   return {
     companyOutcome: "完成渠道结构切换，锁定下半年交付节奏",
     battlefields: [{ battlefieldId: "growth", outcome: "增长战场完成渠道切换" }],
+    capabilities: [{ capabilityId: CAPABILITY_ID, outcome: "交付能力完成第一个真实客户交付" }],
     todos: [
       {
         battlefieldId: "growth",
@@ -64,6 +76,7 @@ async function execute(t: TestApp, cookie: string, actionId: string, input?: unk
 
 /** 创建当前 period 的 draft 并等待在途生成结束。 */
 async function readyPlan(t: TestApp): Promise<string> {
+  await seedCapability(t);
   const result = await t.monthlyPlans!.runScheduled();
   await t.monthlyPlans!.idle();
   expect(result.status).toBe("created");
@@ -139,6 +152,7 @@ describe("MonthlyDraft Agent", () => {
       current = await card(t, cookie, planId);
       expect(current.payload.generation.status).toBe("ready");
       expect(current.payload.companyOutcome).toBe(validCandidate().companyOutcome);
+      expect(current.payload.capabilities).toEqual([{ capabilityId: CAPABILITY_ID, outcome: "交付能力完成第一个真实客户交付" }]);
       expect(current.payload.todos.map((todo: { title: string }) => todo.title)).toEqual([
         "完成渠道合同复核",
         "整理公司级复盘材料",
@@ -253,11 +267,11 @@ describe("MonthlyPlan negotiation", () => {
 
       // 核对项必须是当前计划中的真实条目
       const check = await execute(t, cookie, await planAction(t, cookie, planId, "monthly-plan.update_draft"), {
-        checkedItemIds: ["company", `battlefield:growth`, `todo:${todos[0].id}`],
+        checkedItemIds: ["company", `battlefield:growth`, `capability:${CAPABILITY_ID}`, `todo:${todos[0].id}`],
       });
       expect(check.statusCode).toBe(200);
       current = check.json().cards[0];
-      expect(current.payload.negotiation.checkedItemIds).toEqual(["company", "battlefield:growth", `todo:${todos[0].id}`]);
+      expect(current.payload.negotiation.checkedItemIds).toEqual(["company", "battlefield:growth", `capability:${CAPABILITY_ID}`, `todo:${todos[0].id}`]);
 
       const badCheck = await execute(t, cookie, await planAction(t, cookie, planId, "monthly-plan.update_draft"), {
         checkedItemIds: ["todo:not-a-todo"],
@@ -307,6 +321,7 @@ describe("MonthlyPlan negotiation", () => {
     };
     const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
+      await seedCapability(t);
       const created = await t.monthlyPlans!.runScheduled();
       const planId = created.planId!;
       await waitForGeneration(t, planId, "running");
@@ -362,6 +377,48 @@ describe("MonthlyPlan negotiation", () => {
       expect(conflict.json().code).toBe("VERSION_CONFLICT");
       expect(conflict.json().latestCard.version).toBe(initial.version + 1);
       expect(conflict.json().latestCard.payload.negotiation.note).toBe("第一版");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("edits and checks the capability PCO, and rejects an unregistered capabilityId", async () => {
+    const agent = fakeAgent();
+    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    try {
+      const planId = await readyPlan(t);
+      const cookie = await t.loginCookie();
+      const initial = await card(t, cookie, planId);
+      // 六个月目标只来自 CapabilityConfig，当月 PCO 不复制它
+      expect(initial.payload.capabilities).toEqual([{ capabilityId: CAPABILITY_ID, outcome: "交付能力完成第一个真实客户交付" }]);
+      expect(agent.calls[0].capabilities).toEqual([{ capabilityId: CAPABILITY_ID, name: "交付能力", sixMonthOutcome: "端到端交付六个月目标" }]);
+
+      const edited = await execute(t, cookie, await planAction(t, cookie, planId, "monthly-plan.update_draft"), {
+        capabilities: [{ capabilityId: CAPABILITY_ID, outcome: "交付能力完成第二次真实客户交付" }],
+      });
+      expect(edited.statusCode).toBe(200);
+      let current = edited.json().cards[0];
+      expect(current.payload.capabilities).toEqual([{ capabilityId: CAPABILITY_ID, outcome: "交付能力完成第二次真实客户交付" }]);
+      expect(current.payload.negotiation.edits.at(-1).fields).toContain("capabilities");
+
+      const check = await execute(t, cookie, await planAction(t, cookie, planId, "monthly-plan.update_draft"), {
+        checkedItemIds: ["company", "battlefield:growth", `capability:${CAPABILITY_ID}`],
+      });
+      expect(check.statusCode).toBe(200);
+      current = check.json().cards[0];
+      expect(current.payload.negotiation.checkedItemIds).toEqual(["company", "battlefield:growth", `capability:${CAPABILITY_ID}`]);
+
+      // 编辑能力结果会重新回到未核对，未编辑的公司/战场核对保留
+      const cleared = await execute(t, cookie, await planAction(t, cookie, planId, "monthly-plan.update_draft"), {
+        capabilities: [{ capabilityId: CAPABILITY_ID, outcome: "第三次" }],
+      });
+      expect(cleared.json().cards[0].payload.negotiation.checkedItemIds).toEqual(["company", "battlefield:growth"]);
+
+      const unknown = await execute(t, cookie, await planAction(t, cookie, planId, "monthly-plan.update_draft"), {
+        capabilities: [{ capabilityId: "cap-unknown", outcome: "未登记能力结果" }],
+      });
+      expect(unknown.statusCode).toBe(400);
+      expect(unknown.json().code).toBe("INVALID_CAPABILITY");
     } finally {
       await t.close();
     }

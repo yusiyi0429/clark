@@ -11,10 +11,22 @@ import { createTestApp, testEnv, type TestApp } from "./helpers.js";
 
 type FakeAgent = MonthlyDraftAgent & { calls: MonthlyDraftAgentInput[] };
 
+const CAPABILITY_ID = "cap-delivery";
+
+/** 当月能力 PCO 只能引用已登记能力，所以测试先落一条 CapabilityConfig。 */
+async function seedCapability(t: TestApp): Promise<void> {
+  await t.sql(
+    `INSERT INTO capability_config (id, version, code, sort_order, name, "group", six_month_outcome)
+     VALUES ($1, 1, '01', 10, '交付能力', '交付组织', '端到端交付六个月目标') ON CONFLICT (id) DO NOTHING`,
+    [CAPABILITY_ID],
+  );
+}
+
 function validCandidate(): TMonthlyDraftCandidate {
   return {
     companyOutcome: "完成渠道结构切换，锁定下半年交付节奏",
     battlefields: [{ battlefieldId: "growth", outcome: "增长战场完成渠道切换" }],
+    capabilities: [{ capabilityId: CAPABILITY_ID, outcome: "交付能力完成第一个真实客户交付" }],
     todos: [
       {
         battlefieldId: "growth",
@@ -64,18 +76,20 @@ async function execute(t: TestApp, cookie: string, actionId: string, input?: unk
 }
 
 async function readyPlan(t: TestApp): Promise<string> {
+  await seedCapability(t);
   const result = await t.monthlyPlans!.runScheduled();
   await t.monthlyPlans!.idle();
   expect(result.status).toBe("created");
   return result.planId!;
 }
 
-/** 核对 company、每个战场结果与每个普通待办，满足签发前置条件。 */
+/** 核对 company、每个战场结果、每个能力结果与每个普通待办，满足签发前置条件。 */
 async function checkAll(t: TestApp, cookie: string, planId: string): Promise<Record<string, any>> {
   const current = await card(t, cookie, planId);
   const checkedItemIds = [
     "company",
     ...current.payload.battlefields.map((battlefield: { battlefieldId: string }) => `battlefield:${battlefield.battlefieldId}`),
+    ...current.payload.capabilities.map((capability: { capabilityId: string }) => `capability:${capability.capabilityId}`),
     ...current.payload.todos.map((todo: { id: string }) => `todo:${todo.id}`),
   ];
   const response = await execute(t, cookie, await planAction(t, cookie, planId, "monthly-plan.update_draft"), { checkedItemIds });
@@ -95,12 +109,13 @@ async function driFeedback(t: TestApp, payload: unknown, token = t.env.driServic
 async function patchPlan(
   t: TestApp,
   planId: string,
-  patch: { companyOutcome?: string; battlefields?: unknown; todos?: unknown; checkedItemIds?: string[] },
+  patch: { companyOutcome?: string; battlefields?: unknown; capabilities?: unknown; todos?: unknown; checkedItemIds?: string[] },
 ): Promise<void> {
   await t.sql(
     `UPDATE monthly_plans
         SET company_outcome = COALESCE($2, company_outcome),
             battlefields = COALESCE($3::jsonb, battlefields),
+            capabilities = COALESCE($6::jsonb, capabilities),
             todos = COALESCE($4::jsonb, todos),
             negotiation = CASE WHEN $5::jsonb IS NULL THEN negotiation
                                ELSE jsonb_set(negotiation, '{checkedItemIds}', $5::jsonb) END
@@ -111,6 +126,7 @@ async function patchPlan(
       patch.battlefields ? JSON.stringify(patch.battlefields) : null,
       patch.todos ? JSON.stringify(patch.todos) : null,
       patch.checkedItemIds ? JSON.stringify(patch.checkedItemIds) : null,
+      patch.capabilities ? JSON.stringify(patch.capabilities) : null,
     ],
   );
 }
@@ -161,6 +177,7 @@ describe("MonthlyPlan signing authority and validation", () => {
       expect(stillUnchecked.statusCode).toBe(400);
       expect(stillUnchecked.json().code).toBe("MONTHLY_PLAN_UNCHECKED_ITEMS");
       expect(stillUnchecked.json().fieldErrors.missingItemIds).toContain("battlefield:growth");
+      expect(stillUnchecked.json().fieldErrors.missingItemIds).toContain(`capability:${CAPABILITY_ID}`);
     } finally {
       await t.close();
     }
@@ -195,7 +212,7 @@ describe("MonthlyPlan signing authority and validation", () => {
 
       await patchPlan(t, planId, {
         todos: [{ id: "todo-unknown-owner", title: "无主待办", ownerId: "person-unknown", sourceRef: "issue:1" }],
-        checkedItemIds: ["company", "battlefield:growth", "todo:todo-unknown-owner"],
+        checkedItemIds: ["company", "battlefield:growth", `capability:${CAPABILITY_ID}`, "todo:todo-unknown-owner"],
       });
       const owner = await sign(t, cookie, planId);
       expect(owner.statusCode).toBe(400);
@@ -203,20 +220,31 @@ describe("MonthlyPlan signing authority and validation", () => {
 
       await patchPlan(t, planId, {
         todos: [{ id: "todo-no-source", title: "无来源待办", ownerId: "person-fixture-002", sourceRef: "" }],
-        checkedItemIds: ["company", "battlefield:growth", "todo:todo-no-source"],
+        checkedItemIds: ["company", "battlefield:growth", `capability:${CAPABILITY_ID}`, "todo:todo-no-source"],
       });
       const source = await sign(t, cookie, planId);
       expect(source.statusCode).toBe(400);
       expect(source.json().code).toBe("INVALID_PLAN_CONTENT");
 
+      // 能力结果同样在签发时重校：未登记 capabilityId 与空结果都拒绝
+      await patchPlan(t, planId, {
+        capabilities: [{ capabilityId: "cap-unknown", outcome: "未登记能力结果" }],
+        todos: [],
+        checkedItemIds: ["company", "battlefield:growth", "capability:cap-unknown"],
+      });
+      const capability = await sign(t, cookie, planId);
+      expect(capability.statusCode).toBe(400);
+      expect(capability.json().code).toBe("INVALID_CAPABILITY");
+
       await patchPlan(t, planId, {
         battlefields: [{ battlefieldId: "not-registered", outcome: "未注册战场结果" }],
+        capabilities: [{ capabilityId: CAPABILITY_ID, outcome: " " }],
         todos: [],
-        checkedItemIds: ["company", "battlefield:not-registered"],
+        checkedItemIds: ["company", "battlefield:not-registered", `capability:${CAPABILITY_ID}`],
       });
       const battlefield = await sign(t, cookie, planId);
       expect(battlefield.statusCode).toBe(400);
-      expect(battlefield.json().code).toBe("INVALID_BATTLEFIELD");
+      expect(battlefield.json().code).toBe("INVALID_PLAN_CONTENT");
     } finally {
       await t.close();
     }

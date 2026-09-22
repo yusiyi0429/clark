@@ -19,6 +19,7 @@ function planCard(payloadOverrides: Record<string, unknown>, actions: Card["acti
       status: "confirmed",
       companyOutcome: "守住毛利，东南亚渠道跑通首单",
       battlefields: [],
+      capabilities: [],
       todos: [],
       exports: [],
       negotiation: { edits: [], checkedItemIds: ["company"], note: "", feedback: [] },
@@ -85,5 +86,23 @@ describe("月度计划 · 正文两列", () => {
     // 只有服务端下发的 Action 才渲染按钮。
     expect(html).toContain("保存计划");
     expect(html).not.toContain("签发计划");
+  });
+
+  it("能力 PCO 与公司/战场结果同构：按 capabilityId 渲染编辑区与核对项", () => {
+    const html = render(
+      planCard(
+        {
+          status: "negotiating",
+          confirmedAt: null,
+          capabilities: [{ capabilityId: "Re-architecture", outcome: "九月跑通第一个客户交付" }],
+          negotiation: { edits: [], checkedItemIds: [], note: "", feedback: [] },
+        },
+        [{ actionId: "a1", actionType: "monthly-plan.update_draft", label: "保存计划" }],
+      ),
+    );
+    expect(html).toContain("能力 PCO · Re-architecture");
+    expect(html).toContain("九月跑通第一个客户交付");
+    expect(html).toContain("已核对 Re-architecture 能力 PCO");
+    expect(html).toContain("能力结果");
   });
 });

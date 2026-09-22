@@ -28,6 +28,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
   const { state, run, retry, pending } = useCardAction(onCard);
   const [companyOutcome, setCompanyOutcome] = useState(payload.companyOutcome);
   const [battlefields, setBattlefields] = useState(payload.battlefields);
+  const [capabilities, setCapabilities] = useState(payload.capabilities);
   const [todos, setTodos] = useState<TodoDraft[]>(payload.todos);
   const [note, setNote] = useState(payload.negotiation.note);
   const [checked, setChecked] = useState<string[]>(payload.negotiation.checkedItemIds);
@@ -40,6 +41,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
     synced.current = payload;
     if (payload.companyOutcome !== previous.companyOutcome) setCompanyOutcome(payload.companyOutcome);
     if (JSON.stringify(payload.battlefields) !== JSON.stringify(previous.battlefields)) setBattlefields(payload.battlefields);
+    if (JSON.stringify(payload.capabilities) !== JSON.stringify(previous.capabilities)) setCapabilities(payload.capabilities);
     if (JSON.stringify(payload.todos) !== JSON.stringify(previous.todos)) setTodos(payload.todos);
     if (payload.negotiation.note !== previous.negotiation.note) setNote(payload.negotiation.note);
     // 核对项永远跟着服务端走：编辑过的字段会被服务端取消核对，本地不保留过期勾选。
@@ -52,7 +54,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
   const locked = payload.status === "confirmed" || payload.generation.status === "pending" || payload.generation.status === "running";
 
   /**
-   * 核对项必须有稳定 id：company、battlefield:<id>、todo:<id>；签发前要求全部核对。
+   * 核对项必须有稳定 id：company、battlefield:<id>、capability:<id>、todo:<id>；签发前要求全部核对。
    * 编辑过的字段会被服务端取消核对，所以核对单独提交，不与内容编辑混在同一次 update_draft。
    */
   function toggleChecked(id: string) {
@@ -136,6 +138,24 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
                 {checkable(`battlefield:${battlefield.battlefieldId}`, `${battlefield.battlefieldId} 战场结果`)}
               </section>
             ))}
+
+            {capabilities.map((capability) => (
+              <section key={capability.capabilityId} className={s.section}>
+                <h2 className={s.sectionTitle}>能力 PCO · {capability.capabilityId}</h2>
+                <textarea
+                  aria-label={`${capability.capabilityId} 能力 PCO`}
+                  value={capability.outcome}
+                  disabled={locked}
+                  rows={2}
+                  onChange={(event) =>
+                    setCapabilities((current) =>
+                      current.map((item) => (item.capabilityId === capability.capabilityId ? { ...item, outcome: event.target.value } : item)),
+                    )
+                  }
+                />
+                {checkable(`capability:${capability.capabilityId}`, `${capability.capabilityId} 能力 PCO`)}
+              </section>
+            ))}
           </div>
 
           <div className={s.feedbackColumn}>
@@ -213,7 +233,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
       <div className={s.commitArea}>
         <div className={s.commitInfo}>
           <span>签发后刷新战场目标与 Radar 基础 anchors；不直接更新企业知识。</span>
-          <small>已核对 {checked.length} 项 · 签发前必须核对企业结果、战场结果与普通待办</small>
+          <small>已核对 {checked.length} 项 · 签发前必须核对企业结果、战场结果、能力结果与普通待办</small>
         </div>
         <div className={s.edit}>
           {actionOf("monthly-plan.update_draft") ? (
@@ -221,7 +241,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
               type="button"
               className={s.save}
               disabled={pending || locked}
-              onClick={() => void run(actionOf("monthly-plan.update_draft")!, { companyOutcome, battlefields, todos, checkedItemIds: checked, note })}
+              onClick={() => void run(actionOf("monthly-plan.update_draft")!, { companyOutcome, battlefields, capabilities, todos, checkedItemIds: checked, note })}
             >
               {pending ? "保存中…" : "保存计划"}
             </button>

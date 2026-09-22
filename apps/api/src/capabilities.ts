@@ -93,6 +93,20 @@ export async function validateSupportRefs(q: Query, refs: TCapabilitySupportRef[
   return { ok: true };
 }
 
+/** 已注册的能力 id 集合；CapabilityConfig 是 capabilityId 的确定性校验来源。 */
+export async function getRegisteredCapabilityIds(q: Query): Promise<Set<string>> {
+  const result = await q("SELECT id FROM capability_config");
+  return new Set(result.rows.map((row) => (row as { id: string }).id));
+}
+
+/** 返回第一个未注册的 capabilityId；undefined 表示全部合法。 */
+export function findUnregisteredCapabilityId(
+  registered: Set<string>,
+  capabilityIds: (string | undefined)[],
+): string | undefined {
+  return capabilityIds.find((id): id is string => id !== undefined && !registered.has(id));
+}
+
 export type RegisterCapabilityResult =
   | { ok: true; id: string }
   | { ok: false; status: 409; code: "CAPABILITY_EXISTS" | "CAPABILITY_NAME_CONFLICT" | "CAPABILITY_CODE_CONFLICT"; message: string };

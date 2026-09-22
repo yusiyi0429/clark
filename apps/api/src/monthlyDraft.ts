@@ -4,6 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import { MonthlyDraftCandidate, type TMonthlyDraftCandidate, type TMonthlyPlanFeedback, type TMonthlyPlanTodo } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import { getRegisteredBattlefieldIds, findUnregisteredBattlefieldId } from "./battlefields.js";
+import { getRegisteredCapabilityIds, findUnregisteredCapabilityId } from "./capabilities.js";
 import { companyPeriod, getMonthlyPlanRow, projectMonthlyFeedback, type MonthlyPlanRow, type StoredMonthlyFeedback } from "./monthlyPlans.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
@@ -24,6 +25,8 @@ export type MonthlyDraftAgentInput = {
     feedback: TMonthlyPlanFeedback[];
   } | null;
   driFeedback: TMonthlyPlanFeedback[];
+  /** 已登记能力：Agent 只能引用这些 capabilityId，六个月目标只作为背景，不复制到当月 PCO。 */
+  capabilities: { capabilityId: string; name: string; sixMonthOutcome: string }[];
   companyMemory: { sectionId: string; title: string; sourceRef: string; passages: { id: string; text: string; sourceRef: string }[] }[];
 };
 
@@ -142,6 +145,12 @@ export function createMonthlyPlanService({
         ...(previousPlan?.feedback ?? []),
         ...row.negotiation.feedback.map(projectMonthlyFeedback),
       ],
+      capabilities: (await q("SELECT id, name, six_month_outcome FROM capability_config ORDER BY sort_order, code, id")).rows.map(
+        (row) => {
+          const capability = row as { id: string; name: string; six_month_outcome: string };
+          return { capabilityId: capability.id, name: capability.name, sixMonthOutcome: capability.six_month_outcome };
+        },
+      ),
       companyMemory: memory.slice(0, 6),
     };
   }
@@ -169,21 +178,28 @@ export function createMonthlyPlanService({
       if (badBattlefield) {
         throw Object.assign(new Error(`battlefieldId 未在 BattlefieldConfig 注册: ${badBattlefield}`), { code: INVALID_MONTHLY_DRAFT });
       }
+      const registeredCapabilities = await getRegisteredCapabilityIds(q);
+      const badCapability = findUnregisteredCapabilityId(registeredCapabilities, candidate.capabilities.map((capability) => capability.capabilityId));
+      if (badCapability) {
+        throw Object.assign(new Error(`capabilityId 未在 CapabilityConfig 注册: ${badCapability}`), { code: INVALID_MONTHLY_DRAFT });
+      }
       const todos: TMonthlyPlanTodo[] = candidate.todos.map((todo) => ({ id: `todo-${randomUUID()}`, ...todo }));
       await q(
         `UPDATE monthly_plans
             SET company_outcome = $2,
                 battlefields = $3::jsonb,
-                todos = $4::jsonb,
-                generation = generation || jsonb_build_object('status', 'ready', 'error', NULL, 'generatedAt', $5::text),
+                capabilities = $4::jsonb,
+                todos = $5::jsonb,
+                generation = generation || jsonb_build_object('status', 'ready', 'error', NULL, 'generatedAt', $6::text),
                 version = version + 1,
                 updated_at = now()
           WHERE id = $1 AND status <> 'confirmed'
-            AND generation->>'status' = 'running' AND generation->>'runId' = $6`,
+            AND generation->>'status' = 'running' AND generation->>'runId' = $7`,
         [
           planId,
           candidate.companyOutcome,
           JSON.stringify(uniqueBy(candidate.battlefields, (battlefield) => battlefield.battlefieldId)),
+          JSON.stringify(uniqueBy(candidate.capabilities, (capability) => capability.capabilityId)),
           JSON.stringify(todos),
           now().toISOString(),
           runId,
@@ -245,8 +261,8 @@ export function createMonthlyPlanService({
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["monthly-plan:create"]);
         const inserted = await client.query(
           `INSERT INTO monthly_plans
-             (id, version, period, status, company_outcome, battlefields, todos, negotiation, generation)
-           VALUES ($1, 1, $2, 'draft', '', '[]'::jsonb, '[]'::jsonb, $3::jsonb, $4::jsonb)
+             (id, version, period, status, company_outcome, battlefields, capabilities, todos, negotiation, generation)
+           VALUES ($1, 1, $2, 'draft', '', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, $3::jsonb, $4::jsonb)
            ON CONFLICT (period) DO NOTHING
            RETURNING id`,
           [planId, period, JSON.stringify(emptyNegotiation()), JSON.stringify(emptyGeneration(now().toISOString()))],
