@@ -198,9 +198,12 @@ export const RadarDecisionKind = Type.Union([
   Type.Literal("mission_boundary"),
 ]);
 
+/** Radar 候选 decisionQuestion 上限：schema 与 prompt 同源引用，改这里两边同步。 */
+export const DECISION_QUESTION_MAX_LENGTH = 25;
+
 export const RadarPromotionCandidate = Type.Object({
   decisionKind: RadarDecisionKind,
-  decisionQuestion: Type.String({ minLength: 1, maxLength: 25 }),
+  decisionQuestion: Type.String({ minLength: 1, maxLength: DECISION_QUESTION_MAX_LENGTH }),
   options: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { minItems: 2, maxItems: 4 }),
   location: IssueLocation,
   urgency: Type.Object({

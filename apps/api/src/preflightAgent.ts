@@ -8,6 +8,16 @@ import { makeMemoryTools } from "./memoryTools.js";
 import { createCompanyMemoryMcpServer } from "./mcpCompanyMemory.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import type { PreflightAgent, PreflightAgentInput } from "./meetingPreflight.js";
+import {
+  LEADER_LENS_FORBIDDEN_TEXT,
+  LEADER_LENS_MAX,
+  LEADER_LENS_MIN,
+  MEETING_QUESTION_MAX,
+  MEETING_QUESTION_MIN,
+  PREFLIGHT_AT_LEAST_ONE_KINDS,
+  PREFLIGHT_ENTRY_KINDS,
+  PREFLIGHT_EXACTLY_ONE_KINDS,
+} from "./promptRules.js";
 
 /**
  * advisor-review 的后端场景版本：方法固化在 Prompt；公司事实只从当前输入和 CompanyMemory MCP 读取。
@@ -24,9 +34,9 @@ export const PREFLIGHT_PROMPT = `CEO WarMap Advisor Preflight v2
 
 只能调用 submit_candidate 提交一次严格候选：
 - readiness 只能是 ready、revise、blocked。
-- entries 只允许七类：core_judgment、strategic_alignment、positive_signal、risk_calibration、meeting_question、next_step、leader_lens。
-- core_judgment、strategic_alignment 各恰好 1 条；positive_signal、risk_calibration、next_step 各至少 1 条；meeting_question 必须 3–5 条；leader_lens 必须 3–5 条。每条简短直给。
-- leader_lens 是 3–5 条陈述性追问问题：站在一号位视角把要追问的事直接陈述成问句，不写免责或元评述，禁止出现“视角预判”“非权威发言”。
+- entries 只允许七类：${PREFLIGHT_ENTRY_KINDS.join("、")}。
+- ${PREFLIGHT_EXACTLY_ONE_KINDS.join("、")} 各恰好 1 条；${PREFLIGHT_AT_LEAST_ONE_KINDS.join("、")} 各至少 1 条；meeting_question 必须 ${MEETING_QUESTION_MIN}–${MEETING_QUESTION_MAX} 条；leader_lens 必须 ${LEADER_LENS_MIN}–${LEADER_LENS_MAX} 条。每条简短直给。
+- leader_lens 是 ${LEADER_LENS_MIN}–${LEADER_LENS_MAX} 条陈述性追问问题：站在一号位视角把要追问的事直接陈述成问句，不写免责或元评述，禁止出现${LEADER_LENS_FORBIDDEN_TEXT}。
 - 每条 entry 必须给非空 sourceRefs。只可使用输入显式出现的 issue:<id>、research:<id>、material:<id>、meeting:<id>、transcript:<id>、outcome:<id>，以及通过 MCP 查到的 memory:<sectionId>。
 - basis 说明本轮实际使用的输入与证据边界；brief 是一句核心判断；summary 只写“最关键的一处问题”和“最优先的一个动作”。
 - 无来源事实标“待核实”；缺输入标“待补”；不得声称已批准、确认、分派、签发或形成组织事实。`;

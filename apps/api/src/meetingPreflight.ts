@@ -12,6 +12,16 @@ import {
 import type { ActionScope } from "./actionToken.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import {
+  LEADER_LENS_FORBIDDEN_PHRASES,
+  LEADER_LENS_FORBIDDEN_TEXT,
+  LEADER_LENS_MAX,
+  LEADER_LENS_MIN,
+  MEETING_QUESTION_MAX,
+  MEETING_QUESTION_MIN,
+  PREFLIGHT_AT_LEAST_ONE_KINDS,
+  PREFLIGHT_EXACTLY_ONE_KINDS,
+} from "./promptRules.js";
+import {
   appendFingerprint,
   commit,
   getMeetingRow,
@@ -129,19 +139,23 @@ type RelatedMeetingSnapshotRow = {
 function preflightStructureError(candidate: TPreflightCandidate): string | null {
   const count = (kind: TPreflightCandidate["entries"][number]["kind"]) =>
     candidate.entries.filter((entry) => entry.kind === kind).length;
-  for (const kind of ["core_judgment", "strategic_alignment"] as const) {
+  for (const kind of PREFLIGHT_EXACTLY_ONE_KINDS) {
     if (count(kind) !== 1) return `${kind} 必须恰好 1 条`;
   }
-  for (const kind of ["positive_signal", "risk_calibration", "next_step"] as const) {
+  for (const kind of PREFLIGHT_AT_LEAST_ONE_KINDS) {
     if (count(kind) < 1) return `${kind} 至少需要 1 条`;
   }
   const questions = count("meeting_question");
-  if (questions < 3 || questions > 5) return "meeting_question 必须为 3–5 条";
+  if (questions < MEETING_QUESTION_MIN || questions > MEETING_QUESTION_MAX) {
+    return `meeting_question 必须为 ${MEETING_QUESTION_MIN}–${MEETING_QUESTION_MAX} 条`;
+  }
   const lenses = candidate.entries.filter((entry) => entry.kind === "leader_lens");
-  if (lenses.length < 3 || lenses.length > 5) return "leader_lens 必须为 3–5 条";
+  if (lenses.length < LEADER_LENS_MIN || lenses.length > LEADER_LENS_MAX) {
+    return `leader_lens 必须为 ${LEADER_LENS_MIN}–${LEADER_LENS_MAX} 条`;
+  }
   for (const lens of lenses) {
-    if (lens.body.includes("视角预判") || lens.body.includes("非权威发言")) {
-      return "leader_lens 不得出现“视角预判”“非权威发言”";
+    if (LEADER_LENS_FORBIDDEN_PHRASES.some((phrase) => lens.body.includes(phrase))) {
+      return `leader_lens 不得出现${LEADER_LENS_FORBIDDEN_TEXT}`;
     }
   }
   if (candidate.taskDefinition.secondaryRole === candidate.taskDefinition.primaryRole) {
