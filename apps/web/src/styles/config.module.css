@@ -1,36 +1,52 @@
-/* 配置页基线：Top Nav 返回首页 + SETTINGS header + 1212 宽的 2×2 表单卡。 */
-.shell{min-height:100dvh;box-sizing:border-box;background:#f5f6f8;color:#1d1d1f;padding:20px 40px 80px}
-.topbar{max-width:1212px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
-.back{display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;color:#647083;font:inherit;font-size:13px;padding:9px 11px;border-radius:12px;cursor:pointer}
-.back:hover{background:#edf0f5}
+/* 配置页基线（UpgradeDesign.pen 页面/配置）：Top Nav + Page Header + 2448 宽的 2×2 卡片阵。 */
+.shell{box-sizing:border-box;min-height:100dvh;display:flex;flex-direction:column;gap:24px;background:#f5f5f7;color:#1d1d1f;padding:36px 56px 60px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.back{display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;color:#6e6e73;font:inherit;font-size:13px;padding:9px 10px;border-radius:10px;cursor:pointer}
+.back:hover{background:#ececf0}
 .back svg{width:16px;height:16px}
-.mark{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#41454d}
+.draft{background:#f0f4fa;border-radius:10px;padding:7px 11px;font-size:12px;color:#6e6e73}
 
-.header{max-width:1212px;margin:26px auto 22px}
-.header h1{margin:0;font-size:13px;font-weight:600;letter-spacing:.24em;color:#8b8f98}
-.header p{margin:10px 0 0;max-width:720px;font-size:13px;line-height:1.9;color:#6b7280}
+.header{display:flex;flex-direction:column;gap:8px;max-width:2448px}
+.eyebrow{margin:0;font-size:11px;font-weight:600;letter-spacing:1.4px;color:#007aff}
+.title{margin:0;font-size:30px;font-weight:600;letter-spacing:-.6px}
+.subtitle{margin:0;font-size:15px;line-height:26px;color:#3c4350}
 
-.grid{max-width:1212px;margin:0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}
-.card{display:flex;flex-direction:column;box-sizing:border-box;background:#fff;border:1px solid #e8eaf0;border-radius:20px;padding:22px;box-shadow:0 4px 14px #192d5010}
-.card h2{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}
-.hint{margin:8px 0 16px;font-size:12px;line-height:1.8;color:#7d838d}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;max-width:2448px;align-items:start}
+.card{position:relative;box-sizing:border-box;height:460px;display:flex;flex-direction:column;gap:14px;background:#fff;border-radius:20px;outline:1px solid #e6e9ed;padding:22px 24px}
+.cardHead{display:flex;flex-direction:column;gap:4px}
+.cardHead h2{margin:0;font-size:17px;font-weight:600}
+.cardHead p{margin:0;font-size:13px;line-height:21px;color:#3c4350}
+.iconChip{position:absolute;top:22px;right:24px;display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;background:#e8f1ff;color:#0a5dc2}
+.iconChip svg{width:20px;height:20px}
+.fields{display:flex;flex-direction:column;gap:14px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field>span{font-size:12px;color:#3c4350}
+.field input,.field select{box-sizing:border-box;width:100%;height:44px;border:0;outline:1px solid #d9dde5;border-radius:10px;background:#f7f8fa;padding:0 14px;font:inherit;font-size:13px;color:#1d1d1f}
+.field input::placeholder{color:#6e6e73}
+.field input:focus,.field select:focus{outline:2px solid #4989d6;background:#fff}
+.selectWrap{position:relative;display:block}
+.selectWrap select{appearance:none;padding-right:36px}
+.chevron{position:absolute;top:50%;right:14px;width:14px;height:14px;transform:translateY(-50%);color:#6e6e73;pointer-events:none}
 
-.field{display:block;margin-bottom:14px}
-.field span{display:block;margin-bottom:6px;font-size:12px;color:#6b7280}
-.field input,.field select,.field textarea{box-sizing:border-box;width:100%;height:44px;border:1px solid #d6dae2;border-radius:10px;background:#fbfcfd;padding:0 12px;font:inherit;font-size:14px;color:#1d1d1f}
-.field textarea{height:auto;min-height:88px;padding:11px 12px;line-height:1.7;resize:vertical}
-.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid #4989d6;outline-offset:1px;background:#fff}
+.upload{position:absolute;top:322px;left:24px;right:24px;box-sizing:border-box;display:flex;align-items:center;gap:12px;height:62px;border-radius:14px;background:#f7f8fa;outline:1px solid #b9d6f8;padding:0 20px;cursor:pointer}
+.upload[data-dragging]{background:#eef5ff;outline-color:#007aff}
+.uploadIcon{flex-shrink:0;width:26px;height:26px;color:#007aff}
+.uploadTitle{font-size:15px;font-weight:600}
+.uploadHint{overflow:hidden;font-size:12px;color:#4f5866;text-overflow:ellipsis;white-space:nowrap}
+.fileInput{display:none}
 
-.submit{height:44px;border:0;border-radius:10px;background:#1d1d1f;color:#fff;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
-.submit:hover{background:#000}
-.submit:disabled,.dropzone:disabled{opacity:.5;cursor:default}
-.dropzone{display:flex;align-items:center;justify-content:center;gap:8px;height:44px;border:1px dashed #b9c0cc;border-radius:10px;background:#fafbfc;color:#41454d;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
-.dropzone:hover{background:#f1f4f8;border-color:#8f9aab}
-.dropzone svg{width:16px;height:16px}
-.status{margin:10px 0 0;font-size:12px;line-height:1.7}
-.status[data-kind=ok]{color:#2b6a45}
-.status[data-kind=error]{color:#9f5930}
+.cardFooter{position:absolute;left:24px;right:24px;bottom:22px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.footerHint{font-size:12px;color:#4f5866}
+.footerHint[data-kind=ok]{color:#2f7a44}
+.footerHint[data-kind=error]{color:#a1443c}
+.footerActions{display:flex;align-items:center;gap:10px}
+.secondary{display:inline-flex;align-items:center;justify-content:center;height:42px;border:0;outline:1px solid #d9dde5;border-radius:10px;background:#fff;padding:10px 14px;font:inherit;font-size:13px;font-weight:500;color:#1d1d1f;cursor:pointer}
+.secondary:hover{background:#f5f5f7}
+.primary{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:11px;background:#007aff;padding:11px 17px;font:inherit;font-size:14px;font-weight:600;color:#fff;cursor:pointer}
+.primary:hover{background:#0068db}
+.primary:disabled{opacity:.5;cursor:default}
+.primary svg{width:15px;height:15px}
 
 @media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:690px){.shell{padding:16px 20px 60px}.card{padding:18px}}
-@media(prefers-contrast:more){.card{border-color:#777}.field input,.field select,.field textarea{border-color:#777}}
+@media(max-width:690px){.shell{padding:20px 20px 40px}}
+@media(prefers-contrast:more){.card{outline-color:#777}.field input,.field select{outline-color:#777}}

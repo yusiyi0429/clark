@@ -1,19 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowRight, Calendar, ChevronDown, ChevronLeft, FileUp, Flag, Layers, Target } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
-import { TianshuMark } from "@/components/TianshuMark";
 import c from "@/styles/config.module.css";
 
 type Person = { personId: string; displayName: string; roles: string[] };
 type Battlefield = { id: string; name: string };
 type Status = { kind: "ok" | "error"; message: string } | null;
 
+/** 会前材料只接受与后端同一份白名单：PDF、DOCX、Markdown。 */
+const MATERIAL_ACCEPT = ".pdf,.docx,.md";
+const MAX_MATERIALS = 10;
+
 /**
  * 配置页只做确定性表单写入 Organization Fact：注册战场/能力、直接新建 Issue 与 Meeting。
- * 会前材料不在本页二段上传，Meeting 建好后跳转会议页上传。
+ * 会议卡内嵌会前材料拖拽区，一次 multipart 建会；成功后进入对应决策流程页面。
  */
 export function ConfigScreen({ people, battlefields }: { people: Person[]; battlefields: Battlefield[] }) {
   const router = useRouter();
@@ -22,7 +25,10 @@ export function ConfigScreen({ people, battlefields }: { people: Person[]; battl
   const [capability, setCapability] = useState({ name: "", group: "", description: "" });
   const [issue, setIssue] = useState({ title: "", battlefieldId: battlefields[0]?.id ?? "", decisionBy: "" });
   const [meeting, setMeeting] = useState({ title: "", scheduledAt: "", leadDriId: "" });
+  const [materials, setMaterials] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState<Record<string, Status>>({});
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const set = (key: string) => (value: Status) => setStatus((prev) => ({ ...prev, [key]: value }));
 
@@ -50,8 +56,12 @@ export function ConfigScreen({ people, battlefields }: { people: Person[]; battl
     event.preventDefault();
     setBusy("battlefield");
     const { data, error, response } = await browserApi.POST("/api/config/battlefields", { body: battlefield });
-    if (await finish("battlefield", response, data, error)) setBattlefield({ name: "", owner: "", goal: "" });
+    const id = await finish("battlefield", response, data, error);
     setBusy(null);
+    if (id) {
+      setBattlefield({ name: "", owner: "", goal: "" });
+      router.push("/config/battlefields");
+    }
   }
 
   async function createCapability(event: React.FormEvent) {
@@ -68,155 +78,242 @@ export function ConfigScreen({ people, battlefields }: { people: Person[]; battl
     const body = { title: issue.title, battlefieldId: issue.battlefieldId, ...(issue.decisionBy ? { decisionBy: issue.decisionBy } : {}) };
     const { data, error, response } = await browserApi.POST("/api/config/issues", { body });
     const id = await finish("issue", response, data, error);
+    setBusy(null);
     if (id) {
       setIssue({ title: "", battlefieldId: battlefields[0]?.id ?? "", decisionBy: "" });
       router.push(`/issues/${id}`);
     }
-    setBusy(null);
   }
 
+  /** 建会与材料一次提交：multipart 由浏览器设置 boundary，客户端类型生成不覆盖该场景。 */
   async function createMeeting(event: React.FormEvent) {
     event.preventDefault();
     setBusy("meeting");
-    const { data, error, response } = await browserApi.POST("/api/config/meetings", { body: meeting });
-    const id = await finish("meeting", response, data, error);
-    if (id) router.push(`/meetings/${id}`);
+    const form = new FormData();
+    form.append("title", meeting.title);
+    form.append("scheduledAt", meeting.scheduledAt);
+    form.append("leadDriId", meeting.leadDriId);
+    for (const file of materials) form.append("files", file);
+    const response = await fetch("/api/config/meetings", { method: "POST", body: form });
+    const body = (await response.json().catch(() => ({}))) as { message?: string; cards?: { objectRef: { id: string } }[] };
     setBusy(null);
+    if (response.status === 401) {
+      router.push("/access?next=/config");
+      return;
+    }
+    if (response.ok && body.cards?.[0]) {
+      router.push(`/meetings/${body.cards[0].objectRef.id}`);
+      return;
+    }
+    set("meeting")({ kind: "error", message: body.message ?? `创建失败（${response.status}）` });
+  }
+
+  function addMaterials(list: FileList | null) {
+    const picked = Array.from(list ?? []);
+    if (!picked.length) return;
+    setMaterials((prev) => [...prev, ...picked].slice(0, MAX_MATERIALS));
   }
 
   const dri = people.filter((person) => person.roles.includes("dri"));
+  const primary = (key: string, label: string) => (
+    <button type="submit" className={c.primary} disabled={busy === key}>
+      {label}
+      <ArrowRight aria-hidden="true" />
+    </button>
+  );
 
   return (
     <main className={c.shell}>
       <nav className={c.topbar} aria-label="配置页导航">
         <button type="button" className={c.back} onClick={() => router.push("/")}>
-          <ArrowLeft aria-hidden="true" /> 返回首页
+          <ChevronLeft aria-hidden="true" /> 返回首页
         </button>
-        <span className={c.mark}>
-          <TianshuMark /> 天枢
-        </span>
+        <span className={c.draft}>配置变更写入业务库并同步 Radar 监测范围</span>
       </nav>
 
       <header className={c.header}>
-        <h1>SETTINGS</h1>
-        <p>把公司级事实一次性登记清楚：战场、能力、议题与会议。这里写入的是唯一事实源，首页与会议页读取同一份投影。</p>
+        <p className={c.eyebrow}>SETTINGS</p>
+        <h1 className={c.title}>配置</h1>
+        <p className={c.subtitle}>创建与管理组织级对象：会议、议题、战场与能力。新建后立刻进入对应的决策流程。</p>
       </header>
 
       <div className={c.grid}>
-        <form className={c.card} onSubmit={createBattlefield}>
-          <h2>新建战场</h2>
-          <p className={c.hint}>战场是战略议题的归属容器，注册后才能把 Issue 放进去。</p>
-          <label className={c.field}>
-            <span>战场名称</span>
-            <input value={battlefield.name} onChange={(e) => setBattlefield({ ...battlefield, name: e.target.value })} required />
-          </label>
-          <label className={c.field}>
-            <span>负责人</span>
-            <input value={battlefield.owner} onChange={(e) => setBattlefield({ ...battlefield, owner: e.target.value })} required />
-          </label>
-          <label className={c.field}>
-            <span>目标</span>
-            <textarea value={battlefield.goal} onChange={(e) => setBattlefield({ ...battlefield, goal: e.target.value })} required />
-          </label>
-          <Footer status={status.battlefield} busy={busy === "battlefield"} label="注册战场" />
-        </form>
-
-        <form className={c.card} onSubmit={createCapability}>
-          <h2>新建能力</h2>
-          <p className={c.hint}>注册的能力分组会直接出现在首页公司能力面板，不必等有 Issue 才可见。</p>
-          <label className={c.field}>
-            <span>能力名称</span>
-            <input value={capability.name} onChange={(e) => setCapability({ ...capability, name: e.target.value })} required />
-          </label>
-          <label className={c.field}>
-            <span>所属分组</span>
-            <input value={capability.group} onChange={(e) => setCapability({ ...capability, group: e.target.value })} required />
-          </label>
-          <label className={c.field}>
-            <span>说明</span>
-            <textarea value={capability.description} onChange={(e) => setCapability({ ...capability, description: e.target.value })} required />
-          </label>
-          <Footer status={status.capability} busy={busy === "capability"} label="注册能力" />
+        <form className={c.card} onSubmit={createMeeting}>
+          <CardHead title="新建会议" desc="拉起一场有准备的会：上传材料 → 会前预审 → 会后复盘。" icon={<Calendar aria-hidden="true" />} />
+          <Fields>
+            <Field label="会议名称">
+              <input value={meeting.title} placeholder="例如：Q4 定价策略评审会" onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} required />
+            </Field>
+            <Field label="时间">
+              <input type="datetime-local" value={meeting.scheduledAt} onChange={(e) => setMeeting({ ...meeting, scheduledAt: e.target.value })} required />
+            </Field>
+            <Field label="主持 DRI">
+              <Select value={meeting.leadDriId} onChange={(value) => setMeeting({ ...meeting, leadDriId: value })} placeholder="选择 lead DRI">
+                {dri.map((person) => (
+                  <option key={person.personId} value={person.personId}>
+                    {person.displayName}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </Fields>
+          <div
+            className={c.upload}
+            data-dragging={dragging || undefined}
+            role="button"
+            tabIndex={0}
+            aria-label="上传会前材料"
+            onClick={() => fileRef.current?.click()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                fileRef.current?.click();
+              }
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              addMaterials(event.dataTransfer.files);
+            }}
+          >
+            <FileUp aria-hidden="true" className={c.uploadIcon} />
+            <span className={c.uploadTitle}>上传会前材料</span>
+            <span className={c.uploadHint}>
+              {materials.length ? `已选择 ${materials.length} 份：${materials.map((file) => file.name).join("、")}` : "PDF、DOCX、Markdown · 可拖拽多个文件至此"}
+            </span>
+            <input ref={fileRef} className={c.fileInput} type="file" multiple accept={MATERIAL_ACCEPT} onChange={(event) => addMaterials(event.target.files)} />
+          </div>
+          <CardFooter hint="创建后进入会前预审" status={status.meeting}>
+            {primary("meeting", "创建并进入会前预审")}
+          </CardFooter>
         </form>
 
         <form className={c.card} onSubmit={createIssue}>
-          <h2>新建议题</h2>
-          <p className={c.hint}>一号位直接建 Issue，创建后照常进入预研，与其他来源的议题走同一条决策链路。</p>
-          <label className={c.field}>
-            <span>标题（不超过 25 字）</span>
-            <input maxLength={25} value={issue.title} onChange={(e) => setIssue({ ...issue, title: e.target.value })} required />
-          </label>
-          <label className={c.field}>
-            <span>所属战场</span>
-            <select value={issue.battlefieldId} onChange={(e) => setIssue({ ...issue, battlefieldId: e.target.value })} required>
-              <option value="" disabled>
-                选择已注册战场
-              </option>
-              {battlefields.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={c.field}>
-            <span>决策期限（可选）</span>
-            <input type="date" value={issue.decisionBy} onChange={(e) => setIssue({ ...issue, decisionBy: e.target.value })} />
-          </label>
-          <Footer status={status.issue} busy={busy === "issue"} label="新建议题" />
+          <CardHead title="新建议题" desc="把一件事升格为需要拍板的议题，进入待决策队列。" icon={<Target aria-hidden="true" />} />
+          <Fields>
+            <Field label="议题标题">
+              <input maxLength={25} value={issue.title} placeholder="例如：是否追加东南亚渠道预算 40%" onChange={(e) => setIssue({ ...issue, title: e.target.value })} required />
+            </Field>
+            <Field label="所属战场">
+              <Select value={issue.battlefieldId} onChange={(value) => setIssue({ ...issue, battlefieldId: value })} placeholder="选择已注册战场">
+                {battlefields.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="决定期限">
+              <input type="date" value={issue.decisionBy} onChange={(e) => setIssue({ ...issue, decisionBy: e.target.value })} />
+            </Field>
+          </Fields>
+          <CardFooter hint="议题进入待决策队列" status={status.issue}>
+            {primary("issue", "新建议题")}
+          </CardFooter>
         </form>
 
-        <form className={c.card} onSubmit={createMeeting}>
-          <h2>新建会议</h2>
-          <p className={c.hint}>先建会议，再在会议页挂议题、传会前材料。创建成功后直接进入会议页。</p>
-          <label className={c.field}>
-            <span>会议主题</span>
-            <input value={meeting.title} onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} required />
-          </label>
-          <label className={c.field}>
-            <span>会议时间</span>
-            <input type="datetime-local" value={meeting.scheduledAt} onChange={(e) => setMeeting({ ...meeting, scheduledAt: e.target.value })} required />
-          </label>
-          <label className={c.field}>
-            <span>一号位负责人</span>
-            <select value={meeting.leadDriId} onChange={(e) => setMeeting({ ...meeting, leadDriId: e.target.value })} required>
-              <option value="" disabled>
-                选择 lead DRI
-              </option>
-              {dri.map((person) => (
-                <option key={person.personId} value={person.personId}>
-                  {person.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" className={c.dropzone} disabled={busy === "meeting"}>
-            <Upload aria-hidden="true" />
-            创建 Meeting 并前往上传会前材料
-          </button>
-          <StatusLine status={status.meeting} />
+        <form className={c.card} onSubmit={createBattlefield}>
+          <CardHead title="新建战场" desc="定义一块要打赢的战场：目标、负责人与推进节奏。" icon={<Flag aria-hidden="true" />} />
+          <Fields>
+            <Field label="战场名称">
+              <input value={battlefield.name} placeholder="例如：东南亚交付战场" onChange={(e) => setBattlefield({ ...battlefield, name: e.target.value })} required />
+            </Field>
+            <Field label="负责人">
+              <Select value={battlefield.owner} onChange={(value) => setBattlefield({ ...battlefield, owner: value })} placeholder="选择负责人">
+                {people.map((person) => (
+                  <option key={person.personId} value={person.displayName}>
+                    {person.displayName}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="目标一句话">
+              <input value={battlefield.goal} placeholder="例如：双十一前履约周期压降 18%" onChange={(e) => setBattlefield({ ...battlefield, goal: e.target.value })} required />
+            </Field>
+          </Fields>
+          <CardFooter hint="创建后进入战场管理" status={status.battlefield}>
+            <span className={c.footerActions}>
+              <button type="button" className={c.secondary} onClick={() => router.push("/config/battlefields")}>
+                管理战场
+              </button>
+              {primary("battlefield", "创建并进入战场管理")}
+            </span>
+          </CardFooter>
+        </form>
+
+        <form className={c.card} onSubmit={createCapability}>
+          <CardHead title="新建能力" desc="登记一项可复用的组织能力，供议题与计划引用。" icon={<Layers aria-hidden="true" />} />
+          <Fields>
+            <Field label="能力名称">
+              <input value={capability.name} placeholder="例如：区域仓配服务" onChange={(e) => setCapability({ ...capability, name: e.target.value })} required />
+            </Field>
+            <Field label="所属分组">
+              <input value={capability.group} placeholder="例如：供应链能力" onChange={(e) => setCapability({ ...capability, group: e.target.value })} required />
+            </Field>
+            <Field label="能力说明">
+              <input value={capability.description} placeholder="例如：覆盖三国本地仓的仓配与退货能力" onChange={(e) => setCapability({ ...capability, description: e.target.value })} required />
+            </Field>
+          </Fields>
+          <CardFooter hint="出现在首页公司能力面板" status={status.capability}>
+            {primary("capability", "新建能力")}
+          </CardFooter>
         </form>
       </div>
     </main>
   );
 }
 
-function Footer({ status, busy, label }: { status: Status; busy: boolean; label: string }) {
+function CardHead({ title, desc, icon }: { title: string; desc: string; icon: ReactNode }) {
   return (
     <>
-      <button type="submit" className={c.submit} disabled={busy}>
-        {label}
-      </button>
-      <StatusLine status={status} />
+      <div className={c.cardHead}>
+        <h2>{title}</h2>
+        <p>{desc}</p>
+      </div>
+      <span className={c.iconChip}>{icon}</span>
     </>
   );
 }
 
-function StatusLine({ status }: { status: Status }) {
-  if (!status) return null;
+function Fields({ children }: { children: ReactNode }) {
+  return <div className={c.fields}>{children}</div>;
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <p className={c.status} data-kind={status.kind} role="status">
-      {status.message}
-    </p>
+    <label className={c.field}>
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function Select({ value, onChange, placeholder, children }: { value: string; onChange: (value: string) => void; placeholder: string; children: ReactNode }) {
+  return (
+    <span className={c.selectWrap}>
+      <select value={value} onChange={(event) => onChange(event.target.value)} required>
+        <option value="" disabled>
+          {placeholder}
+        </option>
+        {children}
+      </select>
+      <ChevronDown aria-hidden="true" className={c.chevron} />
+    </span>
+  );
+}
+
+function CardFooter({ hint, status, children }: { hint: string; status: Status; children: ReactNode }) {
+  return (
+    <div className={c.cardFooter}>
+      <span className={c.footerHint} data-kind={status?.kind} role="status">
+        {status?.message ?? hint}
+      </span>
+      {children}
+    </div>
   );
 }
