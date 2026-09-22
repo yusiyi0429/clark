@@ -2,14 +2,9 @@ import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { QueryResult } from "pg";
-import { defineTool } from "@earendil-works/pi-coding-agent";
-import {
-  GetPassagesInput,
-  ListSectionsInput,
-  PreflightCandidate,
-  SearchSectionsInput,
-} from "@warmap/contracts";
+import { PreflightCandidate } from "@warmap/contracts";
 import { runCandidateAgent } from "./candidateAgentRuntime.js";
+import { makeMemoryTools } from "./memoryTools.js";
 import { createCompanyMemoryMcpServer } from "./mcpCompanyMemory.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import type { PreflightAgent, PreflightAgentInput } from "./meetingPreflight.js";
@@ -58,11 +53,7 @@ export async function createPreflightAgent(options: {
     if (result.isError) throw new Error(content.map((item) => item.text).join("\n") || `${name} failed`);
     return { content, details: {} };
   };
-  const memoryTools = [
-    defineTool({ name: "list_sections", label: "企业知识章节", description: "列出企业知识章节", parameters: ListSectionsInput, execute: async (_id, args) => call("list_sections", args) }),
-    defineTool({ name: "search_sections", label: "搜索企业知识", description: "搜索战略、商业模式与经营状态", parameters: SearchSectionsInput, execute: async (_id, args) => call("search_sections", args) }),
-    defineTool({ name: "get_passages", label: "读取企业知识", description: "读取指定章节段落", parameters: GetPassagesInput, execute: async (_id, args) => call("get_passages", args) }),
-  ];
+  const memoryTools = makeMemoryTools(call);
 
   return {
     modelSlot: "light",

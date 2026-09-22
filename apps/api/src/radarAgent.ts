@@ -3,13 +3,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { AssistantMessageEventStream, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import {
-  GetPassagesInput,
-  ListSectionsInput,
-  RadarCandidateSubmission,
-  SearchSectionsInput,
-} from "@warmap/contracts";
+import { RadarCandidateSubmission } from "@warmap/contracts";
 import { runCandidateAgent } from "./candidateAgentRuntime.js";
+import { makeMemoryTools } from "./memoryTools.js";
 import { createCompanyMemoryMcpServer } from "./mcpCompanyMemory.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import type { RadarAssessor } from "./radar.js";
@@ -52,11 +48,7 @@ export async function createRadarAgentAssessor(options: {
     return { content, details: {} };
   };
 
-  const memoryTools = [
-    defineTool({ name: "list_sections", label: "企业知识章节", description: "列出企业知识章节", parameters: ListSectionsInput, execute: async (_id, args) => call("list_sections", args) }),
-    defineTool({ name: "search_sections", label: "搜索企业知识", description: "搜索相关企业知识章节", parameters: SearchSectionsInput, execute: async (_id, args) => call("search_sections", args) }),
-    defineTool({ name: "get_passages", label: "读取企业知识", description: "读取指定章节段落", parameters: GetPassagesInput, execute: async (_id, args) => call("get_passages", args) }),
-  ];
+  const memoryTools = makeMemoryTools(call);
 
   return {
     async assess(input, signal) {

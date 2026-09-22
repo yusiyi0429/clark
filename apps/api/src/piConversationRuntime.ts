@@ -4,10 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   COMPANY_MEMORY_TOOLS,
-  GetPassagesInput,
-  ListSectionsInput,
   SearchPeopleInput,
-  SearchSectionsInput,
   WebSearchInput,
   type TRadarSourceItem,
 } from "@warmap/contracts";
@@ -33,6 +30,7 @@ import {
 } from "@earendil-works/pi-ai";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import type { ConversationRuntime } from "./conversations.js";
+import { makeMemoryTools } from "./memoryTools.js";
 import { createCompanyMemoryMcpServer } from "./mcpCompanyMemory.js";
 import { unavailableWebSearchAdapter, type WebSearchAdapter } from "./webSearch.js";
 
@@ -219,9 +217,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
     return { content, details: {} };
   };
   const mcpTools = [
-    defineTool({ name: "list_sections", label: "企业知识章节", description: "列出企业知识章节", parameters: ListSectionsInput, execute: async (_id, args) => call("list_sections", args) }),
-    defineTool({ name: "search_sections", label: "搜索企业知识", description: "搜索相关企业知识章节", parameters: SearchSectionsInput, execute: async (_id, args) => call("search_sections", args) }),
-    defineTool({ name: "get_passages", label: "读取企业知识", description: "读取指定章节段落", parameters: GetPassagesInput, execute: async (_id, args) => call("get_passages", args) }),
+    ...makeMemoryTools(call),
     defineTool({ name: "search_people", label: "查询人员", description: "查询稳定人员目录", parameters: SearchPeopleInput, execute: async (_id, args) => call("search_people", args) }),
   ];
   const listPendingIssues = options.listPendingIssues;
