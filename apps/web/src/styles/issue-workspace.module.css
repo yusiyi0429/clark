@@ -46,7 +46,7 @@
 .discussion>header h2{white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
 .hintTip{position:relative;display:inline-flex;color:#8a8f98;cursor:default}
 .hintTip:focus-visible{outline:2px solid #8cb1e8;outline-offset:2px;border-radius:6px}
-.hintBubble{position:absolute;left:0;top:calc(100% + 8px);width:max-content;max-width:280px;background:#1d1d1f;color:#fff;font-size:12px;font-weight:400;line-height:1.6;padding:8px 12px;border-radius:8px;opacity:0;visibility:hidden;transition:opacity 150ms;z-index:5;white-space:normal}
+.hintBubble{position:absolute;left:0;top:calc(100% + 8px);width:max-content;max-width:240px;background:#1d1d1f;color:#fff;font-size:12px;font-weight:400;line-height:1.6;padding:8px 12px;border-radius:8px;opacity:0;visibility:hidden;transition:opacity 150ms;z-index:30;white-space:normal}
 .hintTip:hover .hintBubble,.hintTip:focus-visible .hintBubble{opacity:1;visibility:visible}
 @media(prefers-reduced-motion:reduce){.hintBubble{transition:none}}
 .discussion .actionRow button{padding:9px 14px;font-size:13px;line-height:1.6;border-radius:10px}

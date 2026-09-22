@@ -8745,7 +8745,7 @@
                           "x": 96,
                           "y": 46,
                           "name": "Hover Tip · hover 后显示",
-                          "width": 280,
+                          "width": 240,
                           "fill": "$ink",
                           "cornerRadius": 8,
                           "padding": [

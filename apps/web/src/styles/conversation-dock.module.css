@@ -174,7 +174,7 @@
 /* 右栏内部的会话列表面板：在栏内展开，不打开全局弹层。 */
 .sessionPanel{flex:none;display:flex;flex-direction:column;gap:6px;max-height:40%;margin:0 16px;padding:10px;border:1px solid #e6e9ed;border-radius:12px;background:#fff;box-shadow:0 10px 28px #0a0f1e14;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
 .sidebarScroll{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:18px 16px 8px}
-.sidebarComposer{position:relative;display:flex;flex-direction:column;gap:8px;flex:none;padding:10px 16px 18px;border-top:0;background:#fff}
+.sidebarComposer{position:relative;display:flex;flex-direction:column;gap:8px;flex:none;padding:10px 16px 18px;border-top:0;background:#fff;--picker-width:min(330px,calc(100vw - 48px))}
 .sidebarComposer .dock{width:100%;max-width:none}
 .sidebarComposer .dock[data-in-history=true]{height:44px;padding:0 6px 0 14px;border-radius:22px}
 .sidebarComposer .dock[data-in-history=true] .sendButton{width:32px;height:32px}
