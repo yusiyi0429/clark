@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
+import type { TBattlefieldManagementResponse } from "@warmap/contracts";
 import type { Card } from "./client";
 import { serverApi } from "./client";
 
@@ -57,6 +58,14 @@ export async function loadPeople(cookie: string): Promise<PersonOption[]> {
 export async function loadBattlefieldOptions(cookie: string): Promise<{ id: string; name: string }[]> {
   const { cards } = await load("/api/cards/battlefields", cookie);
   return cards.map((card) => ({ id: card.objectRef.id, name: card.title }));
+}
+
+/** 战场管理页一次读全部战场与待决策议题，避免在 Web 侧拼第二份事实。 */
+export async function loadBattlefieldManagement(cookie: string): Promise<TBattlefieldManagementResponse> {
+  const { data, response } = await serverApi.GET("/api/config/battlefields", { headers: { cookie } });
+  if (response.status === 401) redirect("/access");
+  if (!response.ok) throw new Error(`battlefield management query failed with ${response.status}`);
+  return (data as TBattlefieldManagementResponse | undefined) ?? { battlefields: [], issues: [] };
 }
 
 /** 关联 Issue 标题需要逐条读取：已经离开待决策区域的 Issue 仍应显示自己的标题。 */

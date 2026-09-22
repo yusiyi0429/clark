@@ -1,0 +1,58 @@
+/* 战场管理页基线（UpgradeDesign.pen 页面/战场管理）：左 620 战场列表 + 右 关联议题/添加议题。 */
+.body{display:flex;align-items:flex-start;gap:20px;max-width:2448px}
+.left{flex:none;width:620px}
+.right{display:flex;flex-direction:column;flex:1;gap:20px;min-width:0}
+
+.listCard,.relatedCard,.pickCard{position:relative;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;background:#fff;border-radius:20px;outline:1px solid #e6e9ed;padding:22px 24px}
+.listCard{height:1050px}
+.relatedCard{height:400px}
+.pickCard{height:630px}
+
+.iconChip{position:absolute;top:22px;right:24px;display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;background:#e8f1ff;color:#0a5dc2}
+.iconChip[data-tone=issue]{background:#fdf4e4;color:#8a6220}
+.iconChip[data-tone=add]{background:#e8f6ec;color:#2f7a44}
+.iconChip svg{width:20px;height:20px}
+
+.rows{display:flex;flex-direction:column;flex:1;gap:8px;min-height:0;overflow-y:auto;scrollbar-width:thin}
+.row,.issueRow,.pickRow{display:flex;align-items:flex-start;gap:10px;width:100%;border:0;border-radius:10px;background:transparent;padding:12px 14px;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.row[data-selected],.pickRow[data-member]{background:#e8f1ff}
+.row:hover:not([data-selected]),.issueRow:hover,.pickRow:hover:not([data-member]){background:#f7f8fa}
+.rowMain{display:flex;flex:1;align-items:flex-start;gap:10px;min-width:0;border:0;background:none;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.rowText{display:flex;flex:1;flex-direction:column;gap:1px;min-width:0}
+.rowTitle{overflow:hidden;font-size:15px;line-height:23px;color:#1d1d1f;text-overflow:ellipsis;white-space:nowrap}
+.rowMeta{overflow:hidden;font-size:12px;color:#a1443c;text-overflow:ellipsis;white-space:nowrap}
+
+.dot{flex:none;width:6px;height:6px;margin-top:8px;border-radius:50%;background:#8a8a90}
+.row[data-selected] .dot{background:#007aff}
+.dot[data-urgency=red]{background:#e34b43}
+.dot[data-urgency=yellow]{background:#c79624}
+.trash{display:grid;place-items:center;flex:none;width:24px;height:24px;border:0;border-radius:8px;background:transparent;color:#6e6e73;cursor:pointer}
+.trash svg{width:14px;height:14px}
+.trash:hover{background:#1d1d1f0f}
+.chevron{flex:none;width:14px;height:14px;margin-top:5px;color:#8a8a90}
+
+.pickBody{display:flex;flex:1;flex-direction:column;gap:12px;min-height:0}
+.pickerLabel{margin:0;font-size:12.5px;font-weight:600;line-height:20px;color:#4f5866}
+.pickRow:disabled{cursor:default;opacity:.6}
+.check{flex:none;width:16px;height:16px;margin-top:4px;border-radius:50%;background:transparent;outline:1px solid #d9dde5}
+.check[data-member]{background:#007aff}
+.plus{flex:none;width:14px;height:14px;margin-top:5px;color:#0a5dc2}
+
+.confirm{position:absolute;top:95px;left:310px;z-index:4;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;width:300px;background:#fff;border-radius:14px;outline:1px solid #e6e9ed;box-shadow:0 10px 28px #0a0f1e33;padding:14px 16px}
+.confirmTitle{margin:0;font-size:13.5px;font-weight:600;color:#1d1d1f}
+.confirmBody{margin:0;font-size:12px;line-height:19px;color:#4f5866}
+.confirmActions{display:flex;gap:8px}
+.cancel,.danger{border:0;border-radius:9px;padding:8px 13px;font:inherit;font-size:12.5px;cursor:pointer}
+.cancel{background:#fff;outline:1px solid #d9dde5;color:#4f5866}
+.danger{background:#a1443c;font-weight:500;color:#fff}
+.danger:disabled{opacity:.5;cursor:default}
+
+.cardFooter{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto}
+.footerHint{font-size:12px;color:#4f5866}
+.footerHint[data-kind=ok]{color:#2f7a44}
+.footerHint[data-kind=error]{color:#a1443c}
+.primary{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:11px;background:#007aff;padding:11px 17px;font:inherit;font-size:14px;font-weight:600;color:#fff;cursor:pointer}
+.primary:hover{background:#0068db}
+.primary svg{width:15px;height:15px}
+
+@media(max-width:1100px){.body{flex-direction:column}.left{width:100%}.listCard,.relatedCard,.pickCard{height:auto}.confirm{right:24px;left:auto}}

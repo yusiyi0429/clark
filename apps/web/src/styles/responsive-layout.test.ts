@@ -18,6 +18,11 @@ describe("responsive workspace CSS", () => {
     expect(source).toContain("@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}");
   });
 
+  it("stacks the battlefield management columns below 1100px", () => {
+    const source = css("./battlefield-management.module.css");
+    expect(source).toContain("@media(max-width:1100px){.body{flex-direction:column}.left{width:100%}.listCard,.relatedCard,.pickCard{height:auto}.confirm{right:24px;left:auto}}");
+  });
+
   it("keeps both scheduled-meeting side panels reachable below 1000px", () => {
     const source = css("./meeting-workspace.module.css");
     expect(source).not.toContain('.advisorShell>:global([data-testid="meeting-chat-sidebar"]){display:none}');
