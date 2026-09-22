@@ -19902,9 +19902,9 @@
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
                       "content": "我在看全局：增长战场 2 张卡、Radar 3 条未读信号、1 个待签发月度计划。先问哪件？",
-                      "lineHeight": 1.75,
+                      "lineHeight": 1.7,
                       "fontFamily": "$font",
-                      "fontSize": 15,
+                      "fontSize": 13,
                       "fontWeight": "normal"
                     }
                   ]
@@ -19929,9 +19929,9 @@
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
                       "content": "这周增长战场最关键的一件事是什么？",
-                      "lineHeight": 1.75,
+                      "lineHeight": 1.7,
                       "fontFamily": "$font",
-                      "fontSize": 15,
+                      "fontSize": 13,
                       "fontWeight": "normal"
                     }
                   ]
@@ -19950,9 +19950,9 @@
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
                       "content": "二期触发条件还没定阈值。要不要我把时效 / 利用率 / 客诉率三条线写成草案，挂到 2025-09 计划下？",
-                      "lineHeight": 1.75,
+                      "lineHeight": 1.7,
                       "fontFamily": "$font",
-                      "fontSize": 15,
+                      "fontSize": 13,
                       "fontWeight": "normal"
                     }
                   ]
@@ -19977,9 +19977,9 @@
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
                       "content": "三条线的阈值你先给个建议区间，我拿去会上对。",
-                      "lineHeight": 1.75,
+                      "lineHeight": 1.7,
                       "fontFamily": "$font",
-                      "fontSize": 15,
+                      "fontSize": 13,
                       "fontWeight": "normal"
                     }
                   ]
@@ -19998,9 +19998,9 @@
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
                       "content": "建议区间：履约时效 ≤ 3 天、单仓利用率 ≥ 72%、客诉率 ≤ 1.2%。依据是 2025-09 计划里的安全线，未达标时的止损动作我也一并写了。",
-                      "lineHeight": 1.75,
+                      "lineHeight": 1.7,
                       "fontFamily": "$font",
-                      "fontSize": 15,
+                      "fontSize": 13,
                       "fontWeight": "normal"
                     }
                   ]
