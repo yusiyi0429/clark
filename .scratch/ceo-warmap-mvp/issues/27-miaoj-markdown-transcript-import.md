@@ -1,7 +1,7 @@
 # Ticket 27 · 妙记 Markdown Transcript 导入确认
 
 Type: feature
-Status: planned
+Status: resolved
 Blocked by: none
 来源样本（仅本地验收，禁止复制进仓库/证据目录/测试 fixture）：
 - 会前材料：`/Users/renhaoliu/Downloads/TKOS 本体结构（M1 范围）｜CEO 对齐稿，当前 v0.8 草稿 2026-09-22.md`
@@ -82,3 +82,10 @@ Blocked by: none
 - 不改会前 Material 解析；不把 Material 喂给 Outcome。
 - 不新增 Transcript 实体/文件库；不做 Transcript 独立下载（source metadata 留痕即可）。
 - 不把真实样本内容提交 Git；不改用户原文件。
+
+## Comments
+
+- 2026-09-22 resolved。W1 `2c58e75` 契约（`TranscriptSource` / 候选投影 / speaker mapping / confirm·discard input、`MeetingCardPayload.transcriptCandidate`）、migration 020 `meetings ADD COLUMN transcript_candidate JSONB`、确定性 parser `transcriptMarkdown.ts`、ADR 0007「受限的妙记 Markdown 例外」、CONTEXT.md 词条；W2 `00550ac` `POST /api/meetings/:id/transcript-candidate` 与 opaque `meeting.confirm_transcript_candidate` / `meeting.discard_transcript_candidate`；W3 `cb7575d` Web Header 入口按扩展名分流（.md 候选 / .json 旧直导）+ aB4pK 预览弹层（映射表 / 时间锚点 / 抽样发言 / 未映射禁确认 / 清除与确认）。
+- 验证：typecheck ×3；contracts 33、web 141、API 351（`--maxWorkers=1`）全过；真实样本仅本地 parser dry-run——396 turns、4 speakers（刘明华 179 / 刘人豪 125 / 白田田 66 / 于斯一 26）、首 offset 1、末 offset 4591、0 倒序、无 warning、四人 exact 唯一映射，未上传、未落库、未提交真实正文。
+- staging 重建 api+web（迁移 020 已应用）后用临时合成 Meeting + 短 Markdown 跑完 journey：upload 返回候选（status 仍 scheduled、transcript/outcome 为 null、version 2，DB 内保存全量 4 turns + source）；confirm 后 participants 补齐为四人、写入 `warmap-transcript.v1` 且带 `source`（timeAnchor=锁内 scheduledAt）、`startedAt = scheduledAt + offset`（5s / 90s 校验通过）、候选清空、Outcome 启动并落 `ready`（status 派生 reviewed）；journey 后删除临时 Meeting、其 `agent_run` 与临时文件，真实 Meeting 恢复原样。
+- 浏览器 1440×900 与 2560×1440：预览弹层自动打开，`dialog` 与 `body` 无横向溢出。现有 JSON immediate import、DRI service import 与 held/reviewed 危险替换行为未改。
