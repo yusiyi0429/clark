@@ -816,6 +816,9 @@ describe("mission entity contracts", () => {
     expect(Value.Check(MissionCardPayload, { ...mission, status: "doing" })).toBe(false);
     expect(Value.Check(MissionCardPayload, { ...mission, progress: 0.5 })).toBe(false);
     expect(Value.Check(MissionCardPayload, { ...mission, period: "2026/09" })).toBe(false);
+    // 与 MonthlyPlan 同一把尺：月份只接受 01–12
+    expect(Value.Check(MissionCardPayload, { ...mission, period: "2026-13" })).toBe(false);
+    expect(Value.Check(MissionCardPayload, { ...mission, period: "2026-00" })).toBe(false);
     expect(Value.Check(MissionCardPayload, { ...mission, capabilityId: undefined })).toBe(false);
   });
 
@@ -846,6 +849,7 @@ describe("mission entity contracts", () => {
     expect(Value.Check(MissionEditInput, {})).toBe(false);
     expect(Value.Check(MissionEditInput, { sourceRevision: 2 })).toBe(false);
     expect(Value.Check(MissionEditInput, { period: "2026-10" })).toBe(true);
+    expect(Value.Check(MissionEditInput, { period: "2026-13" })).toBe(false);
   });
 
   it("projects the mission management page as the mission payload collection", () => {

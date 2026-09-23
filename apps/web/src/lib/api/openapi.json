@@ -4823,7 +4823,7 @@
             "type": "string"
           },
           "period": {
-            "pattern": "^[0-9]{4}-[0-9]{2}$",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
             "type": "string"
           },
           "title": {
@@ -4923,7 +4923,7 @@
             "type": "string"
           },
           "period": {
-            "pattern": "^[0-9]{4}-[0-9]{2}$",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
             "type": "string"
           },
           "title": {
@@ -5022,7 +5022,7 @@
             "type": "string"
           },
           "period": {
-            "pattern": "^[0-9]{4}-[0-9]{2}$",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
             "type": "string"
           },
           "title": {
@@ -5137,7 +5137,7 @@
                   "type": "string"
                 },
                 "period": {
-                  "pattern": "^[0-9]{4}-[0-9]{2}$",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
                   "type": "string"
                 },
                 "title": {

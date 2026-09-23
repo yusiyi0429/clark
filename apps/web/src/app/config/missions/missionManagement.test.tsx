@@ -42,6 +42,33 @@ const card: Card = {
   actions: [{ actionId: "signed-action", actionType: "mission.edit", label: "编辑 Mission" }],
 } as unknown as Card;
 
+/** 非首条 Mission：deep link 必须展开它自己的内容，不能被首条覆盖。 */
+const secondPayload: MissionPayload = {
+  ...payload,
+  missionId: "07-1",
+  code: "07-1",
+  title: "组织能力 Gap 与补位决策",
+  ownerId: "person-002",
+  ownerDisplayName: "秦梦怡",
+  capabilityId: "talent-organization",
+  capabilityCode: "08",
+  capabilityName: "组织与人才",
+  outcome: "把组织能力 Gap 转成可执行的补位决策。",
+  why: "补位节奏滞后于业务。",
+  sourceTitle: "秦梦怡｜2026 年 9 月 Mission Card",
+};
+
+const secondCard: Card = {
+  schemaVersion: 1,
+  id: "mission:07-1",
+  version: 1,
+  kind: "mission",
+  objectRef: { type: "mission", id: "07-1", version: 1 },
+  title: "07-1 组织能力 Gap 与补位决策",
+  payload: secondPayload,
+  actions: [{ actionId: "signed-action-2", actionType: "mission.edit", label: "编辑 Mission" }],
+} as unknown as Card;
+
 const battlefields = [
   { id: "01", name: "灯塔项目" },
   { id: "02", name: "Token Ops" },
@@ -82,7 +109,9 @@ describe("Mission 配置草稿与 patch", () => {
     const cases: [Partial<typeof draft>, string][] = [
       [{ code: "  " }, "编号不能为空"],
       [{ title: "" }, "Mission 标题不能为空"],
-      [{ period: "2026/09" }, "周期需为 YYYY-MM"],
+      [{ period: "2026/09" }, "周期需为 YYYY-MM（月份 01–12）"],
+      [{ period: "2026-99" }, "周期需为 YYYY-MM（月份 01–12）"],
+      [{ period: "2026-00" }, "周期需为 YYYY-MM（月份 01–12）"],
       [{ ownerId: "" }, "必须指定唯一 DRI"],
       [{ capabilityId: "" }, "必须选择主要能力域"],
       [{ outcome: "" }, "Mission Outcome 不能为空"],
@@ -133,6 +162,33 @@ describe("Mission 配置页渲染", () => {
     expect(editing).toContain("保存后 version +1；历史来源与旧版本保持可追溯。");
     expect(editing).toContain("取消");
     expect(editing).toContain("保存新版本");
+  });
+
+  it("非首条 deep link 展开目标 Mission，不套用首条内容", () => {
+    const editing = renderToStaticMarkup(
+      <MissionManagementScreen
+        missions={[card, secondCard]}
+        battlefields={battlefields}
+        capabilities={capabilities}
+        people={people}
+        initialMissionId="07-1"
+      />,
+    );
+    expect(editing).toContain("07-1 · 当前版本 v1");
+    expect(editing).toContain('value="组织能力 Gap 与补位决策"');
+    expect(editing).not.toContain('value="CEO Agent 架构与质量"');
+    // 根因回归：草稿若错拿首条，patch 非空 → 保存按钮可点，会把首条内容写回目标 Mission
+    const beforeSave = editing.slice(0, editing.indexOf("保存新版本"));
+    expect(beforeSave.slice(beforeSave.lastIndexOf("<button"))).toContain("disabled");
+  });
+
+  it("deep link 未命中时不选中任何 row，也不回落到首条", () => {
+    const editing = renderToStaticMarkup(
+      <MissionManagementScreen missions={[card, secondCard]} battlefields={battlefields} capabilities={capabilities} people={people} initialMissionId="no-such-mission" />,
+    );
+    expect(editing).toContain("选择左侧 Mission 后编辑结果承诺与关系。");
+    expect(editing).not.toContain("保存新版本");
+    expect(editing).not.toContain('aria-current="true"');
   });
 
   it("空注册表仍渲染列表卡与空态", () => {

@@ -27,7 +27,7 @@ export type MissionDraft = {
   boundaries: string;
 };
 
-export const MISSION_PERIOD_PATTERN = /^[0-9]{4}-[0-9]{2}$/;
+export const MISSION_PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 /** 成功证据与关键里程碑都是「每行一项」；空行不产生空条目。 */
 export function parseMissionLines(text: string): string[] {
@@ -67,7 +67,7 @@ export function missionEditPatch(current: MissionDraft, draft: MissionDraft): { 
   const outcome = draft.outcome.trim();
   if (!code) return { ok: false, error: "编号不能为空" };
   if (!title) return { ok: false, error: "Mission 标题不能为空" };
-  if (!MISSION_PERIOD_PATTERN.test(period)) return { ok: false, error: "周期需为 YYYY-MM" };
+  if (!MISSION_PERIOD_PATTERN.test(period)) return { ok: false, error: "周期需为 YYYY-MM（月份 01–12）" };
   if (!draft.ownerId) return { ok: false, error: "必须指定唯一 DRI" };
   if (!draft.capabilityId) return { ok: false, error: "必须选择主要能力域" };
   if (!outcome) return { ok: false, error: "Mission Outcome 不能为空" };
@@ -110,9 +110,11 @@ export function MissionManagementScreen({
   const router = useRouter();
   const action = useCardAction(() => undefined);
   const rows = useMemo(() => missions.map((card) => ({ card, payload: payloadOf<MissionPayload>(card) })), [missions]);
+  // deep link 必须命中同一条 row：未命中时留空，绝不用 rows[0] 兜底，否则编辑器会显示首条内容并把首条差异写回目标 Mission。
+  const linked = initialMissionId ? rows.find((item) => item.payload.missionId === initialMissionId) : undefined;
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState(initialMissionId ?? rows[0]?.payload.missionId ?? "");
-  const [draft, setDraft] = useState<MissionDraft | null>(initialMissionId && rows[0] ? missionDraft(rows[0].payload) : null);
+  const [selectedId, setSelectedId] = useState(linked?.payload.missionId ?? (initialMissionId ? "" : rows[0]?.payload.missionId ?? ""));
+  const [draft, setDraft] = useState<MissionDraft | null>(linked ? missionDraft(linked.payload) : null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error" | "conflict"; text: string } | null>(null);
 

@@ -53,6 +53,7 @@ describe("migration", () => {
         "019_strategy_map_config.sql",
         "020_meeting_transcript_candidate.sql",
         "021_mission_entity.sql",
+        "022_mission_period_check.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -60,7 +61,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(21);
+      expect(Number(again.rows[0].count)).toBe(22);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(
@@ -70,6 +71,14 @@ describe("migration", () => {
       const tsCols = cols.rows.filter((r) => r.column_name.endsWith("_at"));
       expect(tsCols.length).toBeGreaterThanOrEqual(2);
       for (const c of tsCols) expect(c.data_type).toBe("timestamp with time zone");
+
+      // Mission period 与 MonthlyPlan 同口径：月份只接受 01–12（021 建表即严格，022 修正已建库环境）
+      await expect(
+        db.query(
+          `INSERT INTO missions (id, version, code, period, title, owner_id, capability_id, outcome, source_ref, source_document_id, source_revision, source_title)
+           VALUES ('bad-period', 1, 'BAD-PERIOD', '2026-99', '标题', 'owner', 'capability', 'outcome', 'ref', 'doc', 1, '来源')`,
+        ),
+      ).rejects.toThrow(/missions_period_check/);
 
       await admin.query("SELECT 1"); // admin 连接可用
     });

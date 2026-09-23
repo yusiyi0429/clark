@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { MonthlyPlanPeriod } from "./monthlyPlans.js";
 
 /**
  * Mission：WarMap 第七个核心业务实体，版本化 Organization Fact。
@@ -6,7 +7,8 @@ import { Type, type Static } from "@sinclair/typebox";
  */
 
 const MissionCode = Type.String({ minLength: 1, maxLength: 40 });
-const MissionPeriod = Type.String({ pattern: "^[0-9]{4}-[0-9]{2}$" });
+/** 周期与 MonthlyPlan 同一把尺：Asia/Shanghai 公司月 YYYY-MM，月份只接受 01–12。 */
+const MissionPeriod = MonthlyPlanPeriod;
 const MissionTitle = Type.String({ minLength: 1, maxLength: 200 });
 const MissionText = Type.String({ maxLength: 4000 });
 /** 成功证据与关键里程碑都是「每行一项」，保留来源表述，不拆成结构化字段。 */

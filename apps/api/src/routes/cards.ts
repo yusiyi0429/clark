@@ -27,8 +27,8 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
       listPendingIssueCards(q, env.sessionSecret),
       listCapabilityCards(q),
       listMeetingRows(q),
-      // 首页只读 Mission 集合：战场卡 Mission 数、能力面板数量与入口都从这份 collection 派生，不保存汇总
-      listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory)),
+      // 首页只读当前公司周期的 Mission：战场卡 Mission 数、能力面板数量与入口都从这份 collection 派生，不保存汇总；历史周期留在 /api/cards/missions
+      listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), companyPeriod(now())),
       getMonthlyPlanNotice(q, env.sessionSecret, now()),
     ]);
     const meetings = meetingRows

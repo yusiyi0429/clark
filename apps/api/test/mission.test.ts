@@ -115,9 +115,11 @@ describe("Mission 实体", () => {
         expect(invalid.statusCode).toBe(400);
         expect(invalid.json().code).toBe(code);
       }
-      // 非法 period 由契约拦截，不落库
-      const badPeriod = await create(t, headers, missionBody("M-3", { period: "2026/09" }));
-      expect(badPeriod.statusCode).toBe(400);
+      // 非法 period 由契约拦截（月份只接受 01–12），不落库
+      for (const period of ["2026/09", "2026-99", "2026-00"]) {
+        const badPeriod = await create(t, headers, missionBody("M-3", { period }));
+        expect(badPeriod.statusCode, `period=${period} 应被拒绝`).toBe(400);
+      }
       expect(await t.sql("SELECT count(*)::int AS count FROM missions")).toEqual([{ count: 1 }]);
     } finally {
       await t.close();
@@ -226,14 +228,21 @@ describe("Mission 实体", () => {
   });
 
   it("projects Mission cards on home and rejects an unknown id", async () => {
-    const t = await createTestApp();
+    // 固定公司时钟：首页只投影当前周期的 Mission，需要确定性的“当前周期”
+    const t = await createTestApp({}, undefined, { monthlyNow: () => new Date("2026-09-21T12:00:00Z") });
     try {
       const headers = await authed(t);
       await seedRelations(t, headers);
       await create(t, headers, missionBody("LHR-A"));
+      await create(t, headers, missionBody("LHR-B", { period: "2026-08" }));
       const home = await t.app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie: headers.cookie! } });
       expect(home.statusCode).toBe(200);
-      expect(home.json().cards.filter((c: { kind: string }) => c.kind === "mission")).toHaveLength(1);
+      const homeMissions = home.json().cards.filter((c: { kind: string }) => c.kind === "mission");
+      expect(homeMissions.map((c: { payload: { code: string } }) => c.payload.code)).toEqual(["LHR-A"]);
+
+      // 配置页与总览读全部历史周期，SQL 过滤只在首页生效
+      const all = await t.app.inject({ method: "GET", url: "/api/cards/missions", headers: { cookie: headers.cookie! } });
+      expect(all.json().cards.map((c: { payload: { code: string } }) => c.payload.code)).toEqual(["LHR-A", "LHR-B"]);
 
       const missing = await t.app.inject({ method: "GET", url: "/api/cards/missions/no-such-mission", headers: { cookie: headers.cookie! } });
       expect(missing.statusCode).toBe(404);

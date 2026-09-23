@@ -22,7 +22,7 @@ CREATE TABLE missions (
   id TEXT PRIMARY KEY,
   version INTEGER NOT NULL CHECK (version > 0),
   code TEXT UNIQUE NOT NULL,
-  period TEXT NOT NULL CHECK (period ~ '^[0-9]{4}-[0-9]{2}$'),
+  period TEXT NOT NULL CHECK (period ~ '^\d{4}-(0[1-9]|1[0-2])$'),
   title TEXT NOT NULL,
   owner_id TEXT NOT NULL,
   capability_id TEXT NOT NULL,

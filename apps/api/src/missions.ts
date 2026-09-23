@@ -51,9 +51,12 @@ const MISSION_COLUMNS = `m.id, m.version, m.code, m.period, m.title, m.owner_id,
 
 const MISSION_FROM = `FROM missions m LEFT JOIN capability_config c ON c.id = m.capability_id`;
 
-/** 总览与配置页排序：周期倒序，再按能力域 sortOrder、Mission code。 */
-export async function listMissionRows(q: Query): Promise<MissionRow[]> {
-  const result = await q(`SELECT ${MISSION_COLUMNS} ${MISSION_FROM} ORDER BY m.period DESC, c.sort_order NULLS LAST, m.code, m.id`);
+/** 总览与配置页排序：周期倒序，再按能力域 sortOrder、Mission code。period 过滤在 SQL 侧，Web 不再二次筛。 */
+export async function listMissionRows(q: Query, period?: string): Promise<MissionRow[]> {
+  const result = await q(
+    `SELECT ${MISSION_COLUMNS} ${MISSION_FROM} ${period ? "WHERE m.period = $1" : ""} ORDER BY m.period DESC, c.sort_order NULLS LAST, m.code, m.id`,
+    period ? [period] : [],
+  );
   return result.rows as MissionRow[];
 }
 
@@ -107,8 +110,9 @@ export function projectMissionCard(row: MissionRow, secret: string, ownerNames: 
   };
 }
 
-export async function listMissionCards(q: Query, secret: string, ownerNames: Map<string, string>): Promise<TCard[]> {
-  return (await listMissionRows(q)).map((row) => projectMissionCard(row, secret, ownerNames));
+/** period 省略表示全部历史（配置页与总览），传入则只取该周期（首页）。 */
+export async function listMissionCards(q: Query, secret: string, ownerNames: Map<string, string>, period?: string): Promise<TCard[]> {
+  return (await listMissionRows(q, period)).map((row) => projectMissionCard(row, secret, ownerNames));
 }
 
 export type RegisterMissionResult =
