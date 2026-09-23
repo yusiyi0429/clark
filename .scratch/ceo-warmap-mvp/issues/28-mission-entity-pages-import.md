@@ -1,7 +1,7 @@
 # Ticket 28 · Mission 独立实体、页面、配置与 21 条真实导入
 
 Type: feature
-Status: planned
+Status: resolved
 Blocked by: none
 来源: 用户明确要求新建 Mission 页面/编辑配置页，并用 lark-cli 读取 7 份真实 Mission Card 后导入和匹配战场。
 视觉基线（已完成）:
@@ -145,3 +145,12 @@ Battlefield IDs：`01-灯塔项目` / `02-token-ops` / `03-002-客户`。
 - 不保存任务完成率、红黄绿、Task/Activity 或执行日志。
 - 不自动依据文本推断进度；页面展示正式承诺与关系。
 - 不提交飞书正文或访问凭据。
+
+## Comments
+
+- 2026-09-23 resolved。W1 `96e0782` ADR 0019 + ADR 0018 修订、CONTEXT.md 词表、spec 双份同步、migration `021_mission_entity.sql`（`missions` 表 + 三个索引 + jsonb/周期 check）、契约机械改名（`MissionValue`→`MissionAnchor`、`supportRefs` 字面量 `mission`→`mission-anchor`、`UNKNOWN_MISSION_CODE`→`UNKNOWN_MISSION_ANCHOR_CODE`、`missions.ts` 新增 Mission 实体与 create/edit input）、`openapi.ts` 三条路径、`gen:client` 重生成；W2 `fed3808` `missions.ts` repository（单条 SQL 投影、`FOR UPDATE OF m` 行锁、`COALESCE` 差量编辑、fingerprint 幂等、`validateMissionRelations`）、`POST/GET /api/config/missions`、`GET /api/cards/missions[/:id]`、`mission.edit` 分支、删除战场同事务清 Mission `battlefieldIds` 且 version+1；W3 `137b587` Mission 总览/详情/配置三页 + 首页入口 + 战场卡 `Missions · n` + 能力面板 Mission 计数、三份 CSS module 与 5 个测试文件；W4 本票收口（一次性 CEO 导入 + staging/浏览器验收，导入脚本与 payload 只在 `/private/tmp`，未入库）。
+- 导入：21 条 Mission 经 `POST /api/config/missions` 全部 201（空表起始，无冲突），`version=1`。导入前本地两道校验：每段文字去掉排版符号后必须能在对应来源文件中逐字找到（21 条 × outcome/why/evidence/milestones/dependencies/risk/boundaries 全通过，无编造）；命中契约上限（code≤40、title≤200、长文本≤4000、列表项≤500 且≤30、battlefieldIds≤20 去重）。分布与票面表完全一致：owner 刘人豪 3 / 白田田 4 / 秦梦怡 5 / 陈溪南 2 / 于斯一 1 / 唐巨杰 4 / 孙铭泽 2；capability agents 5 / e-o 3 / method 4 / talent-organization 5 / finance-compliance-operations 4；战场关联 01=19、02=9、03=15。SQL 复核 `missions` 21 行 / 7 owner / 1 period / version 全 1；`capability_config.support_refs` 中已无旧 `{"type":"mission"}`（0 行）。
+- 已知取舍：01 刘人豪来源只有文档级里程碑表，无逐条 Mission 的里程碑/依赖/风险，故其 3 条 `milestones=[]`、`dependencies=""`、`risk=""`，只保留逐条的 why 与 B 的范围边界；04 陈溪南无 Why/风险章节，07 孙铭泽无依赖/风险章节，均按来源留空不编造。07 里程碑的「协作」列按来源原样保留为同段文本（未新增「协作：」标签）。
+- 验证：typecheck ×3；contracts 38、web 24 文件 / 167、API 30 文件 / 359（`--maxWorkers=1`）全过。staging 重建 api+web 应用 021 后：首页入口「查看 21 个 Mission」、战场卡 `Missions · 19 / 9 / 15`、能力面板 7 行 Mission 计数合计 21；`/missions` 21 行 + 统计 21/7/3/5 + 周期与战场筛选；`/missions/05-1-…` 代码/周期/生效中/唯一 DRI·于斯一/05 E&O/灯塔项目·002 客户/月度计划 2026-09·已签发/来源/证据 5 项/里程碑 6 项；`/config/missions` 21 条已登记、搜索、展开编辑器（编号/周期/唯一 DRI/标题/能力域/战场/只读月度计划/Outcome/Why/证据/里程碑/依赖/风险/边界）与未改动时禁用的「保存新版本」。1440×900 与 2560×1440 三页均无横向溢出；控制台仅有与既有配置页同源的「表单字段缺 id/name」提示，无报错。未执行保存（避免把真实内容推到 version 2）；`mission.edit` 链路由 W2 API 测试覆盖。
+- 与设计基线的偏差（有意）：总览页脚提示按真实数据动态显示「共 21 条 Mission · 执行进度留在 DRI 流程」（Pen 的「另有 14 条」来自 mock 只画 7 行的截断语义，真实 21 行在滚动区内全部渲染）；配置页列表 meta 显示「21 条 · 按周期与能力域排序」（该页为编辑页，无周期筛选）。Mission 卡 kind 未注册进 `cards/registry.tsx`（无 `renderCard` 调用方，注册即死代码）。
+- 边界遵守：未提交飞书正文、访问凭据或导入脚本；未新增 Task/Activity/完成率/执行状态字段；未改 Pen；临时对象无（导入前 `missions` 为空，无清理项）。工作区干净，未 push。
