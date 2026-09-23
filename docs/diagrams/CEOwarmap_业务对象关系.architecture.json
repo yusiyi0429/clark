@@ -6,16 +6,17 @@
     "locale": "zh-CN",
     "quality_profile": "showcase",
     "output": "CEOwarmap_业务对象关系.html",
-    "viewBox": [1200, 680],
+    "viewBox": [1200, 660],
     "views": [
       { "id": "decision-loop", "label": "决策主链", "focus": ["signal", "issue", "meeting", "outcome"], "note": "外部变化形成议题；会议是可选路径，CEO 逐项确认结论。" },
-      { "id": "strategy-map", "label": "战略地图", "focus": ["strategyConfig", "issue", "monthlyPlan"], "note": "长期方向与六个月目标进入配置；当月 PCO 只保存在 MonthlyPlan。" },
+      { "id": "strategy-map", "label": "战略地图", "focus": ["strategyConfig", "monthlyPlan", "mission"], "note": "长期方向进入配置；当月 PCO 由 MonthlyPlan 持有，Mission 承接周期结果并关联战场与能力域。" },
       { "id": "conversation-scope", "label": "对象对话", "focus": ["conversation", "meeting"], "note": "Conversation 归属具体对象，只解释和取证，不改变组织事实。" }
     ]
   },
   "components": [
-    { "id": "strategyConfig", "type": "database", "label": "组织战略配置", "sublabel": "Company LTCO · BattlefieldConfig · CapabilityConfig", "pos": [250, 60], "size": [500, 82], "tag": "配置和值对象" },
-    { "id": "monthlyPlan", "type": "backend", "label": "MonthlyPlan", "sublabel": "当月公司/战场/能力 PCO · 普通 todo", "pos": [880, 64], "size": [260, 74], "tag": "核心实体" },
+    { "id": "strategyConfig", "type": "database", "label": "组织战略配置", "sublabel": "Company LTCO · BattlefieldConfig · CapabilityConfig", "pos": [50, 60], "size": [450, 82], "tag": "配置和值对象" },
+    { "id": "mission", "type": "backend", "label": "Mission", "sublabel": "周期结果承诺 · DRI · 证据 · 关系", "pos": [590, 64], "size": [230, 74], "tag": "核心实体" },
+    { "id": "monthlyPlan", "type": "backend", "label": "MonthlyPlan", "sublabel": "当月公司/战场/能力 PCO · 普通 todo", "pos": [900, 64], "size": [250, 74], "tag": "核心实体" },
 
     { "id": "signal", "type": "backend", "label": "Signal", "sublabel": "外部变化与证据", "pos": [60, 290], "size": [170, 74], "tag": "核心实体" },
     { "id": "issue", "type": "backend", "label": "Issue", "sublabel": "唯一决策对象", "pos": [310, 290], "size": [170, 74], "tag": "核心实体" },
@@ -24,11 +25,12 @@
     { "id": "conversation", "type": "backend", "label": "Conversation", "sublabel": "对象独立对话 · 只解释与取证", "pos": [520, 500], "size": [250, 74], "tag": "核心实体" }
   ],
   "boundaries": [
-    { "kind": "region", "label": "战略与月度目标", "wraps": ["strategyConfig", "monthlyPlan"], "pad": 24 },
-    { "kind": "region", "label": "六个核心实体", "wraps": ["signal", "issue", "meeting", "outcome", "monthlyPlan", "conversation"], "pad": 26 }
+    { "kind": "region", "label": "战略、月度目标与 Mission", "wraps": ["strategyConfig", "mission", "monthlyPlan"], "pad": 24 },
+    { "kind": "region", "label": "七个核心实体", "wraps": ["signal", "issue", "meeting", "outcome", "monthlyPlan", "mission", "conversation"], "pad": 26 }
   ],
   "connections": [
-    { "id": "strategy-plan", "from": "strategyConfig", "to": "monthlyPlan", "label": "约束当月 PCO" },
+    { "id": "strategy-mission", "from": "strategyConfig", "to": "mission", "label": "能力域 · 战场关系" },
+    { "id": "plan-mission", "from": "monthlyPlan", "to": "mission", "label": "周期与 PCO 承接" },
     { "id": "signal-promotes", "from": "signal", "to": "issue", "label": "确定性升级", "variant": "emphasis" },
     { "id": "issue-meeting", "from": "issue", "to": "meeting", "label": "可关联讨论" },
     { "id": "meeting-outcome", "from": "meeting", "to": "outcome", "label": "抽取候选 · CEO 确认", "variant": "emphasis", "labelDy": 61 },
@@ -36,8 +38,8 @@
     { "id": "conversation-scope-edge", "from": "conversation", "to": "meeting", "label": "对象作用域", "variant": "dashed" }
   ],
   "cards": [
-    { "dot": "emerald", "title": "配置内嵌关系", "items": ["BattlefieldConfig 保存 code、顺序、六个月目标、ownerId 与 Mission[]", "CapabilityConfig 保存 code、顺序、六个月目标与 supportRefs[]", "Mission 不建立实体或执行状态机"] },
-    { "dot": "cyan", "title": "时间尺度", "items": ["Company LTCO 与六个月目标进入战略配置", "当月公司、战场、能力 PCO 只进入 MonthlyPlan", "Card 只做投影，不保存第二份事实"] },
-    { "dot": "amber", "title": "边界不变", "items": ["核心实体仍为 Issue、Signal、Meeting、MeetingOutcome、MonthlyPlan、Conversation", "普通 todo 继续内嵌于 MonthlyPlan", "负责人引用使用企业知识 personId"] }
+    { "dot": "emerald", "title": "Mission 升格", "items": ["Mission 是版本化 Organization Fact，有稳定 id、周期、Outcome 与唯一 DRI", "Mission 关联一个主要能力域和零到多个战场", "BattlefieldConfig 旧 Mission[] 迁为战略锚点，不再承载 Mission Card"] },
+    { "dot": "cyan", "title": "时间尺度", "items": ["Company LTCO 与六个月目标进入战略配置", "当月公司、战场、能力 PCO 只进入 MonthlyPlan", "Mission 承接 period 与 PCO，但不保存完成百分比"] },
+    { "dot": "amber", "title": "七实体边界", "items": ["核心实体新增 Mission；其余六实体生命周期不变", "Task、Activity 和执行状态仍留在外部 DRI 流程", "DRI 引用使用企业知识 personId，来源文档只作可追溯输入"] }
   ]
 }

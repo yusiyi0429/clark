@@ -377,6 +377,16 @@
             },
             {
               "type": "text",
+              "id": "rqrgz",
+              "name": "Mission Count",
+              "fill": "#0A5DC2",
+              "content": "Missions · 8",
+              "fontFamily": "$font",
+              "fontSize": 11,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
               "id": "Yxo2O",
               "name": "Six Month Outcome",
               "fill": "#000000",
@@ -2394,6 +2404,43 @@
                   "fontFamily": "$font",
                   "fontSize": 13,
                   "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "jrJ3I",
+                  "name": "Mission Overview Button",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 9,
+                  "stroke": "#D9DDE5",
+                  "strokeWidth": 1,
+                  "gap": 6,
+                  "padding": [
+                    7,
+                    11
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "occSB",
+                      "name": "Icon",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "flag",
+                      "library": "Material Symbols Rounded",
+                      "fill": "#4F5866"
+                    },
+                    {
+                      "type": "text",
+                      "id": "K4z7B",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "查看 21 个 Mission",
+                      "fontFamily": "$font",
+                      "fontSize": 11.5,
+                      "fontWeight": "600"
+                    }
+                  ]
                 },
                 {
                   "type": "frame",
@@ -33068,6 +33115,43 @@
             },
             {
               "type": "frame",
+              "id": "z3ZeG",
+              "name": "Manage Mission Button",
+              "fill": "$surface",
+              "cornerRadius": 10,
+              "stroke": "$line-strong",
+              "strokeWidth": 1,
+              "gap": 7,
+              "padding": [
+                9,
+                13
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "JGf1S",
+                  "name": "Icon",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "flag",
+                  "library": "Material Symbols Rounded",
+                  "fill": "#000000"
+                },
+                {
+                  "type": "text",
+                  "id": "PQkSX",
+                  "name": "Label",
+                  "fill": "$ink",
+                  "content": "管理 Mission",
+                  "fontFamily": "$font",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
               "id": "Bgsst",
               "name": "Draft Status",
               "fill": "$accent-tint-2",
@@ -34642,6 +34726,13 @@
                   "fontWeight": "normal"
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "o9o88",
+              "name": "Footer Spacer",
+              "width": "fill_container",
+              "height": "fill_container"
             },
             {
               "type": "frame",
@@ -37699,6 +37790,3616 @@
                           "fontFamily": "Inter",
                           "fontSize": 12.5,
                           "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "ImWct",
+      "x": 26610,
+      "y": 560,
+      "name": "页面 / Mission 总览",
+      "clip": true,
+      "width": 2560,
+      "height": 1440,
+      "fill": "#F5F5F7",
+      "layout": "vertical",
+      "gap": 22,
+      "padding": [
+        28,
+        56
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "V7Nil",
+          "name": "Top Navigation",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "EnN7i",
+              "name": "Back to Home",
+              "gap": 7,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "jrux2",
+                  "name": "Back Icon",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "chevron_left",
+                  "library": "Material Symbols Rounded",
+                  "fill": "#4F5866"
+                },
+                {
+                  "type": "text",
+                  "id": "rfPdc",
+                  "name": "Back Label",
+                  "fill": "#4F5866",
+                  "content": "返回首页",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "XdvdQ",
+              "name": "Manage Mission",
+              "fill": "#FFFFFF",
+              "cornerRadius": 10,
+              "stroke": "#D9DDE5",
+              "strokeWidth": 1,
+              "gap": 7,
+              "padding": [
+                9,
+                13
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "xzDMA",
+                  "name": "Settings",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "settings",
+                  "library": "Material Symbols Rounded",
+                  "fill": "#4F5866"
+                },
+                {
+                  "type": "text",
+                  "id": "qbXVj",
+                  "name": "Label",
+                  "fill": "#1D1D1F",
+                  "content": "管理 Mission",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "d9pV4p",
+          "name": "Page Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 7,
+          "children": [
+            {
+              "type": "text",
+              "id": "W1JoY",
+              "name": "Eyebrow",
+              "fill": "#007AFF",
+              "content": "MISSION",
+              "fontFamily": "Inter",
+              "fontSize": 11,
+              "fontWeight": "700",
+              "letterSpacing": 1.6
+            },
+            {
+              "type": "text",
+              "id": "gcAm0",
+              "name": "Title",
+              "fill": "#1D1D1F",
+              "content": "Mission 总览",
+              "fontFamily": "Inter",
+              "fontSize": 34,
+              "fontWeight": "650"
+            },
+            {
+              "type": "text",
+              "id": "jTUWl",
+              "name": "Subtitle",
+              "fill": "#4F5866",
+              "content": "查看本月 DRI 对真实结果的承诺，以及每条 Mission 与战场、能力域和月度 PCO 的关系。",
+              "fontFamily": "Inter",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "h36a2r",
+          "name": "Summary",
+          "width": "fill_container",
+          "gap": 12,
+          "children": [
+            {
+              "type": "frame",
+              "id": "mPFj2",
+              "name": "Stat · 本月 Mission",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 16,
+              "stroke": "#E6E9ED",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 5,
+              "padding": [
+                15,
+                18
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "hk11X",
+                  "name": "Value",
+                  "fill": "#1D1D1F",
+                  "content": "21",
+                  "fontFamily": "Inter",
+                  "fontSize": 22,
+                  "fontWeight": "650"
+                },
+                {
+                  "type": "text",
+                  "id": "LNHLS",
+                  "name": "Label",
+                  "fill": "#6E6E73",
+                  "content": "本月 Mission",
+                  "fontFamily": "Inter",
+                  "fontSize": 11.5,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "uyzkx",
+              "name": "Stat · DRI",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 16,
+              "stroke": "#E6E9ED",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 5,
+              "padding": [
+                15,
+                18
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "L44I12",
+                  "name": "Value",
+                  "fill": "#0A5DC2",
+                  "content": "7",
+                  "fontFamily": "Inter",
+                  "fontSize": 22,
+                  "fontWeight": "650"
+                },
+                {
+                  "type": "text",
+                  "id": "Av1WZ",
+                  "name": "Label",
+                  "fill": "#6E6E73",
+                  "content": "DRI",
+                  "fontFamily": "Inter",
+                  "fontSize": 11.5,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "q8r6UY",
+              "name": "Stat · 关联战场",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 16,
+              "stroke": "#E6E9ED",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 5,
+              "padding": [
+                15,
+                18
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "eJWcP",
+                  "name": "Value",
+                  "fill": "#2F7A44",
+                  "content": "3",
+                  "fontFamily": "Inter",
+                  "fontSize": 22,
+                  "fontWeight": "650"
+                },
+                {
+                  "type": "text",
+                  "id": "ol0UJ",
+                  "name": "Label",
+                  "fill": "#6E6E73",
+                  "content": "关联战场",
+                  "fontFamily": "Inter",
+                  "fontSize": 11.5,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "LtR3y",
+              "name": "Stat · 主要能力域",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 16,
+              "stroke": "#E6E9ED",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 5,
+              "padding": [
+                15,
+                18
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Eb9Yl",
+                  "name": "Value",
+                  "fill": "#8A6220",
+                  "content": "5",
+                  "fontFamily": "Inter",
+                  "fontSize": 22,
+                  "fontWeight": "650"
+                },
+                {
+                  "type": "text",
+                  "id": "Ce3QL",
+                  "name": "Label",
+                  "fill": "#6E6E73",
+                  "content": "主要能力域",
+                  "fontFamily": "Inter",
+                  "fontSize": 11.5,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Q9VI5i",
+          "name": "Body",
+          "width": "fill_container",
+          "height": "fill_container",
+          "gap": 18,
+          "children": [
+            {
+              "type": "frame",
+              "id": "KxvBi",
+              "name": "Filters",
+              "width": 390,
+              "height": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 20,
+              "stroke": "#E6E9ED",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 16,
+              "padding": [
+                20,
+                22
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "X5SIq",
+                  "name": "Title",
+                  "fill": "#1D1D1F",
+                  "content": "筛选",
+                  "fontFamily": "Inter",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "LcZOr",
+                  "name": "Filter Label",
+                  "fill": "#6E6E73",
+                  "content": "周期",
+                  "fontFamily": "Inter",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "Y5piz",
+                  "name": "Filter · 全部 · 2026-09",
+                  "width": "fill_container",
+                  "gap": 9,
+                  "padding": [
+                    7,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "G64rJ",
+                      "name": "Check",
+                      "width": 14,
+                      "height": 14,
+                      "fill": "#007AFF",
+                      "cornerRadius": 4,
+                      "stroke": "#007AFF",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "ju63w",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "全部 · 2026-09",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "CG3aE",
+                  "name": "Filter Label",
+                  "fill": "#6E6E73",
+                  "content": "战场",
+                  "fontFamily": "Inter",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "O6gbE",
+                  "name": "Filter · 全部战场",
+                  "width": "fill_container",
+                  "gap": 9,
+                  "padding": [
+                    7,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "IMPrO",
+                      "name": "Check",
+                      "width": 14,
+                      "height": 14,
+                      "fill": "#007AFF",
+                      "cornerRadius": 4,
+                      "stroke": "#007AFF",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "iSYHI",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "全部战场",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "dLsaX",
+                  "name": "Filter · 01 灯塔项目",
+                  "width": "fill_container",
+                  "gap": 9,
+                  "padding": [
+                    7,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Sox4L",
+                      "name": "Check",
+                      "width": 14,
+                      "height": 14,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "#C7CCD4",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "OJq5y",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "01 灯塔项目",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "UXKKS",
+                  "name": "Filter · 02 Token Ops",
+                  "width": "fill_container",
+                  "gap": 9,
+                  "padding": [
+                    7,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "RAtbS",
+                      "name": "Check",
+                      "width": 14,
+                      "height": 14,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "#C7CCD4",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "a1iCUy",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "02 Token Ops",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "N52Q3w",
+                  "name": "Filter · 03 002 客户",
+                  "width": "fill_container",
+                  "gap": 9,
+                  "padding": [
+                    7,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "pIvbP",
+                      "name": "Check",
+                      "width": 14,
+                      "height": 14,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "#C7CCD4",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "O6aep",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "03 002 客户",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "NU8H9",
+                  "name": "Filter Label",
+                  "fill": "#6E6E73",
+                  "content": "能力域",
+                  "fontFamily": "Inter",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "ihACA",
+                  "name": "Filter · 全部能力域",
+                  "width": "fill_container",
+                  "gap": 9,
+                  "padding": [
+                    7,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "JxpaL",
+                      "name": "Check",
+                      "width": 14,
+                      "height": 14,
+                      "fill": "#007AFF",
+                      "cornerRadius": 4,
+                      "stroke": "#007AFF",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "U2Fv0",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "全部能力域",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "pEohQ",
+                  "name": "Filter · 03 Method",
+                  "width": "fill_container",
+                  "gap": 9,
+                  "padding": [
+                    7,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Oasc6",
+                      "name": "Check",
+                      "width": 14,
+                      "height": 14,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "#C7CCD4",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "D9VLs",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "03 Method",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "N6dICK",
+                  "name": "Filter · 04 Agents",
+                  "width": "fill_container",
+                  "gap": 9,
+                  "padding": [
+                    7,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "c6zAh",
+                      "name": "Check",
+                      "width": 14,
+                      "height": 14,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "#C7CCD4",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "K0lxR",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "04 Agents",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "e7nIl5",
+                  "name": "Filter · 05 E&O",
+                  "width": "fill_container",
+                  "gap": 9,
+                  "padding": [
+                    7,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "xGIuR",
+                      "name": "Check",
+                      "width": 14,
+                      "height": 14,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "#C7CCD4",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "DAyEp",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "05 E&O",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "qQgUT",
+                  "name": "Filter · 08 Talent & Organization",
+                  "width": "fill_container",
+                  "gap": 9,
+                  "padding": [
+                    7,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "P2iC0R",
+                      "name": "Check",
+                      "width": 14,
+                      "height": 14,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "#C7CCD4",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "E9YXo",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "08 Talent & Organization",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "EChiW",
+                  "name": "Filter · 09 Finance / Compliance / Ops",
+                  "width": "fill_container",
+                  "gap": 9,
+                  "padding": [
+                    7,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "hG4se",
+                      "name": "Check",
+                      "width": 14,
+                      "height": 14,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "#C7CCD4",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "Qfsyu",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "09 Finance / Compliance / Ops",
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "L0SnSf",
+              "name": "Mission List Card",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 20,
+              "stroke": "#E6E9ED",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 12,
+              "padding": [
+                20,
+                24
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "UABzI",
+                  "name": "List Header",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "MBzfn",
+                      "name": "Text",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "EoQkv",
+                          "name": "Title",
+                          "fill": "#1D1D1F",
+                          "content": "本月 Mission",
+                          "fontFamily": "Inter",
+                          "fontSize": 17,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "e38Zz6",
+                          "name": "Meta",
+                          "fill": "#6E6E73",
+                          "content": "21 条 · 按能力域与编号排序",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "u5ZUg",
+                      "name": "Scope",
+                      "fill": "#E8F1FF",
+                      "cornerRadius": 9,
+                      "padding": [
+                        7,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "UnCze",
+                          "name": "Label",
+                          "fill": "#0A5DC2",
+                          "content": "2026-09",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Dj73e",
+                  "name": "Mission Rows",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "U9uiHU",
+                      "name": "Mission · LHR-A",
+                      "width": "fill_container",
+                      "gap": 12,
+                      "padding": [
+                        12,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "p7rUoe",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 66,
+                          "content": "LHR-A",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "GTijn",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 3,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "M7qaK",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "CEO Agent Architecture & Quality",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "yHMak",
+                              "name": "Meta",
+                              "fill": "#6E6E73",
+                              "content": "刘人豪 · 04 Agents · 01 灯塔项目",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "ACw6J",
+                          "name": "Arrow",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "chevron_right",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#8A919C"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "N1LUvs",
+                      "name": "Mission · 03-1",
+                      "width": "fill_container",
+                      "gap": 12,
+                      "padding": [
+                        12,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "yI1tn",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 66,
+                          "content": "03-1",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "b6NtD",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 3,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "cW7if",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "M1-A｜真实战略工作持续运行，Agent 专业质量达到 01 部署标准",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "T8uA1",
+                              "name": "Meta",
+                              "fill": "#6E6E73",
+                              "content": "白田田 · 03 Method · 01 灯塔项目",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "IXuuL",
+                          "name": "Arrow",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "chevron_right",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#8A919C"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "sOb7y",
+                      "name": "Mission · 07-1",
+                      "width": "fill_container",
+                      "gap": 12,
+                      "padding": [
+                        12,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "dFc9S",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 66,
+                          "content": "07-1",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "hGCg3",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 3,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "pULjZ",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "识别组织能力 Gap 并形成补位决策",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "ITN0T",
+                              "name": "Meta",
+                              "fill": "#6E6E73",
+                              "content": "秦梦怡 · 08 Talent & Organization · 全战场",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "I3oL3",
+                          "name": "Arrow",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "chevron_right",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#8A919C"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ApTJg",
+                      "name": "Mission · PA-1",
+                      "width": "fill_container",
+                      "gap": 12,
+                      "padding": [
+                        12,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "bG3Gf",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 66,
+                          "content": "PA-1",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ATbpX",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 3,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "N5UAfz",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "M1-B 经营协同 MVP 与真实实践",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "HZCly",
+                              "name": "Meta",
+                              "fill": "#6E6E73",
+                              "content": "陈溪南 · 04 Agents · 01 灯塔项目 · 03 002 客户",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "ZeZma",
+                          "name": "Arrow",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "chevron_right",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#8A919C"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "jrK9Q",
+                      "name": "Mission · 05-1",
+                      "width": "fill_container",
+                      "gap": 12,
+                      "padding": [
+                        12,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "r7hZ4o",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 66,
+                          "content": "05-1",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "jSaxx",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 3,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "uUTMx",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Clark Ontology & Memory v0.1",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "njBip",
+                              "name": "Meta",
+                              "fill": "#6E6E73",
+                              "content": "于斯一 · 05 E&O · 01 灯塔项目 · 03 002 客户",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "hGzGc",
+                          "name": "Arrow",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "chevron_right",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#8A919C"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "EpsSn",
+                      "name": "Mission · 09-2",
+                      "width": "fill_container",
+                      "gap": 12,
+                      "padding": [
+                        12,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "l0SyQ",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 66,
+                          "content": "09-2",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pnFaX",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 3,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "xuQAs",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Token 市场、供应与合作模式基线",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "r0rOYF",
+                              "name": "Meta",
+                              "fill": "#6E6E73",
+                              "content": "唐巨杰 · 09 Finance / Compliance / Ops · 02 Token Ops",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "LHhKa",
+                          "name": "Arrow",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "chevron_right",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#8A919C"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "O17Epi",
+                      "name": "Mission · 04-1",
+                      "width": "fill_container",
+                      "gap": 12,
+                      "padding": [
+                        12,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "F2MCpn",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 66,
+                          "content": "04-1",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "jCHHp",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 3,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "loLCA",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "CEO Agent 核心体验产品化与真实使用",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "Y02G8",
+                              "name": "Meta",
+                              "fill": "#6E6E73",
+                              "content": "孙铭泽 · 04 Agents · 01 灯塔项目",
+                              "fontFamily": "Inter",
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "x6Uq77",
+                          "name": "Arrow",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "chevron_right",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#8A919C"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "FlrPQ",
+                  "name": "Footer",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Uka3I",
+                      "name": "Hint",
+                      "fill": "#6E6E73",
+                      "content": "另有 14 条 Mission · 继续滚动查看",
+                      "fontFamily": "Inter",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "qD0h4",
+                      "name": "Manage Button",
+                      "fill": "#007AFF",
+                      "cornerRadius": 10,
+                      "padding": [
+                        9,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "xEbtH",
+                          "name": "Label",
+                          "fill": "#FFFFFF",
+                          "content": "编辑 Mission 配置",
+                          "fontFamily": "Inter",
+                          "fontSize": 12.5,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "I8FJ86",
+      "x": 29250,
+      "y": 560,
+      "name": "页面 / Mission 详情",
+      "clip": true,
+      "width": 2560,
+      "height": 1440,
+      "fill": "#F5F5F7",
+      "layout": "vertical",
+      "gap": 20,
+      "padding": [
+        28,
+        56
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "YMsnR",
+          "name": "Top Navigation",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "t8WnI",
+              "name": "Back to Missions",
+              "gap": 7,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "Z31A3u",
+                  "name": "Back Icon",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "chevron_left",
+                  "library": "Material Symbols Rounded",
+                  "fill": "#4F5866"
+                },
+                {
+                  "type": "text",
+                  "id": "E3zJc",
+                  "name": "Back Label",
+                  "fill": "#4F5866",
+                  "content": "返回 Mission 总览",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "w7J8P",
+              "name": "Edit Mission",
+              "fill": "#FFFFFF",
+              "cornerRadius": 10,
+              "stroke": "#D9DDE5",
+              "strokeWidth": 1,
+              "gap": 7,
+              "padding": [
+                9,
+                13
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "IeJuf",
+                  "name": "Edit Icon",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "edit",
+                  "library": "Material Symbols Rounded",
+                  "fill": "#4F5866"
+                },
+                {
+                  "type": "text",
+                  "id": "XufiR",
+                  "name": "Label",
+                  "fill": "#1D1D1F",
+                  "content": "编辑 Mission",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "N7rmN",
+          "name": "Mission Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 9,
+          "children": [
+            {
+              "type": "frame",
+              "id": "u6Rb3C",
+              "name": "Meta",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "tJpTy",
+                  "name": "Tag",
+                  "fill": "#E8F1FF",
+                  "cornerRadius": 8,
+                  "padding": [
+                    5,
+                    9
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "N7LtD",
+                      "name": "Label",
+                      "fill": "#0A5DC2",
+                      "content": "LHR-A",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "H0faV",
+                  "name": "Tag",
+                  "fill": "#F1F3F6",
+                  "cornerRadius": 8,
+                  "padding": [
+                    5,
+                    9
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "z9bj3n",
+                      "name": "Label",
+                      "fill": "#4F5866",
+                      "content": "2026-09",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "BNsID",
+                  "name": "Tag",
+                  "fill": "#E8F6EC",
+                  "cornerRadius": 8,
+                  "padding": [
+                    5,
+                    9
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "h1LF0",
+                      "name": "Label",
+                      "fill": "#2F7A44",
+                      "content": "生效中",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "RX6wg",
+              "name": "Title",
+              "fill": "#1D1D1F",
+              "content": "CEO Agent Architecture & Quality",
+              "fontFamily": "Inter",
+              "fontSize": 32,
+              "fontWeight": "650"
+            },
+            {
+              "type": "text",
+              "id": "Go7xA",
+              "name": "Owner",
+              "fill": "#3C4350",
+              "content": "唯一 DRI · 刘人豪",
+              "fontFamily": "Inter",
+              "fontSize": 14,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "pnNEQ",
+          "name": "Relations",
+          "width": "fill_container",
+          "fill": "#FFFFFF",
+          "cornerRadius": 16,
+          "stroke": "#E6E9ED",
+          "strokeWidth": 1,
+          "gap": 16,
+          "padding": [
+            14,
+            18
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "GVYZ9",
+              "name": "Relation · 能力域",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "oXzYi",
+                  "name": "Label",
+                  "fill": "#6E6E73",
+                  "content": "能力域",
+                  "fontFamily": "Inter",
+                  "fontSize": 10.5,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "V9rTmR",
+                  "name": "Value",
+                  "fill": "#0A5DC2",
+                  "content": "04 Agents",
+                  "fontFamily": "Inter",
+                  "fontSize": 12.5,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "jMRiI",
+              "name": "Relation · 关联战场",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Oc3wK",
+                  "name": "Label",
+                  "fill": "#6E6E73",
+                  "content": "关联战场",
+                  "fontFamily": "Inter",
+                  "fontSize": 10.5,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "HVNxx",
+                  "name": "Value",
+                  "fill": "#2F7A44",
+                  "content": "01 灯塔项目",
+                  "fontFamily": "Inter",
+                  "fontSize": 12.5,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "PGlr2",
+              "name": "Relation · 月度计划",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "w6EODZ",
+                  "name": "Label",
+                  "fill": "#6E6E73",
+                  "content": "月度计划",
+                  "fontFamily": "Inter",
+                  "fontSize": 10.5,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "U9ykn",
+                  "name": "Value",
+                  "fill": "#8A6220",
+                  "content": "2026-09 · 已签发",
+                  "fontFamily": "Inter",
+                  "fontSize": 12.5,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "C1Gx07",
+              "name": "Relation · 来源",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "wT37T",
+                  "name": "Label",
+                  "fill": "#6E6E73",
+                  "content": "来源",
+                  "fontFamily": "Inter",
+                  "fontSize": 10.5,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "PxkOs",
+                  "name": "Value",
+                  "fill": "#4F5866",
+                  "content": "刘人豪 2026 年 9 月 Mission Card",
+                  "fontFamily": "Inter",
+                  "fontSize": 12.5,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "le7ft",
+          "name": "Body",
+          "width": "fill_container",
+          "height": "fill_container",
+          "gap": 18,
+          "children": [
+            {
+              "type": "frame",
+              "id": "m5vS7U",
+              "name": "Main",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "R0WOo",
+                  "name": "Outcome Hero",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 20,
+                  "stroke": "#E6E9ED",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 9,
+                  "padding": [
+                    22,
+                    24
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "OE2X9",
+                      "name": "Eyebrow",
+                      "fill": "#007AFF",
+                      "content": "MISSION OUTCOME",
+                      "fontFamily": "Inter",
+                      "fontSize": 10.5,
+                      "fontWeight": "700",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "type": "text",
+                      "id": "byT6X",
+                      "name": "Text",
+                      "fill": "#1D1D1F",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "推动 CEO Agent 从当前以 Chat 为主的能力，形成模块边界清楚、关键模块可独立观察和调试、质量可持续验证的 M1A 业务链，并在词元云集内部发生真实使用。",
+                      "lineHeight": 1.6,
+                      "fontFamily": "Inter",
+                      "fontSize": 17,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "EVpe8",
+                  "name": "Section · 成功证据",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 18,
+                  "stroke": "#E6E9ED",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    18,
+                    22
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Bykm4",
+                      "name": "Title",
+                      "fill": "#1D1D1F",
+                      "content": "成功证据",
+                      "fontFamily": "Inter",
+                      "fontSize": 14.5,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "zGfNF",
+                      "name": "Text",
+                      "fill": "#4F5866",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "• 模块清单、输入输出、实施顺序和不做范围经过产品与业务确认\n• 必要模块可单独测试、回放和定位问题\n• 真实材料具备端到端测试、人工质量评审、失败案例和修复回归记录\n• 留下内部用户实际使用及反馈证据",
+                      "lineHeight": 1.7,
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "GqRVq",
+                  "name": "Section · 关键里程碑",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 18,
+                  "stroke": "#E6E9ED",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    18,
+                    22
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ywyQ3",
+                      "name": "Title",
+                      "fill": "#1D1D1F",
+                      "content": "关键里程碑",
+                      "fontFamily": "Inter",
+                      "fontSize": 14.5,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "XIHLb",
+                      "name": "Text",
+                      "fill": "#4F5866",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "9/14 模块与实现分工确认　·　9/15 测试基线　·　9/18 首次集成　·　9/23 E2E Quality Gate　·　9/28 内部使用复测　·　9/30 月度 Review",
+                      "lineHeight": 1.7,
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "RlZGk",
+              "name": "Sidebar",
+              "width": 650,
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ECyNl",
+                  "name": "Side · 关键依赖",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 18,
+                  "stroke": "#E6E9ED",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    18,
+                    20
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "BRXqG",
+                      "name": "Title",
+                      "fill": "#0A5DC2",
+                      "content": "关键依赖",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "q42JWB",
+                      "name": "Text",
+                      "fill": "#4F5866",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "孙铭泽 · 前端体验与集成\n于斯一 · 数据与记忆服务\n白田田 · 测试材料与业务确认\nCEO · 质量与范围验收",
+                      "lineHeight": 1.7,
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Jwerh",
+                  "name": "Side · 最大风险",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 18,
+                  "stroke": "#E6E9ED",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    18,
+                    20
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "O4JAk",
+                      "name": "Title",
+                      "fill": "#A1443C",
+                      "content": "最大风险",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "cpFrL",
+                      "name": "Text",
+                      "fill": "#4F5866",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "研发容量不足，或月底再次用“功能完成”替代内部质量通关。关键路径、安全或数据正确性问题未关闭时，不视为通关。",
+                      "lineHeight": 1.7,
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "oyM8s",
+                  "name": "Side · 边界",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 18,
+                  "stroke": "#E6E9ED",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    18,
+                    20
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "y2Lh7",
+                      "name": "Title",
+                      "fill": "#8A6220",
+                      "content": "边界",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "tlqlr",
+                      "name": "Text",
+                      "fill": "#4F5866",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "不把架构与质量主责解释成独自承担全部开发；首次 Demo 或上线不能替代质量验收。",
+                      "lineHeight": 1.7,
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "l3qnU",
+                  "name": "Side · 来源追溯",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 18,
+                  "stroke": "#E6E9ED",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    18,
+                    20
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Ifhtf",
+                      "name": "Title",
+                      "fill": "#4F5866",
+                      "content": "来源追溯",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "bTPK8",
+                      "name": "Text",
+                      "fill": "#4F5866",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "飞书文档 · 9 月 11 日修订\n读取时间与 sourceRef 已记录\n外部文档更新不会自动覆盖当前正式版本",
+                      "lineHeight": 1.7,
+                      "fontFamily": "Inter",
+                      "fontSize": 12.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "K5wz5i",
+      "x": 31890,
+      "y": 560,
+      "name": "页面 / Mission 配置",
+      "clip": true,
+      "width": 2560,
+      "height": 1440,
+      "fill": "#F5F5F7",
+      "layout": "vertical",
+      "gap": 20,
+      "padding": [
+        28,
+        56
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "MlE18",
+          "name": "Top Navigation",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Vkg8K",
+              "name": "Back to Config",
+              "gap": 7,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "F3l34L",
+                  "name": "Back Icon",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "chevron_left",
+                  "library": "Material Symbols Rounded",
+                  "fill": "#4F5866"
+                },
+                {
+                  "type": "text",
+                  "id": "wL4kl",
+                  "name": "Back Label",
+                  "fill": "#4F5866",
+                  "content": "返回配置",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "zqEqA",
+              "name": "Scope Chip",
+              "fill": "#E8F1FF",
+              "cornerRadius": 9,
+              "padding": [
+                7,
+                10
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "WgSSE",
+                  "name": "Label",
+                  "fill": "#0A5DC2",
+                  "content": "Organization Fact · CEO 确认",
+                  "fontFamily": "Inter",
+                  "fontSize": 11.5,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "IbOgn",
+          "name": "Page Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 7,
+          "children": [
+            {
+              "type": "text",
+              "id": "g2UiO",
+              "name": "Eyebrow",
+              "fill": "#007AFF",
+              "content": "MISSION SETTINGS",
+              "fontFamily": "Inter",
+              "fontSize": 11,
+              "fontWeight": "700",
+              "letterSpacing": 1.6
+            },
+            {
+              "type": "text",
+              "id": "zIEkh",
+              "name": "Title",
+              "fill": "#1D1D1F",
+              "content": "Mission 配置",
+              "fontFamily": "Inter",
+              "fontSize": 34,
+              "fontWeight": "650"
+            },
+            {
+              "type": "text",
+              "id": "Jv9DV",
+              "name": "Subtitle",
+              "fill": "#4F5866",
+              "content": "编辑 Mission 的结果承诺、责任人和组织关系。修改生成新版本，不覆盖历史来源。",
+              "fontFamily": "Inter",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "m2Jwp",
+          "name": "Body",
+          "width": "fill_container",
+          "height": "fill_container",
+          "gap": 18,
+          "children": [
+            {
+              "type": "frame",
+              "id": "qrUjO",
+              "name": "Mission List",
+              "width": 690,
+              "height": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 20,
+              "stroke": "#E6E9ED",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 10,
+              "padding": [
+                20,
+                22
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ogtHN",
+                  "name": "Title",
+                  "fill": "#1D1D1F",
+                  "content": "已登记 Mission",
+                  "fontFamily": "Inter",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "zMsDp",
+                  "name": "Meta",
+                  "fill": "#6E6E73",
+                  "content": "21 条 · 2026-09",
+                  "fontFamily": "Inter",
+                  "fontSize": 11.5,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "P3i7bu",
+                  "name": "Search",
+                  "width": "fill_container",
+                  "height": 38,
+                  "fill": "#F7F8FA",
+                  "cornerRadius": 9,
+                  "stroke": "#D9DDE5",
+                  "strokeWidth": 1,
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "R0aYU",
+                      "name": "Icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "search",
+                      "library": "Material Symbols Rounded",
+                      "fill": "#8A919C"
+                    },
+                    {
+                      "type": "text",
+                      "id": "IRfr3",
+                      "name": "Placeholder",
+                      "fill": "#8A919C",
+                      "content": "按编号、标题或 DRI 搜索",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "YUxpU",
+                  "name": "Rows",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "gWgQi",
+                      "name": "Mission · LHR-A",
+                      "width": "fill_container",
+                      "fill": "#E8F1FF",
+                      "cornerRadius": 10,
+                      "gap": 10,
+                      "padding": [
+                        11,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "e9eDIS",
+                          "name": "Code",
+                          "fill": "#0A5DC2",
+                          "textGrowth": "fixed-width",
+                          "width": 54,
+                          "content": "LHR-A",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "bKRsR",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "kA6YJ",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "CEO Agent Architecture & Quality",
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "qOArC",
+                              "name": "Owner",
+                              "fill": "#6E6E73",
+                              "content": "刘人豪",
+                              "fontFamily": "Inter",
+                              "fontSize": 10.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "b6ERiU",
+                          "name": "Edit",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "edit",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#6E6E73"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "lre2m",
+                      "name": "Mission · LHR-B",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "gap": 10,
+                      "padding": [
+                        11,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "G6TcJk",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 54,
+                          "content": "LHR-B",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "TMLnK",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "GWRPW",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Ontology & Data Grounding",
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "zdgqg",
+                              "name": "Owner",
+                              "fill": "#6E6E73",
+                              "content": "刘人豪",
+                              "fontFamily": "Inter",
+                              "fontSize": 10.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "Y6jB8",
+                          "name": "Edit",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "edit",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#6E6E73"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "JVQr6",
+                      "name": "Mission · 03-1",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "gap": 10,
+                      "padding": [
+                        11,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "aXoOe",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 54,
+                          "content": "03-1",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "KzXQa",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "sotbH",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "M1-A 真实运行 + Agent 专业质量",
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "sI2lO",
+                              "name": "Owner",
+                              "fill": "#6E6E73",
+                              "content": "白田田",
+                              "fontFamily": "Inter",
+                              "fontSize": 10.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "aPZbO",
+                          "name": "Edit",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "edit",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#6E6E73"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "p9KxoM",
+                      "name": "Mission · 07-1",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "gap": 10,
+                      "padding": [
+                        11,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "EYFiN",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 54,
+                          "content": "07-1",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "rB9tY",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "GWgr6",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "识别组织能力 Gap 并形成补位决策",
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "z3bUD",
+                              "name": "Owner",
+                              "fill": "#6E6E73",
+                              "content": "秦梦怡",
+                              "fontFamily": "Inter",
+                              "fontSize": 10.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "O5a7B",
+                          "name": "Edit",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "edit",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#6E6E73"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "rccby",
+                      "name": "Mission · PA-1",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "gap": 10,
+                      "padding": [
+                        11,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "w7SyhC",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 54,
+                          "content": "PA-1",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "MScYl",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "j78nwW",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "M1-B 经营协同 MVP 与真实实践",
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "J1GuHZ",
+                              "name": "Owner",
+                              "fill": "#6E6E73",
+                              "content": "陈溪南",
+                              "fontFamily": "Inter",
+                              "fontSize": 10.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "ddQZk",
+                          "name": "Edit",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "edit",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#6E6E73"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Colrt",
+                      "name": "Mission · 05-1",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "gap": 10,
+                      "padding": [
+                        11,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Lawrl",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 54,
+                          "content": "05-1",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ojP6Y",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "FvhO0",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Clark Ontology & Memory v0.1",
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "is0KI",
+                              "name": "Owner",
+                              "fill": "#6E6E73",
+                              "content": "于斯一",
+                              "fontFamily": "Inter",
+                              "fontSize": 10.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "hl6Dd",
+                          "name": "Edit",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "edit",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#6E6E73"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "TV7Fp",
+                      "name": "Mission · 09-2",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "gap": 10,
+                      "padding": [
+                        11,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "CCl3M",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 54,
+                          "content": "09-2",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "n0eND",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "P5xKF5",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Token 市场、供应与合作模式基线",
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "NDLz2",
+                              "name": "Owner",
+                              "fill": "#6E6E73",
+                              "content": "唐巨杰",
+                              "fontFamily": "Inter",
+                              "fontSize": 10.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "vtAhj",
+                          "name": "Edit",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "edit",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#6E6E73"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "IuFf9",
+                      "name": "Mission · 04-1",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "gap": 10,
+                      "padding": [
+                        11,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Q3xqW",
+                          "name": "Code",
+                          "fill": "#6E6E73",
+                          "textGrowth": "fixed-width",
+                          "width": 54,
+                          "content": "04-1",
+                          "fontFamily": "Inter",
+                          "fontSize": 10.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "objVC",
+                          "name": "Text",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "FFU3E",
+                              "name": "Title",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "CEO Agent 核心体验产品化",
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "lcFWa",
+                              "name": "Owner",
+                              "fill": "#6E6E73",
+                              "content": "孙铭泽",
+                              "fontFamily": "Inter",
+                              "fontSize": 10.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "D36hpR",
+                          "name": "Edit",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "edit",
+                          "library": "Material Symbols Rounded",
+                          "fill": "#6E6E73"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "xB9KO",
+              "name": "Mission Editor",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 20,
+              "stroke": "#E6E9ED",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 13,
+              "padding": [
+                20,
+                24
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "F9vzzQ",
+                  "name": "Editor Header",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "TBKAy",
+                      "name": "Text",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "IYvRn",
+                          "name": "Title",
+                          "fill": "#1D1D1F",
+                          "content": "编辑 Mission",
+                          "fontFamily": "Inter",
+                          "fontSize": 17,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "DIUhL",
+                          "name": "Meta",
+                          "fill": "#6E6E73",
+                          "content": "LHR-A · 当前版本 v1",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Mxmta",
+                      "name": "Source",
+                      "fill": "#F1F3F6",
+                      "cornerRadius": 9,
+                      "padding": [
+                        7,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "wpLOe",
+                          "name": "Label",
+                          "fill": "#4F5866",
+                          "content": "来源 · 飞书 Mission Card",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ajbqe",
+                  "name": "Basic Fields",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "CAHXv",
+                      "name": "Field · 编号",
+                      "width": 320,
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "klTIW",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "编号",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "q5ebs6",
+                          "name": "Input",
+                          "width": "fill_container",
+                          "height": 38,
+                          "fill": "#F7F8FA",
+                          "cornerRadius": 9,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            0,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "yJMSr",
+                              "name": "Value",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "LHR-A",
+                              "lineHeight": 1.45,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "spB4v",
+                      "name": "Field · 周期",
+                      "width": 320,
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "JmVOs",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "周期",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "y4Nd3",
+                          "name": "Input",
+                          "width": "fill_container",
+                          "height": 38,
+                          "fill": "#F7F8FA",
+                          "cornerRadius": 9,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            0,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "cKKtK",
+                              "name": "Value",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "2026-09",
+                              "lineHeight": 1.45,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "sXRlo",
+                      "name": "Field · 唯一 DRI",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "zE7II",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "唯一 DRI",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "qFbmj",
+                          "name": "Input",
+                          "width": "fill_container",
+                          "height": 38,
+                          "fill": "#F7F8FA",
+                          "cornerRadius": 9,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            0,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "O5iqo",
+                              "name": "Value",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "刘人豪 · person-c70ace51…",
+                              "lineHeight": 1.45,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Y2KQsp",
+                  "name": "Field · Mission 标题",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 5,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "zhiPl",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "Mission 标题",
+                      "fontFamily": "Inter",
+                      "fontSize": 11.5,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "yBR5O",
+                      "name": "Input",
+                      "width": "fill_container",
+                      "height": 38,
+                      "fill": "#F7F8FA",
+                      "cornerRadius": 9,
+                      "stroke": "#D9DDE5",
+                      "strokeWidth": 1,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "t4TpWP",
+                          "name": "Value",
+                          "fill": "#1D1D1F",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "CEO Agent Architecture & Quality",
+                          "lineHeight": 1.45,
+                          "fontFamily": "Inter",
+                          "fontSize": 12.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "a3pCz",
+                  "name": "Relation Fields",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "V7ent",
+                      "name": "Field · 主要能力域",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ZObK4",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "主要能力域",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "EmroY",
+                          "name": "Input",
+                          "width": "fill_container",
+                          "height": 38,
+                          "fill": "#F7F8FA",
+                          "cornerRadius": 9,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            0,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "vhyUV",
+                              "name": "Value",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "04 Agents",
+                              "lineHeight": 1.45,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BgMIv",
+                      "name": "Field · 关联战场",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "R7YamJ",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "关联战场",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "tbFEK",
+                          "name": "Input",
+                          "width": "fill_container",
+                          "height": 38,
+                          "fill": "#F7F8FA",
+                          "cornerRadius": 9,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            0,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "z2hYzm",
+                              "name": "Value",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "01 灯塔项目",
+                              "lineHeight": 1.45,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "iGJlF",
+                      "name": "Field · 月度计划",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "oEfpz",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "月度计划",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "IS8hw",
+                          "name": "Input",
+                          "width": "fill_container",
+                          "height": 38,
+                          "fill": "#F7F8FA",
+                          "cornerRadius": 9,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            0,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "aAIzB",
+                              "name": "Value",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "2026-09",
+                              "lineHeight": 1.45,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "okX8x",
+                  "name": "Field · Mission Outcome",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 5,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Psbrq",
+                      "name": "Label",
+                      "fill": "#3C4350",
+                      "content": "Mission Outcome",
+                      "fontFamily": "Inter",
+                      "fontSize": 11.5,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "M5udz",
+                      "name": "Textarea",
+                      "width": "fill_container",
+                      "height": 74,
+                      "fill": "#F7F8FA",
+                      "cornerRadius": 9,
+                      "stroke": "#D9DDE5",
+                      "strokeWidth": 1,
+                      "padding": [
+                        9,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "MExtb",
+                          "name": "Value",
+                          "fill": "#1D1D1F",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "推动 CEO Agent 形成模块边界清楚、可观察调试、质量可持续验证的 M1A 业务链，并在词元云集内部发生真实使用。",
+                          "lineHeight": 1.45,
+                          "fontFamily": "Inter",
+                          "fontSize": 12.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "GrIxW",
+                  "name": "Detail Fields",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "akq3Q",
+                      "name": "Field · 成功证据（每行一项）",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "tgUtK",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "成功证据（每行一项）",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "NS3sU",
+                          "name": "Textarea",
+                          "width": "fill_container",
+                          "height": 74,
+                          "fill": "#F7F8FA",
+                          "cornerRadius": 9,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            9,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "JU6aq",
+                              "name": "Value",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "模块清单及边界经过确认\n真实材料端到端测试与回归记录\n内部用户实际使用及反馈证据",
+                              "lineHeight": 1.45,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ChNn8",
+                      "name": "Field · 关键里程碑（每行一项）",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "gfiU5",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "关键里程碑（每行一项）",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "gEQ6n",
+                          "name": "Textarea",
+                          "width": "fill_container",
+                          "height": 74,
+                          "fill": "#F7F8FA",
+                          "cornerRadius": 9,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            9,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "MU0mN",
+                              "name": "Value",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "9/14 模块分工确认\n9/23 E2E Quality Gate\n9/30 月度结果 Review",
+                              "lineHeight": 1.45,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "iIqu2",
+                  "name": "Risk Fields",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "E4FLh",
+                      "name": "Field · 关键依赖",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "pj1jE",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "关键依赖",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "xt05a",
+                          "name": "Textarea",
+                          "width": "fill_container",
+                          "height": 74,
+                          "fill": "#F7F8FA",
+                          "cornerRadius": 9,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            9,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "PsWGa",
+                              "name": "Value",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "孙铭泽、于斯一、白田田、CEO",
+                              "lineHeight": 1.45,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "a6hM30",
+                      "name": "Field · 最大风险与边界",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "JyEqW",
+                          "name": "Label",
+                          "fill": "#3C4350",
+                          "content": "最大风险与边界",
+                          "fontFamily": "Inter",
+                          "fontSize": 11.5,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "uTw3I",
+                          "name": "Textarea",
+                          "width": "fill_container",
+                          "height": 74,
+                          "fill": "#F7F8FA",
+                          "cornerRadius": 9,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            9,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "y0yEW",
+                              "name": "Value",
+                              "fill": "#1D1D1F",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "研发容量不足；不能用 Demo 或功能完成替代质量通关。",
+                              "lineHeight": 1.45,
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MIlB7",
+                  "name": "Footer Spacer",
+                  "width": "fill_container",
+                  "height": "fill_container"
+                },
+                {
+                  "type": "frame",
+                  "id": "dmohw",
+                  "name": "Editor Footer",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "X7VXE",
+                      "name": "Hint",
+                      "fill": "#6E6E73",
+                      "content": "保存后 version +1；历史来源与旧版本保持可追溯。",
+                      "fontFamily": "Inter",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "O3Z7kH",
+                      "name": "Actions",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "W3rTDH",
+                          "name": "Cancel",
+                          "cornerRadius": 10,
+                          "stroke": "#D9DDE5",
+                          "strokeWidth": 1,
+                          "padding": [
+                            9,
+                            14
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "x4SJKU",
+                              "name": "Label",
+                              "fill": "#4F5866",
+                              "content": "取消",
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "d1UUnD",
+                          "name": "Save",
+                          "fill": "#007AFF",
+                          "cornerRadius": 10,
+                          "padding": [
+                            9,
+                            15
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "FkkS8",
+                              "name": "Label",
+                              "fill": "#FFFFFF",
+                              "content": "保存新版本",
+                              "fontFamily": "Inter",
+                              "fontSize": 12.5,
+                              "fontWeight": "600"
+                            }
+                          ]
                         }
                       ]
                     }
