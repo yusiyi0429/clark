@@ -44,7 +44,17 @@ async function sessionFixture(): Promise<{ t: Awaited<ReturnType<typeof createTe
   expect(created.statusCode).toBe(201);
   const previousTmp = process.env.TMPDIR;
   process.env.TMPDIR = stagingDir;
-  return { t, cookie, sessionId: created.json().id as string, attachmentDir, stagingDir, restoreTmp: () => { process.env.TMPDIR = previousTmp; } };
+  return {
+    t,
+    cookie,
+    sessionId: created.json().id as string,
+    attachmentDir,
+    stagingDir,
+    restoreTmp: () => {
+      if (previousTmp === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = previousTmp;
+    },
+  };
 }
 
 async function upload(t: Awaited<ReturnType<typeof createTestApp>>, cookie: string, sessionId: string, body: { headers: Record<string, string>; payload: Buffer }) {

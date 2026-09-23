@@ -212,13 +212,16 @@ function createBackupStubs(dir: string): { bin: string; dockerLog: string; offsi
 
 function backupEnv(dir: string, extras: Record<string, string>): Record<string, string> {
   const key = join(dir, "id_ed25519");
+  const composeEnv = join(dir, "compose.env");
   if (!existsSync(key)) writeFileSync(key, "dummy-key\n");
+  if (!existsSync(composeEnv)) writeFileSync(composeEnv, "POSTGRES_PASSWORD=test-only\n");
   return {
     BACKUP_AGE_RECIPIENT: "age1dummy",
     BACKUP_SSH_HOST: "backup.example.com",
     BACKUP_SSH_USER: "warmap",
     BACKUP_SSH_PATH: "/srv/backups",
     BACKUP_SSH_KEY_PATH: key,
+    WARMAP_ENV_FILE: composeEnv,
     ...extras,
   };
 }
