@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Pencil } from "lucide-react";
+import { ConversationDock } from "@/conversation/ConversationDock";
+import type { Card } from "@/lib/api/client";
 import type { MissionPayload } from "@/cards/payloads";
 import m from "@/styles/mission-detail.module.css";
 import c from "@/styles/config.module.css";
@@ -15,10 +17,10 @@ export function planRelation(period: string, planStatus: string | null): string 
  * Mission 详情只展示正式承诺与关系：不推断进度、不显示完成率，
  * Task/Activity 与执行状态留在外部 DRI 流程。
  */
-export function MissionDetailScreen({ mission, planStatus }: { mission: MissionPayload; planStatus: string | null }) {
+export function MissionDetailScreen({ mission, planStatus, card }: { mission: MissionPayload; planStatus: string | null; card?: Card }) {
   const router = useRouter();
   return (
-    <main className={c.shell}>
+    <main className={`${c.shell} ${m.page}`}>
       <nav className={c.topbar} aria-label="Mission 详情页导航">
         <button type="button" className={c.back} onClick={() => router.push("/missions")}>
           <ChevronLeft aria-hidden="true" /> 返回 Mission 总览
@@ -94,6 +96,7 @@ export function MissionDetailScreen({ mission, planStatus }: { mission: MissionP
           </section>
         </div>
       </div>
+      {card ? <ConversationDock scope={`mission:${mission.missionId}`} label={mission.title} availableCards={[card]} /> : null}
     </main>
   );
 }

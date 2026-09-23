@@ -47,7 +47,9 @@ const SYSTEM_PROMPT = `# 角色
 
 # 每轮注入的上下文
 
-每轮输入是一个 JSON，只有三部分。\`currentObject\` 是当前页面对象的 Card 快照，含完整业务字段，Meeting 还附带本场关联 Issue。\`references\` 是本轮 CEO 显式引用的 Card 快照。\`message\` 是 CEO 本轮原话。
+每轮输入是一个 JSON。\`currentObject\` 是当前页面对象的 Card 快照，含完整业务字段，Meeting 还附带本场关联 Issue。\`references\` 是本轮 CEO 显式引用的 Card 快照。\`globalContext\` 仅首页全局对话提供。\`message\` 是 CEO 本轮原话。
+
+\`globalContext\` 是首页全局对话每轮自动带入的实时摘要，包含当前周期、战场、能力、Mission 总数、待决策 Issue 和月度计划状态。涉及某个战场、能力或 DRI 的 Mission 明细时调用 \`list_missions\`，不要从总数推断。
 
 优先使用 currentObject 与 references，不要用历史对话猜测当前对象的最新状态。
 
@@ -61,6 +63,8 @@ const SYSTEM_PROMPT = `# 角色
 
 # 工具
 
+- \`get_warmap_overview\`：读取当前周期的战场、能力、Mission 数、待决策 Issue 与月度计划状态。
+- \`list_missions\`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；CEO 问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。
 - \`list_pending_issues\`：当前所有待 CEO 决策的 Issue 实时清单。被问及当前战略议题、待决策事项或看板状态时必须调用，不要凭上下文推断。
 - \`list_sections\`：企业知识章节目录，先看目录再决定读哪里。
 - \`search_sections\`：在企业知识内按关键词定位相关章节。
@@ -120,6 +124,8 @@ export type PiConversationRuntimeOptions = {
   search?: WebSearchAdapter;
   /** 读取当前 Radar 已启用发布方 feed；未提供时不暴露 read_outlet_feed。 */
   outletFeed?: (signal: AbortSignal) => Promise<TRadarSourceItem[]>;
+  globalContext?: () => Promise<Record<string, unknown>>;
+  listMissions?: (filters: { period?: string; battlefieldId?: string; capabilityId?: string; ownerId?: string }) => Promise<unknown[]>;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 };
 
@@ -209,8 +215,33 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
     defineTool({ name: "search_people", label: "查询人员", description: "查询稳定人员目录", parameters: SearchPeopleInput, execute: async (_id, args) => call("search_people", args) }),
   ];
   const listPendingIssues = options.listPendingIssues;
-  const boardTools = listPendingIssues
-    ? [defineTool({
+  const boardTools = [
+    ...(options.globalContext ? [defineTool({
+      name: "get_warmap_overview",
+      label: "WarMap 总览",
+      description: "读取当前周期的战场、能力、Mission 数、待决策 Issue 与月度计划状态（实时，只读）",
+      parameters: Type.Object({}, { additionalProperties: false }),
+      execute: async () => {
+        const overview = await options.globalContext!();
+        return { content: [{ type: "text" as const, text: JSON.stringify(overview) }], details: overview };
+      },
+    })] : []),
+    ...(options.listMissions ? [defineTool({
+      name: "list_missions",
+      label: "查询 Mission",
+      description: "按周期、战场、能力域或 DRI 查询 Mission 明细（实时，只读）",
+      parameters: Type.Object({
+        period: Type.Optional(Type.String({ pattern: "^\\d{4}-\\d{2}$" })),
+        battlefieldId: Type.Optional(Type.String()),
+        capabilityId: Type.Optional(Type.String()),
+        ownerId: Type.Optional(Type.String()),
+      }, { additionalProperties: false }),
+      execute: async (_id, filters) => {
+        const missions = await options.listMissions!(filters);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ missions }) }], details: { missions } };
+      },
+    })] : []),
+    ...(listPendingIssues ? [defineTool({
         name: "list_pending_issues",
         label: "待决策议题",
         description: "列出当前所有待 CEO 决策的 Issue（实时看板数据，只读）",
@@ -219,8 +250,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           const issues = await listPendingIssues();
           return { content: [{ type: "text" as const, text: JSON.stringify({ issues }) }], details: { issues } };
         },
-      })]
-    : [];
+    })] : []),
+  ];
 
   const modelRuntime = await ModelRuntime.create({
     credentials: new InMemoryCredentialStore(),
@@ -370,6 +401,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         const prompt = JSON.stringify({
           currentObject: input.currentObject,
           references: input.referencesSnapshot,
+          globalContext: input.scope === "global" && options.globalContext ? await options.globalContext() : null,
           message: input.message,
         });
         await session.prompt(prompt, { expandPromptTemplates: false, source: "rpc" });

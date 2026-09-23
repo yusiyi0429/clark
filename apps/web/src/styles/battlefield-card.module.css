@@ -6,7 +6,13 @@
 /* 正面战略上下文：负责人 + 两行六个月目标，始终在待决策列表之上。 */
 .context{display:flex;flex-direction:column;gap:3px;margin-top:7px}
 .contextOwner{font-size:var(--type-meta,12px);line-height:1.6;color:#6e6e73}
-.contextMissions{font-size:var(--type-meta,11px);line-height:1.6;font-weight:600;color:#0a5dc2}
+.contextMissions{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;border:0;border-radius:7px;background:#e8f1ff;padding:4px 7px;font:inherit;font-size:var(--type-meta,11px);line-height:1.6;font-weight:600;color:#0a5dc2;cursor:pointer}
+.contextMissions:hover{background:#d8e7fc}
+.missionList{display:flex;flex-direction:column;gap:1px;max-height:132px;overflow:auto;margin:2px 0 0;padding:2px 0;list-style:none;scrollbar-width:thin}
+.missionList li+li{border-top:1px solid #1d1d1f0d}
+.missionList button{display:flex;align-items:flex-start;gap:6px;width:100%;border:0;border-radius:7px;background:transparent;padding:6px 4px;text-align:left;font:inherit;font-size:11px;line-height:1.45;color:#3c4350;cursor:pointer}
+.missionList button:hover{background:#f2f6fc;color:#0a5dc2}
+.missionList button>span{flex:1;min-width:0}.missionList button>svg:last-child{margin-top:2px;flex:none;color:#8c98a6}.missionList button:focus-visible{outline:2px solid #8cb1e8;outline-offset:2px}
 .outcome{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin:0;font-size:var(--type-meta,12px);line-height:1.6;color:#5b6472}
 .back{transform:rotateY(180deg);background:linear-gradient(155deg,#fff 50%,#f5f8fc);position:relative}
 /* Ambient light belongs to the progress face, never to a status or metric.

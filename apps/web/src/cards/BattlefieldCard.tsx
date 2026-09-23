@@ -1,7 +1,7 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
-import { ArrowLeft, ArrowLeftRight, ChevronRight } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowLeftRight, ChevronRight, Flag } from "lucide-react";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type BattlefieldPayload, type MissionPayload } from "./payloads";
 import { useBattlefieldDisplay } from "./battlefieldDisplay";
@@ -12,10 +12,11 @@ const URGENCY_DOT: Record<string, string> = { red: "#e34b43", yellow: "#c79624",
 /** 正面确认目标与待决策 Issue；背面只展示真实待办与负责人反馈，不显示百分比。 */
 export function BattlefieldCard({ card, collection, onNavigate }: CardRenderProps) {
   const payload = payloadOf<BattlefieldPayload>(card);
-  // Mission 数来自同一页面的 Mission Card 集合，不另存汇总；首页始终带全量 Mission。
-  const missionCount = collection.filter(
+  const missions = collection.filter(
     (item) => item.kind === "mission" && payloadOf<MissionPayload>(item).battlefieldIds.includes(payload.battlefieldId),
-  ).length;
+  );
+  const missionCount = missions.length;
+  const [missionsOpen, setMissionsOpen] = useState(false);
   const display = useBattlefieldDisplay();
   const flipped = display.flipped(payload.battlefieldId);
   const frontFlip = useRef<HTMLButtonElement>(null);
@@ -57,7 +58,33 @@ export function BattlefieldCard({ card, collection, onNavigate }: CardRenderProp
           </header>
           <div className={s.context}>
             <span className={s.contextOwner}>负责人 · {payload.ownerDisplayName || "待指派"}</span>
-            <span className={s.contextMissions}>Missions · {missionCount}</span>
+            <button
+              type="button"
+              className={s.contextMissions}
+              aria-expanded={missionsOpen}
+              aria-controls={`missions-${payload.battlefieldId}`}
+              onClick={() => setMissionsOpen((open) => !open)}
+            >
+              <Flag size={11} aria-hidden="true" />
+              <span>Missions · {missionCount}</span>
+              <ChevronRight size={11} aria-hidden="true" />
+            </button>
+            {missionsOpen ? (
+              <ul id={`missions-${payload.battlefieldId}`} className={s.missionList} aria-label={`${payload.name}的 Mission`}>
+                {missions.map((mission) => {
+                  const item = payloadOf<MissionPayload>(mission);
+                  return (
+                    <li key={mission.id}>
+                      <button type="button" onClick={() => onNavigate(`/missions/${encodeURIComponent(item.missionId)}`)}>
+                        <Flag size={11} aria-hidden="true" />
+                        <span>{item.code} · {item.title}</span>
+                        <ChevronRight size={12} aria-hidden="true" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
             {payload.sixMonthOutcome ? <p className={s.outcome}>六个月目标 · {payload.sixMonthOutcome}</p> : null}
           </div>
           {payload.pendingIssues.length ? (

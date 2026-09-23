@@ -127,7 +127,7 @@ describe("ConversationDock 扩展对话", () => {
   });
 
   it("扩展对话输入使用设计稿占位文案", () => {
-    expect(EXPANDED_PLACEHOLDER).toBe("问天枢：可引用卡片与已签发计划，或拖入文件…");
+    expect(EXPANDED_PLACEHOLDER).toBe("问天枢：可引用 Issue、Meeting、计划、Mission、战场、能力与 Radar，或拖入文件…");
   });
 
   it("Exp Header 标题从 scope 推导：全局与各对象域", () => {

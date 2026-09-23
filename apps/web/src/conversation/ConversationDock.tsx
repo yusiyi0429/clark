@@ -19,12 +19,12 @@ type Session = { id: string; title?: string; createdAt?: string };
 type Attachment = { id: string; fileName: string; mimeType: string };
 
 // Signal 内容由其页面 scope 自动带入对话；Signal Card 不可作为显式引用（与 API 白名单一致）。
-const REFERENCEABLE = new Set(["issue", "meeting", "monthly-plan"]);
+const REFERENCEABLE = new Set(["issue", "meeting", "monthly-plan", "mission"]);
 const ATTACHMENT_ACCEPT = ".pdf,.docx,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown";
 /** 扩展对话输入框的设计稿占位文案（FRH4J Exp Input）。 */
-export const EXPANDED_PLACEHOLDER = "问天枢：可引用卡片与已签发计划，或拖入文件…";
+export const EXPANDED_PLACEHOLDER = "问天枢：可引用 Issue、Meeting、计划、Mission、战场、能力与 Radar，或拖入文件…";
 
-const KIND_LABEL: Record<string, string> = { issue: "Issue", signal: "Signal", meeting: "Meeting", "monthly-plan": "月度计划" };
+const KIND_LABEL: Record<string, string> = { issue: "Issue", signal: "Signal", meeting: "Meeting", "monthly-plan": "月度计划", mission: "Mission", battlefield: "战场", capability: "能力", radar: "Radar" };
 const ATTACHMENT_LABEL: Record<string, string> = {
   "application/pdf": "PDF",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
@@ -32,7 +32,7 @@ const ATTACHMENT_LABEL: Record<string, string> = {
 };
 
 /** scope 前缀 → 页面名；chip 第二段用页面对象名（label）。 */
-const SCOPE_PAGE: Record<string, string> = { issue: "议题", meeting: "会议", signal: "信号", "monthly-plan": "月度计划" };
+const SCOPE_PAGE: Record<string, string> = { issue: "议题", meeting: "会议", signal: "信号", "monthly-plan": "月度计划", mission: "Mission" };
 
 /** FRH4J Exp Title：「天枢 · 全局对话」/「天枢 · 会议对话」等，从 scope 本地推导。 */
 export function conversationTitleFor(scope: string): string {

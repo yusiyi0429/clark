@@ -16,6 +16,7 @@ import { getIssueRow, projectIssueCard } from "./issues.js";
 import { moveStagedFile } from "./meetingMaterials.js";
 import { getMeetingRow, projectMeetingCard } from "./meetingStore.js";
 import { getMonthlyPlanRow, projectMonthlyPlanCard } from "./monthlyPlans.js";
+import { getMissionRow, projectMissionCard } from "./missions.js";
 import { getSignalCard } from "./signals.js";
 
 export type ConversationRuntimeEvent =
@@ -118,6 +119,14 @@ export async function getScopeObject(
       },
     };
   }
+  const mission = objectType === "mission" ? await getMissionRow(q, id) : null;
+  if (mission) {
+    const card = projectMissionCard(mission, secret, new Map());
+    return {
+      visible: true,
+      snapshot: { cardId: card.id, version: card.version, kind: card.kind, title: card.title, objectRef: card.objectRef, payload: card.payload },
+    };
+  }
   const signal = objectType === "signal" ? await getSignalCard(q, id) : null;
   if (signal) {
     return {
@@ -147,7 +156,7 @@ export async function resolveReferenceSnapshots(
   for (const reference of references) {
     const [objectType, id, extra] = reference.cardId.split(":");
     // Signal 内容经 scope 快照进入对话上下文；Signal Card 不作为显式引用对象（CEO 2026-09-21 裁决）。
-    if (extra || !["issue", "meeting", "monthly-plan"].includes(objectType)) {
+    if (extra || !["issue", "meeting", "monthly-plan", "mission"].includes(objectType)) {
       return { status: 404, code: "REFERENCE_NOT_FOUND", message: "Card 引用不存在" };
     }
     const issue = objectType === "issue" ? await getIssueRow(q, id) : null;
@@ -196,6 +205,15 @@ export async function resolveReferenceSnapshots(
         objectRef: card.objectRef,
         payload: card.payload,
       });
+      continue;
+    }
+    const mission = objectType === "mission" ? await getMissionRow(q, id) : null;
+    if (mission) {
+      const card = projectMissionCard(mission, secret, new Map());
+      if (card.version !== reference.version) {
+        return { status: 409, code: "REFERENCE_VERSION_CONFLICT", message: "Card 引用版本已过期" };
+      }
+      snapshots.push({ cardId: card.id, version: card.version, kind: card.kind, title: card.title, objectRef: card.objectRef, payload: card.payload });
       continue;
     }
     return { status: 404, code: "REFERENCE_NOT_FOUND", message: "Card 引用不存在" };

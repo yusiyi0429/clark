@@ -6,6 +6,7 @@ import { RadarSources, type TApiError, type TRadarSources } from "@warmap/contra
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import { loadCompanyMemory, type CompanyMemorySeedEnv } from "./companyMemory.js";
+import { globalConversationContext, listConversationMissions } from "./conversationContext.js";
 import { createPiConversationRuntime } from "./piConversationRuntime.js";
 import type { WebSearchAdapter } from "./webSearch.js";
 import type { ConversationRuntime } from "./conversations.js";
@@ -135,6 +136,8 @@ export async function buildApp({
     compactionModelId: env.compactionModel,
     search: webSearch,
     outletFeed: readOutletFeed,
+    globalContext: () => globalConversationContext(pool.query.bind(pool), new Date()),
+    listMissions: (filters) => listConversationMissions(pool.query.bind(pool), filters),
     // 对话只读工具：实时待决策 Issue 清单（不含签名 Action，不可写入）。
     listPendingIssues: async () => {
       const result = await pool.query(

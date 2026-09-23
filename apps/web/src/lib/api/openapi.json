@@ -3791,7 +3791,7 @@
         ],
         "properties": {
           "scope": {
-            "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+            "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
             "description": "global 或稳定对象 scope",
             "type": "string"
           },
@@ -4010,7 +4010,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -4044,7 +4044,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -4098,7 +4098,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -4147,7 +4147,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -4189,7 +4189,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -4226,7 +4226,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -4261,7 +4261,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -4308,7 +4308,7 @@
             "type": "string"
           },
           "scope": {
-            "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+            "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
             "description": "global 或稳定对象 scope",
             "type": "string"
           },
@@ -4357,7 +4357,7 @@
         ],
         "properties": {
           "scope": {
-            "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+            "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
             "description": "global 或稳定对象 scope",
             "type": "string"
           },
@@ -4382,7 +4382,7 @@
                   "type": "string"
                 },
                 "scope": {
-                  "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127})$",
+                  "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                   "description": "global 或稳定对象 scope",
                   "type": "string"
                 },

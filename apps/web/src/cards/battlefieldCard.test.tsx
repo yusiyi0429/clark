@@ -61,6 +61,18 @@ describe("战场卡正面战略上下文", () => {
     expect(html).not.toContain("六个月目标");
   });
 
+  it("展开 Mission 后渲染逐条详情入口", () => {
+    const linked = (id: string, code: string) =>
+      ({ schemaVersion: 1, id: `mission:${id}`, version: 1, kind: "mission", objectRef: { type: "mission", id, version: 1 }, title: id, payload: { missionId: id, code, title: "测试 Mission", battlefieldIds: ["growth"] }, actions: [] }) as unknown as Card;
+    const html = renderToStaticMarkup(
+      <BattlefieldDisplayProvider>
+        <BattlefieldCard card={battlefieldCard()} collection={[linked("m1", "01-1")]} onCard={() => undefined} onNavigate={() => undefined} />
+      </BattlefieldDisplayProvider>,
+    );
+    expect(html).toContain('aria-controls="missions-growth"');
+    expect(html).toContain('aria-expanded="false"');
+  });
+
   it("Mission 数来自同一集合里关联该战场的 Mission Card，不写汇总", () => {
     const linked = (id: string, battlefieldIds: string[]) =>
       ({ schemaVersion: 1, id: `mission:${id}`, version: 1, kind: "mission", objectRef: { type: "mission", id, version: 1 }, title: id, payload: { missionId: id, battlefieldIds }, actions: [] }) as unknown as Card;

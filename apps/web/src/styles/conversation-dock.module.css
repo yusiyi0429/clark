@@ -25,7 +25,7 @@
   border: 1px solid rgba(255,255,255,.88);
   border-radius: 26px;
   background: rgba(248,248,250,.97);
-  box-shadow: 0 4px 18px #1d1d1f12, 0 0 0 0.5px #1d1d1f12, inset 0 1px 0 #fff;
+  box-shadow: 0 16px 40px #1d1d1f26, 0 4px 12px #1d1d1f18, 0 0 0 0.5px #1d1d1f18, inset 0 1px 0 #fff;
   pointer-events: auto;
   transition: height 260ms cubic-bezier(.22,1,.36,1), width 320ms cubic-bezier(.22,1,.36,1), background-color 260ms ease, color 220ms ease, box-shadow 260ms ease, border-color 260ms ease;
 }

@@ -1,5 +1,5 @@
 import { MissionDetailScreen } from "./MissionDetailScreen";
-import { loadMissionDetail, requireCeo } from "@/lib/api/server";
+import { loadMissionCard, loadMissionDetail, requireCeo } from "@/lib/api/server";
 
 export default async function MissionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   // 路由段是 percent-encoded 的原始 segment（Mission id 保留中文），openapi-fetch 还会再编码一次，
@@ -7,6 +7,8 @@ export default async function MissionDetailPage({ params }: { params: Promise<{ 
   const { id: segment } = await params;
   const id = decodeURIComponent(segment);
   const cookie = await requireCeo(`/missions/${id}`);
-  const { mission, planStatus } = await loadMissionDetail(cookie, id);
-  return <MissionDetailScreen mission={mission} planStatus={planStatus} />;
+  const [{ mission, planStatus }, missionCard] = await Promise.all([loadMissionDetail(cookie, id), loadMissionCard(cookie, id)]);
+  const card = missionCard.cards[0];
+  if (!card) throw new Error("Mission Card missing");
+  return <MissionDetailScreen mission={mission} planStatus={planStatus} card={card} />;
 }

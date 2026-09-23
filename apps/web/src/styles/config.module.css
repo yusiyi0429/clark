@@ -52,7 +52,7 @@
 .footerHint[data-kind=ok]{color:#2f7a44}
 .footerHint[data-kind=error]{color:#a1443c}
 .footerActions{display:flex;align-items:center;gap:10px}
-.secondary{display:inline-flex;align-items:center;justify-content:center;height:42px;border:0;outline:1px solid #d9dde5;border-radius:10px;background:#fff;padding:10px 14px;font:inherit;font-size:13px;font-weight:500;color:#1d1d1f;cursor:pointer}
+.secondary{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:42px;border:0;outline:1px solid #d9dde5;border-radius:10px;background:#fff;padding:10px 14px;font:inherit;font-size:13px;font-weight:500;color:#1d1d1f;cursor:pointer}
 .secondary:hover{background:#f5f5f7}
 .primary{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:11px;background:#007aff;padding:11px 17px;font:inherit;font-size:14px;font-weight:600;color:#fff;cursor:pointer}
 .primary:hover{background:#0068db}
