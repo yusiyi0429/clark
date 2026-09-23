@@ -172,3 +172,10 @@
   .board .panel,
   .board .radar { border-color: #777; }
 }
+
+/* Mission 入口：首页工具栏跳转总览，能力面板行跳转该能力域的 Mission 列表。 */
+.missionEntry{display:inline-flex;align-items:center;gap:6px;margin-right:auto;border:0;border-radius:8px;background:transparent;padding:5px 8px;font:inherit;font-size:11.5px;font-weight:600;color:#3c4350;cursor:pointer}
+.missionEntry svg{flex:none;color:#4f5866}
+.missionEntry:hover{background:#f2f4f7}
+.capabilityMissions{display:inline-flex;align-items:center;gap:5px;margin:0 0 4px;border:0;border-radius:7px;background:#f2f6fc;padding:3px 8px;font:inherit;font-size:11px;font-weight:600;color:#0a5dc2;cursor:pointer}
+.capabilityMissions:hover{background:#e4eefb}

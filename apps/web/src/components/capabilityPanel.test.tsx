@@ -59,4 +59,16 @@ describe("首页公司能力面板", () => {
     // 只有没有 Issue 的 cap-agent 落到空态，Issue 确实落在 cap-delivery 组内
     expect(html.match(/暂无待决策议题/g)).toHaveLength(1);
   });
+
+  it("Mission 入口与能力域 Mission 数都从同一份 Card 集合派生", () => {
+    const mission = card("mission", "lhr-a", "CEO Agent 架构与质量", { missionId: "lhr-a", capabilityId: "cap-delivery", battlefieldIds: [] });
+    const html = renderToStaticMarkup(
+      <HomeBoard cards={[capability, earlyCapability, mission]} onCard={() => undefined} onNavigate={() => undefined} />,
+    );
+    expect(html).toContain("查看 1 个 Mission");
+    expect(html).toContain("Mission · 1");
+    // 已登记能力域都带 Mission 入口（无 Mission 的能力域显示 0），Issue 派生分组不带
+    expect(html.match(/Mission · /g)).toHaveLength(2);
+    expect(html).toContain("Mission · 0");
+  });
 });

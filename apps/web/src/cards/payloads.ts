@@ -1,4 +1,4 @@
-import type { TCapabilityCardPayload, TMeetingCardPayload, TMonthlyPlanCardPayload, TBattlefieldCardPayload } from "@warmap/contracts";
+import type { TCapabilityCardPayload, TMeetingCardPayload, TMissionCardPayload, TMonthlyPlanCardPayload, TBattlefieldCardPayload } from "@warmap/contracts";
 import type { Card } from "@/lib/api/client";
 
 export type IssueLocation =
@@ -79,5 +79,6 @@ export type SignalPayload = {
 
 export type MeetingPayload = TMeetingCardPayload;
 export type MonthlyPlanPayload = TMonthlyPlanCardPayload;
+export type MissionPayload = TMissionCardPayload;
 
 export const payloadOf = <T,>(card: Card): T => card.payload as T;

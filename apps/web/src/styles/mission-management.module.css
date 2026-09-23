@@ -1,0 +1,56 @@
+/* Mission 配置基线（UpgradeDesign.pen 页面/Mission 配置）：左 690 列表 + 右 1740 编辑器。 */
+.body{display:flex;align-items:flex-start;gap:20px;max-width:2448px}
+.listCard{position:relative;display:flex;flex:none;flex-direction:column;gap:12px;box-sizing:border-box;width:690px;height:1217px;background:#fff;border-radius:20px;outline:1px solid #e6e9ed;padding:22px 22px}
+.listTitle{margin:0;font-size:16px;font-weight:600}
+.listMeta{margin:0;font-size:11.5px;color:#6e6e73}
+.search{display:flex;align-items:center;gap:9px;box-sizing:border-box;height:38px;border-radius:9px;background:#f7f8fa;padding:0 12px}
+.search svg{flex:none;width:14px;height:14px;color:#8a919c}
+.search input{width:100%;border:0;background:transparent;font:inherit;font-size:12px;color:#1d1d1f;outline:none}
+.rows{display:flex;flex-direction:column;flex:1;gap:4px;min-height:0;overflow-y:auto;scrollbar-width:thin}
+.row{display:flex;align-items:flex-start;gap:12px;width:100%;border:0;border-radius:10px;background:transparent;padding:10px 12px;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.row:hover{background:#f7f8fa}
+.row[data-selected]{background:#e8f1ff}
+.code{flex:none;width:52px;padding-top:2px;font-size:10.5px;color:#6e6e73}
+.row[data-selected] .code{color:#0a5dc2;font-weight:600}
+.rowText{display:flex;flex:1;flex-direction:column;gap:2px;min-width:0}
+.rowTitle{overflow:hidden;font-size:12.5px;line-height:19px;color:#1d1d1f;text-overflow:ellipsis;white-space:nowrap}
+.rowOwner{font-size:10.5px;color:#6e6e73}
+.edit{flex:none;width:13px;height:13px;margin-top:3px;color:#6e6e73}
+.empty{margin:0;font-size:12.5px;color:#6e6e73}
+
+.editor{display:flex;flex:1;flex-direction:column;gap:14px;box-sizing:border-box;min-width:0;height:1217px;background:#fff;border-radius:20px;outline:1px solid #e6e9ed;padding:22px 24px}
+.editorHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.editorTitle{margin:0;font-size:17px;font-weight:600}
+.editorMeta{margin:0;font-size:11.5px;color:#6e6e73}
+.source{flex:none;border-radius:9px;background:#f1f3f6;padding:7px 11px;font-size:11px;color:#4f5866}
+.fields{display:flex;flex-direction:column;gap:14px}
+.fieldRow{display:grid;grid-template-columns:320px 320px minmax(0,1fr);gap:16px}
+.fieldRow[data-columns=three]{grid-template-columns:repeat(3,minmax(0,1fr))}
+.fieldRow[data-columns=two]{grid-template-columns:repeat(2,minmax(0,1fr))}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field>span{font-size:11.5px;color:#3c4350}
+.field input,.field select{box-sizing:border-box;width:100%;height:38px;border:0;outline:1px solid #d9dde5;border-radius:9px;background:#f7f8fa;padding:0 12px;font:inherit;font-size:12.5px;color:#1d1d1f}
+.field input:focus,.field select:focus{outline:2px solid #4989d6;background:#fff}
+.field input[readonly]{color:#6e6e73}
+.field textarea{box-sizing:border-box;width:100%;min-height:74px;border:0;outline:1px solid #d9dde5;border-radius:9px;background:#f7f8fa;padding:8px 12px;font:inherit;font-size:12.5px;line-height:1.6;color:#1d1d1f;resize:vertical}
+.field textarea:focus{outline:2px solid #4989d6;background:#fff}
+.fieldError{margin:0;font-size:11.5px;color:#a1443c}
+.choices{display:flex;flex-wrap:wrap;gap:6px}
+.choice{display:inline-flex;align-items:center;gap:7px;height:32px;border:0;border-radius:9px;background:#f7f8fa;padding:0 11px;font:inherit;font-size:12px;color:#3c4350;cursor:pointer}
+.choice[aria-pressed=true]{background:#e8f1ff;font-weight:600;color:#0a5dc2}
+.check{width:12px;height:12px;border-radius:50%;background:#fff;outline:1px solid #d9dde5}
+.choice[aria-pressed=true] .check{background:#007aff;outline-color:#007aff}
+
+.spacer{flex:1}
+.footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto}
+.footerHint{margin:0;font-size:11.5px;color:#6e6e73}
+.footerHint[data-kind=ok]{color:#2f7a44}
+.footerHint[data-kind=error],.footerHint[data-kind=conflict]{color:#a1443c}
+.actions{display:flex;flex:none;gap:8px}
+.cancel,.save{border:0;border-radius:10px;padding:10px 15px;font:inherit;font-size:12.5px;cursor:pointer}
+.cancel{background:#fff;outline:1px solid #d9dde5;color:#4f5866}
+.save{background:#007aff;font-weight:500;color:#fff}
+.save:disabled{opacity:.5;cursor:default}
+
+@media(max-width:1400px){.body{flex-direction:column}.listCard,.editor{width:100%;height:auto}.rows{max-height:50vh}}
+@media(max-width:900px){.fieldRow,.fieldRow[data-columns=three],.fieldRow[data-columns=two]{grid-template-columns:minmax(0,1fr)}}

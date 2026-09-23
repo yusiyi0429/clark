@@ -3,15 +3,19 @@
 import { useLayoutEffect, useRef } from "react";
 import { ArrowLeft, ArrowLeftRight, ChevronRight } from "lucide-react";
 import type { CardRenderProps } from "./registry";
-import { payloadOf, type BattlefieldPayload } from "./payloads";
+import { payloadOf, type BattlefieldPayload, type MissionPayload } from "./payloads";
 import { useBattlefieldDisplay } from "./battlefieldDisplay";
 import s from "@/styles/battlefield-card.module.css";
 
 const URGENCY_DOT: Record<string, string> = { red: "#e34b43", yellow: "#c79624", gray: "#8e8e93" };
 
 /** 正面确认目标与待决策 Issue；背面只展示真实待办与负责人反馈，不显示百分比。 */
-export function BattlefieldCard({ card, onNavigate }: CardRenderProps) {
+export function BattlefieldCard({ card, collection, onNavigate }: CardRenderProps) {
   const payload = payloadOf<BattlefieldPayload>(card);
+  // Mission 数来自同一页面的 Mission Card 集合，不另存汇总；首页始终带全量 Mission。
+  const missionCount = collection.filter(
+    (item) => item.kind === "mission" && payloadOf<MissionPayload>(item).battlefieldIds.includes(payload.battlefieldId),
+  ).length;
   const display = useBattlefieldDisplay();
   const flipped = display.flipped(payload.battlefieldId);
   const frontFlip = useRef<HTMLButtonElement>(null);
@@ -53,6 +57,7 @@ export function BattlefieldCard({ card, onNavigate }: CardRenderProps) {
           </header>
           <div className={s.context}>
             <span className={s.contextOwner}>负责人 · {payload.ownerDisplayName || "待指派"}</span>
+            <span className={s.contextMissions}>Missions · {missionCount}</span>
             {payload.sixMonthOutcome ? <p className={s.outcome}>六个月目标 · {payload.sixMonthOutcome}</p> : null}
           </div>
           {payload.pendingIssues.length ? (

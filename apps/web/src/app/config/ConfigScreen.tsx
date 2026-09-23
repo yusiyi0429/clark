@@ -161,7 +161,12 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
         <button type="button" className={c.back} onClick={() => router.push("/")}>
           <ChevronLeft aria-hidden="true" /> 返回首页
         </button>
-        <span className={c.draft}>配置变更写入业务库并同步 Radar 监测范围</span>
+        <div className={c.topActions}>
+          <button type="button" className={c.secondary} onClick={() => router.push("/config/missions")}>
+            <Flag aria-hidden="true" /> 管理 Mission
+          </button>
+          <span className={c.draft}>配置变更写入业务库并同步 Radar 监测范围</span>
+        </div>
       </nav>
 
       <header className={c.header}>

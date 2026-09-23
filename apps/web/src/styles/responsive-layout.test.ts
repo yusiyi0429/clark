@@ -90,4 +90,19 @@ describe("responsive workspace CSS", () => {
     expect(css("./access.module.css")).toContain("@media (min-width: 561px) {");
     expect(css("./notifications.module.css")).toContain("@media(pointer:coarse){.railLock button{width:42px;height:42px}}");
   });
+
+  it("stacks the Mission pages: 390 筛选/列表、1217 编辑器与 650 侧栏", () => {
+    const overview = css("./mission-overview.module.css");
+    expect(overview).toContain(".filters{flex:none;display:flex;flex-direction:column;gap:16px;box-sizing:border-box;width:390px;height:1106px");
+    expect(overview).toContain("@media(max-width:1100px){.body{flex-direction:column}.filters{width:100%;height:auto}.listCard{height:auto}");
+
+    const detail = css("./mission-detail.module.css");
+    expect(detail).toContain(".sidebar{display:flex;flex:none;flex-direction:column;gap:16px;width:650px;max-width:100%}");
+    expect(detail).toContain("@media(max-width:1280px){.body{flex-direction:column}.sidebar{width:100%}}");
+
+    const management = css("./mission-management.module.css");
+    expect(management).toContain("width:690px;height:1217px");
+    expect(management).toContain("@media(max-width:1400px){.body{flex-direction:column}.listCard,.editor{width:100%;height:auto}");
+    expect(management).toContain(".fieldRow[data-columns=two]{grid-template-columns:repeat(2,minmax(0,1fr))}");
+  });
 });

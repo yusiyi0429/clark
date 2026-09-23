@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Flag } from "lucide-react";
 import type { Card } from "@/lib/api/client";
 import { renderCard } from "@/cards/registry";
-import { payloadOf, type CapabilityPayload, type IssuePayload } from "@/cards/payloads";
+import { payloadOf, type CapabilityPayload, type IssuePayload, type MissionPayload } from "@/cards/payloads";
 import { BattlefieldDisplayProvider, useBattlefieldDisplay } from "@/cards/battlefieldDisplay";
 import b from "@/styles/home-board.module.css";
 import r from "@/styles/radar.module.css";
@@ -36,6 +36,8 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
   const radar = cards.find((card) => card.kind === "radar");
   const battlefields = cards.filter((card) => card.kind === "battlefield");
   const issues = useMemo(() => cards.filter((card) => card.kind === "issue"), [cards]);
+  /** Mission 只在入口显示数量与跳转，不在首页展开；数量从同一份 Card 集合算，不保存汇总。 */
+  const missions = useMemo(() => cards.filter((card) => card.kind === "mission"), [cards]);
 
   const strategy = issues.filter((card) => payloadOf<IssuePayload>(card).location.level === "company");
   const capabilities = issues.filter((card) => payloadOf<IssuePayload>(card).location.level === "capability");
@@ -130,6 +132,10 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
 
       <div className={b.battlefieldToolbar} data-testid="battlefield-toolbar">
         <span>战场</span>
+        <button type="button" className={b.missionEntry} onClick={() => onNavigate("/missions")}>
+          <Flag size={13} aria-hidden="true" />
+          查看 {missions.length} 个 Mission
+        </button>
         <div className={b.modeSwitch} role="group" aria-label="战场展示方式" data-mode={display.mode}>
           <i aria-hidden="true" />
           <button type="button" aria-pressed={display.mode === "decisions"} onClick={() => display.setMode("decisions")}>
@@ -161,6 +167,16 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
                   {item.group ? <small className={b.capabilityCategory}>{item.group}</small> : null}
                 </h3>
                 {item.outcome ? <p className={b.capabilityOutcome}>{item.outcome}</p> : null}
+                {item.code ? (
+                  <button
+                    type="button"
+                    className={b.capabilityMissions}
+                    onClick={() => onNavigate(`/missions?capabilityId=${encodeURIComponent(item.id)}`)}
+                  >
+                    <Flag size={11} aria-hidden="true" />
+                    Mission · {missions.filter((card) => payloadOf<MissionPayload>(card).capabilityId === item.id).length}
+                  </button>
+                ) : null}
                 {item.issues.length ? item.issues.map(issueRow) : <p className={b.empty}>暂无待决策议题</p>}
               </section>
             ))}

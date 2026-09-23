@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
-import type { TBattlefieldManagementResponse, TCapabilityManagementResponse, TStrategyConfigResponse } from "@warmap/contracts";
+import type { TBattlefieldManagementResponse, TCapabilityManagementResponse, TMissionCardPayload, TMissionManagementResponse, TStrategyConfigResponse } from "@warmap/contracts";
 import type { Card } from "./client";
 import { serverApi } from "./client";
 
@@ -43,6 +43,8 @@ export const loadRadarCards = async (cookie: string) => ({
 export const loadSignalCard = (cookie: string, id: string) => load("/api/cards/signals/{id}", cookie, { id });
 export const loadMonthlyPlanCards = (cookie: string) => load("/api/cards/monthly-plans", cookie);
 export const loadMeetingCards = (cookie: string) => load("/api/cards/meetings", cookie);
+export const loadMissionCards = (cookie: string) => load("/api/cards/missions", cookie);
+export const loadMissionCard = (cookie: string, id: string) => load("/api/cards/missions/{id}", cookie, { id });
 
 export type PersonOption = { personId: string; displayName: string; roles: string[] };
 
@@ -82,6 +84,30 @@ export async function loadCapabilityManagement(cookie: string): Promise<TCapabil
   if (response.status === 401) redirect("/access");
   if (!response.ok) throw new Error(`capability management query failed with ${response.status}`);
   return (data as TCapabilityManagementResponse | undefined) ?? { capabilities: [] };
+}
+
+/** Mission 配置页一次读管理投影：列表、筛选与编辑器默认值都来自这一份。 */
+export async function loadMissionManagement(cookie: string): Promise<TMissionManagementResponse> {
+  const { data, response } = await serverApi.GET("/api/config/missions", { headers: { cookie } });
+  if (response.status === 401) redirect("/access");
+  if (!response.ok) throw new Error(`mission management query failed with ${response.status}`);
+  return (data as TMissionManagementResponse | undefined) ?? { missions: [] };
+}
+
+/** 月度计划状态文案：Mission 的周期关系只读同周期 MonthlyPlan，不复制它的字段。 */
+export function monthlyPlanLabel(cards: Card[], period: string): string | null {
+  const card = cards.find((item) => (item.payload as { period?: string } | undefined)?.period === period);
+  const status = (card?.payload as { status?: string } | undefined)?.status;
+  if (!status) return null;
+  return status === "confirmed" ? "已签发" : status === "negotiating" ? "协商中" : "草拟中";
+}
+
+/** Mission 详情：读该 Mission 的 Card（404 由 load 转 notFound）与同周期月度计划状态。 */
+export async function loadMissionDetail(cookie: string, id: string): Promise<{ mission: TMissionCardPayload; planStatus: string | null }> {
+  const [mission, plans] = await Promise.all([loadMissionCard(cookie, id), loadMonthlyPlanCards(cookie)]);
+  const payload = mission.cards[0]?.payload as TMissionCardPayload | undefined;
+  if (!payload) notFound();
+  return { mission: payload, planStatus: monthlyPlanLabel(plans.cards, payload.period) };
 }
 
 /** 关联 Issue 标题需要逐条读取：已经离开待决策区域的 Issue 仍应显示自己的标题。 */

@@ -1,0 +1,35 @@
+/* Mission 详情基线（UpgradeDesign.pen 页面/Mission 详情）：Header + 关系条 + 主区/侧栏。 */
+.meta{display:flex;gap:8px}
+.tag{border-radius:8px;background:#e8f1ff;padding:4px 9px;font-size:11px;font-weight:600;color:#0a5dc2}
+.tag[data-tone=period]{background:#f1f3f6;color:#4f5866}
+.tag[data-tone=active]{background:#e8f6ec;color:#2f7a44}
+.owner{margin:0;font-size:14px;color:#3c4350}
+
+.relations{display:flex;gap:24px;max-width:2448px;box-sizing:border-box;background:#fff;border-radius:16px;outline:1px solid #e6e9ed;padding:16px 22px}
+.relation{display:flex;flex:1;flex-direction:column;gap:3px;min-width:0}
+.relationLabel{margin:0;font-size:10.5px;color:#6e6e73}
+.relationValue{margin:0;font-size:12.5px;color:#0a5dc2}
+.relationValue[data-tone=battlefield]{color:#2f7a44}
+.relationValue[data-tone=plan]{color:#8a6220}
+.relationValue[data-tone=source]{color:#4f5866}
+
+.body{display:flex;align-items:flex-start;gap:18px;max-width:2448px}
+.main{display:flex;flex:1;flex-direction:column;gap:16px;min-width:0}
+.sidebar{display:flex;flex:none;flex-direction:column;gap:16px;width:650px;max-width:100%}
+
+.hero,.section{display:flex;flex-direction:column;gap:8px;box-sizing:border-box;background:#fff;border-radius:18px;outline:1px solid #e6e9ed;padding:16px 20px}
+.hero{border-radius:20px;padding:18px 22px}
+.eyebrow{margin:0;font-size:10.5px;font-weight:600;letter-spacing:1.4px;color:#007aff}
+.outcome{margin:0;font-size:17px;line-height:26px;color:#1d1d1f}
+.why{margin:0;font-size:12.5px;line-height:20px;color:#6e6e73}
+.sectionTitle{margin:0;font-size:14.5px;font-weight:600;color:#1d1d1f}
+.sectionTitle[data-tone=dependency]{color:#0a5dc2}
+.sectionTitle[data-tone=risk]{color:#a1443c}
+.sectionTitle[data-tone=boundary]{color:#8a6220}
+.sectionBody{margin:0;font-size:12.5px;line-height:21px;color:#4f5866}
+.bullets{margin:0;padding-left:18px;font-size:12.5px;line-height:21px;color:#4f5866}
+.milestones{margin:0;font-size:12.5px;line-height:21px;color:#4f5866}
+.source{margin:0;font-size:12.5px;line-height:21px;color:#4f5866;word-break:break-all}
+
+@media(max-width:1280px){.body{flex-direction:column}.sidebar{width:100%}}
+@media(max-width:900px){.relations{flex-wrap:wrap;gap:16px}.relation{flex:1 1 40%}}

@@ -31,8 +31,8 @@ describe("配置页渲染", () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(html).toContain('maxLength="25"');
     expect(html.match(/type="submit"/g)).toHaveLength(5);
-    // 返回首页 + 管理战场 + 管理能力：三个次级入口，都不提交表单
-    expect(html.match(/type="button"/g)).toHaveLength(3);
+    // 返回首页 + 管理 Mission + 管理战场 + 管理能力：四个次级入口，都不提交表单
+    expect(html.match(/type="button"/g)).toHaveLength(4);
   });
 
   it("战场/能力表单按设计收编号、顺序、六个月目标", () => {
