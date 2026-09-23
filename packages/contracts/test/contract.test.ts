@@ -21,7 +21,11 @@ import {
   MeetingConfirmItemInput,
   MeetingDismissItemInput,
   MeetingRevokeEffectInput,
-  MissionValue,
+  MissionAnchor,
+  MissionCardPayload,
+  CreateMissionRequest,
+  MissionEditInput,
+  MissionManagementResponse,
   MonthlyDraftCandidate,
   MonthlyPlanCardPayload,
   MonthlyPlanExport,
@@ -643,7 +647,7 @@ describe("monthly plan public contract", () => {
       ownerId: "person-002",
       ownerDisplayName: "陈珂",
       sixMonthOutcome: "验证渠道结构",
-      missions: [{ code: "01-1", title: "未来组织范式设计与确认" }],
+      missionAnchors: [{ code: "01-1", title: "未来组织范式设计与确认" }],
       period: "2026-06",
       target: "增长战场完成渠道切换",
       pendingIssues: [
@@ -668,17 +672,17 @@ describe("monthly plan public contract", () => {
 });
 
 describe("strategy map config contracts", () => {
-  it("keeps Mission a plain value object with no execution fields", () => {
-    expect(Value.Check(MissionValue, { code: "01-1", title: "未来组织范式设计与确认" })).toBe(true);
-    expect(Value.Check(MissionValue, { code: "01-1", title: "x", status: "done" })).toBe(false);
-    expect(Value.Check(MissionValue, { title: "缺少编号" })).toBe(false);
+  it("keeps battlefield mission anchors a plain value object with no execution fields", () => {
+    expect(Value.Check(MissionAnchor, { code: "01-1", title: "未来组织范式设计与确认" })).toBe(true);
+    expect(Value.Check(MissionAnchor, { code: "01-1", title: "x", status: "done" })).toBe(false);
+    expect(Value.Check(MissionAnchor, { title: "缺少编号" })).toBe(false);
   });
 
   it("models capability support refs as a three-way union", () => {
-    expect(Value.Check(CapabilitySupportRef, { type: "mission", missionCode: "02-1" })).toBe(true);
+    expect(Value.Check(CapabilitySupportRef, { type: "mission-anchor", missionCode: "02-1" })).toBe(true);
     expect(Value.Check(CapabilitySupportRef, { type: "battlefield", battlefieldId: "growth" })).toBe(true);
     expect(Value.Check(CapabilitySupportRef, { type: "all-battlefields" })).toBe(true);
-    expect(Value.Check(CapabilitySupportRef, { type: "mission" })).toBe(false);
+    expect(Value.Check(CapabilitySupportRef, { type: "mission", missionCode: "02-1" })).toBe(false);
     expect(Value.Check(CapabilitySupportRef, { type: "all-battlefields", battlefieldId: "growth" })).toBe(false);
   });
 
@@ -690,7 +694,7 @@ describe("strategy map config contracts", () => {
     expect(Value.Check(CreateBattlefieldRequest, { ...battlefield, ownerId: "" })).toBe(true);
     expect(Value.Check(CreateBattlefieldRequest, {
       ...battlefield,
-      missions: [{ code: "01-1", title: "未来组织范式设计与确认" }],
+      missionAnchors: [{ code: "01-1", title: "未来组织范式设计与确认" }],
     })).toBe(true);
 
     const capability = { code: "02", sortOrder: 20, name: "Re-architecture", sixMonthOutcome: "六个月目标" };
@@ -698,7 +702,7 @@ describe("strategy map config contracts", () => {
     expect(Value.Check(CreateCapabilityRequest, { ...capability, group: "" })).toBe(true);
     expect(Value.Check(CreateCapabilityRequest, {
       ...capability,
-      supportRefs: [{ type: "mission", missionCode: "01-1" }, { type: "all-battlefields" }],
+      supportRefs: [{ type: "mission-anchor", missionCode: "01-1" }, { type: "all-battlefields" }],
     })).toBe(true);
 
     // PATCH 至少一项，且 ownerId/group 允许清空
@@ -723,7 +727,7 @@ describe("strategy map config contracts", () => {
     expect(Value.Check(BattlefieldManagementResponse, {
       battlefields: [{
         id: "growth", version: 1, code: "01", sortOrder: 10, name: "灯塔项目",
-        ownerId: "", ownerDisplayName: "待指派", sixMonthOutcome: "目标", missions: [], pendingIssueCount: 0,
+        ownerId: "", ownerDisplayName: "待指派", sixMonthOutcome: "目标", missionAnchors: [], pendingIssueCount: 0,
       }],
       issues: [],
     })).toBe(true);
@@ -778,5 +782,74 @@ describe("research doc source contract", () => {
     });
     expect(Value.Check(ResearchDoc, withSourceUrl("https://example.com/b"))).toBe(true);
     expect(Value.Check(ResearchDoc, withSourceUrl("file:///repo/apps/api/CompanyMemory.md"))).toBe(false);
+  });
+});
+
+describe("mission entity contracts", () => {
+  const mission = {
+    missionId: "lhr-a-ceo-agent-architecture-quality",
+    code: "LHR-A",
+    period: "2026-09",
+    title: "CEO Agent Architecture & Quality",
+    ownerId: "person-c70ace51",
+    ownerDisplayName: "刘人豪",
+    capabilityId: "agents",
+    capabilityCode: "04",
+    capabilityName: "Agents",
+    battlefieldIds: ["01-灯塔项目"],
+    battlefieldNames: ["01 灯塔项目"],
+    outcome: "推动 CEO Agent 形成模块边界清楚的 M1A 业务链",
+    why: "当前以 Chat 为主",
+    successEvidence: ["模块清单经过确认"],
+    milestones: ["9/23 E2E Quality Gate"],
+    dependencies: "孙铭泽、于斯一",
+    risk: "研发容量不足",
+    boundaries: "不把架构与质量主责解释成独自承担全部开发",
+    sourceRef: "https://tokenking.feishu.cn/docx/UvSrdWhPzoGGtCxE47fcHAPlnic",
+    sourceDocumentId: "UvSrdWhPzoGGtCxE47fcHAPlnic",
+    sourceRevision: 33,
+    sourceTitle: "刘人豪 2026 年 9 月 Mission Card",
+  };
+
+  it("models Mission as a versioned fact without execution fields", () => {
+    expect(Value.Check(MissionCardPayload, mission)).toBe(true);
+    expect(Value.Check(MissionCardPayload, { ...mission, status: "doing" })).toBe(false);
+    expect(Value.Check(MissionCardPayload, { ...mission, progress: 0.5 })).toBe(false);
+    expect(Value.Check(MissionCardPayload, { ...mission, period: "2026/09" })).toBe(false);
+    expect(Value.Check(MissionCardPayload, { ...mission, capabilityId: undefined })).toBe(false);
+  });
+
+  it("requires registered relations and source metadata on first registration", () => {
+    const create = {
+      code: "05-1",
+      period: "2026-09",
+      title: "Clark Ontology & Memory v0.1",
+      ownerId: "person-fixture-001",
+      capabilityId: "e-o",
+      battlefieldIds: ["01-灯塔项目", "03-002-客户"],
+      outcome: "形成可用的本体与记忆服务",
+      sourceRef: "https://tokenking.feishu.cn/docx/IY0ndAzK2okR2yx09pLcyh8KnDf",
+      sourceDocumentId: "IY0ndAzK2okR2yx09pLcyh8KnDf",
+      sourceRevision: 5,
+      sourceTitle: "于斯一 2026 年 9 月 Mission Card",
+    };
+    expect(Value.Check(CreateMissionRequest, create)).toBe(true);
+    expect(Value.Check(CreateMissionRequest, { ...create, why: "因为记忆是 Agent 的前置" })).toBe(true);
+    expect(Value.Check(CreateMissionRequest, { ...create, sourceRevision: 0 })).toBe(false);
+    expect(Value.Check(CreateMissionRequest, { ...create, battlefieldIds: ["01-灯塔项目", "01-灯塔项目"] })).toBe(false);
+    expect(Value.Check(CreateMissionRequest, { ...create, sourceTitle: undefined })).toBe(false);
+  });
+
+  it("keeps mission.edit a non-empty field diff that cannot rewrite source metadata", () => {
+    expect(Value.Check(MissionEditInput, { title: "新标题" })).toBe(true);
+    expect(Value.Check(MissionEditInput, { successEvidence: ["证据"], milestones: ["里程碑"] })).toBe(true);
+    expect(Value.Check(MissionEditInput, {})).toBe(false);
+    expect(Value.Check(MissionEditInput, { sourceRevision: 2 })).toBe(false);
+    expect(Value.Check(MissionEditInput, { period: "2026-10" })).toBe(true);
+  });
+
+  it("projects the mission management page as the mission payload collection", () => {
+    expect(Value.Check(MissionManagementResponse, { missions: [mission] })).toBe(true);
+    expect(Value.Check(MissionManagementResponse, { missions: [mission], extra: 1 })).toBe(false);
   });
 });

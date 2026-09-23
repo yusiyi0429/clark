@@ -20,7 +20,7 @@ const battlefields: TBattlefieldManagementResponse["battlefields"] = [
     ownerId: "",
     ownerDisplayName: "",
     sixMonthOutcome: "",
-    missions: [{ code: "01-1", title: "未来组织范式设计与确认" }],
+    missionAnchors: [{ code: "01-1", title: "未来组织范式设计与确认" }],
     pendingIssueCount: 0,
   },
 ];
@@ -82,10 +82,10 @@ describe("能力管理页 CSS 基线", () => {
 describe("能力编辑弹层提交字段", () => {
   const current = capabilityDraft(capabilities[0]);
 
-  it("规范键区分全部战场 / 战场 / Mission", () => {
+  it("规范键区分全部战场 / 战场 / 战略锚点", () => {
     expect(supportKey({ type: "all-battlefields" })).toBe("all");
     expect(supportKey({ type: "battlefield", battlefieldId: "growth" })).toBe("bf:growth");
-    expect(supportKey({ type: "mission", missionCode: "01-1" })).toBe("m:01-1");
+    expect(supportKey({ type: "mission-anchor", missionCode: "01-1" })).toBe("m:01-1");
   });
 
   it("未改动不发字段，改名去空格，顺序转数字", () => {
@@ -96,10 +96,10 @@ describe("能力编辑弹层提交字段", () => {
   });
 
   it("主要支撑按勾选集合比较：同集合不同顺序不算改动", () => {
-    const refs: TCapabilitySupportRef[] = [{ type: "all-battlefields" }, { type: "mission", missionCode: "01-1" }];
+    const refs: TCapabilitySupportRef[] = [{ type: "all-battlefields" }, { type: "mission-anchor", missionCode: "01-1" }];
     expect(capabilityEditPatch({ ...current, supportRefs: [...refs] }, { ...current, supportRefs: [...refs].reverse() })).toEqual({});
-    expect(capabilityEditPatch(current, { ...current, supportRefs: [{ type: "mission", missionCode: "01-1" }] })).toEqual({
-      supportRefs: [{ type: "mission", missionCode: "01-1" }],
+    expect(capabilityEditPatch(current, { ...current, supportRefs: [{ type: "mission-anchor", missionCode: "01-1" }] })).toEqual({
+      supportRefs: [{ type: "mission-anchor", missionCode: "01-1" }],
     });
   });
 });

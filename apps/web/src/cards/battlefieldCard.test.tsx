@@ -20,7 +20,7 @@ function battlefieldCard(overrides: Record<string, unknown> = {}): Card {
       ownerId: "",
       ownerDisplayName: "",
       sixMonthOutcome: "真正跑通，从目标组织范式设计进入真实经营。",
-      missions: [{ code: "01-1", title: "未来组织范式设计与确认" }],
+      missionAnchors: [{ code: "01-1", title: "未来组织范式设计与确认" }],
       period: null,
       target: null,
       pendingIssues: [{ id: "i1", title: "是否追加东南亚渠道预算 40%", urgency: "red", location: { level: "battlefield", battlefieldId: "growth" } }],

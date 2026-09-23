@@ -85,14 +85,14 @@ describe("CEO 配置页 create 路由", () => {
       expect(card.kind).toBe("battlefield");
       expect(card.objectRef.id).toBe("供应战场");
 
-      const row = await t.sql("SELECT name, code, sort_order, six_month_outcome, owner_id, missions FROM battlefield_config WHERE id = $1", ["供应战场"]);
+      const row = await t.sql("SELECT name, code, sort_order, six_month_outcome, owner_id, mission_anchors FROM battlefield_config WHERE id = $1", ["供应战场"]);
       expect(row).toEqual([{
         name: "供应战场",
         code: "01",
         sort_order: 10,
         six_month_outcome: "锁定关键器件的供应与价格",
         owner_id: "person-fixture-002",
-        missions: [],
+        mission_anchors: [],
       }]);
 
       const duplicate = await t.app.inject({
@@ -404,7 +404,7 @@ describe("CEO 配置页 create 路由", () => {
         method: "POST",
         url: "/api/config/battlefields",
         headers,
-        payload: battlefieldBody("灯塔项目", "01", { missions: [{ code: "01-1", title: "未来组织范式设计与确认" }] }),
+        payload: battlefieldBody("灯塔项目", "01", { missionAnchors: [{ code: "01-1", title: "未来组织范式设计与确认" }] }),
       });
       // 引用该战场与它的 Mission
       await t.app.inject({
@@ -412,7 +412,7 @@ describe("CEO 配置页 create 路由", () => {
         url: "/api/config/capabilities",
         headers,
         payload: capabilityBody("Method", "03", {
-          supportRefs: [{ type: "mission", missionCode: "01-1" }, { type: "battlefield", battlefieldId: "灯塔项目" }, { type: "all-battlefields" }],
+          supportRefs: [{ type: "mission-anchor", missionCode: "01-1" }, { type: "battlefield", battlefieldId: "灯塔项目" }, { type: "all-battlefields" }],
         }),
       });
       // 只引用别的战场：不受影响，version 不动
@@ -460,11 +460,11 @@ describe("CEO 配置页 create 路由", () => {
       expect(body.battlefields).toEqual([
         {
           id: "growth", version: 1, code: "", sortOrder: 0, name: "增长战场", ownerId: "", ownerDisplayName: "",
-          sixMonthOutcome: "验证渠道结构与交付节奏，形成可复制的增长路径。", missions: [], pendingIssueCount: 2,
+          sixMonthOutcome: "验证渠道结构与交付节奏，形成可复制的增长路径。", missionAnchors: [], pendingIssueCount: 2,
         },
         {
           id: "渠道战场", version: 1, code: "02", sortOrder: 20, name: "渠道战场", ownerId: "person-fixture-002",
-          ownerDisplayName: "测试乙", sixMonthOutcome: "渠道战场六个月目标", missions: [], pendingIssueCount: 1,
+          ownerDisplayName: "测试乙", sixMonthOutcome: "渠道战场六个月目标", missionAnchors: [], pendingIssueCount: 1,
         },
       ]);
       const byId = new Map(body.issues.map((issue: { id: string }) => [issue.id, issue]));
@@ -580,7 +580,7 @@ describe("CEO 长期配置与结构化引用", () => {
         url: "/api/config/battlefields",
         headers,
         payload: battlefieldBody("灯塔项目", "01", {
-          missions: [
+          missionAnchors: [
             { code: "01-1", title: "未来组织范式设计与确认" },
             { code: "01-2", title: "CEO Agent 常态化使用" },
           ],
@@ -591,10 +591,10 @@ describe("CEO 长期配置与结构化引用", () => {
         method: "POST",
         url: "/api/config/capabilities",
         headers,
-        payload: capabilityBody("Method", "03", { supportRefs: [{ type: "mission", missionCode: "09-9" }] }),
+        payload: capabilityBody("Method", "03", { supportRefs: [{ type: "mission-anchor", missionCode: "09-9" }] }),
       });
       expect(unknownMission.statusCode).toBe(400);
-      expect(unknownMission.json().code).toBe("UNKNOWN_MISSION_CODE");
+      expect(unknownMission.json().code).toBe("UNKNOWN_MISSION_ANCHOR_CODE");
 
       const unknownBattlefield = await t.app.inject({
         method: "POST",
@@ -610,12 +610,12 @@ describe("CEO 长期配置与结构化引用", () => {
         url: "/api/config/capabilities",
         headers,
         payload: capabilityBody("Method", "03", {
-          supportRefs: [{ type: "mission", missionCode: "01-1" }, { type: "battlefield", battlefieldId: "灯塔项目" }, { type: "all-battlefields" }],
+          supportRefs: [{ type: "mission-anchor", missionCode: "01-1" }, { type: "battlefield", battlefieldId: "灯塔项目" }, { type: "all-battlefields" }],
         }),
       });
       expect(created.statusCode).toBe(201);
       expect(created.json().cards[0].payload.supportRefs).toEqual([
-        { type: "mission", missionCode: "01-1" },
+        { type: "mission-anchor", missionCode: "01-1" },
         { type: "battlefield", battlefieldId: "灯塔项目" },
         { type: "all-battlefields" },
       ]);
@@ -624,12 +624,12 @@ describe("CEO 长期配置与结构化引用", () => {
         method: "PATCH",
         url: "/api/config/capabilities/Method",
         headers,
-        payload: { supportRefs: [{ type: "mission", missionCode: "01-3" }] },
+        payload: { supportRefs: [{ type: "mission-anchor", missionCode: "01-3" }] },
       });
       expect(badPatch.statusCode).toBe(400);
-      expect(badPatch.json().code).toBe("UNKNOWN_MISSION_CODE");
+      expect(badPatch.json().code).toBe("UNKNOWN_MISSION_ANCHOR_CODE");
 
-      // 战场 missions 与 ownerDisplayName 一起投影到 Card 正面
+      // 战场 missionAnchors 与 ownerDisplayName 一起投影到 Card 正面
       const home = await t.app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie: headers.cookie! } });
       const battlefieldCard = home.json().cards.find((candidate: { id: string }) => candidate.id === "battlefield:灯塔项目");
       expect(battlefieldCard.payload).toMatchObject({
@@ -637,7 +637,7 @@ describe("CEO 长期配置与结构化引用", () => {
         sortOrder: 10,
         ownerId: "person-fixture-002",
         ownerDisplayName: "测试乙",
-        missions: [
+        missionAnchors: [
           { code: "01-1", title: "未来组织范式设计与确认" },
           { code: "01-2", title: "CEO Agent 常态化使用" },
         ],
@@ -660,14 +660,14 @@ describe("CEO 配置页编辑路由", () => {
         method: "PATCH",
         url: "/api/config/battlefields/供应战场",
         headers,
-        payload: { name: "供应链战场", code: "05", sortOrder: 50, ownerId: "", sixMonthOutcome: "锁定关键器件", missions: [{ code: "05-1", title: "关键器件寻源" }] },
+        payload: { name: "供应链战场", code: "05", sortOrder: 50, ownerId: "", sixMonthOutcome: "锁定关键器件", missionAnchors: [{ code: "05-1", title: "关键器件寻源" }] },
       });
       expect(patched.statusCode).toBe(200);
       const card = patched.json().cards[0];
       expect(card.objectRef.id).toBe("供应战场");
       expect(card.objectRef.version).toBe(2);
       expect(card.title).toBe("供应链战场");
-      expect(card.payload).toMatchObject({ code: "05", sortOrder: 50, sixMonthOutcome: "锁定关键器件", ownerId: "", ownerDisplayName: "", missions: [{ code: "05-1", title: "关键器件寻源" }] });
+      expect(card.payload).toMatchObject({ code: "05", sortOrder: 50, sixMonthOutcome: "锁定关键器件", ownerId: "", ownerDisplayName: "", missionAnchors: [{ code: "05-1", title: "关键器件寻源" }] });
 
       const rows = await t.sql("SELECT id, version, code, sort_order, name, owner_id, six_month_outcome FROM battlefield_config WHERE id = $1", ["供应战场"]);
       expect(rows[0]).toMatchObject({ id: "供应战场", version: 2, code: "05", sort_order: 50, name: "供应链战场", owner_id: "", six_month_outcome: "锁定关键器件" });
@@ -682,7 +682,7 @@ describe("CEO 配置页编辑路由", () => {
         ownerId: "",
         ownerDisplayName: "",
         sixMonthOutcome: "锁定关键器件",
-        missions: [{ code: "05-1", title: "关键器件寻源" }],
+        missionAnchors: [{ code: "05-1", title: "关键器件寻源" }],
         pendingIssueCount: 0,
       });
 
@@ -814,27 +814,27 @@ describe("Mission code 全表唯一与旧引用清理", () => {
         method: "POST",
         url: "/api/config/battlefields",
         headers,
-        payload: battlefieldBody("灯塔项目", "01", { missions: [{ code: "01-1", title: "A" }, { code: "01-1", title: "B" }] }),
+        payload: battlefieldBody("灯塔项目", "01", { missionAnchors: [{ code: "01-1", title: "A" }, { code: "01-1", title: "B" }] }),
       });
       expect(samePayload.statusCode).toBe(409);
-      expect(samePayload.json().code).toBe("MISSION_CODE_CONFLICT");
+      expect(samePayload.json().code).toBe("MISSION_ANCHOR_CODE_CONFLICT");
 
       expect(
         (await t.app.inject({
           method: "POST",
           url: "/api/config/battlefields",
           headers,
-          payload: battlefieldBody("灯塔项目", "01", { missions: [{ code: "01-1", title: "A" }] }),
+          payload: battlefieldBody("灯塔项目", "01", { missionAnchors: [{ code: "01-1", title: "A" }] }),
         })).statusCode,
       ).toBe(201);
       const cross = await t.app.inject({
         method: "POST",
         url: "/api/config/battlefields",
         headers,
-        payload: battlefieldBody("Token Ops", "02", { missions: [{ code: "01-1", title: "占用同一编号" }] }),
+        payload: battlefieldBody("Token Ops", "02", { missionAnchors: [{ code: "01-1", title: "占用同一编号" }] }),
       });
       expect(cross.statusCode).toBe(409);
-      expect(cross.json().code).toBe("MISSION_CODE_CONFLICT");
+      expect(cross.json().code).toBe("MISSION_ANCHOR_CODE_CONFLICT");
     } finally {
       await t.close();
     }
@@ -848,13 +848,13 @@ describe("Mission code 全表唯一与旧引用清理", () => {
         method: "POST",
         url: "/api/config/battlefields",
         headers,
-        payload: battlefieldBody("灯塔项目", "01", { missions: [{ code: "01-1", title: "未来组织范式" }, { code: "01-2", title: "CEO Agent" }] }),
+        payload: battlefieldBody("灯塔项目", "01", { missionAnchors: [{ code: "01-1", title: "未来组织范式" }, { code: "01-2", title: "CEO Agent" }] }),
       });
       await t.app.inject({
         method: "POST",
         url: "/api/config/battlefields",
         headers,
-        payload: battlefieldBody("Token Ops", "02", { missions: [{ code: "02-1", title: "TokenHub 生产化" }] }),
+        payload: battlefieldBody("Token Ops", "02", { missionAnchors: [{ code: "02-1", title: "TokenHub 生产化" }] }),
       });
       const capability = await t.app.inject({
         method: "POST",
@@ -862,8 +862,8 @@ describe("Mission code 全表唯一与旧引用清理", () => {
         headers,
         payload: capabilityBody("Method", "03", {
           supportRefs: [
-            { type: "mission", missionCode: "01-1" },
-            { type: "mission", missionCode: "01-2" },
+            { type: "mission-anchor", missionCode: "01-1" },
+            { type: "mission-anchor", missionCode: "01-2" },
             { type: "battlefield", battlefieldId: "灯塔项目" },
             { type: "all-battlefields" },
           ],
@@ -875,35 +875,35 @@ describe("Mission code 全表唯一与旧引用清理", () => {
         method: "PATCH",
         url: "/api/config/battlefields/token-ops",
         headers,
-        payload: { missions: [{ code: "02-1", title: "TokenHub 生产化" }, { code: "01-1", title: "撞号" }] },
+        payload: { missionAnchors: [{ code: "02-1", title: "TokenHub 生产化" }, { code: "01-1", title: "撞号" }] },
       });
       expect(crossConflict.statusCode).toBe(409);
-      expect(crossConflict.json().code).toBe("MISSION_CODE_CONFLICT");
+      expect(crossConflict.json().code).toBe("MISSION_ANCHOR_CODE_CONFLICT");
 
       const sameConflict = await t.app.inject({
         method: "PATCH",
         url: "/api/config/battlefields/token-ops",
         headers,
-        payload: { missions: [{ code: "02-1", title: "A" }, { code: "02-1", title: "B" }] },
+        payload: { missionAnchors: [{ code: "02-1", title: "A" }, { code: "02-1", title: "B" }] },
       });
       expect(sameConflict.statusCode).toBe(409);
-      expect(sameConflict.json().code).toBe("MISSION_CODE_CONFLICT");
+      expect(sameConflict.json().code).toBe("MISSION_ANCHOR_CODE_CONFLICT");
 
       const patched = await t.app.inject({
         method: "PATCH",
         url: "/api/config/battlefields/灯塔项目",
         headers,
-        payload: { missions: [{ code: "01-1", title: "未来组织范式" }] },
+        payload: { missionAnchors: [{ code: "01-1", title: "未来组织范式" }] },
       });
       expect(patched.statusCode).toBe(200);
       expect(patched.json().cards[0].objectRef.version).toBe(2);
-      expect(patched.json().cards[0].payload.missions).toEqual([{ code: "01-1", title: "未来组织范式" }]);
+      expect(patched.json().cards[0].payload.missionAnchors).toEqual([{ code: "01-1", title: "未来组织范式" }]);
 
       const capRow = await t.sql("SELECT version, support_refs FROM capability_config WHERE id = $1", ["method"]);
       expect(capRow[0]).toEqual({
         version: 2,
         support_refs: [
-          { type: "mission", missionCode: "01-1" },
+          { type: "mission-anchor", missionCode: "01-1" },
           { type: "battlefield", battlefieldId: "灯塔项目" },
           { type: "all-battlefields" },
         ],

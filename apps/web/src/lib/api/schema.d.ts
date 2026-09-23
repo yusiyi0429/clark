@@ -208,6 +208,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cards/missions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mission Card 列表：按 period desc、能力域 sortOrder、code 排序 */
+        get: operations["listMissionCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/missions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 单个 Mission Card：详情页与编辑锚点 */
+        get: operations["getMissionCard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/radar": {
         parameters: {
             query?: never;
@@ -467,6 +501,24 @@ export interface paths {
         head?: never;
         /** CEO 编辑能力（部分字段，id 稳定，version+1，改名 slug 冲突 409） */
         patch: operations["patchCapability"];
+        trace?: never;
+    };
+    "/api/config/missions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mission 配置页一次投影（只读 Mission 正面集合） */
+        get: operations["getMissionManagement"];
+        put?: never;
+        /** CEO 首次登记 Mission（slug id，写入 Organization Fact） */
+        post: operations["createMission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/config/issues": {
@@ -1107,7 +1159,7 @@ export interface components {
             name: string;
             ownerId?: string;
             sixMonthOutcome: string;
-            missions?: {
+            missionAnchors?: {
                 code: string;
                 title: string;
             }[];
@@ -1118,7 +1170,7 @@ export interface components {
             name?: string;
             ownerId?: string;
             sixMonthOutcome?: string;
-            missions?: {
+            missionAnchors?: {
                 code: string;
                 title: string;
             }[];
@@ -1131,7 +1183,7 @@ export interface components {
             sixMonthOutcome: string;
             supportRefs?: ({
                 /** @constant */
-                type: "mission";
+                type: "mission-anchor";
                 missionCode: string;
             } | {
                 /** @constant */
@@ -1150,7 +1202,7 @@ export interface components {
             sixMonthOutcome?: string;
             supportRefs?: ({
                 /** @constant */
-                type: "mission";
+                type: "mission-anchor";
                 missionCode: string;
             } | {
                 /** @constant */
@@ -1168,13 +1220,97 @@ export interface components {
         PatchStrategyConfigRequest: {
             ltco: string;
         };
-        MissionValue: {
+        MissionAnchor: {
             code: string;
             title: string;
         };
+        MissionCardPayload: {
+            missionId: string;
+            code: string;
+            period: string;
+            title: string;
+            ownerId: string;
+            ownerDisplayName: string;
+            capabilityId: string;
+            capabilityCode: string;
+            capabilityName: string;
+            battlefieldIds: string[];
+            battlefieldNames: string[];
+            outcome: string;
+            why: string;
+            successEvidence: string[];
+            milestones: string[];
+            dependencies: string;
+            risk: string;
+            boundaries: string;
+            sourceRef: string;
+            sourceDocumentId: string;
+            sourceRevision: number;
+            sourceTitle: string;
+        };
+        CreateMissionRequest: {
+            code: string;
+            period: string;
+            title: string;
+            ownerId: string;
+            capabilityId: string;
+            battlefieldIds: string[];
+            outcome: string;
+            why?: string;
+            successEvidence?: string[];
+            milestones?: string[];
+            dependencies?: string;
+            risk?: string;
+            boundaries?: string;
+            sourceRef: string;
+            sourceDocumentId: string;
+            sourceRevision: number;
+            sourceTitle: string;
+        };
+        MissionEditInput: {
+            code?: string;
+            period?: string;
+            title?: string;
+            ownerId?: string;
+            capabilityId?: string;
+            battlefieldIds?: string[];
+            outcome?: string;
+            why?: string;
+            successEvidence?: string[];
+            milestones?: string[];
+            dependencies?: string;
+            risk?: string;
+            boundaries?: string;
+        };
+        MissionManagementResponse: {
+            missions: {
+                missionId: string;
+                code: string;
+                period: string;
+                title: string;
+                ownerId: string;
+                ownerDisplayName: string;
+                capabilityId: string;
+                capabilityCode: string;
+                capabilityName: string;
+                battlefieldIds: string[];
+                battlefieldNames: string[];
+                outcome: string;
+                why: string;
+                successEvidence: string[];
+                milestones: string[];
+                dependencies: string;
+                risk: string;
+                boundaries: string;
+                sourceRef: string;
+                sourceDocumentId: string;
+                sourceRevision: number;
+                sourceTitle: string;
+            }[];
+        };
         CapabilitySupportRef: {
             /** @constant */
-            type: "mission";
+            type: "mission-anchor";
             missionCode: string;
         } | {
             /** @constant */
@@ -1195,7 +1331,7 @@ export interface components {
                 sixMonthOutcome: string;
                 supportRefs: ({
                     /** @constant */
-                    type: "mission";
+                    type: "mission-anchor";
                     missionCode: string;
                 } | {
                     /** @constant */
@@ -1231,7 +1367,7 @@ export interface components {
                 ownerId: string;
                 ownerDisplayName: string;
                 sixMonthOutcome: string;
-                missions: {
+                missionAnchors: {
                     code: string;
                     title: string;
                 }[];
@@ -1526,7 +1662,7 @@ export interface components {
             ownerId: string;
             ownerDisplayName: string;
             sixMonthOutcome: string;
-            missions: {
+            missionAnchors: {
                 code: string;
                 title: string;
             }[];
@@ -2102,6 +2238,75 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMissionCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mission Cards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMissionCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mission Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3029,6 +3234,86 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMissionManagement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mission 列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissionManagementResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createMission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMissionRequest"];
+            };
+        };
+        responses: {
+            /** @description 新登记的 Mission Card */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

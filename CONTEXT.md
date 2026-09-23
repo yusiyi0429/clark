@@ -65,7 +65,7 @@ CEO 维护的跨月公司长期目标（LTCO）。它是长期配置而不是当
 _Avoid_: 当月公司结果、月度计划草稿
 
 **Battlefield Config**:
-CEO 维护的长期战场注册表：稳定 id、显示编号 code、排序 sortOrder、名称、负责人 personId、六个月目标与内嵌 Mission 列表。当月战场结果只属于 MonthlyPlan。
+CEO 维护的长期战场注册表：稳定 id、显示编号 code、排序 sortOrder、名称、负责人 personId、六个月目标与内嵌战略锚点列表 `missionAnchors`。锚点是战场图上的只读映射，不是 Mission 实体；当月战场结果只属于 MonthlyPlan。
 _Avoid_: 当月战场结果、任务分组、项目管理单元
 
 **Capability Config**:
@@ -73,8 +73,12 @@ CEO 维护的长期公司能力注册表：稳定 id、显示编号 code、排�
 _Avoid_: 技能库、执行能力评估、当月能力结果
 
 **Mission**:
-战场配置里的只读战略映射值对象 `{code,title}`，可被能力的主要支撑引用。它没有表、状态机、进度、负责人或执行 UI。
-_Avoid_: Mission 执行实体、任务、里程碑、可跟踪进度
+CEO 确认的版本化 Organization Fact，WarMap 的第七个核心实体：稳定 id、周期 period、唯一 DRI personId、一个主要能力域 capabilityId、零到多个战场 battlefieldIds、Outcome、Why、成功证据、关键里程碑、关键依赖、风险、边界与飞书来源元数据。Mission 通过 period 承接同周期 MonthlyPlan 的 PCO，执行过程留在外部 DRI 流程；它不承载 Task、Activity、执行状态或完成率。编辑走 opaque Action `mission.edit`（version 锚 + fingerprint 幂等），首次导入走 CEO 配置写入。
+_Avoid_: 任务、Activity、项目、完成率、执行看板、Mission 进度条
+
+**Mission Anchor**:
+战场配置内嵌的只读战略映射 `{code,title}`，可被能力的主要支撑引用（`{type:"mission-anchor",missionCode}`）。它没有表、状态机、负责人或执行 UI，与 Mission 实体是两套命名空间。
+_Avoid_: Mission、Mission 执行实体、可跟踪进度
 
 **Candidate Material**:
 Agent 生成并可由系统自动保存的研究、预审或会后草稿；它不是已生效的组织事实。ResearchDoc 不被对话局部修改；只有 pending Issue 可由 CEO 显式重跑预研并整份替换当前版本。

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { QueryResult } from "pg";
-import type { TCapabilityCardPayload, TCapabilityManagementResponse, TCapabilitySupportRef, TCard, TMissionValue } from "@warmap/contracts";
+import type { TCapabilityCardPayload, TCapabilityManagementResponse, TCapabilitySupportRef, TCard, TMissionAnchor } from "@warmap/contracts";
 import { hasNameSlugConflict, slugId } from "./slug.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
@@ -73,18 +73,18 @@ export async function listCapabilityCards(q: Query): Promise<TCard[]> {
   });
 }
 
-export type SupportRefValidation = { ok: true } | { ok: false; code: "UNKNOWN_MISSION_CODE" | "UNKNOWN_BATTLEFIELD"; message: string };
+export type SupportRefValidation = { ok: true } | { ok: false; code: "UNKNOWN_MISSION_ANCHOR_CODE" | "UNKNOWN_BATTLEFIELD"; message: string };
 
-/** 主要支撑必须命中已登记战场或该战场的 Mission code；不复制被引用对象的标题。 */
+/** 主要支撑必须命中已登记战场或该战场的战略锚点 code；不复制被引用对象的标题。 */
 export async function validateSupportRefs(q: Query, refs: TCapabilitySupportRef[]): Promise<SupportRefValidation> {
   if (refs.length === 0) return { ok: true };
-  const rows = await q("SELECT id, missions FROM battlefield_config");
-  const battlefields = rows.rows as { id: string; missions: TMissionValue[] }[];
+  const rows = await q("SELECT id, mission_anchors AS \"missionAnchors\" FROM battlefield_config");
+  const battlefields = rows.rows as { id: string; missionAnchors: TMissionAnchor[] }[];
   const ids = new Set(battlefields.map((row) => row.id));
-  const missionCodes = new Set(battlefields.flatMap((row) => (row.missions ?? []).map((mission) => mission.code)));
+  const missionCodes = new Set(battlefields.flatMap((row) => (row.missionAnchors ?? []).map((mission) => mission.code)));
   for (const ref of refs) {
-    if (ref.type === "mission" && !missionCodes.has(ref.missionCode)) {
-      return { ok: false, code: "UNKNOWN_MISSION_CODE", message: `Mission ${ref.missionCode} 不存在` };
+    if (ref.type === "mission-anchor" && !missionCodes.has(ref.missionCode)) {
+      return { ok: false, code: "UNKNOWN_MISSION_ANCHOR_CODE", message: `战略锚点 ${ref.missionCode} 不存在` };
     }
     if (ref.type === "battlefield" && !ids.has(ref.battlefieldId)) {
       return { ok: false, code: "UNKNOWN_BATTLEFIELD", message: `战场 ${ref.battlefieldId} 不存在` };

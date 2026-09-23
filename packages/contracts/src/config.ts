@@ -6,8 +6,8 @@ import { IssueUrgencyLevel } from "./issues.js";
  * 表单是确定性输入，但仍走 CEO session 鉴权；这些路由创建新对象，没有既有 Card version 可锚，所以不是 opaque-action。
  */
 
-/** 战场配置里的 Mission 是只读战略映射值对象：没有表、状态机、进度或执行 UI。 */
-export const MissionValue = Type.Object(
+/** 战场战略锚点是只读映射值对象：没有表、状态机、负责人或执行 UI；真正的 Mission 是独立实体（见 missions.ts）。 */
+export const MissionAnchor = Type.Object(
   {
     code: Type.String({ minLength: 1, maxLength: 40 }),
     title: Type.String({ minLength: 1, maxLength: 200 }),
@@ -15,10 +15,10 @@ export const MissionValue = Type.Object(
   { additionalProperties: false },
 );
 
-/** 能力的主要支撑：单个 Mission、单个战场，或全部战场。 */
+/** 能力的主要支撑：单个战场战略锚点、单个战场，或全部战场。 */
 export const CapabilitySupportRef = Type.Union([
   Type.Object(
-    { type: Type.Literal("mission"), missionCode: Type.String({ minLength: 1, maxLength: 40 }) },
+    { type: Type.Literal("mission-anchor"), missionCode: Type.String({ minLength: 1, maxLength: 40 }) },
     { additionalProperties: false },
   ),
   Type.Object(
@@ -30,7 +30,7 @@ export const CapabilitySupportRef = Type.Union([
 
 const DisplayCode = Type.String({ minLength: 1, maxLength: 40 });
 const SortOrder = Type.Integer({ minimum: 0, maximum: 9999 });
-const Missions = Type.Array(MissionValue, { maxItems: 20 });
+const MissionAnchors = Type.Array(MissionAnchor, { maxItems: 20 });
 const SupportRefs = Type.Array(CapabilitySupportRef, { maxItems: 50 });
 
 /** CEO 新建战场：code/sortOrder 与名称独立，ownerId 可省略（界面显示“待指派”）。 */
@@ -41,7 +41,7 @@ export const CreateBattlefieldRequest = Type.Object(
     name: Type.String({ minLength: 1, maxLength: 100 }),
     ownerId: Type.Optional(Type.String({ maxLength: 200 })),
     sixMonthOutcome: Type.String({ minLength: 1, maxLength: 4000 }),
-    missions: Type.Optional(Missions),
+    missionAnchors: Type.Optional(MissionAnchors),
   },
   { additionalProperties: false },
 );
@@ -70,7 +70,7 @@ export const PatchBattlefieldRequest = Type.Object(
     name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
     ownerId: Type.Optional(Type.String({ maxLength: 200 })),
     sixMonthOutcome: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
-    missions: Type.Optional(Missions),
+    missionAnchors: Type.Optional(MissionAnchors),
   },
   { additionalProperties: false, minProperties: 1 },
 );
@@ -141,7 +141,7 @@ export const BattlefieldManagementResponse = Type.Object(
           /** 投影时现查 company-people.v1；空 ownerId 显示为“待指派”。 */
           ownerDisplayName: Type.String(),
           sixMonthOutcome: Type.String(),
-          missions: Missions,
+          missionAnchors: MissionAnchors,
           pendingIssueCount: Type.Integer({ minimum: 0 }),
         },
         { additionalProperties: false },
@@ -199,7 +199,7 @@ export const CreateConfigMeetingRequest = Type.Object(
   { additionalProperties: false },
 );
 
-export type TMissionValue = Static<typeof MissionValue>;
+export type TMissionAnchor = Static<typeof MissionAnchor>;
 export type TCapabilitySupportRef = Static<typeof CapabilitySupportRef>;
 export type TCreateBattlefieldRequest = Static<typeof CreateBattlefieldRequest>;
 export type TPatchBattlefieldRequest = Static<typeof PatchBattlefieldRequest>;

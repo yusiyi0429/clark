@@ -48,14 +48,14 @@ export function capabilityEditPatch(current: CapabilityDraft, draft: CapabilityD
   return patch;
 }
 
-/** 勾选清单：全部战场 + 每个已登记战场 + 每个战场 Mission；同一 Mission code 只出现一次。 */
+/** 勾选清单：全部战场 + 每个已登记战场 + 每个战场战略锚点；同一锚点 code 只出现一次。 */
 function supportOptions(battlefields: Battlefield[]): { key: string; label: string; ref: TCapabilitySupportRef }[] {
   const options = new Map<string, { key: string; label: string; ref: TCapabilitySupportRef }>();
   options.set("all", { key: "all", label: "全部战场", ref: { type: "all-battlefields" } });
   for (const battlefield of battlefields) {
     options.set(`bf:${battlefield.id}`, { key: `bf:${battlefield.id}`, label: battlefield.name, ref: { type: "battlefield", battlefieldId: battlefield.id } });
-    for (const mission of battlefield.missions) {
-      options.set(`m:${mission.code}`, { key: `m:${mission.code}`, label: `${mission.code} ${mission.title}`, ref: { type: "mission", missionCode: mission.code } });
+    for (const mission of battlefield.missionAnchors) {
+      options.set(`m:${mission.code}`, { key: `m:${mission.code}`, label: `${mission.code} ${mission.title}`, ref: { type: "mission-anchor", missionCode: mission.code } });
     }
   }
   return [...options.values()];
@@ -172,7 +172,7 @@ export function CapabilityScreen({ capabilities, battlefields }: TCapabilityMana
               <textarea value={draft.sixMonthOutcome} onChange={(event) => setDraft({ ...draft, sixMonthOutcome: event.target.value })} />
             </label>
             <div className={g.field}>
-              <span>主要支撑（Mission / 战场）</span>
+              <span>主要支撑（战略锚点 / 战场）</span>
               <div className={g.support} role="group" aria-label="主要支撑">
                 {options.map((option) => (
                   <label key={option.key} className={g.supportRow}>

@@ -573,7 +573,7 @@ describe("MonthlyPlan DRI export boundary", () => {
 });
 
 describe("MonthlyPlan signing boundaries", () => {
-  it("does not create Mission/Todo entities, percentages, or write CompanyMemory", async () => {
+  it("does not create Todo entities, percentages, or write CompanyMemory", async () => {
     const t = await appWith();
     try {
       const planId = await readyPlan(t);
@@ -583,7 +583,7 @@ describe("MonthlyPlan signing boundaries", () => {
 
       const tables = await t.sql(
         `SELECT table_name FROM information_schema.tables
-          WHERE table_schema = 'public' AND lower(table_name) IN ('missions','mission','todos','todo','battlefield_progress')`,
+          WHERE table_schema = 'public' AND lower(table_name) IN ('todos','todo','battlefield_progress')`,
       );
       expect(tables).toEqual([]);
 

@@ -3,7 +3,7 @@ import type { Pool, QueryResult } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import {
   MonthlyDraftCandidate,
-  type TMissionValue,
+  type TMissionAnchor,
   type TMonthlyDraftCandidate,
   type TMonthlyPlanFeedback,
   type TMonthlyPlanTodo,
@@ -35,8 +35,8 @@ export type MonthlyDraftAgentInput = {
   capabilities: { capabilityId: string; name: string; sixMonthOutcome: string }[];
   /** Company LTCO：长期目标，是本月公司结果的长期约束，不作为当月结果原样复制。 */
   ltco: string;
-  /** 按 sortOrder 的战场长期配置（含 Mission）：本月战场结果的长期约束，不作为当月结果原样复制。 */
-  battlefields: { battlefieldId: string; code: string; name: string; sixMonthOutcome: string; missions: TMissionValue[] }[];
+  /** 按 sortOrder 的战场长期配置（含战略锚点）：本月战场结果的长期约束，不作为当月结果原样复制。 */
+  battlefields: { battlefieldId: string; code: string; name: string; sixMonthOutcome: string; missionAnchors: TMissionAnchor[] }[];
   companyMemory: { sectionId: string; title: string; sourceRef: string; passages: { id: string; text: string; sourceRef: string }[] }[];
 };
 
@@ -162,15 +162,15 @@ export function createMonthlyPlanService({
         },
       ),
       ltco: ((await q("SELECT ltco FROM company_strategy_config WHERE id = 'default'")).rows[0]?.ltco as string | undefined) ?? "",
-      battlefields: (await q("SELECT id, code, name, six_month_outcome, missions FROM battlefield_config ORDER BY sort_order, code, id")).rows.map(
+      battlefields: (await q("SELECT id, code, name, six_month_outcome, mission_anchors AS \"missionAnchors\" FROM battlefield_config ORDER BY sort_order, code, id")).rows.map(
         (row) => {
-          const battlefield = row as { id: string; code: string; name: string; six_month_outcome: string; missions: TMissionValue[] };
+          const battlefield = row as { id: string; code: string; name: string; six_month_outcome: string; missionAnchors: TMissionAnchor[] };
           return {
             battlefieldId: battlefield.id,
             code: battlefield.code,
             name: battlefield.name,
             sixMonthOutcome: battlefield.six_month_outcome,
-            missions: battlefield.missions ?? [],
+            missionAnchors: battlefield.missionAnchors ?? [],
           };
         },
       ),

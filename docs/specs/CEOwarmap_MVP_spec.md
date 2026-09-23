@@ -19,7 +19,7 @@ CEO 需要的是单公司、单 CEO、桌面 Web 决策驾驶舱。系统必须�
 
 建立前后端分离的 Monorepo。新的 Web 只渲染类型化 Card、保持现有 CEO WarMap 的像素级交互并提交后端提供的 Action；独立 TypeScript API 拥有业务对象、状态迁移、鉴权、调度、Pi Runtime、CompanyMemory MCP、外部导入和 PostgreSQL 持久化。
 
-系统保留六个实体：Issue、Signal、Meeting、MeetingOutcome、MonthlyPlan 和 Conversation；保留 RadarConfig、CompanyStrategyConfig、BattlefieldConfig 与 CapabilityConfig 长期配置。通知、战场正反面、Radar 态势和 MeetingOutcome 处理进度均由业务对象投影，不建立重复对象。
+系统保留七个实体：Issue、Signal、Meeting、MeetingOutcome、MonthlyPlan、Conversation 和 Mission；保留 RadarConfig、CompanyStrategyConfig、BattlefieldConfig 与 CapabilityConfig 长期配置。通知、战场正反面、Radar 态势和 MeetingOutcome 处理进度均由业务对象投影，不建立重复对象。
 
 Radar 每日自动扫描并允许手动补扫。达到确定性门槛的 Signal 自动创建 pending Issue 并立即展示，不增加 CEO 二次“形成议题”操作。所有 Issue 自动执行唯一深度的预研；CEO 可以直接决定，也可以加入 Meeting。Meeting 使用会前预审和严格的结构化 Transcript，MeetingOutcome 中的决定、普通待办、CEO 判断与复议条件由 CEO 逐项确认或忽略，确认后立即产生精确可撤回的效果。MonthlyPlan 每月自动装配，经外部 DRI 反馈和 CEO 签发后生效。
 
@@ -184,9 +184,10 @@ Pi SDK 提供 Chat agent loop、自定义 Web Search、Session 和 compaction。
 
 ### 领域模型
 
-- 保留 Issue、Signal、Meeting、MeetingOutcome、MonthlyPlan 和 Conversation 六个实体。
+- 保留 Issue、Signal、Meeting、MeetingOutcome、MonthlyPlan、Conversation 和 Mission 七个实体。
 - 保留 RadarConfig、CompanyStrategyConfig、BattlefieldConfig 和 CapabilityConfig 长期配置。
-- 长期配置保存公司 LTCO、战场/能力六个月目标与 Mission 值对象；当月结果只属于 MonthlyPlan。
+- 长期配置保存公司 LTCO、战场/能力六个月目标与战场战略锚点 `missionAnchors`；当月结果只属于 MonthlyPlan。
+- Mission 是版本化 Organization Fact：稳定 id、周期、唯一 DRI、一个主要能力域、零到多个战场、Outcome、Why、证据/里程碑/依赖/风险/边界与来源元数据；通过 period 承接同周期 MonthlyPlan 的 PCO，不保存执行状态或完成率。
 - Notification、Radar 态势、战场正反面和 Outcome 处理进度均为投影。
 - Research、Receipt、Preflight、Transcript、review 状态、todo 和引用快照均为内嵌结构。
 - Issue 来源仅限 Radar 与 DRI。
@@ -255,7 +256,7 @@ Pi SDK 提供 Chat agent loop、自定义 Web Search、Session 和 compaction。
 - todo 与叙述性 feedback 可带 battlefieldId；战场背面按该字段投影，不能通过 owner 反推。
 - DRI todo-feedback 只追加文本、证据和 observedAt，不修改 todo 执行状态。
 - DRI 反馈进入同一个计划，不建立第二份通知草稿。
-- 月度工作使用普通 todo，不使用 Mission 执行实体；Mission 只作为战场配置中的只读战略映射值对象。
+- 月度工作使用普通 todo，不使用 Mission 执行实体；Mission 只承载周期结果承诺与关系，不跟踪执行状态。
 - WarMap 不为 todo 建立执行生命周期。
 - 只有 CEO 可以签发计划。
 - 签发后刷新战场目标和 Radar 基础 anchors，但不直接更新 CompanyMemory。
@@ -355,7 +356,7 @@ Pi SDK 提供 Chat agent loop、自定义 Web Search、Session 和 compaction。
 - 多公司租户。
 - 多 CEO 审批人或基于角色的审批链。
 - DRI、CoAgent、秘书或 operator Web 工作区。
-- 项目管理、任务执行、todo 状态跟踪或 Mission 执行管理（Mission 仅作为战场配置的只读值对象）。
+- 项目管理、任务执行、todo 状态跟踪或 Mission 执行管理（Mission 只承载周期结果承诺与关系，不承载 Task/Activity 与执行状态）。
 - 日历同步或外部会议系统同步。
 - 录音、ASR、说话人分离、说话人映射和 Transcript 格式转换。
 - 移动 Web 验收和原生应用。
@@ -384,7 +385,7 @@ Pi SDK 提供 Chat agent loop、自定义 Web Search、Session 和 compaction。
 
 - 产品意图和领域语言已记录在项目词表中，架构取舍已记录为 ADR。已被替代的 Runtime 决策只保留历史意义，不得作为当前实现依据。
 - 结构化 Transcript 模板已经确定，并保持为 MVP 唯一导入契约。
-- 目标设计附有技术架构图、六实体生命周期图和四张边界清晰的时序图，分别覆盖 Radar 升级、预研到决定、Meeting 准备与抽取、会后逐项确认。
+- 目标设计附有技术架构图、六实体生命周期图和四张边界清晰的时序图，分别覆盖 Radar 升级、预研到决定、Meeting 准备与抽取、会后逐项确认；Mission 没有状态机，只出现在业务对象关系图而不进入生命周期图。
 - 时序图有意拆分，避免压缩成不可读的单张长图。
 - Pi 已通过当前 OpenAI-compatible Responses 端点的真实 Tool loop、手动 compaction 和 Session entries JSON round-trip 恢复验证。
 - 一个 Web Search Provider、一个公众号账号级渠道和 heavy 模型槽位仍需实施 PoC。PoC 未完成会阻止对应验收旅程，但不会重新打开产品意图。

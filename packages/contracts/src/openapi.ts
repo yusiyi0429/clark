@@ -20,7 +20,11 @@ import {
   PatchCapabilityRequest,
   StrategyConfigResponse,
   PatchStrategyConfigRequest,
-  MissionValue,
+  MissionAnchor,
+  MissionCardPayload,
+  CreateMissionRequest,
+  MissionEditInput,
+  MissionManagementResponse,
   CapabilitySupportRef,
   CapabilityManagementResponse,
   CreateCeoIssueRequest,
@@ -236,6 +240,28 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: {
             "200": { description: "Battlefield Cards", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
             "401": errorResponse,
+          },
+        },
+      },
+      "/api/cards/missions": {
+        get: {
+          operationId: "listMissionCards",
+          summary: "Mission Card 列表：按 period desc、能力域 sortOrder、code 排序",
+          responses: {
+            "200": { description: "Mission Cards", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/cards/missions/{id}": {
+        get: {
+          operationId: "getMissionCard",
+          summary: "单个 Mission Card：详情页与编辑锚点",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Mission Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
           },
         },
       },
@@ -506,6 +532,27 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "401": errorResponse,
             "404": errorResponse,
             "409": errorResponse,
+          },
+        },
+      },
+      "/api/config/missions": {
+        post: {
+          operationId: "createMission",
+          summary: "CEO 首次登记 Mission（slug id，写入 Organization Fact）",
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreateMissionRequest" }),
+          responses: {
+            "201": { description: "新登记的 Mission Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "409": errorResponse,
+          },
+        },
+        get: {
+          operationId: "getMissionManagement",
+          summary: "Mission 配置页一次投影（只读 Mission 正面集合）",
+          responses: {
+            "200": { description: "Mission 列表", content: { "application/json": { schema: { $ref: "#/components/schemas/MissionManagementResponse" } } } },
+            "401": errorResponse,
           },
         },
       },
@@ -920,7 +967,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         PatchCapabilityRequest: PatchCapabilityRequest as JsonSchema,
         StrategyConfigResponse: StrategyConfigResponse as JsonSchema,
         PatchStrategyConfigRequest: PatchStrategyConfigRequest as JsonSchema,
-        MissionValue: MissionValue as JsonSchema,
+        MissionAnchor: MissionAnchor as JsonSchema,
+        MissionCardPayload: MissionCardPayload as JsonSchema,
+        CreateMissionRequest: CreateMissionRequest as JsonSchema,
+        MissionEditInput: MissionEditInput as JsonSchema,
+        MissionManagementResponse: MissionManagementResponse as JsonSchema,
         CapabilitySupportRef: CapabilitySupportRef as JsonSchema,
         CapabilityManagementResponse: CapabilityManagementResponse as JsonSchema,
         CreateCeoIssueRequest: CreateCeoIssueRequest as JsonSchema,

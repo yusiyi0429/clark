@@ -1,6 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { IssueLocation, IssueUrgencyLevel } from "./issues.js";
-import { MissionValue } from "./config.js";
+import { MissionAnchor } from "./config.js";
 import { MonthlyPlanExportStatus } from "./monthlyPlans.js";
 
 /** BattlefieldConfig 只作为 battlefieldId 的确定性校验来源；本文件只定义战场 Card 投影。 */
@@ -50,7 +50,7 @@ export const BattlefieldCardPayload = Type.Object(
     /** 投影时现查 company-people.v1；空 ownerId 显示为“待指派”。 */
     ownerDisplayName: Type.String(),
     sixMonthOutcome: Type.String(),
-    missions: Type.Array(MissionValue),
+    missionAnchors: Type.Array(MissionAnchor),
     /** 当前公司月已签发计划的 period；没有 confirmed 计划时为 null。 */
     period: Type.Union([Type.String(), Type.Null()]),
     /** 正面目标；公司级待办与 feedback 不进入单个战场。 */

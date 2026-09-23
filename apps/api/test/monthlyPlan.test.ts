@@ -228,11 +228,11 @@ describe("MonthlyDraft Agent", () => {
     const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       await t.sql("UPDATE company_strategy_config SET ltco = $1 WHERE id = 'default'", ["用 Agent 重做组织结构，让每块战场都有负责人。"]);
-      await t.sql("UPDATE battlefield_config SET code = '02', sort_order = 20, missions = $1::jsonb WHERE id = 'growth'", [
+      await t.sql("UPDATE battlefield_config SET code = '02', sort_order = 20, mission_anchors = $1::jsonb WHERE id = 'growth'", [
         JSON.stringify([{ code: "02-1", title: "TokenHub 进入生产化使用" }]),
       ]);
       await t.sql(
-        `INSERT INTO battlefield_config (id, version, code, sort_order, name, six_month_outcome, missions)
+        `INSERT INTO battlefield_config (id, version, code, sort_order, name, six_month_outcome, mission_anchors)
          VALUES ('north', 1, '01', 10, '北方战场', '北方战场六个月目标', $1::jsonb)`,
         [JSON.stringify([{ code: "01-1", title: "未来组织范式设计与确认" }])],
       );
@@ -246,14 +246,14 @@ describe("MonthlyDraft Agent", () => {
           code: "01",
           name: "北方战场",
           sixMonthOutcome: "北方战场六个月目标",
-          missions: [{ code: "01-1", title: "未来组织范式设计与确认" }],
+          missionAnchors: [{ code: "01-1", title: "未来组织范式设计与确认" }],
         },
         {
           battlefieldId: "growth",
           code: "02",
           name: "增长战场",
           sixMonthOutcome: "验证渠道结构与交付节奏，形成可复制的增长路径。",
-          missions: [{ code: "02-1", title: "TokenHub 进入生产化使用" }],
+          missionAnchors: [{ code: "02-1", title: "TokenHub 进入生产化使用" }],
         },
       ]);
     } finally {

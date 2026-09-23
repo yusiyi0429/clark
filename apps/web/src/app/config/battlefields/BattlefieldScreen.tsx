@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronLeft, ChevronRight, Flag, Pencil, Plus, Target, Trash2 } from "lucide-react";
-import type { TMissionValue, TBattlefieldManagementResponse } from "@warmap/contracts";
+import type { TMissionAnchor, TBattlefieldManagementResponse } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import type { PersonOption } from "@/lib/api/server";
 import b from "@/styles/battlefield-management.module.css";
@@ -14,20 +14,20 @@ type Issue = TBattlefieldManagementResponse["issues"][number];
 type Battlefield = TBattlefieldManagementResponse["battlefields"][number];
 type Status = { kind: "ok" | "error"; message: string } | null;
 
-/** 编辑草稿：编号/顺序以文本编辑，Mission 以「编号 标题」逐行文本编辑，存储仍是结构化值。 */
-export type BattlefieldDraft = { code: string; sortOrder: string; name: string; ownerId: string; sixMonthOutcome: string; missions: string };
+/** 编辑草稿：编号/顺序以文本编辑，战略锚点以「编号 标题」逐行文本编辑，存储仍是结构化值。 */
+export type BattlefieldDraft = { code: string; sortOrder: string; name: string; ownerId: string; sixMonthOutcome: string; missionAnchors: string };
 
-export function formatMissions(missions: TMissionValue[]): string {
-  return missions.map((mission) => `${mission.code} ${mission.title}`).join("\n");
+export function formatMissionAnchors(missionAnchors: TMissionAnchor[]): string {
+  return missionAnchors.map((mission) => `${mission.code} ${mission.title}`).join("\n");
 }
 
-export type MissionParse = { ok: true; missions: TMissionValue[] } | { ok: false; error: string };
+export type MissionAnchorParse = { ok: true; missionAnchors: TMissionAnchor[] } | { ok: false; error: string };
 
 /**
  * 「编号 空格 标题」逐行解析：空文本合法；缺编号、缺标题或编号重复返回错误，不静默丢行。
  */
-export function parseMissions(text: string): MissionParse {
-  const missions: TMissionValue[] = [];
+export function parseMissionAnchors(text: string): MissionAnchorParse {
+  const missionAnchors: TMissionAnchor[] = [];
   const seen = new Set<string>();
   const lines = text.split(/\r?\n/);
   for (let index = 0; index < lines.length; index += 1) {
@@ -41,13 +41,13 @@ export function parseMissions(text: string): MissionParse {
     if (!title) return { ok: false, error: `第 ${index + 1} 行缺少标题` };
     if (seen.has(code)) return { ok: false, error: `第 ${index + 1} 行编号 ${code} 重复` };
     seen.add(code);
-    missions.push({ code, title });
+    missionAnchors.push({ code, title });
   }
-  return { ok: true, missions };
+  return { ok: true, missionAnchors };
 }
 
 export function battlefieldDraft(item: Battlefield): BattlefieldDraft {
-  return { code: item.code, sortOrder: String(item.sortOrder), name: item.name, ownerId: item.ownerId, sixMonthOutcome: item.sixMonthOutcome, missions: formatMissions(item.missions) };
+  return { code: item.code, sortOrder: String(item.sortOrder), name: item.name, ownerId: item.ownerId, sixMonthOutcome: item.sixMonthOutcome, missionAnchors: formatMissionAnchors(item.missionAnchors) };
 }
 
 /** 编辑弹层只提交真正改动的字段：未动的负责人（可能是空串）不重写，避免被当成新值。 */
@@ -57,7 +57,7 @@ export type BattlefieldPatch = {
   name?: string;
   ownerId?: string;
   sixMonthOutcome?: string;
-  missions?: TMissionValue[];
+  missionAnchors?: TMissionAnchor[];
 };
 
 export function battlefieldEditPatch(
@@ -73,10 +73,10 @@ export function battlefieldEditPatch(
   if (draft.sortOrder.trim() !== "" && Number.isInteger(sortOrder) && draft.sortOrder !== current.sortOrder) patch.sortOrder = sortOrder;
   if (draft.ownerId !== current.ownerId) patch.ownerId = draft.ownerId;
   if (draft.sixMonthOutcome !== current.sixMonthOutcome) patch.sixMonthOutcome = draft.sixMonthOutcome;
-  if (draft.missions !== current.missions) {
-    const parsed = parseMissions(draft.missions);
+  if (draft.missionAnchors !== current.missionAnchors) {
+    const parsed = parseMissionAnchors(draft.missionAnchors);
     if (!parsed.ok) return { ok: false, error: parsed.error };
-    patch.missions = parsed.missions;
+    patch.missionAnchors = parsed.missionAnchors;
   }
   return { ok: true, patch };
 }
@@ -101,13 +101,13 @@ export function BattlefieldScreen({ battlefields, issues, people }: TBattlefield
   const [selectedId, setSelectedId] = useState(battlefields[0]?.id ?? "");
   const [confirming, setConfirming] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<BattlefieldDraft>({ code: "", sortOrder: "", name: "", ownerId: "", sixMonthOutcome: "", missions: "" });
+  const [draft, setDraft] = useState<BattlefieldDraft>({ code: "", sortOrder: "", name: "", ownerId: "", sixMonthOutcome: "", missionAnchors: "" });
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Record<"list" | "pick", Status>>({ list: null, pick: null });
 
   const names = new Map(battlefields.map((item) => [item.id, item.name]));
   const selected = battlefields.find((item) => item.id === selectedId) ?? battlefields[0];
-  const missionParse = parseMissions(draft.missions);
+  const missionParse = parseMissionAnchors(draft.missionAnchors);
   const missionError = missionParse.ok ? null : missionParse.error;
   const related = selected ? issues.filter((issue) => issue.battlefieldIds.includes(selected.id)) : [];
   const report = (slot: "list" | "pick", value: Status) => setStatus((prev) => ({ ...prev, [slot]: value }));
@@ -278,8 +278,8 @@ export function BattlefieldScreen({ battlefields, issues, people }: TBattlefield
                   <textarea value={draft.sixMonthOutcome} onChange={(event) => setDraft({ ...draft, sixMonthOutcome: event.target.value })} />
                 </label>
                 <label className={b.field}>
-                  <span>Mission（每行：编号 + 标题）</span>
-                  <textarea value={draft.missions} onChange={(event) => setDraft({ ...draft, missions: event.target.value })} />
+                  <span>战略锚点（每行：编号 + 标题）</span>
+                  <textarea value={draft.missionAnchors} onChange={(event) => setDraft({ ...draft, missionAnchors: event.target.value })} />
                   {missionError ? <span className={b.fieldError} role="alert">{missionError}</span> : null}
                 </label>
                 <span className={b.confirmActions}>

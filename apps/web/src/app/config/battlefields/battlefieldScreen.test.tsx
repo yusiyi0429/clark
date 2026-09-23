@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BattlefieldScreen, battlefieldDraft, battlefieldEditPatch, formatMissions, parseMissions } from "./BattlefieldScreen";
+import { BattlefieldScreen, battlefieldDraft, battlefieldEditPatch, formatMissionAnchors, parseMissionAnchors } from "./BattlefieldScreen";
 import type { TBattlefieldManagementResponse } from "@warmap/contracts";
 import type { PersonOption } from "@/lib/api/server";
 
@@ -19,10 +19,10 @@ const battlefields: TBattlefieldManagementResponse["battlefields"] = [
     ownerId: "person-fixture-002",
     ownerDisplayName: "陈珂",
     sixMonthOutcome: "验证渠道结构与交付节奏",
-    missions: [{ code: "01-1", title: "未来组织范式设计与确认" }],
+    missionAnchors: [{ code: "01-1", title: "未来组织范式设计与确认" }],
     pendingIssueCount: 2,
   },
-  { id: "delivery", version: 1, code: "02", sortOrder: 20, name: "交付战场", ownerId: "", ownerDisplayName: "", sixMonthOutcome: "", missions: [], pendingIssueCount: 1 },
+  { id: "delivery", version: 1, code: "02", sortOrder: 20, name: "交付战场", ownerId: "", ownerDisplayName: "", sixMonthOutcome: "", missionAnchors: [], pendingIssueCount: 1 },
 ];
 const people: PersonOption[] = [{ personId: "person-fixture-002", displayName: "陈珂", roles: ["dri", "participant"] }];
 const issues: Issue[] = [
@@ -104,7 +104,7 @@ describe("战场管理页 CSS 基线", () => {
     expect(source).toContain(".danger{background:#a1443c");
   });
 
-  it("编辑弹层 420 宽，含 Mission 文本域与编号/顺序双列", () => {
+  it("编辑弹层 420 宽，含战略锚点文本域与编号/顺序双列", () => {
     expect(source).toContain(".wide{left:186px;width:420px}");
     expect(source).toContain(".pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}");
     expect(source).toContain(".field textarea{box-sizing:border-box;width:100%;min-height:72px");
@@ -133,35 +133,35 @@ describe("战场编辑弹层提交字段", () => {
   });
 });
 
-/** Mission 只以「编号 标题」逐行文本编辑：存储仍是结构化 {code,title}。 */
-describe("Mission 文本与结构化值互转", () => {
+/** 战略锚点只以「编号 标题」逐行文本编辑：存储仍是结构化 {code,title}。 */
+describe("战略锚点文本与结构化值互转", () => {
   it("格式化与解析对齐设计里的两行示例", () => {
-    const missions = [
+    const missionAnchors = [
       { code: "01-1", title: "未来组织范式设计与确认" },
       { code: "01-2", title: "CEO Agent 常态化使用" },
     ];
-    expect(formatMissions(missions)).toBe("01-1 未来组织范式设计与确认\n01-2 CEO Agent 常态化使用");
-    expect(parseMissions(formatMissions(missions))).toEqual({ ok: true, missions });
+    expect(formatMissionAnchors(missionAnchors)).toBe("01-1 未来组织范式设计与确认\n01-2 CEO Agent 常态化使用");
+    expect(parseMissionAnchors(formatMissionAnchors(missionAnchors))).toEqual({ ok: true, missionAnchors });
   });
 
   it("空文本与空行合法，标题里的空格保留", () => {
-    expect(parseMissions("")).toEqual({ ok: true, missions: [] });
-    expect(parseMissions("\n  \n")).toEqual({ ok: true, missions: [] });
-    expect(parseMissions("01-1  未来 组织范式 ")).toEqual({ ok: true, missions: [{ code: "01-1", title: "未来 组织范式" }] });
+    expect(parseMissionAnchors("")).toEqual({ ok: true, missionAnchors: [] });
+    expect(parseMissionAnchors("\n  \n")).toEqual({ ok: true, missionAnchors: [] });
+    expect(parseMissionAnchors("01-1  未来 组织范式 ")).toEqual({ ok: true, missionAnchors: [{ code: "01-1", title: "未来 组织范式" }] });
   });
 
   it("缺编号、缺标题、编号重复都报错并阻止下发", () => {
-    expect(parseMissions("01-1 标题\n孤儿编号")).toEqual({ ok: false, error: "第 2 行缺少编号或标题：每行需为「编号 空格 标题」" });
-    expect(parseMissions(" 只有标题")).toEqual({ ok: false, error: "第 1 行缺少编号" });
-    expect(parseMissions("01-1 ")).toEqual({ ok: false, error: "第 1 行缺少标题" });
-    expect(parseMissions("01-1 标题\n01-1 另一标题")).toEqual({ ok: false, error: "第 2 行编号 01-1 重复" });
+    expect(parseMissionAnchors("01-1 标题\n孤儿编号")).toEqual({ ok: false, error: "第 2 行缺少编号或标题：每行需为「编号 空格 标题」" });
+    expect(parseMissionAnchors(" 只有标题")).toEqual({ ok: false, error: "第 1 行缺少编号" });
+    expect(parseMissionAnchors("01-1 ")).toEqual({ ok: false, error: "第 1 行缺少标题" });
+    expect(parseMissionAnchors("01-1 标题\n01-1 另一标题")).toEqual({ ok: false, error: "第 2 行编号 01-1 重复" });
     const current = battlefieldDraft(battlefields[0]);
-    expect(battlefieldEditPatch(current, { ...current, missions: "01-1 标题\n01-1 重复" })).toEqual({ ok: false, error: "第 2 行编号 01-1 重复" });
+    expect(battlefieldEditPatch(current, { ...current, missionAnchors: "01-1 标题\n01-1 重复" })).toEqual({ ok: false, error: "第 2 行编号 01-1 重复" });
   });
 
-  it("编辑弹层比较文本：改一行才发 missions", () => {
+  it("编辑弹层比较文本：改一行才发 missionAnchors", () => {
     const current = battlefieldDraft(battlefields[0]);
-    expect(battlefieldEditPatch(current, { ...current, missions: formatMissions(battlefields[0].missions) })).toEqual({ ok: true, patch: {} });
-    expect(battlefieldEditPatch(current, { ...current, missions: "01-1 改过的标题" })).toEqual({ ok: true, patch: { missions: [{ code: "01-1", title: "改过的标题" }] } });
+    expect(battlefieldEditPatch(current, { ...current, missionAnchors: formatMissionAnchors(battlefields[0].missionAnchors) })).toEqual({ ok: true, patch: {} });
+    expect(battlefieldEditPatch(current, { ...current, missionAnchors: "01-1 改过的标题" })).toEqual({ ok: true, patch: { missionAnchors: [{ code: "01-1", title: "改过的标题" }] } });
   });
 });

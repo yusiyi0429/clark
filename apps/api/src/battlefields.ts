@@ -7,7 +7,7 @@ import type {
   TBattlefieldTodo,
   TCapabilitySupportRef,
   TIssueLocation,
-  TMissionValue,
+  TMissionAnchor,
   TMonthlyPlanBattlefield,
   TMonthlyPlanExport,
   TMonthlyPlanFeedback,
@@ -26,7 +26,7 @@ export type BattlefieldRow = {
   name: string;
   owner_id: string;
   six_month_outcome: string;
-  missions: TMissionValue[];
+  missionAnchors: TMissionAnchor[];
 };
 
 /** 已签发计划的最小结构：战场投影只读这一份持久对象，不保存第二份目标。 */
@@ -42,7 +42,7 @@ type ConfirmedPlanRow = {
 
 export async function listBattlefieldRows(q: Query): Promise<BattlefieldRow[]> {
   const result = await q(
-    "SELECT id, version, code, sort_order, name, owner_id, six_month_outcome, missions FROM battlefield_config ORDER BY sort_order, code, id",
+    "SELECT id, version, code, sort_order, name, owner_id, six_month_outcome, mission_anchors AS \"missionAnchors\" FROM battlefield_config ORDER BY sort_order, code, id",
   );
   return result.rows as BattlefieldRow[];
 }
@@ -79,7 +79,7 @@ export type DeleteBattlefieldResult =
   | { ok: false; status: 404; code: "BATTLEFIELD_NOT_FOUND"; message: string };
 
 /**
- * 删除战场：单事务内把所有受影响议题移出该战场并归一化，清掉能力里指向该战场及其 Mission 的 supportRefs，再删注册行。
+ * 删除战场：单事务内把所有受影响议题移出该战场并归一化，清掉能力里指向该战场及其战略锚点的 supportRefs，再删注册行。
  * radar_config.anchors 只删指向该战场的 ontology anchor（不重建，与月度计划签发时的重建逻辑对称）；
  * 月度计划是自包含 JSONB 快照，不回改。
  */
@@ -87,8 +87,8 @@ export async function deleteBattlefield(pool: Pool, id: string): Promise<DeleteB
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const locked = await client.query<{ id: string; missions: TMissionValue[] }>(
-      "SELECT id, missions FROM battlefield_config WHERE id = $1 FOR UPDATE",
+    const locked = await client.query<{ id: string; missionAnchors: TMissionAnchor[] }>(
+      "SELECT id, mission_anchors AS \"missionAnchors\" FROM battlefield_config WHERE id = $1 FOR UPDATE",
       [id],
     );
     if (locked.rowCount !== 1) {
@@ -110,8 +110,8 @@ export async function deleteBattlefield(pool: Pool, id: string): Promise<DeleteB
         [row.id, JSON.stringify(normalizeBattlefieldSet(remaining))],
       );
     }
-    // 能力 supportRefs 只能指向已登记战场与 Mission：同一事务内清掉指向该战场及其 Mission code 的 ref，只有真正被改的能力 version+1
-    const missionCodes = new Set((locked.rows[0].missions ?? []).map((mission) => mission.code));
+    // 能力 supportRefs 只能指向已登记战场与战略锚点：同一事务内清掉指向该战场及其锚点 code 的 ref，只有真正被改的能力 version+1
+    const missionCodes = new Set((locked.rows[0].missionAnchors ?? []).map((mission) => mission.code));
     const capabilities = await client.query<{ id: string; support_refs: TCapabilitySupportRef[] }>(
       "SELECT id, support_refs FROM capability_config FOR UPDATE",
     );
@@ -119,7 +119,7 @@ export async function deleteBattlefield(pool: Pool, id: string): Promise<DeleteB
       const refs = row.support_refs ?? [];
       const kept = refs.filter(
         (ref) =>
-          !(ref.type === "battlefield" && ref.battlefieldId === id) && !(ref.type === "mission" && missionCodes.has(ref.missionCode)),
+          !(ref.type === "battlefield" && ref.battlefieldId === id) && !(ref.type === "mission-anchor" && missionCodes.has(ref.missionCode)),
       );
       if (kept.length !== refs.length) {
         await client.query(
@@ -149,7 +149,7 @@ export async function deleteBattlefield(pool: Pool, id: string): Promise<DeleteB
 
 export type RegisterBattlefieldResult =
   | { ok: true; id: string }
-  | { ok: false; status: 409; code: "BATTLEFIELD_EXISTS" | "BATTLEFIELD_NAME_CONFLICT" | "BATTLEFIELD_CODE_CONFLICT" | "MISSION_CODE_CONFLICT"; message: string };
+  | { ok: false; status: 409; code: "BATTLEFIELD_EXISTS" | "BATTLEFIELD_NAME_CONFLICT" | "BATTLEFIELD_CODE_CONFLICT" | "MISSION_ANCHOR_CODE_CONFLICT"; message: string };
 
 export type BattlefieldWriteInput = {
   code: string;
@@ -157,7 +157,7 @@ export type BattlefieldWriteInput = {
   name: string;
   ownerId?: string;
   sixMonthOutcome: string;
-  missions?: TMissionValue[];
+  missionAnchors?: TMissionAnchor[];
 };
 
 /** code 非空时同表唯一；空 code 是迁移期未编号的旧行，不参与冲突。 */
@@ -166,30 +166,30 @@ async function battlefieldCodeTaken(q: Query, code: string, selfId: string): Pro
   return (rows.rowCount ?? 0) > 0;
 }
 
-/** Mission code 全表唯一：同一次 payload 内重复与跨战场重复都算冲突，返回第一个冲突 code。 */
-async function missionCodeConflict(q: Query, missions: TMissionValue[], selfId: string): Promise<string | undefined> {
+/** 战略锚点 code 全表唯一：同一次 payload 内重复与跨战场重复都算冲突，返回第一个冲突 code。 */
+async function missionAnchorCodeConflict(q: Query, missionAnchors: TMissionAnchor[], selfId: string): Promise<string | undefined> {
   const seen = new Set<string>();
-  for (const mission of missions) {
+  for (const mission of missionAnchors) {
     if (seen.has(mission.code)) return mission.code;
     seen.add(mission.code);
   }
   if (seen.size === 0) return undefined;
-  const rows = await q("SELECT missions FROM battlefield_config WHERE id <> $1", [selfId]);
-  for (const row of rows.rows as { missions: TMissionValue[] }[]) {
-    for (const mission of row.missions ?? []) {
+  const rows = await q("SELECT mission_anchors AS \"missionAnchors\" FROM battlefield_config WHERE id <> $1", [selfId]);
+  for (const row of rows.rows as { missionAnchors: TMissionAnchor[] }[]) {
+    for (const mission of row.missionAnchors ?? []) {
       if (seen.has(mission.code)) return mission.code;
     }
   }
   return undefined;
 }
 
-/** 清掉能力里指向这些 Mission code 的 supportRefs，只有真正被改的能力 version+1。 */
-async function dropMissionSupportRefs(q: Query, missionCodes: Set<string>): Promise<void> {
+/** 清掉能力里指向这些战略锚点 code 的 supportRefs，只有真正被改的能力 version+1。 */
+async function dropMissionAnchorSupportRefs(q: Query, missionCodes: Set<string>): Promise<void> {
   if (missionCodes.size === 0) return;
   const capabilities = await q("SELECT id, support_refs FROM capability_config FOR UPDATE");
   for (const row of capabilities.rows as { id: string; support_refs: TCapabilitySupportRef[] }[]) {
     const refs = row.support_refs ?? [];
-    const kept = refs.filter((ref) => !(ref.type === "mission" && missionCodes.has(ref.missionCode)));
+    const kept = refs.filter((ref) => !(ref.type === "mission-anchor" && missionCodes.has(ref.missionCode)));
     if (kept.length !== refs.length) {
       await q("UPDATE capability_config SET support_refs = $2::jsonb, version = version + 1 WHERE id = $1", [
         row.id,
@@ -212,16 +212,16 @@ export async function registerBattlefield(q: Query, input: BattlefieldWriteInput
   if (await battlefieldCodeTaken(q, input.code, id)) {
     return { ok: false, status: 409, code: "BATTLEFIELD_CODE_CONFLICT", message: `战场编号 ${input.code} 已被占用` };
   }
-  const missionConflict = await missionCodeConflict(q, input.missions ?? [], id);
+  const missionConflict = await missionAnchorCodeConflict(q, input.missionAnchors ?? [], id);
   if (missionConflict) {
-    return { ok: false, status: 409, code: "MISSION_CODE_CONFLICT", message: `Mission 编号 ${missionConflict} 已被占用` };
+    return { ok: false, status: 409, code: "MISSION_ANCHOR_CODE_CONFLICT", message: `战略锚点编号 ${missionConflict} 已被占用` };
   }
   const result = await q(
-    `INSERT INTO battlefield_config (id, version, code, sort_order, name, owner_id, six_month_outcome, missions)
+    `INSERT INTO battlefield_config (id, version, code, sort_order, name, owner_id, six_month_outcome, mission_anchors)
      VALUES ($1, 1, $2, $3, $4, $5, $6, $7::jsonb)
      ON CONFLICT (id) DO NOTHING
      RETURNING id`,
-    [id, input.code, input.sortOrder, input.name, input.ownerId ?? "", input.sixMonthOutcome, JSON.stringify(input.missions ?? [])],
+    [id, input.code, input.sortOrder, input.name, input.ownerId ?? "", input.sixMonthOutcome, JSON.stringify(input.missionAnchors ?? [])],
   );
   if (result.rowCount !== 1) return { ok: false, status: 409, code: "BATTLEFIELD_EXISTS", message: `战场 ${id} 已注册` };
   return { ok: true, id };
@@ -230,11 +230,11 @@ export async function registerBattlefield(q: Query, input: BattlefieldWriteInput
 export type UpdateBattlefieldResult =
   | { ok: true; id: string }
   | { ok: false; status: 404; code: "BATTLEFIELD_NOT_FOUND"; message: string }
-  | { ok: false; status: 409; code: "BATTLEFIELD_NAME_CONFLICT" | "BATTLEFIELD_CODE_CONFLICT" | "MISSION_CODE_CONFLICT"; message: string };
+  | { ok: false; status: 409; code: "BATTLEFIELD_NAME_CONFLICT" | "BATTLEFIELD_CODE_CONFLICT" | "MISSION_ANCHOR_CODE_CONFLICT"; message: string };
 
 /**
- * CEO 编辑战场：id 稳定，只改显示字段并 version+1；新名 slug、code 或 Mission code 撞到其他行时 409。
- * 一次事务内完成战场更新与旧 Mission code 的 supportRefs 清理，避免悬空引用。
+ * CEO 编辑战场：id 稳定，只改显示字段并 version+1；新名 slug、code 或战略锚点 code 撞到其他行时 409。
+ * 一次事务内完成战场更新与旧战略锚点 code 的 supportRefs 清理，避免悬空引用。
  */
 export async function updateBattlefield(
   pool: Pool,
@@ -245,8 +245,8 @@ export async function updateBattlefield(
   try {
     const q: Query = (sql, params) => client.query(sql, params);
     await client.query("BEGIN");
-    const locked = await client.query<{ id: string; missions: TMissionValue[] }>(
-      "SELECT id, missions FROM battlefield_config WHERE id = $1 FOR UPDATE",
+    const locked = await client.query<{ id: string; missionAnchors: TMissionAnchor[] }>(
+      "SELECT id, mission_anchors AS \"missionAnchors\" FROM battlefield_config WHERE id = $1 FOR UPDATE",
       [id],
     );
     if (locked.rowCount !== 1) {
@@ -265,18 +265,18 @@ export async function updateBattlefield(
       await client.query("ROLLBACK");
       return { ok: false, status: 409, code: "BATTLEFIELD_CODE_CONFLICT", message: `战场编号 ${input.code} 已被占用` };
     }
-    if (input.missions !== undefined) {
-      const missionConflict = await missionCodeConflict(q, input.missions, id);
+    if (input.missionAnchors !== undefined) {
+      const missionConflict = await missionAnchorCodeConflict(q, input.missionAnchors, id);
       if (missionConflict) {
         await client.query("ROLLBACK");
-        return { ok: false, status: 409, code: "MISSION_CODE_CONFLICT", message: `Mission 编号 ${missionConflict} 已被占用` };
+        return { ok: false, status: 409, code: "MISSION_ANCHOR_CODE_CONFLICT", message: `战略锚点编号 ${missionConflict} 已被占用` };
       }
     }
     const updated = await client.query(
       `UPDATE battlefield_config
           SET code = COALESCE($2, code), sort_order = COALESCE($3, sort_order), name = COALESCE($4, name),
               owner_id = COALESCE($5, owner_id), six_month_outcome = COALESCE($6, six_month_outcome),
-              missions = COALESCE($7::jsonb, missions),
+              mission_anchors = COALESCE($7::jsonb, mission_anchors),
               version = version + 1, updated_at = now()
         WHERE id = $1
           AND ($8::text IS NULL OR $8 = id OR NOT EXISTS (SELECT 1 FROM battlefield_config WHERE id = $8))
@@ -288,7 +288,7 @@ export async function updateBattlefield(
         input.name ?? null,
         input.ownerId ?? null,
         input.sixMonthOutcome ?? null,
-        input.missions === undefined ? null : JSON.stringify(input.missions),
+        input.missionAnchors === undefined ? null : JSON.stringify(input.missionAnchors),
         nextSlug,
       ],
     );
@@ -296,11 +296,11 @@ export async function updateBattlefield(
       await client.query("ROLLBACK");
       return { ok: false, status: 409, code: "BATTLEFIELD_NAME_CONFLICT", message: `战场名称与已有战场冲突（${nextSlug}）` };
     }
-    // 删除或改名旧 Mission：同事务清掉指向这些 code 的 supportRefs，受影响能力 version+1
-    if (input.missions !== undefined) {
-      const nextCodes = new Set(input.missions.map((mission) => mission.code));
-      const removed = new Set((locked.rows[0].missions ?? []).map((mission) => mission.code).filter((code) => !nextCodes.has(code)));
-      await dropMissionSupportRefs(q, removed);
+    // 删除或改名旧战略锚点：同事务清掉指向这些 code 的 supportRefs，受影响能力 version+1
+    if (input.missionAnchors !== undefined) {
+      const nextCodes = new Set(input.missionAnchors.map((mission) => mission.code));
+      const removed = new Set((locked.rows[0].missionAnchors ?? []).map((mission) => mission.code).filter((code) => !nextCodes.has(code)));
+      await dropMissionAnchorSupportRefs(q, removed);
     }
     await client.query("COMMIT");
     return { ok: true, id };
@@ -319,7 +319,7 @@ export async function updateBattlefield(
  */
 export async function projectBattlefieldManagement(q: Query, ownerNames: Map<string, string>): Promise<TBattlefieldManagementResponse> {
   const battlefields = await q(
-    "SELECT id, version, code, sort_order, name, owner_id, six_month_outcome, missions FROM battlefield_config ORDER BY sort_order, code, id",
+    "SELECT id, version, code, sort_order, name, owner_id, six_month_outcome, mission_anchors AS \"missionAnchors\" FROM battlefield_config ORDER BY sort_order, code, id",
   );
   const issues = await q(
     `SELECT id, title, urgency, location FROM issues
@@ -343,7 +343,7 @@ export async function projectBattlefieldManagement(q: Query, ownerNames: Map<str
       ownerId: row.owner_id,
       ownerDisplayName: ownerNames.get(row.owner_id) ?? "",
       sixMonthOutcome: row.six_month_outcome,
-      missions: row.missions ?? [],
+      missionAnchors: row.missionAnchors ?? [],
       pendingIssueCount: pending.filter((issue) => issue.battlefieldIds.includes(row.id)).length,
     })),
     issues: pending,
@@ -418,7 +418,7 @@ export async function listBattlefieldCards(q: Query, period: string, ownerNames:
       ownerId: battlefield.owner_id,
       ownerDisplayName: ownerNames.get(battlefield.owner_id) ?? "",
       sixMonthOutcome: battlefield.six_month_outcome,
-      missions: battlefield.missions ?? [],
+      missionAnchors: battlefield.missionAnchors ?? [],
       period: plan?.period ?? null,
       target,
       pendingIssues: (issues.rows as { id: string; title: string; urgency: string; location: unknown }[])
