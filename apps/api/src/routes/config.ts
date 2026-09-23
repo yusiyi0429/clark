@@ -10,15 +10,18 @@ import {
   PatchStrategyConfigRequest,
   CreateCeoIssueRequest,
   CreateConfigMeetingRequest,
+  CreateMissionRequest,
   type TBattlefieldManagementResponse,
   type TCapabilityManagementResponse,
   type TCardCollection,
   type TCreateConfigMeetingRequest,
+  type TMissionManagementResponse,
 } from "@warmap/contracts";
 import { deleteBattlefield, listBattlefieldCards, projectBattlefieldManagement, registerBattlefield, updateBattlefield } from "../battlefields.js";
 import { listCapabilityCards, listCapabilityRows, registerCapability, updateCapability, validateSupportRefs } from "../capabilities.js";
 import { assignIssueBattlefield, createCeoIssue, unassignIssueBattlefield } from "../issues.js";
 import { createConfigMeeting } from "../meetings.js";
+import { listMissionCards, listMissionRows, registerMission, validateMissionRelations } from "../missions.js";
 import { companyPeriod } from "../monthlyPlans.js";
 import { isKnownOwner, personDisplayNames } from "../people.js";
 import { getStrategyConfig, updateStrategyConfig } from "../strategy.js";
@@ -162,6 +165,30 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
       } finally {
         if (parsed) await cleanupMaterialTemp(parsed.directory);
       }
+    },
+  );
+  // Mission 配置页：一次返回按 period/能力域/code 排序的完整正面集合，无业务写入。
+  app.get(
+    "/api/config/missions",
+    { preHandler: requireCEO },
+    async (): Promise<TMissionManagementResponse> => ({
+      missions: (await listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory))).map(
+        (card) => card.payload as TMissionManagementResponse["missions"][number],
+      ),
+    }),
+  );
+  // 首次导入没有既有版本可锚，走确定性 CEO 配置写入；之后编辑走 mission.edit opaque Action。
+  app.post(
+    "/api/config/missions",
+    { preHandler: requireCEO, schema: { body: CreateMissionRequest } },
+    async (req, reply): Promise<FastifyReply> => {
+      const ownerNames = personDisplayNames(companyMemory);
+      const refsValid = await validateMissionRelations(q, ownerNames, req.body);
+      if (refsValid) return fail(reply, 400, refsValid.code, refsValid.message);
+      const result = await registerMission(q, req.body);
+      if (!result.ok) return fail(reply, result.status, result.code, result.message);
+      const cards = (await listMissionCards(q, env.sessionSecret, ownerNames)).filter((card) => card.objectRef.id === result.id);
+      return reply.status(201).send({ cards });
     },
   );
   app.delete(

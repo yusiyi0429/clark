@@ -10,6 +10,7 @@ import {
   MeetingConfirmItemInput,
   MeetingDismissItemInput,
   MeetingRevokeEffectInput,
+  MissionEditInput,
   ReplaceTranscriptRequest,
   RequestSupplementRequest,
   SignMonthlyPlanRequest,
@@ -23,6 +24,8 @@ import { executeIssueAction } from "../issues.js";
 import { executeCancelMeeting, executeCreateMeeting, executeEditMeetingDetails, executeJoinMeeting, executeRequestSupplement, executeUpdateDraft } from "../meetings.js";
 import { executeEditMaterials } from "../meetingMaterials.js";
 import { executeRegeneratePreflight, executeRetryPreflight, executeRunPreflight } from "../meetingPreflight.js";
+import { executeEditMission } from "../missions.js";
+import { personDisplayNames } from "../people.js";
 import { executeRetryMonthlyPlanDraft, executeSignMonthlyPlan, executeUpdateMonthlyPlanDraft } from "../monthlyPlans.js";
 import { executeConfirmItem, executeDismissItem, executeReplaceTranscript, executeRetryOutcome, executeRevokeEffect } from "../outcome.js";
 import { executeConfirmTranscriptCandidate, executeDiscardTranscriptCandidate } from "../transcriptCandidate.js";
@@ -133,6 +136,11 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         const signInput = input ?? {};
         if (!Value.Check(SignMonthlyPlanRequest, signInput)) return invalidInput(reply, SignMonthlyPlanRequest, signInput);
         return respond(reply, await executeSignMonthlyPlan(pool, companyMemory, env.sessionSecret, scope, fingerprint));
+      }
+
+      if (scope.actionType === "mission.edit") {
+        if (!Value.Check(MissionEditInput, input)) return invalidInput(reply, MissionEditInput, input);
+        return respond(reply, await executeEditMission(pool, env.sessionSecret, personDisplayNames(companyMemory), scope, input, fingerprint));
       }
 
       if (scope.objectType === "issue") {

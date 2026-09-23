@@ -2,6 +2,7 @@ import type { FastifyReply } from "fastify";
 import { PeopleDirectoryResponse, type TCardCollection } from "@warmap/contracts";
 import { listBattlefieldCards } from "../battlefields.js";
 import { listCapabilityCards } from "../capabilities.js";
+import { getMissionRow, listMissionCards, projectMissionCard } from "../missions.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "../issues.js";
 import { getMeetingRow, listMeetingRows, projectMeetingCard } from "../meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice, getMonthlyPlanRow, listMonthlyPlanRows, projectMonthlyPlanCard } from "../monthlyPlans.js";
@@ -20,19 +21,21 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
     })),
   }));
   app.get("/api/cards/home", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
-    const [radarCard, battlefields, issues, capabilities, meetingRows, monthlyNotice] = await Promise.all([
+    const [radarCard, battlefields, issues, capabilities, meetingRows, missions, monthlyNotice] = await Promise.all([
       projectRadarCard(q, radar.providerStatus),
       listBattlefieldCards(q, companyPeriod(now()), personDisplayNames(companyMemory)),
       listPendingIssueCards(q, env.sessionSecret),
       listCapabilityCards(q),
       listMeetingRows(q),
+      // 首页只读 Mission 集合：战场卡 Mission 数、能力面板数量与入口都从这份 collection 派生，不保存汇总
+      listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory)),
       getMonthlyPlanNotice(q, env.sessionSecret, now()),
     ]);
     const meetings = meetingRows
       .filter((row) => row.status === "scheduled")
       .map((row) => projectMeetingCard(row, env.sessionSecret));
     const monthly = monthlyNotice && (monthlyNotice.payload as { status?: string }).status !== "confirmed" ? [monthlyNotice] : [];
-    return { cards: [radarCard, ...battlefields, ...capabilities, ...issues, ...meetings, ...monthly] };
+    return { cards: [radarCard, ...battlefields, ...capabilities, ...issues, ...meetings, ...missions, ...monthly] };
   });
   app.get(
     "/api/cards/issues/:id",
@@ -81,6 +84,22 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       const row = await getMonthlyPlanRow(q, req.params.id);
       return row ? { cards: [projectMonthlyPlanCard(row, env.sessionSecret)] } : fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
+    },
+  );
+
+  // Mission Card：总览与详情共用同一 projector；关系显示名在投影时现查。
+  app.get("/api/cards/missions", { preHandler: requireCEO }, async (): Promise<TCardCollection> => ({
+    cards: await listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory)),
+  }));
+
+  app.get(
+    "/api/cards/missions/:id",
+    { preHandler: requireCEO, schema: { params: idParams } },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      const mission = await getMissionRow(q, req.params.id);
+      return mission
+        ? { cards: [projectMissionCard(mission, env.sessionSecret, personDisplayNames(companyMemory))] }
+        : fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
     },
   );
 

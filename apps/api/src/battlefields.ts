@@ -128,6 +128,18 @@ export async function deleteBattlefield(pool: Pool, id: string): Promise<DeleteB
         );
       }
     }
+    // Mission 的 battlefieldIds 必须归一化：同一事务移除该战场，只对受影响 Mission version+1
+    const missions = await client.query<{ id: string; battlefield_ids: string[] }>(
+      "SELECT id, battlefield_ids FROM missions WHERE battlefield_ids @> $1::jsonb FOR UPDATE",
+      [JSON.stringify([id])],
+    );
+    for (const row of missions.rows) {
+      const kept = (row.battlefield_ids ?? []).filter((candidate) => candidate !== id);
+      await client.query("UPDATE missions SET battlefield_ids = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1", [
+        row.id,
+        JSON.stringify(kept),
+      ]);
+    }
     await client.query("DELETE FROM battlefield_config WHERE id = $1", [id]);
     const config = await client.query<{ anchors: TRadarAnchor[] }>("SELECT anchors FROM radar_config WHERE id = 'default' FOR UPDATE");
     if (config.rowCount === 1) {
