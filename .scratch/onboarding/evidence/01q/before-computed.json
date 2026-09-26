@@ -1,0 +1,753 @@
+{
+  "version": "154.0.8037.57",
+  "errors": [],
+  "compiled": [
+    {
+      "url": "http://127.0.0.1:3600/_next/static/chunks/apps_web-01q_src_10kt0uq._.css",
+      "file": "before-0.css"
+    }
+  ],
+  "states": [
+    {
+      "width": 1440,
+      "matches": false,
+      "supportsStandard": true,
+      "supportsWebkit": false,
+      "elements": [
+        {
+          "id": "foundation-glass",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-codeCell",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-passwordField",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.973)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.21)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.973)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.21)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-dock",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(248, 248, 250, 0.97)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-caption",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(36, 40, 49, 0.91)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-sheet",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(41, 41, 43)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-expandedHeader",
+          "pseudo": null,
+          "filter": "blur(30px) saturate(1.28)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-glassHeader",
+          "pseudo": null,
+          "filter": "blur(30px) saturate(1.3)",
+          "background": "rgba(22, 32, 52, 0.28)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-homeCapsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-button",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "account-menu-popover",
+          "pseudo": null,
+          "filter": "blur(24px) saturate(1.8)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "header-capsule-ts-detail-header",
+          "pseudo": "::before",
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-column-header",
+          "pseudo": "::before",
+          "filter": "blur(12px) saturate(1.4)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "meeting-header-capsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "material-tabs-bar",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-workspace",
+          "pseudo": null,
+          "filter": "blur(26px) saturate(1.08)",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-header",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-commitArea",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.91)",
+          "blur": "40px",
+          "saturation": "140%"
+        }
+      ],
+      "preference": "no-preference"
+    },
+    {
+      "width": 1440,
+      "matches": true,
+      "supportsStandard": true,
+      "supportsWebkit": false,
+      "elements": [
+        {
+          "id": "foundation-glass",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-codeCell",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-passwordField",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.4)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.4)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-dock",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(248, 248, 250, 0.97)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-caption",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(36, 40, 49)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-sheet",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(40, 40, 42)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-expandedHeader",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(245, 245, 247)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-glassHeader",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(44, 54, 74)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-homeCapsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-button",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "account-menu-popover",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "header-capsule-ts-detail-header",
+          "pseudo": "::before",
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-column-header",
+          "pseudo": "::before",
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "meeting-header-capsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "material-tabs-bar",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-workspace",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(248, 249, 251)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-header",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(248, 249, 251)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-commitArea",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.91)",
+          "blur": "40px",
+          "saturation": "140%"
+        }
+      ],
+      "preference": "reduce"
+    },
+    {
+      "width": 375,
+      "matches": false,
+      "supportsStandard": true,
+      "supportsWebkit": false,
+      "elements": [
+        {
+          "id": "foundation-glass",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-codeCell",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-passwordField",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.973)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.21)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.973)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.21)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-dock",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(248, 248, 250, 0.97)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-caption",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(36, 40, 49, 0.91)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-sheet",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(41, 41, 43)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-expandedHeader",
+          "pseudo": null,
+          "filter": "blur(30px) saturate(1.28)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-glassHeader",
+          "pseudo": null,
+          "filter": "blur(30px) saturate(1.3)",
+          "background": "rgba(36, 53, 78, 0.72)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-homeCapsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-button",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "account-menu-popover",
+          "pseudo": null,
+          "filter": "blur(24px) saturate(1.8)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "header-capsule-ts-detail-header",
+          "pseudo": "::before",
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-column-header",
+          "pseudo": "::before",
+          "filter": "blur(12px) saturate(1.4)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "meeting-header-capsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "material-tabs-bar",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-workspace",
+          "pseudo": null,
+          "filter": "blur(26px) saturate(1.08)",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-header",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-commitArea",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        }
+      ],
+      "preference": "no-preference"
+    },
+    {
+      "width": 375,
+      "matches": true,
+      "supportsStandard": true,
+      "supportsWebkit": false,
+      "elements": [
+        {
+          "id": "foundation-glass",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-codeCell",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-passwordField",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.4)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.4)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-dock",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(248, 248, 250, 0.97)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-caption",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(36, 40, 49)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-sheet",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(40, 40, 42)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-expandedHeader",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(245, 245, 247)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-glassHeader",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(44, 54, 74)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-homeCapsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-button",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "account-menu-popover",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "header-capsule-ts-detail-header",
+          "pseudo": "::before",
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-column-header",
+          "pseudo": "::before",
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "meeting-header-capsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "material-tabs-bar",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-workspace",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(248, 249, 251)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-header",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(248, 249, 251)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-commitArea",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        }
+      ],
+      "preference": "reduce"
+    }
+  ],
+  "rules": []
+}

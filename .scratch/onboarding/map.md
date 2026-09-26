@@ -10,6 +10,7 @@
 |---|---|---|
 | 1 | 01 锁屏与引导底座 `issues/01-lockscreen-and-onboarding-foundation.md` | resolved（Claude 已验收并提交；打磨见 01p） |
 | 1p | 01p 验收后的打磨 `issues/01p-onboarding-polish.md` | resolved（待 Claude 验收、提交） |
+| 1q | 01q 减少透明度回退 [报告](evidence/01q/report.md) | resolved（编译／CDP／类型检查／291 项测试通过；待 Claude 验收、提交） |
 | 2 | 04a 数据、状态机与讨论候选 `issues/04a-mission-rounds-data-and-drafts.md` | ready-for-agent |
 | 3 | 04b 个人卡页与讨论 `issues/04b-mission-card-page-and-discussion.md` | ready-for-agent |
 | 4 | 04c 集中 Review 与确认 `issues/04c-mission-round-review-and-confirm.md` | ready-for-agent |

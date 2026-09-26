@@ -1,0 +1,1065 @@
+{
+  "version": "154.0.8037.57",
+  "errors": [],
+  "compiled": [
+    {
+      "url": "http://127.0.0.1:3600/_next/static/chunks/apps_web-01q_src_10kt0uq._.css",
+      "file": "after-0.css"
+    }
+  ],
+  "states": [
+    {
+      "width": 1440,
+      "matches": false,
+      "supportsStandard": true,
+      "supportsWebkit": false,
+      "elements": [
+        {
+          "id": "foundation-glass",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-codeCell",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-passwordField",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.973)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.21)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.973)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.21)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-dock",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(248, 248, 250, 0.97)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-caption",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(36, 40, 49, 0.91)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-sheet",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(41, 41, 43)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-expandedHeader",
+          "pseudo": null,
+          "filter": "blur(30px) saturate(1.28)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-glassHeader",
+          "pseudo": null,
+          "filter": "blur(30px) saturate(1.3)",
+          "background": "rgba(22, 32, 52, 0.28)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-homeCapsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-button",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "account-menu-popover",
+          "pseudo": null,
+          "filter": "blur(24px) saturate(1.8)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "header-capsule-ts-detail-header",
+          "pseudo": "::before",
+          "filter": "blur(14px) saturate(1.7)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-column-header",
+          "pseudo": "::before",
+          "filter": "blur(12px) saturate(1.4)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "meeting-header-capsule",
+          "pseudo": null,
+          "filter": "blur(14px) saturate(1.7)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "material-tabs-bar",
+          "pseudo": null,
+          "filter": "blur(14px) saturate(1.7)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-workspace",
+          "pseudo": null,
+          "filter": "blur(26px) saturate(1.08)",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-header",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-commitArea",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.91)",
+          "blur": "40px",
+          "saturation": "140%"
+        }
+      ],
+      "preference": "no-preference"
+    },
+    {
+      "width": 1440,
+      "matches": true,
+      "supportsStandard": true,
+      "supportsWebkit": false,
+      "elements": [
+        {
+          "id": "foundation-glass",
+          "pseudo": null,
+          "filter": "blur(0px) saturate(1)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "0px",
+          "saturation": "100%"
+        },
+        {
+          "id": "access-codeCell",
+          "pseudo": null,
+          "filter": "blur(0px) saturate(1)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "0px",
+          "saturation": "100%"
+        },
+        {
+          "id": "access-passwordField",
+          "pseudo": null,
+          "filter": "blur(0px) saturate(1)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "0px",
+          "saturation": "100%"
+        },
+        {
+          "id": "confirm-dialog-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.4)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.4)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-dock",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(248, 248, 250, 0.97)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-caption",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(36, 40, 49)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-sheet",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(40, 40, 42)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-expandedHeader",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(245, 245, 247)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-glassHeader",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(44, 54, 74)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-homeCapsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-button",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "account-menu-popover",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "header-capsule-ts-detail-header",
+          "pseudo": "::before",
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-column-header",
+          "pseudo": "::before",
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "meeting-header-capsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "material-tabs-bar",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-workspace",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(248, 249, 251)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-header",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(248, 249, 251)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-commitArea",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.91)",
+          "blur": "40px",
+          "saturation": "140%"
+        }
+      ],
+      "preference": "reduce"
+    },
+    {
+      "width": 375,
+      "matches": false,
+      "supportsStandard": true,
+      "supportsWebkit": false,
+      "elements": [
+        {
+          "id": "foundation-glass",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-codeCell",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "access-passwordField",
+          "pseudo": null,
+          "filter": "blur(40px) saturate(1.4)",
+          "background": "rgba(255, 255, 255, 0.92)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.973)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.21)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(247, 247, 248, 0.973)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.21)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-dock",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(248, 248, 250, 0.97)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-caption",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(36, 40, 49, 0.91)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-sheet",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(41, 41, 43)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-expandedHeader",
+          "pseudo": null,
+          "filter": "blur(30px) saturate(1.28)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-glassHeader",
+          "pseudo": null,
+          "filter": "blur(30px) saturate(1.3)",
+          "background": "rgba(36, 53, 78, 0.72)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-homeCapsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-button",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "account-menu-popover",
+          "pseudo": null,
+          "filter": "blur(24px) saturate(1.8)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "header-capsule-ts-detail-header",
+          "pseudo": "::before",
+          "filter": "blur(14px) saturate(1.7)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-column-header",
+          "pseudo": "::before",
+          "filter": "blur(12px) saturate(1.4)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "meeting-header-capsule",
+          "pseudo": null,
+          "filter": "blur(14px) saturate(1.7)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "material-tabs-bar",
+          "pseudo": null,
+          "filter": "blur(14px) saturate(1.7)",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-workspace",
+          "pseudo": null,
+          "filter": "blur(26px) saturate(1.08)",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-header",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-commitArea",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        }
+      ],
+      "preference": "no-preference"
+    },
+    {
+      "width": 375,
+      "matches": true,
+      "supportsStandard": true,
+      "supportsWebkit": false,
+      "elements": [
+        {
+          "id": "foundation-glass",
+          "pseudo": null,
+          "filter": "blur(0px) saturate(1)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "0px",
+          "saturation": "100%"
+        },
+        {
+          "id": "access-codeCell",
+          "pseudo": null,
+          "filter": "blur(0px) saturate(1)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "0px",
+          "saturation": "100%"
+        },
+        {
+          "id": "access-passwordField",
+          "pseudo": null,
+          "filter": "blur(0px) saturate(1)",
+          "background": "rgb(247, 249, 252)",
+          "blur": "0px",
+          "saturation": "100%"
+        },
+        {
+          "id": "confirm-dialog-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "confirm-dialog-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.4)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-dialog",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 247, 248)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "anchor-editor-backdrop",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(52, 54, 61, 0.4)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-dock",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(248, 248, 250, 0.97)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-dock-caption",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(36, 40, 49)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-sheet",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(40, 40, 42)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "app-shell-expandedHeader",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(245, 245, 247)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-glassHeader",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(44, 54, 74)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-homeCapsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "notifications-button",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "account-menu-popover",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "header-capsule-ts-detail-header",
+          "pseudo": "::before",
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "conversation-column-header",
+          "pseudo": "::before",
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "meeting-header-capsule",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "material-tabs-bar",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(247, 249, 252)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-workspace",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(248, 249, 251)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-header",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgb(248, 249, 251)",
+          "blur": "40px",
+          "saturation": "140%"
+        },
+        {
+          "id": "monthly-workspace-commitArea",
+          "pseudo": null,
+          "filter": "none",
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "40px",
+          "saturation": "140%"
+        }
+      ],
+      "preference": "reduce"
+    }
+  ],
+  "cascadeProbes": [
+    {
+      "width": 1440,
+      "preference": true,
+      "elements": [
+        {
+          "id": "confirm-dialog-dialog",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "confirm-dialog-backdrop",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "anchor-editor-dialog",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "anchor-editor-backdrop",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "conversation-dock-dock",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "conversation-dock-caption",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "app-shell-sheet",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "app-shell-expandedHeader",
+          "filter": "none"
+        },
+        {
+          "id": "notifications-glassHeader",
+          "filter": "none"
+        },
+        {
+          "id": "notifications-homeCapsule",
+          "filter": "none"
+        },
+        {
+          "id": "notifications-button",
+          "filter": "none"
+        },
+        {
+          "id": "account-menu-popover",
+          "filter": "none"
+        },
+        {
+          "id": "header-capsule-ts-detail-header",
+          "filter": "none"
+        },
+        {
+          "id": "conversation-column-header",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "meeting-header-capsule",
+          "filter": "none"
+        },
+        {
+          "id": "material-tabs-bar",
+          "filter": "none"
+        },
+        {
+          "id": "monthly-workspace-workspace",
+          "filter": "none"
+        },
+        {
+          "id": "monthly-workspace-header",
+          "filter": "none"
+        },
+        {
+          "id": "monthly-workspace-commitArea",
+          "filter": "blur(9px)"
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "preference": true,
+      "elements": [
+        {
+          "id": "confirm-dialog-dialog",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "confirm-dialog-backdrop",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "anchor-editor-dialog",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "anchor-editor-backdrop",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "conversation-dock-dock",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "conversation-dock-caption",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "app-shell-sheet",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "app-shell-expandedHeader",
+          "filter": "none"
+        },
+        {
+          "id": "notifications-glassHeader",
+          "filter": "none"
+        },
+        {
+          "id": "notifications-homeCapsule",
+          "filter": "none"
+        },
+        {
+          "id": "notifications-button",
+          "filter": "none"
+        },
+        {
+          "id": "account-menu-popover",
+          "filter": "none"
+        },
+        {
+          "id": "header-capsule-ts-detail-header",
+          "filter": "none"
+        },
+        {
+          "id": "conversation-column-header",
+          "filter": "blur(9px)"
+        },
+        {
+          "id": "meeting-header-capsule",
+          "filter": "none"
+        },
+        {
+          "id": "material-tabs-bar",
+          "filter": "none"
+        },
+        {
+          "id": "monthly-workspace-workspace",
+          "filter": "none"
+        },
+        {
+          "id": "monthly-workspace-header",
+          "filter": "none"
+        },
+        {
+          "id": "monthly-workspace-commitArea",
+          "filter": "blur(9px)"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".foundation-module__nxPOlq__glass",
+      "css": ".foundation-module__nxPOlq__glass { background: var(--morning-start); --onboarding-blur: 0px; --onboarding-sat: 100%; }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".access-module__XWqvtq__codeCell, .access-module__XWqvtq__passwordField",
+      "css": ".access-module__XWqvtq__codeCell, .access-module__XWqvtq__passwordField { background: var(--morning-start); --onboarding-blur: 0px; --onboarding-sat: 100%; }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".confirm-dialog-module__yoLDsW__dialog",
+      "css": ".confirm-dialog-module__yoLDsW__dialog { background: rgb(247, 247, 248); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".confirm-dialog-module__yoLDsW__backdrop",
+      "css": ".confirm-dialog-module__yoLDsW__backdrop { background: rgba(52, 54, 61, 0.4); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".conversation-dock-module__2s7PMW__dock",
+      "css": ".conversation-dock-module__2s7PMW__dock { background: rgb(248, 248, 250); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".conversation-dock-module__2s7PMW__layer .conversation-dock-module__2s7PMW__caption",
+      "css": ".conversation-dock-module__2s7PMW__layer .conversation-dock-module__2s7PMW__caption { background: rgb(36, 40, 49); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".notifications-module__nM-aYa__rail",
+      "css": ".notifications-module__nM-aYa__rail { background-image: linear-gradient(160deg, rgb(67, 84, 115), rgb(52, 65, 92)); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".notifications-module__nM-aYa__glassHeader, .notifications-module__nM-aYa__railClock .notifications-module__nM-aYa__homeCapsule, .notifications-module__nM-aYa__railLock button",
+      "css": ".notifications-module__nM-aYa__glassHeader, .notifications-module__nM-aYa__railClock .notifications-module__nM-aYa__homeCapsule, .notifications-module__nM-aYa__railLock button { backdrop-filter: none; background: rgb(44, 54, 74); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".notifications-module__nM-aYa__tray",
+      "css": ".notifications-module__nM-aYa__tray { background: rgb(247, 247, 248); }"
+    },
+    {
+      "condition": " (max-width: 690px) and (prefers-reduced-transparency: reduce)",
+      "selector": ".notifications-module__nM-aYa__rail",
+      "css": ".notifications-module__nM-aYa__rail { background: rgb(232, 233, 237); }"
+    },
+    {
+      "condition": " (prefers-contrast: more)",
+      "selector": ".notifications-module__nM-aYa__glassHeader",
+      "css": ".notifications-module__nM-aYa__glassHeader { backdrop-filter: none; background: rgb(48, 57, 74); }"
+    },
+    {
+      "condition": " (max-width: 690px) and (prefers-reduced-transparency: reduce)",
+      "selector": ".notifications-module__nM-aYa__glassHeader",
+      "css": ".notifications-module__nM-aYa__glassHeader { background: rgb(44, 54, 74); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".anchor-editor-module__2VoNGW__dialog",
+      "css": ".anchor-editor-module__2VoNGW__dialog { background: rgb(247, 247, 248); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".anchor-editor-module__2VoNGW__backdrop",
+      "css": ".anchor-editor-module__2VoNGW__backdrop { background: rgba(52, 54, 61, 0.4); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".app-shell-module__6w2pXG__shell",
+      "css": ".app-shell-module__6w2pXG__shell { background: rgb(245, 245, 247); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".app-shell-module__6w2pXG__expandedHeader",
+      "css": ".app-shell-module__6w2pXG__expandedHeader { backdrop-filter: none; background: rgb(245, 245, 247); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".app-shell-module__6w2pXG__sheet",
+      "css": ".app-shell-module__6w2pXG__sheet { background: rgb(40, 40, 42); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".app-shell-module__6w2pXG__shell",
+      "css": ".app-shell-module__6w2pXG__shell { background: rgb(245, 245, 247); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".account-menu-module__0pFXha__popover.account-menu-module__0pFXha__popover",
+      "css": ".account-menu-module__0pFXha__popover.account-menu-module__0pFXha__popover { backdrop-filter: none; background: rgb(247, 249, 252); }"
+    },
+    {
+      "condition": "",
+      "selector": ".header-capsule-module__AGntVW__scope .ts-detail-header",
+      "css": ".header-capsule-module__AGntVW__scope .ts-detail-header { --header-end-space: 0px; top: var(--capsule-top, 8px); z-index: 4; isolation: isolate; box-sizing: border-box; min-width: 0px; height: var(--coagent-capsule-height, 48px); margin: var(--capsule-top, 8px) 14px 0; border-radius: calc(var(--coagent-capsule-height, 48px) / 2); box-shadow: none; backdrop-filter: none; background: none; border: 0px; grid-template-columns: auto auto auto minmax(0px, 1fr) auto; grid-template-areas: \"back lead eyebrow title actions\"; align-items: center; column-gap: 0px; padding: 0px 6px; transition: margin-right 0.32s cubic-bezier(0.22, 1, 0.36, 1); display: grid; position: sticky; }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".header-capsule-module__AGntVW__scope .ts-detail-header::before",
+      "css": ".header-capsule-module__AGntVW__scope .ts-detail-header::before { backdrop-filter: none; background: rgb(247, 249, 252); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".conversation-column-module__iSds3G__header::before",
+      "css": ".conversation-column-module__iSds3G__header::before { backdrop-filter: none; background: linear-gradient(180deg, var(--column-surface) 0%, var(--column-surface) 70%, transparent 100%); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".meeting-header-module__VcODCW__capsule",
+      "css": ".meeting-header-module__VcODCW__capsule { backdrop-filter: none; background: rgb(247, 249, 252); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".material-tabs-module__3GJeuq__bar",
+      "css": ".material-tabs-module__3GJeuq__bar { backdrop-filter: none; background: rgb(247, 249, 252); }"
+    },
+    {
+      "condition": " (prefers-reduced-transparency: reduce)",
+      "selector": ".monthly-workspace-module__NNIPRq__workspace, .monthly-workspace-module__NNIPRq__header",
+      "css": ".monthly-workspace-module__NNIPRq__workspace, .monthly-workspace-module__NNIPRq__header { backdrop-filter: none; background: rgb(248, 249, 251); }"
+    },
+    {
+      "condition": " (prefers-contrast: more)",
+      "selector": ".monthly-workspace-module__NNIPRq__workspace",
+      "css": ".monthly-workspace-module__NNIPRq__workspace { --heavy-secondary: #424954; --heavy-note: #4c5562; --heavy-separator: #77818c; backdrop-filter: none; background: rgb(248, 249, 251); border-color: rgb(119, 129, 140); }"
+    },
+    {
+      "condition": " (prefers-contrast: more)",
+      "selector": ".monthly-workspace-module__NNIPRq__header",
+      "css": ".monthly-workspace-module__NNIPRq__header { backdrop-filter: none; background: rgb(241, 243, 246); }"
+    },
+    {
+      "condition": " (forced-colors: active)",
+      "selector": ".monthly-workspace-module__NNIPRq__workspace, .monthly-workspace-module__NNIPRq__header, .monthly-workspace-module__NNIPRq__materials",
+      "css": ".monthly-workspace-module__NNIPRq__workspace, .monthly-workspace-module__NNIPRq__header, .monthly-workspace-module__NNIPRq__materials { color: canvastext; backdrop-filter: none; box-shadow: none; background: canvas; }"
+    },
+    {
+      "condition": "",
+      "selector": ".home-board-module__6OybRG__board .home-board-module__6OybRG__radar",
+      "css": ".home-board-module__6OybRG__board .home-board-module__6OybRG__radar { backdrop-filter: none; background: linear-gradient(145deg, rgb(241, 247, 255), rgb(248, 250, 253) 75%); }"
+    }
+  ]
+}

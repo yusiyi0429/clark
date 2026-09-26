@@ -50,6 +50,6 @@
   .shell[data-unlocking="true"] .brand, .shell[data-unlocking="true"] .clockGroup, .shell[data-unlocking="true"] .accessForm, .shell[data-unlocking="true"] .panelFooter { animation: unlockFade 150ms both !important; }
 }
 @keyframes unlockFade { to { opacity: 0; } }
-@media (prefers-reduced-transparency: reduce) { .codeCell, .passwordField { background: var(--morning-start); backdrop-filter: none; -webkit-backdrop-filter: none; } }
+@media (prefers-reduced-transparency: reduce) { .codeCell, .passwordField { background: var(--morning-start); --onboarding-blur: 0px; --onboarding-sat: 100%; } }
 @media (prefers-contrast: more) { .codeCell, .passwordField { border: 1px solid var(--ink-muted); } }
 @media (forced-colors: active) { .codeCell, .passwordField { border: 1px solid CanvasText; } .clock { color: CanvasText; } }

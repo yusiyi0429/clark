@@ -1,0 +1,25 @@
+import m0 from '@/components/onboarding/foundation.module.css';
+import m1 from '@/styles/access.module.css';
+import m2 from '@/styles/confirm-dialog.module.css';
+import m3 from '@/styles/conversation-dock.module.css';
+import m4 from '@/styles/notifications.module.css';
+import m5 from '@/styles/anchor-editor.module.css';
+import m6 from '@/styles/app-shell.module.css';
+import m7 from '@/styles/account-menu.module.css';
+import m8 from '@/styles/header-capsule.module.css';
+import m9 from '@/styles/conversation-column.module.css';
+import m10 from '@/styles/meeting-header.module.css';
+import m11 from '@/styles/material-tabs.module.css';
+import m12 from '@/styles/monthly-workspace.module.css';
+import m13 from '@/styles/home-board.module.css';
+export default function TransparencyEvidence() {
+  const modules = {"foundation":m0,"access":m1,"confirm-dialog":m2,"conversation-dock":m3,"notifications":m4,"anchor-editor":m5,"app-shell":m6,"account-menu":m7,"header-capsule":m8,"conversation-column":m9,"meeting-header":m10,"material-tabs":m11,"monthly-workspace":m12,"home-board":m13};
+  return <main style={{padding: 32}}>
+    <h1>01q CSS compilation fixture</h1>
+    <p>Unmodified application CSS modules, compiled by Next / Turbopack.</p>
+    <div id="module-map" data-modules={JSON.stringify(modules)} />
+    <div id="foundation-glass" className={m0.glass} style={{padding:24}}>Onboarding glass</div>
+    <input id="access-codeCell" className={m1.codeCell} aria-label="Code cell" defaultValue="1" />
+    <div id="access-passwordField" className={m1.passwordField}><input aria-label="Password" className={m1.passwordInput} /></div>
+  </main>;
+}
