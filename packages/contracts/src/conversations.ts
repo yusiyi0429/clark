@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const ConversationScope = Type.String({
-  pattern: "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+  pattern: "^(global|(issue|signal|meeting|monthly-plan|mission-card):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
   description: "global 或稳定对象 scope",
 });
 

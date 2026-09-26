@@ -37,7 +37,7 @@ const draft = {
   payload: { period: "2026-10", battlefieldId: "01", battlefieldName: "灯塔项目", placeholder: true, todo: "可以整理个人卡草稿", serverNow: "2026-10-01T00:00:00.000Z" },
   actions: [{ actionId: "opaque-slot", actionType: "mission-round.draft", label: "整理个人卡草稿" }],
 } as Card;
-const round = { ...draft, id: "mission-round:actual", objectRef: { type: "mission-round", id: "actual", version: 1 }, payload: { ...(draft.payload as Record<string, unknown>), phase: "draft" }, actions: [] } as Card;
+const round = { ...draft, id: "mission-round:actual", objectRef: { type: "mission-round", id: "actual", version: 1 }, payload: { ...(draft.payload as Record<string, unknown>), phase: "draft", cards: [{ cardId: "first-personal-card" }] }, actions: [] } as Card;
 const event = { target: { closest: () => null } };
 
 beforeEach(() => { vi.clearAllMocks(); ui.buttons.clear(); ui.refreshEffect = undefined; });
@@ -59,7 +59,7 @@ describe("CEO 整理个人卡草稿交互", () => {
     expect(ui.run).not.toHaveBeenCalled();
   });
 
-  it("确认后走轮次端点，立即交回真实轮次并刷新首页", async () => {
+  it("确认后走轮次端点，交回真实轮次、刷新首页并打开第一张个人卡", async () => {
     ui.ask.mockResolvedValue(true);
     ui.run.mockResolvedValue(round);
     const view = render();
@@ -68,15 +68,15 @@ describe("CEO 整理个人卡草稿交互", () => {
     expect(ui.endpoint).toBe("/api/mission-rounds/actions/execute");
     expect(ui.run).toHaveBeenCalledExactlyOnceWith(draft.actions[0]);
     expect(ui.refresh).toHaveBeenCalledOnce();
-    expect(view.onNavigate).not.toHaveBeenCalled();
+    expect(view.onNavigate).toHaveBeenCalledExactlyOnceWith("/mission-cards/first-personal-card", null);
   });
 
-  it("已建轮次的入口留在首页，不请求动作、不打开尚未上线的个人卡路由", async () => {
+  it("已建轮次直接打开第一张个人卡，不重复整理", async () => {
     const view = render(round);
     await view.press();
     expect(ui.ask).not.toHaveBeenCalled();
     expect(ui.run).not.toHaveBeenCalled();
-    expect(view.onNavigate).not.toHaveBeenCalled();
+    expect(view.onNavigate).toHaveBeenCalledExactlyOnceWith("/mission-cards/first-personal-card", null);
   });
 
   it.each([["open", true], ["closed", true], ["reviewing", false]] as const)("%s 阶段按需继续分钟刷新，直到截止快照已写入", (phase, shouldRefresh) => {

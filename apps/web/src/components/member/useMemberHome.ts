@@ -19,6 +19,7 @@ export interface MemberNotification {
 }
 
 const REFRESH_MS = 20_000;
+const REFRESH_ERROR = "工作台暂时没有连接成功，已保留当前内容；稍后会自动重试。";
 
 type Result = { ok: true } | { ok: false; error: string };
 const failed = (error: unknown, fallback: string): Result => ({ ok: false, error: (error as { message?: string } | undefined)?.message ?? fallback });
@@ -30,13 +31,19 @@ export function useMemberHome() {
   const [taskError, setTaskError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [home, list] = await Promise.all([browserApi.GET("/api/me/home"), browserApi.GET("/api/me/notifications")]);
-    if (home.response.status === 401 || list.response.status === 401) {
-      window.location.assign("/access?next=%2Fme");
-      return;
+    try {
+      const [home, list] = await Promise.all([browserApi.GET("/api/me/home"), browserApi.GET("/api/me/notifications")]);
+      if (home.response.status === 401 || list.response.status === 401) {
+        window.location.assign("/access?next=%2Fme");
+        return;
+      }
+      if (home.data) setTasks(home.data.myTasks as MemberTask[]);
+      if (list.data) setNotifications(list.data.notifications as MemberNotification[]);
+      if (home.data && list.data) setTaskError((current) => current === REFRESH_ERROR ? null : current);
+    } catch {
+      // 首页在详情背后仍保持挂载；后台轮询断网不能打断当前阅读与讨论。
+      setTaskError(REFRESH_ERROR);
     }
-    if (home.data) setTasks(home.data.myTasks as MemberTask[]);
-    if (list.data) setNotifications(list.data.notifications as MemberNotification[]);
   }, []);
 
   useEffect(() => {

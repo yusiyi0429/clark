@@ -629,6 +629,257 @@
         }
       }
     },
+    "/api/mission-cards/{cardId}": {
+      "get": {
+        "operationId": "getPersonalMissionCard",
+        "summary": "读取可见的个人卡正文、版本、意见和本轮动作",
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Personal Mission Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mission-cards/{cardId}/feedback": {
+      "post": {
+        "operationId": "createPersonalMissionCardFeedback",
+        "summary": "发表公开评论、引用或修改建议；按 clientId 幂等",
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMissionCardFeedbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "公开意见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateMissionCardFeedbackResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mission-cards/{cardId}/group": {
+      "get": {
+        "operationId": "getPersonalMissionCardGroup",
+        "summary": "公开意见、开场、阶段分隔线及未读；after 只过滤意见，系统事件始终返回",
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "事项群组",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionCardGroupView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mission-cards/{cardId}/group/read": {
+      "post": {
+        "operationId": "markPersonalMissionCardRead",
+        "summary": "已读位置只增不减，最多到本卡最后一条公开意见",
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkMissionCardReadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已读状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkMissionCardReadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mission-rounds/{roundId}": {
       "get": {
         "operationId": "getMissionRound",
@@ -5144,7 +5395,7 @@
         ],
         "properties": {
           "scope": {
-            "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+            "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
             "description": "global 或稳定对象 scope",
             "type": "string"
           },
@@ -5363,7 +5614,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -5397,7 +5648,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -5451,7 +5702,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -5500,7 +5751,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -5542,7 +5793,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -5579,7 +5830,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -5614,7 +5865,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -6998,6 +7249,2216 @@
           "input": {},
           "viewCardId": {
             "type": "string"
+          }
+        }
+      },
+      "MissionCardFeedbackView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "missionId",
+          "field",
+          "kind",
+          "authorId",
+          "authorName",
+          "body",
+          "quote",
+          "proposed",
+          "original",
+          "sourceVersion",
+          "basis",
+          "late",
+          "round",
+          "createdAt",
+          "verdict",
+          "decision",
+          "actions"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "missionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "field": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "title",
+                    "type": "string"
+                  },
+                  {
+                    "const": "why",
+                    "type": "string"
+                  },
+                  {
+                    "const": "outcome",
+                    "type": "string"
+                  },
+                  {
+                    "const": "successEvidence",
+                    "type": "string"
+                  },
+                  {
+                    "const": "boundaries",
+                    "type": "string"
+                  },
+                  {
+                    "const": "keyPath",
+                    "type": "string"
+                  },
+                  {
+                    "const": "milestones",
+                    "type": "string"
+                  },
+                  {
+                    "const": "resources",
+                    "type": "string"
+                  },
+                  {
+                    "const": "dependencies",
+                    "type": "string"
+                  },
+                  {
+                    "const": "humanAgentSplit",
+                    "type": "string"
+                  },
+                  {
+                    "const": "risk",
+                    "type": "string"
+                  },
+                  {
+                    "const": "retrospect",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "comment",
+                "type": "string"
+              },
+              {
+                "const": "quote",
+                "type": "string"
+              },
+              {
+                "const": "suggestion",
+                "type": "string"
+              }
+            ]
+          },
+          "authorId": {
+            "type": "string"
+          },
+          "authorName": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "original": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceVersion": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "basis": {
+            "anyOf": [
+              {
+                "const": "draft",
+                "type": "string"
+              },
+              {
+                "const": "candidate",
+                "type": "string"
+              }
+            ]
+          },
+          "late": {
+            "type": "boolean"
+          },
+          "round": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "createdAt": {
+            "description": "应用时钟生成的 ISO 8601 时间",
+            "type": "string"
+          },
+          "verdict": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "text",
+              "tone"
+            ],
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "tone": {
+                "anyOf": [
+                  {
+                    "const": "open",
+                    "type": "string"
+                  },
+                  {
+                    "const": "accept",
+                    "type": "string"
+                  },
+                  {
+                    "const": "decline",
+                    "type": "string"
+                  },
+                  {
+                    "const": "late",
+                    "type": "string"
+                  },
+                  {
+                    "const": "wait",
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "const": "accept",
+                "type": "string"
+              },
+              {
+                "const": "decline",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "actionId",
+                "actionType",
+                "label"
+              ],
+              "properties": {
+                "actionId": {
+                  "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                  "type": "string"
+                },
+                "actionType": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PersonalMissionCardMission": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "missionId",
+          "code",
+          "period",
+          "title",
+          "ownerId",
+          "ownerDisplayName",
+          "capabilityId",
+          "capabilityCode",
+          "capabilityName",
+          "battlefieldIds",
+          "battlefieldNames",
+          "outcome",
+          "why",
+          "successEvidence",
+          "milestones",
+          "dependencies",
+          "risk",
+          "boundaries",
+          "keyPath",
+          "resources",
+          "humanAgentSplit",
+          "retrospect",
+          "placeholder",
+          "personalCard",
+          "sourceRef",
+          "sourceDocumentId",
+          "sourceRevision",
+          "sourceTitle",
+          "version",
+          "changedFields"
+        ],
+        "properties": {
+          "missionId": {
+            "type": "string"
+          },
+          "code": {
+            "minLength": 1,
+            "maxLength": 40,
+            "type": "string"
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "ownerDisplayName": {
+            "type": "string"
+          },
+          "capabilityId": {
+            "type": "string"
+          },
+          "capabilityCode": {
+            "type": "string"
+          },
+          "capabilityName": {
+            "type": "string"
+          },
+          "battlefieldIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "battlefieldNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          },
+          "successEvidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "milestones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dependencies": {
+            "type": "string"
+          },
+          "risk": {
+            "type": "string"
+          },
+          "boundaries": {
+            "type": "string"
+          },
+          "keyPath": {
+            "type": "string"
+          },
+          "resources": {
+            "type": "string"
+          },
+          "humanAgentSplit": {
+            "type": "string"
+          },
+          "retrospect": {
+            "type": "string"
+          },
+          "placeholder": {
+            "type": "boolean"
+          },
+          "personalCard": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "cardId",
+                  "roundId",
+                  "status"
+                ],
+                "properties": {
+                  "cardId": {
+                    "type": "string"
+                  },
+                  "roundId": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "const": "draft",
+                        "type": "string"
+                      },
+                      {
+                        "const": "open",
+                        "type": "string"
+                      },
+                      {
+                        "const": "reviewing",
+                        "type": "string"
+                      },
+                      {
+                        "const": "confirmed",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceRef": {
+            "type": "string"
+          },
+          "sourceDocumentId": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sourceTitle": {
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "changedFields": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "const": "title",
+                  "type": "string"
+                },
+                {
+                  "const": "why",
+                  "type": "string"
+                },
+                {
+                  "const": "outcome",
+                  "type": "string"
+                },
+                {
+                  "const": "successEvidence",
+                  "type": "string"
+                },
+                {
+                  "const": "boundaries",
+                  "type": "string"
+                },
+                {
+                  "const": "keyPath",
+                  "type": "string"
+                },
+                {
+                  "const": "milestones",
+                  "type": "string"
+                },
+                {
+                  "const": "resources",
+                  "type": "string"
+                },
+                {
+                  "const": "dependencies",
+                  "type": "string"
+                },
+                {
+                  "const": "humanAgentSplit",
+                  "type": "string"
+                },
+                {
+                  "const": "risk",
+                  "type": "string"
+                },
+                {
+                  "const": "retrospect",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "PersonalMissionCardPayload": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "round",
+          "card",
+          "feedback",
+          "confirmation"
+        ],
+        "properties": {
+          "round": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "roundId",
+              "period",
+              "battlefieldId",
+              "battlefieldName",
+              "version",
+              "phase",
+              "round",
+              "openedAt",
+              "closesAt",
+              "reviewAt",
+              "serverNow",
+              "approver",
+              "deciderName",
+              "todo",
+              "placeholder",
+              "goals",
+              "counts",
+              "cards"
+            ],
+            "properties": {
+              "roundId": {
+                "type": "string"
+              },
+              "period": {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              "battlefieldId": {
+                "type": "string"
+              },
+              "battlefieldName": {
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "phase": {
+                "anyOf": [
+                  {
+                    "const": "draft",
+                    "type": "string"
+                  },
+                  {
+                    "const": "open",
+                    "type": "string"
+                  },
+                  {
+                    "const": "closed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "reviewing",
+                    "type": "string"
+                  },
+                  {
+                    "const": "confirmed",
+                    "type": "string"
+                  }
+                ]
+              },
+              "round": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "openedAt": {
+                "anyOf": [
+                  {
+                    "description": "应用时钟生成的 ISO 8601 时间",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "closesAt": {
+                "anyOf": [
+                  {
+                    "description": "应用时钟生成的 ISO 8601 时间",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "reviewAt": {
+                "anyOf": [
+                  {
+                    "description": "应用时钟生成的 ISO 8601 时间",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "serverNow": {
+                "description": "应用时钟生成的 ISO 8601 时间",
+                "type": "string"
+              },
+              "approver": {
+                "type": "boolean"
+              },
+              "deciderName": {
+                "type": "string"
+              },
+              "todo": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "placeholder": {
+                "type": "boolean"
+              },
+              "goals": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "sixMonthOutcome",
+                      "monthOutcome",
+                      "signedAt"
+                    ],
+                    "properties": {
+                      "sixMonthOutcome": {
+                        "type": "string"
+                      },
+                      "monthOutcome": {
+                        "type": "string"
+                      },
+                      "signedAt": {
+                        "description": "应用时钟生成的 ISO 8601 时间",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "counts": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "feedback",
+                  "pending",
+                  "conflicts",
+                  "dependencies",
+                  "late"
+                ],
+                "properties": {
+                  "feedback": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "pending": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "conflicts": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "dependencies": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "late": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                }
+              },
+              "cards": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "cardId",
+                    "ownerId",
+                    "ownerName",
+                    "roleLabel",
+                    "missionCount",
+                    "line",
+                    "pending",
+                    "mine"
+                  ],
+                  "properties": {
+                    "cardId": {
+                      "type": "string"
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "ownerName": {
+                      "type": "string"
+                    },
+                    "roleLabel": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "missionCount": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "line": {
+                      "type": "string"
+                    },
+                    "pending": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "mine": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "card": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "cardId",
+              "ownerId",
+              "ownerName",
+              "roleLabel",
+              "members",
+              "status",
+              "shown",
+              "missions"
+            ],
+            "properties": {
+              "cardId": {
+                "type": "string"
+              },
+              "ownerId": {
+                "type": "string"
+              },
+              "ownerName": {
+                "type": "string"
+              },
+              "roleLabel": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "members": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName",
+                    "title"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "title": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "status": {
+                "type": "string"
+              },
+              "shown": {
+                "anyOf": [
+                  {
+                    "const": "draft",
+                    "type": "string"
+                  },
+                  {
+                    "const": "candidate",
+                    "type": "string"
+                  },
+                  {
+                    "const": "confirmed",
+                    "type": "string"
+                  }
+                ]
+              },
+              "missions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "missionId",
+                    "code",
+                    "period",
+                    "title",
+                    "ownerId",
+                    "ownerDisplayName",
+                    "capabilityId",
+                    "capabilityCode",
+                    "capabilityName",
+                    "battlefieldIds",
+                    "battlefieldNames",
+                    "outcome",
+                    "why",
+                    "successEvidence",
+                    "milestones",
+                    "dependencies",
+                    "risk",
+                    "boundaries",
+                    "keyPath",
+                    "resources",
+                    "humanAgentSplit",
+                    "retrospect",
+                    "placeholder",
+                    "personalCard",
+                    "sourceRef",
+                    "sourceDocumentId",
+                    "sourceRevision",
+                    "sourceTitle",
+                    "version",
+                    "changedFields"
+                  ],
+                  "properties": {
+                    "missionId": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "minLength": 1,
+                      "maxLength": 40,
+                      "type": "string"
+                    },
+                    "period": {
+                      "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                      "type": "string"
+                    },
+                    "title": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "ownerDisplayName": {
+                      "type": "string"
+                    },
+                    "capabilityId": {
+                      "type": "string"
+                    },
+                    "capabilityCode": {
+                      "type": "string"
+                    },
+                    "capabilityName": {
+                      "type": "string"
+                    },
+                    "battlefieldIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "battlefieldNames": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "outcome": {
+                      "type": "string"
+                    },
+                    "why": {
+                      "type": "string"
+                    },
+                    "successEvidence": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "milestones": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "dependencies": {
+                      "type": "string"
+                    },
+                    "risk": {
+                      "type": "string"
+                    },
+                    "boundaries": {
+                      "type": "string"
+                    },
+                    "keyPath": {
+                      "type": "string"
+                    },
+                    "resources": {
+                      "type": "string"
+                    },
+                    "humanAgentSplit": {
+                      "type": "string"
+                    },
+                    "retrospect": {
+                      "type": "string"
+                    },
+                    "placeholder": {
+                      "type": "boolean"
+                    },
+                    "personalCard": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "cardId",
+                            "roundId",
+                            "status"
+                          ],
+                          "properties": {
+                            "cardId": {
+                              "type": "string"
+                            },
+                            "roundId": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "draft",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "open",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "reviewing",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "confirmed",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sourceRef": {
+                      "type": "string"
+                    },
+                    "sourceDocumentId": {
+                      "type": "string"
+                    },
+                    "sourceRevision": {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "sourceTitle": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "changedFields": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "const": "title",
+                            "type": "string"
+                          },
+                          {
+                            "const": "why",
+                            "type": "string"
+                          },
+                          {
+                            "const": "outcome",
+                            "type": "string"
+                          },
+                          {
+                            "const": "successEvidence",
+                            "type": "string"
+                          },
+                          {
+                            "const": "boundaries",
+                            "type": "string"
+                          },
+                          {
+                            "const": "keyPath",
+                            "type": "string"
+                          },
+                          {
+                            "const": "milestones",
+                            "type": "string"
+                          },
+                          {
+                            "const": "resources",
+                            "type": "string"
+                          },
+                          {
+                            "const": "dependencies",
+                            "type": "string"
+                          },
+                          {
+                            "const": "humanAgentSplit",
+                            "type": "string"
+                          },
+                          {
+                            "const": "risk",
+                            "type": "string"
+                          },
+                          {
+                            "const": "retrospect",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "feedback": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "seq",
+                "missionId",
+                "field",
+                "kind",
+                "authorId",
+                "authorName",
+                "body",
+                "quote",
+                "proposed",
+                "original",
+                "sourceVersion",
+                "basis",
+                "late",
+                "round",
+                "createdAt",
+                "verdict",
+                "decision",
+                "actions"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "seq": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "missionId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "field": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "title",
+                          "type": "string"
+                        },
+                        {
+                          "const": "why",
+                          "type": "string"
+                        },
+                        {
+                          "const": "outcome",
+                          "type": "string"
+                        },
+                        {
+                          "const": "successEvidence",
+                          "type": "string"
+                        },
+                        {
+                          "const": "boundaries",
+                          "type": "string"
+                        },
+                        {
+                          "const": "keyPath",
+                          "type": "string"
+                        },
+                        {
+                          "const": "milestones",
+                          "type": "string"
+                        },
+                        {
+                          "const": "resources",
+                          "type": "string"
+                        },
+                        {
+                          "const": "dependencies",
+                          "type": "string"
+                        },
+                        {
+                          "const": "humanAgentSplit",
+                          "type": "string"
+                        },
+                        {
+                          "const": "risk",
+                          "type": "string"
+                        },
+                        {
+                          "const": "retrospect",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "comment",
+                      "type": "string"
+                    },
+                    {
+                      "const": "quote",
+                      "type": "string"
+                    },
+                    {
+                      "const": "suggestion",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "authorId": {
+                  "type": "string"
+                },
+                "authorName": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "quote": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "proposed": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sourceVersion": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "basis": {
+                  "anyOf": [
+                    {
+                      "const": "draft",
+                      "type": "string"
+                    },
+                    {
+                      "const": "candidate",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "late": {
+                  "type": "boolean"
+                },
+                "round": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "createdAt": {
+                  "description": "应用时钟生成的 ISO 8601 时间",
+                  "type": "string"
+                },
+                "verdict": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "text",
+                    "tone"
+                  ],
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "tone": {
+                      "anyOf": [
+                        {
+                          "const": "open",
+                          "type": "string"
+                        },
+                        {
+                          "const": "accept",
+                          "type": "string"
+                        },
+                        {
+                          "const": "decline",
+                          "type": "string"
+                        },
+                        {
+                          "const": "late",
+                          "type": "string"
+                        },
+                        {
+                          "const": "wait",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "decision": {
+                  "anyOf": [
+                    {
+                      "const": "accept",
+                      "type": "string"
+                    },
+                    {
+                      "const": "decline",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "actionId",
+                      "actionType",
+                      "label"
+                    ],
+                    "properties": {
+                      "actionId": {
+                        "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                        "type": "string"
+                      },
+                      "actionType": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "itemId": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "by",
+                  "byName",
+                  "at",
+                  "note"
+                ],
+                "properties": {
+                  "by": {
+                    "type": "string"
+                  },
+                  "byName": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "description": "应用时钟生成的 ISO 8601 时间",
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CreateMissionCardFeedbackRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientId",
+          "kind",
+          "round",
+          "body"
+        ],
+        "properties": {
+          "clientId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "comment",
+                "type": "string"
+              },
+              {
+                "const": "quote",
+                "type": "string"
+              },
+              {
+                "const": "suggestion",
+                "type": "string"
+              }
+            ]
+          },
+          "round": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "missionId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "const": "title",
+                "type": "string"
+              },
+              {
+                "const": "why",
+                "type": "string"
+              },
+              {
+                "const": "outcome",
+                "type": "string"
+              },
+              {
+                "const": "successEvidence",
+                "type": "string"
+              },
+              {
+                "const": "boundaries",
+                "type": "string"
+              },
+              {
+                "const": "keyPath",
+                "type": "string"
+              },
+              {
+                "const": "milestones",
+                "type": "string"
+              },
+              {
+                "const": "resources",
+                "type": "string"
+              },
+              {
+                "const": "dependencies",
+                "type": "string"
+              },
+              {
+                "const": "humanAgentSplit",
+                "type": "string"
+              },
+              {
+                "const": "risk",
+                "type": "string"
+              },
+              {
+                "const": "retrospect",
+                "type": "string"
+              }
+            ]
+          },
+          "quote": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "proposed": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "body": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "sourceVersion": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        }
+      },
+      "CreateMissionCardFeedbackResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "feedback"
+        ],
+        "properties": {
+          "feedback": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "seq",
+              "missionId",
+              "field",
+              "kind",
+              "authorId",
+              "authorName",
+              "body",
+              "quote",
+              "proposed",
+              "original",
+              "sourceVersion",
+              "basis",
+              "late",
+              "round",
+              "createdAt",
+              "verdict",
+              "decision",
+              "actions"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "seq": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "missionId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "field": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "const": "title",
+                        "type": "string"
+                      },
+                      {
+                        "const": "why",
+                        "type": "string"
+                      },
+                      {
+                        "const": "outcome",
+                        "type": "string"
+                      },
+                      {
+                        "const": "successEvidence",
+                        "type": "string"
+                      },
+                      {
+                        "const": "boundaries",
+                        "type": "string"
+                      },
+                      {
+                        "const": "keyPath",
+                        "type": "string"
+                      },
+                      {
+                        "const": "milestones",
+                        "type": "string"
+                      },
+                      {
+                        "const": "resources",
+                        "type": "string"
+                      },
+                      {
+                        "const": "dependencies",
+                        "type": "string"
+                      },
+                      {
+                        "const": "humanAgentSplit",
+                        "type": "string"
+                      },
+                      {
+                        "const": "risk",
+                        "type": "string"
+                      },
+                      {
+                        "const": "retrospect",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "comment",
+                    "type": "string"
+                  },
+                  {
+                    "const": "quote",
+                    "type": "string"
+                  },
+                  {
+                    "const": "suggestion",
+                    "type": "string"
+                  }
+                ]
+              },
+              "authorId": {
+                "type": "string"
+              },
+              "authorName": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              },
+              "quote": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "proposed": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "original": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sourceVersion": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "basis": {
+                "anyOf": [
+                  {
+                    "const": "draft",
+                    "type": "string"
+                  },
+                  {
+                    "const": "candidate",
+                    "type": "string"
+                  }
+                ]
+              },
+              "late": {
+                "type": "boolean"
+              },
+              "round": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "createdAt": {
+                "description": "应用时钟生成的 ISO 8601 时间",
+                "type": "string"
+              },
+              "verdict": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "text",
+                  "tone"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "tone": {
+                    "anyOf": [
+                      {
+                        "const": "open",
+                        "type": "string"
+                      },
+                      {
+                        "const": "accept",
+                        "type": "string"
+                      },
+                      {
+                        "const": "decline",
+                        "type": "string"
+                      },
+                      {
+                        "const": "late",
+                        "type": "string"
+                      },
+                      {
+                        "const": "wait",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              },
+              "decision": {
+                "anyOf": [
+                  {
+                    "const": "accept",
+                    "type": "string"
+                  },
+                  {
+                    "const": "decline",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "actionId",
+                    "actionType",
+                    "label"
+                  ],
+                  "properties": {
+                    "actionId": {
+                      "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                      "type": "string"
+                    },
+                    "actionType": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MissionCardGroupView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "members",
+          "lastReadSeq",
+          "unread",
+          "entries"
+        ],
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName",
+                "title"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "displayName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "lastReadSeq": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unread": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "feedback"
+                  ],
+                  "properties": {
+                    "type": {
+                      "const": "message",
+                      "type": "string"
+                    },
+                    "feedback": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "seq",
+                        "missionId",
+                        "field",
+                        "kind",
+                        "authorId",
+                        "authorName",
+                        "body",
+                        "quote",
+                        "proposed",
+                        "original",
+                        "sourceVersion",
+                        "basis",
+                        "late",
+                        "round",
+                        "createdAt",
+                        "verdict",
+                        "decision",
+                        "actions"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "seq": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "missionId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "field": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "const": "title",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "why",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "outcome",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "successEvidence",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "boundaries",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "keyPath",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "milestones",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "resources",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "dependencies",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "humanAgentSplit",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "risk",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "retrospect",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "comment",
+                              "type": "string"
+                            },
+                            {
+                              "const": "quote",
+                              "type": "string"
+                            },
+                            {
+                              "const": "suggestion",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "authorId": {
+                          "type": "string"
+                        },
+                        "authorName": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "quote": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "proposed": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "original": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "sourceVersion": {
+                          "anyOf": [
+                            {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "basis": {
+                          "anyOf": [
+                            {
+                              "const": "draft",
+                              "type": "string"
+                            },
+                            {
+                              "const": "candidate",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "late": {
+                          "type": "boolean"
+                        },
+                        "round": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "createdAt": {
+                          "description": "应用时钟生成的 ISO 8601 时间",
+                          "type": "string"
+                        },
+                        "verdict": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "text",
+                            "tone"
+                          ],
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "tone": {
+                              "anyOf": [
+                                {
+                                  "const": "open",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "accept",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "decline",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "late",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "wait",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "decision": {
+                          "anyOf": [
+                            {
+                              "const": "accept",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decline",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "actions": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "actionId",
+                              "actionType",
+                              "label"
+                            ],
+                            "properties": {
+                              "actionId": {
+                                "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                                "type": "string"
+                              },
+                              "actionType": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "itemId": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "at",
+                    "text"
+                  ],
+                  "properties": {
+                    "type": {
+                      "const": "divider",
+                      "type": "string"
+                    },
+                    "at": {
+                      "description": "应用时钟生成的 ISO 8601 时间",
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "at",
+                    "text"
+                  ],
+                  "properties": {
+                    "type": {
+                      "const": "opening",
+                      "type": "string"
+                    },
+                    "at": {
+                      "description": "应用时钟生成的 ISO 8601 时间",
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "MarkMissionCardReadRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lastReadSeq"
+        ],
+        "properties": {
+          "lastReadSeq": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      },
+      "MarkMissionCardReadResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lastReadSeq",
+          "unread"
+        ],
+        "properties": {
+          "lastReadSeq": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unread": {
+            "minimum": 0,
+            "type": "integer"
           }
         }
       },

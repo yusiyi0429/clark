@@ -86,7 +86,8 @@ export function railGroups(cards: Card[], now: Date = new Date()): RailGroup[] {
     if (card.kind !== "mission-round") return [];
     const payload = payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(card);
     if ("phase" in payload && payload.phase === "confirmed") return [];
-    return [{ id: card.id, title: card.title, meta: missionRoundMeta(payload), tone: "amber", href: "/", missionRound: card }];
+    const firstCard = "cards" in payload ? payload.cards[0] : null;
+    return [{ id: card.id, title: card.title, meta: missionRoundMeta(payload), tone: "amber", href: firstCard ? `/mission-cards/${firstCard.cardId}` : "/", missionRound: card }];
   });
 
   const meetings = cards
@@ -237,14 +238,19 @@ export function NotificationRail({
     }
     const draft = item.missionRound.actions.find((descriptor) => descriptor.actionType === "mission-round.draft");
     if (!draft) {
-      setNotice("个人卡页即将上线");
+      if (item.href !== "/") onNavigate(item.href, origin);
+      else setNotice("这一轮暂无可打开的个人卡。");
       return;
     }
     setNotice("");
     action.reset();
     if (!await ask("草稿是占位：Agent 起草未接入，由 9 月个人卡生成，待大家讨论修改。整理草稿不会确认个人承诺，也不会开放讨论。", "整理个人卡草稿")) return;
     const saved = await action.run(draft);
-    if (saved) setNotice("草稿已整理。个人卡页即将上线");
+    if (saved) {
+      const firstCard = payloadOf<TMissionRoundSummary>(saved).cards[0];
+      if (firstCard) onNavigate(`/mission-cards/${firstCard.cardId}`, origin);
+      else setNotice("草稿已整理，这一轮暂无可打开的个人卡。");
+    }
   }
 
   // 分组出现 / 消失时，其余卡片从旧位置滑到新位置（FLIP，clark 同）。

@@ -11,9 +11,14 @@ import { ConversationNotice, ConversationThinking, ConversationTurns } from "./T
 import { useReferences } from "./references";
 import { useColumnMode } from "./useColumnMode";
 import { useConversation, type ConversationData } from "./useConversation";
+import { useMissionGroup } from "./useMissionGroup";
+import { MissionGroupTranscript } from "./MissionGroupTranscript";
+import { MissionGroupComposer } from "./MissionGroupComposer";
+import type { PersonalMissionGroup } from "./missionCardGroup";
+import groupStyles from "@/styles/mission-group.module.css";
 import w from "@/styles/app-shell.module.css";
 
-export type ConversationTarget = { scope: string; label: string };
+export type ConversationTarget = { scope: string; label: string; group?: PersonalMissionGroup };
 const GLOBAL: ConversationTarget = { scope: "global", label: "我的 Agent" };
 
 export type ConversationUiState = {
@@ -122,12 +127,26 @@ function RailConversation({
 }) {
   const column = useColumnMode();
   const [composerHeight, setComposerHeight] = useState(90);
+  const [channel, setChannel] = useState(target.group ? "group" : "agent");
   const end = useRef<HTMLDivElement>(null);
-  const channels: ConversationChannel[] = [{ id: "agent", kind: "agent", label: "我的 Agent", title: agentTitle, unread: 0 }];
+  const group = useMissionGroup(target.group, channel === "group" && (column.narrow ? ui.railMobileOpen : column.mode === "expanded"));
+  const members = group.view?.members ?? target.group?.members ?? [];
+  const channels: ConversationChannel[] = [
+    { id: "agent", kind: "agent", label: "我的 Agent", title: agentTitle, unread: 0 },
+    ...(target.group ? [{ id: "group", kind: "group" as const, label: `事项群组 · ${members.length + 1}`, title: `事项群组 · ${members.length + 1}`, unread: group.view?.unread ?? 0 }] : []),
+  ];
+  useEffect(() => {
+    if (!target.group?.reference) return;
+    setChannel("group");
+    if (column.narrow) ui.setRailMobileOpen(true);
+    else column.setMode("expanded");
+    // 只响应用户新选出的引用，刷新不主动展开。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.group?.reference?.nonce]);
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
-  }, [data.messages, data.streaming]);
+  }, [data.messages, data.streaming, group.view?.entries.length, channel]);
 
   return (
     <>
@@ -135,29 +154,31 @@ function RailConversation({
         testId="topic-conversation-rail"
         ariaLabel={`${target.label} · 对话`}
         channels={channels}
-        channel="agent"
-        onChannel={() => undefined}
+        channel={channel}
+        onChannel={setChannel}
         mode={column.mode}
         onMode={column.setMode}
         mobileOpen={ui.railMobileOpen}
         onMobileOpen={ui.setRailMobileOpen}
         composerHeight={composerHeight}
       >
-        <AttachmentStatus data={data} className={cs.error} />
-        <div className={cs.log} role="log" aria-label={`与${agentTitle}的对话`} aria-live="polite" aria-relevant="additions text">
-          {data.messages.length ? <ConversationTurns messages={data.messages} /> : !data.streaming ? <p className={cs.empty}>暂无消息</p> : null}
-          {data.error && !data.streaming ? <ConversationNotice text={data.error} /> : null}
-          {data.streaming ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} /> : null}
+        {channel === "agent" ? <AttachmentStatus data={data} className={cs.error} /> : null}
+        <div className={cs.log} role="log" aria-label={channel === "group" ? "事项群组公开讨论" : `与${agentTitle}的对话`} aria-live="polite" aria-relevant="additions text">
+          {channel === "group" ? <MissionGroupTranscript entries={group.view?.entries ?? []} /> : <>
+            {data.messages.length ? <ConversationTurns messages={data.messages} /> : !data.streaming ? <p className={cs.empty}>暂无消息</p> : null}
+            {data.error && !data.streaming ? <ConversationNotice text={data.error} /> : null}
+            {data.streaming ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} /> : null}
+          </>}
           <div ref={end} />
         </div>
-        <p className={cs.footnote}>仅你可见 · 只读：不改左侧内容、不形成决定</p>
+        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : target.group ? "仅你可见 · 只读：不改这张卡、不进集中 Review" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
       </ConversationColumn>
-      <ColumnComposer
+      {channel === "group" && target.group ? <MissionGroupComposer cardId={target.group.cardId} viewerId={target.group.viewerId} phase={target.group.phase} channels={channels} channel={channel} onChannel={setChannel} narrow={column.narrow} mobileOpen={ui.railMobileOpen} onMobileOpen={ui.setRailMobileOpen} onHeightChange={setComposerHeight} reference={target.group.reference ?? null} onRemoveReference={target.group.onRemoveReference} busy={group.sending} error={group.error} onSend={group.send} /> : <ColumnComposer
         data={data}
         label={target.label}
         channels={channels}
-        channel="agent"
-        onChannel={() => undefined}
+        channel={channel}
+        onChannel={setChannel}
         narrow={column.narrow}
         mobileOpen={ui.railMobileOpen}
         onMobileOpen={ui.setRailMobileOpen}
@@ -166,7 +187,9 @@ function RailConversation({
         onHeightChange={setComposerHeight}
         prefill={ui.prefill}
         onPrefillUsed={ui.consumePrefill}
-      />
+        draftOwnerId={target.group?.viewerId}
+        allowAttachments={!target.group}
+      />}
     </>
   );
 }

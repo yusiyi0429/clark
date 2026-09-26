@@ -28,6 +28,9 @@ import {
   MissionRoundSummary,
   MissionRoundDraftPayload,
   ExecuteMissionRoundActionRequest,
+  MissionCardFeedbackView, PersonalMissionCardMission, PersonalMissionCardPayload,
+  CreateMissionCardFeedbackRequest, CreateMissionCardFeedbackResponse, MissionCardGroupView,
+  MarkMissionCardReadRequest, MarkMissionCardReadResponse,
   CapabilitySupportRef,
   CapabilityManagementResponse,
   CreateCeoIssueRequest,
@@ -325,6 +328,36 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "401": errorResponse,
             "404": errorResponse,
           },
+        },
+      },
+      "/api/mission-cards/{cardId}": {
+        get: {
+          operationId: "getPersonalMissionCard", summary: "读取可见的个人卡正文、版本、意见和本轮动作",
+          parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Personal Mission Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/mission-cards/{cardId}/feedback": {
+        post: {
+          operationId: "createPersonalMissionCardFeedback", summary: "发表公开评论、引用或修改建议；按 clientId 幂等",
+          parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreateMissionCardFeedbackRequest" }),
+          responses: { "200": { description: "公开意见", content: { "application/json": { schema: { $ref: "#/components/schemas/CreateMissionCardFeedbackResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/mission-cards/{cardId}/group": {
+        get: {
+          operationId: "getPersonalMissionCardGroup", summary: "公开意见、开场、阶段分隔线及未读；after 只过滤意见，系统事件始终返回",
+          parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }, { name: "after", in: "query", required: false, schema: { type: "integer", minimum: 0 } }],
+          responses: { "200": { description: "事项群组", content: { "application/json": { schema: { $ref: "#/components/schemas/MissionCardGroupView" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/mission-cards/{cardId}/group/read": {
+        post: {
+          operationId: "markPersonalMissionCardRead", summary: "已读位置只增不减，最多到本卡最后一条公开意见",
+          parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MarkMissionCardReadRequest" }),
+          responses: { "200": { description: "已读状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MarkMissionCardReadResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
         },
       },
       "/api/mission-rounds/{roundId}": {
@@ -1257,6 +1290,14 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MissionRoundSummary: MissionRoundSummary as JsonSchema,
         MissionRoundDraftPayload: MissionRoundDraftPayload as JsonSchema,
         ExecuteMissionRoundActionRequest: ExecuteMissionRoundActionRequest as JsonSchema,
+        MissionCardFeedbackView: MissionCardFeedbackView as JsonSchema,
+        PersonalMissionCardMission: PersonalMissionCardMission as JsonSchema,
+        PersonalMissionCardPayload: PersonalMissionCardPayload as JsonSchema,
+        CreateMissionCardFeedbackRequest: CreateMissionCardFeedbackRequest as JsonSchema,
+        CreateMissionCardFeedbackResponse: CreateMissionCardFeedbackResponse as JsonSchema,
+        MissionCardGroupView: MissionCardGroupView as JsonSchema,
+        MarkMissionCardReadRequest: MarkMissionCardReadRequest as JsonSchema,
+        MarkMissionCardReadResponse: MarkMissionCardReadResponse as JsonSchema,
         CapabilitySupportRef: CapabilitySupportRef as JsonSchema,
         CapabilityManagementResponse: CapabilityManagementResponse as JsonSchema,
         CreateCeoIssueRequest: CreateCeoIssueRequest as JsonSchema,

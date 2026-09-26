@@ -90,7 +90,7 @@ web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，�
 ${HUMAN_WRITING_STYLE}`;
 
 /** 成员的 DRI Agent：只读规则、证据标注与“企业知识”称谓同 CEO Agent；不给 CEO 决策面（战场总览、待决策议题）和首页全局上下文。 */
-function driSystemPrompt(displayName: string): string {
+function driSystemPrompt(displayName: string, personalCard = false): string {
   return `# 角色
 
 你是 ${displayName} 的 DRI Agent，天枢里只供 ${displayName} 本人使用的只读对话助手。用 ${displayName} 所用的语言回复，避免空话。
@@ -117,7 +117,7 @@ function driSystemPrompt(displayName: string): string {
 
 # 工具
 
-- \`list_missions\`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。
+${personalCard ? "当前个人卡的正文、公开意见和轮次已放在 currentObject；只根据这份授权资料讨论个人承诺。不能查询或推测其他人的个人卡，也不能把私聊变为公开意见。" : "- `list_missions`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。"}
 - \`list_sections\`：企业知识章节目录，先看目录再决定读哪里。
 - \`search_sections\`：在企业知识内按关键词定位相关章节。
 - \`get_passages\`：读取指定章节的段落正文。
@@ -131,7 +131,7 @@ function driSystemPrompt(displayName: string): string {
 
 以下问题必须检索：具体公司、产品、人物、政策或市场的现状；数字、价格、规模、融资和财报；“最新”“现在”“近期”等时效问题；以及你没有把握的外部事实。
 
-顺序是先内后外。公司内部事实先查企业知识与 Mission 列表。问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源；该工具返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search。存在多个独立信息需求时，先定好最多 4 项证据问题再逐项检索；除非被追问，不要把检索计划写进回答。
+顺序是先内后外。公司内部事实先查企业知识与${personalCard ? "当前卡资料" : " Mission 列表"}。问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源；该工具返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search。存在多个独立信息需求时，先定好最多 4 项证据问题再逐项检索；除非被追问，不要把检索计划写进回答。
 
 web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，达到上限会中止本轮并报错。把额度用在关键分歧上，证据够了就停。博查摘要只能用于发现线索，不能当作最终证据。本运行没有读取网页原文的工具，所以引用外部事实时必须给出标题与 URL，并说明这是检索摘要、未经原文核验。
 
@@ -396,7 +396,9 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         },
       })] : [];
       const isCeo = input.viewer.role === "ceo";
-      const viewerBoardTools = isCeo ? boardTools : boardTools.filter((tool) => !CEO_ONLY_TOOLS.has(tool.name));
+      const personalCard = input.scope.startsWith("mission-card:");
+      // The current card has already passed object authorization. The unscoped Mission query must not bypass that boundary.
+      const viewerBoardTools = isCeo ? boardTools : boardTools.filter((tool) => !CEO_ONLY_TOOLS.has(tool.name) && !(personalCard && tool.name === "list_missions"));
       const recreated = !validRuntimeEntries(input.runtimeEntries, input.piSessionId);
       const piSessionId = recreated ? randomUUID() : input.piSessionId;
       const warning = recreated ? "Pi runtime entries were corrupted; rebuilt from current object and recent raw messages" : undefined;
@@ -414,7 +416,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const { session } = await createAgentSession({
         model,
         modelRuntime,
-        resourceLoader: isCeo ? ceoResourceLoader : resourceLoaderFor(driSystemPrompt(input.viewer.displayName)),
+        resourceLoader: isCeo ? ceoResourceLoader : resourceLoaderFor(driSystemPrompt(input.viewer.displayName, personalCard)),
         customTools: [...mcpTools, ...viewerBoardTools, ...outletFeedTools, searchTool],
         tools: [...COMPANY_MEMORY_TOOLS, ...viewerBoardTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
         sessionManager: manager,

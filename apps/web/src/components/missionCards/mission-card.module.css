@@ -1,0 +1,76 @@
+/* clark workspace / card-document：同一阅读面、版本行、字段列和行内意见；材质统一为晨光冷白。 */
+.screen { display: flex; flex: 1; min-width: 0; min-height: 0; --glass-light-fill: var(--onboarding-glass); --glass-blur: blur(var(--onboarding-blur)) saturate(var(--onboarding-sat)); --glass-light-shadow: var(--onboarding-shadow); }
+.screen :global(.ts-detail) { background: var(--surface); overflow-y: auto; overscroll-behavior: contain; }
+.content { width: 100%; min-width: 0; padding: 24px calc(32px + var(--conversation-lane, 0px)) 128px 32px; color: var(--ink-muted); transition: padding-right var(--dur-slow) var(--ease-brand); }
+.content > * { max-width: 840px; margin-inline: auto; }
+.document { font-size: 15px; line-height: 1.85; color: var(--ink-muted); }
+.version { display: grid; gap: 8px; padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid var(--hairline); font-size: 14px; line-height: 1.75; }
+.versionMain, .source { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.versionMain strong { color: var(--ink); font-weight: 600; }
+.source { color: var(--ink-muted); }
+.source a { color: var(--brand-deep); text-decoration: underline; text-underline-offset: 4px; }
+.tasks { display: grid; gap: 40px; }
+.task h2, .loose h2 { margin: 0; color: var(--ink); font-size: 21px; line-height: 1.5; font-weight: 600; }
+.taskMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 8px 0 20px; color: var(--ink-faint); font-size: 13px; overflow-wrap: anywhere; }
+.placeholder { padding: 1px 8px; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-pill-radius); color: var(--ink-muted); }
+.fields { margin: 0; display: grid; }
+.field { display: grid; grid-template-columns: 104px minmax(0,1fr); gap: 16px; border-top: 1px solid var(--hairline); padding: 16px 0; }
+.field dt { display: grid; align-content: start; gap: 8px; color: var(--ink-muted); font-size: 14px; font-weight: 600; }
+.field dd { min-width: 0; margin: 0; }
+.field p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.field ul { margin: 0; padding-left: 22px; list-style: disc; }
+.field li { margin: 2px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fieldText { outline-offset: 4px; }
+.field[data-changed] { border-left: 2px solid var(--onboarding-blue); padding-left: 12px; }
+.changed { color: var(--brand-deep); font-size: 12px; font-weight: 400; }
+.missing { color: var(--ink-faint); }
+.owner { color: var(--ink); font-weight: 600; }
+.fieldActions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; opacity: 0; transition: opacity 160ms ease; }
+.field:hover .fieldActions, .field:focus-within .fieldActions { opacity: 1; }
+.textAction.textAction { min-height: 44px; height: 44px; padding: 0 8px; border-radius: var(--onboarding-inset-radius); font-size: 13px; color: var(--brand-deep); }
+.proposal { display: grid; gap: 12px; margin-top: 12px; padding: 16px; border: 1px solid color-mix(in oklab, var(--onboarding-blue) 20%, var(--surface)); border-radius: var(--onboarding-inset-radius); background: color-mix(in oklab, var(--onboarding-blue) 5%, var(--surface)); }
+.proposal label { color: var(--ink); font-size: 14px; font-weight: 600; }
+.proposal textarea { width: 100%; min-height: 112px; resize: vertical; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-control-radius); padding: 12px; background: var(--surface); color: var(--ink); font: inherit; line-height: 1.7; outline: none; }
+.proposal textarea:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+.hint { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.75; }
+.proposalError { margin: 0; color: var(--onboarding-error); font-size: 14px; line-height: 1.75; }
+.inlineActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.primary.primary { min-height: 44px; padding: 8px 20px; border-radius: var(--onboarding-pill-radius); background: var(--onboarding-blue); color: var(--solid-fg); font-size: 17px; font-weight: 600; }
+.secondary.secondary { min-height: 44px; padding: 8px 16px; border-radius: var(--onboarding-control-radius); font-size: 14px; color: var(--ink-muted); }
+.remarks { display: grid; gap: 12px; margin-top: 12px; }
+.remark { display: grid; gap: 8px; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); padding: 16px; background: var(--morning-start); color: var(--ink-muted); font-size: 14px; line-height: 1.75; }
+.remark header { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; color: var(--ink-faint); font-size: 13px; }
+.remarkWho { color: var(--ink); font-weight: 600; }
+.remark p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.remark blockquote { margin: 0; padding-left: 12px; border-left: 2px solid color-mix(in oklab, var(--onboarding-blue) 25%, var(--surface)); color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.verdict { margin-left: auto; font-weight: 500; }
+.verdict[data-tone='wait'] { color: var(--brand-deep); }
+.verdict[data-tone='accept'] { color: var(--confirmed); }
+.verdict[data-tone='late'] { color: var(--judgment); }
+.remark[data-tone='late'] { background: var(--judgment-wash); border-color: var(--hairline-strong); }
+.basis { color: var(--ink-faint); font-size: 12px; }
+.diff { display: grid; gap: 8px; }
+.diff p { display: grid; gap: 2px; }
+.diff p > span { color: var(--ink-faint); font-size: 12px; }
+.diff del { color: var(--ink-faint); text-decoration-color: var(--ink-faint); }
+.diff ins { padding: 4px 8px; background: color-mix(in oklab, var(--onboarding-blue) 9%, var(--surface)); border-radius: var(--r-bar); color: var(--brand-deep); text-decoration: none; }
+.loose { border-top: 1px solid var(--hairline); padding-top: 24px; margin-top: 40px; }
+.loose h2 { font-size: 18px; }
+.error { padding: 12px 16px; border: 1px solid color-mix(in oklab, var(--onboarding-error) 15%, transparent); border-radius: var(--onboarding-inset-radius); background: var(--counter-wash); color: var(--onboarding-error); font-size: 14px; line-height: 1.75; }
+.notice { padding: 12px 16px; border-radius: var(--onboarding-inset-radius); background: color-mix(in oklab, var(--onboarding-blue) 7%, var(--surface)); color: var(--brand-deep); font-size: 14px; line-height: 1.75; }
+.dialog { width: min(560px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--hairline); border-radius: var(--onboarding-card-radius); background: var(--onboarding-glass); color: var(--ink-muted); box-shadow: var(--elev-3), var(--onboarding-highlight); backdrop-filter: blur(var(--onboarding-blur)) saturate(var(--onboarding-sat)); }
+.dialog h2 { margin: 0 0 16px; color: var(--ink); font-size: 24px; font-weight: 600; }
+.dialog h3 { margin: 24px 0 8px; color: var(--ink); font-size: 16px; font-weight: 600; }
+.dialog p { margin: 0; white-space: pre-wrap; line-height: 1.8; }
+.dialog footer { display: flex; justify-content: flex-end; margin-top: 24px; }
+.tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+.tabs button { min-height: 44px; border-radius: var(--onboarding-pill-radius); padding: 8px 16px; }
+.tabs [aria-selected='true'] { background: var(--onboarding-blue); color: var(--solid-fg); }
+.artifact { overflow-wrap: anywhere; }
+.artifact table { display: block; max-width: 100%; overflow-x: auto; }
+@media (hover: none) { .fieldActions { opacity: 1; } }
+@media (max-width: 1000px) { .content { padding-inline: 24px calc(24px + var(--conversation-lane, 0px)); } .field { grid-template-columns: 88px minmax(0,1fr); gap: 12px; } }
+@media (max-width: 759px) { .content { padding: 16px 16px 152px; } .document { font-size: 15px; } .task h2 { font-size: 20px; } .field { grid-template-columns: 1fr; gap: 8px; padding-block: 16px; } .field dt { font-size: 14px; } .fieldActions { opacity: 1; } .taskMeta { margin-bottom: 16px; } .primary.primary { width: 100%; } .proposal { padding: 12px; } .remark { padding: 12px; } .verdict { margin-left: 0; } }
+@media (prefers-reduced-motion: reduce) { .fieldActions, .content { transition: none; } }
+@media (prefers-reduced-transparency: reduce) { .dialog { background: var(--morning-start); backdrop-filter: none; } }
+@media (prefers-contrast: more) { .field, .version, .remark { border-color: var(--ink-muted); } }

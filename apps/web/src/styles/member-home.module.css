@@ -43,10 +43,10 @@
 .quiet {
   margin: 0;
   padding: 4px 6px;
-  color: rgb(255 255 255 / .82);
+  color: var(--ink-muted);
   font-size: var(--type-meta, 12px);
   line-height: 1.6;
-  text-shadow: 0 .5px 1px rgb(0 0 0 / .22);
+  text-shadow: none;
 }
 
 @media (max-width: 690px) {

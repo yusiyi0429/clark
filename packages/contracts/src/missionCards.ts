@@ -1,5 +1,8 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { MonthlyPlanPeriod } from "./monthlyPlans.js";
+import { ActionDescriptor } from "./cards.js";
+import { MissionCardPayload } from "./missions.js";
+import { ThreadMember } from "./threads.js";
 
 /** 个人任务允许建议的 12 个字段；唯一责任人由个人卡归属决定。 */
 export const MissionCardField = Type.Union([
@@ -73,9 +76,61 @@ export const ExecuteMissionRoundActionRequest = Type.Object({
   viewCardId: Type.Optional(Type.String()),
 }, { additionalProperties: false });
 
+const FeedbackKind = Type.Union([Type.Literal("comment"), Type.Literal("quote"), Type.Literal("suggestion")]);
+const NullableText = Type.Union([Type.String(), Type.Null()]);
+export const MissionCardFeedbackView = Type.Object({
+  id: Type.String(), seq: Type.Integer({ minimum: 1 }), missionId: NullableText,
+  field: Type.Union([MissionCardField, Type.Null()]), kind: FeedbackKind,
+  authorId: Type.String(), authorName: Type.String(), body: Type.String(),
+  quote: NullableText, proposed: NullableText, original: NullableText,
+  sourceVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  basis: Type.Union([Type.Literal("draft"), Type.Literal("candidate")]),
+  late: Type.Boolean(), round: Type.Integer({ minimum: 1 }), createdAt: DateTime,
+  verdict: Type.Object({ text: Type.String(), tone: Type.Union([Type.Literal("open"), Type.Literal("accept"), Type.Literal("decline"), Type.Literal("late"), Type.Literal("wait")]) }, { additionalProperties: false }),
+  decision: Type.Union([Type.Literal("accept"), Type.Literal("decline"), Type.Null()]),
+  actions: Type.Array(ActionDescriptor),
+}, { additionalProperties: false });
+export const PersonalMissionCardMission = Type.Object({
+  ...MissionCardPayload.properties, version: Type.Integer({ minimum: 1 }), changedFields: Type.Array(MissionCardField),
+}, { additionalProperties: false });
+export const PersonalMissionCardPayload = Type.Object({
+  round: MissionRoundSummary,
+  card: Type.Object({
+    cardId: Type.String(), ownerId: Type.String(), ownerName: Type.String(), roleLabel: NullableText,
+    members: Type.Array(ThreadMember), status: Type.String(),
+    shown: Type.Union([Type.Literal("draft"), Type.Literal("candidate"), Type.Literal("confirmed")]),
+    missions: Type.Array(PersonalMissionCardMission),
+  }, { additionalProperties: false }),
+  feedback: Type.Array(MissionCardFeedbackView),
+  confirmation: Type.Union([Type.Object({ by: Type.String(), byName: Type.String(), at: DateTime, note: Type.String() }, { additionalProperties: false }), Type.Null()]),
+}, { additionalProperties: false });
+export const CreateMissionCardFeedbackRequest = Type.Object({
+  clientId: Type.String({ format: "uuid" }), kind: FeedbackKind, round: Type.Integer({ minimum: 1 }),
+  missionId: Type.Optional(Type.String({ minLength: 1 })), field: Type.Optional(MissionCardField),
+  quote: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
+  proposed: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
+  body: Type.String({ minLength: 1, maxLength: 4000 }), sourceVersion: Type.Optional(Type.Integer({ minimum: 1 })),
+}, { additionalProperties: false });
+export const CreateMissionCardFeedbackResponse = Type.Object({ feedback: MissionCardFeedbackView }, { additionalProperties: false });
+export const MissionCardGroupView = Type.Object({
+  members: Type.Array(ThreadMember), lastReadSeq: Count, unread: Count,
+  entries: Type.Array(Type.Union([
+    Type.Object({ type: Type.Literal("message"), feedback: MissionCardFeedbackView }, { additionalProperties: false }),
+    Type.Object({ type: Type.Literal("divider"), at: DateTime, text: Type.String() }, { additionalProperties: false }),
+    Type.Object({ type: Type.Literal("opening"), at: DateTime, text: Type.String() }, { additionalProperties: false }),
+  ])),
+}, { additionalProperties: false });
+export const MarkMissionCardReadRequest = Type.Object({ lastReadSeq: Count }, { additionalProperties: false });
+export const MarkMissionCardReadResponse = Type.Object({ lastReadSeq: Count, unread: Count }, { additionalProperties: false });
+
 export type TMissionCardField = Static<typeof MissionCardField>;
 export type TMissionRoundPhase = Static<typeof MissionRoundPhase>;
 export type TMissionCardRow = Static<typeof MissionCardRow>;
 export type TMissionRoundSummary = Static<typeof MissionRoundSummary>;
 export type TMissionRoundDraftPayload = Static<typeof MissionRoundDraftPayload>;
 export type TExecuteMissionRoundActionRequest = Static<typeof ExecuteMissionRoundActionRequest>;
+export type TMissionCardFeedbackView = Static<typeof MissionCardFeedbackView>;
+export type TPersonalMissionCardMission = Static<typeof PersonalMissionCardMission>;
+export type TPersonalMissionCardPayload = Static<typeof PersonalMissionCardPayload>;
+export type TCreateMissionCardFeedbackRequest = Static<typeof CreateMissionCardFeedbackRequest>;
+export type TMissionCardGroupView = Static<typeof MissionCardGroupView>;

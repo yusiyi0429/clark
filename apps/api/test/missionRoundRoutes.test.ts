@@ -52,7 +52,7 @@ describe("Mission round HTTP boundary", () => {
     } finally { await t.close(); }
   });
 
-  it("allows the battlefield DRI to open, returns the current Card on replay and rejects unsupported view projection without writing", async () => {
+  it("allows the battlefield DRI to open, returns the current Card on replay and rejects an unrelated view before writing", async () => {
     const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(start) });
     try {
       const { roundId, cardId } = await seed(t);
@@ -60,14 +60,15 @@ describe("Mission round HTTP boundary", () => {
       const cookie = await t.memberCookie();
       const view = await t.app.inject({ method: "GET", url: `/api/mission-rounds/${roundId}`, headers: { cookie } });
       const token = view.json().cards[0].actions.find((a: {actionType: string}) => a.actionType === "mission-round.open").actionId;
-      const unavailable = await execute(t, cookie, token, { viewCardId: cardId });
-      expect(unavailable.statusCode).toBe(400);
-      expect(unavailable.json().code).toBe("VIEW_CARD_NOT_AVAILABLE");
+      const unavailable = await execute(t, cookie, token, { viewCardId: randomUUID() });
+      expect(unavailable.statusCode).toBe(404);
+      expect(unavailable.json().code).toBe("PERSONAL_MISSION_CARD_NOT_FOUND");
       expect((await t.sql("SELECT status FROM mission_rounds WHERE id=$1", [roundId]))[0].status).toBe("draft");
       const opened = await execute(t, cookie, token);
       expect(opened.statusCode).toBe(200);
       expect(opened.json().cards[0]).toMatchObject({ version: 2, payload: { phase: "open", openedAt: start, closesAt: "2026-10-03T02:00:00.000Z", serverNow: start, approver: true } });
       expect((await execute(t, cookie, token)).json().cards[0].version).toBe(2);
+      expect((await execute(t, cookie, token, { viewCardId: cardId })).json().cards[0]).toMatchObject({ kind: "personal-mission-card", version: 2, payload: { card: { cardId } } });
       const duplicate = await execute(t, cookie, action(t, roundId, "mission-round.open", 2));
       expect(duplicate.statusCode).toBe(409);
       expect(duplicate.json().code).toBe("ROUND_ALREADY_OPEN");

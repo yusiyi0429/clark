@@ -1,0 +1,50 @@
+[
+  {
+    "url": "/mission-cards/633142c8-6462-4590-8ae9-3abedb4a94d8",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "articleWidth": 840,
+    "openingCount": 1,
+    "reducedMotion": false
+  },
+  {
+    "url": "/mission-cards/633142c8-6462-4590-8ae9-3abedb4a94d8",
+    "width": 834,
+    "scrollWidth": 834,
+    "articleWidth": 400,
+    "openingCount": 1,
+    "reducedMotion": false
+  },
+  {
+    "url": "/mission-cards/633142c8-6462-4590-8ae9-3abedb4a94d8",
+    "width": 390,
+    "scrollWidth": 390,
+    "articleWidth": 288,
+    "openingCount": 1,
+    "reducedMotion": false
+  },
+  {
+    "url": "/me/mission-cards/633142c8-6462-4590-8ae9-3abedb4a94d8",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "articleWidth": 840,
+    "openingCount": 1,
+    "reducedMotion": true
+  },
+  {
+    "url": "/me/mission-cards/633142c8-6462-4590-8ae9-3abedb4a94d8",
+    "width": 834,
+    "scrollWidth": 834,
+    "articleWidth": 400,
+    "openingCount": 1,
+    "reducedMotion": true
+  },
+  {
+    "url": "/me/mission-cards/633142c8-6462-4590-8ae9-3abedb4a94d8",
+    "width": 390,
+    "scrollWidth": 390,
+    "articleWidth": 288,
+    "openingCount": 1,
+    "reducedMotion": true
+  }
+]

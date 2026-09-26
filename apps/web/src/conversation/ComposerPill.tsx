@@ -214,7 +214,7 @@ function ActionIcons() {
  * 右端那颗钮：语音没接入，所以麦克风态是灰的、按不下去，悬停写「语音对话尚未接入」（禁用的钮收不到悬停，
  * 提示挂在外面那一层）。有字时是发送，回答中是停止。
  */
-export function ComposerAction({ state, onStop, sendLabel = "发送", unavailable = "语音对话尚未接入" }: { state: ActionState; onStop?: () => void; sendLabel?: string; unavailable?: string }) {
+export function ComposerAction({ state, onStop, isDisabled = false, sendLabel = "发送", unavailable = "语音对话尚未接入" }: { state: ActionState; onStop?: () => void; isDisabled?: boolean; sendLabel?: string; unavailable?: string }) {
   const label = state === "stop" ? "停止本次回答" : state === "send" ? sendLabel : unavailable;
   return (
     <span className={p.actionSlot} title={state === "mic" ? unavailable : undefined}>
@@ -223,7 +223,7 @@ export function ComposerAction({ state, onStop, sendLabel = "发送", unavailabl
         className={p.actionButton}
         data-state={state}
         type={state === "send" ? "submit" : "button"}
-        isDisabled={state === "mic" || (state === "stop" && !onStop)}
+        isDisabled={state === "mic" || (state === "send" && isDisabled) || (state === "stop" && !onStop)}
         onPress={state === "stop" ? onStop : undefined}
         aria-label={label}
       >

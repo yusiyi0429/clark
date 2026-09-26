@@ -12,7 +12,7 @@
 | 1p | 01p 验收后的打磨 `issues/01p-onboarding-polish.md` | resolved（待 Claude 验收、提交） |
 | 1q | 01q 减少透明度回退 [报告](evidence/01q/report.md) | resolved（编译／CDP／类型检查／291 项测试通过；待 Claude 验收、提交） |
 | 2 | 04a 数据、状态机与讨论候选 `issues/04a-mission-rounds-data-and-drafts.md` | resolved（待 Claude 验收、提交；[报告](evidence/04a/report.md)） |
-| 3 | 04b 个人卡页与讨论 `issues/04b-mission-card-page-and-discussion.md` | ready-for-agent |
+| 3 | 04b 个人卡页与讨论 `issues/04b-mission-card-page-and-discussion.md` | resolved（待 Claude 验收、提交；[报告](evidence/04b/report.md)；预览副本删除被自动审批拦截） |
 | 4 | 04c 集中 Review 与确认 `issues/04c-mission-round-review-and-confirm.md` | ready-for-agent |
 | 5 | 04d 通知、入口与引导中的状态 `issues/04d-mission-card-notices-and-entries.md` | ready-for-agent |
 | 6 | 03 DRI 首页小组件 `issues/03-dri-home-widgets.md` | ready-for-agent |
@@ -48,3 +48,12 @@
 - Contracts **42 → 46 全通过**；Web **291 → 314 全通过**；API **477 通过／8 失败 → 503 通过／同样 8 失败**。API 最终全部 50 文件按每组 5 文件、`--maxWorkers=1` 串行完成；单次长跑曾有材料超时、fork IPC 断开及 threads 原生异常，均单独记录，不计作通过。8 项稳定失败仍是已有 Windows/Git Bash 部署脚本问题。API/Web 类型检查、gen:client、diff whitespace 检查通过。
 - 浏览器实际走通签发计划 → 占位说明确认 →「草稿 · 可以统一开放讨论」，检查 1440×900 与 375×812，无横向溢出。8 张截图、完整改动清单、设计补充及日志见 [报告](evidence/04a/report.md)。3500/4500、自建测试库、同层 Web 副本和专用浏览器已清理，其他服务 PID 不变。依赖锁文件最终无差异，候选 JSON、API 声纹文件未改，无 Git 写命令。
 - ADR-0022、ADR-0019/0020 与 CONTEXT 已同步。slot 独立投影、目标依据版本冻结、`viewCardId` 在 04a 写前拒绝等补充已记录。仍需 Claude 验收、真实登记映射核对、GAP-04 决定及本机长跑运行器稳定性复核；04b/04c/04d 尚待接续。
+
+### 04b · 2026-09-27
+
+- 整页移植概念版个人卡阅读与讨论：共用两个角色路由、13 字段正文、来源与版本、首次五步说明、固定窗口倒计时、行内引用和建议、公开群组／私有 Agent。成员与 CEO 共用工作区过渡和焦点还原；CEO 通知整理成功可直接打开个人卡。正文 840px、晨光厚白玻璃与实心天枢蓝沿用现有语言。
+- 卡页、三类意见、群组时间线、已读与私人 scope 接通；§3.2 全 15 个组合均有写入测试，意见保留原文和版本、幂等且不直接改正文。成员个人卡 Agent 禁止调用无卡权限过滤的 list_missions。
+- Web **314 → 372 全通过（47 文件）**；Contracts **46 → 47 全通过**。API 按指定串行命令完整跑完 **524 通过／同样 8 项部署失败**；后补目标与权限两项红绿测试，相关 37/37，全量加补测去重 **526 通过／8 既有失败**。API/Web 类型检查及差异空白检查通过。
+- 测试库真实 UI 演练整理 5 卡／12 条任务 → 开放 → 三类公开意见 → 私聊隔离 → 3 条意见快照 → 截止后评论与候选引用 → 重开第 2 轮与划词引用；最终 6 条意见、快照仍 3 条。两身份在 1440／834／390 均无横向溢出；验证手机群组浮层、未读、断网保留输入、中文错误提示、返回焦点与减少动效，截图及边界见 [报告](evidence/04b/report.md)。浏览器截止使用外部快照控制，未推进 API 固定时钟，严格截止边界以 API 测试为证。
+- 未移植部分逐项列于报告：04c 的逐条处理／确认、04d 的成员通知、10 月原件页签与全文、演示拨钟和本机业务 store、执行状态／完成率、名单弹层、私聊转公开与会议胶囊等，均有设计范围或宿主适配原因。成员本次从深链接进入，不宣称通知已上线。
+- 3500／4500、测试库、合成人员目录与专用浏览器已关闭清理，保护端口 PID 不变；副本与源 215 个 src 文件 hash 一致。自动审批以 blocked by policy 拒绝递归及逐文件删除预览副本，已单独解除 junction，`apps/web-04b-preview` 仍需人工删除。原依赖、锁文件、候选文件及 API 声纹文件未改变，无 Git 写命令。

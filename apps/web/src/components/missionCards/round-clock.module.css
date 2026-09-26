@@ -1,0 +1,8 @@
+.clock { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.figure { font-size: 15px; line-height: 24px; font-weight: 600; white-space: nowrap; }
+.note { font-size: 13px; color: var(--ink-muted); white-space: nowrap; }
+.track { position: relative; width: 28px; height: 5px; flex: none; overflow: hidden; border-radius: var(--r-bar); background: var(--morning-blue); }
+.track::before { content: ''; position: absolute; inset: 0 auto 0 0; width: calc(var(--share, 0) * 100%); background: var(--onboarding-blue); border-radius: inherit; transition: width 220ms ease; }
+.clock[data-tone='glass'] .figure { font-size: 20px; }
+@media (max-width: 759px) { .figure { font-size: 13px; } .note { font-size: 12px; } .track { width: 20px; } }
+@media (prefers-reduced-motion: reduce) { .track::before { transition: none; } }

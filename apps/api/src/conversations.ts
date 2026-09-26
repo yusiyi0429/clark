@@ -19,6 +19,9 @@ import { getMeetingRow, projectMeetingCard } from "./meetingStore.js";
 import { getMonthlyPlanRow, projectMonthlyPlanCard } from "./monthlyPlans.js";
 import { getMissionRow, projectMissionCard } from "./missions.js";
 import { getSignalCard } from "./signals.js";
+import { getPersonalMissionCard } from "./personalMissionCards.js";
+import type { MemoryPerson } from "./companyMemory.js";
+import type { MissionRoundPerson } from "./missionRounds.js";
 
 export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
@@ -69,9 +72,14 @@ export async function getScopeObject(
   q: Query,
   scope: TConversationScope,
   secret: string,
+  context?: { person: MissionRoundPerson; people: MemoryPerson[]; now: Date },
 ): Promise<{ snapshot: TReferenceSnapshot | null; visible: boolean }> {
   if (scope === "global") return { snapshot: null, visible: true };
   const [objectType, id] = scope.split(":", 2);
+  if (objectType === "mission-card") {
+    const card = context ? await getPersonalMissionCard(q, context.people, secret, context.person, id, context.now) : null;
+    return card ? { visible: true, snapshot: { cardId: card.id, version: card.version, kind: card.kind, title: card.title, objectRef: card.objectRef, payload: card.payload } } : { visible: false, snapshot: null };
+  }
   const issue = objectType === "issue" ? await getIssueRow(q, id) : null;
   if (issue) {
     const card = projectIssueCard(issue, secret);

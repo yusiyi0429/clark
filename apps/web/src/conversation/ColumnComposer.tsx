@@ -31,6 +31,8 @@ export function ColumnComposer({
   onHeightChange,
   prefill,
   onPrefillUsed,
+  draftOwnerId,
+  allowAttachments = true,
 }: {
   data: ConversationData;
   label: string;
@@ -47,8 +49,10 @@ export function ColumnComposer({
   /** 引用追问：替换输入并聚焦。 */
   prefill?: { text: string; nonce: number } | null;
   onPrefillUsed?: () => void;
+  draftOwnerId?: string;
+  allowAttachments?: boolean;
 }) {
-  const draftKey = `tianshu-conversation-draft-v1:${data.scope}`;
+  const draftKey = `tianshu-conversation-draft-v1:${draftOwnerId ? `${draftOwnerId}:` : ""}${data.scope}`;
   const [input, setInput] = useState("");
   const pill = useRef<HTMLFormElement>(null);
   const inputElement = useRef<HTMLTextAreaElement>(null);
@@ -183,7 +187,7 @@ export function ColumnComposer({
         }
         action={
           <>
-            <AttachButton data={data} className={pillStyles.tool} />
+            {allowAttachments ? <AttachButton data={data} className={pillStyles.tool} /> : null}
             <ComposerAction state={busy ? "stop" : input.trim() ? "send" : "mic"} onStop={data.stop} />
           </>
         }

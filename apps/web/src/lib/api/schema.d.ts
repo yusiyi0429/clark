@@ -276,6 +276,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mission-cards/{cardId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取可见的个人卡正文、版本、意见和本轮动作 */
+        get: operations["getPersonalMissionCard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-cards/{cardId}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发表公开评论、引用或修改建议；按 clientId 幂等 */
+        post: operations["createPersonalMissionCardFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-cards/{cardId}/group": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 公开意见、开场、阶段分隔线及未读；after 只过滤意见，系统事件始终返回 */
+        get: operations["getPersonalMissionCardGroup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-cards/{cardId}/group/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 已读位置只增不减，最多到本卡最后一条公开意见 */
+        post: operations["markPersonalMissionCardRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/mission-rounds/{roundId}": {
         parameters: {
             query?: never;
@@ -1680,6 +1748,311 @@ export interface components {
             input?: unknown;
             viewCardId?: string;
         };
+        MissionCardFeedbackView: {
+            id: string;
+            seq: number;
+            missionId: string | null;
+            field: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
+            kind: "comment" | "quote" | "suggestion";
+            authorId: string;
+            authorName: string;
+            body: string;
+            quote: string | null;
+            proposed: string | null;
+            original: string | null;
+            sourceVersion: number | null;
+            basis: "draft" | "candidate";
+            late: boolean;
+            round: number;
+            /** @description 应用时钟生成的 ISO 8601 时间 */
+            createdAt: string;
+            verdict: {
+                text: string;
+                tone: "open" | "accept" | "decline" | "late" | "wait";
+            };
+            decision: "accept" | "decline" | null;
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        PersonalMissionCardMission: {
+            missionId: string;
+            code: string;
+            period: string;
+            title: string;
+            ownerId: string;
+            ownerDisplayName: string;
+            capabilityId: string;
+            capabilityCode: string;
+            capabilityName: string;
+            battlefieldIds: string[];
+            battlefieldNames: string[];
+            outcome: string;
+            why: string;
+            successEvidence: string[];
+            milestones: string[];
+            dependencies: string;
+            risk: string;
+            boundaries: string;
+            keyPath: string;
+            resources: string;
+            humanAgentSplit: string;
+            retrospect: string;
+            placeholder: boolean;
+            personalCard: {
+                cardId: string;
+                roundId: string;
+                status: "draft" | "open" | "reviewing" | "confirmed";
+            } | null;
+            sourceRef: string;
+            sourceDocumentId: string;
+            sourceRevision: number;
+            sourceTitle: string;
+            version: number;
+            changedFields: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
+        };
+        PersonalMissionCardPayload: {
+            round: {
+                roundId: string;
+                period: string;
+                battlefieldId: string;
+                battlefieldName: string;
+                version: number;
+                phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                round: number;
+                openedAt: string | null;
+                closesAt: string | null;
+                reviewAt: string | null;
+                /** @description 应用时钟生成的 ISO 8601 时间 */
+                serverNow: string;
+                approver: boolean;
+                deciderName: string;
+                todo: string | null;
+                placeholder: boolean;
+                goals: {
+                    sixMonthOutcome: string;
+                    monthOutcome: string;
+                    /** @description 应用时钟生成的 ISO 8601 时间 */
+                    signedAt: string;
+                } | null;
+                counts: {
+                    feedback: number;
+                    pending: number;
+                    conflicts: number;
+                    dependencies: number;
+                    late: number;
+                };
+                cards: {
+                    cardId: string;
+                    ownerId: string;
+                    ownerName: string;
+                    roleLabel: string | null;
+                    missionCount: number;
+                    line: string;
+                    pending: number;
+                    mine: boolean;
+                }[];
+            };
+            card: {
+                cardId: string;
+                ownerId: string;
+                ownerName: string;
+                roleLabel: string | null;
+                members: {
+                    personId: string;
+                    displayName: string;
+                    title: string | null;
+                }[];
+                status: string;
+                shown: "draft" | "candidate" | "confirmed";
+                missions: {
+                    missionId: string;
+                    code: string;
+                    period: string;
+                    title: string;
+                    ownerId: string;
+                    ownerDisplayName: string;
+                    capabilityId: string;
+                    capabilityCode: string;
+                    capabilityName: string;
+                    battlefieldIds: string[];
+                    battlefieldNames: string[];
+                    outcome: string;
+                    why: string;
+                    successEvidence: string[];
+                    milestones: string[];
+                    dependencies: string;
+                    risk: string;
+                    boundaries: string;
+                    keyPath: string;
+                    resources: string;
+                    humanAgentSplit: string;
+                    retrospect: string;
+                    placeholder: boolean;
+                    personalCard: {
+                        cardId: string;
+                        roundId: string;
+                        status: "draft" | "open" | "reviewing" | "confirmed";
+                    } | null;
+                    sourceRef: string;
+                    sourceDocumentId: string;
+                    sourceRevision: number;
+                    sourceTitle: string;
+                    version: number;
+                    changedFields: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
+                }[];
+            };
+            feedback: {
+                id: string;
+                seq: number;
+                missionId: string | null;
+                field: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
+                kind: "comment" | "quote" | "suggestion";
+                authorId: string;
+                authorName: string;
+                body: string;
+                quote: string | null;
+                proposed: string | null;
+                original: string | null;
+                sourceVersion: number | null;
+                basis: "draft" | "candidate";
+                late: boolean;
+                round: number;
+                /** @description 应用时钟生成的 ISO 8601 时间 */
+                createdAt: string;
+                verdict: {
+                    text: string;
+                    tone: "open" | "accept" | "decline" | "late" | "wait";
+                };
+                decision: "accept" | "decline" | null;
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            }[];
+            confirmation: {
+                by: string;
+                byName: string;
+                /** @description 应用时钟生成的 ISO 8601 时间 */
+                at: string;
+                note: string;
+            } | null;
+        };
+        CreateMissionCardFeedbackRequest: {
+            /** Format: uuid */
+            clientId: string;
+            kind: "comment" | "quote" | "suggestion";
+            round: number;
+            missionId?: string;
+            field?: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+            quote?: string;
+            proposed?: string;
+            body: string;
+            sourceVersion?: number;
+        };
+        CreateMissionCardFeedbackResponse: {
+            feedback: {
+                id: string;
+                seq: number;
+                missionId: string | null;
+                field: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
+                kind: "comment" | "quote" | "suggestion";
+                authorId: string;
+                authorName: string;
+                body: string;
+                quote: string | null;
+                proposed: string | null;
+                original: string | null;
+                sourceVersion: number | null;
+                basis: "draft" | "candidate";
+                late: boolean;
+                round: number;
+                /** @description 应用时钟生成的 ISO 8601 时间 */
+                createdAt: string;
+                verdict: {
+                    text: string;
+                    tone: "open" | "accept" | "decline" | "late" | "wait";
+                };
+                decision: "accept" | "decline" | null;
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+        };
+        MissionCardGroupView: {
+            members: {
+                personId: string;
+                displayName: string;
+                title: string | null;
+            }[];
+            lastReadSeq: number;
+            unread: number;
+            entries: ({
+                /** @constant */
+                type: "message";
+                feedback: {
+                    id: string;
+                    seq: number;
+                    missionId: string | null;
+                    field: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
+                    kind: "comment" | "quote" | "suggestion";
+                    authorId: string;
+                    authorName: string;
+                    body: string;
+                    quote: string | null;
+                    proposed: string | null;
+                    original: string | null;
+                    sourceVersion: number | null;
+                    basis: "draft" | "candidate";
+                    late: boolean;
+                    round: number;
+                    /** @description 应用时钟生成的 ISO 8601 时间 */
+                    createdAt: string;
+                    verdict: {
+                        text: string;
+                        tone: "open" | "accept" | "decline" | "late" | "wait";
+                    };
+                    decision: "accept" | "decline" | null;
+                    actions: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    }[];
+                };
+            } | {
+                /** @constant */
+                type: "divider";
+                /** @description 应用时钟生成的 ISO 8601 时间 */
+                at: string;
+                text: string;
+            } | {
+                /** @constant */
+                type: "opening";
+                /** @description 应用时钟生成的 ISO 8601 时间 */
+                at: string;
+                text: string;
+            })[];
+        };
+        MarkMissionCardReadRequest: {
+            lastReadSeq: number;
+        };
+        MarkMissionCardReadResponse: {
+            lastReadSeq: number;
+            unread: number;
+        };
         CapabilitySupportRef: {
             /** @constant */
             type: "mission-anchor";
@@ -3025,6 +3398,203 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPersonalMissionCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Personal Mission Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createPersonalMissionCardFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMissionCardFeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description 公开意见 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMissionCardFeedbackResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPersonalMissionCardGroup: {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 事项群组 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissionCardGroupView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    markPersonalMissionCardRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkMissionCardReadRequest"];
+            };
+        };
+        responses: {
+            /** @description 已读状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkMissionCardReadResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
             /** @description ApiError 统一错误 */
