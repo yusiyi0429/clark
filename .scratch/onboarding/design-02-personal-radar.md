@@ -501,7 +501,7 @@ type RadarSettingsEditorProps = {
   - `pnpm --filter @warmap/contracts test`
   - `pnpm --filter @warmap/web gen:client`
   - `pnpm --filter @warmap/api typecheck`
-  - API 测试：`pnpm --filter @warmap/api test -- --maxWorkers=1`（并发跑会碰到测试库连接上限）
+  - API 测试：`pnpm --filter @warmap/api exec vitest run --maxWorkers=1`（并发跑会碰到测试库连接上限）
   - `pnpm --filter @warmap/web typecheck && pnpm --filter @warmap/web test`
   - 改 web 之前先读 `node_modules/next/dist/docs`（apps/web/AGENTS.md）。
 - **浏览器**（1440 与 390）：

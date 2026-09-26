@@ -33,6 +33,12 @@ export function loginDestination(role: Role, nextPath?: string, onboarded = true
   return next ? `/welcome?next=${encodeURIComponent(next)}` : "/welcome";
 }
 
+/** 登录的默认首页不是待恢复的原链接；保留真正指向工作内容的链接。 */
+export function onboardingReturnPath(role: Role, nextPath?: string): string | null {
+  const next = validNextPath(role, nextPath);
+  return next === homePath(role) ? null : next;
+}
+
 export function onboardingDestination(role: Role, nextPath: string | undefined, suggestedPath: string): string {
-  return withHomeEntry(validNextPath(role, nextPath) ?? validNextPath(role, suggestedPath) ?? homePath(role));
+  return withHomeEntry(onboardingReturnPath(role, nextPath) ?? validNextPath(role, suggestedPath) ?? homePath(role));
 }

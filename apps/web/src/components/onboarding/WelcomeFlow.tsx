@@ -6,7 +6,7 @@ import { TianshuMark } from "@/components/TianshuMark";
 import { useVoiceprintEnrollment, VOICEPRINT_SCRIPT, VOICEPRINT_CONSENT } from "@/components/member/useVoiceprintEnrollment";
 import { browserApi } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
-import { onboardingDestination } from "@/lib/access-paths";
+import { onboardingDestination, onboardingReturnPath } from "@/lib/access-paths";
 import { MorningCanvas } from "./MorningCanvas";
 import { CoAgentCapsule } from "./CoAgentCapsule";
 import { OnboardingProgress } from "./OnboardingProgress";
@@ -75,6 +75,7 @@ export function WorkSnapshot({ data }: { data: Extract<OnboardingData, { role: "
 
 export function WelcomeFlow({ data, nextPath }: { data: OnboardingData; nextPath?: string }) {
   const steps = onboardingSteps(data);
+  const returnPath = onboardingReturnPath(data.role, nextPath);
   const [index, setIndex] = useState(0);
   const [acknowledge, setAcknowledge] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -94,6 +95,7 @@ export function WelcomeFlow({ data, nextPath }: { data: OnboardingData; nextPath
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
+    content.current?.parentElement?.scrollTo({ top: 0, behavior: "instant" });
     title.current?.focus({ preventScroll: true });
   }, [index]);
   useEffect(() => {
@@ -166,7 +168,10 @@ export function WelcomeFlow({ data, nextPath }: { data: OnboardingData; nextPath
   const busy = finishing || voice.phase === "saving";
   const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
   const primaryDisabled = busy || (!error && step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort));
-  const primaryLabel = finishing ? "正在进入…" : step === "hello" ? "开始" : step === "start" ? data.next.action : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
+  const disabledHint = step === "voiceprint" && primaryDisabled && !busy
+    ? voice.recording ? "录好后再继续，也可以选「稍后」" : voice.tooShort ? "请重新录满 15 秒，或者选「稍后」" : voice.consent ? "录好一段 15–30 秒的朗读，或者选「稍后」" : "先勾选同意并录好，或者选「稍后」"
+    : null;
+  const primaryLabel = finishing ? "正在进入…" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
 
   return <main className={s.page} onKeyDown={onKeyDown} style={{ "--direction": direction } as CSSProperties}>
     <MorningCanvas progress={index} />
@@ -182,7 +187,7 @@ export function WelcomeFlow({ data, nextPath }: { data: OnboardingData; nextPath
             <h1 ref={title} tabIndex={-1}>{heading}</h1>
             {step === "hello" ? <><p className={s.subtitle}>我是你的 Co-Agent</p><p className={s.description}>我先带你看看这个月和你有关的工作。{data.voiceprint.configured ? <><br />声纹，可以现在录，也可以以后再说。</> : null}</p></> : null}
             {step === "voiceprint" ? <p className={s.description}>录一段 15–30 秒的朗读，帮我在会后建议哪些发言可能来自你——最后仍由人核对。</p> : null}
-            {step === "start" ? <p className={s.description}>{data.next.text}</p> : null}
+            {step === "start" && !returnPath ? <p className={s.description}>{data.next.text}</p> : null}
           </div>
           <div className={s.details}>
             {step === "company" && data.role === "ceo" ? <CompanySnapshot data={data} /> : null}
@@ -214,9 +219,11 @@ export function WelcomeFlow({ data, nextPath }: { data: OnboardingData; nextPath
         </div>
       </div>
       <footer className={s.footer}>
-        <OnboardingProgress current={index + 1} total={steps.length} complete={step === "start"} />
+        <OnboardingProgress current={index + 1} total={steps.length} />
         {error ? <p className={s.error} role="alert">{error}</p> : null}
-        <button key={step} ref={primary} className={f.primary} type="button" onClick={() => void forward()} disabled={primaryDisabled}>{error ? "重试" : primaryLabel}{!busy ? <ArrowRight size={18} aria-hidden="true" /> : null}</button>
+        {step === "start" && returnPath ? <p className={s.footnote}>{data.next.text}</p> : null}
+        {disabledHint ? <p id="welcome-action-hint" className={s.actionHint}>{disabledHint}</p> : null}
+        <button key={step} ref={primary} className={f.primary} type="button" onClick={() => void forward()} disabled={primaryDisabled} aria-describedby={disabledHint ? "welcome-action-hint" : undefined}>{error ? "重试" : primaryLabel}{!busy ? <ArrowRight size={18} aria-hidden="true" /> : null}</button>
         <div className={s.secondary}>
           {index > 0 ? <button className={f.textButton} type="button" onClick={() => move(-1)} disabled={busy}>上一步</button> : null}
           {step === "voiceprint" ? <button className={f.textButton} type="button" onClick={() => move(1)} disabled={busy}>稍后</button> : null}

@@ -78,7 +78,7 @@ Spec: `../spec.md` §6、§7；产品论证：`../why.md` §（e）（f）
 - 开工前先跑一次基线；完成后跑下面这组：
   - `pnpm --filter @warmap/contracts build && pnpm --filter @warmap/contracts test`
   - `pnpm --filter @warmap/web gen:client`
-  - `pnpm --filter @warmap/api typecheck && pnpm --filter @warmap/api test -- --maxWorkers=1`
+  - `pnpm --filter @warmap/api typecheck && pnpm --filter @warmap/api exec vitest run --maxWorkers=1`
   - `pnpm --filter @warmap/web typecheck && pnpm --filter @warmap/web test`
 - 在测试库里走一遍：签发一份 2026-10 计划，整理草稿，核对轮次、卡和 Mission 的数量与标记；开放，拨时钟到截止，看快照；重开。
 - 浏览器：CEO 通知栏入口在 1440 和 375 宽下都能正常显示，确认弹窗可用。

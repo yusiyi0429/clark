@@ -88,8 +88,9 @@
   /* 晨光：锁屏、引导与入场共用；其余工作面沿用已有 token。 */
   --morning-start: #f7f9fc;
   --morning-end: #fbfcfe;
-  --morning-blue: rgb(58 131 247 / 8%);
-  --morning-cyan: rgb(91 216 246 / 6%);
+  --morning-blue: rgb(58 131 247 / 14%);
+  --morning-cyan: rgb(91 216 246 / 10%);
+  --morning-halo: rgb(58 131 247 / 6%);
   --onboarding-blue: #3a83f7;
   --onboarding-pressed: #246ddf;
   --onboarding-ink: var(--ink);
@@ -211,6 +212,15 @@
     cursor: pointer;
   }
 }
+
+/* 禁用状态优先于入场动画终帧，也覆盖原生按钮与 HeroUI 的同一语义。 */
+button:is(:disabled, [aria-disabled="true"], [data-disabled="true"]) {
+  opacity: .55 !important;
+  filter: saturate(.25) !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+}
+button:disabled { pointer-events: auto; }
 
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -15,6 +15,7 @@
 .blueLight, .cyanLight { position: absolute; width: 120%; height: 130%; }
 .blueLight { left: -30%; top: -45%; background: radial-gradient(ellipse, var(--morning-blue), transparent 68%); animation: dawn 48s ease-in-out infinite alternate; }
 .cyanLight { right: -30%; bottom: -55%; background: radial-gradient(ellipse, var(--morning-cyan), transparent 68%); animation: dawn 44s -18s ease-in-out infinite alternate-reverse; }
+.haloLight { position: absolute; inset: 8% 12% 38%; background: radial-gradient(ellipse at 50% 35%, var(--morning-halo), transparent 68%); }
 @keyframes dawn { to { transform: translate3d(5%, 4%, 0); } }
 
 .glass {
@@ -38,15 +39,14 @@
   font: 600 17px/1.6 var(--font-sans);
   transition: background var(--onboarding-feedback), transform var(--onboarding-feedback);
 }
-.primary:hover { background: var(--onboarding-pressed); }
-.primary:active { transform: scale(.985); }
-.primary:disabled { opacity: .5; cursor: default; }
+.primary:hover:not(:disabled) { background: var(--onboarding-pressed); }
+.primary:active:not(:disabled) { transform: scale(.985); }
 .textButton { min-height: 44px; border: 0; border-radius: var(--onboarding-inset-radius); padding: 8px 12px; color: var(--onboarding-muted); background: transparent; font: inherit; font-size: 14px; }
 .textButton:hover { color: var(--onboarding-ink); background: var(--wash-hover); }
 .textButton:disabled { opacity: .45; cursor: default; }
 .primary:focus-visible, .textButton:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 4px; }
 
-.capsule { display: flex; justify-content: center; height: 64px; animation: condense 460ms var(--onboarding-ease) both; }
+.capsule { display: flex; flex-shrink: 0; justify-content: center; height: 64px; animation: condense 460ms var(--onboarding-ease) both; }
 .capsuleGlass { position: relative; width: 224px; height: 64px; }
 .capsuleBody, .acknowledge {
   position: absolute;
@@ -54,17 +54,18 @@
   overflow: hidden;
   isolation: isolate;
   border-radius: var(--onboarding-pill-radius);
-  background: linear-gradient(180deg, #0011fd, #0600a6 46%, #07058e);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 20%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 25%), 0 10px 24px -20px rgb(0 17 253 / 24%);
+  background: linear-gradient(180deg, #0011fd, #0600a6 56%, #07058e);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 32%), inset 0 1px 0 rgb(255 255 255 / 45%), inset 0 -8px 12px -8px rgb(0 0 45 / 60%), 0 4px 8px -7px rgb(7 5 142 / 16%);
 }
-.sheen { position: absolute; z-index: 2; inset: 0; border-radius: inherit; background: radial-gradient(70% 58% at 32% 0%, rgb(255 255 255 / 38%), transparent 75%); animation: breathe 4s ease-in-out infinite; }
-.idleLight { position: absolute; inset: 20% 12%; opacity: .55; background: radial-gradient(ellipse 45% 20% at 50% 55%, #e5faff, #abe6ff 25%, transparent 100%); filter: blur(1px); transform: rotate(-3deg); animation: idleFlow 8s ease-in-out infinite alternate; }
-.wave { position: absolute; width: 100%; height: 100%; mix-blend-mode: screen; filter: blur(.5px); }
+.sheen { position: absolute; z-index: 2; inset: 1px; border-radius: inherit; background: radial-gradient(ellipse 80% 68% at 50% -18%, rgb(225 244 255 / 42%), transparent 78%); animation: breathe 4s ease-in-out infinite; }
+.sheen::before { content: ""; position: absolute; inset: 0 8px 20%; border-radius: 50%; border-top: 1px solid rgb(255 255 255 / 85%); mask-image: linear-gradient(90deg, transparent, #000 28%, #000 72%, transparent); }
+.idleLight { position: absolute; inset: 13% 15% 24%; opacity: .48; background: radial-gradient(ellipse at 36% 38%, rgb(238 251 255 / 65%), transparent 50%), radial-gradient(ellipse at 63% 55%, rgb(91 216 246 / 62%), transparent 62%); filter: blur(9px); transform: rotate(-8deg); animation: idleFlow 8s ease-in-out infinite alternate; }
+.wave { position: absolute; inset: 8% 0; width: 100%; height: 84%; mix-blend-mode: screen; filter: blur(1px); opacity: .88; }
 .acknowledge { animation: acknowledge var(--onboarding-morph) var(--onboarding-ease); }
-.acknowledge::after { content: ""; position: absolute; inset: 0; z-index: 3; background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 22%) 50%, transparent 70%); animation: sweep var(--onboarding-morph) var(--onboarding-ease) both; }
+.acknowledge::after { content: ""; position: absolute; inset: 0 0 60%; border-radius: inherit; z-index: 3; background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 22%) 50%, transparent 70%); filter: blur(2px); animation: sweep var(--onboarding-morph) var(--onboarding-ease) both; }
 @keyframes condense { from { opacity: 0; transform: scale(.94); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
 @keyframes breathe { 50% { opacity: .7; } }
-@keyframes idleFlow { to { transform: translateX(10%) rotate(4deg); opacity: .45; } }
+@keyframes idleFlow { to { transform: translateX(8%) rotate(6deg); opacity: .38; } }
 @keyframes acknowledge { 50% { left: -3%; right: -3%; } }
 @keyframes sweep { from { transform: translateX(-100%); opacity: 0; } 30% { opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
 .progress { display: flex; height: 36px; align-items: center; justify-content: center; }
@@ -73,17 +74,13 @@
 .dots span { width: 6px; height: 6px; border-radius: var(--onboarding-pill-radius); background: color-mix(in srgb, var(--ink) 18%, transparent); transition: width var(--onboarding-feedback), background var(--onboarding-feedback); }
 .dots span[data-past="true"] { background: var(--onboarding-blue); }
 .dots span[data-current="true"] { width: 20px; background: var(--onboarding-blue); }
-.constellation { overflow: visible; }
-.constellation path { fill: none; stroke: color-mix(in srgb, var(--ink) 8%, transparent); stroke-width: 1; }
-.constellation circle { fill: var(--onboarding-blue); animation: starOn 240ms calc(var(--star-order) * 90ms) both; }
-@keyframes starOn { from { fill: color-mix(in srgb, var(--ink) 18%, transparent); } }
 @media (max-width: 759px) { .capsule, .capsuleGlass { height: 52px; } .capsuleGlass { width: 184px; } }
 @media (prefers-reduced-motion: reduce) {
   .lightPosition { transform: none; transition: none; }
-  .blueLight, .cyanLight, .capsule, .sheen, .idleLight, .acknowledge, .constellation circle { animation: none; }
+  .blueLight, .cyanLight, .capsule, .sheen, .idleLight, .acknowledge { animation: none; }
   .acknowledge::after { display: none; }
   .primary:active { transform: none; }
 }
 @media (prefers-reduced-transparency: reduce) { .glass { background: var(--morning-start); backdrop-filter: none; -webkit-backdrop-filter: none; } }
 @media (prefers-contrast: more) { .glass { border: 1px solid var(--ink-muted); } }
-@media (forced-colors: active) { .glass { border: 1px solid CanvasText; } .primary { background: Highlight; color: HighlightText; } .dots span, .constellation circle { background: Highlight; fill: Highlight; } }
+@media (forced-colors: active) { .glass { border: 1px solid CanvasText; } .primary { background: Highlight; color: HighlightText; } .dots span { background: Highlight; } }

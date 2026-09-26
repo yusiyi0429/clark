@@ -108,13 +108,6 @@ export function SiriWave({ energy, className }: {
         context.fillStyle = `rgba(${COLORS[c]}, 0.78)`;
         context.fill();
       }
-      // 中间那条细白线，两头淡出。
-      const line = context.createLinearGradient(0, 0, width, 0);
-      line.addColorStop(0, 'rgba(255,255,255,0)');
-      line.addColorStop(0.5, 'rgba(255,255,255,0.85)');
-      line.addColorStop(1, 'rgba(255,255,255,0)');
-      context.fillStyle = line;
-      context.fillRect(width * 0.12, middle - 0.6, width * 0.76, 1.2);
       context.globalCompositeOperation = 'source-over';
     }
 
