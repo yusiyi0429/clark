@@ -70,6 +70,17 @@ function parseScheduledAt(value: string): Date | null {
   const parsed = new Date(value);
   return Number.isFinite(parsed.getTime()) ? parsed : null;
 }
+
+const DEFAULT_MEETING_DURATION_MS = 60 * 60_000;
+
+/** 计划结束时间：未给出时按 defaultDurationMs 顺延（新建 60 分钟，编辑保持原时长）；给出时必须可解析且晚于开始。 */
+function resolveEndsAt(scheduledAt: Date, value: string | undefined, defaultDurationMs = DEFAULT_MEETING_DURATION_MS): Date | MeetingActionError {
+  if (value === undefined) return new Date(scheduledAt.getTime() + defaultDurationMs);
+  const endsAt = parseScheduledAt(value);
+  if (!endsAt) return { status: 400, code: "INVALID_INPUT", message: "endsAt 不是可解析时间", fieldErrors: { endsAt: "unparsable" } };
+  if (endsAt <= scheduledAt) return { status: 400, code: "INVALID_INPUT", message: "结束时间必须晚于开始时间", fieldErrors: { endsAt: "must be after scheduledAt" } };
+  return endsAt;
+}
 function validateDraft(draft: TMeetingDraft, row: MeetingRow): MeetingActionError | null {
   const issues = new Set(row.issue_ids);
   if ([...draft.readIssueIds, ...draft.carriedIssueIds].some((id) => !issues.has(id))) {
@@ -87,7 +98,7 @@ export async function executeCreateMeeting(
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
-  input: { title: string; scheduledAt: string; leadDriId: string; ceoParticipantId: string; participants: string[]; issueIds: string[] },
+  input: { title: string; scheduledAt: string; endsAt?: string; leadDriId: string; ceoParticipantId: string; participants: string[]; issueIds: string[] },
   fingerprint: string,
 ): Promise<MeetingActionOutcome> {
   if (scope.objectType !== "issue") return { error: { status: 404, code: "UNKNOWN_ACTION", message: "无效 actionId" } };
@@ -96,6 +107,8 @@ export async function executeCreateMeeting(
   if (issue.status === "dismissed") return { error: { status: 409, code: "ISSUE_NOT_MEETING_READY", message: "dismissed Issue 不能创建 Meeting" } };
   const scheduledAt = parseScheduledAt(input.scheduledAt);
   if (!scheduledAt) return { error: { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } } };
+  const endsAt = resolveEndsAt(scheduledAt, input.endsAt);
+  if (!(endsAt instanceof Date)) return { error: endsAt };
   const resolved = resolveParticipants(companyMemory, input);
   if ("error" in resolved) return { error: resolved.error };
   const issueIds = unique([scope.objectId, ...input.issueIds]);
@@ -126,8 +139,8 @@ export async function executeCreateMeeting(
       const inserted = await client.query<MeetingRow>(
         `INSERT INTO meetings
            (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
-            participants, issue_ids, preflight, draft, materials, origin_ref, action_fingerprints)
-         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11::jsonb)
+            participants, issue_ids, preflight, draft, materials, origin_ref, action_fingerprints, ends_at)
+         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11::jsonb, $12)
          RETURNING ${meetingColumns()}`,
         [
           meetingId,
@@ -141,6 +154,7 @@ export async function executeCreateMeeting(
           JSON.stringify(emptyDraft()),
           JSON.stringify({ type: "issue", issueId: scope.objectId }),
           JSON.stringify([fingerprint]),
+          endsAt,
         ],
       );
       created = inserted.rows[0];
@@ -169,10 +183,12 @@ export async function createConfigMeeting(
   companyMemory: CompanyMemoryRepository,
   preflightAgent: PreflightAgent,
   secret: string,
-  input: { title: string; scheduledAt: string; leadDriId: string; issueIds?: string[]; materials?: ParsedMaterial[]; materialStorageDir: string },
+  input: { title: string; scheduledAt: string; endsAt?: string; leadDriId: string; issueIds?: string[]; materials?: ParsedMaterial[]; materialStorageDir: string },
 ): Promise<{ card: TCard } | { error: MeetingActionError }> {
   const scheduledAt = parseScheduledAt(input.scheduledAt);
   if (!scheduledAt) return { error: { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } } };
+  const endsAt = resolveEndsAt(scheduledAt, input.endsAt);
+  if (!(endsAt instanceof Date)) return { error: endsAt };
   const ceo = companyMemory.searchPeople(undefined).find((person) => person.roles.includes("ceo"));
   if (!ceo) return { error: { status: 400, code: "INVALID_CEO", message: "company-people.v1 中没有 ceo 角色", fieldErrors: { leadDriId: "ceo missing" } } };
   const resolved = resolveParticipants(companyMemory, { leadDriId: input.leadDriId, ceoParticipantId: ceo.personId, participants: [] });
@@ -184,8 +200,8 @@ export async function createConfigMeeting(
   const inserted = await pool.query<MeetingRow>(
     `INSERT INTO meetings
        (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
-        participants, issue_ids, preflight, draft, origin_ref, action_fingerprints)
-     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb)
+        participants, issue_ids, preflight, draft, origin_ref, action_fingerprints, ends_at)
+     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11)
      RETURNING ${meetingColumns()}`,
     [
       randomUUID(),
@@ -198,6 +214,7 @@ export async function createConfigMeeting(
       JSON.stringify(emptyPreflight()),
       JSON.stringify(emptyDraft()),
       JSON.stringify({ type: "config" }),
+      endsAt,
     ],
   );
   const created = inserted.rows[0];
@@ -278,7 +295,7 @@ export async function executeUpdateDraft(
 }
 
 /**
- * 编辑 scheduled Meeting 基本字段：title/scheduledAt/leadDriId 至少一项。
+ * 编辑 scheduled Meeting 基本字段：title/scheduledAt/endsAt/leadDriId 至少一项；只改 scheduledAt 时保持原时长。
  * 换主持 DRI 时按 createConfigMeeting 的同一构造方式重建 participants（ceo 在首位，新 lead 其次，其余保持）。
  */
 export async function executeEditMeetingDetails(
@@ -286,7 +303,7 @@ export async function executeEditMeetingDetails(
   companyMemory: CompanyMemoryRepository,
   secret: string,
   scope: ActionScope,
-  input: { title?: string; scheduledAt?: string; leadDriId?: string },
+  input: { title?: string; scheduledAt?: string; endsAt?: string; leadDriId?: string },
   fingerprint: string,
 ): Promise<MeetingActionOutcome> {
   let scheduledAt: Date | null = null;
@@ -296,6 +313,8 @@ export async function executeEditMeetingDetails(
   }
   return withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
     if (row.status !== "scheduled") return { error: { status: 409, code: "MEETING_NOT_SCHEDULED", message: "只有 scheduled Meeting 可以编辑" } };
+    const endsAt = resolveEndsAt(scheduledAt ?? row.scheduled_at, input.endsAt, row.ends_at.getTime() - row.scheduled_at.getTime());
+    if (!(endsAt instanceof Date)) return { error: endsAt };
     let participants: TMeetingParticipant[] | null = null;
     if (input.leadDriId !== undefined && input.leadDriId !== row.lead_dri_id) {
       // 保留原参会人（含原主持，换主持不等于把人移出会议），新主持由 resolveParticipants 去重并排在 ceo 之后。
@@ -309,13 +328,14 @@ export async function executeEditMeetingDetails(
       row.id,
       `title = COALESCE($3, title), scheduled_at = COALESCE($4, scheduled_at),
        lead_dri_id = COALESCE($5, lead_dri_id), participants = COALESCE($6::jsonb, participants),
-       version = version + 1, action_fingerprints = $2::jsonb`,
+       ends_at = $7, version = version + 1, action_fingerprints = $2::jsonb`,
       [
         JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint)),
         input.title ?? null,
         scheduledAt,
         input.leadDriId ?? null,
         participants ? JSON.stringify(participants) : null,
+        endsAt,
       ],
     );
     return commit(client, updated, secret);
@@ -438,17 +458,38 @@ export async function executeCancelMeeting(
     return commit(client, updated, secret);
   });
 }
+
+/** 「这场会开完了」：只记结束时刻，不改 status（held 只表示已有确认的 Transcript，会后抽取依赖它）；之后 Transcript 导入照旧。 */
+export async function executeEndMeeting(
+  pool: Pool,
+  secret: string,
+  scope: ActionScope,
+  fingerprint: string,
+): Promise<MeetingActionOutcome> {
+  return withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+    if (row.status !== "scheduled") return { error: { status: 409, code: "MEETING_NOT_ENDABLE", message: "只有 scheduled Meeting 可以标记开完" } };
+    const updated = await updateMeeting(
+      client,
+      row.id,
+      "ended_at = now(), version = version + 1, action_fingerprints = $2::jsonb",
+      [JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+    );
+    return commit(client, updated, secret);
+  });
+}
 export type DriMeetingImportResult =
   | { status: 201 | 200; card: TCard }
   | { status: 400 | 409; code: string; message: string; fieldErrors?: Record<string, string> };
 
 function meetingRequestFingerprint(body: {
-  externalId: string; title: string; scheduledAt: string; leadDriId: string; ceoParticipantId: string; participants: string[]; issueIds: string[];
+  externalId: string; title: string; scheduledAt: string; endsAt?: string; leadDriId: string; ceoParticipantId: string; participants: string[]; issueIds: string[];
 }): string {
   return createHash("sha256").update(JSON.stringify({
     externalId: body.externalId,
     title: body.title,
     scheduledAt: body.scheduledAt,
+    // 未给 endsAt 时 JSON.stringify 省略该键，旧导入的 fingerprint 不变
+    endsAt: body.endsAt,
     leadDriId: body.leadDriId,
     ceoParticipantId: body.ceoParticipantId,
     // 人员与 Issue 顺序不影响内容：排序去重后参与 fingerprint
@@ -464,11 +505,13 @@ export async function importDriMeeting(
   preflightAgent: PreflightAgent,
   secret: string,
   body: {
-    externalId: string; title: string; scheduledAt: string; leadDriId: string; ceoParticipantId: string; participants: string[]; issueIds: string[];
+    externalId: string; title: string; scheduledAt: string; endsAt?: string; leadDriId: string; ceoParticipantId: string; participants: string[]; issueIds: string[];
   },
 ): Promise<DriMeetingImportResult> {
   const scheduledAt = parseScheduledAt(body.scheduledAt);
   if (!scheduledAt) return { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } };
+  const endsAt = resolveEndsAt(scheduledAt, body.endsAt);
+  if (!(endsAt instanceof Date)) return { status: 400, code: endsAt.code, message: endsAt.message, fieldErrors: endsAt.fieldErrors };
   const resolved = resolveParticipants(companyMemory, body);
   if ("error" in resolved) return { status: 400, code: resolved.error.code, message: resolved.error.message, fieldErrors: resolved.error.fieldErrors };
   const issueIds = unique(body.issueIds);
@@ -490,8 +533,8 @@ export async function importDriMeeting(
       const inserted = await client.query<MeetingRow>(
         `INSERT INTO meetings
            (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
-            participants, issue_ids, preflight, draft, materials, origin_ref, external_id, request_fingerprint)
-         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11, $12)
+            participants, issue_ids, preflight, draft, materials, origin_ref, external_id, request_fingerprint, ends_at)
+         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11, $12, $13)
          ON CONFLICT DO NOTHING
          RETURNING ${meetingColumns()}`,
         [
@@ -507,6 +550,7 @@ export async function importDriMeeting(
           JSON.stringify({ type: "dri", externalId: body.externalId, leadDriId: resolved.lead.personId }),
           body.externalId,
           requestFingerprint,
+          endsAt,
         ],
       );
       if (inserted.rowCount === 1) {

@@ -1,6 +1,7 @@
 "use client";
 
-import { PanelLeft, Settings } from "lucide-react";
+import { PanelLeft } from "lucide-react";
+import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { ContextMark, type ContextMarkKind } from "@/components/ContextMark";
 import { HeroButton } from "@/components/HeroButton";
 import { TianshuMark } from "@/components/TianshuMark";
@@ -21,7 +22,8 @@ export function NoticeStrip({
   transitioning,
   onHome,
   onTogglePeek,
-  onConfig,
+  account,
+  onNavigate,
 }: {
   current: ContextMarkKind | null;
   currentLabel?: string;
@@ -31,7 +33,9 @@ export function NoticeStrip({
   transitioning?: boolean;
   onHome: () => void;
   onTogglePeek: () => void;
-  onConfig: () => void;
+  /** 底部那颗头像：个人菜单（声纹、口令、组织配置、退出登录）。 */
+  account: Account;
+  onNavigate: (href: string) => void;
 }) {
   const peekLabel = peekOpen ? "收起通知栏" : urgent ? `展开通知栏，${urgent} 条需要尽快处理` : "展开通知栏";
   const morphedIn = useMountedDuringViewTransition();
@@ -66,9 +70,7 @@ export function NoticeStrip({
         {urgent > 0 ? <i className={s.badge} aria-hidden="true" /> : null}
       </HeroButton>
       <span className={s.bottom}>
-        <HeroButton variant="ghost" size="sm" isIconOnly type="button" onPress={onConfig} aria-label="配置" title="配置">
-          <Settings size={16} strokeWidth={1.8} />
-        </HeroButton>
+        <AccountMenu account={account} compact onNavigate={onNavigate} />
       </span>
     </nav>
   );

@@ -8,6 +8,7 @@ import { browserApi } from "@/lib/api/client";
 import { logout } from "@/lib/logout";
 import c from "@/styles/config.module.css";
 
+
 type Person = { personId: string; displayName: string; roles: string[] };
 type Battlefield = { id: string; name: string };
 type Status = { kind: "ok" | "error"; message: string } | null;

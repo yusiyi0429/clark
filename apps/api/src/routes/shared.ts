@@ -11,10 +11,12 @@ import type { CompanyMemoryRepository } from "../companyMemory.js";
 import type { ConversationRuntime } from "../conversations.js";
 import type { DriExporter, MeetingActionOutcome, Query } from "../meetingStore.js";
 import type { PreflightAgent } from "../meetingPreflight.js";
-import type { PostMeetingAgent, TranscriptImportResult } from "../outcome.js";
+import type { OntologyUpdater, PostMeetingAgent, TranscriptImportResult } from "../outcome.js";
 import type { RadarService } from "../radar.js";
 import type { ResearchService } from "../research.js";
 import type { MonthlyPlanService } from "../monthlyDraft.js";
+import type { MeetingRecordingService } from "../meetingRecordings.js";
+import type { VoiceprintDeps } from "../voiceprints.js";
 import type { AppEnv } from "../app.js";
 
 export type AppInstance = FastifyInstance<
@@ -53,7 +55,10 @@ export type RouteContext = {
   radar: RadarService;
   research: ResearchService;
   driExporter?: DriExporter;
+  ontologyUpdater: OntologyUpdater;
   monthlyPlanService?: MonthlyPlanService;
+  recordings: MeetingRecordingService;
+  voiceprints: VoiceprintDeps;
   materialStorageDir: string;
   conversationAttachmentStorageDir: string;
   conversationTurnTimeoutMs: number;

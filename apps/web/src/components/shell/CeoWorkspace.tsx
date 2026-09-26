@@ -7,8 +7,11 @@ import { Check } from "lucide-react";
 import type { Card } from "@/lib/api/client";
 import { HomeBoard } from "@/components/HomeBoard";
 import { NotificationRail } from "@/components/NotificationRail";
+import type { Account } from "@/components/AccountMenu";
+import { columnHostClass } from "@/conversation/ConversationColumn";
 import { ConversationHost, type ConversationUiState } from "@/conversation/ConversationHost";
 import { ReferenceProvider } from "@/conversation/references";
+import { saveColumnMode } from "@/conversation/useColumnMode";
 import { prefersReducedMotion, runRouteTransition, supportsViewTransition, type TransitionDirection } from "@/lib/viewTransition";
 import { NoticeStrip } from "./NoticeStrip";
 import { WorkspaceContext, type DetailInfo, type WorkspaceApi } from "./WorkspaceContext";
@@ -43,7 +46,7 @@ const rectOf = (el: Element): Rect => {
  * 打开对象时来源卡片长成工作区、通知栏同一帧折成窄条；关闭时反向，焦点回到来源（C-01）。
  * 对象页仍是各自的路由（可分享、可直达），渲染在主区的 children 里。
  */
-export function CeoWorkspace({ initialCards, viewerId, children }: { initialCards: Card[]; viewerId: string; children: ReactNode }) {
+export function CeoWorkspace({ initialCards, viewerId, account, children }: { initialCards: Card[]; viewerId: string; account: Account; children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const detailOpen = pathname !== "/";
@@ -90,12 +93,13 @@ export function CeoWorkspace({ initialCards, viewerId, children }: { initialCard
     setRailMobileOpen(false);
     setPrefill(null);
   }, [pathname]);
-  // clark onQuote：切到当前对象的对话（窄屏展开对话列）、键盘面，输入条写入「关于“…”，」。
+  // clark onQuote：切到当前对象的对话（右列收着就展开并记成偏好，窄屏打开浮层），输入条写入「关于“…”，」。
   const quote = useCallback((text: string) => {
     setHistoryOpen(false);
     setGlobalView(false);
     setKeyboard(true);
     if (window.matchMedia("(max-width:759px)").matches) setRailMobileOpen(true);
+    else saveColumnMode("expanded");
     setPrefill({ text: `关于“${text}”，`, nonce: Date.now() });
   }, []);
   const consumePrefill = useCallback(() => setPrefill(null), []);
@@ -319,7 +323,8 @@ export function CeoWorkspace({ initialCards, viewerId, children }: { initialCard
       }
       if (peek) return setPeek(false);
       if (railMobileOpen) return setRailMobileOpen(false);
-      if (keyboard) return setKeyboard(false);
+      // 二级页的输入条没有键盘/语音两面（右列底下那条一直是文字框）。
+      if (keyboard && !railAllowed) return setKeyboard(false);
       if (historyOpen) {
         setHistoryOpen(false);
         setGlobalView(false);
@@ -332,7 +337,7 @@ export function CeoWorkspace({ initialCards, viewerId, children }: { initialCard
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [close, detailOpen, historyOpen, keyboard, navigate, pathname, peek, railMobileOpen]);
+  }, [close, detailOpen, historyOpen, keyboard, navigate, pathname, peek, railAllowed, railMobileOpen]);
 
   // 触屏：左缘滑入展开 peek，在 peek 上反向滑动收起（Safari 可能占用边缘手势，尽力而为）。
   const swipe = useRef<{ x: number; y: number; peek: boolean } | null>(null);
@@ -387,7 +392,7 @@ export function CeoWorkspace({ initialCards, viewerId, children }: { initialCard
     <WorkspaceContext.Provider value={api}>
       <ReferenceProvider onLimit={showToast}>
       <div
-        className={s.shell}
+        className={`${s.shell} ${columnHostClass}`}
         data-testid="ceo-workspace"
         data-detail-open={detailOpen}
         data-arriving={arriving}
@@ -434,14 +439,15 @@ export function CeoWorkspace({ initialCards, viewerId, children }: { initialCard
             transitioning={!!noticeTransition}
             onHome={goHome}
             onTogglePeek={() => setPeek((value) => !value)}
-            onConfig={() => navigate("/config")}
+            account={account}
+            onNavigate={navigate}
           />
         ) : null}
         {detailOpen && peek ? <button type="button" className={s.noticePeekBackdrop} aria-label="收起通知栏" onClick={() => setPeek(false)} /> : null}
         <div className={s.notificationArea} data-testid="notification-only" style={noticeTransition ? { viewTransitionName: "notice-rail" } : undefined}>
-          <NotificationRail cards={cards} onNavigate={navigate} onHome={goHome} homeActive={!detailOpen} currentHref={detailOpen ? pathname : undefined} />
+          <NotificationRail cards={cards} onNavigate={navigate} onHome={goHome} homeActive={!detailOpen} currentHref={detailOpen ? pathname : undefined} onCard={onCard} account={account} />
         </div>
-        <ConversationHost page={detail ? { scope: detail.scope, label: detail.label } : null} detailOpen={detailOpen} rail={railAllowed} ui={conversationUi} />
+        <ConversationHost page={detail ? { scope: detail.scope, label: detail.label } : null} detailOpen={detailOpen} rail={railAllowed} agentTitle="CEO Agent" ui={conversationUi} />
         {toast ? (
           <div className={s.noticeToast} role="status">
             <Check size={15} />

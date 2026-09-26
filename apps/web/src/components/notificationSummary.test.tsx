@@ -50,12 +50,13 @@ describe("通知栏分组（clark 三组）", () => {
     expect(groups[0].items[0].meta).toBe("9/25 10:00");
   });
 
-  it("没有「稍后处理」与条数上限（C-05：待拍板事项不能被藏起）；左上角是配置入口；胶囊回首页", () => {
+  it("没有「稍后处理」与条数上限（C-05：待拍板事项不能被藏起）；左上角是锁屏（退出登录）；胶囊回首页；左下角是自己的名字", () => {
     const many = Array.from({ length: 8 }, (_, index) => issue(`r${index}`, `议题 ${index}`, "radar", "red", { level: "company", relatedBattlefieldIds: [] }));
-    const html = renderToStaticMarkup(<NotificationRail cards={many} onNavigate={() => undefined} />);
+    const html = renderToStaticMarkup(<NotificationRail cards={many} onNavigate={() => undefined} account={{ displayName: "刘明华", loginId: "lium", role: "ceo" }} />);
     expect(html).not.toContain("稍后处理");
     expect(html.match(/data-tone="red"/g)).toHaveLength(8);
-    expect(html).toContain('aria-label="配置"');
+    expect(html).toContain('aria-label="退出登录"');
+    expect(html).toContain('aria-label="刘明华，打开个人菜单"');
     expect(html).toContain('aria-label="天枢，返回首页"');
     expect(html).toContain('aria-label="8 项通知"');
   });

@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import type { TMeetingOutcomeItem, TMeetingOutcomeState, TRadarAnchor } from "@warmap/contracts";
 import type { IssueReceiptRow, IssueRow } from "./issues.js";
 import type { MeetingRow } from "./meetingStore.js";
+import { deleteDispatchedTask } from "./tasks.js";
 
 export type EffectRevokeOutcome =
   | { ok: true; receipts: IssueReceiptRow[] }
@@ -66,6 +67,22 @@ function parseMeetingEffectRef(
   const match = /^meeting:([^:]+):(decision|todo|judgment|reopen):(.+)$/.exec(effectRef);
   if (!match) return null;
   return { meetingId: match[1], kind: match[2] as MeetingEffectKind, itemId: match[3] };
+}
+
+/** 已推送的 todo 效果是 `task:<taskId>`：会议与条目从执行事项的来源读回。 */
+async function parseTaskEffectRef(
+  client: PoolClient,
+  effectRef: string,
+): Promise<{ meetingId: string; kind: MeetingEffectKind; itemId: string; taskId: string } | null> {
+  const match = /^task:([0-9a-f-]{36})$/i.exec(effectRef);
+  if (!match) return null;
+  const task = await client.query<{ origin_meeting_id: string | null; origin_item_id: string | null }>(
+    "SELECT origin_meeting_id::text, origin_item_id FROM tasks WHERE id = $1",
+    [match[1]],
+  );
+  const origin = task.rows[0];
+  if (!origin?.origin_meeting_id || !origin.origin_item_id) return null;
+  return { meetingId: origin.origin_meeting_id, kind: "todo", itemId: origin.origin_item_id, taskId: match[1] };
 }
 
 /** 复议条件写入的 Radar anchor 是确定性的：id 由会议条目派生，撤回与重建都按 id 精确匹配。 */
@@ -186,8 +203,8 @@ async function lockIssue(client: PoolClient, issueId: string): Promise<IssueRow 
 }
 
 /**
- * 统一 meeting item 撤回：Outcome item、关联 Issue Receipt、Radar anchor 与 Meeting 派生状态
- * 在同一事务内同步。调用方提交；delivered 的外部 Handoff 返回明确 warning，不伪造恢复。
+ * 统一 meeting item 撤回：Outcome item、关联 Issue Receipt、Radar anchor、已推送的执行事项与 Meeting 派生状态
+ * 在同一事务内同步。调用方提交；负责人已处理的执行事项返回明确 warning，不伪造恢复。
  */
 async function revokeMeetingEffect(
   client: PoolClient,
@@ -195,7 +212,8 @@ async function revokeMeetingEffect(
   fingerprint: string,
   options: MeetingRevokeOptions = {},
 ): Promise<MeetingRevokeOutcome> {
-  const parsed = parseMeetingEffectRef(effectRef);
+  const taskRef = await parseTaskEffectRef(client, effectRef);
+  const parsed = taskRef ?? parseMeetingEffectRef(effectRef);
   if (!parsed) return { ok: false, code: "UNKNOWN_EFFECT", message: "未知 effectRef，无法撤回" };
 
   const locked = await client.query<MeetingRow>(MEETING_SELECT, [parsed.meetingId]);
@@ -230,13 +248,9 @@ async function revokeMeetingEffect(
   const target = items.find((candidate) => candidate.id === item.id)!;
   let issue: IssueRow | null = null;
 
-  if (kind === "todo" && target.review?.handoff?.exportStatus === "delivered") {
-    // 外部已送达：WarMap 不能假装恢复，要求人工处理
-    return {
-      ok: false,
-      code: "EFFECT_NOT_REVOCABLE",
-      message: "该 DRI Handoff 已送达外部，不能自动撤回，请人工处理",
-    };
+  if (taskRef) {
+    const removed = await deleteDispatchedTask(client, taskRef.taskId);
+    if (!removed.ok) return removed;
   }
 
   if (kind === "decision") {

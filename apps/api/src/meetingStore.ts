@@ -11,6 +11,7 @@ import type {
   TStoredTranscript,
   TStoredTranscriptCandidate,
   TTranscriptCandidateProjection,
+  TMeetingRecordingSummary,
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 
@@ -25,6 +26,9 @@ export type MeetingRow = {
   title: string;
   status: MeetingStatus;
   scheduled_at: Date;
+  ends_at: Date;
+  /** 「这场会开完了」的时刻；与 status 独立。 */
+  ended_at: Date | null;
   lead_dri_id: string;
   ceo_participant_id: string;
   participants: TMeetingParticipant[];
@@ -41,14 +45,19 @@ export type MeetingRow = {
   action_fingerprints: string[];
   created_at: Date;
   updated_at: Date;
+  /** 最近一次会议录音（meeting_recordings 另表，随 meetingColumns 带出）；`SELECT *` 读出的行没有这一格。 */
+  latest_recording?: TMeetingRecordingSummary | null;
 };
 
 const MEETING_COLUMNS = [
-  "id", "version", "title", "status", "scheduled_at", "lead_dri_id", "ceo_participant_id",
+  "id", "version", "title", "status", "scheduled_at", "ends_at", "ended_at", "lead_dri_id", "ceo_participant_id",
   "participants", "issue_ids", "preflight", "draft", "materials", "transcript", "transcript_candidate", "outcome", "origin_ref", "external_id",
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
 ];
-export const meetingColumns = (prefix = "") => MEETING_COLUMNS.map((column) => `${prefix}${column}`).join(", ");
+/** 录音状态变化不 bump Meeting version（否则会让进行中的会议 Action 全部失效），所以每次读取现查最近一条。 */
+const latestRecordingColumn = (prefix: string) =>
+  `(SELECT jsonb_build_object('id', r.id, 'status', r.status, 'error', r.error) FROM meeting_recordings r WHERE r.meeting_id = ${prefix || "meetings."}id ORDER BY r.created_at DESC LIMIT 1) AS latest_recording`;
+export const meetingColumns = (prefix = "") => [...MEETING_COLUMNS.map((column) => `${prefix}${column}`), latestRecordingColumn(prefix)].join(", ");
 
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type MeetingActionError = { status: number; code: string; message: string; fieldErrors?: Record<string, string> };
@@ -56,7 +65,7 @@ export type MeetingActionOutcome =
   | { card: TCard; conflict?: false; /** true 表示该 Action 已产生过效果，本次是幂等重放 */ replayed?: boolean }
   | { conflict: true; latestCard: TCard }
   | { error: MeetingActionError };
-/** DRI 出站请求：Supplement Request、MeetingOutcome todo 与 MonthlyPlan todo 共用同一导出边界。 */
+/** DRI 出站请求：Supplement Request 与 MonthlyPlan todo 共用同一导出边界（会后 todo 改为推送执行事项）。 */
 export type DriExportRequest = {
   effectRef: string;
   targetDriId: string;
@@ -136,6 +145,8 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
       action("meeting.request_supplement", "请求补充材料"),
       action("meeting.cancel", "取消会议"),
     );
+    // 「这场会开完了」只记一次结束时刻，不改 status
+    if (!row.ended_at) actions.push(action("meeting.end", "这场会开完了"));
     if (row.preflight.status === "failed") actions.push(action("meeting.retry_preflight", "重试预审"));
     if (row.preflight.status === "ready") actions.push(action("meeting.regenerate_preflight", "重新预审"));
   }
@@ -160,10 +171,10 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
           (item.kind !== "reopenWhen" || parentConfirmed(row.outcome, item)) &&
           (item.kind !== "decision" || decisionIssueId(row, item) !== null);
         if (confirmable) actions.push(action("meeting.confirm_item", "确认", item.id));
-        actions.push(action("meeting.dismiss_item", "忽略", item.id));
-      } else if (item.review.status === "confirmed") {
-        const deliveredTodo = item.kind === "todo" && item.review.handoff?.exportStatus === "delivered";
-        if (!deliveredTodo) actions.push(action("meeting.revoke_effect", "撤回", item.id));
+        actions.push(action("meeting.dismiss_item", item.kind === "strategic" ? "不同意" : "忽略", item.id));
+      } else if (item.review.status === "confirmed" && item.kind !== "strategic") {
+        // 战略项确认后已交给本体更新，不提供撤回；已推送 todo 的撤回由服务端按执行事项状态判定
+        actions.push(action("meeting.revoke_effect", "撤回", item.id));
       }
     }
   }
@@ -179,6 +190,8 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
     payload: {
       status: row.status,
       scheduledAt: row.scheduled_at.toISOString(),
+      endsAt: row.ends_at.toISOString(),
+      endedAt: row.ended_at?.toISOString() ?? null,
       leadDriId: row.lead_dri_id,
       ceoParticipantId: row.ceo_participant_id,
       participants: row.participants,
@@ -190,6 +203,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
       transcript: row.transcript,
       transcriptCandidate: projectTranscriptCandidate(row.transcript_candidate),
       outcome: row.outcome,
+      recording: row.latest_recording ?? null,
     },
     navigation: [{ href: `/meetings/${row.id}`, label: "Meeting" }],
     conversation: { scope: `meeting:${row.id}` },
@@ -260,6 +274,11 @@ export async function updateMeeting(client: PoolClient, id: string, assignments:
 /** 只有 confirmed 的 item 才能真正阻止替换；pending/dismissed 不算已生效效果。 */
 export function hasConfirmedEffect(outcome: TMeetingOutcomeState | null): boolean {
   return outcome?.items.some((item) => item.review?.status === "confirmed" || item.review?.effectRef != null) ?? false;
+}
+
+/** CEO 通知栏「需要你确认」：抽取已完成且还有未处理的战略议题。 */
+export function hasPendingStrategicItem(outcome: TMeetingOutcomeState | null): boolean {
+  return outcome?.status === "ready" && outcome.items.some((item) => item.kind === "strategic" && item.review?.status === "pending");
 }
 
 /** decision 的关联 Issue：显式 issueId 优先，否则只有单一关联 Issue 时才无歧义。 */

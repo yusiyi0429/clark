@@ -132,7 +132,7 @@ describe("Meeting Material preview", () => {
       const missing = await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/materials/${randomUUID()}/preview`, headers: { cookie } });
       expect(missing.statusCode).toBe(404);
       // 不持久化 HTML：volume 只保留 3 份原件
-      const stored = (await readdir(storageDir, { recursive: true })).filter((entry) => entry.includes("/"));
+      const stored = (await readdir(storageDir, { recursive: true })).filter((entry) => /[\\/]/.test(entry));
       expect(stored).toHaveLength(3);
       expect(stored.some((entry) => entry.endsWith(".html"))).toBe(false);
     } finally {

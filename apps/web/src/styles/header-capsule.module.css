@@ -1,0 +1,253 @@
+/*
+ * 二级页页头：一颗液态玻璃胶囊（照搬 clark `coagent/capsule.module.css` 的页头部分）。天枢没有 WorkspaceShell，
+ * 用 DetailFrame（components/shell/DetailFrame）画出和它同一个阅读页与页头；先用在会议页。
+ *
+ * 为什么是这个样子（用户 2026-09-25 定：页头、开始会议／计时、Co-Agent 是同一种形状、同一种材质的三颗胶囊）：
+ * - 高 48（同日从 66 压扁：顶上那一截太占地方）、两头全圆，和会议中右列顶上那颗 Co-Agent 胶囊一样（读右列
+ *   宿主上的 --coagent-capsule-*）；材质也是它那一份液态玻璃（--glass-*），只是颜色换成浅的。离阅读页顶边
+ *   --capsule-top（8px），几颗上下齐平。
+ * - 胶囊里只有三样，排成一行：左端一颗圆的返回（只留箭头，读屏名称「返回总览」不变）；眉题和标题（眉题是
+ *   标题前面一小段灰字，不用竖线隔开）；右端一样这个对象自己的东西（个人卡的倒计时、会议页的会议记录入口）。
+ *   会议页标题前面站的不是眉题，是这场会的计划时段（data-header-lead，比眉题醒目，见下）。
+ * - 会议页的「开始会议」→ 计时不在胶囊里：它是页头右边单独一颗，和 Co-Agent 胶囊一样大（detail-header/meeting，
+ *   `data-header-end`）。页头元素本身透明，玻璃画在 ::before 上、只盖到那颗左边 12px 为止 —— 页头元素自己
+ *   要是做了毛玻璃，里面那颗的毛玻璃就只看得到页头、看不到正文。
+ * - 正文从它下面滚过去会被虚化 —— 它是功能层，毛玻璃用在这里合规（principles）。高度不随滚动伸缩；胶囊上
+ *   唯一会动的是 Co-Agent 在处理这份内容时沿下沿走的那道光，让「动」只表示「有事在发生」。
+ *
+ * 为什么是具名作用域覆盖：ts-design 的 WorkspaceShell 页头结构是固定的（.ts-row 里是返回键和
+ * detail.actions，下面是 p.ts-eyebrow 和 h1），node_modules 不能改。这里把 .ts-row 摊平
+ * （display:contents），用 grid 把几样东西摆好；h1 的 id 和 aria-labelledby 不动，焦点与转场测量
+ * 节点也不动。长期应把「紧凑页头 + 状态段」作为属性上移到 ts-design。
+ */
+
+.scope :global(.ts-detail-header) {
+  /* 右边那颗开始会议／计时占的宽（含和胶囊之间的 12）；没有它就是 0，胶囊铺满。 */
+  --header-end-space: 0px;
+  position: sticky;
+  top: var(--capsule-top, 8px);
+  z-index: 4;
+  isolation: isolate;
+  display: grid;
+  /*
+   * 一行：返回 · 标题前面那一段 · 眉题 · 标题 · 右端那一样。间距写在各自的 margin 上 —— 眉题空着或窄屏退场时，
+   * 它那一截间距跟着走。「标题前面那一段」只有会议页有（计划时段，detail-header/meeting），别的页这一列是 0。
+   */
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+  grid-template-areas: 'back lead eyebrow title actions';
+  column-gap: 0;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  height: var(--coagent-capsule-height, 48px);
+  margin: var(--capsule-top, 8px) 14px 0;
+  padding: 0 6px;
+  border: 0;
+  border-radius: calc(var(--coagent-capsule-height, 48px) / 2);
+  background: none;
+  box-shadow: none;
+  /* ts-design 给页头元素本身挂了毛玻璃：去掉，玻璃只画在 ::before 上（理由见文件头）。 */
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  /* 右列收起时右边距会变（停在 Co-Agent 胶囊旁边，见 conversation/column.module.css），和阅读页同一条曲线。 */
+  transition: margin-right 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 胶囊的玻璃。 */
+.scope :global(.ts-detail-header)::before {
+  content: '';
+  position: absolute;
+  inset: 0 var(--header-end-space) 0 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass-sheen), var(--glass-light-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-light-rim), var(--glass-edges), var(--glass-light-shadow);
+  pointer-events: none;
+}
+
+.scope :global(.ts-detail-header > .ts-row) { display: contents; }
+
+/* 返回：一颗 36px 的圆，只留箭头，和胶囊的圆头同心（24 − 6 = 18）。文字还在，读屏读「返回总览」。 */
+.scope :global(.ts-detail-header > .ts-row > .button:first-child) {
+  grid-area: back;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  margin-right: 8px;
+  gap: 0;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0;
+  color: #3d4a5c;
+}
+
+/* 眉题：标题前面一小段灰字（最长 12 个字，再长省略），和标题同一条基线。 */
+.scope :global(.ts-detail-header > .ts-eyebrow) {
+  grid-area: eyebrow;
+  min-width: 0;
+  max-width: 12em;
+  margin: 0 10px 0 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  line-height: 20px;
+  color: #7c889b;
+}
+
+.scope :global(.ts-detail-header > .ts-eyebrow:empty) { display: none; }
+
+.scope :global(.ts-detail-header > h1) {
+  grid-area: title;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0;
+  color: #1f2a3d;
+}
+
+/* detail.actions：胶囊右端这个对象自己的东西（倒计时、Co-Agent 圆点、会议记录入口）。:where 把特指度压到最低。 */
+.scope :global(.ts-detail-header > .ts-row > :where(:not(.button:first-child))) {
+  grid-area: actions;
+  justify-self: end;
+  margin-left: 10px;
+}
+
+/*
+ * 标题前面那一段（data-header-lead）：这个对象最要紧的一个事实，站在眉题的位置、比眉题醒目。会议页是这场会的计划
+ * 时段（用户 2026-09-26：会没开始时几点开、几点散一定要写在页头上，而且要最显眼）；有它的页不另写眉题。
+ */
+.scope :global(.ts-detail-header > .ts-row > [data-header-lead]) {
+  grid-area: lead;
+  justify-self: start;
+  margin: 0 14px 0 0;
+}
+
+/* 会议页的标题让出了计划时段那一截：一行放不下时折成两行、不省略（和 1250 以下的规矩一样：会议名只写在标题里）。 */
+.scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]) > h1) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  text-overflow: clip;
+}
+
+/*
+ * 页头右边单独那一颗（data-header-end：会议页的开始会议 → 计时）。和 Co-Agent 胶囊一样大；它和胶囊之间空 12，
+ * 胶囊里最右那一样离胶囊右沿 6 —— 一共 18。这 18 算进最后一列的宽度、那一颗贴右：写成那一颗的左外边距时，
+ * 固定宽的列放不下，浏览器把外边距吃掉，胶囊右端那一样就压到玻璃外面、贴着那一颗。
+ */
+.scope :global(.ts-detail-header:has(> .ts-row > [data-header-end])) {
+  --header-end-space: calc(var(--coagent-capsule-width, 184px) + 12px);
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto calc(var(--coagent-capsule-width, 184px) + 18px);
+  grid-template-areas: 'back lead eyebrow title actions end';
+  padding-right: 0;
+}
+
+.scope :global(.ts-detail-header > .ts-row > [data-header-end]) {
+  grid-area: end;
+  justify-self: end;
+}
+
+/* 胶囊 sticky 在阅读区上面：键盘聚焦和滚动定位都要让开它，不能停在胶囊底下（Focus Not Obscured）。
+   页头下面还吸着一排材料页签时（会议页，detail-header/material-tabs），再让出那一排。 */
+.scope :global(.ts-detail) {
+  --reading-edge: calc(var(--capsule-top, 8px) + var(--coagent-capsule-height, 48px) + 10px);
+  scroll-padding-top: var(--reading-edge);
+}
+.scope :global(.ts-detail:has([data-material-tabs])) {
+  --reading-edge: calc(var(--capsule-top, 8px) + var(--coagent-capsule-height, 48px) + var(--material-tabs-gap, 6px) + var(--material-tabs-height, 32px) + 10px);
+}
+
+/*
+ * 正文滚上去时，在浮着的几颗胶囊后面淡成阅读页的底色：胶囊之间、胶囊上面那 10px、材料页签旁边都不再露出
+ * 半行字。一层吸在阅读页顶上的渐变（sticky，不占位置），在页头和页签下面。
+ */
+.scope :global(.ts-detail)::before {
+  content: '';
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: block;
+  height: var(--reading-edge);
+  margin-bottom: calc(-1 * var(--reading-edge));
+  background: linear-gradient(180deg, var(--ts-reading-surface, #fcfdfe) 0%, var(--ts-reading-surface, #fcfdfe) calc(100% - 26px), rgb(252 253 254 / 0%) 100%);
+  pointer-events: none;
+}
+
+/*
+ * 窄了标题最多两行、不省略 —— 会议名、交接包的决定只写在标题里，截掉就读不到了。眉题退场，标题小一号，
+ * 一行两行都在竖直正中，高度不变（两行 36，胶囊 48）。1000 以下所有二级页都这样；会议页页头右边还多一颗
+ * 开始会议／计时，1250 以下就挤了，提前这样。会议页是唯一的例外：两行里上面那一行让给计划时段（见下）。
+ */
+@media (max-width: 1250px) {
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-end]) > .ts-eyebrow) { display: none; }
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-end]) > h1) { white-space: normal; text-overflow: clip; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 14px; line-height: 18px; }
+  /*
+   * 会议页标题前面还有计划时段：放不下一行了，时段和标题上下两行、时段在上 —— 用户要它一定看得到，窄了先保住它；
+   * 标题让成一行、过长省略。两行一共 36，在胶囊里竖直居中；返回、胶囊右端那一样和右边那颗跨两行。
+   */
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]):has(> .ts-row > [data-header-end])) {
+    grid-template-rows: auto auto;
+    grid-template-areas: 'back lead lead lead actions end' 'back title title title actions end';
+    align-content: center;
+  }
+  .scope :global(.ts-detail-header > .ts-row > [data-header-lead]) { margin: 0; }
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]):has(> .ts-row > [data-header-end]) > h1) { display: block; white-space: nowrap; text-overflow: ellipsis; }
+}
+
+@media (max-width: 1000px) {
+  .scope :global(.ts-detail-header > .ts-eyebrow) { display: none; }
+  .scope :global(.ts-detail-header > h1) { white-space: normal; text-overflow: clip; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 14px; line-height: 18px; }
+}
+
+@media (max-width: 759px) {
+  /*
+   * 手机上 Co-Agent 胶囊只在对话浮层里，不会和页头并排：页头回到 44px，离顶边 8px。右边那颗开始会议／计时
+   * 跟着变矮变窄（104），和胶囊之间空 8。
+   */
+  .scope :global(.ts-detail-header) {
+    top: 8px;
+    height: auto;
+    min-height: 44px;
+    margin: 8px 8px 0;
+    padding: 0 4px;
+  }
+  .scope :global(.ts-detail-header > .ts-row > :where(:not(.button:first-child))) { margin-left: 6px; }
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-end])) {
+    --header-end-space: 112px;
+    grid-template-columns: auto auto auto minmax(0, 1fr) auto calc(104px + 12px);
+    padding-right: 0;
+  }
+  /* 右边那颗离页头的玻璃 8，玻璃里最右那一样再让 4：一共 12（同上，算进列宽）。 */
+  .scope :global(.ts-detail-header > .ts-row > [data-header-end]) { align-self: stretch; }
+  .scope :global(.ts-detail-header > .ts-row > .button:first-child) { margin-right: 4px; }
+  .scope :global(.ts-detail) { --reading-edge: 62px; }
+  .scope :global(.ts-detail:has([data-material-tabs])) { --reading-edge: calc(8px + 44px + var(--material-tabs-gap, 6px) + var(--material-tabs-height, 32px) + 10px); }
+  .scope :global(.ts-detail-header > h1) { font-size: 14.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scope :global(.ts-detail-header) { transition: none; }
+}
+
+:global([data-reduce-motion='true']) .scope :global(.ts-detail-header) { transition: none; }
+
+@media (prefers-reduced-transparency: reduce) {
+  .scope :global(.ts-detail-header)::before { -webkit-backdrop-filter: none; backdrop-filter: none; background: #f7f9fc; }
+}
+
+@media (prefers-contrast: more) {
+  .scope :global(.ts-detail-header)::before { box-shadow: inset 0 0 0 1px #5b6b85; }
+}

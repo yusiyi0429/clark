@@ -1,0 +1,124 @@
+/*
+ * 「推动」那一组：每条通知是一块 —— 上面是标题行（打开详情），下面是卡上的处理。
+ *
+ * 通知卡的材质、标题行、圆点都在 CEO 与 DRI 共用的 ceo-warmap/notifications.module.css，这里一条都不改，
+ * 只加 DRI 自己的：处理那一行、填写区、回执。那份共用样式里有一条 `.card button{color:inherit;border:0}`，
+ * 会盖掉 HeroUI 按钮的变体颜色，所以这里的按钮样式都写成双类名，稳稳压过它（和 dri.module.css 的
+ * `.detailReading.detailReading` 同一个办法）。颜色沿用 CEO 通知卡上内联动作那一组（#e4eaf2 / #334d70）。
+ */
+
+.push { position: relative; min-width: 0; }
+.push + .push,
+.push + .receipt,
+.receipt + .push { border-top: 1px solid var(--notice-separator); }
+
+/* 标题行下面紧跟着处理那一行：标题行的下边距收小，整块读起来是一条。 */
+.push.push .openRow > button:first-child { min-height: 0; padding-bottom: 6px; }
+
+.handle { display: grid; gap: 8px; min-width: 0; padding: 0 8px 12px 32px; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.actions.actions > button,
+.formActions.formActions > button {
+  min-width: 0;
+  min-height: 30px;
+  height: auto;
+  padding: 5px 12px;
+  border-radius: 9px;
+  background: #e9edf3a8;
+  color: var(--notice-ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.actions.actions > button:hover,
+.formActions.formActions > button:hover { background: rgb(38 61 92 / 9%); }
+.actions.actions > button[data-emphasis] { background: #e4eaf2; color: #334d70; font-weight: 600; }
+.actions.actions > button[aria-expanded='true'] { background: #d9e3f0; color: #2b4466; box-shadow: inset 0 0 0 1px rgb(51 77 112 / 22%); }
+.formActions.formActions > button[data-emphasis] { background: #334d70; color: #fff; font-weight: 600; }
+/* 「接下，10 月 10 日前回传」在最窄的通知栏（290px）里放不下一行：让它折行，不顶出卡外。 */
+.formActions.formActions > button { max-width: 100%; white-space: normal; text-align: center; }
+.formActions.formActions > button[data-emphasis]:hover { background: #2b4466; }
+
+/* 填写区：接下选日期、拒绝写原因、写一句。一块淡底，不加边框。 */
+.form { display: grid; gap: 8px; min-width: 0; padding: 10px; border-radius: 12px; background: rgb(38 61 92 / 4.5%); }
+.say { margin: 0; }
+.fieldLabel { color: var(--notice-muted); font-size: 12px; line-height: 1.5; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.field input,
+.field textarea { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; font-size: 14px; line-height: 1.6; color: var(--notice-ink); }
+.hint { color: var(--notice-muted); font-size: 11px; line-height: 1.5; }
+
+.dues { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.dues.dues button {
+  min-height: 30px;
+  height: auto;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--notice-separator);
+  color: var(--notice-ink);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.dues.dues button[data-selected] { background: #334d70; color: #fff; box-shadow: none; }
+
+.formActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+
+.error { margin: 0; color: #a44e46; font-size: 12px; line-height: 1.5; }
+.note { display: flex; align-items: center; gap: 5px; margin: 0; color: #517868; font-size: 12px; line-height: 1.5; }
+.note svg { flex: none; }
+
+/* 处理完之后，这条在原来的位置上写一行回执，停一下再收起（和 CEO 首页议题决定后的回执同一个节拍，约 1.3 秒）。 */
+.receipt {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  overflow: hidden;
+  padding: 12px 10px 12px 12px;
+  color: #517868;
+  font-size: var(--type-meta, 13px);
+  line-height: 1.5;
+  animation: settle 1.3s both;
+}
+.receipt svg { flex: none; margin-top: 2px; }
+@keyframes settle {
+  0% { opacity: 0; max-height: 96px; }
+  15%, 72% { opacity: 1; max-height: 96px; }
+  100% { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; }
+}
+
+/* 右边执行事项那张卡：左缘一道天枢蓝、外面一圈淡光，一点几秒里淡掉；回执写在卡顶那一行。 */
+.flash { animation: flash 1.6s ease-out both; }
+@keyframes flash {
+  0%, 55% { box-shadow: inset 3px 0 0 var(--ts-info, #3a83f7), 0 0 0 3px color-mix(in oklab, var(--ts-info, #3a83f7) 18%, transparent); }
+  100% { box-shadow: inset 3px 0 0 transparent, 0 0 0 3px transparent; }
+}
+.cardReceipt { display: inline-flex; align-items: center; gap: 4px; min-width: 0; color: var(--ts-info, #3a83f7); font-size: 12px; font-weight: 600; line-height: 1.5; }
+.cardReceipt svg { flex: none; }
+
+@media (max-width: 1200px) {
+  .handle { padding-left: 30px; padding-right: 6px; }
+}
+@media (max-width: 759px) {
+  /* 窄屏：处理那一行和填写区贴着左边铺开，按钮照样一行排不下就折行，不横向溢出。 */
+  .handle { padding-left: 12px; }
+  .actions.actions > button,
+  .formActions.formActions > button,
+  .dues.dues button { min-height: 36px; }
+  .field input,
+  .field textarea { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 不做动画，只留静态状态：回执停在原处、卡的左缘那道蓝色常亮，到时间一起撤掉。 */
+  .receipt { animation: none; }
+  .flash { animation: none; }
+  .flash.flash.flash { box-shadow: inset 3px 0 0 var(--ts-info, #3a83f7); }
+}
+@media (prefers-contrast: more) {
+  .hint, .fieldLabel { color: #454549; }
+  .error { color: #8a2f28; }
+}

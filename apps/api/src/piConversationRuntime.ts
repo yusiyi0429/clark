@@ -89,19 +89,79 @@ web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，�
 
 ${HUMAN_WRITING_STYLE}`;
 
-const resourceLoader: ResourceLoader = {
-  getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
-  getSkills: () => ({ skills: [], diagnostics: [] }),
-  getPrompts: () => ({ prompts: [], diagnostics: [] }),
-  getThemes: () => ({ themes: [], diagnostics: [] }),
-  getAgentsFiles: () => ({ agentsFiles: [] }),
-  getSystemPrompt: () => SYSTEM_PROMPT,
-  getSystemPromptSource: () => undefined,
-  getAppendSystemPrompt: () => [],
-  getAppendSystemPromptSources: () => [],
-  extendResources: () => undefined,
-  reload: async () => undefined,
-};
+/** 成员的 DRI Agent：只读规则、证据标注与“企业知识”称谓同 CEO Agent；不给 CEO 决策面（战场总览、待决策议题）和首页全局上下文。 */
+function driSystemPrompt(displayName: string): string {
+  return `# 角色
+
+你是 ${displayName} 的 DRI Agent，天枢里只供 ${displayName} 本人使用的只读对话助手。用 ${displayName} 所用的语言回复，避免空话。
+
+# 工作方式
+
+- 结论先行，再给依据。
+- 帮 ${displayName} 把手上的事想清楚、推进下去：拆解问题、梳理依据、指出风险和下一步。
+- 问题立场不明确时用双向钢人论证，即把对立两方各自最强的版本摆出来，再下判断。
+
+# 每轮注入的上下文
+
+每轮输入是一个 JSON。\`currentObject\` 是当前页面对象的 Card 快照，没有时为 null。\`references\` 是本轮显式引用的 Card 快照。\`message\` 是 ${displayName} 本轮原话。
+
+优先使用 currentObject 与 references，不要用历史对话猜测当前对象的最新状态。
+
+# 只读边界
+
+内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实用企业知识章节与段落标注。公司知识库一律称“企业知识”，不要出现 CompanyMemory 这个词。
+
+你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，不形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
+
+你看不到 CEO 的决策面，包括战场总览和待 CEO 决策的议题。被问到这些时直接说明看不到，不要推测。要求超出只读权限时，说明边界并给出可执行的下一步。
+
+# 工具
+
+- \`list_missions\`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。
+- \`list_sections\`：企业知识章节目录，先看目录再决定读哪里。
+- \`search_sections\`：在企业知识内按关键词定位相关章节。
+- \`get_passages\`：读取指定章节的段落正文。
+- \`search_people\`：稳定人员目录，把姓名解析为 personId。
+- \`read_outlet_feed\`：读取当前 Radar 已启用的 BBC、彭博、路透、金融时报、CNBC、经济学人等发布方媒体窗口内最新条目。它不是全文、历史库或全网关键词检索。
+- \`web_search\`：检索公开来源，仅在内部材料不足时使用。
+
+# 检索与证据
+
+先判断是否需要检索。纯推理、写作润色、加工已有材料和明确要求不用查时直接回答，无需搜索。
+
+以下问题必须检索：具体公司、产品、人物、政策或市场的现状；数字、价格、规模、融资和财报；“最新”“现在”“近期”等时效问题；以及你没有把握的外部事实。
+
+顺序是先内后外。公司内部事实先查企业知识与 Mission 列表。问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源；该工具返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search。存在多个独立信息需求时，先定好最多 4 项证据问题再逐项检索；除非被追问，不要把检索计划写进回答。
+
+web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，达到上限会中止本轮并报错。把额度用在关键分歧上，证据够了就停。博查摘要只能用于发现线索，不能当作最终证据。本运行没有读取网页原文的工具，所以引用外部事实时必须给出标题与 URL，并说明这是检索摘要、未经原文核验。
+
+不要把全部企业知识章节拼接进上下文，按章节目录定位后只读需要的段落。搜不到就明说，不编造。材料重复或没有新增时换检索方向。搜索次数只是行为记录，不代表回答质量。
+
+没有来源、样本或可复核计算时，不给竞争重叠率、成功概率和置信度写精确百分比；可以使用定性等级，并说明判断依据。
+
+${HUMAN_WRITING_STYLE}`;
+}
+
+/** DRI Agent 去掉的工具：它们读的是只给 CEO 看的决策面。 */
+const CEO_ONLY_TOOLS = new Set(["get_warmap_overview", "list_pending_issues"]);
+
+function resourceLoaderFor(systemPrompt: string): ResourceLoader {
+  return {
+    getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
+    getSkills: () => ({ skills: [], diagnostics: [] }),
+    getPrompts: () => ({ prompts: [], diagnostics: [] }),
+    getThemes: () => ({ themes: [], diagnostics: [] }),
+    getAgentsFiles: () => ({ agentsFiles: [] }),
+    getSystemPrompt: () => systemPrompt,
+    getSystemPromptSource: () => undefined,
+    getAppendSystemPrompt: () => [],
+    getAppendSystemPromptSources: () => [],
+    extendResources: () => undefined,
+    reload: async () => undefined,
+  };
+}
+
+const ceoResourceLoader = resourceLoaderFor(SYSTEM_PROMPT);
 
 /** list_pending_issues 工具返回的单条 Issue 摘要；只含 CEO 看板可见字段。 */
 export type PendingIssueSummary = {
@@ -335,6 +395,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
         },
       })] : [];
+      const isCeo = input.viewer.role === "ceo";
+      const viewerBoardTools = isCeo ? boardTools : boardTools.filter((tool) => !CEO_ONLY_TOOLS.has(tool.name));
       const recreated = !validRuntimeEntries(input.runtimeEntries, input.piSessionId);
       const piSessionId = recreated ? randomUUID() : input.piSessionId;
       const warning = recreated ? "Pi runtime entries were corrupted; rebuilt from current object and recent raw messages" : undefined;
@@ -352,9 +414,9 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const { session } = await createAgentSession({
         model,
         modelRuntime,
-        resourceLoader,
-        customTools: [...mcpTools, ...boardTools, ...outletFeedTools, searchTool],
-        tools: [...COMPANY_MEMORY_TOOLS, ...boardTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
+        resourceLoader: isCeo ? ceoResourceLoader : resourceLoaderFor(driSystemPrompt(input.viewer.displayName)),
+        customTools: [...mcpTools, ...viewerBoardTools, ...outletFeedTools, searchTool],
+        tools: [...COMPANY_MEMORY_TOOLS, ...viewerBoardTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
         sessionManager: manager,
         settingsManager: settings,
         thinkingLevel: "off",
@@ -401,7 +463,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         const prompt = JSON.stringify({
           currentObject: input.currentObject,
           references: input.referencesSnapshot,
-          globalContext: input.scope === "global" && options.globalContext ? await options.globalContext() : null,
+          globalContext: isCeo && input.scope === "global" && options.globalContext ? await options.globalContext() : null,
           message: input.message,
         });
         await session.prompt(prompt, { expandPromptTemplates: false, source: "rpc" });

@@ -1,0 +1,118 @@
+/*
+ * 阅读区看哪一份（components/shell/MaterialTabs.tsx，照搬 clark `detail-header/material-tabs`）。
+ *
+ * 页签那颗小胶囊：页头下面 --material-tabs-gap（6px），高 --material-tabs-height（32）、两头全圆，和页头同一份
+ * 液态玻璃（右列宿主上的 --glass-*）。里面的页签高 28、圆角 14：当前那一份淡蓝底、蓝字，其余透明。胶囊宽度跟着
+ * 页签数走（max-content），放不下时在自己里面横向滚动，不把阅读区撑宽。它吸在页头下面：正文滚动时它
+ * 留在原处，和页头之间始终那 6px（自然位置就是吸住的位置，滚起来不跳）。
+ *
+ * 页头里那个整场入口：高 36、圆角 18，和胶囊的圆头同心；当前时同样淡蓝底、蓝字。
+ */
+
+.bar {
+  position: sticky;
+  top: calc(var(--capsule-top, 8px) + var(--coagent-capsule-height, 48px) + var(--material-tabs-gap, 6px));
+  z-index: 3;
+  isolation: isolate;
+  display: flex;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 100%;
+  height: var(--material-tabs-height, 32px);
+  padding: 2px;
+  border-radius: calc(var(--material-tabs-height, 32px) / 2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  background: var(--glass-sheen), var(--glass-light-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-light-rim), var(--glass-edges), var(--glass-light-shadow);
+}
+
+.bar::-webkit-scrollbar { display: none; }
+
+.bar > :global(.toggle-button-group) {
+  display: flex;
+  gap: 2px;
+  width: max-content;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tab.tab {
+  flex: none;
+  gap: 5px;
+  max-width: 240px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: #5b6678;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.tab.tab:hover { background: rgb(31 53 86 / 5%); color: #1f2a3d; }
+
+.tab.tab[data-selected='true'],
+.whole.whole[data-selected='true'] {
+  background: var(--pill-current-agent, #eaf2ff);
+  color: var(--pill-current-ink-agent, #2f6fd6);
+  font-weight: 600;
+}
+
+.tab.tab:focus-visible,
+.whole.whole:focus-visible { outline: 2px solid #3a83f7; outline-offset: 2px; }
+
+.label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* 页头胶囊右端那个整场入口（会议记录）。 */
+.whole.whole {
+  position: relative;
+  flex: none;
+  gap: 6px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: #3d4a5c;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.whole.whole:hover { background: rgb(31 53 86 / 5%); color: #1f2a3d; }
+
+/* 页头挤的时候（1250 以下，会议页的页头右边还有一颗开始会议／计时），整场入口只留图标。 */
+@media (max-width: 1250px) {
+  .whole.whole { width: 36px; min-width: 36px; padding: 0; justify-content: center; }
+  .whole .label { display: none; }
+}
+
+@media (max-width: 759px) {
+  .bar { top: calc(8px + 44px + var(--material-tabs-gap, 6px)); }
+  .whole.whole { width: 36px; min-width: 36px; height: 36px; min-height: 36px; border-radius: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab.tab, .whole.whole { transition: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .bar { -webkit-backdrop-filter: none; backdrop-filter: none; background: #f7f9fc; }
+}
+
+@media (prefers-contrast: more) {
+  .bar { box-shadow: inset 0 0 0 1px #5b6b85; }
+}

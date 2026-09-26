@@ -30,6 +30,8 @@ export const SessionResponse = Type.Object(
     personId: Type.Optional(Type.String()),
     displayName: Type.Optional(Type.String()),
     role: Type.Optional(SessionRole),
+    /** 登录 ID：个人菜单顶部写给本人看，修改口令也要用它。 */
+    loginId: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );

@@ -11,5 +11,9 @@ export default async function CeoLayout({ children }: { children: React.ReactNod
   const session = await readSession(cookie);
   if (session?.role !== "ceo") return children;
   const { cards } = await loadHomeCards(cookie);
-  return <CeoWorkspace initialCards={cards} viewerId={session.personId}>{children}</CeoWorkspace>;
+  return (
+    <CeoWorkspace initialCards={cards} viewerId={session.personId} account={{ displayName: session.displayName, loginId: session.loginId, role: "ceo" }}>
+      {children}
+    </CeoWorkspace>
+  );
 }

@@ -188,11 +188,12 @@ export const CreateCeoIssueRequest = Type.Object(
   { additionalProperties: false },
 );
 
-/** 独立新建 Meeting：issueIds 允许为空数组（会议可以先立，再并入议题）。 */
+/** 独立新建 Meeting：issueIds 允许为空数组（会议可以先立，再并入议题）；endsAt 缺省为开始后 60 分钟。 */
 export const CreateConfigMeetingRequest = Type.Object(
   {
     title: Type.String({ minLength: 1, maxLength: 200 }),
     scheduledAt: Type.String({ minLength: 1, maxLength: 100 }),
+    endsAt: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
     leadDriId: Type.String({ minLength: 1, maxLength: 200 }),
     issueIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { maxItems: 50, uniqueItems: true })),
   },

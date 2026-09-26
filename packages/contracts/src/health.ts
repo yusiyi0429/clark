@@ -9,6 +9,10 @@ export const HealthDependencies = Type.Object(
     search: Type.Boolean(),
     wechat: Type.Boolean(),
     outlets: Type.Boolean(),
+    /** 会议录音识别的两段外部凭据是否配全（TOS 对象存储、火山语音识别）；不含 ffmpeg 自检。 */
+    recording: Type.Object({ tos: Type.Boolean(), asr: Type.Boolean() }, { additionalProperties: false }),
+    /** 腾讯云声纹（说话人注册 / 1:N）凭据是否配全；只看变量在不在，不发起外部调用。 */
+    voiceprint: Type.Boolean(),
   },
   { additionalProperties: false },
 );

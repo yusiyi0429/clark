@@ -1,0 +1,14 @@
+/* 天枢独有的对话附件：历史层页头那颗附件键（深色，沿用 clark 引用预览的材质）与输入条里的附件 chip。 */
+.toolButton{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:44px;height:44px;padding:0 12px;border:0;border-radius:22px;background:#ffffff12;color:#cdd4df;font:inherit;font-size:13px;cursor:pointer;transition:background 150ms,color 150ms}
+.toolButton:hover{background:#ffffff20;color:#fff}
+.toolButton:focus-visible{outline:2px solid #5a97dd;outline-offset:2px}
+.toolButton:disabled{opacity:.45;cursor:default}
+.toolButton svg{width:17px;height:17px;flex:none}
+.fileInput{display:none}
+.attachmentChip{display:flex;align-items:center;gap:2px;flex:none;max-width:100%;height:26px;box-sizing:border-box;border-radius:8px;border:1px solid #8d9aaf25;background:#e8ecf27a;color:#596a80}
+.attachmentChip>svg{flex:none;margin-left:8px}
+.attachmentChip>span{display:block;max-width:190px;padding:4px 5px 4px 5px;font-size:11px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attachmentChip button{display:flex;align-items:center;background:none;border:0;cursor:pointer;color:#596a80;padding:5px}
+.attachmentChip button:hover{color:#215ba1}
+@media(max-width:690px){.attachmentChip>span{max-width:145px}}
+@media(prefers-reduced-motion:reduce){.toolButton{transition:none}}

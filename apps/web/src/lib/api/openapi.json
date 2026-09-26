@@ -973,303 +973,7 @@
         }
       }
     },
-    "/api/conversations/{scope}/sessions": {
-      "get": {
-        "operationId": "listConversationSessions",
-        "parameters": [
-          {
-            "name": "scope",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "列出 scope 内未删除的 Conversation 会话",
-        "responses": {
-          "200": {
-            "description": "会话列表（最早未删除者为默认会话）",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationSessionList"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createConversationSession",
-        "parameters": [
-          {
-            "name": "scope",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "在 scope 内新建 Conversation 会话",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateConversationSessionRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "新建的会话摘要",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationSessionSummary"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{scope}/sessions/{sessionId}": {
-      "delete": {
-        "operationId": "deleteConversationSession",
-        "parameters": [
-          {
-            "name": "scope",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "sessionId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "summary": "删除会话（含消息与附件原件）；运行中拒绝",
-        "responses": {
-          "204": {
-            "description": "已删除"
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{scope}/sessions/{sessionId}/messages": {
-      "get": {
-        "operationId": "getConversationSessionMessages",
-        "parameters": [
-          {
-            "name": "scope",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "sessionId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "summary": "读取指定会话的原始 Conversation 消息",
-        "responses": {
-          "200": {
-            "description": "会话消息历史",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationHistory"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "sendConversationSessionMessage",
-        "parameters": [
-          {
-            "name": "scope",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "sessionId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "summary": "在指定会话发送消息并通过 SSE 返回 Pi 运行事件",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConversationMessageRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "SSE 事件流",
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationSseEvent"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{scope}/sessions/{sessionId}/attachments": {
+    "/api/conversations/{scope}/attachments": {
       "post": {
         "operationId": "uploadConversationAttachments",
         "parameters": [
@@ -1280,18 +984,9 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "sessionId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
           }
         ],
-        "summary": "上传会话附件（multipart files，PDF/DOCX/Markdown）；元数据随消息发送时内嵌入库",
+        "summary": "上传附件到本人在该 scope 的主对话（没有则创建；multipart files，PDF/DOCX/Markdown）；元数据随消息发送时内嵌入库",
         "requestBody": {
           "content": {
             "multipart/form-data": {
@@ -1352,6 +1047,763 @@
             }
           },
           "413": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{objectType}/{objectId}": {
+      "get": {
+        "operationId": "getThread",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "signal",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "打开对象群组：成员、最近消息、读到哪里与未读数；非成员 404",
+        "responses": {
+          "200": {
+            "description": "群组视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{objectType}/{objectId}/messages": {
+      "get": {
+        "operationId": "listThreadMessages",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "signal",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "summary": "取 after 之后的新消息（轮询用，一次最多 200 条）；非成员 404",
+        "responses": {
+          "200": {
+            "description": "新消息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMessageList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postThreadMessage",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "signal",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "在群组里发一条纯文字消息（可附带引用片段）；非成员 404",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostThreadMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "已发出的消息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{objectType}/{objectId}/read": {
+      "post": {
+        "operationId": "markThreadRead",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "signal",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "记下读到哪条（只增不减，不超过群里最后一条）；非成员 404",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkThreadReadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "读到的位置与剩余未读",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkThreadReadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/home": {
+      "get": {
+        "operationId": "getMyHome",
+        "summary": "成员工作台：我负责的执行事项（全部状态，新到旧）",
+        "responses": {
+          "200": {
+            "description": "我的执行事项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeHomeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{id}": {
+      "patch": {
+        "operationId": "patchMyTask",
+        "summary": "负责人改执行事项状态；不是负责人 404 TASK_NOT_FOUND，version 不一致 409 带 latestTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchMyTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新后的执行事项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{id}/return": {
+      "post": {
+        "operationId": "returnMyTask",
+        "summary": "负责人写原因退回执行事项，并通知会议主持人（主持人退回自己的不通知）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnMyTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已退回的执行事项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/notifications": {
+      "get": {
+        "operationId": "listMyNotifications",
+        "summary": "我的通知：未读在前，最近 50 条，文案按对象当前状态组合",
+        "responses": {
+          "200": {
+            "description": "通知列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/seen": {
+      "post": {
+        "operationId": "markMyNotificationsSeen",
+        "summary": "把我的这些通知标为已读；别人的 id 忽略",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkNotificationsSeenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "已标记"
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/voiceprint": {
+      "get": {
+        "operationId": "getMyVoiceprint",
+        "summary": "本人声纹状态：录没录、什么时候录的、服务器是否配好腾讯云声纹",
+        "responses": {
+          "200": {
+            "description": "声纹状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceprintStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "enrollMyVoiceprint",
+        "summary": "本人录入或重录声纹（multipart：audio 单个音频文件约 20–40 秒 + consent=true）；只用于会后预填说话人，不自动确认",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "audio",
+                  "consent"
+                ],
+                "properties": {
+                  "audio": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "consent": {
+                    "type": "string",
+                    "enum": [
+                      "true"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "录入后的声纹状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceprintStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMyVoiceprint",
+        "summary": "本人删除声纹：腾讯云与库里一起删；没有声纹时同样 204",
+        "responses": {
+          "204": {
+            "description": "已删除"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -1894,6 +2346,9 @@
                     "type": "string"
                   },
                   "scheduledAt": {
+                    "type": "string"
+                  },
+                  "endsAt": {
                     "type": "string"
                   },
                   "leadDriId": {
@@ -3375,6 +3830,349 @@
         }
       }
     },
+    "/api/meetings/{id}/recordings": {
+      "post": {
+        "operationId": "startMeetingRecording",
+        "summary": "CEO 开始会议录音（scheduled only）；已有在途录音时返回那一份",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已有在途录音（任一非 done/failed 状态），返回它",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartMeetingRecordingResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "新建的录音",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartMeetingRecordingResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/recordings/{recordingId}": {
+      "get": {
+        "operationId": "getMeetingRecording",
+        "summary": "CEO 查询录音与识别进度",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "recordingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "录音当前状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingRecording"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/recordings/{recordingId}/chunks/{seq}": {
+      "put": {
+        "operationId": "putMeetingRecordingChunk",
+        "summary": "CEO 上传一片录音（原始字节，seq 从 0 起按录制顺序）；同一 seq 重传幂等，单片上限 20 MiB",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "recordingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "seq",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 99999
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "audio/webm": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "收下后的录音状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingRecording"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/recordings/{recordingId}/finish": {
+      "post": {
+        "operationId": "finishMeetingRecording",
+        "summary": "CEO 结束录音并在后台转码、上传、识别，完成后写成会议记录候选（source.format = volc_asr）；重复调用返回当前状态",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "recordingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "已交给后台流水线",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingRecording"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "health",
@@ -3855,6 +4653,128 @@
                 }
               }
             }
+          },
+          "latestTask": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "version",
+              "title",
+              "status",
+              "dueDate",
+              "returnReason",
+              "origin",
+              "createdAt",
+              "updatedAt"
+            ],
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "title": {
+                "minLength": 1,
+                "maxLength": 120,
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "not_started",
+                    "type": "string"
+                  },
+                  {
+                    "const": "in_progress",
+                    "type": "string"
+                  },
+                  {
+                    "const": "done",
+                    "type": "string"
+                  },
+                  {
+                    "const": "returned",
+                    "type": "string"
+                  }
+                ]
+              },
+              "dueDate": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "returnReason": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "meetingId",
+                      "meetingTitle",
+                      "quote"
+                    ],
+                    "properties": {
+                      "type": {
+                        "const": "meeting",
+                        "type": "string"
+                      },
+                      "meetingId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "meetingTitle": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "quote": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "createdAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "updatedAt": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -3956,6 +4876,9 @@
                 "type": "string"
               }
             ]
+          },
+          "loginId": {
+            "type": "string"
           }
         }
       },
@@ -4520,153 +5443,6 @@
             }
           }
         ]
-      },
-      "ConversationSessionSummary": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "scope",
-          "title",
-          "isDefault",
-          "messageCount",
-          "lastMessageAt",
-          "createdAt"
-        ],
-        "properties": {
-          "id": {
-            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-            "description": "scope 内的 Conversation 会话 id",
-            "type": "string"
-          },
-          "scope": {
-            "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
-            "description": "global 或稳定对象 scope",
-            "type": "string"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "minLength": 1,
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "isDefault": {
-            "type": "boolean"
-          },
-          "messageCount": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "lastMessageAt": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        }
-      },
-      "ConversationSessionList": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "scope",
-          "sessions"
-        ],
-        "properties": {
-          "scope": {
-            "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
-            "description": "global 或稳定对象 scope",
-            "type": "string"
-          },
-          "sessions": {
-            "type": "array",
-            "items": {
-              "additionalProperties": false,
-              "type": "object",
-              "required": [
-                "id",
-                "scope",
-                "title",
-                "isDefault",
-                "messageCount",
-                "lastMessageAt",
-                "createdAt"
-              ],
-              "properties": {
-                "id": {
-                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                  "description": "scope 内的 Conversation 会话 id",
-                  "type": "string"
-                },
-                "scope": {
-                  "pattern": "^(global|(issue|signal|meeting|monthly-plan):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
-                  "description": "global 或稳定对象 scope",
-                  "type": "string"
-                },
-                "title": {
-                  "anyOf": [
-                    {
-                      "minLength": 1,
-                      "maxLength": 200,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "isDefault": {
-                  "type": "boolean"
-                },
-                "messageCount": {
-                  "minimum": 0,
-                  "type": "integer"
-                },
-                "lastMessageAt": {
-                  "anyOf": [
-                    {
-                      "format": "date-time",
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "createdAt": {
-                  "format": "date-time",
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      },
-      "CreateConversationSessionRequest": {
-        "additionalProperties": false,
-        "type": "object",
-        "properties": {
-          "title": {
-            "minLength": 1,
-            "maxLength": 200,
-            "type": "string"
-          }
-        }
       },
       "CreateBattlefieldRequest": {
         "additionalProperties": false,
@@ -5659,6 +6435,11 @@
             "maxLength": 100,
             "type": "string"
           },
+          "endsAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
           "leadDriId": {
             "minLength": 1,
             "maxLength": 200,
@@ -6027,7 +6808,9 @@
               "companyMemoryMcp",
               "search",
               "wechat",
-              "outlets"
+              "outlets",
+              "recording",
+              "voiceprint"
             ],
             "properties": {
               "piRuntime": {
@@ -6046,6 +6829,25 @@
                 "type": "boolean"
               },
               "outlets": {
+                "type": "boolean"
+              },
+              "recording": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "tos",
+                  "asr"
+                ],
+                "properties": {
+                  "tos": {
+                    "type": "boolean"
+                  },
+                  "asr": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "voiceprint": {
                 "type": "boolean"
               }
             }
@@ -6569,6 +7371,11 @@
             "maxLength": 100,
             "type": "string"
           },
+          "endsAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
           "leadDriId": {
             "minLength": 1,
             "maxLength": 200,
@@ -6618,6 +7425,11 @@
             "type": "string"
           },
           "scheduledAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "endsAt": {
             "minLength": 1,
             "maxLength": 100,
             "type": "string"
@@ -6713,6 +7525,11 @@
             "type": "string"
           },
           "scheduledAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "endsAt": {
             "minLength": 1,
             "maxLength": 100,
             "type": "string"
@@ -8224,6 +9041,10 @@
                   {
                     "const": "warmap_json",
                     "type": "string"
+                  },
+                  {
+                    "const": "volc_asr",
+                    "type": "string"
                   }
                 ]
               },
@@ -8234,7 +9055,7 @@
               },
               "sizeBytes": {
                 "minimum": 1,
-                "maximum": 1048576,
+                "maximum": 1073741824,
                 "type": "integer"
               },
               "sha256": {
@@ -8310,6 +9131,10 @@
                     {
                       "const": "open",
                       "type": "string"
+                    },
+                    {
+                      "const": "strategic",
+                      "type": "string"
                     }
                   ]
                 },
@@ -8365,6 +9190,20 @@
                 "parentIndex": {
                   "minimum": 0,
                   "type": "integer"
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "brief": {
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "dueDate": {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
                 }
               }
             }
@@ -8516,6 +9355,10 @@
                     },
                     {
                       "const": "open",
+                      "type": "string"
+                    },
+                    {
+                      "const": "strategic",
                       "type": "string"
                     }
                   ]
@@ -8713,6 +9556,18 @@
                       "type": "null"
                     }
                   ]
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "brief": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "dueDate": {
+                  "minLength": 1,
+                  "type": "string"
                 }
               }
             }
@@ -8840,6 +9695,904 @@
             "minLength": 1,
             "maxLength": 500,
             "type": "string"
+          }
+        }
+      },
+      "ThreadView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "members",
+          "messages",
+          "lastReadId",
+          "unread"
+        ],
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName",
+                "title"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "displayName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "kind",
+                "authorId",
+                "authorName",
+                "content",
+                "quote",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "member",
+                      "type": "string"
+                    },
+                    {
+                      "const": "co-agent",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "authorId": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "authorName": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "content": {
+                  "minLength": 1,
+                  "maxLength": 4000,
+                  "type": "string"
+                },
+                "quote": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "text"
+                      ],
+                      "properties": {
+                        "text": {
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "lastReadId": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unread": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      },
+      "ThreadMessage": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "authorId",
+          "authorName",
+          "content",
+          "quote",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "member",
+                "type": "string"
+              },
+              {
+                "const": "co-agent",
+                "type": "string"
+              }
+            ]
+          },
+          "authorId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "authorName": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "text"
+                ],
+                "properties": {
+                  "text": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "ThreadMessageList": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "kind",
+                "authorId",
+                "authorName",
+                "content",
+                "quote",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "member",
+                      "type": "string"
+                    },
+                    {
+                      "const": "co-agent",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "authorId": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "authorName": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "content": {
+                  "minLength": 1,
+                  "maxLength": 4000,
+                  "type": "string"
+                },
+                "quote": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "text"
+                      ],
+                      "properties": {
+                        "text": {
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PostThreadMessageRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "quote": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "text"
+            ],
+            "properties": {
+              "text": {
+                "minLength": 1,
+                "maxLength": 2000,
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "MarkThreadReadRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lastReadId"
+        ],
+        "properties": {
+          "lastReadId": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      },
+      "MarkThreadReadResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lastReadId",
+          "unread"
+        ],
+        "properties": {
+          "lastReadId": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unread": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      },
+      "TaskView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "title",
+          "status",
+          "dueDate",
+          "returnReason",
+          "origin",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "title": {
+            "minLength": 1,
+            "maxLength": 120,
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "not_started",
+                "type": "string"
+              },
+              {
+                "const": "in_progress",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              },
+              {
+                "const": "returned",
+                "type": "string"
+              }
+            ]
+          },
+          "dueDate": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "returnReason": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "type",
+                  "meetingId",
+                  "meetingTitle",
+                  "quote"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "meeting",
+                    "type": "string"
+                  },
+                  "meetingId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "meetingTitle": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "quote": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "updatedAt": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "MeHomeResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "myTasks"
+        ],
+        "properties": {
+          "myTasks": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "version",
+                "title",
+                "status",
+                "dueDate",
+                "returnReason",
+                "origin",
+                "createdAt",
+                "updatedAt"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "not_started",
+                      "type": "string"
+                    },
+                    {
+                      "const": "in_progress",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "returned",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "dueDate": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "returnReason": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "origin": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "meetingId",
+                        "meetingTitle",
+                        "quote"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "meeting",
+                          "type": "string"
+                        },
+                        "meetingId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "meetingTitle": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "quote": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PatchMyTaskRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "status"
+        ],
+        "properties": {
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "not_started",
+                "type": "string"
+              },
+              {
+                "const": "in_progress",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "ReturnMyTaskRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "reason"
+        ],
+        "properties": {
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reason": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
+      "NotificationList": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "notifications"
+        ],
+        "properties": {
+          "notifications": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "kind",
+                "text",
+                "objectType",
+                "objectId",
+                "createdAt",
+                "readAt"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "meeting_action_assigned",
+                      "type": "string"
+                    },
+                    {
+                      "const": "task_returned",
+                      "type": "string"
+                    },
+                    {
+                      "const": "strategic_rejected",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "text": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "objectType": {
+                  "anyOf": [
+                    {
+                      "const": "task",
+                      "type": "string"
+                    },
+                    {
+                      "const": "meeting",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "objectId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "readAt": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "MarkNotificationsSeenRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "notificationIds"
+        ],
+        "properties": {
+          "notificationIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MeetingRecording": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "chunkCount",
+          "error",
+          "createdAt",
+          "finishedAt"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "recording",
+                "type": "string"
+              },
+              {
+                "const": "uploading",
+                "type": "string"
+              },
+              {
+                "const": "transcoding",
+                "type": "string"
+              },
+              {
+                "const": "transcribing",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "chunkCount": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "StartMeetingRecordingResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "recordingId"
+        ],
+        "properties": {
+          "recordingId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "VoiceprintStatus": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enrolled",
+          "updatedAt",
+          "configured"
+        ],
+        "properties": {
+          "enrolled": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "configured": {
+            "type": "boolean"
           }
         }
       }

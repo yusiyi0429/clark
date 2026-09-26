@@ -173,7 +173,7 @@ describe("health", () => {
         api: true,
         database: true,
         buildSha: "test-sha",
-        dependencies: { piRuntime: true, modelSlots: true, companyMemoryMcp: true, search: false, wechat: false, outlets: false },
+        dependencies: { piRuntime: true, modelSlots: true, companyMemoryMcp: true, search: false, wechat: false, outlets: false, recording: { tos: false, asr: false }, voiceprint: false },
       });
 
       const gets = [

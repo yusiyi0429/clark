@@ -2,12 +2,15 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Card as HeroCard } from "@heroui/react";
-import { ChevronRight, Settings } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
+import { AccountMenu, type Account } from "./AccountMenu";
+import { logout } from "@/lib/logout";
 import type { Card } from "@/lib/api/client";
 import { payloadOf, type BattlefieldPayload, type CapabilityPayload, type IssuePayload, type MeetingPayload, type MonthlyPlanPayload } from "@/cards/payloads";
 import { ContextMark, type ContextMarkKind } from "./ContextMark";
 import { HeroButton } from "./HeroButton";
 import { ReferenceButton } from "@/conversation/references";
+import { StrategicConfirmCard, pendingStrategicItems } from "./StrategicConfirmCard";
 import { TianshuMark } from "./TianshuMark";
 import { COMPANY_TIMEZONE, monthDayTime } from "@/lib/companyTime";
 import n from "@/styles/notifications.module.css";
@@ -166,9 +169,15 @@ export function NotificationRail({
   onHome,
   homeActive = true,
   currentHref,
+  onCard,
+  account,
 }: {
   cards: Card[];
   onNavigate: (href: string, origin?: Element | null) => void;
+  /** 在通知栏卡上办完的动作（战略议题确认）返回的新 Card。 */
+  onCard?: (card: Card) => void;
+  /** 左下角自己的名字：个人菜单。 */
+  account?: Account;
   onHome?: () => void;
   homeActive?: boolean;
   /** 当前打开的对象（高亮所在分组与那一行）。 */
@@ -177,7 +186,8 @@ export function NotificationRail({
   const groups = railGroups(cards);
   const rail = useRef<HTMLElement>(null);
   const positions = useRef(new Map<string, number>());
-  const layoutKey = groups.map((group) => `${group.kind}:${group.items.length}`).join("|");
+  const strategic = pendingStrategicItems(cards).length;
+  const layoutKey = [`strategic:${strategic}`, ...groups.map((group) => `${group.kind}:${group.items.length}`)].join("|");
 
   // 分组出现 / 消失时，其余卡片从旧位置滑到新位置（FLIP，clark 同）。
   useLayoutEffect(() => {
@@ -200,12 +210,13 @@ export function NotificationRail({
         onHome={() => onHome?.()}
         homeActive={homeActive}
         lead={
-          <HeroButton variant="ghost" size="sm" isIconOnly type="button" onPress={() => onNavigate("/config")} aria-label="配置" title="配置">
-            <Settings aria-hidden="true" />
+          <HeroButton variant="ghost" size="sm" isIconOnly type="button" onPress={() => void logout()} aria-label="退出登录" title="退出登录">
+            <Lock aria-hidden="true" />
           </HeroButton>
         }
       />
       <div className={n.noticeList}>
+        {onCard ? <StrategicConfirmCard cards={cards} onCard={onCard} onNavigate={onNavigate} /> : null}
         {groups.map((group) => {
           const current = group.items.some((item) => item.href === currentHref);
           return (
@@ -258,6 +269,11 @@ export function NotificationRail({
           );
         })}
       </div>
+      {account ? (
+        <div className={n.railFoot}>
+          <AccountMenu account={account} onNavigate={(href) => onNavigate(href)} />
+        </div>
+      ) : null}
     </aside>
   );
 }

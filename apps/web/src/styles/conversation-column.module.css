@@ -1,0 +1,434 @@
+/*
+ * 二级页右列（conversation/ConversationColumn.tsx），照搬 clark `conversation/column.module.css`。
+ *
+ * 尺寸都挂在宿主根节点上（.host）：右列和左侧内容读同一个 --conversation-width，右列变宽、左侧让位
+ * 是同一条曲线、同一个时刻。宿主只负责让位（CEO 的 .mainArea 右边距，app-shell.module.css）。
+ *
+ *   ≥1600      右列 440
+ *   1280–1599  右列 400
+ *   1001–1279  右列 360
+ *   760–1000   右列 300
+ *   ≥760 收起  0：阅读页铺满右边，把手和频道钮浮在右边 56px 那一溜上
+ *   ≤759       浮层；入口是输入条底行左边的开关
+ *
+ * 左边的材料和右列是同一块面板：宿主把阅读页右侧两个角改成直角、不留间隙，右列只有左边一条线，
+ * 右侧两个角接着阅读页的圆角。收起钮是骑在这条线上的一个小把手，线走到哪它跟到哪。
+ * 材质是浅色：「我的 Agent」近白带一点晨雾蓝，事项群组暖一点。
+ */
+
+.host {
+  --conversation-edge: 14px;
+  --conversation-open-width: 360px;
+  --conversation-width: var(--conversation-open-width);
+  --conversation-overlay-left: 62px;
+  --conversation-radius: 26px;
+  --conversation-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /*
+   * 页头胶囊、会议页「开始会议」→ 计时那颗读同一组数（C-08）：一样高、一样圆。离阅读页顶边 --capsule-top；
+   * 下面材料页签那颗小胶囊高 --material-tabs-height、离页头 --material-tabs-gap。
+   */
+  --coagent-capsule-width: 184px;
+  --coagent-capsule-height: 48px;
+  --capsule-top: 8px;
+  --material-tabs-height: 32px;
+  --material-tabs-gap: 6px;
+
+  /*
+   * 液态玻璃：页头胶囊、开始会议／计时那颗、材料页签那颗小胶囊是同一种材质 —— 透明处模糊并提亮下面的内容，
+   * 顶上偏左一道高光，上下沿各一线亮边，影子淡到几乎看不见。
+   */
+  --glass-blur: blur(14px) saturate(170%);
+  --glass-sheen: radial-gradient(60% 46% at 30% 0%, rgb(255 255 255 / 26%) 0%, rgb(255 255 255 / 0%) 72%);
+  --glass-edges: inset 0 1px 0 rgb(255 255 255 / 55%), inset 0 -1px 0 rgb(255 255 255 / 75%);
+  --glass-light-fill: linear-gradient(180deg, rgb(255 255 255 / 72%) 0%, rgb(247 250 254 / 58%) 100%);
+  --glass-light-rim: inset 0 0 0 1px rgb(255 255 255 / 70%), 0 0 0 1px rgb(31 53 86 / 7%);
+  --glass-light-shadow: 0 10px 26px -18px rgb(31 53 86 / 28%);
+
+  /* 阅读页里正文那一栏的宽度：右列收起、阅读页铺满右边时，正文跟着挪到新的正中。 */
+  --reading-measure: 880px;
+
+  /*
+   * 宿主读的三个数：右列展开时阅读页右边两个角是直角、接着右列；收起时阅读页铺满右边，两个角圆回来
+   * （等铺到头那一刻再圆，展开时立刻变直角），正文右边让出那一溜悬浮钮的 56px。
+   */
+  --conversation-join-radius: 0px;
+  --conversation-join-delay: 0s;
+  --conversation-lane: 0px;
+
+  /* 频道色。右列正文底色、收起后的频道钮读这一组。 */
+  --conversation-agent-panel: linear-gradient(170deg, #f8fafd 0%, #fcfdfe 60%, #f9fbfd 100%);
+  --conversation-line: #e3e8ef;
+  --conversation-agent-ink: #3c66bf;
+  --conversation-agent-badge: var(--pill-badge-agent);
+  --conversation-group-panel: linear-gradient(170deg, #faf6f0 0%, #fdfbf8 60%, #fbf8f3 100%);
+  --conversation-group-fill: #ede5d8;
+  --conversation-group-ink: #756045;
+  --conversation-group-badge: var(--pill-badge-group);
+
+  /* 输入条（ComposerPill）的两套颜色：输入条、开关、收起后的频道钮、未读角标四处都读这一组。 */
+  --pill-bg-agent: #ffffff;
+  --pill-line-agent: #dfe5ee;
+  --pill-track-agent: #f1f5fb;
+  --pill-current-agent: #eaf2ff;
+  --pill-current-ink-agent: #2f6fd6;
+  --pill-selected-agent: #2f6fd6;
+  --pill-mic-agent: #f1f4f8;
+  --pill-send-agent: #3a83f7;
+  --pill-badge-agent: #3a83f7;
+  --pill-bg-group: #f8f4ec;
+  --pill-line-group: #e6dccb;
+  --pill-track-group: #f3ede2;
+  --pill-current-group: #ede5d8;
+  --pill-current-ink-group: #756045;
+  --pill-selected-group: #8a6d48;
+  --pill-mic-group: #efe7d8;
+  --pill-send-group: #8c7451;
+  --pill-badge-group: #a08556;
+}
+
+@media (min-width: 1280px) { .host { --conversation-open-width: 400px; } }
+@media (min-width: 1600px) { .host { --conversation-open-width: 440px; } }
+@media (max-width: 1250px) { .host { --conversation-edge: 10px; } }
+@media (min-width: 760px) and (max-width: 1000px) { .host { --conversation-open-width: 300px; } }
+@media (max-width: 690px) { .host { --conversation-edge: 8px; } }
+@media (min-width: 760px) {
+  .host:has(.root[data-mode='strip']) {
+    --conversation-width: 0px;
+    --conversation-join-radius: var(--conversation-radius);
+    --conversation-join-delay: 320ms;
+    --conversation-lane: 56px;
+  }
+}
+
+/* ── 右列本身 ─────────────────────────────────────────────────────── */
+
+.root {
+  /* 右列底部让给输入条的那一段：输入条离右列下沿 12px，再空 8px 给正文。 */
+  --conversation-footer: calc(var(--conversation-composer-height, 48px) + 12px + 8px + env(safe-area-inset-bottom, 0px));
+  --column-surface: #f9fbfd;
+  --column-header-top: 8px;
+  --column-header-height: 48px;
+  --column-header-fade: 16px;
+}
+
+.root[data-channel='group'] { --column-surface: #fcf9f4; }
+
+.column {
+  position: fixed;
+  top: var(--conversation-edge);
+  right: var(--conversation-edge);
+  bottom: var(--conversation-edge);
+  width: var(--conversation-width);
+  z-index: 105;
+  overflow: hidden;
+  border-left: 1px solid var(--conversation-line);
+  border-radius: 0 var(--conversation-radius) var(--conversation-radius) 0;
+  background: var(--conversation-agent-panel);
+  color: #25282e;
+  transition: width 320ms var(--conversation-ease);
+}
+
+.root[data-channel='group'] .column { background: var(--conversation-group-panel); }
+
+/* 展开时的内容按展开宽度排好、贴右放：收起的 320ms 里是左沿扫过去，字不跟着一路重排。 */
+.panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: calc(var(--conversation-open-width) - 1px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transition: opacity 200ms ease;
+}
+
+/* 窄屏浮层右上角的收起钮，和页头在同一行。 */
+.close.close {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  right: 8px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 12px;
+  color: #6b7482;
+  background: transparent;
+}
+
+/*
+ * 收起／展开的把手：骑在材料和对话之间那条线的正中，一个竖着的圆角块。线随右列变宽变窄，它跟着走；
+ * 收起后停在右边那一溜悬浮钮的竖直正中。36×72，按得到的范围再往外扩到 44×88（::after）。
+ */
+.handle.handle {
+  position: fixed;
+  z-index: 106;
+  top: 50%;
+  right: calc(var(--conversation-edge) + var(--conversation-width) - 18px);
+  width: 36px;
+  min-width: 36px;
+  height: 72px;
+  padding: 0;
+  border: 1px solid #d5dce6;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #4d5a6c;
+  box-shadow: 0 3px 12px rgb(31 53 86 / 10%);
+  transform: translateY(-50%);
+  transition: right 320ms var(--conversation-ease), background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.handle.handle::after { content: ''; position: absolute; inset: -8px -4px; }
+.handle.handle:hover { background: #f4f8fe; color: #1f2a3d; box-shadow: 0 4px 16px rgb(31 53 86 / 16%); }
+.handle.handle:focus-visible { outline: 2px solid #3a83f7; outline-offset: 2px; }
+
+.body { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+
+.footer { flex: none; height: var(--conversation-footer); }
+
+/* ── 未读角标（收起后的频道钮上）：颜色是它所属频道的 ─────────────────── */
+
+.badge {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--conversation-agent-badge);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.badge[data-kind='group'] { background: var(--conversation-group-badge); }
+
+/* ── 收起后：右边 56px 那一溜，底部 42px 圆钮，浮在阅读页上面 ─────────── */
+
+.strip {
+  position: fixed;
+  z-index: 106;
+  right: var(--conversation-edge);
+  bottom: var(--conversation-edge);
+  width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 200ms ease, visibility 0s linear 200ms;
+}
+
+.stripButton.stripButton {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid #dfe6ef;
+  border-radius: 50%;
+  background: #fff;
+  color: #56657a;
+  box-shadow: inset 0 1px #fff, 0 3px 10px #1f35560f;
+  transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.stripButton.stripButton:hover { background: #f4f8fe; }
+.stripButton.stripButton:active { transform: scale(0.96); }
+.stripButton[data-kind='agent'][data-current] { color: var(--conversation-agent-ink); box-shadow: inset 0 0 0 1.5px #3a83f7, 0 3px 10px #1f35560f; }
+.stripButton[data-kind='group'] { color: var(--conversation-group-ink); }
+.stripButton[data-kind='group'][data-current] { background: var(--conversation-group-fill); border-color: #dccfbb; }
+.stripButton .badge { position: absolute; top: -4px; right: -5px; box-shadow: 0 0 0 2px #f6f8fb; }
+
+/* 收起后那颗 Agent 钮上的标志：跟着钮的字色走（单色）。 */
+.stripMark { width: 18px; height: 18px; --brand-deep: currentColor; --brand-bright: currentColor; }
+
+/* 收起态只在 ≥760 成立。 */
+@media (min-width: 760px) {
+  /* 右列缩到 0，缩完才藏起来，左边那条线也留到那一刻。 */
+  .root[data-mode='strip'] .column {
+    visibility: hidden;
+    border-left-color: transparent;
+    transition: width 320ms var(--conversation-ease), visibility 0s linear 320ms, border-left-color 0s linear 320ms;
+  }
+  /* 收起后在 56px 那一溜里居中：(56 − 36) / 2 = 10。 */
+  .root[data-mode='strip'] .handle.handle { right: calc(var(--conversation-edge) + 10px); }
+  .root[data-mode='strip'] .panel { opacity: 0; visibility: hidden; transition: opacity 200ms ease, visibility 0s linear 200ms; }
+  .root[data-mode='strip'] .strip { opacity: 1; visibility: visible; transition: opacity 200ms ease 120ms, visibility 0s; }
+}
+
+/* ── ≤759：浮层 ─────────────── */
+
+.veil.veil {
+  position: fixed;
+  inset: 0;
+  z-index: 1030;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 100%;
+  padding: 0;
+  border-radius: 0;
+  background: #253a5925;
+}
+
+@media (max-width: 759px) {
+  .column {
+    left: var(--conversation-overlay-left);
+    width: auto;
+    z-index: 1040;
+    visibility: hidden;
+    border: 1px solid var(--conversation-line);
+    border-radius: 21px;
+    box-shadow: 0 12px 40px #1e3c6522;
+    transition: none;
+  }
+  .root[data-mobile-open] .column { visibility: visible; }
+  .panel { left: 0; width: auto; }
+  .strip { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .column, .panel, .strip, .handle.handle, .stripButton.stripButton { transition: none; }
+}
+
+@media (prefers-contrast: more) {
+  .column, .handle.handle, .stripButton.stripButton { border-color: #5b6b85; }
+}
+
+/* ── 输入条的位置由右列给（宿主把 columnComposerClass 挂到输入条那一层上） ── */
+
+@media (min-width: 760px) {
+  .host .composer.composer[data-composer] {
+    left: auto;
+    right: calc(var(--conversation-edge) + 13px);
+    bottom: calc(var(--conversation-edge) + 12px);
+    width: calc(var(--conversation-open-width) - 26px);
+    height: auto;
+    transform: none;
+    --composer-width: 100%;
+    --composer-shift: 0px;
+  }
+  /* 收起时没有地方打字：先展开。 */
+  .host:has(.root[data-mode='strip']) .composer.composer[data-composer] { display: none; }
+}
+
+@media (max-width: 759px) {
+  .host .composer.composer[data-composer] {
+    left: auto;
+    right: calc(var(--conversation-edge) + 12px);
+    bottom: calc(var(--conversation-edge) + 12px + env(safe-area-inset-bottom, 0px));
+    width: calc(100vw - var(--conversation-overlay-left) - var(--conversation-edge) - 24px);
+    height: auto;
+    transform: none;
+    --composer-width: 100%;
+    --composer-shift: 0px;
+  }
+  /* 浮层开着时输入条在浮层之上。 */
+  .host:has(.root[data-mobile-open]) .composer.composer[data-composer] { z-index: 1050; }
+}
+
+/* ── 对话正文 ─────────────────── */
+
+.log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  /* 正文让出页头那一截；滚动时照样从页头下面滑过。 */
+  padding: calc(var(--column-header-top) + var(--column-header-height) + var(--column-header-fade)) 20px 12px;
+  scrollbar-width: thin;
+}
+
+@media (min-width: 1600px) { .log { padding-inline: 24px; } }
+@media (min-width: 760px) and (max-width: 1000px) { .log { padding-inline: 16px; } }
+
+/* 这条线上还没有人说话：正中一行浅灰小字。 */
+.empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 120px;
+  margin: 0;
+  color: #a3a9b2;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.error { flex: none; margin: 8px 16px; padding: 10px 16px; border-radius: 10px; background: #fff5f2; color: #a44d3e; font-size: 12px; line-height: 1.8; }
+
+/* ── 右列的页头 ───────────────────────────── */
+
+/*
+ * 不是一条实心的边：一层磨砂从右列上沿往下化开，正文滚上去先被虚化、再淡出，看不到一刀切的线。
+ * 页头那一行和左侧页头同一条上沿。正文让出这一截（上面 .log）。
+ */
+.header {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  box-sizing: border-box;
+  height: calc(var(--column-header-top) + var(--column-header-height) + var(--column-header-fade));
+  padding: var(--column-header-top) 16px 0;
+  pointer-events: none;
+}
+
+.header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, var(--column-surface) 0%, color-mix(in srgb, var(--column-surface) 78%, transparent) 100%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 calc(100% - var(--column-header-fade) - 6px), transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 calc(100% - var(--column-header-fade) - 6px), transparent 100%);
+}
+
+.header > * { pointer-events: auto; }
+
+.headerTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--column-header-height);
+  margin: 0;
+  color: #1f2a3d;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.header[data-kind='group'] .headerTitle { color: #4f4334; }
+
+/* Agent：标志用品牌的两色渐变，字用字标那一款字（登录页那一枚同一套）。 */
+.headerMark { flex: none; width: 20px; height: 20px; }
+.wordmark { font-family: var(--font-wordmark), "Microsoft YaHei UI", sans-serif; font-size: 17px; font-weight: 400; letter-spacing: 0.06em; }
+
+/* 谁看得到这条线、它能做什么，写在正文底下那一行（C-02）。 */
+.footnote { flex: none; margin: 0; padding: 4px 20px 0; font-size: 10.5px; line-height: 1.7; text-align: center; text-wrap: balance; word-break: keep-all; overflow-wrap: anywhere; color: #979ea8; }
+
+/* 窄屏浮层：页头和右上角的收起钮在同一行，两边让出收起钮的位置。 */
+@media (max-width: 759px) {
+  .root { --column-header-top: 8px; --column-header-height: 40px; }
+  .header { padding-inline: 56px; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .header::before { -webkit-backdrop-filter: none; backdrop-filter: none; background: linear-gradient(180deg, var(--column-surface) 0%, var(--column-surface) 70%, transparent 100%); }
+}

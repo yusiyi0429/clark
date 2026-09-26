@@ -32,12 +32,13 @@ function transcript(meetingId: string, turns: unknown = TURNS): Record<string, u
   return { schemaVersion: "warmap-transcript.v1", meetingId, turns };
 }
 
+/** 待办归 CEO 自己：不推送执行事项、保持 pending，替换 Transcript 的用例依赖没有已确认效果。 */
 function defaultCandidate(): TPostMeetingCandidate {
   return {
     summary: "会议形成一项方向决定与一项待办",
     items: [
       { kind: "decision", text: "灯塔项目优先", turnId: "turn-001", quote: "灯塔项目优先" },
-      { kind: "todo", text: "周五前提交资源排期", turnId: "turn-002", quote: "我周五前提交资源排期", ownerPersonId: "person-fixture-002" },
+      { kind: "todo", text: "六月前拿到风险清单", turnId: "turn-003", quote: "六月前给我风险清单", ownerPersonId: "person-fixture-001" },
       { kind: "ceoJudgment", text: "外部承诺先不签", turnId: "turn-003", quote: "外部承诺先不签", judgmentKind: "external_commitment" },
       { kind: "reopenWhen", text: "六月前", turnId: "turn-003", quote: "六月前", parentIndex: 0 },
       { kind: "open", text: "TokenOps 最低验证力量", turnId: "turn-001", quote: "TokenOps 保留最低验证力量" },
@@ -173,7 +174,7 @@ describe("warmap-transcript.v1 import boundary", () => {
       const items = card.payload.outcome.items as { id: string; kind: string; turnId: string; quote: string; speakerId: string; parentItemId: string | null; review: { status: string } | null }[];
       expect(items.map((item) => item.id)).toEqual(["item-1", "item-2", "item-3", "item-4", "item-5"]);
       expect(items[0]).toMatchObject({ kind: "decision", turnId: "turn-001", quote: "灯塔项目优先", speakerId: "person-fixture-001", parentItemId: null });
-      expect(items[1]).toMatchObject({ kind: "todo", ownerPersonId: "person-fixture-002", review: { status: "pending" } });
+      expect(items[1]).toMatchObject({ kind: "todo", ownerPersonId: "person-fixture-001", review: { status: "pending" } });
       expect(items[2]).toMatchObject({ kind: "ceoJudgment", speakerId: "person-fixture-001", judgmentKind: "external_commitment" });
       expect(items[3]).toMatchObject({ kind: "reopenWhen", parentItemId: "item-1" });
       // open 只展示，不带 Review
@@ -186,6 +187,23 @@ describe("warmap-transcript.v1 import boundary", () => {
 
       // 已 held 后不再接受普通导入，只能走危险替换 Action
       expect((await importVia(t, via, meetingId, cookie, transcript(meetingId))).statusCode).toBe(409);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("still imports a transcript after 「这场会开完了」: meeting.end keeps status scheduled until the transcript lands", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: fakeOutcomeAgent() });
+    try {
+      const { cookie, meetingId } = await readyMeeting(t, "after-end");
+      const ended = await execute(t, cookie, await meetingAction(t, cookie, meetingId, "meeting.end"));
+      expect(ended.statusCode).toBe(200);
+      const endedAt = ended.json().cards[0].payload.endedAt as string;
+      expect(ended.json().cards[0].payload).toMatchObject({ status: "scheduled", endedAt: expect.any(String), outcome: null });
+
+      const res = await importVia(t, "web", meetingId, cookie, transcript(meetingId));
+      expect(res.statusCode).toBe(200);
+      expect(res.json().cards[0].payload).toMatchObject({ status: "held", endedAt, outcome: { status: "ready" } });
     } finally {
       await t.close();
     }
@@ -470,7 +488,8 @@ describe("dangerous Transcript replacement", () => {
       const replaced = await execute(t, cookie, replaceAction, { transcript: transcript(meetingId, TURNS_B), confirmReplace: true });
       expect(replaced.statusCode).toBe(200);
       const payload = replaced.json().cards[0].payload;
-      expect(payload.status).toBe("held");
+      // 新抽取只有一条 todo 且已推送成执行事项，没有待处理条目
+      expect(payload.status).toBe("reviewed");
       expect(payload.transcript.turns[1].text).toContain("下周三");
       expect(payload.outcome.status).toBe("ready");
       // 旧 candidate 整体作废，只保留新一次抽取的 items
@@ -556,9 +575,9 @@ describe("startup recovery of an interrupted outcome extraction", () => {
       ];
       await db.query(
         `INSERT INTO meetings
-           (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
+           (id, version, title, status, scheduled_at, ends_at, lead_dri_id, ceo_participant_id,
             participants, issue_ids, preflight, draft, transcript, outcome, origin_ref)
-         VALUES ($1, 1, '恢复测试', 'held', now(), 'person-fixture-002', 'person-fixture-001',
+         VALUES ($1, 1, '恢复测试', 'held', now(), now() + interval '60 minutes', 'person-fixture-002', 'person-fixture-001',
                  $2::jsonb, '[]'::jsonb, '{}'::jsonb, '{}'::jsonb, $3::jsonb, $4::jsonb, '{}'::jsonb)`,
         [
           meetingId,

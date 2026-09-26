@@ -206,6 +206,15 @@ describe("CEO 配置页 create 路由", () => {
       expect(emptyCard.payload.issueIds).toEqual([]);
       expect(emptyCard.payload.status).toBe("scheduled");
       expect(emptyCard.payload.leadDriId).toBe("person-fixture-002");
+      expect(emptyCard.payload).toMatchObject({ endsAt: "2026-06-01T03:00:00.000Z", endedAt: null });
+
+      const timed = await postConfigMeeting(t, headers, { title: "带结束时间", scheduledAt: "2026-06-01T14:00:00.000+08:00", endsAt: "2026-06-01T15:30:00.000+08:00", leadDriId: "person-fixture-002" });
+      expect(timed.statusCode).toBe(201);
+      expect(timed.json().cards[0].payload.endsAt).toBe("2026-06-01T07:30:00.000Z");
+
+      const badRange = await postConfigMeeting(t, headers, { title: "结束早于开始", scheduledAt: "2026-06-01T14:00:00.000+08:00", endsAt: "2026-06-01T13:00:00.000+08:00", leadDriId: "person-fixture-002" });
+      expect(badRange.statusCode).toBe(400);
+      expect(badRange.json()).toMatchObject({ code: "INVALID_INPUT", fieldErrors: { endsAt: expect.any(String) } });
 
       const issue = await t.createIssue();
       const linked = await postConfigMeeting(t, headers, {

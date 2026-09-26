@@ -4,66 +4,67 @@ import { Type } from "@sinclair/typebox";
 import {
   ConversationMessageRequest,
   ConversationScope,
-  ConversationSessionId,
-  CreateConversationSessionRequest,
   type TConversationAttachment,
   type TConversationMessageRequest,
   type TConversationScope,
 } from "@warmap/contracts";
 import {
   conversationAttachmentInfo,
-  createConversationSession,
+  ensureMainConversation,
   getConversationHistory,
-  getConversationSession,
-  getConversationSessionHistory,
   getScopeObject,
-  listConversationSessions,
   loadConversationAttachments,
-  removeConversationAttachmentFiles,
   resolveReferenceSnapshots,
   storeConversationAttachments,
 } from "../conversations.js";
 import { recordAgentTrace } from "../langsmith.js";
 import { MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch } from "../materialParser.js";
 import { logEvent } from "../observability.js";
-import type { AppInstance, RouteContext } from "./shared.js";
+import { personDisplayNames } from "../people.js";
+import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requireCEO, requestContext, runtime, conversationAttachmentStorageDir, conversationTurnTimeoutMs } = ctx;
+  const { pool, q, env, fail, requirePerson, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
-  const conversationSessionParams = Type.Object(
-    { scope: ConversationScope, sessionId: ConversationSessionId },
-    { additionalProperties: false },
-  );
-  const conversationScopeVisible = async (scope: TConversationScope) =>
-    (await getScopeObject(q, scope, env.sessionSecret)).visible;
+  // 我的 Agent 按「人 × 页面」私有：CEO 沿用对象可见性；成员在 2a 只有首页 global（2b 起按群成员放开议题）。
+  const scopeObjectFor = async (person: SessionPerson, scope: TConversationScope) =>
+    person.role === "ceo" || scope === "global"
+      ? getScopeObject(q, scope, env.sessionSecret)
+      : { snapshot: null, visible: false };
+  const conversationScopeVisible = async (person: SessionPerson, scope: TConversationScope) =>
+    (await scopeObjectFor(person, scope)).visible;
 
   app.get(
     "/api/conversations/:scope/messages",
-    { preHandler: requireCEO, schema: { params: conversationParams } },
+    { preHandler: requirePerson, schema: { params: conversationParams } },
     async (req, reply) => {
-      const object = await getScopeObject(q, req.params.scope, env.sessionSecret);
+      const object = await scopeObjectFor(req.person!, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      return getConversationHistory(q, req.params.scope);
+      return getConversationHistory(q, req.person!.personId, req.params.scope);
     },
   );
 
-  /** 一轮对话的完整流程；conversationId 为 null 时走 legacy 默认会话语义。 */
+  /** 一轮对话的完整流程：读写这个人在这个页面的主对话。 */
   const sendConversationTurn = async (
     req: FastifyRequest<{ Params: { scope: TConversationScope }; Body: TConversationMessageRequest }>,
     reply: FastifyReply,
-    conversationId: string | null,
   ): Promise<void> => {
-      const object = await getScopeObject(q, req.params.scope, env.sessionSecret);
+      const person = req.person!;
+      const owner = person.personId;
+      const object = await scopeObjectFor(person, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      // 成员在 2a 看不到任何 Card，也不能借显式引用把 Card 带进自己的 Agent。
+      if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
       const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret);
       if (!("snapshots" in references)) {
         return fail(reply, references.status, references.code, references.message);
       }
 
+      // 锁按「人 × scope」：不同的人在同一页面不会互相挡住。
+      const lockKey = `${owner}|${req.params.scope}`;
       const client = await pool.connect();
-      const locked = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtext($1)) AS locked", [req.params.scope]);
+      const locked = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtext($1)) AS locked", [lockKey]);
       if (!locked.rows[0]?.locked) {
         client.release();
         return fail(reply, 409, "TURN_IN_PROGRESS", "该 Conversation 正在运行");
@@ -81,31 +82,20 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
       let runError: string | undefined;
       let runOutput: unknown;
       try {
+        // 主对话 = 这个人最早未删除的会话；不存在则在锁内惰性创建。
         let row: { id: string; pi_session_id: string; runtime_entries: unknown[] };
-        if (conversationId) {
-          const found = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[] }>(
-            "SELECT id, pi_session_id, runtime_entries FROM conversations WHERE id = $1::uuid AND scope = $2 AND deleted_at IS NULL",
-            [conversationId, req.params.scope],
-          );
-          if (!found.rows[0]) {
-            return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
-          }
-          row = found.rows[0];
+        const existing = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[] }>(
+          "SELECT id, pi_session_id, runtime_entries FROM conversations WHERE owner_id = $1 AND scope = $2 AND deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1",
+          [owner, req.params.scope],
+        );
+        if (existing.rows[0]) {
+          row = existing.rows[0];
         } else {
-          // legacy 路由：默认会话 = 最早未删除；不存在则在锁内惰性创建（scope 唯一约束已随会话化移除）。
-          const existing = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[] }>(
-            "SELECT id, pi_session_id, runtime_entries FROM conversations WHERE scope = $1 AND deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1",
-            [req.params.scope],
+          row = { id: randomUUID(), pi_session_id: randomUUID(), runtime_entries: [] };
+          await client.query(
+            "INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, $3, $4)",
+            [row.id, owner, req.params.scope, row.pi_session_id],
           );
-          if (existing.rows[0]) {
-            row = existing.rows[0];
-          } else {
-            row = { id: randomUUID(), pi_session_id: randomUUID(), runtime_entries: [] };
-            await client.query(
-              "INSERT INTO conversations (id, scope, pi_session_id) VALUES ($1, $2, $3)",
-              [row.id, req.params.scope, row.pi_session_id],
-            );
-          }
         }
         // 附件：只信服务端 sidecar（客户端只能传 id）；原件不进入 Runtime，只拼接有界抽取文本。
         let attachments: TConversationAttachment[] = [];
@@ -155,6 +145,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             runtime.promptHash ?? createHash("sha256").update("conversation-runtime").digest("hex"),
             JSON.stringify({
               scope: req.params.scope,
+              viewerId: owner,
               conversationId: row.id,
               message: req.body.message,
               currentObject: object.snapshot,
@@ -195,6 +186,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         try {
           const result = await runtime.run({
             scope: req.params.scope,
+            viewer: { personId: owner, displayName: personDisplayNames(companyMemory).get(owner) ?? owner, role: person.role },
             message: runtimeMessage,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,
@@ -318,80 +310,33 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         streamFinished = true;
         // Fastify inject/browser may observe SSE end before this function's finally runs.
         // Release first so an immediate next turn/delete cannot spuriously see TURN_IN_PROGRESS.
-        await client.query("SELECT pg_advisory_unlock(hashtext($1))", [req.params.scope]).catch(() => undefined);
+        await client.query("SELECT pg_advisory_unlock(hashtext($1))", [lockKey]).catch(() => undefined);
         scopeLockHeld = false;
         reply.raw.end();
       } finally {
-        if (scopeLockHeld) await client.query("SELECT pg_advisory_unlock(hashtext($1))", [req.params.scope]).catch(() => undefined);
+        if (scopeLockHeld) await client.query("SELECT pg_advisory_unlock(hashtext($1))", [lockKey]).catch(() => undefined);
         client.release();
       }
     };
 
-  // legacy 路由：读写默认会话，老调用方与既有测试行为不变。
   app.post(
     "/api/conversations/:scope/messages",
     {
-      preHandler: requireCEO,
+      preHandler: requirePerson,
       schema: { params: conversationParams, body: ConversationMessageRequest },
     },
     async (req: FastifyRequest<{ Params: { scope: TConversationScope }; Body: TConversationMessageRequest }>, reply) =>
-      sendConversationTurn(req, reply, null),
+      sendConversationTurn(req, reply),
   );
 
-  app.get(
-    "/api/conversations/:scope/sessions",
-    { preHandler: requireCEO, schema: { params: conversationParams } },
-    async (req, reply) => {
-      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      return listConversationSessions(q, req.params.scope);
-    },
-  );
-
+  // 附件挂到这个人在这个页面的主对话（没有就建）；复用 Meeting 材料的受限解析器（PDF/DOCX/Markdown、同一大小/数量/超时限制），API 卷独立。
   app.post(
-    "/api/conversations/:scope/sessions",
-    { preHandler: requireCEO, schema: { params: conversationParams, body: CreateConversationSessionRequest } },
-    async (req, reply) => {
-      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      const session = await createConversationSession(q, req.params.scope, req.body.title);
-      return reply.code(201).send(session);
-    },
-  );
-
-  app.get(
-    "/api/conversations/:scope/sessions/:sessionId/messages",
-    { preHandler: requireCEO, schema: { params: conversationSessionParams } },
-    async (req, reply) => {
-      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      const session = await getConversationSession(q, req.params.scope, req.params.sessionId);
-      if (!session) return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
-      return getConversationSessionHistory(q, req.params.scope, req.params.sessionId);
-    },
-  );
-
-  app.post(
-    "/api/conversations/:scope/sessions/:sessionId/messages",
-    {
-      preHandler: requireCEO,
-      schema: { params: conversationSessionParams, body: ConversationMessageRequest },
-    },
-    async (req: FastifyRequest<{ Params: { scope: TConversationScope; sessionId: string }; Body: TConversationMessageRequest }>, reply) => {
-      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      const session = await getConversationSession(q, req.params.scope, req.params.sessionId);
-      if (!session) return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
-      return sendConversationTurn(req, reply, session.id);
-    },
-  );
-
-  // 会话附件：复用 Meeting 材料的受限解析器（PDF/DOCX/Markdown、同一大小/数量/超时限制），API 卷独立。
-  app.post(
-    "/api/conversations/:scope/sessions/:sessionId/attachments",
-    { preHandler: requireCEO, schema: { params: conversationSessionParams }, bodyLimit: 101 * 1024 * 1024 },
+    "/api/conversations/:scope/attachments",
+    { preHandler: requirePerson, schema: { params: conversationParams }, bodyLimit: 101 * 1024 * 1024 },
     async (req, reply) => {
       let parsed: Awaited<ReturnType<typeof parseMaterialBatch>> | undefined;
       try {
-        if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-        const session = await getConversationSession(q, req.params.scope, req.params.sessionId);
-        if (!session) return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
+        if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
         const files: { filename: string; mimetype: string; buffer: Buffer }[] = [];
         for await (const part of req.files({ limits: { fileSize: MAX_MATERIAL_FILE_BYTES, files: MAX_MATERIAL_FILES } })) {
           if (part.type !== "file" || part.fieldname !== "files") return fail(reply, 400, "INVALID_ATTACHMENT", "multipart 只接受 files 文件字段");
@@ -399,7 +344,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         }
         if (!files.length) return fail(reply, 400, "INVALID_ATTACHMENT", "缺少附件文件");
         parsed = await parseMaterialBatch(files);
-        const stored = await storeConversationAttachments(conversationAttachmentStorageDir, session.id, parsed.materials);
+        const conversationId = await ensureMainConversation(pool, req.person!.personId, req.params.scope);
+        const stored = await storeConversationAttachments(conversationAttachmentStorageDir, conversationId, parsed.materials);
         return { attachments: stored.map(conversationAttachmentInfo) };
       } catch (error) {
         if (error instanceof MaterialParseError) return fail(reply, 400, error.code, error.message);
@@ -408,43 +354,6 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         throw error;
       } finally {
         if (parsed) await cleanupMaterialTemp(parsed.directory);
-      }
-    },
-  );
-
-  // 删除会话：与轮次共用 scope 级 advisory lock，拿到锁即可保证没有进行中的轮次。
-  app.delete(
-    "/api/conversations/:scope/sessions/:sessionId",
-    { preHandler: requireCEO, schema: { params: conversationSessionParams } },
-    async (req, reply): Promise<FastifyReply> => {
-      if (!await conversationScopeVisible(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      const client = await pool.connect();
-      let locked = false;
-      try {
-        const lock = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtext($1)) AS locked", [req.params.scope]);
-        locked = lock.rows[0]?.locked === true;
-        if (!locked) return fail(reply, 409, "SESSION_BUSY", "会话正在运行一轮对话，稍后再删");
-        await client.query("BEGIN");
-        const row = await client.query<{ id: string }>(
-          "SELECT id FROM conversations WHERE id = $1::uuid AND scope = $2 AND deleted_at IS NULL FOR UPDATE",
-          [req.params.sessionId, req.params.scope],
-        );
-        if (!row.rows[0]) {
-          await client.query("ROLLBACK");
-          return fail(reply, 404, "CONVERSATION_SESSION_NOT_FOUND", "会话不存在");
-        }
-        await client.query("DELETE FROM conversation_messages WHERE conversation_id = $1", [row.rows[0].id]);
-        await client.query("UPDATE conversations SET deleted_at = now() WHERE id = $1", [row.rows[0].id]);
-        await client.query("COMMIT");
-        // DB 删除已提交后才清文件；清理失败只留孤儿文件，不影响删除语义。
-        await removeConversationAttachmentFiles(conversationAttachmentStorageDir, row.rows[0].id);
-        return reply.code(204).send();
-      } catch (error) {
-        await client.query("ROLLBACK").catch(() => undefined);
-        throw error;
-      } finally {
-        if (locked) await client.query("SELECT pg_advisory_unlock(hashtext($1))", [req.params.scope]).catch(() => undefined);
-        client.release();
       }
     },
   );

@@ -15,7 +15,7 @@ import { resolveConfiguredOutletIds } from "./outletSources.js";
 import type { ResearchService } from "./research.js";
 import type { PreflightAgent } from "./meetingPreflight.js";
 import { createPreflightAgent } from "./preflightAgent.js";
-import type { PostMeetingAgent } from "./outcome.js";
+import { pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import type { DriExporter } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
@@ -44,6 +44,11 @@ import { registerMeetingRoutes } from "./routes/meetings.js";
 import { registerActionRoutes } from "./routes/actions.js";
 import { registerDriRoutes } from "./routes/dri.js";
 import { registerSystemRoutes } from "./routes/system.js";
+import { registerThreadRoutes } from "./routes/threads.js";
+import { registerRecordingRoutes } from "./routes/recordings.js";
+import { registerMeRoutes } from "./routes/me.js";
+import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
+import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 
 type ValidationItem = { instancePath?: string; dataPath?: string; message?: string };
 
@@ -73,6 +78,8 @@ export type AppEnv = {
   materialStorageDir?: string;
   /** 会话附件 API 卷；与 Meeting 材料卷隔离。 */
   conversationAttachmentStorageDir?: string;
+  /** 会议录音卷（分片、拼好的 webm、转码后的 mp3、厂商原文）；与材料卷隔离。 */
+  recordingStorageDir?: string;
 } & CompanyMemorySeedEnv;
 
 export async function buildApp({
@@ -84,7 +91,10 @@ export async function buildApp({
   preflightAgent,
   outcomeAgent,
   driExporter,
+  ontologyUpdater = pendingOntologyUpdater,
   monthlyPlanService,
+  recordingService,
+  voiceprintDeps = realVoiceprintDeps,
   webSearch,
   outlets,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
@@ -98,7 +108,13 @@ export async function buildApp({
   preflightAgent?: PreflightAgent;
   outcomeAgent?: PostMeetingAgent;
   driExporter?: DriExporter;
+  /** CEO 确认战略议题后的本体更新；缺省不做事、请求保持 pending（co-agent 同事实现真实 Agent）。 */
+  ontologyUpdater?: OntologyUpdater;
   monthlyPlanService?: MonthlyPlanService;
+  /** 会议录音流水线；缺省按 env.recordingStorageDir 装配真实 ffmpeg/TOS/火山依赖（server.ts 注入以便启动时恢复）。 */
+  recordingService?: MeetingRecordingService;
+  /** 本人声纹录入/删除用的 ffmpeg 与腾讯云依赖；缺省为真实实现（测试注入假实现）。 */
+  voiceprintDeps?: VoiceprintDeps;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
@@ -203,6 +219,11 @@ export async function buildApp({
   await ensureMaterialStorage(materialStorageDir);
   const conversationAttachmentStorageDir = env.conversationAttachmentStorageDir ?? DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR;
   await ensureMaterialStorage(conversationAttachmentStorageDir);
+  const recordingStorageDir = env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR;
+  await ensureMaterialStorage(recordingStorageDir);
+  const recordings = recordingService ?? createMeetingRecordingService({ pool, storageDir: recordingStorageDir, companyMemory });
+  // 关闭时只停轮询：在途的识别停在 transcribing，下次启动 recoverInterrupted 接着轮询
+  app.addHook("onClose", async () => recordings.close());
 
   const fail = createFail(requestContext);
   const readSession = createReadSession(env, q, companyMemory);
@@ -249,7 +270,10 @@ export async function buildApp({
     radar,
     research,
     driExporter,
+    ontologyUpdater,
     monthlyPlanService,
+    recordings,
+    voiceprints: voiceprintDeps,
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,
@@ -276,6 +300,9 @@ export async function buildApp({
   registerActionRoutes(app, ctx);
   registerDriRoutes(app, ctx);
   registerSystemRoutes(app, ctx);
+  registerThreadRoutes(app, ctx);
+  registerRecordingRoutes(app, ctx);
+  registerMeRoutes(app, ctx);
 
   return app;
 }

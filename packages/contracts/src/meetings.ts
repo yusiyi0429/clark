@@ -205,10 +205,55 @@ export const MeetingMaterial = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 会议录音状态。实际先后：recording（收分片）→ transcoding（拼接 + ffmpeg 转 mp3）→ uploading（传 TOS）
+ * → transcribing（火山识别、轮询）→ done（已写成 transcriptCandidate）；任一步失败为 failed，error 写原因。
+ */
+export const MeetingRecordingStatus = Type.Union([
+  Type.Literal("recording"),
+  Type.Literal("uploading"),
+  Type.Literal("transcoding"),
+  Type.Literal("transcribing"),
+  Type.Literal("done"),
+  Type.Literal("failed"),
+]);
+
+/** Meeting Card 上最近一次录音；没有录过为 null。状态变化不 bump Meeting version，进度请轮询单条录音。 */
+export const MeetingRecordingSummary = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    status: MeetingRecordingStatus,
+    error: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+/** 单条录音：开始、分片、结束与查询接口共用。finishedAt 是结束录音（停止收分片）的时刻。 */
+export const MeetingRecording = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    status: MeetingRecordingStatus,
+    chunkCount: Type.Integer({ minimum: 0 }),
+    error: Type.Union([Type.String(), Type.Null()]),
+    createdAt: Type.String({ minLength: 1 }),
+    finishedAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const StartMeetingRecordingResponse = Type.Object(
+  { recordingId: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+
 export const MeetingCardPayload = Type.Object(
   {
     status: MeetingStatus,
     scheduledAt: Type.String(),
+    /** 计划结束时间；创建时缺省为开始后 60 分钟。 */
+    endsAt: Type.String(),
+    /** 「这场会开完了」的时刻；不改变 status，held 仍只表示已有确认的 Transcript。 */
+    endedAt: Type.Union([Type.String(), Type.Null()]),
     leadDriId: Type.String(),
     ceoParticipantId: Type.String(),
     participants: Type.Array(MeetingParticipant),
@@ -221,6 +266,7 @@ export const MeetingCardPayload = Type.Object(
     /** 妙记 Markdown 候选：未确认或已清除时为 null；完整 turns 不进 Card。 */
     transcriptCandidate: Type.Union([TranscriptCandidateProjection, Type.Null()]),
     outcome: Type.Union([MeetingOutcomeState, Type.Null()]),
+    recording: Type.Union([MeetingRecordingSummary, Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -230,11 +276,12 @@ const IsoDateTime = Type.String({ minLength: 1, maxLength: 100 });
 const IssueIdList = Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 20 });
 const ParticipantIds = Type.Array(PersonId, { minItems: 1, maxItems: 50 });
 
-/** Issue Action：从 Issue 新建 scheduled Meeting。 */
+/** Issue Action：从 Issue 新建 scheduled Meeting；endsAt 缺省为开始后 60 分钟。 */
 export const CreateMeetingRequest = Type.Object(
   {
     title: Type.String({ minLength: 1, maxLength: 200 }),
     scheduledAt: IsoDateTime,
+    endsAt: Type.Optional(IsoDateTime),
     leadDriId: PersonId,
     ceoParticipantId: PersonId,
     participants: ParticipantIds,
@@ -275,11 +322,12 @@ export const UpdateMeetingDraftRequest = Type.Object(
   { additionalProperties: false },
 );
 
-/** Meeting Action：编辑会议基本字段（至少一项）；仅 scheduled 可执行，换 lead 时同步 participants。 */
+/** Meeting Action：编辑会议基本字段（至少一项）；仅 scheduled 可执行，换 lead 时同步 participants；只改 scheduledAt 时保持原时长。 */
 export const EditMeetingDetailsRequest = Type.Object(
   {
     title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
     scheduledAt: Type.Optional(IsoDateTime),
+    endsAt: Type.Optional(IsoDateTime),
     leadDriId: Type.Optional(PersonId),
   },
   { additionalProperties: false, minProperties: 1 },
@@ -300,6 +348,7 @@ export const DriMeetingImportRequest = Type.Object(
     externalId: Type.String({ minLength: 1, maxLength: 200 }),
     title: Type.String({ minLength: 1, maxLength: 200 }),
     scheduledAt: IsoDateTime,
+    endsAt: Type.Optional(IsoDateTime),
     leadDriId: PersonId,
     ceoParticipantId: PersonId,
     participants: ParticipantIds,
@@ -345,6 +394,10 @@ export type TSupplementExportStatus = Static<typeof SupplementExportStatus>;
 export type TSupplementRequest = Static<typeof SupplementRequest>;
 export type TMeetingDraft = Static<typeof MeetingDraft>;
 export type TMeetingMaterial = Static<typeof MeetingMaterial>;
+export type TMeetingRecordingStatus = Static<typeof MeetingRecordingStatus>;
+export type TMeetingRecordingSummary = Static<typeof MeetingRecordingSummary>;
+export type TMeetingRecording = Static<typeof MeetingRecording>;
+export type TStartMeetingRecordingResponse = Static<typeof StartMeetingRecordingResponse>;
 export type TMeetingCardPayload = Static<typeof MeetingCardPayload>;
 export type TCreateMeetingRequest = Static<typeof CreateMeetingRequest>;
 export type TJoinMeetingRequest = Static<typeof JoinMeetingRequest>;

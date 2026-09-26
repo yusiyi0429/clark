@@ -162,21 +162,21 @@
 .referenceRow{display:flex;align-items:center;gap:9px;min-width:0}
 .referenceRow>button:first-child{flex:1;min-width:0}
 
-/* 每个二级阅读共用右侧对话列（含 iPad 竖屏）。 */
-.shell{--topic-rail-width:360px;--topic-rail-gap:12px}
+/* 每个二级阅读共用右列（conversation/ConversationColumn，含 iPad 竖屏）。右列宽度挂在外壳上（--conversation-width，
+   440 / 400 / 360 / 300，收起时 0），阅读区沿同一条曲线让位。收起后阅读区铺满右边、连右下角一起盖住，右边两个角圆回来
+   （--conversation-join-*）；只有把手和频道钮浮在上面（--conversation-lane）。 */
+.shell.shell{--conversation-edge:var(--shell-edge);--conversation-overlay-left:var(--main-start);--conversation-radius:22px}
 @media(min-width:760px){
- .shell[data-topic-rail=true] .mainArea{margin-right:calc(var(--topic-rail-width) + var(--topic-rail-gap))}
- .shell[data-topic-rail=true] .sheet:not(.historySheet){right:calc(var(--shell-edge) + var(--topic-rail-width) + var(--topic-rail-gap))}
- .shell[data-topic-rail=true] :global([data-testid="global-controls"]){display:flex;left:auto;right:calc(var(--shell-edge) + 16px);width:calc(var(--topic-rail-width) - 32px);bottom:calc(var(--shell-edge) + 20px);transform:none;z-index:106;--composer-width:100%}
- .shell[data-topic-rail=true] .expandedScroll{margin:0;padding:18px 24px 44px}
+ .shell[data-topic-rail=true] .mainArea{margin-right:var(--conversation-width);border-top-right-radius:var(--conversation-join-radius,0px);border-bottom-right-radius:var(--conversation-join-radius,0px);transition:margin-right 320ms cubic-bezier(.22,1,.36,1),border-top-right-radius 0s linear var(--conversation-join-delay,0s),border-bottom-right-radius 0s linear var(--conversation-join-delay,0s)}
+ .shell[data-topic-rail=true] .expanded{border-top-right-radius:var(--conversation-join-radius,0px);border-bottom-right-radius:var(--conversation-join-radius,0px)}
+ .shell[data-topic-rail=true] :global([data-testid="global-controls"]){display:flex;z-index:106}
+ .shell[data-topic-rail=true] .expandedScroll{margin:0;padding:18px calc(24px + var(--conversation-lane,0px)) 44px 24px}
  .shell[data-topic-rail=true] .expandedScroll[data-radar-reader-layout=true]{padding:0}
 }
-@media(min-width:1600px){.shell{--topic-rail-width:400px}}
-@media(min-width:760px) and (max-width:1000px){.shell{--topic-rail-width:310px;--topic-rail-gap:10px}.shell[data-topic-rail=true] .expandedHeader{padding:22px 20px;gap:10px}.shell[data-topic-rail=true] .expandedScroll{padding-left:18px;padding-right:18px}}
-@media(max-width:759px){
- .shell[data-topic-rail=true] :global([data-testid="global-controls"]){left:auto;right:calc(var(--shell-edge) + 14px);width:calc(100vw - var(--main-start) - var(--shell-edge) - 28px);transform:none;--composer-width:100%}
- .shell[data-topic-rail=true][data-topic-mobile-open=true] :global([data-testid="global-controls"]){left:auto;right:calc(var(--shell-edge) + 14px);width:calc(100vw - var(--main-start) - var(--shell-edge) - 28px);transform:none;z-index:1050;bottom:calc(var(--shell-edge) + 18px + env(safe-area-inset-bottom))}
-}
+/* 转场截的是最终布局：截图那一刻阅读区不能还在滑。 */
+:global(html[data-notice-transition]) .shell .mainArea{transition:none}
+@media(min-width:760px) and (max-width:1000px){.shell[data-topic-rail=true] .expandedHeader{padding:22px 20px;gap:10px}.shell[data-topic-rail=true] .expandedScroll{padding-left:18px;padding-right:18px}}
+@media(max-width:759px){.shell[data-topic-rail=true] :global([data-testid="global-controls"]){display:flex}}
 
 /* 战场视角切换（与卡片正反面对应）。 */
 .facetSwitch{flex:none;margin-left:4px}

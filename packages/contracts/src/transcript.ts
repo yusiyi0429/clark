@@ -28,16 +28,18 @@ export const WarmapTranscript = Type.Object(
 export const TranscriptSourceFormat = Type.Union([
   Type.Literal("miaoji_markdown"),
   Type.Literal("warmap_json"),
+  /** 会议录音经火山录音文件识别（说话人分离）生成；fileName/sizeBytes/sha256 指规整后的 mp3。 */
+  Type.Literal("volc_asr"),
 ]);
 
 export const TranscriptSource = Type.Object(
   {
     format: TranscriptSourceFormat,
     fileName: Type.String({ minLength: 1, maxLength: 300 }),
-    sizeBytes: Type.Integer({ minimum: 1, maximum: 1024 * 1024 }),
+    sizeBytes: Type.Integer({ minimum: 1, maximum: 1024 * 1024 * 1024 }),
     sha256: Type.String({ minLength: 1, maxLength: 200 }),
     parserVersion: Type.String({ minLength: 1, maxLength: 50 }),
-    /** 绝对时间锚点：生成 turns 时采用的 Meeting scheduledAt；无锚点时为 null。 */
+    /** 绝对时间锚点：妙记为生成 turns 时的 Meeting scheduledAt，volc_asr 为录音开始时刻；无锚点时为 null。 */
     timeAnchor: Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()]),
   },
   { additionalProperties: false },
@@ -131,9 +133,11 @@ export const OutcomeItemKind = Type.Union([
   Type.Literal("ceoJudgment"),
   Type.Literal("reopenWhen"),
   Type.Literal("open"),
+  /** 提给 CEO 拍板的战略议题：CEO 确认后交给本体更新，不同意则通知主持人。 */
+  Type.Literal("strategic"),
 ]);
 
-/** CEO 判断只允许五类权限，模型不能自造类别。 */
+/** CEO 判断与战略议题只允许五类权限，模型不能自造类别。 */
 export const CeoJudgmentKind = Type.Union([
   Type.Literal("company_direction"),
   Type.Literal("resource_allocation"),
@@ -154,6 +158,11 @@ export const PostMeetingItem = Type.Object(
     judgmentKind: Type.Optional(CeoJudgmentKind),
     /** reopenWhen 指向同一候选内父 decision 的下标。 */
     parentIndex: Type.Optional(Type.Integer({ minimum: 0 })),
+    /** strategic 必填：标题不超过 40 字，说明一两句不超过 120 字。 */
+    title: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+    brief: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+    /** todo 可选截止日期（YYYY-MM-DD）。 */
+    dueDate: Type.Optional(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" })),
   },
   { additionalProperties: false },
 );
@@ -192,8 +201,9 @@ export const OutcomeHandoff = Type.Object(
 export const OutcomeReview = Type.Object(
   {
     status: OutcomeReviewStatus,
+    /** 已推送的 todo 为 `task:<taskId>`，已确认的 strategic 为 `ontology:<requestId>`，其余为 `meeting:<id>:<kind>:<itemId>`。 */
     effectRef: Type.Union([Type.String(), Type.Null()]),
-    /** 已确认 todo 的 DRI Handoff。 */
+    /** 旧版已确认 todo 的 DRI Handoff；会后推送改为执行事项后不再写入。 */
     handoff: Type.Optional(Type.Union([OutcomeHandoff, Type.Null()])),
     /** reopenWhen 写入的 Radar anchor id。 */
     anchorId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
@@ -216,6 +226,11 @@ export const MeetingOutcomeItem = Type.Object(
     judgmentKind: Type.Union([CeoJudgmentKind, Type.Null()]),
     parentItemId: Type.Union([Type.String(), Type.Null()]),
     review: Type.Union([OutcomeReview, Type.Null()]),
+    /** 只有 strategic 带标题与说明；Optional 保证旧 Meeting JSONB 继续可读。 */
+    title: Type.Optional(Type.String({ minLength: 1 })),
+    brief: Type.Optional(Type.String({ minLength: 1 })),
+    /** todo 的截止日期（YYYY-MM-DD）。 */
+    dueDate: Type.Optional(Type.String({ minLength: 1 })),
   },
   { additionalProperties: false },
 );

@@ -1,0 +1,21 @@
+/*
+ * DetailFrame（components/shell/DetailFrame.tsx，照搬 clark `detail-header/frame`）：宿主给外框，阅读页铺满它。
+ *
+ * 外框（宿主的元素）负责位置、圆角、和右列接上时右边两个角变直（conversation/column 的 --conversation-join-*）；
+ * 这里一路 inherit 下来，阅读页的圆角永远和外框一致 —— ts-design 给 .ts-detail 的 26px 圆角在外框里会露出角落。
+ */
+.frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border-radius: inherit;
+}
+
+.reader.reader {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  border-radius: inherit;
+}

@@ -4,32 +4,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
 
 /**
- * 对话的数据与调用：与原 ConversationDock 同一组端点与请求体（只抽出来，不改调用逻辑）。
- * - 未选择会话时走按 scope 的默认会话端点，选择后走 session 端点；
- * - 发送走 SSE，完成后重载历史；会话列表 / 新建 / 删除 / 附件上传端点不变。
+ * 对话的数据与调用：一个人在一个页面只有一条连续的对话（没有「会话」这回事，用户感觉不到它）。
+ * - 历史和发送都走按 scope 的端点；发送走 SSE，完成后重载历史；
+ * - 附件直接挂在这条对话上，不用先选什么。
  * 展示态（思考阶段、秒数、失败文案）在这里派生，供 clark 风格的界面使用。
  */
 
 export type ReferenceSnapshot = { cardId: string; version: number; kind: string; title: string };
 export type Message = { sequence: number; role: "user" | "assistant"; content: string; referencesSnapshot?: ReferenceSnapshot[]; attachments?: Attachment[]; createdAt?: string };
-export type Session = { id: string; title?: string; createdAt?: string };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
 /** clark 的三段思考：尚无事件 = 思考；开始用工具 = 快速查证；首个文字 = 整理回答。 */
 export type ThinkingStage = "thinking" | "researching" | "answering";
 export type CardRef = { cardId: string; version: number };
 
-export function messagesEndpoint(scope: string, sessionId: string | null): string {
-  const base = `/api/conversations/${encodeURIComponent(scope)}`;
-  return sessionId ? `${base}/sessions/${encodeURIComponent(sessionId)}/messages` : `${base}/messages`;
+export function messagesEndpoint(scope: string): string {
+  return `/api/conversations/${encodeURIComponent(scope)}/messages`;
 }
 
 export function isAttachable(file: { name: string }): boolean {
   return /\.(pdf|docx|md)$/i.test(file.name);
-}
-
-export function sessionLabel(session: { id: string; title?: string }): string {
-  return session.title ?? `会话 ${session.id.slice(0, 8)}`;
 }
 
 /** 服务端错误码 → 面向 CEO 的中文（clark 的失败文案；不显示英文原文）。 */
@@ -66,17 +60,12 @@ export function useConversation(scope: string) {
   const [startedAt, setStartedAt] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [lastReply, setLastReply] = useState<{ text: string; ms: number } | null>(null);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [sessionError, setSessionError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // 删除激活会话后停在「未选择会话」空态，不自动回载默认会话消息。
-  const skipLegacyReload = useRef(false);
 
-  const historyUrl = messagesEndpoint(scope, activeSessionId);
+  const historyUrl = messagesEndpoint(scope);
 
   const loadHistory = useCallback(async () => {
     const response = await fetch(historyUrl, { headers: { accept: "application/json" } });
@@ -85,89 +74,16 @@ export function useConversation(scope: string) {
     setMessages(body.messages);
   }, [historyUrl]);
 
-  const loadSessions = useCallback(async () => {
-    setSessionError(null);
-    try {
-      const response = await fetch(`/api/conversations/${encodeURIComponent(scope)}/sessions`, { headers: { accept: "application/json" } });
-      if (response.status === 401) {
-        window.location.assign("/access");
-        return;
-      }
-      if (!response.ok) throw new Error("会话列表加载失败");
-      const body = (await response.json()) as { sessions?: Session[] };
-      setSessions(body.sessions ?? []);
-    } catch (cause) {
-      setSessionError((cause as Error).message);
-    }
-  }, [scope]);
-
   useEffect(() => {
     setMessages([]);
     setPartial("");
     setStatus("idle");
-    if (skipLegacyReload.current) {
-      skipLegacyReload.current = false;
-      return;
-    }
     void loadHistory();
   }, [loadHistory]);
-
-  function selectSession(id: string | null) {
-    if (id === activeSessionId) return;
-    setActiveSessionId(id);
-    setAttachments([]);
-    setAttachmentError(null);
-    setMessages([]);
-    setPartial("");
-    setStatus("idle");
-    setError(null);
-    if (id) {
-      void (async () => {
-        const response = await fetch(messagesEndpoint(scope, id), { headers: { accept: "application/json" } });
-        if (response.ok) setMessages(((await response.json()) as { messages: Message[] }).messages);
-      })();
-    }
-  }
-
-  async function createSession() {
-    setSessionError(null);
-    try {
-      const response = await fetch(`/api/conversations/${encodeURIComponent(scope)}/sessions`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      if (!response.ok) throw new Error("新建会话失败");
-      const session = (await response.json()) as Session;
-      setSessions((current) => [...current, session]);
-      selectSession(session.id);
-    } catch (cause) {
-      setSessionError((cause as Error).message);
-    }
-  }
-
-  async function deleteSession(id: string) {
-    setSessionError(null);
-    try {
-      const response = await fetch(`/api/conversations/${encodeURIComponent(scope)}/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (!response.ok && response.status !== 404) throw new Error("删除会话失败");
-      setSessions((current) => current.filter((session) => session.id !== id));
-      if (activeSessionId === id) {
-        skipLegacyReload.current = true;
-        selectSession(null);
-      }
-    } catch (cause) {
-      setSessionError((cause as Error).message);
-    }
-  }
 
   async function uploadFiles(files: FileList | File[]) {
     const list = Array.from(files);
     if (!list.length) return;
-    if (!activeSessionId) {
-      setAttachmentError("先选择或新建一个会话，再上传附件。");
-      return;
-    }
     const rejected = list.filter((file) => !isAttachable(file));
     const acceptable = list.filter(isAttachable);
     if (!acceptable.length) {
@@ -179,7 +95,7 @@ export function useConversation(scope: string) {
     try {
       const form = new FormData();
       for (const file of acceptable) form.append("files", file);
-      const response = await fetch(`/api/conversations/${encodeURIComponent(scope)}/sessions/${encodeURIComponent(activeSessionId)}/attachments`, {
+      const response = await fetch(`/api/conversations/${encodeURIComponent(scope)}/attachments`, {
         method: "POST",
         body: form,
       });
@@ -297,16 +213,9 @@ export function useConversation(scope: string) {
     startedAt,
     error,
     lastReply,
-    sessions,
-    activeSessionId,
-    sessionError,
     attachments,
     uploading,
     attachmentError,
-    loadSessions,
-    selectSession,
-    createSession,
-    deleteSession,
     uploadFiles,
     removeAttachment: (id: string) => setAttachments((current) => current.filter((item) => item.id !== id)),
     send,

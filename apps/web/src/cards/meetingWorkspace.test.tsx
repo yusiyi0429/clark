@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
 import type { TTranscriptCandidateProjection } from "@warmap/contracts";
-import { MeetingCard, confirmTranscriptInput, meetingLargeTime, offsetLabel, speakerMappingError, speakerMappingRows } from "./MeetingCard";
+import { MeetingCard, confirmTranscriptInput, fromCompanyInput, meetingNow, offsetLabel, speakerMappingError, speakerMappingRows, toCompanyInput } from "./MeetingCard";
+import { meetingDayWord, meetingSlot } from "@/components/meeting/MeetingHeader";
 
 // 会议页读取外壳的首页集合（关联议题的位置名）；单测里给一个空集合。
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ homeCards: [], closing: false }) }));
@@ -34,6 +35,9 @@ export function meetingCard(payloadOverrides: Record<string, unknown>, actions: 
     payload: {
       status: "scheduled",
       scheduledAt: "2025-09-24T14:00:00.000Z",
+      endsAt: "2025-09-24T15:30:00.000Z",
+      endedAt: null,
+      recording: null,
       leadDriId: "p1",
       ceoParticipantId: "p2",
       participants,
@@ -124,21 +128,63 @@ const candidateBase: TTranscriptCandidateProjection = {
   warnings: ["“外部顾问”未匹配到人员，请手动选择。"],
 };
 
-describe("Meeting 页头（clark MeetingWorkspace）", () => {
-  it("会议标记、眉题、大时间、主责 DRI 与人数、关闭会议空间", () => {
+describe("Meeting 页头（clark 会议页，C-08）", () => {
+  it("页头胶囊：返回、计划时段、会名、会议记录入口，右边一颗开始会议；没有四段进度条", () => {
     const html = render(meetingCard({}));
-    expect(html).toContain('data-context-mark="meeting"');
-    expect(html).toContain("会前预审 / 会议材料");
-    expect(html).toContain('dateTime="2025-09-24T14:00:00.000Z"');
-    expect(html).toContain("主责 DRI · ");
-    expect(html).toContain(" 人参会");
-    expect(html).toContain('aria-label="关闭会议空间"');
-    expect(html).not.toContain('aria-label="返回首页"');
+    expect(html).toContain("返回总览");
+    expect(html).toContain("data-header-lead");
+    expect(html).toContain("22:00");
+    expect(html).toContain("23:30");
+    expect(html).toContain('id="meeting-title"');
+    expect(html).toContain("data-header-whole");
+    expect(html).toContain("会议记录");
+    expect(html).toContain("开始会议");
+    expect(html).not.toContain("会议阶段");
+    expect(html).not.toContain("Outcome 复核</span>");
   });
 
-  it("大时间同一天只写时刻，否则带日期（公司时区）", () => {
-    expect(meetingLargeTime("2026-09-24T07:00:00.000Z", new Date("2026-09-24T01:00:00.000Z"))).toBe("15:00");
-    expect(meetingLargeTime("2026-09-25T07:00:00.000Z", new Date("2026-09-24T01:00:00.000Z"))).toBe("9/25 15:00");
+  it("材料上面一行灰字：谁主持、谁参会、这一刻的一件事", () => {
+    const html = render(meetingCard({}));
+    expect(html).toContain("林晓主持 · 参会：林晓、陈珂 · 会前预审 · 可提交");
+  });
+
+  it("已取消的会没有开始会议那颗；开完了写已开完", () => {
+    expect(render(meetingCard({ status: "cancelled" }))).not.toContain("开始会议");
+    const ended = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z" }));
+    expect(ended).toContain("已开完");
+    expect(ended).toContain("这场会开完了");
+    expect(ended).not.toContain("开始会议");
+  });
+
+  it("计划时段按公司时区写 HH:mm；日子写今天、明天、后天、昨天，再远写日期", () => {
+    expect(meetingSlot("2026-09-24T06:00:00.000Z", "2026-09-24T07:30:00.000Z")).toEqual({ startsAt: "14:00", endsAt: "15:30" });
+    const now = new Date("2026-09-24T01:00:00.000Z");
+    expect(meetingDayWord("2026-09-24T06:00:00.000Z", now)).toBe("今天");
+    expect(meetingDayWord("2026-09-25T06:00:00.000Z", now)).toBe("明天");
+    expect(meetingDayWord("2026-09-26T06:00:00.000Z", now)).toBe("后天");
+    expect(meetingDayWord("2026-09-23T06:00:00.000Z", now)).toBe("昨天");
+    expect(meetingDayWord("2026-09-30T06:00:00.000Z", now)).toBe("9 月 30 日");
+  });
+
+  it("开完之后录音在转写：会议记录页写明进度，转写失败提示改用妙记", () => {
+    const transcribing = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", recording: { id: "r1", status: "transcribing", error: null } }));
+    expect(transcribing).toContain("会议录音");
+    expect(transcribing).toContain("正在识别");
+    expect(transcribing).toContain("录音转写中");
+    const failed = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", recording: { id: "r1", status: "failed", error: "识别服务没有返回结果。" } }));
+    expect(failed).toContain("识别服务没有返回结果。可以改用下面的妙记导入。");
+  });
+
+  it("这一刻的一件事随会议状态走", () => {
+    const payload = (overrides: Record<string, unknown>) => meetingCard(overrides).payload as never;
+    expect(meetingNow(payload({}), true)).toBe("待导入会议记录");
+    expect(meetingNow(payload({ status: "held" }), true)).toBe("正在整理纪要");
+    expect(meetingNow(payload({ status: "cancelled" }), false)).toBe("已取消");
+  });
+
+  it("编辑会议的时间按公司时区回填与提交", () => {
+    expect(toCompanyInput("2026-09-24T07:00:00.000Z")).toBe("2026-09-24T15:00");
+    expect(fromCompanyInput("2026-09-24T15:00")).toBe("2026-09-24T15:00:00+08:00");
   });
 });
 describe("Meeting 会前预审", () => {
@@ -182,8 +228,7 @@ describe("Meeting 会前预审", () => {
 describe("Meeting 编辑会议弹层 CSS 基线", () => {
   const source = readFileSync(new URL("../styles/meeting-workspace.module.css", import.meta.url), "utf8");
 
-  it("Header 白底铅笔按钮与 320 宽弹层取设计色值", () => {
-    expect(source).toContain(".editAction{display:flex;align-items:center;gap:6px;padding:9px 13px;border:1px solid #d9dde5;border-radius:10px;background:#fff");
+  it("320 宽弹层取设计色值", () => {
     expect(source).toContain("width:320px;padding:14px 16px;border:1px solid #e6e9ed;border-radius:14px");
     expect(source).toContain("height:36px;border:1px solid #d9dde5;border-radius:9px;background:#f7f8fa");
     expect(source).toContain(".editSave{background:#007aff");
@@ -237,8 +282,8 @@ describe("Meeting Outcome 复核", () => {
 });
 
 describe("妙记 Markdown 候选预览", () => {
-  it("Header 入口同时接受 .md 与 .json，文案改为导入会议记录", () => {
-    const html = render(meetingCard({}));
+  it("会开完了默认打开会议记录：入口同时接受 .md 与 .json", () => {
+    const html = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z" }));
     expect(html).toContain('accept=".md,.json,application/json,text/markdown"');
     expect(html).toContain("导入会议记录");
     expect(html).not.toContain("上传会议逐字稿");

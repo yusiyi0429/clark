@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Pool, QueryResult } from "pg";
+import type { Pool, PoolClient, QueryResult } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import {
   PostMeetingCandidate,
@@ -8,7 +8,6 @@ import {
   type TMeetingOutcomeItem,
   type TMeetingOutcomeState,
   type TMeetingParticipant,
-  type TOutcomeHandoff,
   type TOutcomeWarning,
   type TRadarAnchor,
   type TStoredTranscript,
@@ -29,10 +28,11 @@ import {
   projectMeetingCard,
   updateMeeting,
   withMeetingLock,
-  type DriExporter,
   type MeetingActionOutcome,
   type MeetingRow,
 } from "./meetingStore.js";
+import { insertNotification } from "./notifications.js";
+import { dispatchMeetingTodo } from "./tasks.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -47,6 +47,21 @@ export type PostMeetingAgent = {
   promptHash?: string;
   modelSlot?: "heavy";
   generate(input: PostMeetingAgentInput, signal?: AbortSignal): Promise<{ candidate: unknown; runId?: string }>;
+};
+
+/** CEO 确认的战略议题，对应 ontology_update_requests 一行。 */
+export type OntologyUpdateRequest = { id: string; meetingId: string; itemId: string; title: string; brief: string };
+
+/** 本体更新 Agent 的接口：处理后回写请求状态与结果；抛错记为 failed。 */
+export type OntologyUpdater = {
+  apply(request: OntologyUpdateRequest): Promise<{ status: "pending" | "applied" | "failed"; result: unknown }>;
+};
+
+/** 默认不更新本体，请求保持 pending；真实实现由 co-agent 同事接入。 */
+export const pendingOntologyUpdater: OntologyUpdater = {
+  async apply() {
+    return { status: "pending", result: null };
+  },
 };
 
 export const OUTCOME_AGENT_FAILED = "outcome_agent_failed";
@@ -128,6 +143,7 @@ export type OutcomeAssessment =
 /**
  * 确定性校验 Agent 候选：turnId 存在、quote 连续存在于被引用 turn、speaker 只从 turn 取得、
  * owner 只能来自“我来”的 speaker 或引文中明确点名的人、CEO 判断只认 CEO turn 和五类权限、
+ * 战略议题可引用任何人但标题/说明/五类权限缺一不可、dueDate 只给 todo 且是真实日期、
  * issueId 属 Meeting。任一项不合格的候选进入 warnings，不进入可审阅 items。
  */
 export function assessOutcomeCandidate(input: {
@@ -160,12 +176,24 @@ export function assessOutcomeCandidate(input: {
       continue;
     }
     const speakerId = turn.speakerId;
-    if (candidate.judgmentKind !== undefined && candidate.kind !== "ceoJudgment") {
-      reject("judgmentKind 只允许用于 ceoJudgment");
+    if (candidate.judgmentKind !== undefined && candidate.kind !== "ceoJudgment" && candidate.kind !== "strategic") {
+      reject("judgmentKind 只允许用于 ceoJudgment 与 strategic");
       continue;
     }
     if (candidate.parentIndex !== undefined && candidate.kind !== "reopenWhen") {
       reject("parentIndex 只允许用于 reopenWhen");
+      continue;
+    }
+    if ((candidate.title !== undefined || candidate.brief !== undefined) && candidate.kind !== "strategic") {
+      reject("title 与 brief 只允许用于 strategic");
+      continue;
+    }
+    if (candidate.dueDate !== undefined && candidate.kind !== "todo") {
+      reject("dueDate 只允许用于 todo");
+      continue;
+    }
+    if (candidate.dueDate !== undefined && !isCalendarDate(candidate.dueDate)) {
+      reject(`dueDate 不是有效日期: ${candidate.dueDate}`);
       continue;
     }
     if (candidate.kind === "ceoJudgment") {
@@ -175,6 +203,17 @@ export function assessOutcomeCandidate(input: {
       }
       if (!candidate.judgmentKind) {
         reject("ceoJudgment 缺少五类权限 kind");
+        continue;
+      }
+    }
+    // 战略议题可以引用任何人的发言，但标题、说明与五类权限缺一不可
+    if (candidate.kind === "strategic") {
+      if (!candidate.title || !candidate.brief || !candidate.judgmentKind) {
+        reject("strategic 缺少 title、brief 或 judgmentKind");
+        continue;
+      }
+      if ((candidate.brief.match(/[。！？!?]/g)?.length ?? 0) > 2) {
+        reject("brief 最多两句话");
         continue;
       }
     }
@@ -204,7 +243,7 @@ export function assessOutcomeCandidate(input: {
     }
     const id = `item-${index + 1}`;
     if (candidate.kind === "decision") decisionItemIdByIndex.set(index, id);
-    acceptedItems.push({
+    const item: TMeetingOutcomeItem = {
       id,
       kind: candidate.kind,
       text: candidate.text,
@@ -217,9 +256,21 @@ export function assessOutcomeCandidate(input: {
       parentItemId,
       // open 只展示，不带 Review（Ticket 11 处理其余四类的确认/忽略）
       review: candidate.kind === "open" ? null : { status: "pending", effectRef: null },
-    });
+    };
+    if (candidate.kind === "strategic") {
+      item.title = candidate.title;
+      item.brief = candidate.brief;
+    }
+    if (candidate.dueDate !== undefined) item.dueDate = candidate.dueDate;
+    acceptedItems.push(item);
   }
   return { ok: true, summary: input.candidate.summary, items: acceptedItems, warnings };
+}
+
+/** YYYY-MM-DD 且是真实存在的日期（排除 2 月 30 日这类）。 */
+function isCalendarDate(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 type OutcomeMeetingRow = {
@@ -229,6 +280,7 @@ type OutcomeMeetingRow = {
   scheduled_at: Date;
   status: "scheduled" | "held" | "reviewed" | "cancelled";
   participants: TMeetingParticipant[];
+  lead_dri_id: string;
   ceo_participant_id: string;
   issue_ids: string[];
   transcript: { turns: TTranscriptTurn[] } | null;
@@ -239,6 +291,7 @@ type IssueSnapshotRow = { id: string; title: string; location: unknown; urgency:
 
 /**
  * 运行一次会后抽取：pending/failed → running → ready 或 failed。
+ * 进入 ready 的同一事务内把每条 todo 推送成执行事项（见 dispatchMeetingTodo）。
  * 失败保留原始 Transcript 并写可见 error，等待 CEO 显式重试；不自动 retry。
  */
 export async function runOutcome(
@@ -249,7 +302,7 @@ export async function runOutcome(
 ): Promise<void> {
   const q = pool.query.bind(pool);
   const found = await q(
-    `SELECT id, version, title, scheduled_at, status, participants, ceo_participant_id, issue_ids, transcript, outcome
+    `SELECT id, version, title, scheduled_at, status, participants, lead_dri_id, ceo_participant_id, issue_ids, transcript, outcome
        FROM meetings WHERE id = $1`,
     [meetingId],
   );
@@ -319,24 +372,45 @@ export async function runOutcome(
       await fail(assessed.code, assessed.message);
       return;
     }
-    const nextStatus = deriveMeetingStatus(meeting.status, assessed.items);
-    await q(
-      `UPDATE meetings
-          SET outcome = outcome || jsonb_build_object(
-                'status', 'ready',
-                'summary', $3::text,
-                'items', $4::jsonb,
-                'warnings', $5::jsonb,
-                'extractedAt', $6::text,
-                'error', NULL,
-                'startedAt', NULL
-              ),
-              status = $7,
-              version = version + 1,
-              updated_at = now()
-        WHERE id = $1 AND outcome->>'runId' = $2`,
-      [meetingId, runId, assessed.summary, JSON.stringify(assessed.items), JSON.stringify(assessed.warnings), new Date().toISOString(), nextStatus],
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query<{ run_id: string | null }>("SELECT outcome->>'runId' AS run_id FROM meetings WHERE id = $1 FOR UPDATE", [meetingId]);
+      if (current.rows[0]?.run_id !== runId) {
+        await client.query("ROLLBACK");
+        return;
+      }
+      // 推送后的 todo 记为已确认（effect task:<id>），已有确认效果即阻止替换 Transcript
+      for (const item of assessed.items) {
+        if (item.kind !== "todo") continue;
+        const taskId = await dispatchMeetingTodo(client, { id: meetingId, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id }, item);
+        if (taskId) item.review = { status: "confirmed", effectRef: `task:${taskId}` };
+      }
+      const nextStatus = deriveMeetingStatus(meeting.status, assessed.items);
+      await client.query(
+        `UPDATE meetings
+            SET outcome = outcome || jsonb_build_object(
+                  'status', 'ready',
+                  'summary', $2::text,
+                  'items', $3::jsonb,
+                  'warnings', $4::jsonb,
+                  'extractedAt', $5::text,
+                  'error', NULL,
+                  'startedAt', NULL
+                ),
+                status = $6,
+                version = version + 1,
+                updated_at = now()
+          WHERE id = $1`,
+        [meetingId, assessed.summary, JSON.stringify(assessed.items), JSON.stringify(assessed.warnings), new Date().toISOString(), nextStatus],
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     await fail(OUTCOME_AGENT_FAILED, (err as Error).message || "PostMeeting Agent 失败");
   }
@@ -491,17 +565,37 @@ function radarLocation(location: TIssueLocation | null | undefined): TRadarAncho
 function clonedItems(state: TMeetingOutcomeState): TMeetingOutcomeItem[] {
   return state.items.map((item) => structuredClone(item));
 }
+/** 逐项处理的提交：写回 Outcome items、派生 Meeting 状态并记 fingerprint。 */
+async function commitReview(
+  client: PoolClient,
+  row: MeetingRow,
+  state: TMeetingOutcomeState,
+  items: TMeetingOutcomeItem[],
+  fingerprint: string,
+  secret: string,
+): Promise<{ card: TCard }> {
+  const nextState: TMeetingOutcomeState = { ...state, items };
+  const updated = await updateMeeting(
+    client,
+    row.id,
+    "outcome = $2::jsonb, status = $3, version = version + 1, action_fingerprints = $4::jsonb",
+    [JSON.stringify(nextState), deriveMeetingStatus(row.status, items), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+  );
+  return commit(client, updated, secret);
+}
 /**
  * 逐项确认：写对应数据库 effect、effectRef 与 review，派生 Meeting reviewed。
  * 不同条目仍由 Meeting 行 version 串行，fingerprint 重放不产生第二个 effect。
+ * todo 确认即推送执行事项；strategic 确认写一条待更新本体，提交后交给 OntologyUpdater。
  */
 export async function executeConfirmItem(
   pool: Pool,
-  exporter: DriExporter | undefined,
+  ontologyUpdater: OntologyUpdater,
   secret: string,
   scope: ActionScope,
   fingerprint: string,
 ): Promise<MeetingActionOutcome> {
+  let ontologyRequest: OntologyUpdateRequest | null = null;
   const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
     if (row.status !== "held" && row.status !== "reviewed") {
       return { error: { status: 409, code: "MEETING_NOT_REVIEWABLE", message: "只有 held/reviewed Meeting 可以处理会后条目" } };
@@ -515,6 +609,15 @@ export async function executeConfirmItem(
     if (!item) return { error: { status: 404, code: "OUTCOME_ITEM_NOT_FOUND", message: "Outcome item 不存在" } };
     if (!item.review) return { error: { status: 409, code: "OPEN_ITEM_NOT_REVIEWABLE", message: "open item 只展示，不能创建效果" } };
     if (item.review.status !== "pending") return { error: { status: 409, code: "ITEM_ALREADY_REVIEWED", message: "该条目已处理" } };
+    if (item.kind === "strategic") {
+      ontologyRequest = { id: randomUUID(), meetingId: row.id, itemId: item.id, title: item.title ?? item.text, brief: item.brief ?? item.text };
+      await client.query(
+        "INSERT INTO ontology_update_requests (id, meeting_id, item_id, title, brief) VALUES ($1, $2, $3, $4, $5)",
+        [ontologyRequest.id, ontologyRequest.meetingId, ontologyRequest.itemId, ontologyRequest.title, ontologyRequest.brief],
+      );
+      item.review = { status: "confirmed", effectRef: `ontology:${ontologyRequest.id}` };
+      return commitReview(client, row, state, items, fingerprint, secret);
+    }
     const effectRef = meetingEffectRef(row.id, item.kind, item.id);
     if (!effectRef) return { error: { status: 409, code: "OPEN_ITEM_NOT_REVIEWABLE", message: "open item 只展示，不能创建效果" } };
     const now = new Date().toISOString();
@@ -545,7 +648,9 @@ export async function executeConfirmItem(
       );
       item.review = { status: "confirmed", effectRef };
     } else if (item.kind === "todo") {
-      item.review = { status: "confirmed", effectRef, handoff: { exportStatus: "pending_export", exportRef: null, error: null } };
+      // 撤回后再确认即重新推送；负责人是 CEO 时只记已确认，不建执行事项
+      const taskId = await dispatchMeetingTodo(client, { id: row.id, leadDriId: row.lead_dri_id, ceoId: row.ceo_participant_id }, item);
+      item.review = { status: "confirmed", effectRef: taskId ? `task:${taskId}` : effectRef };
     } else if (item.kind === "ceoJudgment") {
       // CEO 判断只保留在 MeetingOutcome，不直接写 CompanyMemory
       item.review = { status: "confirmed", effectRef };
@@ -565,21 +670,29 @@ export async function executeConfirmItem(
       item.review = { status: "confirmed", effectRef, anchorId: anchor.id };
     }
 
-    const nextState: TMeetingOutcomeState = { ...state, items };
-    const status = deriveMeetingStatus(row.status, items);
-    const updated = await updateMeeting(
-      client,
-      row.id,
-      "outcome = $2::jsonb, status = $3, version = version + 1, action_fingerprints = $4::jsonb",
-      [JSON.stringify(nextState), status, JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
-    );
-    return commit(client, updated, secret);
+    return commitReview(client, row, state, items, fingerprint, secret);
   });
   if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
-  await exportPendingTodoHandoff(pool, scope.objectId, scope.itemId, exporter);
+  if (ontologyRequest) await applyOntologyUpdate(pool, ontologyUpdater, ontologyRequest);
   return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
 }
-/** 忽略一项只记录状态与原因，不产生 effect；父 decision 被忽略时同一事务内处理其子条件。 */
+/** 提交确认后才交给本体更新；失败不改回 pending，只把请求记为 failed。 */
+async function applyOntologyUpdate(pool: Pool, updater: OntologyUpdater, request: OntologyUpdateRequest): Promise<void> {
+  let applied: { status: "pending" | "applied" | "failed"; result: unknown };
+  try {
+    applied = await updater.apply(request);
+  } catch (err) {
+    applied = { status: "failed", result: { error: (err as Error).message || "ontology update failed" } };
+  }
+  await pool.query(
+    "UPDATE ontology_update_requests SET status = $2, result = $3::jsonb, updated_at = now() WHERE id = $1",
+    [request.id, applied.status, applied.result == null ? null : JSON.stringify(applied.result)],
+  );
+}
+/**
+ * 忽略一项只记录状态与原因，不产生 effect；父 decision 被忽略时同一事务内处理其子条件。
+ * CEO 不同意战略项时通知主持人（主持人就是 CEO 时不发）。
+ */
 export async function executeDismissItem(
   pool: Pool,
   secret: string,
@@ -612,21 +725,16 @@ export async function executeDismissItem(
         }
       }
     }
+    if (item.kind === "strategic" && row.lead_dri_id !== row.ceo_participant_id) {
+      await insertNotification(client, { personId: row.lead_dri_id, kind: "strategic_rejected", objectType: "meeting", objectId: row.id, itemId: item.id });
+    }
 
-    const nextState: TMeetingOutcomeState = { ...state, items };
-    const status = deriveMeetingStatus(row.status, items);
-    const updated = await updateMeeting(
-      client,
-      row.id,
-      "outcome = $2::jsonb, status = $3, version = version + 1, action_fingerprints = $4::jsonb",
-      [JSON.stringify(nextState), status, JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
-    );
-    return commit(client, updated, secret);
+    return commitReview(client, row, state, items, fingerprint, secret);
   });
 }
 /**
- * 撤回已确认效果：统一走 revokeEffect，同步 Outcome item、Receipt、Radar anchor 与 Meeting 状态。
- * delivered 的外部效果禁用撤回：Card 不提供该 Action，服务端也返回明确 warning。
+ * 撤回已确认效果：统一走 revokeEffect，同步 Outcome item、Receipt、Radar anchor、执行事项与 Meeting 状态。
+ * 已推送的执行事项只在负责人未开始时可撤回，否则返回明确 warning。
  */
 export async function executeRevokeEffect(
   pool: Pool,
@@ -680,58 +788,3 @@ export async function executeRevokeEffect(
     client.release();
   }
 }
-/** 提交确认后才尝试真实外发；失败不改回 confirmed，只写可见 failed。 */
-async function exportPendingTodoHandoff(
-  pool: Pool,
-  meetingId: string,
-  itemId: string | undefined,
-  exporter: DriExporter | undefined,
-): Promise<void> {
-  if (!exporter || !itemId) return;
-  const meeting = await getMeetingRow(pool.query.bind(pool), meetingId);
-  const item = meeting?.outcome?.items.find((candidate) => candidate.id === itemId);
-  if (!item || item.kind !== "todo" || item.review?.status !== "confirmed") return;
-  if (item.review.handoff?.exportStatus !== "pending_export" || !item.ownerPersonId) return;
-  try {
-    const result = await exporter.export(
-      { effectRef: item.review.effectRef!, targetDriId: item.ownerPersonId, text: item.text },
-      new AbortController().signal,
-    );
-    await updateOutcomeHandoff(pool, meetingId, itemId, { exportStatus: "delivered", exportRef: result.exportRef, error: null });
-  } catch (err) {
-    await updateOutcomeHandoff(pool, meetingId, itemId, { exportStatus: "failed", exportRef: null, error: (err as Error).message || "export failed" });
-  }
-}
-/** Handoff 状态与其它 Outcome 写入一样持行锁，避免整份 outcome 被并发覆盖。 */
-async function updateOutcomeHandoff(
-  pool: Pool,
-  meetingId: string,
-  itemId: string,
-  handoff: TOutcomeHandoff,
-): Promise<void> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT id FROM meetings WHERE id = $1 FOR UPDATE", [meetingId]);
-    await client.query(
-      `UPDATE meetings
-          SET outcome = jsonb_set(outcome, '{items}', (
-                SELECT jsonb_agg(
-                  CASE WHEN item->>'id' = $2 THEN jsonb_set(item, '{review,handoff}', $3::jsonb) ELSE item END
-                )
-                FROM jsonb_array_elements(outcome->'items') AS item
-              )),
-              version = version + 1,
-              updated_at = now()
-        WHERE id = $1 AND outcome->'items' @> jsonb_build_array(jsonb_build_object('id', $2::text))`,
-      [meetingId, itemId, JSON.stringify(handoff)],
-    );
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-

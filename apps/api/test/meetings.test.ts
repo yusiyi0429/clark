@@ -410,6 +410,9 @@ describe("DRI service Meeting import", () => {
       expect(Value.Check(Card, card)).toBe(true);
       expect(card.payload).toMatchObject({
         status: "scheduled",
+        // 未给 endsAt：按开始后 60 分钟补齐
+        endsAt: "2026-06-01T03:00:00.000Z",
+        endedAt: null,
         preflight: { status: "ready" },
         originRef: { type: "dri", externalId: "dri-meeting-100" },
       });
@@ -436,6 +439,7 @@ describe("DRI service Meeting import", () => {
     ["leadDriId 没有 dri 角色", (body: Record<string, unknown>) => ({ ...body, leadDriId: "person-fixture-001" })],
     ["引用不存在的 Issue", (body: Record<string, unknown>) => ({ ...body, issueIds: ["00000000-0000-4000-8000-000000000001"] })],
     ["scheduledAt 不可解析", (body: Record<string, unknown>) => ({ ...body, scheduledAt: "下周三下午" })],
+    ["endsAt 不晚于 scheduledAt", (body: Record<string, unknown>) => ({ ...body, endsAt: body.scheduledAt })],
   ])("rejects %s before creating a Meeting", async (_label, mutate) => {
     const t = await createTestApp();
     try {
@@ -487,9 +491,9 @@ describe("Candidate Preflight", () => {
       const meetingId = randomUUID();
       await db.query(
         `INSERT INTO meetings
-           (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
+           (id, version, title, status, scheduled_at, ends_at, lead_dri_id, ceo_participant_id,
             participants, issue_ids, preflight, draft, origin_ref)
-         VALUES ($1, 1, '挂起预审', 'scheduled', now(), 'person-fixture-002', 'person-fixture-001',
+         VALUES ($1, 1, '挂起预审', 'scheduled', now(), now() + interval '60 minutes', 'person-fixture-002', 'person-fixture-001',
                  '[]'::jsonb, '[]'::jsonb, $2::jsonb, $3::jsonb, '{}'::jsonb)`,
         [
           meetingId,
@@ -974,6 +978,142 @@ describe("edit a scheduled Meeting", () => {
       const empty = await execute(t, cookie, editAction, {});
       expect(empty.statusCode).toBe(400);
       expect(empty.json().code).toBe("INVALID_INPUT");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("keeps the planned duration when only scheduledAt moves, and validates endsAt against the start", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { cookie, meetingId, editAction } = await setup(t);
+      // 先把时长拉到 90 分钟：只改 endsAt 时对照当前开始时间
+      const widened = await execute(t, cookie, editAction, { endsAt: "2026-06-01T11:30:00.000+08:00" });
+      expect(widened.statusCode).toBe(200);
+      expect(widened.json().cards[0].payload.endsAt).toBe("2026-06-01T03:30:00.000Z");
+
+      const moved = await execute(t, cookie, await meetingAction(t, cookie, meetingId, "meeting.edit_details"), { scheduledAt: "2026-06-03T14:00:00.000+08:00" });
+      expect(moved.statusCode).toBe(200);
+      expect(moved.json().cards[0].payload).toMatchObject({ scheduledAt: "2026-06-03T06:00:00.000Z", endsAt: "2026-06-03T07:30:00.000Z" });
+
+      const rangeAction = await meetingAction(t, cookie, meetingId, "meeting.edit_details");
+      for (const input of [
+        { endsAt: "2026-06-03T13:00:00.000+08:00" },
+        { scheduledAt: "2026-06-04T10:00:00.000+08:00", endsAt: "2026-06-04T10:00:00.000+08:00" },
+        { endsAt: "不是时间" },
+      ]) {
+        const res = await execute(t, cookie, rangeAction, input);
+        expect(res.statusCode).toBe(400);
+        expect(res.json()).toMatchObject({ code: "INVALID_INPUT", fieldErrors: { endsAt: expect.any(String) } });
+      }
+      const row = (await t.sql("SELECT scheduled_at, ends_at FROM meetings WHERE id = $1", [meetingId]))[0];
+      expect([row.scheduled_at.toISOString(), row.ends_at.toISOString()]).toEqual(["2026-06-03T06:00:00.000Z", "2026-06-03T07:30:00.000Z"]);
+    } finally {
+      await t.close();
+    }
+  });
+});
+
+describe("Meeting 计划结束时间与「这场会开完了」", () => {
+  type ActionCard = { objectRef: { version: number }; actions: { actionType: string; actionId: string; label: string }[] };
+  const actionTypes = (card: ActionCard) => card.actions.map((action) => action.actionType);
+  const actionOf = (card: ActionCard, actionType: string) => {
+    const descriptor = card.actions.find((action) => action.actionType === actionType);
+    expect(descriptor, `应提供 ${actionType}`).toBeTruthy();
+    return descriptor!;
+  };
+  const meetingCard = async (t: TestApp, cookie: string, meetingId: string): Promise<ActionCard & { payload: Record<string, unknown> }> =>
+    (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie } })).json().cards[0];
+
+  it("defaults endsAt to scheduledAt + 60 minutes, accepts an explicit endsAt and rejects one not after the start", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { card } = await readyMeeting(t, "dri-ends-100");
+      expect(card.payload).toMatchObject({ scheduledAt: "2026-06-01T02:00:00.000Z", endsAt: "2026-06-01T03:00:00.000Z", endedAt: null });
+
+      const issue = await createIssue(t, "dri-ends-101");
+      const cookie = await t.loginCookie();
+      const createAction = await issueAction(t, cookie, issue.id, "issue.create_meeting");
+      for (const endsAt of [MEETING_INPUT.scheduledAt, "2026-06-01T09:00:00.000+08:00", "不是时间"]) {
+        const res = await execute(t, cookie, createAction, { ...MEETING_INPUT, endsAt, issueIds: [issue.id] });
+        expect(res.statusCode).toBe(400);
+        expect(res.json()).toMatchObject({ code: "INVALID_INPUT", fieldErrors: { endsAt: expect.any(String) } });
+      }
+      expect(await t.sql("SELECT count(*)::int AS count FROM meetings")).toEqual([{ count: 1 }]);
+
+      const created = await execute(t, cookie, createAction, { ...MEETING_INPUT, endsAt: "2026-06-01T11:30:00.000+08:00", issueIds: [issue.id] });
+      expect(created.statusCode).toBe(200);
+      expect(created.json().cards[0].payload).toMatchObject({ endsAt: "2026-06-01T03:30:00.000Z", endedAt: null });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("meeting.end records endedAt without changing status, bumps version and is no longer offered", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { cookie, meetingId, card } = await readyMeeting(t, "dri-end-100");
+      const created = card as unknown as ActionCard;
+      const end = actionOf(created, "meeting.end");
+      expect(end.label).toBe("这场会开完了");
+
+      const ended = await execute(t, cookie, end.actionId);
+      expect(ended.statusCode).toBe(200);
+      const endedCard = ended.json().cards[0];
+      expect(Value.Check(MeetingCardPayload, endedCard.payload)).toBe(true);
+      expect(endedCard.payload.status).toBe("scheduled");
+      expect(endedCard.payload.endedAt).toEqual(expect.any(String));
+      expect(endedCard.objectRef.version).toBe(created.objectRef.version + 1);
+      expect(actionTypes(endedCard)).not.toContain("meeting.end");
+      // 其余 scheduled Action 不受影响
+      expect(actionTypes(endedCard)).toEqual(expect.arrayContaining(["meeting.edit_details", "meeting.cancel"]));
+
+      // 同一 actionId 重放：幂等，不再 version+1
+      const replay = await execute(t, cookie, end.actionId);
+      expect(replay.statusCode).toBe(200);
+      expect(replay.json().cards[0].objectRef.version).toBe(created.objectRef.version + 1);
+
+      const row = (await t.sql("SELECT status, ended_at FROM meetings WHERE id = $1", [meetingId]))[0];
+      expect(row.status).toBe("scheduled");
+      expect(row.ended_at.toISOString()).toBe(endedCard.payload.endedAt);
+      expect(actionTypes(await meetingCard(t, cookie, meetingId))).not.toContain("meeting.end");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it.each(["cancelled", "held"] as const)("neither offers nor executes meeting.end on a %s Meeting", async (status) => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { cookie, meetingId, card } = await readyMeeting(t, `dri-end-${status}`);
+      const end = actionOf(card as unknown as ActionCard, "meeting.end");
+      await t.sql("UPDATE meetings SET status = $2 WHERE id = $1", [meetingId, status]);
+      expect(actionTypes(await meetingCard(t, cookie, meetingId))).not.toContain("meeting.end");
+
+      const res = await execute(t, cookie, end.actionId);
+      expect(res.statusCode).toBe(409);
+      expect(res.json().code).toBe("MEETING_NOT_ENDABLE");
+      expect((await t.sql("SELECT status, ended_at FROM meetings WHERE id = $1", [meetingId]))[0]).toEqual({ status, ended_at: null });
+      await expectNoIdleInTransaction(t);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("rejects a stale meeting.end with the latest card like other Meeting actions", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { cookie, meetingId, card } = await readyMeeting(t, "dri-end-stale");
+      const created = card as unknown as ActionCard;
+      const end = actionOf(created, "meeting.end");
+      expect((await execute(t, cookie, actionOf(created, "meeting.edit_details").actionId, { title: "改名后" })).statusCode).toBe(200);
+
+      const stale = await execute(t, cookie, end.actionId);
+      expect(stale.statusCode).toBe(409);
+      expect(stale.json().code).toBe("VERSION_CONFLICT");
+      expect(stale.json().latestCard).toMatchObject({ id: `meeting:${meetingId}`, payload: { endedAt: null } });
+      expect((await t.sql("SELECT ended_at FROM meetings WHERE id = $1", [meetingId]))[0].ended_at).toBeNull();
+      await expectNoIdleInTransaction(t);
     } finally {
       await t.close();
     }

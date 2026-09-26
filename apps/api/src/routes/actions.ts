@@ -21,7 +21,7 @@ import {
 } from "@warmap/contracts";
 import { actionFingerprint, verifyActionId } from "../actionToken.js";
 import { executeIssueAction } from "../issues.js";
-import { executeCancelMeeting, executeCreateMeeting, executeEditMeetingDetails, executeJoinMeeting, executeRequestSupplement, executeUpdateDraft } from "../meetings.js";
+import { executeCancelMeeting, executeCreateMeeting, executeEditMeetingDetails, executeEndMeeting, executeJoinMeeting, executeRequestSupplement, executeUpdateDraft } from "../meetings.js";
 import { executeEditMaterials } from "../meetingMaterials.js";
 import { executeRegeneratePreflight, executeRetryPreflight, executeRunPreflight } from "../meetingPreflight.js";
 import { executeEditMission } from "../missions.js";
@@ -32,7 +32,7 @@ import { executeConfirmTranscriptCandidate, executeDiscardTranscriptCandidate } 
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, env, fail, requireCEO, requestContext, companyMemory, preflight, driExporter, outcome, monthlyPlanService, research, invalidInput, respond } = ctx;
+  const { pool, env, fail, requireCEO, requestContext, companyMemory, preflight, driExporter, ontologyUpdater, outcome, monthlyPlanService, research, invalidInput, respond } = ctx;
 
   app.post(
     "/api/actions/execute",
@@ -76,6 +76,9 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       if (scope.actionType === "meeting.cancel") {
         return respond(reply, await executeCancelMeeting(pool, env.sessionSecret, scope, fingerprint));
       }
+      if (scope.actionType === "meeting.end") {
+        return respond(reply, await executeEndMeeting(pool, env.sessionSecret, scope, fingerprint));
+      }
       if (scope.actionType === "meeting.retry_preflight") {
         return respond(reply, await executeRetryPreflight(pool, companyMemory, preflight, env.sessionSecret, scope, fingerprint));
       }
@@ -103,7 +106,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       // Ticket 11：逐项确认/忽略/撤回；itemId 由签名 actionId 携带
       if (scope.actionType === "meeting.confirm_item") {
         if (!Value.Check(MeetingConfirmItemInput, input ?? {})) return invalidInput(reply, MeetingConfirmItemInput, input ?? {});
-        return respond(reply, await executeConfirmItem(pool, driExporter, env.sessionSecret, scope, fingerprint));
+        return respond(reply, await executeConfirmItem(pool, ontologyUpdater, env.sessionSecret, scope, fingerprint));
       }
       if (scope.actionType === "meeting.dismiss_item") {
         const dismissInput = input ?? {};

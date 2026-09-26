@@ -1,0 +1,36 @@
+/*
+ * 成员首页的执行事项（照搬 clark `dri/home.module.css` 的 Task 区与 `dri.module.css` 的状态点）：一格一格的卡，
+ * 按截止排；卡上写状态、标题、来处（来自哪场会）、会上原话、截止，以及推进它的两颗小钮。
+ */
+
+.tasks { display: grid; gap: 12px; min-width: 0; }
+.taskToolbar { display: flex; align-items: center; justify-content: space-between; min-height: 30px; gap: 12px; color: var(--ts-text-muted, #6b7482); font-size: 12px; }
+.taskGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; min-width: 0; }
+.taskCard { display: flex; flex-direction: column; align-items: stretch; gap: 12px; min-width: 0; min-height: 160px; box-sizing: border-box; padding: 20px 22px; border: 0; border-radius: 26px; background: var(--ts-surface, #fff); box-shadow: none; }
+.taskCard h3 { min-width: 0; margin: 0; color: var(--ts-text, #1f2a3d); font-size: 17px; font-weight: 600; line-height: 1.6; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.taskTop { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 28px; font-size: 12px; }
+.due { color: var(--ts-text-muted, #6b7482); font-size: 12px; }
+.assignment { font-size: 12px; color: var(--ts-text-muted, #6b7482); }
+.quote { margin: 0; padding-left: 10px; border-left: 2px solid var(--ts-border, #e3e8ef); color: var(--ts-text-muted, #6b7482); font-size: 12.5px; line-height: 1.7; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.returned { margin: 0; color: #8a5a1f; font-size: 12.5px; line-height: 1.7; }
+.taskActions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.taskActions.taskActions > button { min-height: 30px; height: auto; padding: 5px 12px; border-radius: 9px; background: #e9edf3a8; color: #334d70; font-size: 13px; }
+.taskActions.taskActions > button[data-emphasis] { background: #e4eaf2; font-weight: 600; }
+.taskActions.taskActions > button:hover { background: #dfe6ef; }
+.empty { margin: 0; color: var(--ts-text-muted, #6b7482); font-size: 13px; line-height: 1.8; }
+.error { margin: 0; color: #a44d3e; font-size: 12.5px; }
+
+/* 四档状态：一个点加一句话，色弱也能辨认，因为文字一直在。未开始是空心的。 */
+.status { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--ts-text, #1f2a3d); }
+.statusDot { width: 9px; height: 9px; border-radius: 50%; background: var(--ts-text-muted, #6b7482); flex: none; }
+.status[data-status='done'] .statusDot { background: var(--ts-confirmed, #2f7a44); }
+.status[data-status='in_progress'] .statusDot { background: var(--ts-action, #3a83f7); }
+.status[data-status='returned'] .statusDot { background: var(--ts-judgment, #c9822b); }
+.status[data-status='not_started'] .statusDot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ts-text-muted, #6b7482); }
+
+@media (max-width: 1250px) { .taskGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 759px) {
+  .taskGrid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .taskCard { padding: 18px 20px; }
+  .taskActions.taskActions > button { min-height: 36px; }
+}

@@ -44,9 +44,8 @@ describe("responsive workspace CSS", () => {
     const source = css("./meeting-workspace.module.css");
     expect(source).not.toContain('.advisorShell>:global([data-testid="meeting-chat-sidebar"]){display:none}');
     expect(source).not.toContain(".priorityContent{display:none}");
-    // 会前结论栏不再可折叠（pen 无折叠态）；只有对话栏保留 --rail-stub 收起宽度。
+    // 会前结论栏不可折叠（pen 无折叠态）；会议页已不再内嵌对话栏，对话由工作面右列提供。
     expect(source.match(/width:var\(--rail-stub\);min-width:var\(--rail-stub\)/g)).toBeNull();
-    expect(source).toContain("--rail-stub:52px");
   });
 
   it("renders the issue workspace inside the shell panel with clark's header and reading column", () => {

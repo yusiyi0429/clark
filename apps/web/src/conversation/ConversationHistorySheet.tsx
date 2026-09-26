@@ -4,7 +4,8 @@ import { useEffect, useRef } from "react";
 import { ChevronDown } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { TianshuMark } from "@/components/TianshuMark";
-import { AttachmentStatus, SessionTools } from "./SessionTools";
+import { AttachButton, AttachmentStatus } from "./ConversationAttachments";
+import x from "@/styles/conversation-attachments.module.css";
 import { ConversationNotice, ConversationThinking, ConversationTurns } from "./Transcript";
 import type { ConversationData } from "./useConversation";
 import w from "@/styles/app-shell.module.css";
@@ -37,7 +38,7 @@ export function ConversationHistorySheet({ data, label, global, onClose }: { dat
           </div>
         </div>
         <div className={w.historyHeaderActions}>
-          <SessionTools data={data} />
+          <AttachButton data={data} className={x.toolButton} />
           <HeroButton variant="ghost" size="sm" isIconOnly onPress={onClose} aria-label="收起对话记录">
             <ChevronDown size={24} />
           </HeroButton>

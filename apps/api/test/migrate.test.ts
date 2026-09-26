@@ -27,6 +27,12 @@ describe("migration", () => {
       expect(names).toContain("battlefield_config");
       expect(names).toContain("capability_config");
       expect(names).toContain("missions");
+      expect(names).toContain("meeting_recordings");
+      expect(names).toContain("tasks");
+      expect(names).toContain("task_members");
+      expect(names).toContain("notifications");
+      expect(names).toContain("ontology_update_requests");
+      expect(names).toContain("person_voiceprints");
 
       const applied = await db.query<{ id: number; filename: string }>(
         "SELECT id, filename FROM schema_migrations ORDER BY id",
@@ -55,6 +61,12 @@ describe("migration", () => {
         "021_mission_entity.sql",
         "022_mission_period_check.sql",
         "023_member_access.sql",
+        "024_conversation_owner_and_threads.sql",
+        "025_meeting_end_time.sql",
+        "026_tasks_and_notifications.sql",
+        "027_meeting_recordings.sql",
+        "028_merge_conversation_sessions.sql",
+        "029_voiceprints.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -62,7 +74,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(23);
+      expect(Number(again.rows[0].count)).toBe(29);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(
@@ -110,6 +122,116 @@ describe("migration", () => {
       const capability = await db.query<{ support_refs: unknown }>("SELECT support_refs FROM capability_config WHERE id = 'legacy-capability'");
       // 顺序保持，未受影响的 ref 原样留下
       expect(capability.rows[0].support_refs).toEqual([{ type: "mission-anchor", missionCode: "07-1" }, { type: "all-battlefields" }]);
+    });
+  });
+
+  /** 025 给已有 Meeting 回填计划结束时间：开始后 60 分钟，未标记开完。 */
+  it("backfills meeting ends_at as scheduled_at + 60 minutes and enforces ends_at > scheduled_at", async () => {
+    await createTestDb(async ({ db }: TestDb) => {
+      const files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith(".sql") && Number(f.split("_")[0]) <= 24).sort();
+      await db.query("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+      for (const file of files) {
+        await db.query(await readFile(join(MIGRATIONS_DIR, file), "utf8"));
+        await db.query("INSERT INTO schema_migrations (id, filename) VALUES ($1, $2)", [Number(file.split("_")[0]), file]);
+      }
+      await db.query(
+        `INSERT INTO meetings (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id, participants, issue_ids, preflight, draft, origin_ref)
+         VALUES ('00000000-0000-4000-8000-000000000025', 1, '旧会议', 'held', '2026-06-01T02:00:00Z', 'dri', 'ceo', '[]', '[]', '{}', '{}', '{}')`,
+      );
+
+      await migrate(db);
+
+      const row = await db.query<{ ends_at: Date; ended_at: Date | null }>("SELECT ends_at, ended_at FROM meetings");
+      expect(row.rows[0].ends_at.toISOString()).toBe("2026-06-01T03:00:00.000Z");
+      expect(row.rows[0].ended_at).toBeNull();
+      await expect(db.query("UPDATE meetings SET ends_at = scheduled_at")).rejects.toThrow(/meetings_ends_after_start/);
+    });
+  });
+
+  /** 028 去掉会话：同一个人 × 页面的其余会话并进最早那条，消息按时间交错、序号重排；主对话 Pi 运行态不动。 */
+  it("merges extra conversation sessions per owner × scope into the earliest one", async () => {
+    await createTestDb(async ({ db }: TestDb) => {
+      const files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith(".sql") && Number(f.split("_")[0]) <= 27).sort();
+      await db.query("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+      for (const file of files) {
+        await db.query(await readFile(join(MIGRATIONS_DIR, file), "utf8"));
+        await db.query("INSERT INTO schema_migrations (id, filename) VALUES ($1, $2)", [Number(file.split("_")[0]), file]);
+      }
+      const id = (suffix: string) => `00000000-0000-4000-8000-0000000000${suffix}`;
+      const conversation = (suffix: string, owner: string | null, scope: string, createdAt: string, deletedAt: string | null = null) => db.query(
+        `INSERT INTO conversations (id, owner_id, scope, pi_session_id, runtime_entries, created_at, deleted_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
+        [id(suffix), owner, scope, `10000000-0000-4000-8000-0000000000${suffix}`, JSON.stringify([{ entry: suffix }]), createdAt, deletedAt],
+      );
+      const message = (suffix: string, sequence: number, role: "user" | "assistant", content: string, createdAt: string, attachments: unknown[] = []) => db.query(
+        `INSERT INTO conversation_messages (conversation_id, sequence, role, content, attachments, run_id, created_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
+        [id(suffix), sequence, role, content, JSON.stringify(attachments), `20000000-0000-4000-8000-0000000000${suffix}`, createdAt],
+      );
+      // person-a 首页：更早的 f 已删除不参与；a 是主对话，b 的消息与 a 交错
+      await conversation("0f", "person-a", "global", "2026-08-01T00:00:00Z", "2026-08-15T00:00:00Z");
+      await conversation("0a", "person-a", "global", "2026-09-01T00:00:00Z");
+      await conversation("0b", "person-a", "global", "2026-09-02T00:00:00Z");
+      await message("0a", 1, "user", "A1", "2026-09-01T10:00:00Z");
+      await message("0a", 2, "assistant", "A2", "2026-09-01T10:01:00Z");
+      await message("0a", 3, "user", "A3", "2026-09-03T10:00:00Z");
+      await message("0a", 4, "assistant", "A4", "2026-09-03T10:01:00Z");
+      await message("0b", 1, "user", "B1", "2026-09-02T10:00:00Z", [{ id: "att-1", fileName: "brief.md" }]);
+      await message("0b", 2, "assistant", "B2", "2026-09-02T10:01:00Z");
+      await message("0b", 3, "user", "B3", "2026-09-04T10:00:00Z");
+      // person-b 同一页面只有一条：不动
+      await conversation("0c", "person-b", "global", "2026-09-01T00:00:00Z");
+      await message("0c", 1, "user", "C1", "2026-09-01T10:30:00Z");
+      // owner 还没回填的旧对话自成一组，一起合并
+      await conversation("0d", null, "issue:legacy", "2026-09-01T00:00:00Z");
+      await conversation("0e", null, "issue:legacy", "2026-09-05T00:00:00Z");
+      await message("0d", 1, "user", "D1", "2026-09-05T09:00:00Z");
+      await message("0e", 1, "user", "E1", "2026-09-05T08:00:00Z");
+      await message("0e", 2, "assistant", "E2", "2026-09-05T08:01:00Z");
+
+      await migrate(db);
+
+      const messages = async (suffix: string) => (await db.query<{ sequence: number; role: string; content: string }>(
+        "SELECT sequence, role, content FROM conversation_messages WHERE conversation_id = $1 ORDER BY sequence",
+        [id(suffix)],
+      )).rows.map((row) => [row.sequence, row.role, row.content]);
+      expect(await messages("0a")).toEqual([
+        [1, "user", "A1"],
+        [2, "assistant", "A2"],
+        [3, "user", "B1"],
+        [4, "assistant", "B2"],
+        [5, "user", "A3"],
+        [6, "assistant", "A4"],
+        [7, "user", "B3"],
+      ]);
+      expect(await messages("0b")).toEqual([]);
+      expect(await messages("0c")).toEqual([[1, "user", "C1"]]);
+      expect(await messages("0d")).toEqual([[1, "user", "E1"], [2, "assistant", "E2"], [3, "user", "D1"]]);
+      expect(await messages("0e")).toEqual([]);
+      // 并入的消息保留附件元数据与 run_id
+      const moved = await db.query("SELECT attachments, run_id FROM conversation_messages WHERE conversation_id = $1 AND content = 'B1'", [id("0a")]);
+      expect(moved.rows[0]).toEqual({ attachments: [{ id: "att-1", fileName: "brief.md" }], run_id: "20000000-0000-4000-8000-00000000000b" });
+
+      const conversations = await db.query<{ id: string; pi_session_id: string; runtime_entries: unknown; deleted: boolean }>(
+        "SELECT id, pi_session_id, runtime_entries, deleted_at IS NOT NULL AS deleted FROM conversations ORDER BY id",
+      );
+      expect(conversations.rows).toEqual([
+        { id: id("0a"), pi_session_id: "10000000-0000-4000-8000-00000000000a", runtime_entries: [{ entry: "0a" }], deleted: false },
+        { id: id("0b"), pi_session_id: "10000000-0000-4000-8000-00000000000b", runtime_entries: [{ entry: "0b" }], deleted: true },
+        { id: id("0c"), pi_session_id: "10000000-0000-4000-8000-00000000000c", runtime_entries: [{ entry: "0c" }], deleted: false },
+        { id: id("0d"), pi_session_id: "10000000-0000-4000-8000-00000000000d", runtime_entries: [{ entry: "0d" }], deleted: false },
+        { id: id("0e"), pi_session_id: "10000000-0000-4000-8000-00000000000e", runtime_entries: [{ entry: "0e" }], deleted: true },
+        { id: id("0f"), pi_session_id: "10000000-0000-4000-8000-00000000000f", runtime_entries: [{ entry: "0f" }], deleted: true },
+      ]);
+      const earlierDeleted = await db.query<{ deleted_at: Date }>("SELECT deleted_at FROM conversations WHERE id = $1", [id("0f")]);
+      expect(earlierDeleted.rows[0].deleted_at.toISOString()).toBe("2026-08-15T00:00:00.000Z");
+
+      // 每组已只剩一条：再跑一次什么都不变
+      await db.query(await readFile(join(MIGRATIONS_DIR, "028_merge_conversation_sessions.sql"), "utf8"));
+      expect(await messages("0a")).toHaveLength(7);
+      expect(await messages("0d")).toHaveLength(3);
+      const live = await db.query("SELECT id FROM conversations WHERE deleted_at IS NULL ORDER BY id");
+      expect(live.rows.map((row) => row.id)).toEqual([id("0a"), id("0c"), id("0d")]);
     });
   });
 });

@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, extname, join } from "node:path";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 export const MAX_MATERIAL_FILE_BYTES = 20 * 1024 * 1024;
 export const MAX_MATERIAL_BATCH_BYTES = 100 * 1024 * 1024;
@@ -45,7 +46,7 @@ function kindFor(name: string, mime: string): ParsedMaterial["mimeType"] {
 
 function runWorker(path: string, kind: ParsedMaterial["mimeType"]): Promise<{ text: string; pageCount?: number }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--max-old-space-size=256", new URL("./materialParserWorker.mjs", import.meta.url).pathname, path, kind], {
+    const child = spawn(process.execPath, ["--max-old-space-size=256", fileURLToPath(new URL("./materialParserWorker.mjs", import.meta.url)), path, kind], {
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
     });

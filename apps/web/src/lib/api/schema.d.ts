@@ -379,25 +379,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/conversations/{scope}/sessions": {
+    "/api/conversations/{scope}/attachments": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 列出 scope 内未删除的 Conversation 会话 */
-        get: operations["listConversationSessions"];
+        get?: never;
         put?: never;
-        /** 在 scope 内新建 Conversation 会话 */
-        post: operations["createConversationSession"];
+        /** 上传附件到本人在该 scope 的主对话（没有则创建；multipart files，PDF/DOCX/Markdown）；元数据随消息发送时内嵌入库 */
+        post: operations["uploadConversationAttachments"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/conversations/{scope}/sessions/{sessionId}": {
+    "/api/threads/{objectType}/{objectId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 打开对象群组：成员、最近消息、读到哪里与未读数；非成员 404 */
+        get: operations["getThread"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/threads/{objectType}/{objectId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取 after 之后的新消息（轮询用，一次最多 200 条）；非成员 404 */
+        get: operations["listThreadMessages"];
+        put?: never;
+        /** 在群组里发一条纯文字消息（可附带引用片段）；非成员 404 */
+        post: operations["postThreadMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/threads/{objectType}/{objectId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 记下读到哪条（只增不减，不超过群里最后一条）；非成员 404 */
+        post: operations["markThreadRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 成员工作台：我负责的执行事项（全部状态，新到旧） */
+        get: operations["getMyHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -407,32 +475,14 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** 删除会话（含消息与附件原件）；运行中拒绝 */
-        delete: operations["deleteConversationSession"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{scope}/sessions/{sessionId}/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 读取指定会话的原始 Conversation 消息 */
-        get: operations["getConversationSessionMessages"];
-        put?: never;
-        /** 在指定会话发送消息并通过 SSE 返回 Pi 运行事件 */
-        post: operations["sendConversationSessionMessage"];
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** 负责人改执行事项状态；不是负责人 404 TASK_NOT_FOUND，version 不一致 409 带 latestTask */
+        patch: operations["patchMyTask"];
         trace?: never;
     };
-    "/api/conversations/{scope}/sessions/{sessionId}/attachments": {
+    "/api/me/tasks/{id}/return": {
         parameters: {
             query?: never;
             header?: never;
@@ -441,9 +491,62 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 上传会话附件（multipart files，PDF/DOCX/Markdown）；元数据随消息发送时内嵌入库 */
-        post: operations["uploadConversationAttachments"];
+        /** 负责人写原因退回执行事项，并通知会议主持人（主持人退回自己的不通知） */
+        post: operations["returnMyTask"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我的通知：未读在前，最近 50 条，文案按对象当前状态组合 */
+        get: operations["listMyNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 把我的这些通知标为已读；别人的 id 忽略 */
+        post: operations["markMyNotificationsSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/voiceprint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人声纹状态：录没录、什么时候录的、服务器是否配好腾讯云声纹 */
+        get: operations["getMyVoiceprint"];
+        put?: never;
+        /** 本人录入或重录声纹（multipart：audio 单个音频文件约 20–40 秒 + consent=true）；只用于会后预填说话人，不自动确认 */
+        post: operations["enrollMyVoiceprint"];
+        /** 本人删除声纹：腾讯云与库里一起删；没有声纹时同样 204 */
+        delete: operations["deleteMyVoiceprint"];
         options?: never;
         head?: never;
         patch?: never;
@@ -896,6 +999,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{id}/recordings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** CEO 开始会议录音（scheduled only）；已有在途录音时返回那一份 */
+        post: operations["startMeetingRecording"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/recordings/{recordingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** CEO 查询录音与识别进度 */
+        get: operations["getMeetingRecording"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/recordings/{recordingId}/chunks/{seq}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** CEO 上传一片录音（原始字节，seq 从 0 起按录制顺序）；同一 seq 重传幂等，单片上限 20 MiB */
+        put: operations["putMeetingRecordingChunk"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/recordings/{recordingId}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** CEO 结束录音并在后台转码、上传、识别，完成后写成会议记录候选（source.format = volc_asr）；重复调用返回当前状态 */
+        post: operations["finishMeetingRecording"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -1030,6 +1201,23 @@ export interface components {
                     itemId?: string;
                 }[];
             };
+            latestTask?: {
+                id: string;
+                version: number;
+                title: string;
+                status: "not_started" | "in_progress" | "done" | "returned";
+                dueDate: string | null;
+                returnReason: string | null;
+                origin: {
+                    /** @constant */
+                    type: "meeting";
+                    meetingId: string;
+                    meetingTitle: string;
+                    quote: string | null;
+                } | null;
+                createdAt: string;
+                updatedAt: string;
+            };
         };
         LoginRequest: {
             loginId: string;
@@ -1050,6 +1238,7 @@ export interface components {
             personId?: string;
             displayName?: string;
             role?: "ceo" | "member";
+            loginId?: string;
         };
         PeopleDirectoryResponse: {
             people: {
@@ -1169,37 +1358,6 @@ export interface components {
             /** @constant */
             type: "done";
             status: "completed" | "aborted";
-        };
-        ConversationSessionSummary: {
-            /** @description scope 内的 Conversation 会话 id */
-            id: string;
-            /** @description global 或稳定对象 scope */
-            scope: string;
-            title: string | null;
-            isDefault: boolean;
-            messageCount: number;
-            lastMessageAt: string | null;
-            /** Format: date-time */
-            createdAt: string;
-        };
-        ConversationSessionList: {
-            /** @description global 或稳定对象 scope */
-            scope: string;
-            sessions: {
-                /** @description scope 内的 Conversation 会话 id */
-                id: string;
-                /** @description global 或稳定对象 scope */
-                scope: string;
-                title: string | null;
-                isDefault: boolean;
-                messageCount: number;
-                lastMessageAt: string | null;
-                /** Format: date-time */
-                createdAt: string;
-            }[];
-        };
-        CreateConversationSessionRequest: {
-            title?: string;
         };
         CreateBattlefieldRequest: {
             code: string;
@@ -1399,6 +1557,7 @@ export interface components {
         CreateConfigMeetingRequest: {
             title: string;
             scheduledAt: string;
+            endsAt?: string;
             leadDriId: string;
             issueIds?: string[];
         };
@@ -1467,6 +1626,11 @@ export interface components {
                 search: boolean;
                 wechat: boolean;
                 outlets: boolean;
+                recording: {
+                    tos: boolean;
+                    asr: boolean;
+                };
+                voiceprint: boolean;
             };
         };
         RadarScanResponse: {
@@ -1563,6 +1727,7 @@ export interface components {
             externalId: string;
             title: string;
             scheduledAt: string;
+            endsAt?: string;
             leadDriId: string;
             ceoParticipantId: string;
             participants: string[];
@@ -1571,6 +1736,7 @@ export interface components {
         CreateMeetingRequest: {
             title: string;
             scheduledAt: string;
+            endsAt?: string;
             leadDriId: string;
             ceoParticipantId: string;
             participants: string[];
@@ -1591,6 +1757,7 @@ export interface components {
         EditMeetingDetailsRequest: {
             title?: string;
             scheduledAt?: string;
+            endsAt?: string;
             leadDriId?: string;
         };
         RequestSupplementRequest: {
@@ -1841,7 +2008,7 @@ export interface components {
             }[];
             importedAt: string;
             source?: {
-                format: "miaoji_markdown" | "warmap_json";
+                format: "miaoji_markdown" | "warmap_json" | "volc_asr";
                 fileName: string;
                 sizeBytes: number;
                 sha256: string;
@@ -1852,7 +2019,7 @@ export interface components {
         PostMeetingCandidate: {
             summary: string;
             items: {
-                kind: "decision" | "todo" | "ceoJudgment" | "reopenWhen" | "open";
+                kind: "decision" | "todo" | "ceoJudgment" | "reopenWhen" | "open" | "strategic";
                 text: string;
                 turnId: string;
                 quote: string;
@@ -1860,6 +2027,9 @@ export interface components {
                 issueId?: string;
                 judgmentKind?: "company_direction" | "resource_allocation" | "external_commitment" | "major_risk" | "mission_boundary";
                 parentIndex?: number;
+                title?: string;
+                brief?: string;
+                dueDate?: string;
             }[];
         };
         MeetingOutcomeState: {
@@ -1876,7 +2046,7 @@ export interface components {
             summary: string;
             items: {
                 id: string;
-                kind: "decision" | "todo" | "ceoJudgment" | "reopenWhen" | "open";
+                kind: "decision" | "todo" | "ceoJudgment" | "reopenWhen" | "open" | "strategic";
                 text: string;
                 turnId: string;
                 quote: string;
@@ -1896,6 +2066,9 @@ export interface components {
                     anchorId?: string | null;
                     reason?: string | null;
                 } | null;
+                title?: string;
+                brief?: string;
+                dueDate?: string;
             }[];
             warnings: {
                 candidate: unknown;
@@ -1924,6 +2097,140 @@ export interface components {
         };
         MeetingRevokeEffectInput: {
             reason?: string;
+        };
+        ThreadView: {
+            members: {
+                personId: string;
+                displayName: string;
+                title: string | null;
+            }[];
+            messages: {
+                id: number;
+                kind: "member" | "co-agent";
+                authorId: string | null;
+                authorName: string | null;
+                content: string;
+                quote: {
+                    text: string;
+                } | null;
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+            lastReadId: number;
+            unread: number;
+        };
+        ThreadMessage: {
+            id: number;
+            kind: "member" | "co-agent";
+            authorId: string | null;
+            authorName: string | null;
+            content: string;
+            quote: {
+                text: string;
+            } | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ThreadMessageList: {
+            messages: {
+                id: number;
+                kind: "member" | "co-agent";
+                authorId: string | null;
+                authorName: string | null;
+                content: string;
+                quote: {
+                    text: string;
+                } | null;
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+        };
+        PostThreadMessageRequest: {
+            content: string;
+            quote?: {
+                text: string;
+            };
+        };
+        MarkThreadReadRequest: {
+            lastReadId: number;
+        };
+        MarkThreadReadResponse: {
+            lastReadId: number;
+            unread: number;
+        };
+        TaskView: {
+            id: string;
+            version: number;
+            title: string;
+            status: "not_started" | "in_progress" | "done" | "returned";
+            dueDate: string | null;
+            returnReason: string | null;
+            origin: {
+                /** @constant */
+                type: "meeting";
+                meetingId: string;
+                meetingTitle: string;
+                quote: string | null;
+            } | null;
+            createdAt: string;
+            updatedAt: string;
+        };
+        MeHomeResponse: {
+            myTasks: {
+                id: string;
+                version: number;
+                title: string;
+                status: "not_started" | "in_progress" | "done" | "returned";
+                dueDate: string | null;
+                returnReason: string | null;
+                origin: {
+                    /** @constant */
+                    type: "meeting";
+                    meetingId: string;
+                    meetingTitle: string;
+                    quote: string | null;
+                } | null;
+                createdAt: string;
+                updatedAt: string;
+            }[];
+        };
+        PatchMyTaskRequest: {
+            version: number;
+            status: "not_started" | "in_progress" | "done";
+        };
+        ReturnMyTaskRequest: {
+            version: number;
+            reason: string;
+        };
+        NotificationList: {
+            notifications: {
+                id: string;
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected";
+                text: string;
+                objectType: "task" | "meeting";
+                objectId: string;
+                createdAt: string;
+                readAt: string | null;
+            }[];
+        };
+        MarkNotificationsSeenRequest: {
+            notificationIds: string[];
+        };
+        MeetingRecording: {
+            id: string;
+            status: "recording" | "uploading" | "transcoding" | "transcribing" | "done" | "failed";
+            chunkCount: number;
+            error: string | null;
+            createdAt: string;
+            finishedAt: string | null;
+        };
+        StartMeetingRecordingResponse: {
+            recordingId: string;
+        };
+        VoiceprintStatus: {
+            enrolled: boolean;
+            updatedAt: string | null;
+            configured: boolean;
         };
     };
     responses: never;
@@ -2806,240 +3113,12 @@ export interface operations {
             };
         };
     };
-    listConversationSessions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 会话列表（最早未删除者为默认会话） */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationSessionList"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    createConversationSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateConversationSessionRequest"];
-            };
-        };
-        responses: {
-            /** @description 新建的会话摘要 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationSessionSummary"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    deleteConversationSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-                sessionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 已删除 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    getConversationSessionMessages: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-                sessionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 会话消息历史 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationHistory"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    sendConversationSessionMessage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-                sessionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConversationMessageRequest"];
-            };
-        };
-        responses: {
-            /** @description SSE 事件流 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": components["schemas"]["ConversationSseEvent"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
     uploadConversationAttachments: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 scope: string;
-                sessionId: string;
             };
             cookie?: never;
         };
@@ -3089,6 +3168,613 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "signal" | "task" | "meeting";
+                objectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 群组视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listThreadMessages: {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: never;
+            path: {
+                objectType: "issue" | "signal" | "task" | "meeting";
+                objectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 新消息 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadMessageList"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    postThreadMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "signal" | "task" | "meeting";
+                objectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostThreadMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description 已发出的消息 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadMessage"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    markThreadRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "signal" | "task" | "meeting";
+                objectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkThreadReadRequest"];
+            };
+        };
+        responses: {
+            /** @description 读到的位置与剩余未读 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkThreadReadResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyHome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 我的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeHomeResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    patchMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchMyTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    returnMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnMyTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 已退回的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMyNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 通知列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationList"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    markMyNotificationsSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkNotificationsSeenRequest"];
+            };
+        };
+        responses: {
+            /** @description 已标记 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyVoiceprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 声纹状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceprintStatus"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    enrollMyVoiceprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    audio: string;
+                    /** @enum {string} */
+                    consent: "true";
+                };
+            };
+        };
+        responses: {
+            /** @description 录入后的声纹状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceprintStatus"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deleteMyVoiceprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3576,6 +4262,7 @@ export interface operations {
                 "multipart/form-data": {
                     title: string;
                     scheduledAt: string;
+                    endsAt?: string;
                     leadDriId: string;
                     issueIds?: string;
                     files?: string[];
@@ -4737,6 +5424,265 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    startMeetingRecording: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已有在途录音（任一非 done/failed 状态），返回它 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartMeetingRecordingResponse"];
+                };
+            };
+            /** @description 新建的录音 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartMeetingRecordingResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMeetingRecording: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                recordingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 录音当前状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingRecording"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    putMeetingRecordingChunk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                recordingId: string;
+                seq: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "audio/webm": string;
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description 收下后的录音状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingRecording"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    finishMeetingRecording: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                recordingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已交给后台流水线 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingRecording"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

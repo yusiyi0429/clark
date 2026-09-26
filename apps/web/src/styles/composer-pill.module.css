@@ -1,0 +1,279 @@
+/*
+ * 二级页输入条（conversation/ComposerPill.tsx），照搬 clark `conversation/composer-pill.module.css` 的两行形态：
+ *
+ *   上面文字（14/20，左右各让 16），下面操作区：左开关、右钮。上下内边距 14 / 8、左右 8，两行之间 10，圆角 20
+ *   开关   轨道圆角 18、内边距 2；每颗高 32、左右 12、圆角 16，图标 + 名字；当前那颗实心频道色、白字
+ *   右端钮 36px 圆；麦克风 / 发送 / 停止 三个图标交叉淡入（150ms）
+ *
+ * 颜色读 conversation-column.module.css 顶部那组 --pill-*，按 data-tone 换成当前频道那一套：换频道时底色渐变 200ms。
+ */
+
+.pill {
+  --tone-bg: var(--pill-bg-agent, #ffffff);
+  --tone-line: var(--pill-line-agent, #dfe5ee);
+  --tone-track: var(--pill-track-agent, #f1f5fb);
+  --tone-current: var(--pill-current-agent, #eaf2ff);
+  --tone-current-ink: var(--pill-current-ink-agent, #2f6fd6);
+  --tone-selected: var(--pill-selected-agent, #2f6fd6);
+  --tone-mic: var(--pill-mic-agent, #f1f4f8);
+  --tone-send: var(--pill-send-agent, #3a83f7);
+  --tone-ink: #282c32;
+  --tone-muted: #7b8290;
+  --tone-placeholder: #9197a0;
+
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'field field field' 'leading . action';
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 14px 8px 8px;
+  border: 1px solid var(--tone-line);
+  border-radius: 20px;
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+  box-shadow: 0 4px 18px rgb(29 29 31 / 7%), inset 0 1px rgb(255 255 255 / 70%);
+  pointer-events: auto;
+  transition: background-color 200ms ease, border-color 200ms ease;
+}
+
+.pill[data-tone='group'] {
+  --tone-bg: var(--pill-bg-group, #f8f4ec);
+  --tone-line: var(--pill-line-group, #e6dccb);
+  --tone-track: var(--pill-track-group, #f3ede2);
+  --tone-current: var(--pill-current-group, #ede5d8);
+  --tone-current-ink: var(--pill-current-ink-group, #756045);
+  --tone-selected: var(--pill-selected-group, #8a6d48);
+  --tone-mic: var(--pill-mic-group, #efe7d8);
+  --tone-send: var(--pill-send-group, #8c7451);
+  --tone-ink: #4f4334;
+  --tone-muted: #8a7458;
+  --tone-placeholder: #9a8a73;
+  box-shadow: 0 4px 18px rgb(69 66 61 / 8%), inset 0 1px rgb(255 255 255 / 60%);
+}
+
+.pill[data-references] { grid-template-areas: 'references references references' 'field field field' 'leading . action'; }
+
+.references { grid-area: references; display: flex; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.references::-webkit-scrollbar { display: none; }
+.leading { grid-area: leading; display: flex; align-items: center; min-width: 0; }
+.field { grid-area: field; position: relative; display: flex; align-items: center; min-width: 0; padding: 0 8px; }
+.action { grid-area: action; display: flex; align-items: center; gap: 4px; }
+
+/* ── 文字框 ─────────────────────────────────────────────────────────── */
+
+.field textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  max-height: 160px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: var(--tone-ink);
+  caret-color: var(--tone-current-ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  resize: none;
+  overflow-y: auto;
+  scrollbar-width: none;
+  box-shadow: none;
+}
+
+.field textarea::-webkit-scrollbar { display: none; }
+.field textarea::placeholder { color: var(--tone-placeholder); }
+/* 空着的时候占位字只占一行（放不下就截掉），不在一行高的框里折出看不见的第二行。 */
+.field textarea:placeholder-shown { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.field textarea:focus, .field textarea:focus-visible { outline: none; box-shadow: none; }
+.field textarea:disabled { cursor: not-allowed; }
+
+/* ── 频道开关（底行左边） ───────────────────────────────────── */
+
+.switch.switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--tone-track);
+  box-shadow: none;
+  transition: background-color 200ms ease;
+}
+
+.segment.segment {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  min-width: 0;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--tone-muted);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+.segment.segment > svg { flex: none; }
+.segment.segment:hover { background: color-mix(in srgb, var(--tone-selected) 9%, transparent); color: var(--tone-ink); }
+/* 当前那颗：实心的频道色、白字，微微浮起一点 —— 轨道是浅的，选中的那颗一眼就跳出来。 */
+.segment.segment[data-selected='true'] {
+  background: var(--tone-selected);
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgb(20 30 50 / 16%), inset 0 1px 0 rgb(255 255 255 / 16%);
+}
+
+/* 天枢的标志跟着钮的字色走（单色）：没选中是灰的，选中是白的。 */
+.mark { flex: none; width: 16px; height: 16px; --brand-deep: currentColor; --brand-bright: currentColor; }
+.segment.segment:focus-visible { outline: 2px solid var(--tone-send); outline-offset: 1px; }
+
+/* 名字一直在；地方实在不够时截掉尾巴，不把右端钮挤走。 */
+.name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* 另一颗右上角挂那个频道的未读数：16px 高的小胶囊，白描边。 */
+.badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--pill-badge-agent, #3a83f7);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--tone-bg);
+}
+
+.badge[data-kind='group'] { background: var(--pill-badge-group, #a08556); }
+
+/* 右列 300 的平板竖屏（输入条 274 宽）：开关收紧一点，两个名字照样都在。 */
+@container (max-width: 299px) {
+  .segment.segment { gap: 4px; padding: 0 10px; }
+}
+
+/* ── 右端那颗钮：麦克风 / 发送 / 停止 ────────────────────────────────── */
+
+.actionSlot { display: inline-flex; }
+
+.actionButton.actionButton {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--tone-mic);
+  color: var(--tone-muted);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease, box-shadow 200ms ease, transform 120ms ease;
+}
+
+.actionButton.actionButton[data-state='send'],
+.actionButton.actionButton[data-state='stop'] { background: var(--tone-send); color: #ffffff; }
+.actionButton.actionButton:disabled,
+.actionButton.actionButton[data-disabled='true'] { cursor: default; opacity: 1; }
+.actionButton.actionButton[data-state='mic']:disabled,
+.actionButton.actionButton[data-state='mic'][data-disabled='true'] { color: color-mix(in srgb, var(--tone-muted) 55%, transparent); pointer-events: none; }
+.actionButton.actionButton:not(:disabled):active { transform: scale(0.94); }
+.actionButton.actionButton:focus-visible { outline: 2px solid var(--tone-send); outline-offset: 2px; }
+
+.icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.actionButton[data-state='mic'] .icon[data-icon='mic'],
+.actionButton[data-state='send'] .icon[data-icon='send'],
+.actionButton[data-state='stop'] .icon[data-icon='stop'] { opacity: 1; transform: none; }
+
+/* ── 附件条（在输入条最上面那一行） ─────────────────────────────────────── */
+
+.reference {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 3px 4px 3px 9px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--tone-line) 80%, var(--tone-current-ink) 20%);
+  border-radius: 10px;
+  background: var(--tone-current);
+  color: var(--tone-current-ink);
+  font-size: 11.5px;
+}
+
+.reference > svg { flex: none; }
+.reference > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reference > button { width: 24px; min-width: 24px; height: 24px; min-height: 24px; padding: 0; border-radius: 8px; }
+
+/* 底行右边、发送钮左边的附件键（天枢独有）：和首页那颗历史键同一个样子。 */
+.tool {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tone-muted);
+  cursor: pointer;
+}
+
+.tool:hover { background: rgb(29 29 31 / 5%); color: var(--tone-ink); }
+.tool:disabled { opacity: 0.45; cursor: default; }
+.tool:focus-visible { outline: 2px solid var(--tone-send); outline-offset: 2px; }
+
+@media (max-width: 690px) {
+  .field textarea { font-size: 16px; }
+  .field textarea::placeholder { font-size: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill, .switch.switch, .segment.segment, .actionButton.actionButton, .icon { transition: none; }
+}
+
+@media (prefers-contrast: more) {
+  .pill { border-color: #8e8e93; }
+  .pill[data-tone='group'] { border-color: #8b7351; }
+}

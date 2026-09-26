@@ -26,6 +26,7 @@ import {
   CreateMissionRequest,
   MissionEditInput,
   MissionManagementResponse,
+  MarkThreadReadRequest,
   MonthlyDraftCandidate,
   MonthlyPlanCardPayload,
   MonthlyPlanExport,
@@ -35,6 +36,7 @@ import {
   PatchCapabilityRequest,
   PatchStrategyConfigRequest,
   PostMeetingCandidate,
+  PostThreadMessageRequest,
   PreflightCandidate,
   ReplaceTranscriptRequest,
   StoredTranscript,
@@ -88,6 +90,16 @@ describe("openapi contract", () => {
         "/api/signals/{id}/state",
         "/api/actions/execute",
         "/api/conversations/{scope}/messages",
+        "/api/conversations/{scope}/attachments",
+        "/api/threads/{objectType}/{objectId}",
+        "/api/threads/{objectType}/{objectId}/messages",
+        "/api/threads/{objectType}/{objectId}/read",
+        "/api/me/home",
+        "/api/me/tasks/{id}",
+        "/api/me/tasks/{id}/return",
+        "/api/me/notifications",
+        "/api/me/seen",
+        "/api/me/voiceprint",
         "/healthz",
       ]),
     );
@@ -196,6 +208,18 @@ describe("conversation public contract", () => {
       results: [{ title: "公告", url: "https://example.com", excerpt: "内容", provider: "fake" }],
       warnings: [],
     })).toBe(true);
+  });
+});
+
+describe("thread public contract", () => {
+  it("accepts plain-text messages with an optional quoted excerpt only", () => {
+    expect(Value.Check(PostThreadMessageRequest, { content: "请看渠道数据" })).toBe(true);
+    expect(Value.Check(PostThreadMessageRequest, { content: "请看", quote: { text: "东南亚渠道预算追加 15%" } })).toBe(true);
+    expect(Value.Check(PostThreadMessageRequest, { content: "" })).toBe(false);
+    expect(Value.Check(PostThreadMessageRequest, { content: "字".repeat(4001) })).toBe(false);
+    expect(Value.Check(PostThreadMessageRequest, { content: "伪造", kind: "co-agent" })).toBe(false);
+    expect(Value.Check(MarkThreadReadRequest, { lastReadId: 0 })).toBe(true);
+    expect(Value.Check(MarkThreadReadRequest, { lastReadId: -1 })).toBe(false);
   });
 });
 
@@ -342,6 +366,8 @@ describe("meeting public contract", () => {
       issueIds: ["00000000-0000-4000-8000-000000000001"],
     };
     expect(Value.Check(CreateMeetingRequest, create)).toBe(true);
+    // 结束时间可选：缺省由服务端按开始后 60 分钟补齐
+    expect(Value.Check(CreateMeetingRequest, { ...create, endsAt: "2026-06-01T11:30:00.000+08:00" })).toBe(true);
     expect(Value.Check(CreateMeetingRequest, { ...create, participants: [] })).toBe(false);
     expect(Value.Check(CreateMeetingRequest, { ...create, issueIds: [] })).toBe(false);
     expect(Value.Check(UpdateMeetingDraftRequest, { checkedEntryIds: ["entry-1"], editsByEntryId: { "entry-1": "改" } })).toBe(true);
@@ -354,6 +380,8 @@ describe("meeting public contract", () => {
     const payload = {
       status: "scheduled",
       scheduledAt: "2026-06-01T02:00:00.000Z",
+      endsAt: "2026-06-01T03:00:00.000Z",
+      endedAt: null,
       leadDriId: "person-002",
       ceoParticipantId: "person-001",
       participants: [{ personId: "person-001", displayName: "CEO", roles: ["ceo"], sourceRef: "seed#person-001", updatedAt: "2026-05-01T00:00:00.000Z" }],
@@ -365,8 +393,17 @@ describe("meeting public contract", () => {
       transcript: null,
       transcriptCandidate: null,
       outcome: null,
+      recording: null,
     };
     expect(Value.Check(MeetingCardPayload, payload)).toBe(true);
+    // 「这场会开完了」只记 endedAt，status 仍是 scheduled
+    expect(Value.Check(MeetingCardPayload, { ...payload, endedAt: "2026-06-01T02:55:00.000Z" })).toBe(true);
+    // 最近一次录音只带 id/status/error；状态只认六档
+    expect(Value.Check(MeetingCardPayload, { ...payload, recording: { id: "r-1", status: "transcribing", error: null } })).toBe(true);
+    expect(Value.Check(MeetingCardPayload, { ...payload, recording: { id: "r-1", status: "failed", error: "对象存储还没配全" } })).toBe(true);
+    expect(Value.Check(MeetingCardPayload, { ...payload, recording: { id: "r-1", status: "queued", error: null } })).toBe(false);
+    const { endsAt: _endsAt, ...withoutEndsAt } = payload;
+    expect(Value.Check(MeetingCardPayload, withoutEndsAt)).toBe(false);
     expect(Value.Check(MeetingCardPayload, { ...payload, status: "postponed" })).toBe(false);
     expect(Value.Check(MeetingCardPayload, {
       ...payload,
@@ -406,6 +443,9 @@ describe("meeting public contract", () => {
     const turn = { speakerName: "测试乙", offsetSeconds: 1, text: "我来跟进" };
     expect(Value.Check(StoredTranscriptCandidate, { source, createdAt: "2026-09-22T12:30:00.000Z", speakers: [speaker], turns: [turn], warnings: [] })).toBe(true);
     expect(Value.Check(StoredTranscriptCandidate, { source, createdAt: "x", speakers: [speaker], turns: [], warnings: [] })).toBe(false);
+    // 录音识别候选走同一形状：sizeBytes 是 mp3 大小（一小时约 29 MB）
+    const asrSource = { ...source, format: "volc_asr", fileName: "会议录音 9月26日 15:02.mp3", sizeBytes: 29 * 1024 * 1024, parserVersion: "volc-asr.v1" };
+    expect(Value.Check(StoredTranscriptCandidate, { source: asrSource, createdAt: "2026-09-26T07:30:00.000Z", speakers: [speaker], turns: [turn], warnings: [] })).toBe(true);
     const projection = {
       source,
       createdAt: "2026-09-22T12:30:00.000Z",

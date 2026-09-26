@@ -12,8 +12,10 @@ import type { PreflightAgent } from "../src/meetingPreflight.js";
 import type { DriExporter } from "../src/meetingStore.js";
 import { createMonthlyPlanService, type MonthlyDraftAgent, type MonthlyPlanService } from "../src/monthlyDraft.js";
 import { loadCompanyMemory } from "../src/companyMemory.js";
-import type { PostMeetingAgent } from "../src/outcome.js";
+import type { OntologyUpdater, PostMeetingAgent } from "../src/outcome.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
+import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService, type RecordingDeps } from "../src/meetingRecordings.js";
+import type { VoiceprintDeps } from "../src/voiceprints.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
@@ -161,6 +163,8 @@ export type TestApp = {
   sql: (text: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
   /** 仅当注入 monthlyDraftAgent 时存在；测试用它触发 Company Day scheduler。 */
   monthlyPlans?: MonthlyPlanService;
+  /** 仅当注入 recordingDeps 时存在；测试用它等流水线跑完、模拟重启恢复。 */
+  recordings?: MeetingRecordingService;
   restart: (runtime: ConversationRuntime) => Promise<FastifyInstance>;
   close: () => Promise<void>;
 };
@@ -174,15 +178,20 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "extraOrigins">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
     preflightAgent?: PreflightAgent;
     outcomeAgent?: PostMeetingAgent;
     driExporter?: DriExporter;
+    ontologyUpdater?: OntologyUpdater;
     monthlyDraftAgent?: MonthlyDraftAgent;
     monthlyNow?: () => Date;
+    /** 会议录音的假 ffmpeg/TOS/火山；不注入时 app 装配真实依赖（不会被调用）。 */
+    recordingDeps?: RecordingDeps;
+    /** /api/me/voiceprint 的假 ffmpeg/腾讯云；不注入时按环境变量判断未配置。 */
+    voiceprintDeps?: VoiceprintDeps;
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {
@@ -198,15 +207,19 @@ export async function createTestApp(
   await seedTestAccess(client);
   client.release();
   const env = { ...testEnv, ...seedOverrides };
-  const { monthlyDraftAgent, monthlyNow, ...appRuntimeOptions } = runtimeOptions;
+  const { monthlyDraftAgent, monthlyNow, recordingDeps, ...appRuntimeOptions } = runtimeOptions;
   const monthlyPlans = monthlyDraftAgent
     ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;
-  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, now: monthlyNow, ...appRuntimeOptions });
+  const recordings = recordingDeps
+    ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, companyMemory: loadCompanyMemory(env), deps: recordingDeps })
+    : undefined;
+  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, recordingService: recordings, now: monthlyNow, ...appRuntimeOptions });
   const apps = [app];
   return {
     app,
     monthlyPlans,
+    recordings,
     publicOrigin: testEnv.publicOrigin,
     env: testEnv,
     loginCookie: () => loginAs(app, TEST_CEO),
@@ -255,7 +268,7 @@ export async function createTestApp(
     agentRuns: async () => (await pool.query("SELECT * FROM agent_runs ORDER BY started_at, id")).rows,
     sql: async (text, params) => (await pool.query(text, params)).rows,
     restart: async (runtime) => {
-      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, researchService, monthlyPlanService: monthlyPlans, now: monthlyNow, ...appRuntimeOptions });
+      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, researchService, monthlyPlanService: monthlyPlans, recordingService: recordings, now: monthlyNow, ...appRuntimeOptions });
       apps.push(restarted);
       return restarted;
     },

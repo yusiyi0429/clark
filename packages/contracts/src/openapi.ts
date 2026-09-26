@@ -11,9 +11,6 @@ import {
   ConversationAttachment,
   ConversationAttachmentInfo,
   ConversationAttachmentUploadResponse,
-  ConversationSessionList,
-  ConversationSessionSummary,
-  CreateConversationSessionRequest,
   CreateBattlefieldRequest,
   PatchBattlefieldRequest,
   CreateCapabilityRequest,
@@ -73,6 +70,21 @@ import {
   MeetingConfirmItemInput,
   MeetingDismissItemInput,
   MeetingRevokeEffectInput,
+  MeetingRecording,
+  StartMeetingRecordingResponse,
+  MarkThreadReadRequest,
+  MarkThreadReadResponse,
+  PostThreadMessageRequest,
+  ThreadMessage,
+  ThreadMessageList,
+  ThreadView,
+  TaskView,
+  MeHomeResponse,
+  PatchMyTaskRequest,
+  ReturnMyTaskRequest,
+  NotificationList,
+  MarkNotificationsSeenRequest,
+  VoiceprintStatus,
 } from "./index.js";
 
 const errorResponse = {
@@ -84,6 +96,11 @@ const jsonBody = (schema: JsonSchema) => ({
   required: true,
   content: { "application/json": { schema } },
 });
+
+const threadParameters = [
+  { name: "objectType", in: "path" as const, required: true, schema: { type: "string", enum: ["issue", "signal", "task", "meeting"] } },
+  { name: "objectId", in: "path" as const, required: true, schema: { type: "string" } },
+];
 
 export function buildOpenApiDocument(): OpenAPIV3.Document {
   return {
@@ -385,83 +402,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
-      "/api/conversations/{scope}/sessions": {
-        get: {
-          operationId: "listConversationSessions",
-          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
-          summary: "列出 scope 内未删除的 Conversation 会话",
-          responses: {
-            "200": { description: "会话列表（最早未删除者为默认会话）", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationSessionList" } } } },
-            "401": errorResponse,
-          },
-        },
-        post: {
-          operationId: "createConversationSession",
-          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
-          summary: "在 scope 内新建 Conversation 会话",
-          requestBody: jsonBody({ $ref: "#/components/schemas/CreateConversationSessionRequest" }),
-          responses: {
-            "201": { description: "新建的会话摘要", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationSessionSummary" } } } },
-            "400": errorResponse,
-            "401": errorResponse,
-          },
-        },
-      },
-      "/api/conversations/{scope}/sessions/{sessionId}": {
-        delete: {
-          operationId: "deleteConversationSession",
-          parameters: [
-            { name: "scope", in: "path", required: true, schema: { type: "string" } },
-            { name: "sessionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-          ],
-          summary: "删除会话（含消息与附件原件）；运行中拒绝",
-          responses: {
-            "204": { description: "已删除" },
-            "401": errorResponse,
-            "404": errorResponse,
-            "409": errorResponse,
-          },
-        },
-      },
-      "/api/conversations/{scope}/sessions/{sessionId}/messages": {
-        get: {
-          operationId: "getConversationSessionMessages",
-          parameters: [
-            { name: "scope", in: "path", required: true, schema: { type: "string" } },
-            { name: "sessionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-          ],
-          summary: "读取指定会话的原始 Conversation 消息",
-          responses: {
-            "200": { description: "会话消息历史", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationHistory" } } } },
-            "401": errorResponse,
-            "404": errorResponse,
-          },
-        },
-        post: {
-          operationId: "sendConversationSessionMessage",
-          parameters: [
-            { name: "scope", in: "path", required: true, schema: { type: "string" } },
-            { name: "sessionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-          ],
-          summary: "在指定会话发送消息并通过 SSE 返回 Pi 运行事件",
-          requestBody: jsonBody({ $ref: "#/components/schemas/ConversationMessageRequest" }),
-          responses: {
-            "200": { description: "SSE 事件流", content: { "text/event-stream": { schema: { $ref: "#/components/schemas/ConversationSseEvent" } } } },
-            "400": errorResponse,
-            "401": errorResponse,
-            "404": errorResponse,
-            "409": errorResponse,
-          },
-        },
-      },
-      "/api/conversations/{scope}/sessions/{sessionId}/attachments": {
+      "/api/conversations/{scope}/attachments": {
         post: {
           operationId: "uploadConversationAttachments",
-          parameters: [
-            { name: "scope", in: "path", required: true, schema: { type: "string" } },
-            { name: "sessionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-          ],
-          summary: "上传会话附件（multipart files，PDF/DOCX/Markdown）；元数据随消息发送时内嵌入库",
+          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
+          summary: "上传附件到本人在该 scope 的主对话（没有则创建；multipart files，PDF/DOCX/Markdown）；元数据随消息发送时内嵌入库",
           requestBody: {
             content: { "multipart/form-data": { schema: { type: "object", properties: { files: { type: "array", items: { type: "string", format: "binary" } } } } } },
           },
@@ -471,6 +416,171 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "401": errorResponse,
             "404": errorResponse,
             "413": errorResponse,
+          },
+        },
+      },
+      "/api/threads/{objectType}/{objectId}": {
+        get: {
+          operationId: "getThread",
+          parameters: threadParameters,
+          summary: "打开对象群组：成员、最近消息、读到哪里与未读数；非成员 404",
+          responses: {
+            "200": { description: "群组视图", content: { "application/json": { schema: { $ref: "#/components/schemas/ThreadView" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/threads/{objectType}/{objectId}/messages": {
+        get: {
+          operationId: "listThreadMessages",
+          parameters: [...threadParameters, { name: "after", in: "query", required: false, schema: { type: "integer", minimum: 0 } }],
+          summary: "取 after 之后的新消息（轮询用，一次最多 200 条）；非成员 404",
+          responses: {
+            "200": { description: "新消息", content: { "application/json": { schema: { $ref: "#/components/schemas/ThreadMessageList" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+        post: {
+          operationId: "postThreadMessage",
+          parameters: threadParameters,
+          summary: "在群组里发一条纯文字消息（可附带引用片段）；非成员 404",
+          requestBody: jsonBody({ $ref: "#/components/schemas/PostThreadMessageRequest" }),
+          responses: {
+            "201": { description: "已发出的消息", content: { "application/json": { schema: { $ref: "#/components/schemas/ThreadMessage" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/threads/{objectType}/{objectId}/read": {
+        post: {
+          operationId: "markThreadRead",
+          parameters: threadParameters,
+          summary: "记下读到哪条（只增不减，不超过群里最后一条）；非成员 404",
+          requestBody: jsonBody({ $ref: "#/components/schemas/MarkThreadReadRequest" }),
+          responses: {
+            "200": { description: "读到的位置与剩余未读", content: { "application/json": { schema: { $ref: "#/components/schemas/MarkThreadReadResponse" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/me/home": {
+        get: {
+          operationId: "getMyHome",
+          summary: "成员工作台：我负责的执行事项（全部状态，新到旧）",
+          responses: {
+            "200": { description: "我的执行事项", content: { "application/json": { schema: { $ref: "#/components/schemas/MeHomeResponse" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/me/tasks/{id}": {
+        patch: {
+          operationId: "patchMyTask",
+          summary: "负责人改执行事项状态；不是负责人 404 TASK_NOT_FOUND，version 不一致 409 带 latestTask",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/PatchMyTaskRequest" }),
+          responses: {
+            "200": { description: "更新后的执行事项", content: { "application/json": { schema: { $ref: "#/components/schemas/TaskView" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/me/tasks/{id}/return": {
+        post: {
+          operationId: "returnMyTask",
+          summary: "负责人写原因退回执行事项，并通知会议主持人（主持人退回自己的不通知）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ReturnMyTaskRequest" }),
+          responses: {
+            "200": { description: "已退回的执行事项", content: { "application/json": { schema: { $ref: "#/components/schemas/TaskView" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/me/notifications": {
+        get: {
+          operationId: "listMyNotifications",
+          summary: "我的通知：未读在前，最近 50 条，文案按对象当前状态组合",
+          responses: {
+            "200": { description: "通知列表", content: { "application/json": { schema: { $ref: "#/components/schemas/NotificationList" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/me/seen": {
+        post: {
+          operationId: "markMyNotificationsSeen",
+          summary: "把我的这些通知标为已读；别人的 id 忽略",
+          requestBody: jsonBody({ $ref: "#/components/schemas/MarkNotificationsSeenRequest" }),
+          responses: {
+            "204": { description: "已标记" },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+          },
+        },
+      },
+      "/api/me/voiceprint": {
+        get: {
+          operationId: "getMyVoiceprint",
+          summary: "本人声纹状态：录没录、什么时候录的、服务器是否配好腾讯云声纹",
+          responses: {
+            "200": { description: "声纹状态", content: { "application/json": { schema: { $ref: "#/components/schemas/VoiceprintStatus" } } } },
+            "401": errorResponse,
+          },
+        },
+        post: {
+          operationId: "enrollMyVoiceprint",
+          summary: "本人录入或重录声纹（multipart：audio 单个音频文件约 20–40 秒 + consent=true）；只用于会后预填说话人，不自动确认",
+          requestBody: {
+            required: true,
+            content: {
+              "multipart/form-data": {
+                schema: {
+                  type: "object",
+                  required: ["audio", "consent"],
+                  properties: {
+                    audio: { type: "string", format: "binary" },
+                    /** 必须是 "true"：录之前单独征得的同意。 */
+                    consent: { type: "string", enum: ["true"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "录入后的声纹状态", content: { "application/json": { schema: { $ref: "#/components/schemas/VoiceprintStatus" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "413": errorResponse,
+            "502": errorResponse,
+            "503": errorResponse,
+          },
+        },
+        delete: {
+          operationId: "deleteMyVoiceprint",
+          summary: "本人删除声纹：腾讯云与库里一起删；没有声纹时同样 204",
+          responses: {
+            "204": { description: "已删除" },
+            "401": errorResponse,
+            "403": errorResponse,
+            "502": errorResponse,
+            "503": errorResponse,
           },
         },
       },
@@ -619,6 +729,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
                   properties: {
                     title: { type: "string" },
                     scheduledAt: { type: "string" },
+                    /** 计划结束时间；省略或空串表示开始后 60 分钟。 */
+                    endsAt: { type: "string" },
                     leadDriId: { type: "string" },
                     /** 议题 id 的 JSON 字符串数组；省略或空串表示不并入议题。 */
                     issueIds: { type: "string" },
@@ -967,6 +1079,81 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/meetings/{id}/recordings": {
+        post: {
+          operationId: "startMeetingRecording",
+          summary: "CEO 开始会议录音（scheduled only）；已有在途录音时返回那一份",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "201": { description: "新建的录音", content: { "application/json": { schema: { $ref: "#/components/schemas/StartMeetingRecordingResponse" } } } },
+            "200": { description: "已有在途录音（任一非 done/failed 状态），返回它", content: { "application/json": { schema: { $ref: "#/components/schemas/StartMeetingRecordingResponse" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/meetings/{id}/recordings/{recordingId}": {
+        get: {
+          operationId: "getMeetingRecording",
+          summary: "CEO 查询录音与识别进度",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "recordingId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            "200": { description: "录音当前状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingRecording" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/meetings/{id}/recordings/{recordingId}/chunks/{seq}": {
+        put: {
+          operationId: "putMeetingRecordingChunk",
+          summary: "CEO 上传一片录音（原始字节，seq 从 0 起按录制顺序）；同一 seq 重传幂等，单片上限 20 MiB",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "recordingId", in: "path", required: true, schema: { type: "string" } },
+            { name: "seq", in: "path", required: true, schema: { type: "integer", minimum: 0, maximum: 99999 } },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "audio/webm": { schema: { type: "string", format: "binary" } },
+              "application/octet-stream": { schema: { type: "string", format: "binary" } },
+            },
+          },
+          responses: {
+            "200": { description: "收下后的录音状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingRecording" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+            "413": errorResponse,
+          },
+        },
+      },
+      "/api/meetings/{id}/recordings/{recordingId}/finish": {
+        post: {
+          operationId: "finishMeetingRecording",
+          summary: "CEO 结束录音并在后台转码、上传、识别，完成后写成会议记录候选（source.format = volc_asr）；重复调用返回当前状态",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "recordingId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            "202": { description: "已交给后台流水线", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingRecording" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+            "503": errorResponse,
+          },
+        },
+      },
       "/healthz": {
         get: {
           operationId: "health",
@@ -997,9 +1184,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ConversationHistory: ConversationHistory as JsonSchema,
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
         ConversationSseEvent: ConversationSseEvent as JsonSchema,
-        ConversationSessionSummary: ConversationSessionSummary as JsonSchema,
-        ConversationSessionList: ConversationSessionList as JsonSchema,
-        CreateConversationSessionRequest: CreateConversationSessionRequest as JsonSchema,
         CreateBattlefieldRequest: CreateBattlefieldRequest as JsonSchema,
         PatchBattlefieldRequest: PatchBattlefieldRequest as JsonSchema,
         CreateCapabilityRequest: CreateCapabilityRequest as JsonSchema,
@@ -1057,6 +1241,21 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingConfirmItemInput: MeetingConfirmItemInput as JsonSchema,
         MeetingDismissItemInput: MeetingDismissItemInput as JsonSchema,
         MeetingRevokeEffectInput: MeetingRevokeEffectInput as JsonSchema,
+        ThreadView: ThreadView as JsonSchema,
+        ThreadMessage: ThreadMessage as JsonSchema,
+        ThreadMessageList: ThreadMessageList as JsonSchema,
+        PostThreadMessageRequest: PostThreadMessageRequest as JsonSchema,
+        MarkThreadReadRequest: MarkThreadReadRequest as JsonSchema,
+        MarkThreadReadResponse: MarkThreadReadResponse as JsonSchema,
+        TaskView: TaskView as JsonSchema,
+        MeHomeResponse: MeHomeResponse as JsonSchema,
+        PatchMyTaskRequest: PatchMyTaskRequest as JsonSchema,
+        ReturnMyTaskRequest: ReturnMyTaskRequest as JsonSchema,
+        NotificationList: NotificationList as JsonSchema,
+        MarkNotificationsSeenRequest: MarkNotificationsSeenRequest as JsonSchema,
+        MeetingRecording: MeetingRecording as JsonSchema,
+        StartMeetingRecordingResponse: StartMeetingRecordingResponse as JsonSchema,
+        VoiceprintStatus: VoiceprintStatus as JsonSchema,
       },
     },
   };

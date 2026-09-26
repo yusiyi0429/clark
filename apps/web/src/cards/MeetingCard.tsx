@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Button, Chip } from "@heroui/react";
-import { Check, ChevronDown, ChevronRight, FileUp, Files, Pencil, RefreshCw, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, ChevronDown, FileUp, Pencil, RefreshCw, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import type { TTranscriptCandidateProjection } from "@warmap/contracts";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
 import { issueScopeLabel } from "./scopeNames";
-import { ContextMark } from "@/components/ContextMark";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { MeetingClock, MeetingHeaderActions, MeetingStatus, meetingDayWord, meetingPhase, meetingSlot } from "@/components/meeting/MeetingHeader";
+import { useMeetingRecorder, type RecorderState } from "@/components/meeting/useMeetingRecorder";
+import { DetailFrame } from "@/components/shell/DetailFrame";
+import { HeaderMaterialToggle, MaterialTabs, pressMaterial, toggleWhole, useRememberedScroll, type MaterialTab, type MaterialView } from "@/components/shell/MaterialTabs";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 import { ActionFeedback, useCardAction, type ActionState } from "@/lib/useCardAction";
@@ -23,6 +25,7 @@ const ITEM_LABEL: Record<string, string> = {
   ceoJudgment: "CEO 判断",
   reopenWhen: "复议条件",
   open: "未收敛事项",
+  strategic: "战略议题",
 };
 
 const EXPORT_LABEL: Record<string, string> = {
@@ -63,22 +66,6 @@ export function materialMeta(material: MaterialMeta): string {
     .join(" · ");
 }
 
-/** 状态行（tp8t9 Header Meta）：状态 · 材料口径 · 份数 · 最近更新。 */
-export function materialStateLine(
-  status: "scheduled" | "held" | "reviewed" | "cancelled",
-  readiness: string | undefined,
-  materials: MaterialMeta[],
-): string {
-  const latest = materials.map((material) => material.uploadedAt).sort().at(-1);
-  const phase =
-    status === "scheduled"
-      ? `会前预审 · ${readiness === "ready" ? "已就绪 · 材料只读" : readiness === "revise" ? "修改后提交 · 材料可替换" : "待预审"}`
-      : status === "cancelled"
-        ? "已取消 · 材料只读"
-        : "Outcome 复核 · 材料已归档只读";
-  return `${phase} · ${materials.length} 份${latest ? ` · 最近更新 ${latest.slice(0, 10)}` : ""}`;
-}
-
 export type MaterialPreview =
   | { state: "idle" | "loading" }
   | { state: "ready"; kind: "pdf"; url: string }
@@ -111,165 +98,33 @@ export function buildSupplementForm(requestId: string, file: File): FormData {
   return form;
 }
 
-const MATERIAL_DIALOG_NOTE = "只读依据 · 不参与判断与抽取，原始材料不会自动改写预审结论";
-
-/** pen Flow Stage Bar：四步固定；状态机映射到激活步（cancelled 无激活步）。 */
-export const STAGE_STEPS = ["新增会议", "会前预审", "会议进行", "Outcome 复核"] as const;
-
-export function activeStageIndex(status: "scheduled" | "held" | "reviewed" | "cancelled"): number {
-  if (status === "scheduled") return 1;
-  if (status === "cancelled") return -1;
-  return 3;
-}
-
-/** 四步流程条：完成步绿勾、激活步 #E8F1FF/#007AFF、未到步灰；右侧状态行用真实材料/预审事实。 */
-function StageBar({ status, statusLine, actions }: { status: "scheduled" | "held" | "reviewed" | "cancelled"; statusLine: string; actions?: ReactNode }) {
-  const active = activeStageIndex(status);
+/** 一份材料的只读预览（材料页签里）：PDF 原样、DOCX 清洗 HTML、MD 纯文本；底下一行出处与下载。任何状态都不含编辑。 */
+export function MaterialPane({ meetingId, material, preview, provenance = "" }: { meetingId: string; material: MaterialMeta; preview: MaterialPreview; provenance?: string }) {
   return (
-    <div className={s.stageRow}>
-      <div className={s.stageBar} aria-label="会议阶段">
-        <ol className={s.stageSteps}>
-          {STAGE_STEPS.map((label, index) => (
-            <li key={label} className={s.stageStep} data-state={index < active ? "done" : index === active ? "active" : "idle"}>
-              {index < active ? <Check size={13} aria-hidden="true" /> : <span className={s.stageNo}>{String(index + 1).padStart(2, "0")}</span>}
-              <span>{label}</span>
-              {index < STAGE_STEPS.length - 1 ? <ChevronRight size={14} aria-hidden="true" className={s.stageSep} /> : null}
-            </li>
-          ))}
-        </ol>
-        <span className={s.stageStatus}>{statusLine}</span>
-      </div>
-      {actions ? <div className={s.stageActionsBar}>{actions}</div> : null}
-    </div>
-  );
-}
-
-/** 原始材料只读弹窗：列表 + 预览（PDF iframe / DOCX 清洗 HTML / MD 纯文本）+ 下载；任何状态都不含编辑。 */
-export function MaterialReaderModal({
-  dialogRef,
-  meetingId,
-  materials,
-  selectedId,
-  preview,
-  stateLine,
-  transcriptMeta,
-  supplementRequests,
-  note,
-  onClose,
-  onSelect,
-}: {
-  dialogRef: { current: HTMLDialogElement | null };
-  meetingId: string;
-  materials: MaterialMeta[];
-  selectedId: string | null;
-  preview: MaterialPreview;
-  stateLine: string;
-  /** Outcome 只读上下文：逐字稿没有预览/下载端点，作为静态条目展示。 */
-  transcriptMeta: { count: number; schemaVersion: string } | null;
-  /** 补充材料出处：supplementFor → 请求文本；读者只看到归档事实。 */
-  supplementRequests?: { id: string; text: string }[];
-  note: string;
-  onClose: () => void;
-  onSelect: (id: string) => void;
-}) {
-  const selected = materials.find((material) => material.id === selectedId) ?? null;
-  const { primary, supplements } = splitMaterials(materials);
-  const provenance = (material: MaterialMeta) => {
-    const request = supplementRequests?.find((item) => item.id === material.supplementFor);
-    return request ? ` · 回应「${truncateText(request.text, 24)}」` : "";
-  };
-  const readerItem = (material: MaterialMeta, supplement = false) => (
-    <div key={material.id} className={s.readerItem} data-active={material.id === selectedId}>
-      <button
-        type="button"
-        className={s.readerSelect}
-        aria-current={material.id === selectedId ? "true" : undefined}
-        onClick={() => onSelect(material.id)}
-      >
+    <div className={s.readerPane} aria-live="polite">
+      {preview.state === "loading" || preview.state === "idle" ? <p className={s.empty}>预览加载中…</p> : null}
+      {preview.state === "error" ? <p className={s.error} role="alert">{preview.error}</p> : null}
+      {preview.state === "ready" && preview.kind === "pdf" ? <iframe className={s.readerFrame} src={preview.url} title={`${material.fileName} 预览`} /> : null}
+      {preview.state === "ready" && preview.kind === "html" ? (
+        <iframe
+          className={s.readerFrame}
+          sandbox=""
+          title={`${material.fileName} 预览`}
+          srcDoc={`<!doctype html><meta charset="utf-8"><style>body{font:14px/1.8 -apple-system,system-ui,sans-serif;color:#282c32;padding:18px;max-width:44em;margin:0 auto}</style>${preview.content}`}
+        />
+      ) : null}
+      {preview.state === "ready" && preview.kind === "text" ? <pre className={s.readerText}>{preview.content}</pre> : null}
+      <p className={s.readerPaneFoot}>
         <span className={s.readerBadge}>{MIME_BADGE[material.mimeType] ?? "文件"}</span>
-        <span className={s.readerName}>{material.fileName}</span>
-        <small>{materialMeta(material)}{supplement ? provenance(material) : ""}</small>
-      </button>
-      <a
-        className={s.readerDownload}
-        href={`/api/meetings/${meetingId}/materials/${material.id}/download`}
-        aria-label={`下载 ${material.fileName}`}
-      >
-        下载
-      </a>
+        <span>
+          {material.fileName} · {materialMeta(material)}
+          {provenance}
+        </span>
+        <a href={`/api/meetings/${meetingId}/materials/${material.id}/download`} aria-label={`下载 ${material.fileName}`}>
+          下载原件
+        </a>
+      </p>
     </div>
-  );
-  return (
-    <dialog ref={dialogRef} className={s.materialReader} aria-label="会议原始材料">
-      <header className={s.readerHeader}>
-        <div>
-          <h2>会议原始材料</h2>
-          <p className={s.readerStateLine}>{stateLine}</p>
-          <p>{MATERIAL_DIALOG_NOTE}</p>
-        </div>
-        <button type="button" onClick={onClose} aria-label="关闭原始材料">
-          <X size={16} aria-hidden="true" />
-        </button>
-      </header>
-      <div className={s.readerBody}>
-        <nav className={s.readerList} aria-label="材料列表">
-          <details className={s.readerGroup} open>
-            <summary>
-              会前材料
-              <span>{primary.length} 份</span>
-            </summary>
-            {primary.map((material) => readerItem(material))}
-          </details>
-          {supplements.length ? (
-            <details className={s.readerGroup} open>
-              <summary>
-                补充材料
-                <span>{supplements.length} 份</span>
-              </summary>
-              {supplements.map((material) => readerItem(material, true))}
-            </details>
-          ) : null}
-          {transcriptMeta ? (
-            <details className={s.readerGroup} open>
-              <summary>
-                会议逐字稿
-                <span>1 份</span>
-              </summary>
-              <div className={s.readerItem} data-static="true">
-                <span className={s.readerBadge}>JSON</span>
-                <span className={s.readerName}>会议逐字稿（{transcriptMeta.schemaVersion}）</span>
-                <small>{transcriptMeta.count} 条发言 · 会后采集 · 仅页面内查看，无独立下载</small>
-              </div>
-            </details>
-          ) : null}
-        </nav>
-        <div className={s.readerPane} aria-live="polite">
-          {preview.state === "loading" || preview.state === "idle" ? <p className={s.empty}>预览加载中…</p> : null}
-          {preview.state === "error" ? <p className={s.error} role="alert">{preview.error}</p> : null}
-          {preview.state === "ready" && preview.kind === "pdf" ? (
-            <iframe className={s.readerFrame} src={preview.url} title={selected ? `${selected.fileName} 预览` : "材料预览"} />
-          ) : null}
-          {preview.state === "ready" && preview.kind === "html" ? (
-            <iframe
-              className={s.readerFrame}
-              sandbox=""
-              title={selected ? `${selected.fileName} 预览` : "材料预览"}
-              srcDoc={`<!doctype html><meta charset="utf-8"><style>body{font:14px/1.8 -apple-system,system-ui,sans-serif;color:#282c32;padding:18px;max-width:44em;margin:0 auto}</style>${preview.content}`}
-            />
-          ) : null}
-          {preview.state === "ready" && preview.kind === "text" ? <pre className={s.readerText}>{preview.content}</pre> : null}
-          {preview.state === "ready" && selected ? (
-            <p className={s.readerPaneFoot}>
-              {selected.fileName} · {materialMeta(selected)}
-              <a href={`/api/meetings/${meetingId}/materials/${selected.id}/download`}>下载原件</a>
-            </p>
-          ) : null}
-        </div>
-      </div>
-      <footer className={s.readerFooter}>
-        <p>{note}</p>
-      </footer>
-    </dialog>
   );
 }
 
@@ -481,25 +336,104 @@ export function TranscriptCandidateDialog({
   );
 }
 
-/** 会议页头的大时间（clark largeTime）：同一天只写时刻，否则带上日期；按公司时区。 */
-export function meetingLargeTime(iso: string, now: Date = new Date()): string {
+/** datetime-local 的值 ↔ 后台时刻：一律按公司时区（上海，无夏令时）读写，不按浏览器所在时区。 */
+export function toCompanyInput(iso: string): string {
   const at = new Date(iso);
   if (!Number.isFinite(at.getTime())) return "";
-  const day = (date: Date) => date.toLocaleDateString("sv-SE", { timeZone: COMPANY_TIMEZONE });
-  const time = at.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: COMPANY_TIMEZONE });
-  return day(at) === day(now) ? time : `${at.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric", timeZone: COMPANY_TIMEZONE })} ${time}`;
+  const date = at.toLocaleDateString("en-CA", { timeZone: COMPANY_TIMEZONE });
+  const time = at.toLocaleTimeString("en-GB", { timeZone: COMPANY_TIMEZONE, hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${date}T${time}`;
 }
 
-const MEETING_EYEBROW: Record<MeetingPayload["status"], string> = {
-  scheduled: "会前预审 / 会议材料",
-  held: "Outcome 复核 / 会议材料",
-  reviewed: "Outcome 复核 · 已归档",
-  cancelled: "会议材料 · 已取消",
+export function fromCompanyInput(value: string): string {
+  return `${value}:00+08:00`;
+}
+
+/** 会中那一行灰字里「这一刻的一件事」：录没录上。 */
+export function recorderLine(state: RecorderState): string {
+  if (state.status === "recording") return "录音中";
+  if (state.status === "starting") return "正在打开麦克风";
+  return state.error ?? "没有录音";
+}
+
+/** 计时弹出那一小块里的说明：按下「开完了」会发生什么。 */
+export function recordingNote(state: RecorderState): string {
+  if (state.status === "recording") return "正在录音。按下这一下，停止录音并记为已开完；录音转成文字后，在「会议记录」里确认每位说话人是谁。不取消飞书日程。";
+  return `${state.error ?? "这场会没有录音。"}按下这一下，这场会记为已开完，接着在「会议记录」里导入妙记或逐字稿；不取消飞书日程。`;
+}
+
+const PREFLIGHT_TAB: MaterialTab = { id: "preflight", label: "AI 预审", title: "AI 预审：会前材料的评审结论" };
+/** 整场会的那一页：页头胶囊里的入口。会前在这里导入妙记或逐字稿，会后在这里逐项复核。 */
+const RECORD_TAB: MaterialTab = { id: "record", label: "会议记录", title: "会议记录：妙记或逐字稿与会后复核" };
+
+/** 材料页签上的短名：去掉扩展名，补充材料前面写「补充」。 */
+export function materialTab(material: MaterialMeta): MaterialTab {
+  const name = material.fileName.replace(/\.(pdf|docx|md)$/i, "");
+  return { id: material.id, label: material.kind === "supplement" ? `补充 · ${name}` : name, title: `会议材料：${material.fileName}` };
+}
+
+type OutcomeItem = NonNullable<MeetingPayload["outcome"]>["items"][number];
+
+/** Action Item 归谁：抽取给了负责人就是他，没有就是这场会的主持人（和服务端推送同一条规则）。 */
+export function actionOwner(item: OutcomeItem, payload: MeetingPayload): string {
+  return item.ownerPersonId ?? payload.leadDriId;
+}
+
+/** 纪要里每一条此刻的状态：给人看的一句话，和一个状态色。 */
+export function outcomeItemState(item: OutcomeItem, payload: MeetingPayload, name: (personId: string) => string): { state: "confirmed" | "dismissed" | "open" | "pending"; label: string } {
+  const status = item.review?.status;
+  if (item.kind === "open") return { state: "open", label: "仅展示，不产生效果" };
+  if (item.kind === "strategic") {
+    if (status === "confirmed") return { state: "confirmed", label: "CEO 已确认 · 本体待 Co-Agent 更新" };
+    if (status === "dismissed") return { state: "dismissed", label: "CEO 不同意" };
+    return { state: "pending", label: "等 CEO 确认" };
+  }
+  if (item.kind === "todo") {
+    const owner = actionOwner(item, payload);
+    if (status === "confirmed") return { state: "confirmed", label: item.review?.effectRef?.startsWith("task:") ? `已推送给${name(owner)}` : "已确认" };
+    if (status === "dismissed") return { state: "dismissed", label: "已忽略" };
+    return { state: "pending", label: owner === payload.ceoParticipantId ? "CEO 的事，只留在纪要" : "待推送" };
+  }
+  if (status === "confirmed") return { state: "confirmed", label: "已确认" };
+  if (status === "dismissed") return { state: "dismissed", label: "已忽略" };
+  return { state: "pending", label: "待处理" };
+}
+
+/** 会议录音的几步（服务端实际先后：转码 → 上传 → 识别）。 */
+export const RECORDING_LABEL: Record<NonNullable<MeetingPayload["recording"]>["status"], string> = {
+  recording: "录音中",
+  transcoding: "正在转码",
+  uploading: "正在上传",
+  transcribing: "正在识别",
+  done: "已转成文字",
+  failed: "转写失败",
 };
 
+/** 录音交给服务端之后、识别完之前：页面每几秒取一次会议卡片，等说话人对应弹出来。 */
+export function recordingInFlight(recording: MeetingPayload["recording"]): boolean {
+  return recording?.status === "transcoding" || recording?.status === "uploading" || recording?.status === "transcribing";
+}
+
+/** 材料上面那一行灰字里「这一刻的一件事」。 */
+export function meetingNow(payload: MeetingPayload, ended: boolean): string {
+  if (payload.status === "cancelled") return "已取消";
+  if (payload.status === "reviewed") return "会后事项已处理完";
+  if (payload.status === "held") {
+    if (payload.outcome?.status !== "ready") return "正在整理纪要";
+    return payload.outcome.items.some((item) => item.kind === "strategic" && item.review?.status === "pending") ? "纪要已生成 · 等 CEO 确认战略议题" : "纪要已生成";
+  }
+  if (ended && payload.transcriptCandidate) return "会议记录待确认说话人";
+  if (ended && recordingInFlight(payload.recording)) return "录音转写中";
+  if (ended && payload.recording?.status === "failed") return "录音转写失败，可导入妙记";
+  if (ended) return "待导入会议记录";
+  if (payload.preflight.status === "running") return "会前预审中";
+  return `会前预审 · ${READINESS_LABEL[payload.preflight.readiness ?? ""] ?? "待预审"}`;
+}
+
 /**
- * Meeting 页面（clark MeetingWorkspace 的页头与色调）：会前预审、Transcript 导入/替换与 MeetingOutcome 逐项确认都在这里；
- * 页头只放身份与大时间，天枢独有的动作排在阶段条右侧。
+ * Meeting 页面（clark 会议二级页，C-08）：页头胶囊里是计划时段、会名、会议记录入口，右边一颗开始会议／计时；页头下面是
+ * 材料页签（AI 预审 + 每一份会前材料）和一行状态，再下面是正在看的那一份。会前预审、妙记导入、会后逐项复核这些真实功能
+ * 都在：AI 预审页签（编辑会议、返回编辑材料、重新预审在它顶部）、材料页签（只读预览）、会议记录（导入与复核）。
  */
 export function MeetingCard({ card, collection, onCard, onNavigate }: CardRenderProps) {
   const payload = payloadOf<MeetingPayload>(card);
@@ -514,25 +448,32 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   const [replaceArmed, setReplaceArmed] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  // 补充材料：仅 scheduled 分支渲染入口；状态只存内存，成功后由后端返回的新 Card 驱动。
+  // 补充材料：仅 scheduled 渲染入口；状态只存内存，成功后由后端返回的新 Card 驱动。
   const [supplementBusyId, setSupplementBusyId] = useState<string | null>(null);
   const [supplementError, setSupplementError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState("core");
-  // 原始材料只读弹窗：选择 + 预览取自 preview endpoint；不在弹窗内提供任何编辑。
   // 编辑会议弹层：只提交改动字段，写入走 opaque action meeting.edit_details。
   const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ title: card.title, scheduledAt: payload.scheduledAt.slice(0, 16), leadDriId: payload.leadDriId });
+  const detailsForm = () => ({ title: card.title, scheduledAt: toCompanyInput(payload.scheduledAt), endsAt: toCompanyInput(payload.endsAt), leadDriId: payload.leadDriId });
+  const [editForm, setEditForm] = useState(detailsForm);
   const [driOptions, setDriOptions] = useState<DirectoryOption[]>([]);
   const [driError, setDriError] = useState<string | null>(null);
   // 妙记候选：全量人员目录 + 预览弹层；候选变化（重上传）时靠 key 重置映射。
   const [candidateOpen, setCandidateOpen] = useState(Boolean(payload.transcriptCandidate));
   const [directory, setDirectory] = useState<DirectoryOption[]>([]);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
-  const [readerOpen, setReaderOpen] = useState(false);
-  const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
+  // 左侧阅读区看哪一份：会前默认 AI 预审；会开完了、有待确认的会议记录或已在复核，默认会议记录（那是下一步要做的事）。
+  const [view, setView] = useState<MaterialView>(() => ({
+    current:
+      payload.status === "held" || payload.status === "reviewed" || (payload.status === "scheduled" && (payload.endedAt || payload.transcriptCandidate))
+        ? RECORD_TAB.id
+        : PREFLIGHT_TAB.id,
+    material: PREFLIGHT_TAB.id,
+  }));
+  // 「开始会议」计时是这一页的状态（和概念版一样），同时开始录音；「这场会开完了」停下录音交给服务端转写，并写进后台。
+  const [startedAt, setStartedAt] = useState<number | undefined>(undefined);
+  const recorder = useMeetingRecorder(card.objectRef.id);
   const [preview, setPreview] = useState<MaterialPreview>({ state: "idle" });
-  const readerDialog = useRef<HTMLDialogElement>(null);
-  const readerCloseRef = useRef<HTMLButtonElement>(null);
   const previewUrlRef = useRef<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -549,44 +490,19 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   const issueById = new Map(issues.map((item) => [item.objectRef.id, item]));
   const people = new Map(payload.participants.map((person) => [person.personId, person.displayName]));
   const dri = payload.participants.filter((person) => person.roles.includes("dri"));
+  const readOnly = payload.status !== "scheduled";
+  const viewedMaterial = payload.materials.find((material) => material.id === view.current) ?? null;
 
-  function openMaterialReader() {
-    setReaderOpen(true);
-    setSelectedMaterialId((current) => current ?? payload.materials[0]?.id ?? null);
-    requestAnimationFrame(() => readerCloseRef.current?.focus({ preventScroll: true }));
-  }
-
-  function closeMaterialReader() {
-    setReaderOpen(false);
-    setSelectedMaterialId(null);
-    setPreview({ state: "idle" });
-    if (previewUrlRef.current) {
-      URL.revokeObjectURL(previewUrlRef.current);
-      previewUrlRef.current = null;
-    }
-  }
+  useRememberedScroll(`${card.objectRef.id}|${view.current}`);
 
   useEffect(() => {
-    if (!readerOpen) return;
-    const dialog = readerDialog.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
-    // Escape 的原生 close 也要同步 React 状态并回收 object URL。
-    dialog.addEventListener("close", closeMaterialReader);
-    return () => {
-      dialog.removeEventListener("close", closeMaterialReader);
-      if (dialog.open) dialog.close();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readerOpen]);
-
-  useEffect(() => {
-    if (!readerOpen || !selectedMaterialId) return;
+    const id = viewedMaterial?.id;
+    if (!id) return;
     const controller = new AbortController();
     setPreview({ state: "loading" });
     void (async () => {
       try {
-        const response = await fetch(`/api/meetings/${card.objectRef.id}/materials/${selectedMaterialId}/preview`, {
+        const response = await fetch(`/api/meetings/${card.objectRef.id}/materials/${id}/preview`, {
           headers: { accept: "application/pdf, text/html, text/plain" },
           signal: controller.signal,
         });
@@ -610,9 +526,31 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
       }
     })();
     return () => controller.abort();
-  }, [readerOpen, selectedMaterialId, card.objectRef.id]);
+  }, [viewedMaterial?.id, card.objectRef.id]);
+
+  // 离开这一页时回收 PDF 预览的 object URL。
+  useEffect(
+    () => () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    },
+    [],
+  );
 
   const candidateKey = payload.transcriptCandidate?.createdAt ?? null;
+
+  // 录音转写中、会后抽取中：每 5 秒取一次会议卡片，状态、候选、纪要跟着更新；候选一到，下面那段就自动打开说话人对应。
+  const transcribing = recordingInFlight(payload.recording);
+  const extracting = payload.status === "held" && (payload.outcome?.status === "pending" || payload.outcome?.status === "running");
+  const refreshing = transcribing || extracting;
+  useEffect(() => {
+    if (!refreshing) return;
+    const timer = window.setInterval(async () => {
+      const { data } = await browserApi.GET("/api/cards/meetings/{id}", { params: { path: { id: card.objectRef.id } } });
+      const next = data?.cards?.[0];
+      if (next) onCard(next);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [refreshing, card.objectRef.id, onCard]);
 
   // 候选出现或重上传后自动打开预览；关闭只收起，不回滚服务端候选。
   useEffect(() => {
@@ -660,7 +598,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
 
   /** 编辑弹层回填当前 Card 事实；主持 DRI 只列人员目录里的 DRI，目录不可用时保留当前值。 */
   async function openEditDetails() {
-    setEditForm({ title: card.title, scheduledAt: payload.scheduledAt.slice(0, 16), leadDriId: payload.leadDriId });
+    setEditForm(detailsForm());
     setDriError(null);
     setEditOpen(true);
     const { data, response } = await browserApi.GET("/api/people");
@@ -671,14 +609,16 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
     setDriOptions((((data as { people?: DirectoryOption[] } | undefined)?.people ?? []).filter((person) => person.roles.includes("dri"))));
   }
 
-  /** 只提交真正改动的字段：未改的时间不重写，避免本地输入被重新解析成另一个瞬间。 */
+  /** 只提交真正改动的字段：未改的时间不重写。时间按公司时区提交。 */
   async function saveMeetingDetails() {
     const action = actionOf("meeting.edit_details");
     if (!action) return;
-    const patch: { title?: string; scheduledAt?: string; leadDriId?: string } = {};
+    const initial = detailsForm();
+    const patch: { title?: string; scheduledAt?: string; endsAt?: string; leadDriId?: string } = {};
     const title = editForm.title.trim();
     if (title && title !== card.title) patch.title = title;
-    if (editForm.scheduledAt && editForm.scheduledAt !== payload.scheduledAt.slice(0, 16)) patch.scheduledAt = editForm.scheduledAt;
+    if (editForm.scheduledAt && editForm.scheduledAt !== initial.scheduledAt) patch.scheduledAt = fromCompanyInput(editForm.scheduledAt);
+    if (editForm.endsAt && editForm.endsAt !== initial.endsAt) patch.endsAt = fromCompanyInput(editForm.endsAt);
     if (editForm.leadDriId && editForm.leadDriId !== payload.leadDriId) patch.leadDriId = editForm.leadDriId;
     if (!Object.keys(patch).length) {
       setEditOpen(false);
@@ -707,7 +647,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
     setUploadError(body.message ?? "Transcript 整份被拒绝");
   }
 
-  /** Header 入口按扩展名分流：.md 只生成候选，.json 走既有 immediate import。 */
+  /** 会议记录入口按扩展名分流：.md 只生成候选，.json 走既有 immediate import。 */
   async function importTranscriptFile(file: File) {
     if (!/\.md$/i.test(file.name)) return uploadTranscript(file);
     setUploading(true);
@@ -793,7 +733,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   }
 
   const coreEntry = payload.preflight.entries.find((entry) => entry.kind === "core_judgment");
-  /** pen 把一号位点评从正文目录移进左侧 amber 参考盒，正文目录因此只剩其余六段。 */
+  /** 一号位点评在左侧 amber 参考盒里，正文目录因此只剩其余几段。 */
   const lensEntries = payload.preflight.entries.filter((entry) => entry.kind === "leader_lens");
   const preflightGroups = groupPreflight(payload.preflight.entries, Boolean(payload.preflight.taskDefinition))
     .map((group) => ({ ...group, entries: group.entries.filter((entry) => entry.kind !== "leader_lens") }))
@@ -810,22 +750,23 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
     return ref;
   };
 
-  /** 评审目录 scroll-spy：以正文滚动容器顶部为基准，取最后一个越过分界线的章节。 */
+  /** 评审目录 scroll-spy：以阅读页（.ts-detail）顶部为基准，让出页头胶囊和材料页签，取最后一个越过分界线的章节。 */
+  const preflightShown = view.current === PREFLIGHT_TAB.id;
   useEffect(() => {
-    const main = mainRef.current;
-    if (!main || payload.status !== "scheduled" || !payload.preflight.taskDefinition) return;
+    const scroller = mainRef.current?.closest<HTMLElement>(".ts-detail");
+    if (!scroller || !preflightShown || !payload.preflight.taskDefinition) return;
     const sync = () => {
-      const boundary = main.getBoundingClientRect().top + 96;
-      const sections = [...main.querySelectorAll<HTMLElement>("[data-section]")].map((section) => ({
+      const boundary = scroller.getBoundingClientRect().top + 120;
+      const sections = [...(mainRef.current?.querySelectorAll<HTMLElement>("[data-section]") ?? [])].map((section) => ({
         key: section.dataset.section ?? "",
         top: section.getBoundingClientRect().top,
       }));
       setActiveSection(pickActiveSection(sections, boundary));
     };
     sync();
-    main.addEventListener("scroll", sync, { passive: true });
-    return () => main.removeEventListener("scroll", sync);
-  }, [payload.status, payload.preflight.taskDefinition]);
+    scroller.addEventListener("scroll", sync, { passive: true });
+    return () => scroller.removeEventListener("scroll", sync);
+  }, [preflightShown, payload.preflight.taskDefinition]);
 
   function jump(kind: string) {
     const target = mainRef.current?.querySelector<HTMLElement>(`[data-section="${kind}"]`);
@@ -834,63 +775,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
     target.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
   }
 
-  /* Header 右侧 Secondary Seg Group：只摆真实可用的动作，段间 1×18 分隔。 */
-  const segments: { key: string; node: ReactNode }[] = [];
-  if (payload.status === "scheduled" && actionOf("meeting.edit_materials")) {
-    segments.push({
-      key: "edit",
-      node: (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={async () => {
-            if (await ask("返回编辑会使当前预审候选失效。是否继续？")) void run(actionOf("meeting.edit_materials")!, {});
-          }}
-        >
-          <RefreshCw size={13} aria-hidden="true" />
-          返回编辑材料
-        </button>
-      ),
-    });
-  }
-  if (payload.materials.length) {
-    segments.push({
-      key: "reader",
-      node: (
-        <button type="button" onClick={openMaterialReader}>
-          <Files size={13} aria-hidden="true" />
-          查看原始材料
-        </button>
-      ),
-    });
-  }
-  if (payload.status === "scheduled" && actionOf("meeting.regenerate_preflight")) {
-    segments.push({
-      key: "regen",
-      node: (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={async () => {
-            if (await ask("重新预审会替换当前条目，并清除旧条目的核对和编辑状态。是否继续？")) {
-              void run(actionOf("meeting.regenerate_preflight")!, {});
-            }
-          }}
-        >
-          <RefreshCw size={13} aria-hidden="true" />
-          {pending ? "预审中…" : "重新预审"}
-        </button>
-      ),
-    });
-  }
-
-  const stageLine = materialStateLine(payload.status, payload.preflight.readiness, payload.materials);
   /* 下拉永远包含当前主持 DRI：目录加载失败也不会把值改成空。 */
   const editDriOptions: DirectoryOption[] = driOptions.length
     ? driOptions
     : [{ personId: payload.leadDriId, displayName: people.get(payload.leadDriId) ?? payload.leadDriId, roles: [] }];
 
-  /* pen Signals & Risks Row：积极信号与潜在风险两卡并排；其余章节整宽。 */
+  /* 积极信号与潜在风险两卡并排；其余章节整宽。 */
   const isPairKey = (key: string) => key === "positive_signal" || key === "risk_calibration";
   const firstPairIndex = preflightGroups.findIndex((group) => isPairKey(group.key));
   const beforePair = firstPairIndex === -1 ? preflightGroups : preflightGroups.slice(0, firstPairIndex);
@@ -915,107 +805,99 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
               <summary>查看依据（{entry.sourceRefs.length}）</summary>
               <ul>{entry.sourceRefs.map((ref) => <li key={ref}>{sourceLabel(ref)}</li>)}</ul>
             </details>
-            <div className={s.briefActions}>
-              <button type="button" aria-pressed={checked} disabled={pending} onClick={() => toggle("checkedEntryIds", entry.id)}>
-                {checked ? "已核对" : "标记已核对"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSupplementEntry(entry.id);
-                  setSupplementText(`请补充「${entry.title}」的证据`);
-                }}
-              >
-                请求补充材料
-              </button>
-            </div>
+            {readOnly ? null : (
+              <div className={s.briefActions}>
+                <button type="button" aria-pressed={checked} disabled={pending} onClick={() => toggle("checkedEntryIds", entry.id)}>
+                  {checked ? "已核对" : "标记已核对"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSupplementEntry(entry.id);
+                    setSupplementText(`请补充「${entry.title}」的证据`);
+                  }}
+                >
+                  请求补充材料
+                </button>
+              </div>
+            )}
           </article>
         );
       })}
     </section>
   );
 
-  return (
-    <section className={s.workspace} data-testid="meeting-workspace" data-status={payload.status} aria-labelledby="meeting-title">
-      {confirmDialog}
-      <header className={s.header}>
-        <div className={s.identity}>
-          <ContextMark kind="meeting" />
-          <div>
-            <span>{MEETING_EYEBROW[payload.status]}</span>
-            <h1 id="meeting-title">{card.title}</h1>
-            <p className={s.largeTime}>
-              <time dateTime={payload.scheduledAt}>{meetingLargeTime(payload.scheduledAt)}</time>
-            </p>
-          </div>
-        </div>
-        <div className={s.headerMeta}>
-          <Chip size="sm" variant="soft">
-            主责 DRI · {people.get(payload.leadDriId) ?? "待确认"}
-          </Chip>
-          <Chip size="sm" variant="soft">
-            {payload.participants.length} 人参会
-          </Chip>
-        </div>
-        <Button isIconOnly variant="tertiary" data-close-view onPress={() => onNavigate("/")} aria-label="关闭会议空间">
-          <X size={19} aria-hidden="true" />
-        </Button>
-      </header>
-      <StageBar
-        status={payload.status}
-        statusLine={stageLine}
-        actions={
-          <>
-            {payload.status === "scheduled" && actionOf("meeting.edit_details") ? (
-              <button type="button" className={s.editAction} disabled={pending} onClick={() => void openEditDetails()}>
-                <Pencil size={13} aria-hidden="true" />
-                编辑会议
-              </button>
-            ) : null}
-            {segments.length ? (
-              <div className={s.segGroup}>
-                {segments.map((segment, index) => (
-                  <span key={segment.key} className={s.segItem}>
-                    {index > 0 ? <span className={s.segDivider} aria-hidden="true" /> : null}
-                    {segment.node}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            {payload.status === "scheduled" ? (
-              <>
-                {payload.transcriptCandidate && !candidateOpen ? (
-                  <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>
-                    查看会议记录候选
-                  </button>
-                ) : null}
-                <input
-                  ref={uploadRef}
-                  type="file"
-                  accept=".md,.json,application/json,text/markdown"
-                  className={s.hiddenInput}
-                  aria-label="选择会议记录文件"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (file) void importTranscriptFile(file);
-                  }}
-                />
-                <button
-                  type="button"
-                  className={s.primaryAction}
-                  disabled={uploading}
-                  onClick={() => uploadRef.current?.click()}
-                >
-                  <FileUp size={13} aria-hidden="true" />
-                  {uploading ? "上传中…" : payload.transcriptCandidate ? "重新导入会议记录" : "导入会议记录"}
-                </button>
-              </>
-            ) : null}
-          </>
-        }
+  /* 页头：计划时段、会议记录入口、开始会议／计时（已取消的会没有计时）。 */
+  const ended = Boolean(payload.endedAt) || payload.status === "held" || payload.status === "reviewed";
+  const phase = meetingPhase(startedAt, ended);
+  const endAction = actionOf("meeting.end");
+  const clock =
+    payload.status === "cancelled" ? undefined : (
+      <MeetingClock
+        phase={phase}
+        startedAt={startedAt}
+        endedAt={payload.endedAt}
+        ending={pending || !endAction || recorder.state.status === "stopping"}
+        caption={recorder.state.status === "recording" ? "录音中" : "会议中"}
+        note={recordingNote(recorder.state)}
+        onStart={() => {
+          setStartedAt(Date.now());
+          void recorder.start();
+        }}
+        onEnd={async () => {
+          if (!endAction) return;
+          await recorder.stop();
+          if (!(await run(endAction, {}))) return;
+          setStartedAt(undefined);
+          setView((current) => ({ ...current, current: RECORD_TAB.id }));
+        }}
       />
+    );
+  const participantNames = payload.participants.map((person) => person.displayName);
+  const facts = [
+    `${people.get(payload.leadDriId) ?? "主持人待确认"}主持`,
+    participantNames.length <= 4 ? `参会：${participantNames.join("、")}` : `${participantNames.length} 人参会`,
+  ];
+  const tabs = [PREFLIGHT_TAB, ...payload.materials.map(materialTab)];
+  const provenance = (material: MaterialMeta) => {
+    const request = payload.draft.supplementRequests.find((item) => item.id === material.supplementFor);
+    return request ? ` · 回应「${truncateText(request.text, 24)}」` : "";
+  };
 
+  const preflightToolbar = readOnly ? null : (
+    <div className={s.toolbar}>
+      {actionOf("meeting.edit_details") ? (
+        <button type="button" disabled={pending} onClick={() => void openEditDetails()}>
+          <Pencil size={13} aria-hidden="true" />
+          编辑会议
+        </button>
+      ) : null}
+      {actionOf("meeting.edit_materials") ? (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={async () => {
+            if (await ask("返回编辑会使当前预审候选失效。是否继续？")) void run(actionOf("meeting.edit_materials")!, {});
+          }}
+        >
+          <RefreshCw size={13} aria-hidden="true" />
+          返回编辑材料
+        </button>
+      ) : null}
+      {actionOf("meeting.regenerate_preflight") ? (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={async () => {
+            if (await ask("重新预审会替换当前条目，并清除旧条目的核对和编辑状态。是否继续？")) {
+              void run(actionOf("meeting.regenerate_preflight")!, {});
+            }
+          }}
+        >
+          <RefreshCw size={13} aria-hidden="true" />
+          {pending ? "预审中…" : "重新预审"}
+        </button>
+      ) : null}
       {editOpen ? (
         <div className={s.editPopover} role="dialog" aria-label="编辑会议">
           <p className={s.editTitle}>编辑会议</p>
@@ -1024,12 +906,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
             <input value={editForm.title} onChange={(event) => setEditForm({ ...editForm, title: event.target.value })} />
           </label>
           <label className={s.editField}>
-            <span>时间</span>
-            <input
-              type="datetime-local"
-              value={editForm.scheduledAt}
-              onChange={(event) => setEditForm({ ...editForm, scheduledAt: event.target.value })}
-            />
+            <span>开始</span>
+            <input type="datetime-local" value={editForm.scheduledAt} onChange={(event) => setEditForm({ ...editForm, scheduledAt: event.target.value })} />
+          </label>
+          <label className={s.editField}>
+            <span>结束</span>
+            <input type="datetime-local" value={editForm.endsAt} onChange={(event) => setEditForm({ ...editForm, endsAt: event.target.value })} />
           </label>
           <label className={s.editField}>
             <span>主持 DRI</span>
@@ -1044,168 +926,175 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
               <ChevronDown size={13} aria-hidden="true" className={s.editChevron} />
             </span>
           </label>
+          {editForm.scheduledAt && editForm.endsAt && editForm.endsAt <= editForm.scheduledAt ? <p className={s.editHint}>结束时间要晚于开始时间</p> : null}
           {driError ? <p className={s.editHint}>{driError}</p> : null}
           <div className={s.editActions}>
             <button type="button" className={s.editCancel} onClick={() => setEditOpen(false)}>
               取消
             </button>
-            <button type="button" className={s.editSave} disabled={pending || !editForm.title.trim()} onClick={() => void saveMeetingDetails()}>
+            <button
+              type="button"
+              className={s.editSave}
+              disabled={pending || !editForm.title.trim() || (Boolean(editForm.endsAt) && editForm.endsAt <= editForm.scheduledAt)}
+              onClick={() => void saveMeetingDetails()}
+            >
               保存
             </button>
           </div>
         </div>
       ) : null}
+    </div>
+  );
 
-      <div className={s.materials}>
-        {payload.status === "scheduled" ? (
-          <section className={s.advisorShell}>
-            <aside className={s.prioritySidebar} aria-label="会前结论与评审目录">
-              <div className={s.readinessBlock}>
-                <small>预审结论</small>
-                <span className={s.readiness} data-readiness={payload.preflight.readiness ?? "legacy"}>
-                  {READINESS_LABEL[payload.preflight.readiness ?? ""] ?? "会前材料"}
-                </span>
-              </div>
-              {payload.issueIds.length ? (
-                <div className={s.sidebarIssues} aria-label="关联议题">
-                  <small>关联议题{payload.issueIds.length > 1 ? ` · ${payload.issueIds.length} 项` : ""}</small>
-                  {payload.issueIds.map((issueId) => {
-                    const issue = issueById.get(issueId);
-                    const read = payload.draft.readIssueIds.includes(issueId);
-                    const carried = payload.draft.carriedIssueIds.includes(issueId);
-                    return (
-                      <article key={issueId} className={s.linkedIssue} data-read={read}>
-                        <small>{issue ? issueScopeLabel((issue.payload as IssuePayload).location, homeCards) : "议题"}</small>
-                        <h4 title={issue?.title ?? issueId}>{issue?.title ?? issueId}</h4>
-                        <div className={s.briefActions}>
-                          <button type="button" aria-pressed={read} disabled={pending} onClick={() => toggle("readIssueIds", issueId)}>
-                            <Check size={12} aria-hidden="true" />
-                            已阅
-                          </button>
-                          <button type="button" aria-pressed={carried} disabled={pending} onClick={() => toggle("carriedIssueIds", issueId)}>
-                            带到会议
-                          </button>
-                          <button type="button" onClick={() => onNavigate(`/issues/${issueId}`)}>
-                            打开 Issue
-                          </button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : null}
-              {lensEntries.length ? (
-                <div className={s.leaderLens}>
-                  <small>一号位追问</small>
-                  <ol>
-                    {lensEntries.map((entry) => (
-                      <li key={entry.id}>{entry.body}</li>
-                    ))}
-                  </ol>
-                </div>
-              ) : null}
-              {payload.preflight.inputCoverage ? (
-                <div className={s.coverage}>
-                  <small>四输入边界</small>
-                  <span>背景 <b>{INPUT_LABEL[payload.preflight.inputCoverage.background]}</b></span>
-                  <span>目的 <b>{INPUT_LABEL[payload.preflight.inputCoverage.purpose]}</b></span>
-                  <span>源材料 <b>{INPUT_LABEL[payload.preflight.inputCoverage.sourceMaterial]}</b></span>
-                  <span>关联会议 <b>{INPUT_LABEL[payload.preflight.inputCoverage.relatedMeeting]}</b></span>
-                </div>
-              ) : null}
-              {payload.preflight.entries.length ? (
-                <nav className={s.outline} aria-label="评审目录">
-                  <div className={s.outlineHead}>
-                    <small>评审目录</small>
-                    <span>
-                      {checkedCount} / {payload.preflight.entries.length}
-                    </span>
-                  </div>
-                  <button type="button" data-active={activeSection === "core"} onClick={() => jump("core")}>
-                    <span>核心判断</span>
-                  </button>
-                  {preflightGroups.map((group) => (
-                    <button
-                      key={group.key}
-                      type="button"
-                      data-active={activeSection === group.key}
-                      onClick={() => jump(group.key)}
-                    >
-                      <span>{group.shortLabel}</span>
-                      <em>
-                        {group.entries.filter((entry) => payload.draft.checkedEntryIds.includes(entry.id)).length}/
-                        {group.entries.length}
-                      </em>
+  const preflightView = (
+    <section className={s.advisorShell}>
+      <aside className={s.prioritySidebar} aria-label="会前结论与评审目录">
+        <div className={s.readinessBlock}>
+          <small>预审结论</small>
+          <span className={s.readiness} data-readiness={payload.preflight.readiness ?? "legacy"}>
+            {READINESS_LABEL[payload.preflight.readiness ?? ""] ?? "会前材料"}
+          </span>
+        </div>
+        {payload.issueIds.length ? (
+          <div className={s.sidebarIssues} aria-label="关联议题">
+            <small>关联议题{payload.issueIds.length > 1 ? ` · ${payload.issueIds.length} 项` : ""}</small>
+            {payload.issueIds.map((issueId) => {
+              const issue = issueById.get(issueId);
+              const read = payload.draft.readIssueIds.includes(issueId);
+              const carried = payload.draft.carriedIssueIds.includes(issueId);
+              return (
+                <article key={issueId} className={s.linkedIssue} data-read={read}>
+                  <small>{issue ? issueScopeLabel((issue.payload as IssuePayload).location, homeCards) : "议题"}</small>
+                  <h4 title={issue?.title ?? issueId}>{issue?.title ?? issueId}</h4>
+                  <div className={s.briefActions}>
+                    {readOnly ? null : (
+                      <>
+                        <button type="button" aria-pressed={read} disabled={pending} onClick={() => toggle("readIssueIds", issueId)}>
+                          <Check size={12} aria-hidden="true" />
+                          已阅
+                        </button>
+                        <button type="button" aria-pressed={carried} disabled={pending} onClick={() => toggle("carriedIssueIds", issueId)}>
+                          带到会议
+                        </button>
+                      </>
+                    )}
+                    <button type="button" onClick={() => onNavigate(`/issues/${issueId}`)}>
+                      打开 Issue
                     </button>
-                  ))}
-                </nav>
-              ) : null}
-            </aside>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
+        {lensEntries.length ? (
+          <div className={s.leaderLens}>
+            <small>一号位追问</small>
+            <ol>
+              {lensEntries.map((entry) => (
+                <li key={entry.id}>{entry.body}</li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+        {payload.preflight.inputCoverage ? (
+          <div className={s.coverage}>
+            <small>四输入边界</small>
+            <span>背景 <b>{INPUT_LABEL[payload.preflight.inputCoverage.background]}</b></span>
+            <span>目的 <b>{INPUT_LABEL[payload.preflight.inputCoverage.purpose]}</b></span>
+            <span>源材料 <b>{INPUT_LABEL[payload.preflight.inputCoverage.sourceMaterial]}</b></span>
+            <span>关联会议 <b>{INPUT_LABEL[payload.preflight.inputCoverage.relatedMeeting]}</b></span>
+          </div>
+        ) : null}
+        {payload.preflight.entries.length ? (
+          <nav className={s.outline} aria-label="评审目录">
+            <div className={s.outlineHead}>
+              <small>评审目录</small>
+              <span>
+                {checkedCount} / {payload.preflight.entries.length}
+              </span>
+            </div>
+            <button type="button" data-active={activeSection === "core"} onClick={() => jump("core")}>
+              <span>核心判断</span>
+            </button>
+            {preflightGroups.map((group) => (
+              <button key={group.key} type="button" data-active={activeSection === group.key} onClick={() => jump(group.key)}>
+                <span>{group.shortLabel}</span>
+                <em>
+                  {group.entries.filter((entry) => payload.draft.checkedEntryIds.includes(entry.id)).length}/{group.entries.length}
+                </em>
+              </button>
+            ))}
+          </nav>
+        ) : null}
+      </aside>
 
-            <main className={s.advisorMain} ref={mainRef}>
-              {uploadError ? <p className={s.error} role="alert">{uploadError}</p> : null}
-              {payload.preflight.status === "pending" && !actionOf("meeting.edit_materials") ? (
-                /* scheduled 未预审：材料编辑卡（白卡，按钮 13px/9 14/r10）。预审完成后材料入口在 Header。 */
-                <section className={s.reviewSection}>
-                  <header>
-                    <h3>会前材料</h3>
-                    <span>{payload.materials.length} 份</span>
-                  </header>
-                  {payload.materials.map((material) => (
-                    <p key={material.id} className={s.entryBody}>
-                      <a href={`/api/meetings/${card.objectRef.id}/materials/${material.id}/download`}>{material.fileName}</a> · {Math.ceil(material.sizeBytes / 1024)} KB
-                    </p>
-                  ))}
-                  <input ref={materialRef} type="file" multiple accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,text/markdown,.md" aria-label="选择会前材料" />
-                  <div className={s.stageActions}>
-                    <button type="button" disabled={uploading} onClick={() => void replaceMaterials()}>{uploading ? "解析中…" : "替换材料集"}</button>
-                    {actionOf("meeting.run_preflight") ? <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.run_preflight")!, {})}>运行预审</button> : null}
-                  </div>
-                </section>
-              ) : null}
-              <section className={s.judgmentHero} data-section="core">
-                <small>核心判断</small>
-                <h2>{coreEntry?.title ?? "会前预审"}</h2>
-                <p>{(coreEntry?.body ?? payload.preflight.brief) || "预审尚未产出会议简报。"}</p>
-                {payload.preflight.summary ? (
-                  <div className={s.heroSummary}>
-                    <span><small>最优先动作</small>{payload.preflight.summary.priorityAction}</span>
-                    <span><small>最关键问题</small>{payload.preflight.summary.criticalIssue}</span>
-                  </div>
-                ) : null}
-                {coreEntry ? (
-                  <details className={s.sources}>
-                    <summary>查看依据（{coreEntry.sourceRefs.length}）</summary>
-                    <ul>{coreEntry.sourceRefs.map((ref) => <li key={ref}>{sourceLabel(ref)}</li>)}</ul>
-                  </details>
-                ) : null}
-              </section>
-            {payload.preflight.error ? (
-              <p className={s.error} role="alert">
-                {payload.preflight.error.code}：{payload.preflight.error.message}
-                {actionOf("meeting.retry_preflight") ? (
-                  <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.retry_preflight")!, {})}>
-                    重试预审
-                  </button>
-                ) : null}
+      <main className={s.advisorMain} ref={mainRef}>
+        {uploadError ? <p className={s.error} role="alert">{uploadError}</p> : null}
+        {!readOnly && payload.preflight.status === "pending" && !actionOf("meeting.edit_materials") ? (
+          /* 未预审：材料编辑卡。预审完成后替换材料要先「返回编辑材料」。 */
+          <section className={s.reviewSection}>
+            <header>
+              <h3>会前材料</h3>
+              <span>{payload.materials.length} 份</span>
+            </header>
+            {payload.materials.map((material) => (
+              <p key={material.id} className={s.entryBody}>
+                <a href={`/api/meetings/${card.objectRef.id}/materials/${material.id}/download`}>{material.fileName}</a> · {Math.ceil(material.sizeBytes / 1024)} KB
               </p>
+            ))}
+            <input ref={materialRef} type="file" multiple accept={MATERIAL_ACCEPT} aria-label="选择会前材料" />
+            <div className={s.stageActions}>
+              <button type="button" disabled={uploading} onClick={() => void replaceMaterials()}>{uploading ? "解析中…" : "替换材料集"}</button>
+              {actionOf("meeting.run_preflight") ? <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.run_preflight")!, {})}>运行预审</button> : null}
+            </div>
+          </section>
+        ) : null}
+        <section className={s.judgmentHero} data-section="core">
+          <small>核心判断</small>
+          <h2>{coreEntry?.title ?? "会前预审"}</h2>
+          <p>{(coreEntry?.body ?? payload.preflight.brief) || "预审尚未产出会议简报。"}</p>
+          {payload.preflight.summary ? (
+            <div className={s.heroSummary}>
+              <span><small>最优先动作</small>{payload.preflight.summary.priorityAction}</span>
+              <span><small>最关键问题</small>{payload.preflight.summary.criticalIssue}</span>
+            </div>
+          ) : null}
+          {coreEntry ? (
+            <details className={s.sources}>
+              <summary>查看依据（{coreEntry.sourceRefs.length}）</summary>
+              <ul>{coreEntry.sourceRefs.map((ref) => <li key={ref}>{sourceLabel(ref)}</li>)}</ul>
+            </details>
+          ) : null}
+        </section>
+        {payload.preflight.error ? (
+          <p className={s.error} role="alert">
+            {payload.preflight.error.code}：{payload.preflight.error.message}
+            {actionOf("meeting.retry_preflight") ? (
+              <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.retry_preflight")!, {})}>
+                重试预审
+              </button>
             ) : null}
+          </p>
+        ) : null}
 
-            {payload.preflight.taskDefinition ? (
-              <details className={s.taskContext}>
-                <summary>材料任务与评审边界</summary>
-                <div><small>材料目的</small><p>{payload.preflight.taskDefinition.materialPurpose}</p></div>
-                <div><small>本次评审目的</small><p>{payload.preflight.taskDefinition.reviewPurpose}</p></div>
-                <div><small>读者下一动作</small><p>{payload.preflight.taskDefinition.readerAction}</p></div>
-                <div><small>本材料非目标</small><p>{payload.preflight.taskDefinition.nonGoal}</p></div>
-                <div><small>证据边界</small><p>{payload.preflight.basis}</p></div>
-              </details>
-            ) : null}
+        {payload.preflight.taskDefinition ? (
+          <details className={s.taskContext}>
+            <summary>材料任务与评审边界</summary>
+            <div><small>材料目的</small><p>{payload.preflight.taskDefinition.materialPurpose}</p></div>
+            <div><small>本次评审目的</small><p>{payload.preflight.taskDefinition.reviewPurpose}</p></div>
+            <div><small>读者下一动作</small><p>{payload.preflight.taskDefinition.readerAction}</p></div>
+            <div><small>本材料非目标</small><p>{payload.preflight.taskDefinition.nonGoal}</p></div>
+            <div><small>证据边界</small><p>{payload.preflight.basis}</p></div>
+          </details>
+        ) : null}
 
-            {beforePair.map(renderGroup)}
-            {pairGroups.length ? <div className={s.pairRow}>{pairGroups.map(renderGroup)}</div> : null}
-            {afterPair.map(renderGroup)}
+        {beforePair.map(renderGroup)}
+        {pairGroups.length ? <div className={s.pairRow}>{pairGroups.map(renderGroup)}</div> : null}
+        {afterPair.map(renderGroup)}
 
+        {readOnly ? null : (
+          <>
             <div className={s.reviewSection}>
               <header>
                 <h3>请求补充材料</h3>
@@ -1296,207 +1185,275 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
                 ) : null}
               </div>
             </div>
-
-              <p className={s.publishReceipt}>上传逐字稿（warmap-transcript.v1）在右上角；任一条不合规则整份拒绝，不保存部分 turns。</p>
-              <ActionFeedback state={state} onRetry={retry} />
-            </main>
-
-          </section>
-        ) : (
-          <section className={s.review}>
-            <div className={s.reviewColumn}>
-              {payload.outcome ? (
-                <>
-                  <section className={s.reviewSection}>
-                    <header>
-                      <h3>会后抽取摘要</h3>
-                    </header>
-                    <p className={s.entryBody}>{payload.outcome.summary || "抽取尚未产出摘要。"}</p>
-                  </section>
-                  {payload.outcome.error ? (
-                    <p className={s.error} role="alert">
-                      {payload.outcome.error.code}：{payload.outcome.error.message}
-                      {actionOf("meeting.retry_outcome") ? (
-                        <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.retry_outcome")!, {})}>
-                          重试会后抽取
-                        </button>
-                      ) : null}
-                    </p>
-                  ) : null}
-                  <section className={s.reviewSection}>
-                    <header>
-                      <h3>逐项处理</h3>
-                      <span className={s.count}>{payload.outcome.items.length} 条</span>
-                    </header>
-                    {payload.outcome.items.map((item) => {
-                      const itemState =
-                        item.review?.status === "confirmed"
-                          ? "confirmed"
-                          : item.review?.status === "dismissed"
-                            ? "dismissed"
-                            : item.kind === "open"
-                              ? "open"
-                              : "pending";
-                      return (
-                        <article key={item.id} className={s.decisionRecord} data-kind={item.kind}>
-                          <div className={s.itemHead}>
-                            <span className={s.kindBadge}>{ITEM_LABEL[item.kind] ?? item.kind}</span>
-                            <p className={s.itemText}>{item.text}</p>
-                          </div>
-                          <blockquote className={s.itemQuote}>
-                            <p>{item.quote}</p>
-                          </blockquote>
-                          <div className={s.itemMeta}>
-                            <div className={s.itemMetaLeft}>
-                              <span>{people.get(item.speakerId) ?? item.speakerId}</span>
-                              <span className={s.itemState} data-state={itemState}>
-                                {itemState === "confirmed"
-                                  ? `已确认${item.review?.handoff ? ` · ${EXPORT_LABEL[item.review.handoff.exportStatus] ?? item.review.handoff.exportStatus}` : ""}`
-                                  : itemState === "dismissed"
-                                    ? "已忽略"
-                                    : itemState === "open"
-                                      ? "仅展示，不产生效果"
-                                      : "待处理"}
-                              </span>
-                            </div>
-                            <div className={s.itemActions}>
-                              {itemAction("meeting.confirm_item", item.id) ? (
-                                <button
-                                  type="button"
-                                  data-variant="confirm"
-                                  disabled={pending}
-                                  onClick={() => void run(itemAction("meeting.confirm_item", item.id)!, {})}
-                                >
-                                  确认
-                                </button>
-                              ) : null}
-                              {itemAction("meeting.dismiss_item", item.id) ? (
-                                <button
-                                  type="button"
-                                  disabled={pending}
-                                  onClick={() => void run(itemAction("meeting.dismiss_item", item.id)!, {})}
-                                >
-                                  忽略
-                                </button>
-                              ) : null}
-                              {itemAction("meeting.revoke_effect", item.id) ? (
-                                <button
-                                  type="button"
-                                  disabled={pending}
-                                  onClick={() => void run(itemAction("meeting.revoke_effect", item.id)!, {})}
-                                >
-                                  撤回
-                                </button>
-                              ) : null}
-                            </div>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </section>
-                </>
-              ) : (
-                <p className={s.empty}>Transcript 已保存，会后抽取尚未开始。</p>
-              )}
-              <ActionFeedback state={state} onRetry={retry} />
-            </div>
-
-            <div className={s.reviewColumn}>
-              <section className={s.reviewSection}>
-                <header>
-                  <h3>原始会前材料</h3>
-                  <span>
-                    {payload.materials.length} 份
-                    {payload.materials.length ? (
-                      <button type="button" className={s.readerOpen} onClick={openMaterialReader}>查看原始材料</button>
-                    ) : null}
-                  </span>
-                </header>
-                {payload.materials.map((material) => <p key={material.id} className={s.entryBody}><a href={`/api/meetings/${card.objectRef.id}/materials/${material.id}/download`}>{material.fileName}</a></p>)}
-                <p className={s.publishReceipt}>材料仅供查看；Outcome 只以 Transcript 为输入。</p>
-              </section>
-              <section className={s.reviewSection}>
-                <header>
-                  <h3>Transcript</h3>
-                </header>
-                <p className={s.entryBody}>
-                  {payload.transcript ? `${payload.transcript.turns.length} 条发言已保存 · warmap-transcript.v1` : "尚未导入 Transcript"}
-                </p>
-              </section>
-
-              {actionOf("meeting.replace_transcript") ? (
-                <section className={`${s.reviewSection} ${s.dangerSection}`}>
-                  <header>
-                    <h3>替换 Transcript · 危险操作</h3>
-                  </header>
-                  <p className={s.warnings}>
-                    替换会整体使旧 Outcome candidate 与 actionId 失效并重跑抽取；只有没有任何 confirmed effect 时才允许。
-                  </p>
-                  <input ref={replaceRef} type="file" accept="application/json,.json" aria-label="选择替换用的 Transcript 文件" />
-                  <label className={s.summaryEdit}>
-                    <input type="checkbox" checked={replaceArmed} onChange={(event) => setReplaceArmed(event.target.checked)} />
-                    我确认整份替换当前 Transcript
-                  </label>
-                  <div className={s.stageActions}>
-                    <button type="button" disabled={pending || !replaceArmed} onClick={() => void replaceTranscript()}>
-                      替换 Transcript
-                    </button>
-                  </div>
-                </section>
-              ) : null}
-            </div>
-
-          </section>
+          </>
         )}
+      </main>
+    </section>
+  );
 
-        <p className={s.publishReceipt}>
-          参与人：{payload.participants.map((person) => person.displayName).join("、")} · 关联 Issue {payload.issueIds.length} 个
+  /* 会后纪要：共识（决定）、按负责人分组的 Action Item（待办）、提给 CEO 的战略议题，其余照原样列在后面。 */
+  const outcomeItems = payload.outcome?.items ?? [];
+  const minutes = {
+    decisions: outcomeItems.filter((item) => item.kind === "decision"),
+    actions: [...outcomeItems.filter((item) => item.kind === "todo").reduce((groups, item) => {
+      const ownerId = actionOwner(item, payload);
+      groups.set(ownerId, [...(groups.get(ownerId) ?? []), item]);
+      return groups;
+    }, new Map<string, typeof outcomeItems>())].map(([ownerId, items]) => ({ ownerId, items })),
+    strategic: outcomeItems.filter((item) => item.kind === "strategic"),
+    others: outcomeItems.filter((item) => !["decision", "todo", "strategic"].includes(item.kind)),
+  };
+  const renderItem = (item: (typeof outcomeItems)[number]) => {
+    const itemState = outcomeItemState(item, payload, (id) => people.get(id) ?? id);
+    return (
+      <article key={item.id} className={s.decisionRecord} data-kind={item.kind}>
+        <div className={s.itemHead}>
+          <span className={s.kindBadge}>{ITEM_LABEL[item.kind] ?? item.kind}</span>
+          <p className={s.itemText}>{item.kind === "strategic" && item.title ? item.title : item.text}</p>
+        </div>
+        {item.kind === "strategic" && item.brief ? <p className={s.entryBody}>{item.brief}</p> : null}
+        <blockquote className={s.itemQuote}>
+          <p>{item.quote}</p>
+        </blockquote>
+        <div className={s.itemMeta}>
+          <div className={s.itemMetaLeft}>
+            <span>{people.get(item.speakerId) ?? item.speakerId}</span>
+            {item.dueDate ? <span>{item.dueDate.slice(5).replace("-", "/")} 前</span> : null}
+            <span className={s.itemState} data-state={itemState.state}>
+              {itemState.label}
+            </span>
+          </div>
+          <div className={s.itemActions}>
+            {itemAction("meeting.confirm_item", item.id) ? (
+              <button type="button" data-variant="confirm" disabled={pending} onClick={() => void run(itemAction("meeting.confirm_item", item.id)!, {})}>
+                {item.kind === "todo" ? "推送" : "确认"}
+              </button>
+            ) : null}
+            {itemAction("meeting.dismiss_item", item.id) ? (
+              <button type="button" disabled={pending} onClick={() => void run(itemAction("meeting.dismiss_item", item.id)!, {})}>
+                {item.kind === "strategic" ? "不同意" : "忽略"}
+              </button>
+            ) : null}
+            {itemAction("meeting.revoke_effect", item.id) ? (
+              <button type="button" disabled={pending} onClick={() => void run(itemAction("meeting.revoke_effect", item.id)!, {})}>
+                撤回
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </article>
+    );
+  };
+
+  const recordView =
+    payload.status === "cancelled" ? (
+      <p className={s.empty}>这场会已取消，没有会议记录。</p>
+    ) : payload.status === "scheduled" ? (
+      <>
+      {payload.recording && payload.recording.status !== "done" ? (
+        <section className={s.reviewSection} aria-live="polite">
+          <header>
+            <h3>会议录音</h3>
+            <span>{RECORDING_LABEL[payload.recording.status]}</span>
+          </header>
+          {payload.recording.status === "failed" ? (
+            <p className={s.error} role="alert">
+              {payload.recording.error ?? "录音没能转成文字。"}可以改用下面的妙记导入。
+            </p>
+          ) : (
+            <p className={s.entryBody}>录音正在转成文字，转完会自动弹出「确认每位说话人是谁」。一小时的会大约要几分钟。</p>
+          )}
+        </section>
+      ) : null}
+      <section className={s.reviewSection}>
+        <header>
+          <h3>导入会议记录</h3>
+        </header>
+        <p className={s.entryBody}>
+          会后导入飞书妙记 Markdown（.md），确认说话人对应的人之后生成会后复核；也可以导入 warmap-transcript.v1 JSON。任一条不合规则整份拒绝，不保存部分发言。
         </p>
-        {readerOpen ? (
-          <MaterialReaderModal
-            dialogRef={readerDialog}
-            meetingId={card.objectRef.id}
-            materials={payload.materials}
-            selectedId={selectedMaterialId}
-            preview={preview}
-            stateLine={materialStateLine(payload.status, payload.preflight.readiness, payload.materials)}
-            supplementRequests={payload.draft.supplementRequests}
-            transcriptMeta={
-              payload.status !== "scheduled" && payload.transcript
-                ? { count: payload.transcript.turns.length, schemaVersion: payload.transcript.schemaVersion }
-                : null
-            }
-            note={
-              payload.status === "scheduled"
-                ? payload.preflight.status === "ready"
-                  ? "材料集当前只读；替换需先「返回编辑材料」，替换后旧预审结论失效。"
-                  : "替换材料集请使用「会前材料」区的上传控件；替换后旧预审结论失效。"
-                : "Outcome 只以 Transcript 为输入；材料仅供查看。"
-            }
-            onClose={closeMaterialReader}
-            onSelect={(id) => setSelectedMaterialId(id)}
+        <div className={s.stageActions}>
+          <input
+            ref={uploadRef}
+            type="file"
+            accept=".md,.json,application/json,text/markdown"
+            className={s.hiddenInput}
+            aria-label="选择会议记录文件"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void importTranscriptFile(file);
+            }}
           />
+          <button type="button" className={s.primaryAction} disabled={uploading} onClick={() => uploadRef.current?.click()}>
+            <FileUp size={13} aria-hidden="true" />
+            {uploading ? "上传中…" : payload.transcriptCandidate ? "重新导入会议记录" : "导入会议记录"}
+          </button>
+          {payload.transcriptCandidate && !candidateOpen ? (
+            <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>
+              查看会议记录候选
+            </button>
+          ) : null}
+        </div>
+        {uploadError ? <p className={s.error} role="alert">{uploadError}</p> : null}
+      </section>
+      </>
+    ) : (
+      <section className={s.review}>
+        {payload.outcome ? (
+          <>
+            <section className={s.reviewSection}>
+              <header>
+                <h3>会议纪要</h3>
+              </header>
+              <p className={s.entryBody}>{payload.outcome.summary || "抽取尚未产出摘要。"}</p>
+            </section>
+            {payload.outcome.error ? (
+              <p className={s.error} role="alert">
+                {payload.outcome.error.code}：{payload.outcome.error.message}
+                {actionOf("meeting.retry_outcome") ? (
+                  <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.retry_outcome")!, {})}>
+                    重试会后抽取
+                  </button>
+                ) : null}
+              </p>
+            ) : null}
+            {minutes.decisions.length ? (
+              <section className={s.reviewSection}>
+                <header>
+                  <h3>会议共识</h3>
+                  <span className={s.count}>{minutes.decisions.length} 条</span>
+                </header>
+                {minutes.decisions.map(renderItem)}
+              </section>
+            ) : null}
+            {minutes.actions.length ? (
+              <section className={s.reviewSection}>
+                <header>
+                  <h3>Action Item</h3>
+                  <span className={s.count}>{minutes.actions.reduce((sum, group) => sum + group.items.length, 0)} 条 · 已推到负责人的执行事项</span>
+                </header>
+                {minutes.actions.map((group) => (
+                  <div key={group.ownerId} className={s.ownerGroup}>
+                    <h4>{people.get(group.ownerId) ?? group.ownerId}</h4>
+                    {group.items.map(renderItem)}
+                  </div>
+                ))}
+              </section>
+            ) : null}
+            {minutes.strategic.length ? (
+              <section className={s.reviewSection}>
+                <header>
+                  <h3>提给 CEO 的战略议题</h3>
+                  <span className={s.count}>{minutes.strategic.length} 条</span>
+                </header>
+                {minutes.strategic.map(renderItem)}
+              </section>
+            ) : null}
+            {minutes.others.length ? (
+              <section className={s.reviewSection}>
+                <header>
+                  <h3>其他记录</h3>
+                  <span className={s.count}>{minutes.others.length} 条</span>
+                </header>
+                {minutes.others.map(renderItem)}
+              </section>
+            ) : null}
+          </>
+        ) : (
+          <p className={s.empty}>Transcript 已保存，会后抽取尚未开始。</p>
+        )}
+        <section className={s.reviewSection}>
+          <header>
+            <h3>Transcript</h3>
+          </header>
+          <p className={s.entryBody}>
+            {payload.transcript ? `${payload.transcript.turns.length} 条发言已保存 · warmap-transcript.v1` : "尚未导入 Transcript"}
+          </p>
+          <p className={s.publishReceipt}>会后复核只以 Transcript 为输入；会前材料在材料页签里只读查看。</p>
+        </section>
+        {actionOf("meeting.replace_transcript") ? (
+          <section className={`${s.reviewSection} ${s.dangerSection}`}>
+            <header>
+              <h3>替换 Transcript · 危险操作</h3>
+            </header>
+            <p className={s.warnings}>替换会整体使旧 Outcome candidate 与 actionId 失效并重跑抽取；只有没有任何 confirmed effect 时才允许。</p>
+            <input ref={replaceRef} type="file" accept="application/json,.json" aria-label="选择替换用的 Transcript 文件" />
+            <label className={s.summaryEdit}>
+              <input type="checkbox" checked={replaceArmed} onChange={(event) => setReplaceArmed(event.target.checked)} />
+              我确认整份替换当前 Transcript
+            </label>
+            <div className={s.stageActions}>
+              <button type="button" disabled={pending || !replaceArmed} onClick={() => void replaceTranscript()}>
+                替换 Transcript
+              </button>
+            </div>
+            {uploadError ? <p className={s.error} role="alert">{uploadError}</p> : null}
+          </section>
         ) : null}
-        {payload.transcriptCandidate && candidateOpen ? (
-          <TranscriptCandidateDialog
-            key={payload.transcriptCandidate.createdAt}
-            dialogRef={candidateDialog}
-            candidate={payload.transcriptCandidate}
-            scheduledAt={payload.scheduledAt}
-            participants={payload.participants}
-            directory={directory}
-            directoryError={directoryError}
-            pending={pending}
-            state={state}
-            hasConfirm={Boolean(actionOf("meeting.confirm_transcript_candidate"))}
-            hasDiscard={Boolean(actionOf("meeting.discard_transcript_candidate"))}
-            onRetry={retry}
-            onClose={() => setCandidateOpen(false)}
-            onConfirm={confirmCandidate}
-            onDiscard={discardCandidate}
-          />
-        ) : null}
-      </div>
+      </section>
+    );
+
+  const showing = view.current === RECORD_TAB.id ? RECORD_TAB : viewedMaterial ? materialTab(viewedMaterial) : PREFLIGHT_TAB;
+
+  return (
+    <section className={s.workspace} data-testid="meeting-workspace" data-status={payload.status}>
+      {confirmDialog}
+      <DetailFrame
+        headingId="meeting-title"
+        title={card.title}
+        onBack={() => onNavigate("/")}
+        actions={
+          <MeetingHeaderActions day={meetingDayWord(payload.scheduledAt)} slot={meetingSlot(payload.scheduledAt, payload.endsAt)} clock={clock}>
+            <HeaderMaterialToggle tab={RECORD_TAB} selected={view.current === RECORD_TAB.id} onToggle={() => setView((current) => toggleWhole(current, RECORD_TAB.id))} />
+          </MeetingHeaderActions>
+        }
+      >
+        <div className={s.reading}>
+          <div className={s.pane}>
+            <MaterialTabs
+              label="会议材料"
+              tabs={tabs}
+              selected={view.current === RECORD_TAB.id ? null : view.current}
+              onSelect={(id) => setView((current) => pressMaterial(current, id))}
+            />
+            <MeetingStatus phase={phase} facts={facts} now={phase === "live" ? recorderLine(recorder.state) : meetingNow(payload, ended)} endedAt={payload.endedAt} />
+            {payload.preflight.taskDefinition?.reviewPurpose ? <p className={s.agenda}>{payload.preflight.taskDefinition.reviewPurpose}</p> : null}
+            <section className={s.material} aria-label={showing.title}>
+              {view.current === RECORD_TAB.id ? (
+                recordView
+              ) : viewedMaterial ? (
+                <MaterialPane meetingId={card.objectRef.id} material={viewedMaterial} preview={preview} provenance={provenance(viewedMaterial)} />
+              ) : (
+                <>
+                  {preflightToolbar}
+                  {preflightView}
+                </>
+              )}
+            </section>
+            <ActionFeedback state={state} onRetry={retry} />
+          </div>
+        </div>
+      </DetailFrame>
+      {payload.transcriptCandidate && candidateOpen ? (
+        <TranscriptCandidateDialog
+          key={payload.transcriptCandidate.createdAt}
+          dialogRef={candidateDialog}
+          candidate={payload.transcriptCandidate}
+          scheduledAt={payload.scheduledAt}
+          participants={payload.participants}
+          directory={directory}
+          directoryError={directoryError}
+          pending={pending}
+          state={state}
+          hasConfirm={Boolean(actionOf("meeting.confirm_transcript_candidate"))}
+          hasDiscard={Boolean(actionOf("meeting.discard_transcript_candidate"))}
+          onRetry={retry}
+          onClose={() => setCandidateOpen(false)}
+          onConfirm={confirmCandidate}
+          onDiscard={discardCandidate}
+        />
+      ) : null}
     </section>
   );
 }

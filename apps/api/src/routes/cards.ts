@@ -4,7 +4,7 @@ import { listBattlefieldCards } from "../battlefields.js";
 import { listCapabilityCards } from "../capabilities.js";
 import { getMissionRow, listMissionCards, projectMissionCard } from "../missions.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "../issues.js";
-import { getMeetingRow, listMeetingRows, projectMeetingCard } from "../meetingStore.js";
+import { getMeetingRow, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "../meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice, getMonthlyPlanRow, listMonthlyPlanRows, projectMonthlyPlanCard } from "../monthlyPlans.js";
 import { personDisplayNames } from "../people.js";
 import { projectRadarCard } from "../signals.js";
@@ -31,8 +31,9 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
       listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), companyPeriod(now())),
       getMonthlyPlanNotice(q, env.sessionSecret, now()),
     ]);
+    // 会前通知看 scheduled；会后有待 CEO 确认的战略议题的会议也进首页（通知栏「需要你确认」）
     const meetings = meetingRows
-      .filter((row) => row.status === "scheduled")
+      .filter((row) => row.status === "scheduled" || hasPendingStrategicItem(row.outcome))
       .map((row) => projectMeetingCard(row, env.sessionSecret));
     const monthly = monthlyNotice && (monthlyNotice.payload as { status?: string }).status !== "confirmed" ? [monthlyNotice] : [];
     return { cards: [radarCard, ...battlefields, ...capabilities, ...issues, ...meetings, ...missions, ...monthly] };

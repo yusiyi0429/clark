@@ -1,0 +1,202 @@
+/*
+ * 会议页的页头（components/meeting/MeetingHeader.tsx，照搬 clark `detail-header/meeting`）：页头胶囊里标题前面那一段计划时段、页头右边那颗
+ * 「开始会议」→ 计时，和材料上面那一行灰字。
+ */
+
+/*
+ * 计划时段：「今天 14:00–15:30」。站在眉题的位置，日子和眉题一样是一小段灰字，时段是这一排最醒目的字 ——
+ * 比标题大一号、同样的字重、等宽数字（和计时那颗里走着的分:秒同一种写法：小字在前、数字在后）。它和标题之间
+ * 空 14（眉题是 10）：两段都是深色粗字，挨得太近会读成一句。窄了（≤1250）它和标题上下两行、它在上（排版在
+ * coagent/capsule.module.css），字跟着小一号。
+ */
+.slot {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.slotDay { font-size: 12.5px; font-weight: 500; line-height: 20px; color: #7c889b; }
+
+.slotTime {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0;
+  color: #1f2a3d;
+  font-variant-numeric: tabular-nums;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 1250px) {
+  .slot { gap: 6px; }
+  .slotDay { font-size: 11.5px; line-height: 18px; }
+  .slotTime { font-size: 14.5px; line-height: 18px; }
+}
+
+/* 手机上那一行只放得下时段：日子退场（和眉题一样），几点到几点一个字不省。 */
+@media (max-width: 759px) {
+  .slotDay { display: none; }
+}
+
+/*
+ * 那颗胶囊：和右列顶上的 Co-Agent 胶囊一样大（--coagent-capsule-*）、两头全圆，材质是同一份液态玻璃的浅色
+ * （--glass-*，页头胶囊也是这一份）。三个阶段都是这一个元素：
+ *   会前  「开始会议」，天枢蓝字，胶囊上浅浅一层蓝 —— 这一页此刻该按的就是它
+ *   会中  那层蓝淡出（320ms），里面换成一颗蓝点、「会议中」和走着的分:秒（一行），字随后淡入；点开能结束
+ *   会后  「已开完」和几点（一行），灰字，按不了
+ * 里面的按钮铺满胶囊，热区就是整颗。
+ */
+.capsule {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  box-sizing: border-box;
+  width: var(--coagent-capsule-width, 184px);
+  height: var(--coagent-capsule-height, 48px);
+  border-radius: calc(var(--coagent-capsule-height, 48px) / 2);
+  background: var(--glass-sheen), var(--glass-light-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-light-rim), var(--glass-edges), var(--glass-light-shadow);
+}
+
+/* 会前那一层浅蓝：单独一层，好让它淡出（渐变本身不能过渡）。 */
+.capsule::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgb(58 131 247 / 13%) 0%, rgb(58 131 247 / 5%) 100%);
+  opacity: 0;
+  transition: opacity 320ms ease;
+  pointer-events: none;
+}
+
+.capsule[data-phase='idle']::before { opacity: 1; }
+
+.press.press,
+.still {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0 20px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: #1f2a3d;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 160ms ease;
+}
+
+.press.press:hover { background: rgb(255 255 255 / 45%); }
+.press.press:focus-visible { outline: 2px solid #3a83f7; outline-offset: 2px; }
+
+.capsule[data-phase='idle'] .press.press { gap: 8px; color: #2f6fd6; }
+.capsule[data-phase='live'] .press.press { justify-content: flex-start; gap: 10px; padding: 0 14px 0 20px; }
+.capsule[data-phase='ended'] .still { justify-content: flex-start; gap: 10px; padding: 0 20px; color: #56657a; }
+
+/* 换了阶段，里面的字淡入。 */
+.capsule[data-phase='live'] .press.press > *,
+.capsule[data-phase='ended'] .still > * { animation: contentIn 260ms 120ms ease-out both; }
+
+/* 会中那颗点：和 Co-Agent 胶囊同一个蓝，不闪 —— 走着的秒数已经在说「在开」。 */
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0011fd;
+  box-shadow: 0 0 0 4px rgb(0 17 253 / 10%);
+}
+
+/* 一行：小字在前、数字在后，和页头胶囊里眉题在标题前面同一个读法。 */
+.readout {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  line-height: 20px;
+}
+
+.caption { font-size: 12.5px; font-weight: 500; line-height: 20px; color: #7c889b; }
+.time { font-size: 16px; font-weight: 600; line-height: 20px; font-variant-numeric: tabular-nums; }
+.capsule[data-phase='ended'] .time { font-weight: 500; color: #56657a; }
+
+.chevron { flex: none; color: #7c889b; }
+
+@keyframes contentIn {
+  from { opacity: 0; transform: translateY(3px); }
+}
+
+/* 计时弹出的那一小块。 */
+.popover { min-width: 260px; max-width: 320px; }
+.dialog { display: grid; gap: 8px; padding: 14px 16px 16px; }
+.dialog p { margin: 0; font-size: 13px; line-height: 1.7; color: #3d4a5c; }
+.heading { margin: 0; font-size: 14px; font-weight: 600; color: #1f2a3d; }
+.dialog .note { font-size: 12px; color: #7c889b; }
+.end.end { justify-self: start; margin-top: 4px; }
+
+/* 材料上面那一行灰字。 */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #6b7482;
+}
+
+.status[data-phase='live'] { color: #22305a; }
+
+@media (max-width: 759px) {
+  /* 手机上页头只有 44 高：这一颗跟着变矮变窄，一行写完 —— 会中只留点和分:秒，开完只写「已开完」（几点在材料上面那一行）。 */
+  .capsule { width: 104px; height: 100%; min-height: 44px; border-radius: 22px; }
+  .press.press, .still { padding: 0 12px; font-size: 13px; }
+  .capsule[data-phase='idle'] .press.press { gap: 5px; padding: 0 10px; }
+  .capsule[data-phase='live'] .press.press, .capsule[data-phase='ended'] .still { justify-content: center; gap: 8px; padding: 0 12px; }
+  .readout { flex: none; }
+  .capsule[data-phase='live'] .caption { display: none; }
+  .capsule[data-phase='ended'] .time { display: none; }
+  .capsule[data-phase='ended'] .caption { font-size: 13px; font-weight: 600; color: #56657a; }
+  .time { font-size: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capsule::before, .press.press { transition: none; }
+  .capsule[data-phase='live'] .press.press > *, .capsule[data-phase='ended'] .still > * { animation: none; }
+}
+
+:global([data-reduce-motion='true']) .capsule::before,
+:global([data-reduce-motion='true']) .press.press { transition: none; }
+:global([data-reduce-motion='true']) .capsule[data-phase='live'] .press.press > *,
+:global([data-reduce-motion='true']) .capsule[data-phase='ended'] .still > * { animation: none; }
+
+@media (prefers-reduced-transparency: reduce) {
+  .capsule { -webkit-backdrop-filter: none; backdrop-filter: none; background: #f7f9fc; }
+}
+
+@media (prefers-contrast: more) {
+  .capsule { box-shadow: inset 0 0 0 1px #5b6b85; }
+}

@@ -317,7 +317,8 @@ describe("meeting.confirm_transcript_candidate", () => {
       const res = await execute(t, cookie, confirm, { speakerMappings: MAPPINGS, confirmAddParticipants: true });
       expect(res.statusCode).toBe(200);
       const payload = res.json().cards[0].payload;
-      expect(payload.status).toBe("held");
+      // 唯一的 todo 已自动推送成执行事项，没有待处理条目，Meeting 直接 reviewed
+      expect(payload.status).toBe("reviewed");
       expect(payload.transcriptCandidate).toBeNull();
       expect(Value.Check(StoredTranscript, payload.transcript)).toBe(true);
       expect(payload.transcript.source).toMatchObject({ format: "miaoji_markdown", fileName: "meeting.md", timeAnchor: "2026-06-01T02:00:00.000Z" });

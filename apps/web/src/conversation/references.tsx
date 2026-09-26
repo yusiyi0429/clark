@@ -8,7 +8,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { monthDayTime } from "@/lib/companyTime";
 import type { Attachment } from "./useConversation";
 import s from "@/styles/card-references.module.css";
-import x from "@/styles/conversation-sessions.module.css";
+import x from "@/styles/conversation-attachments.module.css";
 
 /** 可作为对话引用的卡片（与 API 白名单一致：Signal 由其页面 scope 自动带入，不作显式引用）。 */
 export const REFERENCEABLE = new Set(["issue", "meeting", "monthly-plan", "mission"]);

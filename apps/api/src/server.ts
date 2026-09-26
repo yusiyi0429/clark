@@ -10,6 +10,7 @@ import { createOutletFeedAdapter } from "./outletSources.js";
 import { createBochaWebSearchAdapter } from "./webSearch.js";
 import { recoverInterruptedResearch } from "./issues.js";
 import { loadCompanyMemory } from "./companyMemory.js";
+import { assignLegacyConversations } from "./conversations.js";
 import { createResearchService } from "./research.js";
 import { createResearchAgentRunner } from "./researchAgent.js";
 import { recoverInterruptedPreflight } from "./meetingPreflight.js";
@@ -17,6 +18,7 @@ import { createMonthlyPlanService } from "./monthlyDraft.js";
 import { createMonthlyDraftAgent } from "./monthlyDraftAgent.js";
 import { createMonthlyPlanScheduler } from "./monthlyPlanScheduler.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
+import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -45,6 +47,7 @@ const env: AppEnv = {
   langsmithProject: process.env.LANGSMITH_PROJECT,
   materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
   conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,
+  recordingStorageDir: process.env.MEETING_RECORDING_STORAGE_DIR,
 };
 
 const port = Number(process.env.PORT ?? "4000");
@@ -59,6 +62,7 @@ try {
 }
 
 const companyMemory = loadCompanyMemory(env);
+await assignLegacyConversations(pool.query.bind(pool), companyMemory);
 const outletAdapter = createOutletFeedAdapter({});
 // 雷达与对话 web_search 共用一个博查实例：同一 BOCHA_API_KEY 的请求间隔与 429 重试只在一处生效
 const bochaSearch = createBochaWebSearchAdapter({ apiKey: process.env.BOCHA_API_KEY });
@@ -116,12 +120,20 @@ await recoverInterruptedPreflight(pool.query.bind(pool));
 await monthlyPlanService.recoverInterrupted();
 // Ticket 10：崩溃留下的未完成会后抽取同样标为可见 failed，等待 CEO 显式重试
 await recoverInterruptedOutcome(pool.query.bind(pool));
+// 02c：会议录音识别中的接着轮询（火山任务 id 已落库，不重复计费）；卡在拼接/转码/上传的标为可见 failed
+const recordingService = createMeetingRecordingService({
+  pool,
+  storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR,
+  companyMemory,
+});
+await recordingService.recoverInterrupted();
 const app = await buildApp({
   pool,
   env,
   radarService,
   researchService,
   monthlyPlanService,
+  recordingService,
   webSearch: bochaSearch,
   outlets: outletAdapter,
 });

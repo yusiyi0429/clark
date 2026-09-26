@@ -14,3 +14,6 @@ export * from "./battlefields.js";
 export * from "./missions.js";
 export * from "./config.js";
 export * from "./transcript.js";
+export * from "./threads.js";
+export * from "./tasks.js";
+export * from "./voiceprint.js";

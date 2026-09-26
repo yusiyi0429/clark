@@ -38,6 +38,9 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     if (!value) return { error: `${key} 必填` };
     body[key] = value;
   }
+  // 结束时间可选：省略或空串交给 createConfigMeeting 按开始后 60 分钟补齐
+  const endsAt = fields.get("endsAt")?.trim();
+  if (endsAt) body.endsAt = endsAt;
   const issueIds = fields.get("issueIds");
   if (issueIds !== undefined && issueIds.trim() !== "") {
     let decoded: unknown;

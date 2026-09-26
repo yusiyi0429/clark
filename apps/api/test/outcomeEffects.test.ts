@@ -4,7 +4,6 @@ import { Card, MeetingCardPayload, MeetingOutcomeState, type TPostMeetingCandida
 import { createTestApp, preflightCandidate, testEnv, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
-import type { DriExportRequest, DriExporter } from "../src/meetingStore.js";
 import { signActionId } from "../src/actionToken.js";
 
 const MEETING_INPUT = {
@@ -21,7 +20,7 @@ const TURNS = [
   { id: "turn-003", speakerId: "person-fixture-001", startedAt: "2026-06-01T10:01:00+08:00", text: "外部承诺先不签，六月前给我风险清单。" },
 ];
 
-/** item-1 decision、item-2 todo、item-3 ceoJudgment、item-4 reopenWhen、item-5 open。 */
+/** item-1 decision、item-2 todo（抽取完成即推送成执行事项）、item-3 ceoJudgment、item-4 reopenWhen、item-5 open。 */
 function candidate(issueId: string): TPostMeetingCandidate {
   return {
     summary: "会议形成一项决定、一项待办、一项判断与一个复议条件",
@@ -50,19 +49,6 @@ function outcomeAgent(): PostMeetingAgent & { calls: PostMeetingAgentInput[] } {
     },
   };
   return agent;
-}
-
-type RecordingExporter = DriExporter & { calls: DriExportRequest[] };
-function recordingExporter(outcome: "delivered" | "failed" = "delivered"): RecordingExporter {
-  const exporter: RecordingExporter = {
-    calls: [],
-    async export(request: DriExportRequest) {
-      exporter.calls.push(request);
-      if (outcome === "failed") throw new Error("dri channel unreachable");
-      return { exportRef: "dri-handoff-001" };
-    },
-  };
-  return exporter;
 }
 
 async function createIssue(t: TestApp, externalId: string): Promise<string> {
@@ -142,7 +128,7 @@ const outcomeOf = (card: Record<string, unknown>) => card.payload as { outcome: 
 type OutcomeItem = {
   id: string;
   kind: string;
-  review: { status: string; effectRef: string | null; anchorId?: string | null; handoff?: { exportStatus: string; exportRef: string | null } | null; reason?: string | null } | null;
+  review: { status: string; effectRef: string | null; anchorId?: string | null; reason?: string | null } | null;
 };
 
 async function issueReceipts(t: TestApp, issueId: string): Promise<Record<string, unknown>[]> {
@@ -219,19 +205,21 @@ describe("item-by-item Outcome review", () => {
     }
   });
 
-  it("keeps every reviewable item pending with an open item only displayed, and exposes no Issue creation", async () => {
+  it("keeps the other reviewable items pending once the todo is dispatched, shows open items only, and exposes no Issue creation", async () => {
     const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: outcomeAgent() });
     try {
       const { cookie, meetingId, card } = await readyOutcome(t);
       const items = outcomeOf(card).outcome.items;
       expect(items.map((item) => item.id)).toEqual(["item-1", "item-2", "item-3", "item-4", "item-5"]);
-      expect(items.slice(0, 4).map((item) => item.review?.status)).toEqual(["pending", "pending", "pending", "pending"]);
+      expect(items.slice(0, 4).map((item) => item.review?.status)).toEqual(["pending", "confirmed", "pending", "pending"]);
+      expect(items[1].review?.effectRef).toMatch(/^task:/);
       // open 只展示，不带 Review
       expect(items[4]).toMatchObject({ kind: "open", review: null });
 
       const actions = (await meetingCard(t, cookie, meetingId)).actions as CardAction[];
-      expect(actions.filter((a) => a.actionType === "meeting.confirm_item").map((a) => a.itemId)).toEqual(["item-1", "item-2", "item-3"]);
-      expect(actions.filter((a) => a.actionType === "meeting.dismiss_item").map((a) => a.itemId)).toEqual(["item-1", "item-2", "item-3", "item-4"]);
+      expect(actions.filter((a) => a.actionType === "meeting.confirm_item").map((a) => a.itemId)).toEqual(["item-1", "item-3"]);
+      expect(actions.filter((a) => a.actionType === "meeting.dismiss_item").map((a) => a.itemId)).toEqual(["item-1", "item-3", "item-4"]);
+      expect(actions.filter((a) => a.actionType === "meeting.revoke_effect").map((a) => a.itemId)).toEqual(["item-2"]);
       // open item 没有确认/忽略，也没有任何创建 Issue 的 Action
       expect(actions.some((a) => a.itemId === "item-5")).toBe(false);
       expect(actions.some((a) => a.actionType.includes("issue"))).toBe(false);
@@ -255,7 +243,7 @@ describe("item-by-item Outcome review", () => {
         status: "confirmed",
         effectRef: `meeting:${meetingId}:decision:item-1`,
       });
-      expect(items[1].review?.status).toBe("pending");
+      expect(items[2].review?.status).toBe("pending");
 
       const receipts = await issueReceipts(t, issueId);
       expect(receipts).toHaveLength(1);
@@ -307,18 +295,10 @@ describe("item-by-item Outcome review", () => {
     }
   });
 
-  it("confirms a todo into a DRI Handoff with pending_export and confirms a CEO judgment without touching CompanyMemory", async () => {
+  it("confirms a CEO judgment without touching CompanyMemory", async () => {
     const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: outcomeAgent() });
     try {
       const { cookie, issueId, meetingId } = await readyOutcome(t);
-      const todo = await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.confirm_item", "item-2"));
-      expect(todo.statusCode).toBe(200);
-      expect(outcomeOf(todo.json().cards[0]).outcome.items[1].review).toMatchObject({
-        status: "confirmed",
-        effectRef: `meeting:${meetingId}:todo:item-2`,
-        handoff: { exportStatus: "pending_export", exportRef: null },
-      });
-
       const judgment = await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.confirm_item", "item-3"));
       expect(judgment.statusCode).toBe(200);
       expect(outcomeOf(judgment.json().cards[0]).outcome.items[2].review).toMatchObject({
@@ -352,69 +332,12 @@ describe("item-by-item Outcome review", () => {
     }
   });
 
-  it("dismisses an item without effect and confirms the todo through a real DRI channel only on receipt", async () => {
-    const exporter = recordingExporter("delivered");
-    const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: outcomeAgent(), driExporter: exporter });
-    try {
-      const { cookie, meetingId } = await readyOutcome(t);
-      const dismissed = await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.dismiss_item", "item-3"), { reason: "不是本次决定" });
-      expect(dismissed.statusCode).toBe(200);
-      expect(outcomeOf(dismissed.json().cards[0]).outcome.items[2].review).toMatchObject({ status: "dismissed", reason: "不是本次决定" });
-
-      const confirmed = await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.confirm_item", "item-2"));
-      expect(confirmed.statusCode).toBe(200);
-      const handoff = outcomeOf(confirmed.json().cards[0]).outcome.items[1].review?.handoff;
-      expect(handoff).toMatchObject({ exportStatus: "delivered", exportRef: "dri-handoff-001" });
-      expect(exporter.calls).toHaveLength(1);
-      expect(exporter.calls[0]).toMatchObject({ effectRef: `meeting:${meetingId}:todo:item-2`, targetDriId: "person-fixture-002", text: "周五前提交资源排期" });
-    } finally {
-      await t.close();
-    }
-  });
-
-  it("records a failed export without rolling back the confirmed item", async () => {
-    const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: outcomeAgent(), driExporter: recordingExporter("failed") });
-    try {
-      const { cookie, meetingId } = await readyOutcome(t);
-      const confirmed = await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.confirm_item", "item-2"));
-      expect(confirmed.statusCode).toBe(200);
-      expect(outcomeOf(confirmed.json().cards[0]).outcome.items[1].review).toMatchObject({
-        status: "confirmed",
-        handoff: { exportStatus: "failed", error: "dri channel unreachable" },
-      });
-    } finally {
-      await t.close();
-    }
-  });
-
-  it("refuses to revoke a delivered todo and hides the revoke Action instead of faking recovery", async () => {
-    const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: outcomeAgent(), driExporter: recordingExporter("delivered") });
-    try {
-      const { cookie, meetingId } = await readyOutcome(t);
-      await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.confirm_item", "item-2"));
-      const card = await meetingCard(t, cookie, meetingId);
-      const actions = card.actions as CardAction[];
-      expect(actions.some((a) => a.actionType === "meeting.revoke_effect" && a.itemId === "item-2")).toBe(false);
-
-      // 即使绕过 Web 直接提交，也只返回明确 warning，不改变状态
-      const version = (card.objectRef as { version: number }).version;
-      const forced = signActionId(testEnv.sessionSecret, { actionType: "meeting.revoke_effect", objectType: "meeting", objectId: meetingId, objectVersion: version, itemId: "item-2" });
-      const res = await execute(t, cookie, forced);
-      expect(res.statusCode).toBe(409);
-      expect(res.json().code).toBe("EFFECT_NOT_REVOCABLE");
-      expect(res.json().message).toContain("不能自动撤回");
-      expect(outcomeOf(await meetingCard(t, cookie, meetingId)).outcome.items[1].review?.handoff?.exportStatus).toBe("delivered");
-    } finally {
-      await t.close();
-    }
-  });
-
   it("confirms two items independently and revoking one leaves the other effect intact", async () => {
     const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: outcomeAgent() });
     try {
       const { cookie, issueId, meetingId } = await readyOutcome(t);
       await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.confirm_item", "item-1"));
-      await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.confirm_item", "item-2"));
+      // item-2 todo 已在抽取完成时推送；撤回即删除未开始的执行事项
 
       const revokedTodo = await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.revoke_effect", "item-2"));
       expect(revokedTodo.statusCode).toBe(200);
@@ -450,12 +373,12 @@ describe("item-by-item Outcome review", () => {
       // 旧 version 上签发的另一个 Action：冲突并返回最新 Card
       const card = await meetingCard(t, cookie, meetingId);
       const version = (card.objectRef as { version: number }).version;
-      const stale = signActionId(testEnv.sessionSecret, { actionType: "meeting.confirm_item", objectType: "meeting", objectId: meetingId, objectVersion: version - 1, itemId: "item-2" });
+      const stale = signActionId(testEnv.sessionSecret, { actionType: "meeting.confirm_item", objectType: "meeting", objectId: meetingId, objectVersion: version - 1, itemId: "item-3" });
       const conflict = await execute(t, cookie, stale);
       expect(conflict.statusCode).toBe(409);
       expect(conflict.json().code).toBe("VERSION_CONFLICT");
       expect(conflict.json().latestCard.id).toBe(`meeting:${meetingId}`);
-      expect(outcomeOf(await meetingCard(t, cookie, meetingId)).outcome.items[1].review?.status).toBe("pending");
+      expect(outcomeOf(await meetingCard(t, cookie, meetingId)).outcome.items[2].review?.status).toBe("pending");
     } finally {
       await t.close();
     }
@@ -588,12 +511,11 @@ describe("item-by-item Outcome review", () => {
       const { cookie, meetingId } = await readyOutcome(t);
       for (const [itemId, actionType] of [
         ["item-1", "meeting.confirm_item"],
-        ["item-2", "meeting.dismiss_item"],
         ["item-3", "meeting.confirm_item"],
       ] as const) {
         await execute(t, cookie, await meetingActionId(t, cookie, meetingId, actionType, itemId));
       }
-      // 只剩 item-4（父 decision 已确认）
+      // item-2 已推送；只剩 item-4（父 decision 已确认）
       expect((await t.sql("SELECT status FROM meetings WHERE id = $1", [meetingId]))[0].status).toBe("held");
       const last = await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.confirm_item", "item-4"));
       expect(last.statusCode).toBe(200);

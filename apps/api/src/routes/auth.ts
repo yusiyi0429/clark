@@ -62,6 +62,14 @@ export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
   app.get("/api/auth/session", { schema: { response: { 200: SessionResponse } } }, async (req) => {
     const person = await readSession(req);
     if (!person) return { authenticated: false };
-    return { authenticated: true, personId: person.personId, displayName: findPerson(person.personId)?.displayName ?? person.personId, role: person.role };
+    const access = await q("SELECT login_id FROM member_access WHERE person_id = $1", [person.personId]);
+    const loginId = access.rows[0]?.login_id as string | undefined;
+    return {
+      authenticated: true,
+      personId: person.personId,
+      displayName: findPerson(person.personId)?.displayName ?? person.personId,
+      role: person.role,
+      ...(loginId ? { loginId } : {}),
+    };
   });
 }

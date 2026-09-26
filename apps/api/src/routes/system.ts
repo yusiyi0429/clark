@@ -5,7 +5,7 @@ import { createCompanyMemoryMcpSession } from "../mcpCompanyMemory.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { q, env, runtime, companyMemory, radar, requireServiceToken } = ctx;
+  const { q, env, runtime, companyMemory, radar, recordings, voiceprints, requireServiceToken } = ctx;
 
   const healthz = async (): Promise<Static<typeof HealthResponse>> => {
     let database = true;
@@ -23,6 +23,10 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
       search: radar.providerStatus.web,
       wechat: radar.providerStatus.wechat,
       outlets: radar.providerStatus.outlets ?? false,
+      // 会议录音识别凭据是否配全（只看变量在不在，不发起外部调用）
+      recording: recordings.configured(),
+      // 腾讯云声纹凭据是否配全（同上，只看变量）
+      voiceprint: voiceprints.configured(),
     };
     const status: Static<typeof HealthResponse>["status"] =
       database && dependencies.piRuntime && dependencies.modelSlots && dependencies.companyMemoryMcp ? "ok" : "degraded";

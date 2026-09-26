@@ -1,17 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { QueryResult } from "pg";
+import type { Pool, QueryResult } from "pg";
 import type {
   TCardReference,
   TConversationAttachment,
   TConversationAttachmentInfo,
   TConversationHistory,
   TConversationScope,
-  TConversationSessionSummary,
   TReferenceSnapshot,
 } from "@warmap/contracts";
+import type { CompanyMemoryRepository } from "./companyMemory.js";
 import type { ParsedMaterial } from "./materialParser.js";
+import { roleOf, type SessionRole } from "./memberAccess.js";
 import { getIssueRow, projectIssueCard } from "./issues.js";
 import { moveStagedFile } from "./meetingMaterials.js";
 import { getMeetingRow, projectMeetingCard } from "./meetingStore.js";
@@ -33,6 +34,8 @@ export type ConversationRuntime = {
   modelId?: string;
   run(input: {
     scope: TConversationScope;
+    /** 这一轮是谁在问：CEO 用 CEO Agent；成员用 DRI Agent（不带 CEO 决策面工具与首页全局上下文）。 */
+    viewer: { personId: string; displayName: string; role: SessionRole };
     message: string;
     currentObject: TReferenceSnapshot | null;
     referencesSnapshot: TReferenceSnapshot[];
@@ -52,6 +55,15 @@ export type ConversationRuntime = {
 };
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
+
+/**
+ * 旧对话归属：按人私有之前的会话没有 owner（都是 CEO 与天枢的对话），归到人员目录里的 CEO；目录里没有 CEO 就跳过。
+ * 启动时在迁移之后执行（server.ts），可重复执行。
+ */
+export async function assignLegacyConversations(q: Query, companyMemory: CompanyMemoryRepository): Promise<void> {
+  const ceo = companyMemory.searchPeople(undefined).find((person) => roleOf(person) === "ceo");
+  if (ceo) await q("UPDATE conversations SET owner_id = $1 WHERE owner_id IS NULL", [ceo.personId]);
+}
 
 export async function getScopeObject(
   q: Query,
@@ -221,12 +233,12 @@ export async function resolveReferenceSnapshots(
   return { snapshots };
 }
 
-export async function getConversationHistory(q: Query, scope: TConversationScope): Promise<TConversationHistory> {
-  // legacy 路由：只读默认会话（最早未删除），不合并其他会话的消息。
-  const conversation = await q(
-    "SELECT id FROM conversations WHERE scope = $1 AND deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1",
-    [scope],
-  );
+/** 这个人在这个页面的主对话：最早的未删除行（028 已把多余会话并进它）。 */
+const MAIN_CONVERSATION_SQL =
+  "SELECT id FROM conversations WHERE owner_id = $1 AND scope = $2 AND deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1";
+
+export async function getConversationHistory(q: Query, owner: string, scope: TConversationScope): Promise<TConversationHistory> {
+  const conversation = await q(MAIN_CONVERSATION_SQL, [owner, scope]);
   const conversationId = conversation.rows[0]?.id as string | undefined;
   if (!conversationId) return { scope, messages: [] };
   const result = await q(
@@ -250,87 +262,34 @@ export async function getConversationHistory(q: Query, scope: TConversationScope
   };
 }
 
-/** 会话行：scope 匹配且未删除才算存在。 */
-export async function getConversationSession(
-  q: Query,
-  scope: TConversationScope,
-  sessionId: string,
-): Promise<{ id: string } | null> {
-  const result = await q(
-    "SELECT id FROM conversations WHERE id = $1::uuid AND scope = $2 AND deleted_at IS NULL",
-    [sessionId, scope],
-  );
-  return result.rows[0] ? { id: result.rows[0].id as string } : null;
-}
-
-export async function getConversationSessionHistory(
-  q: Query,
-  scope: TConversationScope,
-  sessionId: string,
-): Promise<TConversationHistory> {
-  const result = await q(
-    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at
-       FROM conversations c
-       JOIN conversation_messages m ON m.conversation_id = c.id
-      WHERE c.id = $1::uuid AND c.scope = $2 AND c.deleted_at IS NULL
-      ORDER BY m.sequence`,
-    [sessionId, scope],
-  );
-  return {
-    scope,
-    messages: result.rows.map((row) => ({
-      sequence: row.sequence as number,
-      role: row.role as "user" | "assistant",
-      content: row.content as string,
-      referencesSnapshot: row.references_snapshot,
-      attachments: (row.attachments as TConversationAttachment[]).map(conversationAttachmentInfo),
-      runId: row.run_id as string,
-      createdAt: (row.created_at as Date).toISOString(),
-    })),
-  };
-}
-
-export async function listConversationSessions(
-  q: Query,
-  scope: TConversationScope,
-): Promise<{ scope: TConversationScope; sessions: TConversationSessionSummary[] }> {
-  const result = await q(
-    `SELECT c.id, c.title, c.created_at,
-            (SELECT count(*)::int FROM conversation_messages m WHERE m.conversation_id = c.id) AS message_count,
-            (SELECT max(m.created_at) FROM conversation_messages m WHERE m.conversation_id = c.id) AS last_message_at
-       FROM conversations c
-      WHERE c.scope = $1 AND c.deleted_at IS NULL
-      ORDER BY c.created_at ASC, c.id ASC`,
-    [scope],
-  );
-  return {
-    scope,
-    sessions: result.rows.map((row, index) => ({
-      id: row.id as string,
-      scope,
-      title: (row.title as string | null) ?? null,
-      isDefault: index === 0,
-      messageCount: row.message_count as number,
-      lastMessageAt: row.last_message_at ? (row.last_message_at as Date).toISOString() : null,
-      createdAt: (row.created_at as Date).toISOString(),
-    })),
-  };
-}
-
-export async function createConversationSession(
-  q: Query,
-  scope: TConversationScope,
-  title: string | undefined,
-): Promise<TConversationSessionSummary> {
-  const id = randomUUID();
-  await q(
-    "INSERT INTO conversations (id, scope, pi_session_id, title) VALUES ($1, $2, $3, $4)",
-    [id, scope, randomUUID(), title ?? null],
-  );
-  const sessions = await listConversationSessions(q, scope);
-  const created = sessions.sessions.find((session) => session.id === id);
-  if (!created) throw new Error("会话创建后不可见");
-  return created;
+/**
+ * 主对话 id；还没有时创建。创建走与轮次相同的「人 × scope」advisory lock（事务级锁与轮次的会话级锁同一键空间），
+ * 避免和并发的首轮对话各建一条。已有主对话时不拿锁，上传不必等进行中的轮次。
+ */
+export async function ensureMainConversation(pool: Pool, owner: string, scope: TConversationScope): Promise<string> {
+  const existing = await pool.query<{ id: string }>(MAIN_CONVERSATION_SQL, [owner, scope]);
+  if (existing.rows[0]) return existing.rows[0].id;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${owner}|${scope}`]);
+    const locked = await client.query<{ id: string }>(MAIN_CONVERSATION_SQL, [owner, scope]);
+    let id = locked.rows[0]?.id;
+    if (!id) {
+      id = randomUUID();
+      await client.query(
+        "INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, $3, $4)",
+        [id, owner, scope, randomUUID()],
+      );
+    }
+    await client.query("COMMIT");
+    return id;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -393,7 +352,7 @@ export async function loadConversationAttachments(
     try {
       raw = await readFile(join(storageDir, sessionId, `${id}.json`), "utf8");
     } catch {
-      throw attachmentMissing("附件不存在或已随会话删除");
+      throw attachmentMissing("附件不存在");
     }
     try {
       attachments.push(JSON.parse(raw) as TConversationAttachment);
@@ -402,12 +361,6 @@ export async function loadConversationAttachments(
     }
   }
   return attachments;
-}
-
-/** 删除会话后清理附件原件与 sidecar；失败只留孤儿文件，不影响删除语义。 */
-export async function removeConversationAttachmentFiles(storageDir: string, sessionId: string): Promise<void> {
-  if (!SESSION_ID_PATTERN.test(sessionId)) return;
-  await rm(join(storageDir, sessionId), { recursive: true, force: true });
 }
 
 export function conversationAttachmentInfo(attachment: TConversationAttachment): TConversationAttachmentInfo {

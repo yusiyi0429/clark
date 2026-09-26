@@ -41,14 +41,19 @@ function projectPerson(person: TPersonResult): TMeetingParticipant {
   return { personId: person.personId, displayName: person.displayName, roles: [...person.roles], sourceRef: person.sourceRef, updatedAt: person.updatedAt };
 }
 
+/** 声纹 1:N 给出的说话人建议（录音识别路径）；score 为 0–100。 */
+export type SpeakerSuggestion = { personId: string; displayName: string; score: number };
+
 /**
- * 候选构建：exact displayName 只在人员目录唯一命中时给出建议；0 或 ≥2 命中留空由 CEO 手选。
+ * 候选构建：exact displayName 只在人员目录唯一命中时给出建议；否则用声纹建议（录音识别的「说话人 N」只能靠它）；
+ * 都没有就留空由 CEO 手选。建议只是预填，确认仍由人做。
  * speaker 顺序保持来源首次出现顺序，不合并相邻同说话人。
  */
 export function buildTranscriptCandidate(
   turns: ParsedTranscriptTurn[],
   people: TPersonResult[],
   source: TTranscriptSource,
+  voiceprint?: Map<string, SpeakerSuggestion>,
 ): TStoredTranscriptCandidate {
   const byName = new Map<string, TPersonResult[]>();
   for (const person of people) {
@@ -66,12 +71,14 @@ export function buildTranscriptCandidate(
   const speakers: TTranscriptCandidateSpeaker[] = order.map((speakerName) => {
     const matches = byName.get(speakerName) ?? [];
     const unique = matches.length === 1 ? matches[0] : null;
-    if (!unique) warnings.push(`说话人「${speakerName}」${matches.length === 0 ? "未命中人员目录" : "命中多个同名人员"}，需要人工映射`);
+    const heard = unique ? undefined : voiceprint?.get(speakerName);
+    if (heard) warnings.push(`说话人「${speakerName}」按声纹建议为「${heard.displayName}」（相似度 ${Math.round(heard.score)}），请确认`);
+    else if (!unique) warnings.push(`说话人「${speakerName}」${matches.length === 0 ? "未命中人员目录" : "命中多个同名人员"}，需要人工映射`);
     return {
       speakerName,
       turnCount: counts.get(speakerName)!,
-      suggestedPersonId: unique?.personId ?? null,
-      suggestedDisplayName: unique?.displayName ?? null,
+      suggestedPersonId: unique?.personId ?? heard?.personId ?? null,
+      suggestedDisplayName: unique?.displayName ?? heard?.displayName ?? null,
     };
   });
   return { source, createdAt: new Date().toISOString(), speakers, turns, warnings };
@@ -101,7 +108,19 @@ export async function createTranscriptCandidate(
     timeAnchor: meeting.scheduled_at.toISOString(),
   };
   const candidate = buildTranscriptCandidate(parsed.transcript.turns, companyMemory.searchPeople(undefined), source);
+  const saved = await saveTranscriptCandidate(pool, meetingId, candidate);
+  return "row" in saved ? { status: 200, card: projectMeetingCard(saved.row, secret) } : saved;
+}
 
+/**
+ * 候选落库（妙记 Markdown 与会议录音识别共用）：行锁内确认没有已确认 Transcript、仍是 scheduled，
+ * 整份替换候选并 bump version；不改 status、不跑 Outcome。
+ */
+export async function saveTranscriptCandidate(
+  pool: Pool,
+  meetingId: string,
+  candidate: TStoredTranscriptCandidate,
+): Promise<{ row: MeetingRow } | { status: 404 | 409; code: string; message: string }> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -124,7 +143,7 @@ export async function createTranscriptCandidate(
       [meetingId, JSON.stringify(candidate)],
     );
     await client.query("COMMIT");
-    return { status: 200, card: projectMeetingCard(updated.rows[0], secret) };
+    return { row: updated.rows[0] };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;
@@ -178,7 +197,9 @@ export async function executeConfirmTranscriptCandidate(
     const added = [...usedPersonIds].filter((personId) => !existingIds.has(personId)).map((personId) => projectPerson(personById.get(personId)!));
     const participants = [...row.participants, ...added];
 
-    const anchor = row.scheduled_at.getTime();
+    // 录音识别的 offset 相对录音开始时刻（绝对事实，不随改期漂移）；妙记相对锁内最新 scheduledAt
+    const anchorIso = candidate.source.format === "volc_asr" && candidate.source.timeAnchor ? candidate.source.timeAnchor : row.scheduled_at.toISOString();
+    const anchor = Date.parse(anchorIso);
     const turns: TTranscriptTurn[] = candidate.turns.map((turn, index) => ({
       id: `turn-${String(index + 1).padStart(4, "0")}`,
       speakerId: mappingBySpeaker.get(turn.speakerName)!,
@@ -194,7 +215,7 @@ export async function executeConfirmTranscriptCandidate(
     const stored: TStoredTranscript = {
       ...validated.value,
       importedAt: now,
-      source: { ...candidate.source, timeAnchor: row.scheduled_at.toISOString() },
+      source: { ...candidate.source, timeAnchor: anchorIso },
     };
     const updated = await updateMeeting(
       client,

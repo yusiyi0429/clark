@@ -10,6 +10,9 @@ import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import { createFakeWebSearchAdapter, testEnv } from "./helpers.js";
 
+const CEO_VIEWER = { personId: "person-fixture-001", displayName: "测试甲", role: "ceo" as const };
+const MEMBER_VIEWER = { personId: "person-fixture-002", displayName: "测试乙", role: "member" as const };
+
 const usage = {
   input: 4,
   output: 2,
@@ -73,6 +76,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     try {
       await expect(runtime.run({
         scope: "global",
+        viewer: CEO_VIEWER,
         message: "不要开始",
         currentObject: null,
         referencesSnapshot: [],
@@ -104,6 +108,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     try {
       const result = await runtime.run({
         scope: "issue:fixture-001",
+        viewer: CEO_VIEWER,
         message: "总结当前对象",
         currentObject: null,
         referencesSnapshot: [],
@@ -153,6 +158,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     try {
       const result = await runtime.run({
         scope: "global",
+        viewer: CEO_VIEWER,
         message: "最新窗口是什么？",
         currentObject: null,
         referencesSnapshot: [],
@@ -191,6 +197,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     try {
       await expect(runtime.run({
         scope: "global",
+        viewer: CEO_VIEWER,
         message: "loop",
         currentObject: null,
         referencesSnapshot: [],
@@ -239,6 +246,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     try {
       const history = await runtime.run({
         scope: "global",
+        viewer: CEO_VIEWER,
         message: "历史上下文".repeat(30_000),
         currentObject: null,
         referencesSnapshot: [],
@@ -249,6 +257,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       });
       const middle = await runtime.run({
         scope: "global",
+        viewer: CEO_VIEWER,
         message: "近期上下文".repeat(30_000),
         currentObject: null,
         referencesSnapshot: [],
@@ -259,6 +268,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       });
       await runtime.run({
         scope: "global",
+        viewer: CEO_VIEWER,
         message: "查询当前事实",
         currentObject: null,
         referencesSnapshot: [],
@@ -300,6 +310,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     try {
       const first = await runtime.run({
         scope: "global",
+        viewer: CEO_VIEWER,
         message: "旧上下文".repeat(30_000),
         currentObject: null,
         referencesSnapshot: [],
@@ -310,6 +321,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       });
       const middle = await runtime.run({
         scope: "global",
+        viewer: CEO_VIEWER,
         message: "仍需保留的近期上下文".repeat(10_000),
         currentObject: null,
         referencesSnapshot: [],
@@ -324,6 +336,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       latestAssistant.message.usage = highUsage;
       const second = await runtime.run({
         scope: "global",
+        viewer: CEO_VIEWER,
         message: "继续",
         currentObject: null,
         referencesSnapshot: [],
@@ -361,6 +374,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     try {
       const result = await runtime.run({
         scope: "issue:fixture-001",
+        viewer: CEO_VIEWER,
         message: "继续",
         currentObject: null,
         referencesSnapshot: [],
@@ -411,6 +425,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       const emitted: unknown[] = [];
       const first = await runtime.run({
         scope: "issue:fixture-001",
+        viewer: CEO_VIEWER,
         message: "负责人是谁？",
         currentObject: {
           cardId: "issue:fixture-001",
@@ -447,6 +462,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       restoredRuntime = await createPiConversationRuntime(runtimeOptions);
       const restored = await restoredRuntime.run({
         scope: "issue:fixture-001",
+        viewer: CEO_VIEWER,
         message: "继续",
         currentObject: null,
         referencesSnapshot: [],
@@ -495,6 +511,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     try {
       const result = await runtime.run({
         scope: "global",
+        viewer: CEO_VIEWER,
         message: "彭博最近如何报道？",
         currentObject: null,
         referencesSnapshot: [],
@@ -543,6 +560,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     try {
       const result = await runtime.run({
         scope: "global",
+        viewer: CEO_VIEWER,
         message: "现在公司有哪些战略议题？",
         currentObject: null,
         referencesSnapshot: [],
@@ -554,6 +572,69 @@ describe("controlled Pi conversation adapter public behavior", () => {
       expect(result.assistantMessage).toBe("BOARD OK");
       expect(contexts[0].tools?.map((tool) => tool.name)).toContain("list_pending_issues");
       expect(contexts[0].systemPrompt).toContain("list_pending_issues");
+    } finally {
+      await runtime.close?.();
+    }
+  });
+
+  it("gives a member the DRI Agent: no CEO decision tools, no global context, own identity", async () => {
+    const contexts: Context[] = [];
+    let globalContextReads = 0;
+    const runtime = await createPiConversationRuntime({
+      companyMemory: loadCompanyMemory(testEnv),
+      baseUrl: "https://provider.invalid/v1/responses",
+      apiKey: "test-key",
+      modelId: "fake-light",
+      streamSimple: (_model, context) => {
+        contexts.push(context);
+        return stream(message([{ type: "text", text: "ok" }], "stop"));
+      },
+      globalContext: async () => {
+        globalContextReads += 1;
+        return { period: "2026-09" };
+      },
+      listMissions: async () => [],
+      listPendingIssues: async () => [],
+    });
+    const userPrompt = (context: Context) => {
+      const user = context.messages.findLast((item) => item.role === "user")!;
+      const text = typeof user.content === "string"
+        ? user.content
+        : user.content.map((block) => (block.type === "text" ? block.text : "")).join("");
+      return JSON.parse(text) as { globalContext: unknown };
+    };
+    const turn = (viewer: typeof CEO_VIEWER | typeof MEMBER_VIEWER, piSessionId: string) => runtime.run({
+      scope: "global",
+      viewer,
+      message: "现在该关注什么？",
+      currentObject: null,
+      referencesSnapshot: [],
+      runtimeEntries: [],
+      piSessionId,
+      signal: new AbortController().signal,
+      emit: () => undefined,
+    });
+    try {
+      await turn(MEMBER_VIEWER, "44444444-4444-4444-8444-444444444444");
+      const memberTools = contexts[0].tools?.map((tool) => tool.name) ?? [];
+      expect(memberTools).toContain("list_missions");
+      expect(memberTools).not.toContain("get_warmap_overview");
+      expect(memberTools).not.toContain("list_pending_issues");
+      expect(userPrompt(contexts[0]).globalContext).toBeNull();
+      expect(globalContextReads).toBe(0);
+      expect(contexts[0].systemPrompt).toContain("测试乙 的 DRI Agent");
+      expect(contexts[0].systemPrompt).toContain("企业知识");
+      expect(contexts[0].systemPrompt).toContain("不能执行任何业务写入");
+      expect(contexts[0].systemPrompt).not.toContain("CEO WarMap 的只读决策对话助手");
+      expect(contexts[0].systemPrompt).not.toContain("get_warmap_overview");
+      expect(contexts[0].systemPrompt).not.toContain("list_pending_issues");
+
+      // 同一个 runtime 上 CEO 的一轮不受影响
+      await turn(CEO_VIEWER, "55555555-5555-4555-8555-555555555555");
+      const ceoTools = contexts[1].tools?.map((tool) => tool.name) ?? [];
+      expect(ceoTools).toEqual(expect.arrayContaining(["get_warmap_overview", "list_missions", "list_pending_issues"]));
+      expect(userPrompt(contexts[1]).globalContext).toEqual({ period: "2026-09" });
+      expect(contexts[1].systemPrompt).toContain("你是 Clark，词元云集 CEO WarMap 的只读决策对话助手");
     } finally {
       await runtime.close?.();
     }

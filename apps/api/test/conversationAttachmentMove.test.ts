@@ -35,19 +35,16 @@ function multipart(files: { name: string; content: string }[]): { headers: Recor
   return { headers: { "content-type": `multipart/form-data; boundary=${boundary}` }, payload: Buffer.concat([...parts, Buffer.from(`--${boundary}--\r\n`)]) };
 }
 
-async function sessionFixture(): Promise<{ t: Awaited<ReturnType<typeof createTestApp>>; cookie: string; sessionId: string; attachmentDir: string; stagingDir: string; restoreTmp: () => void }> {
+async function uploadFixture(): Promise<{ t: Awaited<ReturnType<typeof createTestApp>>; cookie: string; attachmentDir: string; stagingDir: string; restoreTmp: () => void }> {
   const attachmentDir = await mkdtemp(join(tmpdir(), "warmap-attachment-"));
   const stagingDir = await mkdtemp(join(tmpdir(), "warmap-attachment-staging-"));
   const t = await createTestApp({ conversationAttachmentStorageDir: attachmentDir });
   const cookie = await t.loginCookie();
-  const created = await t.app.inject({ method: "POST", url: "/api/conversations/global/sessions", headers: { cookie, origin: t.publicOrigin }, payload: {} });
-  expect(created.statusCode).toBe(201);
   const previousTmp = process.env.TMPDIR;
   process.env.TMPDIR = stagingDir;
   return {
     t,
     cookie,
-    sessionId: created.json().id as string,
     attachmentDir,
     stagingDir,
     restoreTmp: () => {
@@ -57,35 +54,43 @@ async function sessionFixture(): Promise<{ t: Awaited<ReturnType<typeof createTe
   };
 }
 
-async function upload(t: Awaited<ReturnType<typeof createTestApp>>, cookie: string, sessionId: string, body: { headers: Record<string, string>; payload: Buffer }) {
+async function upload(t: Awaited<ReturnType<typeof createTestApp>>, cookie: string, body: { headers: Record<string, string>; payload: Buffer }) {
   return t.app.inject({
     method: "POST",
-    url: `/api/conversations/global/sessions/${sessionId}/attachments`,
+    url: "/api/conversations/global/attachments",
     headers: { cookie, origin: t.publicOrigin, ...body.headers },
     payload: body.payload,
   });
+}
+
+/** 上传把附件挂到 CEO 在首页的主对话（首次上传时创建）。 */
+async function mainConversationId(t: Awaited<ReturnType<typeof createTestApp>>): Promise<string> {
+  const rows = await t.sql("SELECT id FROM conversations WHERE scope = 'global' AND deleted_at IS NULL");
+  expect(rows).toHaveLength(1);
+  return rows[0].id as string;
 }
 
 it("EXDEV 下附件上传仍成功：原件与 sidecar 落盘、元数据正确、暂存源文件被清理", async () => {
   forced.code = "EXDEV";
   forced.failOnCall = 0;
   forced.calls = 0;
-  const { t, cookie, sessionId, attachmentDir, stagingDir, restoreTmp } = await sessionFixture();
+  const { t, cookie, attachmentDir, stagingDir, restoreTmp } = await uploadFixture();
   const content = "# 渠道备忘\n\n东南亚渠道预算追加 15%。";
   try {
-    const res = await upload(t, cookie, sessionId, multipart([{ name: "note.md", content }]));
+    const res = await upload(t, cookie, multipart([{ name: "note.md", content }]));
     expect(res.statusCode).toBe(200);
+    const conversationId = await mainConversationId(t);
     const info = res.json().attachments[0] as { id: string; fileName: string; sha256?: string };
     expect(info.fileName).toBe("note.md");
     expect("extractedText" in res.json().attachments[0]).toBe(false);
 
     // 原件字节与 sidecar 元数据都在卷内，sha256 与内容一致
-    expect(await readFile(join(attachmentDir, sessionId, info.id), "utf8")).toBe(content);
-    const sidecar = JSON.parse(await readFile(join(attachmentDir, sessionId, `${info.id}.json`), "utf8"));
+    expect(await readFile(join(attachmentDir, conversationId, info.id), "utf8")).toBe(content);
+    const sidecar = JSON.parse(await readFile(join(attachmentDir, conversationId, `${info.id}.json`), "utf8"));
     expect(sidecar).toMatchObject({
       id: info.id,
       fileName: "note.md",
-      storageKey: `${sessionId}/${info.id}`,
+      storageKey: `${conversationId}/${info.id}`,
       sha256: createHash("sha256").update(content).digest("hex"),
     });
     expect(sidecar.extractedText).toContain("东南亚渠道预算追加 15%");
@@ -104,15 +109,16 @@ it("EXDEV 下多附件批量上传逐件走回退", async () => {
   forced.code = "EXDEV";
   forced.failOnCall = 0;
   forced.calls = 0;
-  const { t, cookie, sessionId, attachmentDir, stagingDir, restoreTmp } = await sessionFixture();
+  const { t, cookie, attachmentDir, stagingDir, restoreTmp } = await uploadFixture();
   try {
-    const res = await upload(t, cookie, sessionId, multipart([{ name: "a.md", content: "甲" }, { name: "b.md", content: "乙" }]));
+    const res = await upload(t, cookie, multipart([{ name: "a.md", content: "甲" }, { name: "b.md", content: "乙" }]));
     expect(res.statusCode).toBe(200);
+    const conversationId = await mainConversationId(t);
     const infos = res.json().attachments as { id: string; fileName: string }[];
     expect(infos.map((info) => info.fileName)).toEqual(["a.md", "b.md"]);
     for (const [index, info] of infos.entries()) {
-      expect(await readFile(join(attachmentDir, sessionId, info.id), "utf8")).toBe(index === 0 ? "甲" : "乙");
-      expect(JSON.parse(await readFile(join(attachmentDir, sessionId, `${info.id}.json`), "utf8")).sha256).toBe(createHash("sha256").update(index === 0 ? "甲" : "乙").digest("hex"));
+      expect(await readFile(join(attachmentDir, conversationId, info.id), "utf8")).toBe(index === 0 ? "甲" : "乙");
+      expect(JSON.parse(await readFile(join(attachmentDir, conversationId, `${info.id}.json`), "utf8")).sha256).toBe(createHash("sha256").update(index === 0 ? "甲" : "乙").digest("hex"));
     }
     expect(await readdir(stagingDir)).toEqual([]);
   } finally {
@@ -128,12 +134,12 @@ it("非 EXDEV 错误不被降级为复制：整批回滚，不留下原件或 si
   forced.code = "EACCES";
   forced.failOnCall = 2; // 第一件成功、第二件失败 → 必须回滚第一件
   forced.calls = 0;
-  const { t, cookie, sessionId, attachmentDir, stagingDir, restoreTmp } = await sessionFixture();
+  const { t, cookie, attachmentDir, stagingDir, restoreTmp } = await uploadFixture();
   try {
-    const res = await upload(t, cookie, sessionId, multipart([{ name: "a.md", content: "甲" }, { name: "b.md", content: "乙" }]));
+    const res = await upload(t, cookie, multipart([{ name: "a.md", content: "甲" }, { name: "b.md", content: "乙" }]));
     expect(res.statusCode).toBe(500);
     expect(forced.calls).toBe(2);
-    expect(await readdir(join(attachmentDir, sessionId))).toEqual([]);
+    expect(await readdir(join(attachmentDir, await mainConversationId(t)))).toEqual([]);
   } finally {
     restoreTmp();
     forced.code = null;
