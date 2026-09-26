@@ -71,7 +71,8 @@ it("EXDEV 下主材料替换仍成功：文件落到卷内且暂存源文件被�
     // 源文件已被 copy+unlink 回退删除，解析暂存目录不留残留
     expect(await readdir(stagingDir)).toEqual([]);
   } finally {
-    process.env.TMPDIR = previousTmp;
+    if (previousTmp === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmp;
     await rm(storageDir, { recursive: true, force: true });
     await rm(stagingDir, { recursive: true, force: true });
     await t.close();
