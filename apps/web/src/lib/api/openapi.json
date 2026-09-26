@@ -1354,6 +1354,72 @@
         }
       }
     },
+    "/api/me/onboarding": {
+      "get": {
+        "operationId": "getOnboarding",
+        "summary": "本人首次登录引导：按角色投影真实目标、工作、声纹状态与下一件事",
+        "responses": {
+          "200": {
+            "description": "引导数据",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/onboarding/complete": {
+      "post": {
+        "operationId": "completeOnboarding",
+        "summary": "本人完成或跳过引导（幂等，需要同站 Origin）",
+        "responses": {
+          "200": {
+            "description": "已看过引导",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteOnboardingResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/home": {
       "get": {
         "operationId": "getMyHome",
@@ -4822,6 +4888,9 @@
                 "type": "string"
               }
             ]
+          },
+          "onboarded": {
+            "type": "boolean"
           }
         }
       },
@@ -4879,6 +4948,9 @@
           },
           "loginId": {
             "type": "string"
+          },
+          "onboarded": {
+            "type": "boolean"
           }
         }
       },
@@ -10592,6 +10664,362 @@
             ]
           },
           "configured": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OnboardingResponse": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "displayName",
+              "companyName",
+              "next",
+              "voiceprint",
+              "role",
+              "company"
+            ],
+            "properties": {
+              "displayName": {
+                "type": "string"
+              },
+              "companyName": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "next": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "text",
+                  "action",
+                  "href"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "action": {
+                    "type": "string"
+                  },
+                  "href": {
+                    "type": "string"
+                  }
+                }
+              },
+              "voiceprint": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "enrolled",
+                  "updatedAt",
+                  "configured"
+                ],
+                "properties": {
+                  "enrolled": {
+                    "type": "boolean"
+                  },
+                  "updatedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "configured": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "role": {
+                "const": "ceo",
+                "type": "string"
+              },
+              "company": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "sixMonthGoal",
+                  "battlefields",
+                  "capabilities",
+                  "people"
+                ],
+                "properties": {
+                  "sixMonthGoal": {
+                    "type": "string"
+                  },
+                  "battlefields": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "code",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "ownerName": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "capabilities": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "code",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "people": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "displayName"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "displayName",
+              "companyName",
+              "next",
+              "voiceprint",
+              "role",
+              "work"
+            ],
+            "properties": {
+              "displayName": {
+                "type": "string"
+              },
+              "companyName": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "next": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "text",
+                  "action",
+                  "href"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "action": {
+                    "type": "string"
+                  },
+                  "href": {
+                    "type": "string"
+                  }
+                }
+              },
+              "voiceprint": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "enrolled",
+                  "updatedAt",
+                  "configured"
+                ],
+                "properties": {
+                  "enrolled": {
+                    "type": "boolean"
+                  },
+                  "updatedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "configured": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "role": {
+                "const": "member",
+                "type": "string"
+              },
+              "work": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "period",
+                  "planStatus",
+                  "battlefields",
+                  "missions"
+                ],
+                "properties": {
+                  "period": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  },
+                  "planStatus": {
+                    "anyOf": [
+                      {
+                        "const": "none",
+                        "type": "string"
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "const": "draft",
+                            "type": "string"
+                          },
+                          {
+                            "const": "negotiating",
+                            "type": "string"
+                          },
+                          {
+                            "const": "confirmed",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "battlefields": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name",
+                        "monthTarget"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "monthTarget": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "missions": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "code",
+                        "title",
+                        "battlefieldIds"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "battlefieldIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "CompleteOnboardingResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "onboarded"
+        ],
+        "properties": {
+          "onboarded": {
+            "const": true,
             "type": "boolean"
           }
         }

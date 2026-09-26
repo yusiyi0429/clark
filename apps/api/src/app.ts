@@ -47,6 +47,7 @@ import { registerSystemRoutes } from "./routes/system.js";
 import { registerThreadRoutes } from "./routes/threads.js";
 import { registerRecordingRoutes } from "./routes/recordings.js";
 import { registerMeRoutes } from "./routes/me.js";
+import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 
@@ -64,6 +65,8 @@ export type AppEnv = {
   publicOrigin: string;
   /** 本地开发额外允许的浏览器来源（如 127.0.0.1、局域网 IP）；线上不配，只认 publicOrigin。 */
   extraOrigins?: string[];
+  /** 引导中的公司名，可空；不从其他资料猜测。 */
+  companyName?: string;
   driServiceToken: string;
   mcpServiceToken: string;
   buildSha: string;
@@ -303,6 +306,7 @@ export async function buildApp({
   registerThreadRoutes(app, ctx);
   registerRecordingRoutes(app, ctx);
   registerMeRoutes(app, ctx);
+  registerOnboardingRoutes(app, ctx);
 
   return app;
 }

@@ -2,7 +2,10 @@
 
 import { useRef, useState } from "react";
 import { TianshuMark } from "@/components/TianshuMark";
-import { LockscreenBackdrop, LockscreenClock } from "./LockscreenVisual";
+import { LockscreenClock } from "./LockscreenVisual";
+import { MorningCanvas } from "@/components/onboarding/MorningCanvas";
+import { loginDestination } from "@/lib/access-paths";
+export { landingPath } from "@/lib/access-paths";
 import { PinField, type PinFieldHandle } from "./PinField";
 import a from "@/styles/access.module.css";
 
@@ -18,33 +21,25 @@ export function loginFailureCopy(status: number, serverMessage?: string): string
   return "暂时无法验证";
 }
 
-/** 登录后去哪：成员只去 /me 下的页面；CEO 从 /me 来的回首页，回首页时带入场动画。 */
-export function landingPath(role: Role, nextPath: string): string {
-  const memberPath = nextPath === "/me" || nextPath.startsWith("/me/");
-  if (role === "member") return memberPath ? nextPath : "/me";
-  const target = memberPath ? "/" : nextPath;
-  return target === "/" ? "/?_entry=unlock" : target;
-}
-
 function navigationDelay() {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 40 : 520;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 150 : 240;
 }
 
-type Result = { ok: true; mustChangePasscode: boolean; role?: Role } | { ok: false; message: string };
+type Result = { ok: true; mustChangePasscode: boolean; role?: Role; onboarded?: boolean } | { ok: false; message: string };
 
 async function post(url: string, body: Record<string, string>): Promise<Result> {
   const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const data = (await response.json().catch(() => null)) as { mustChangePasscode?: boolean; role?: Role; message?: string } | null;
-  if (response.ok) return { ok: true, mustChangePasscode: Boolean(data?.mustChangePasscode), role: data?.role };
+  const data = (await response.json().catch(() => null)) as { mustChangePasscode?: boolean; role?: Role; onboarded?: boolean; message?: string } | null;
+  if (response.ok) return { ok: true, mustChangePasscode: Boolean(data?.mustChangePasscode), role: data?.role, onboarded: data?.onboarded };
   return { ok: false, message: loginFailureCopy(response.status, data?.message) };
 }
 
 /**
- * 锁屏（clark `access-screen.tsx` + `access-form.tsx`）：浅蓝壁纸、等高线与闪光、锁形时钟。
+ * 锁屏与引导共用晨光画布，解锁只让输入与时钟离场。
  * 天枢是「你的 ID + 4 位口令」：口令输满即提交；初始码登录后原地换成「设置你的 4 位口令」，输两遍。
- * 验证通过后解锁动画 520ms，再以 replace 进入（不留锁屏历史）。
+ * 验证通过后以 replace 进入（不留锁屏历史）。
  */
-export function AccessScreen({ nextPath }: { nextPath: string }) {
+export function AccessScreen({ nextPath }: { nextPath?: string }) {
   const [stage, setStage] = useState<Stage>({ kind: "login" });
   const [loginId, setLoginId] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -54,7 +49,6 @@ export function AccessScreen({ nextPath }: { nextPath: string }) {
   const pin = useRef<PinFieldHandle>(null);
   const newPin = useRef<PinFieldHandle>(null);
   const confirmPin = useRef<PinFieldHandle>(null);
-  const chosen = useRef("");
   const inFlight = useRef(false);
   const busy = submitting || unlocking;
 
@@ -74,10 +68,10 @@ export function AccessScreen({ nextPath }: { nextPath: string }) {
     }
   }
 
-  async function enter(role: Role) {
+  async function enter(role: Role, onboarded?: boolean) {
     setUnlocking(true);
     await new Promise((resolve) => window.setTimeout(resolve, navigationDelay()));
-    window.location.replace(landingPath(role, nextPath));
+    window.location.replace(loginDestination(role, nextPath, onboarded));
   }
 
   const login = (passcode: string) =>
@@ -85,7 +79,7 @@ export function AccessScreen({ nextPath }: { nextPath: string }) {
       const id = loginId.trim();
       if (!id) {
         setError("先输入你的 ID");
-        pin.current?.clear();
+        pin.current?.clear(false);
         idInput.current?.focus();
         return;
       }
@@ -99,11 +93,10 @@ export function AccessScreen({ nextPath }: { nextPath: string }) {
         setStage({ kind: "set", loginId: id, passcode });
         return;
       }
-      await enter(result.role ?? "member");
+      await enter(result.role ?? "member", result.onboarded);
     });
 
-  function choose(code: string) {
-    chosen.current = code;
+  function choose() {
     setError("");
     confirmPin.current?.focus();
   }
@@ -111,7 +104,8 @@ export function AccessScreen({ nextPath }: { nextPath: string }) {
   const confirm = (code: string) =>
     run(async () => {
       if (stage.kind !== "set") return;
-      if (code !== chosen.current) {
+      const newPasscode = newPin.current?.value() ?? "";
+      if (newPasscode.length !== 4 || code !== newPasscode) {
         setError("两次输入的口令不一致");
         confirmPin.current?.clear();
         return;
@@ -119,17 +113,16 @@ export function AccessScreen({ nextPath }: { nextPath: string }) {
       const result = await post("/api/auth/passcode", { loginId: stage.loginId, passcode: stage.passcode, newPasscode: code });
       if (!result.ok) {
         setError(result.message);
-        chosen.current = "";
         confirmPin.current?.clear();
         newPin.current?.clear();
         return;
       }
-      await enter(result.role ?? "member");
+      await enter(result.role ?? "member", result.onboarded);
     });
 
   return (
     <main className={a.shell} data-unlocking={unlocking}>
-      <LockscreenBackdrop />
+      <MorningCanvas />
 
       <div className={a.brand} aria-label="天枢">
         <TianshuMark className={a.brandMark} />
@@ -143,14 +136,14 @@ export function AccessScreen({ nextPath }: { nextPath: string }) {
 
         <LockscreenClock />
 
-        <form className={a.accessForm} onSubmit={(event) => event.preventDefault()} aria-busy={submitting}>
+        <form className={a.accessForm} data-error={Boolean(error)} onSubmit={(event) => event.preventDefault()} aria-busy={submitting}>
           {stage.kind === "login" ? (
             <>
               <div className={`${a.codeGroup} ${a.narrowGroup}`}>
                 <label className={a.codeLabel} htmlFor="access-id">
                   你的 ID
                 </label>
-                <div className={`${a.passwordField} ${a.idField}`}>
+                <div className={a.passwordField}>
                   <input
                     ref={idInput}
                     id="access-id"
@@ -180,6 +173,7 @@ export function AccessScreen({ nextPath }: { nextPath: string }) {
               <div className={`${a.codeGroup} ${a.narrowGroup}`}>
                 <p className={a.codeLabel}>4 位口令</p>
                 <PinField
+                  key="login"
                   ref={pin}
                   label="口令"
                   autoComplete="current-password"
@@ -195,7 +189,7 @@ export function AccessScreen({ nextPath }: { nextPath: string }) {
               <p className={a.setHint}>第一次登录，设置你自己的 4 位口令</p>
               <div className={`${a.codeGroup} ${a.narrowGroup}`}>
                 <p className={a.codeLabel}>新口令</p>
-                <PinField ref={newPin} label="新口令" autoComplete="new-password" autoFocus disabled={busy} onComplete={choose} />
+                <PinField key="new" ref={newPin} label="新口令" autoComplete="new-password" autoFocus disabled={busy} onComplete={choose} />
               </div>
               <div className={`${a.codeGroup} ${a.narrowGroup}`}>
                 <p className={a.codeLabel}>再输一遍</p>
@@ -226,7 +220,6 @@ export function AccessScreen({ nextPath }: { nextPath: string }) {
         <span>天枢 · TKOS</span>
       </footer>
 
-      <div className={a.unlockWash} aria-hidden="true" />
     </main>
   );
 }

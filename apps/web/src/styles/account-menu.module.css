@@ -43,6 +43,18 @@
 .avatarButton.avatarButton { padding: 0; }
 .avatarButton .avatar { width: 30px; height: 30px; background: transparent; font-size: 13.5px; }
 
+@media (max-width: 690px) {
+  .chip.chip {
+    border-color: var(--hairline);
+    background: var(--onboarding-glass);
+    color: var(--ink);
+    box-shadow: var(--onboarding-highlight), var(--onboarding-shadow);
+  }
+  .chip.chip:hover { background: var(--surface); }
+  .chip .avatar { background: var(--neutral-wash); color: var(--ink-muted); }
+  .chip.chip:focus-visible, .avatarButton.avatarButton:focus-visible { outline-color: var(--onboarding-blue); }
+}
+
 /* 弹出来的那一张：圆角矩形、毛玻璃半透明。透明处模糊并提亮下面的内容，顶上偏左一道高光，边上一圈细亮边，影子很淡。 */
 .popover.popover {
   min-width: 248px;

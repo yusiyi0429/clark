@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { ChangePasscodeRequest, LoginRequest, LoginResponse, SessionResponse, type TLoginResponse, type TSessionRole } from "@warmap/contracts";
 import { LOCK_AFTER_FAILURES, changePasscode, roleOf, verifyCredentials, type Rejected } from "../memberAccess.js";
 import { sessionClearCookie, sessionSetCookie } from "../session.js";
+import { hasCompletedOnboarding } from "../onboarding.js";
 import { isAllowedOrigin, type AppInstance, type RouteContext } from "./shared.js";
 
 export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -26,9 +27,10 @@ export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
     return fail(reply, 401, "INVALID_CREDENTIALS", "ID 或口令不对");
   }
 
-  function signIn(reply: FastifyReply, personId: string, version: number, role: TSessionRole): TLoginResponse {
+  async function signIn(reply: FastifyReply, personId: string, version: number, role: TSessionRole): Promise<TLoginResponse> {
+    const onboarded = await hasCompletedOnboarding(q, personId);
     reply.header("set-cookie", sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds, { pid: personId, v: version }));
-    return { authenticated: true, mustChangePasscode: false, role };
+    return { authenticated: true, mustChangePasscode: false, role, onboarded };
   }
 
   app.post(
@@ -69,6 +71,7 @@ export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
       personId: person.personId,
       displayName: findPerson(person.personId)?.displayName ?? person.personId,
       role: person.role,
+      onboarded: await hasCompletedOnboarding(q, person.personId),
       ...(loginId ? { loginId } : {}),
     };
   });

@@ -1,0 +1,227 @@
+"use client";
+
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { ArrowRight, Check, Mic, Square } from "lucide-react";
+import { TianshuMark } from "@/components/TianshuMark";
+import { useVoiceprintEnrollment, VOICEPRINT_SCRIPT, VOICEPRINT_CONSENT } from "@/components/member/useVoiceprintEnrollment";
+import { browserApi } from "@/lib/api/client";
+import type { components } from "@/lib/api/schema";
+import { onboardingDestination } from "@/lib/access-paths";
+import { MorningCanvas } from "./MorningCanvas";
+import { CoAgentCapsule } from "./CoAgentCapsule";
+import { OnboardingProgress } from "./OnboardingProgress";
+import f from "./foundation.module.css";
+import s from "./welcome.module.css";
+
+export type OnboardingData = components["schemas"]["OnboardingResponse"];
+type Step = "hello" | "company" | "work" | "voiceprint" | "start";
+
+/** 工单 02 只需在 company/work 后插入 radar；进度、前后导航与动效不依赖固定步数。 */
+export function onboardingSteps(data: OnboardingData): Step[] {
+  return ["hello", data.role === "ceo" ? "company" : "work", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "start"];
+}
+
+export function monthTargetCopy(status: "none" | "draft" | "negotiating" | "confirmed", target: string | null): string {
+  if (status === "none") return "本月目标还没出来";
+  if (status !== "confirmed") return "本月目标还在协商";
+  return target || "这个战场的本月目标还没有登记";
+}
+
+export function CompanySnapshot({ data }: { data: Extract<OnboardingData, { role: "ceo" }> }) {
+  const { company } = data;
+  return <>
+    <div className={`${f.glass} ${s.snapshot}`}>
+      {!company.sixMonthGoal && !company.battlefields.length ? <p className={s.empty}>公司的目标和战场还没登记。登记之后，这里会列出目标和分工。</p> : <>
+        <section className={s.snapshotSection}>
+          <h2>六个月目标</h2>
+          <p className={s.clampThree}>{company.sixMonthGoal || "六个月目标还没有登记"}</p>
+        </section>
+        <section className={s.snapshotSection}>
+          <h2>战场 <span>{company.battlefields.length}</span></h2>
+          {company.battlefields.length ? <ul className={s.battlefields}>{company.battlefields.map((battlefield) => <li key={battlefield.id}>
+            <span className={s.code}>{battlefield.code}</span><strong>{battlefield.name}</strong><span>{battlefield.ownerName ?? "待指派"}</span>
+          </li>)}</ul> : <p>战场还没有登记</p>}
+        </section>
+      </>}
+      {company.capabilities.length ? <section className={s.snapshotSection}><h2>能力 <span>{company.capabilities.length}</span></h2><p className={s.clampTwo}>{company.capabilities.map((item) => item.name).join(" · ")}</p></section> : null}
+      <section className={`${s.snapshotSection} ${s.people}`}>
+        <div className={s.avatars} aria-hidden="true">{company.people.slice(0, 5).map((person) => <span key={person.personId}>{Array.from(person.displayName)[0]}</span>)}</div>
+        <p>{company.people.length} 位同事</p>
+      </section>
+    </div>
+    <p className={s.footnote}>哪里不对，在个人菜单的「组织配置」里改。</p>
+  </>;
+}
+
+export function WorkSnapshot({ data }: { data: Extract<OnboardingData, { role: "member" }> }) {
+  const { work } = data;
+  const unassigned = work.missions.filter((mission) => !mission.battlefieldIds.some((id) => work.battlefields.some((battlefield) => battlefield.id === id)));
+  const missionList = (missions: typeof work.missions) => <><ul className={s.missions}>{missions.slice(0, 3).map((mission) => <li key={mission.id}>{mission.title}</li>)}</ul>{missions.length > 3 ? <p className={s.more}>另 {missions.length - 3} 条</p> : null}</>;
+  return <div className={`${f.glass} ${s.snapshot}`}>
+    <p className={s.period}>{Number(work.period.slice(5))} 月 · 与你有关的工作</p>
+    {work.battlefields.length ? work.battlefields.map((battlefield) => {
+      const missions = work.missions.filter((mission) => mission.battlefieldIds.includes(battlefield.id));
+      return <section className={s.workSection} key={battlefield.id}>
+        <h2>{battlefield.name}</h2>
+        <p className={s.targetLabel}>本月目标</p>
+        <p className={s.clampThree}>{monthTargetCopy(work.planStatus, battlefield.monthTarget)}</p>
+        {missions.length ? <><p className={s.targetLabel}>我的 Mission</p>{missionList(missions)}</> : null}
+      </section>;
+    }) : <p className={s.empty}>这个月还没有登记你参与的战场。</p>}
+    {unassigned.length ? <section className={s.workSection}><h2>我的 Mission</h2>{missionList(unassigned)}</section> : null}
+    {!work.missions.length ? <p className={s.emptyMission}>这个月还没有登记你的 Mission</p> : null}
+  </div>;
+}
+
+export function WelcomeFlow({ data, nextPath }: { data: OnboardingData; nextPath?: string }) {
+  const steps = onboardingSteps(data);
+  const [index, setIndex] = useState(0);
+  const [acknowledge, setAcknowledge] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const [finishing, setFinishing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rerecord, setRerecord] = useState(false);
+  const step = steps[index];
+  const voice = useVoiceprintEnrollment({ initialStatus: data.voiceprint });
+  const current = useRef(0);
+  const completing = useRef(false);
+  const title = useRef<HTMLHeadingElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const outgoing = useRef<HTMLElement | null>(null);
+  const outgoingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const primary = useRef<HTMLButtonElement>(null);
+  const recordResult = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+    title.current?.focus({ preventScroll: true });
+  }, [index]);
+  useEffect(() => {
+    if (step !== "voiceprint" || voice.phase !== "recorded" || !window.matchMedia("(max-width: 759px)").matches) return;
+    // 手机读完长稿后，把时长和重录入口带回视野，避免被固定操作区遮住。
+    recordResult.current?.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  }, [step, voice.phase]);
+  useEffect(() => () => { outgoing.current?.remove(); if (outgoingTimer.current) clearTimeout(outgoingTimer.current); }, []);
+
+  function move(delta: number) {
+    const next = Math.max(0, Math.min(steps.length - 1, current.current + delta));
+    if (next === current.current || completing.current || voice.phase === "saving") return;
+    voice.cancel();
+    outgoing.current?.remove();
+    if (outgoingTimer.current) clearTimeout(outgoingTimer.current);
+    const old = content.current?.cloneNode(true) as HTMLElement | undefined;
+    if (old && content.current?.parentElement) {
+      old.inert = true;
+      old.setAttribute("aria-hidden", "true");
+      old.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+      old.classList.add(s.outgoing);
+      old.style.setProperty("--direction", String(delta));
+      content.current.parentElement.appendChild(old);
+      outgoing.current = old;
+      outgoingTimer.current = setTimeout(() => { old.remove(); if (outgoing.current === old) outgoing.current = null; }, 200);
+    }
+    current.current = next;
+    setDirection(delta);
+    setIndex(next);
+    setAcknowledge((value) => value + 1);
+    setError(null);
+  }
+
+  async function finish() {
+    if (completing.current || voice.phase === "saving") return;
+    completing.current = true;
+    voice.cancel();
+    setFinishing(true);
+    setError(null);
+    try {
+      const { response, error: failure } = await browserApi.POST("/api/me/onboarding/complete");
+      if (!response.ok) throw new Error(failure?.message ?? "还没能保存，请再试一次。");
+      window.location.replace(onboardingDestination(data.role, nextPath, data.next.href));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "网络连接失败，请再试一次。");
+      completing.current = false;
+      setFinishing(false);
+    }
+  }
+
+  async function forward() {
+    if (step === "start" || error) return finish();
+    if (step === "voiceprint" && voice.phase === "recorded") {
+      const saved = await voice.save();
+      if (saved) { setRerecord(false); move(1); }
+      return;
+    }
+    move(1);
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key !== "Enter" || event.defaultPrevented || event.nativeEvent.isComposing || event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("input, textarea, select, button, a, [contenteditable=true]")) return;
+    event.preventDefault();
+    primary.current?.click();
+  }
+
+  const heading = step === "hello" ? `你好，${data.displayName}` : step === "company" ? `这是天枢里登记的${data.companyName || "公司"}` : step === "work" ? "你这个月的工作" : step === "voiceprint" ? "让我在会上认出你的声音" : "可以开始了";
+  const busy = finishing || voice.phase === "saving";
+  const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
+  const primaryDisabled = busy || (!error && step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort));
+  const primaryLabel = finishing ? "正在进入…" : step === "hello" ? "开始" : step === "start" ? data.next.action : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
+
+  return <main className={s.page} onKeyDown={onKeyDown} style={{ "--direction": direction } as CSSProperties}>
+    <MorningCanvas progress={index} />
+    <header className={s.header}>
+      <div className={s.brand} aria-label="天枢"><TianshuMark /><span>天枢</span></div>
+      {step !== "start" ? <button type="button" className={f.textButton} onClick={() => void finish()} disabled={busy}>先进入工作台</button> : null}
+    </header>
+    <div className={s.flow} data-step={step}>
+      <CoAgentCapsule acknowledge={acknowledge} state={voice.recording ? "listening" : "idle"} level={voice.level} />
+      <div className={s.stage}>
+        <div className={s.content} key={step} ref={content} data-step={step}>
+          <div className={s.intro}>
+            <h1 ref={title} tabIndex={-1}>{heading}</h1>
+            {step === "hello" ? <><p className={s.subtitle}>我是你的 Co-Agent</p><p className={s.description}>我先带你看看这个月和你有关的工作。{data.voiceprint.configured ? <><br />声纹，可以现在录，也可以以后再说。</> : null}</p></> : null}
+            {step === "voiceprint" ? <p className={s.description}>录一段 15–30 秒的朗读，帮我在会后建议哪些发言可能来自你——最后仍由人核对。</p> : null}
+            {step === "start" ? <p className={s.description}>{data.next.text}</p> : null}
+          </div>
+          <div className={s.details}>
+            {step === "company" && data.role === "ceo" ? <CompanySnapshot data={data} /> : null}
+            {step === "work" && data.role === "member" ? <WorkSnapshot data={data} /> : null}
+            {step === "voiceprint" ? <>
+              {voiceReady ? <div className={`${f.glass} ${s.enrolled}`}>
+                <span className={s.successIcon}><Check size={24} /></span>
+                <p>你的声纹已经录好</p>
+                {voice.status?.updatedAt ? <p className={s.updated}>{new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "long", day: "numeric" }).format(new Date(voice.status.updatedAt))}更新</p> : null}
+                <button type="button" className={f.textButton} onClick={() => setRerecord(true)}>重新录制</button>
+              </div> : <>
+                <label className={s.consent}><input type="checkbox" checked={voice.consent} disabled={voice.recording || busy} onChange={(event) => voice.setConsent(event.target.checked)} /><span>{VOICEPRINT_CONSENT}</span></label>
+                <blockquote className={`${f.glass} ${s.script}`} aria-label="请朗读这段文字"><span>请用平时开会的语速朗读</span>{VOICEPRINT_SCRIPT}</blockquote>
+                <div className={s.recordControl} ref={recordResult}>
+                  <div className={s.recordRing}>
+                    <svg viewBox="0 0 88 88" aria-hidden="true"><circle cx="44" cy="44" r="41" /><circle cx="44" cy="44" r="41" pathLength="30" strokeDasharray="30" strokeDashoffset={30 - Math.min(30, voice.seconds)} /></svg>
+                    <button type="button" className={s.recordButton} disabled={busy || voice.starting || (!voice.recording && !voice.consent) || (voice.recording && !voice.canStop)} aria-label={voice.recording ? "停止录制" : voice.phase === "recorded" ? "重新录制" : "开始录制"} onClick={() => voice.recording ? voice.stop() : void voice.start()}>
+                      {voice.recording ? <Square size={22} fill="currentColor" /> : <Mic size={26} />}
+                    </button>
+                  </div>
+                  <p className={s.timer}>{voice.recording || voice.phase === "recorded" ? <><span>{String(voice.seconds).padStart(2, "0")}</span> / 30 秒</> : "15–30 秒"}</p>
+                  <p className={s.recordHint} role="status">{voice.recording ? voice.canStop ? "读完了就可以停止" : "正在录音，15 秒后可以停止" : voice.phase === "recorded" ? voice.tooShort ? "这段太短了，请重新录制" : "录好了，可以保存或重录" : "找一个安静的地方，准备好就开始"}</p>
+                </div>
+              </>}
+              {voice.error ? <p className={s.error} role="alert">{voice.error}</p> : null}
+            </> : null}
+            {step === "start" && data.voiceprint.configured ? <p className={s.summary}>声纹 · {voice.status?.enrolled ? "已录好" : "稍后在个人菜单里录"}<span>都可以在个人菜单里改</span></p> : null}
+          </div>
+        </div>
+      </div>
+      <footer className={s.footer}>
+        <OnboardingProgress current={index + 1} total={steps.length} complete={step === "start"} />
+        {error ? <p className={s.error} role="alert">{error}</p> : null}
+        <button key={step} ref={primary} className={f.primary} type="button" onClick={() => void forward()} disabled={primaryDisabled}>{error ? "重试" : primaryLabel}{!busy ? <ArrowRight size={18} aria-hidden="true" /> : null}</button>
+        <div className={s.secondary}>
+          {index > 0 ? <button className={f.textButton} type="button" onClick={() => move(-1)} disabled={busy}>上一步</button> : null}
+          {step === "voiceprint" ? <button className={f.textButton} type="button" onClick={() => move(1)} disabled={busy}>稍后</button> : null}
+        </div>
+      </footer>
+    </div>
+  </main>;
+}

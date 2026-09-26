@@ -85,6 +85,8 @@ import {
   NotificationList,
   MarkNotificationsSeenRequest,
   VoiceprintStatus,
+  OnboardingResponse,
+  CompleteOnboardingResponse,
 } from "./index.js";
 
 const errorResponse = {
@@ -466,6 +468,27 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "400": errorResponse,
             "401": errorResponse,
             "404": errorResponse,
+          },
+        },
+      },
+      "/api/me/onboarding": {
+        get: {
+          operationId: "getOnboarding",
+          summary: "本人首次登录引导：按角色投影真实目标、工作、声纹状态与下一件事",
+          responses: {
+            "200": { description: "引导数据", content: { "application/json": { schema: { $ref: "#/components/schemas/OnboardingResponse" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/me/onboarding/complete": {
+        post: {
+          operationId: "completeOnboarding",
+          summary: "本人完成或跳过引导（幂等，需要同站 Origin）",
+          responses: {
+            "200": { description: "已看过引导", content: { "application/json": { schema: { $ref: "#/components/schemas/CompleteOnboardingResponse" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
           },
         },
       },
@@ -1256,6 +1279,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingRecording: MeetingRecording as JsonSchema,
         StartMeetingRecordingResponse: StartMeetingRecordingResponse as JsonSchema,
         VoiceprintStatus: VoiceprintStatus as JsonSchema,
+        OnboardingResponse: OnboardingResponse as JsonSchema,
+        CompleteOnboardingResponse: CompleteOnboardingResponse as JsonSchema,
       },
     },
   };

@@ -84,6 +84,41 @@
     0 24px 48px -16px var(--sh-3);
 
   --ring: var(--ink-faint);
+
+  /* 晨光：锁屏、引导与入场共用；其余工作面沿用已有 token。 */
+  --morning-start: #f7f9fc;
+  --morning-end: #fbfcfe;
+  --morning-blue: rgb(58 131 247 / 8%);
+  --morning-cyan: rgb(91 216 246 / 6%);
+  --onboarding-blue: #3a83f7;
+  --onboarding-pressed: #246ddf;
+  --onboarding-ink: var(--ink);
+  --onboarding-muted: var(--ink-muted);
+  --onboarding-faint: var(--ink-faint);
+  --onboarding-error: var(--counter);
+  --onboarding-glass: rgb(255 255 255 / 92%);
+  --onboarding-blur: var(--mat-blur);
+  --onboarding-sat: var(--mat-sat);
+  --onboarding-edge: var(--hairline);
+  --onboarding-highlight: inset 0 1px 0 #fff;
+  --onboarding-shadow: 0 8px 24px -20px var(--sh-3);
+  --onboarding-card-radius: 24px;
+  --onboarding-control-radius: var(--r-card);
+  --onboarding-inset-radius: var(--r-inset);
+  --onboarding-pill-radius: var(--r-capsule);
+  --onboarding-morph: 420ms;
+  --onboarding-ease: cubic-bezier(.32, .72, 0, 1);
+  --onboarding-ease-brand: var(--ease-brand);
+  --onboarding-feedback: var(--dur-base);
+  --onboarding-enter: var(--dur-slow);
+  --onboarding-leave: 200ms;
+  --onboarding-stagger: 60ms;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
 }
 
 @theme inline {
@@ -144,6 +179,7 @@
   }
 
   html {
+    background-color: var(--morning-start);
     font-family: var(--font-sans);
     -webkit-text-size-adjust: 100%;
     height: 100%;
@@ -152,7 +188,7 @@
 
   body {
     min-height: 100%;
-    background-color: var(--paper);
+    background-color: var(--morning-start);
     color: var(--ink);
     /* 不设 -webkit-font-smoothing：保留默认次像素渲染（clark 同）。 */
     text-rendering: optimizeLegibility;

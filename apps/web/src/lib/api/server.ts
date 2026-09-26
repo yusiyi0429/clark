@@ -7,14 +7,14 @@ import { serverApi } from "./client";
 
 export const SESSION_COOKIE = "warmap_session";
 
-export type SessionInfo = { personId: string; displayName: string; role: "ceo" | "member"; loginId?: string };
+export type SessionInfo = { personId: string; displayName: string; role: "ceo" | "member"; onboarded: boolean; loginId?: string };
 
 /** 读当前会话（服务端）：没有 cookie 不发请求；接口判定无效（过期、口令已重置）时返回 null。 */
 export async function readSession(cookie: string): Promise<SessionInfo | null> {
   if (!cookie.includes(`${SESSION_COOKIE}=`)) return null;
   const { data, response } = await serverApi.GET("/api/auth/session", { headers: { cookie } });
   if (!response.ok || !data?.authenticated || !data.personId || !data.role) return null;
-  return { personId: data.personId, displayName: data.displayName ?? data.personId, role: data.role, ...(data.loginId ? { loginId: data.loginId } : {}) };
+  return { personId: data.personId, displayName: data.displayName ?? data.personId, role: data.role, onboarded: data.onboarded ?? true, ...(data.loginId ? { loginId: data.loginId } : {}) };
 }
 
 const accessPath = (targetPath: string) => `/access?next=${encodeURIComponent(targetPath)}`;
@@ -25,6 +25,7 @@ export async function requireCeo(targetPath: string): Promise<string> {
   const session = await readSession(cookie);
   if (!session) redirect(accessPath(targetPath));
   if (session.role !== "ceo") redirect("/me");
+  if (!session.onboarded) redirect(`/welcome?next=${encodeURIComponent(targetPath)}`);
   return cookie;
 }
 
@@ -34,6 +35,7 @@ export async function requireMember(targetPath: string): Promise<{ cookie: strin
   const session = await readSession(cookie);
   if (!session) redirect(accessPath(targetPath));
   if (session.role !== "member") redirect("/");
+  if (!session.onboarded) redirect(`/welcome?next=${encodeURIComponent(targetPath)}`);
   return { cookie, session };
 }
 

@@ -79,10 +79,12 @@ describe("responsive workspace CSS", () => {
     expect(source).toContain(".scroll{padding:24px 32px 30px;overflow-y:auto;overscroll-behavior:contain;min-height:0;");
   });
 
-  it("uses clark's light-blue lock screen (contour + glint) and 42px coarse-pointer notification controls", () => {
+  it("uses the shared morning surface and blue focus on the lock screen, retaining coarse-pointer notification controls", () => {
     const access = css("./access.module.css");
-    expect(access).toContain("linear-gradient(180deg, #87aef4, #8fa5f0 58%, #adb6ec)");
-    expect(access).toContain("animation: contourDraw 1.85s 0.5s forwards");
+    expect(access).toContain("background: var(--morning-start)");
+    expect(access).toContain("outline: 2px solid var(--onboarding-blue)");
+    expect(access).toContain("prefers-reduced-transparency");
+    expect(access).not.toContain("contourDraw");
     expect(access).toContain(".passwordField {");
     expect(css("./notifications.module.css")).toContain("@media(pointer:coarse){.railLock button{width:42px;height:42px;margin:0}}");
   });

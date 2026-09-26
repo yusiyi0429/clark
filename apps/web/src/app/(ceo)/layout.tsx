@@ -9,7 +9,7 @@ import { loadHomeCards, readSession } from "@/lib/api/server";
 export default async function CeoLayout({ children }: { children: React.ReactNode }) {
   const cookie = (await cookies()).toString();
   const session = await readSession(cookie);
-  if (session?.role !== "ceo") return children;
+  if (session?.role !== "ceo" || !session.onboarded) return children;
   const { cards } = await loadHomeCards(cookie);
   return (
     <CeoWorkspace initialCards={cards} viewerId={session.personId} account={{ displayName: session.displayName, loginId: session.loginId, role: "ceo" }}>

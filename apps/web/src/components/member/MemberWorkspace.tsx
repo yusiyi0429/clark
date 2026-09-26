@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { AccountMenu } from "@/components/AccountMenu";
+import { MorningCanvas } from "@/components/onboarding/MorningCanvas";
+import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
 import { ActionNoticeCard } from "@/components/ActionNoticeCard";
 import { HeroButton } from "@/components/HeroButton";
 import { RailClock } from "@/components/NotificationRail";
@@ -23,6 +25,7 @@ import m from "@/styles/member-home.module.css";
  * 发给我的信号在第 3 步接入。
  */
 export function MemberWorkspace({ displayName, loginId }: { displayName: string; loginId?: string }) {
+  const arriving = useHomeArrival();
   const [leaving, setLeaving] = useState(false);
   const [keyboard, setKeyboard] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -52,7 +55,8 @@ export function MemberWorkspace({ displayName, loginId }: { displayName: string;
   }, [historyOpen, keyboard]);
 
   return (
-    <div className={s.shell} data-testid="member-workspace">
+    <div className={s.shell} data-testid="member-workspace" data-arriving={arriving}>
+      {arriving ? <div className={s.entryCarry} aria-hidden="true"><MorningCanvas /></div> : null}
       <div className={s.mainArea}>
         <div className={s.homeSurface}>
           <div className={m.board}>

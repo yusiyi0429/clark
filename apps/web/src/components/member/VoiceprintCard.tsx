@@ -7,118 +7,16 @@
  * 录音用浏览器 MediaRecorder，最少 15 秒、最多 30 秒（和火山实时声纹注册的 15–30 秒同一个口径，以后换过去不用重录）。
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Checkbox, Label } from "ts-design/primitives";
 import { Mic, Square } from "lucide-react";
-import { browserApi } from "@/lib/api/client";
 import { monthDayTime } from "@/lib/companyTime";
-import { pickRecordingType } from "@/components/meeting/useMeetingRecorder";
+import { MAX_SECONDS, MIN_SECONDS, useVoiceprintEnrollment, VOICEPRINT_CONSENT, VOICEPRINT_SCRIPT } from "./useVoiceprintEnrollment";
 import s from "@/styles/voiceprint.module.css";
 
-export const VOICEPRINT_SCRIPT =
-  "我是天枢的成员。开会时，我会把判断、依据和下一步说清楚：这件事为什么现在做，需要谁来配合，什么时候给出结果。会上定下来的事情，我会放进执行事项里跟进，并及时同步进展。遇到拿不准的地方，我会先说清楚还缺什么信息，再约相关的同事一起对齐。";
-
-const MIN_SECONDS = 15;
-const MAX_SECONDS = 30;
-
-type Status = { enrolled: boolean; updatedAt: string | null; configured: boolean };
-type Phase = "idle" | "recording" | "recorded" | "saving";
+export { VOICEPRINT_SCRIPT } from "./useVoiceprintEnrollment";
 
 export function VoiceprintCard() {
-  const [status, setStatus] = useState<Status | null>(null);
-  const [consent, setConsent] = useState(false);
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [seconds, setSeconds] = useState(0);
-  const [clip, setClip] = useState<Blob | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-  const recorder = useRef<MediaRecorder | null>(null);
-  const timer = useRef<number | null>(null);
-
-  const load = useCallback(async () => {
-    const { data } = await browserApi.GET("/api/me/voiceprint");
-    if (data) setStatus(data as Status);
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
-  useEffect(
-    () => () => {
-      if (timer.current) window.clearInterval(timer.current);
-      recorder.current?.stream.getTracks().forEach((track) => track.stop());
-    },
-    [],
-  );
-
-  const stop = () => {
-    if (timer.current) window.clearInterval(timer.current);
-    timer.current = null;
-    recorder.current?.stop();
-  };
-
-  const start = async () => {
-    setError(null);
-    setNote(null);
-    setClip(null);
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return setError("这个浏览器不能录音，请换 Chrome 或 Edge。");
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      return setError("麦克风没有授权，录不了声纹。");
-    }
-    const type = pickRecordingType((candidate) => MediaRecorder.isTypeSupported(candidate));
-    const media = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
-    const parts: Blob[] = [];
-    media.ondataavailable = (event) => {
-      if (event.data.size) parts.push(event.data);
-    };
-    media.onstop = () => {
-      stream.getTracks().forEach((track) => track.stop());
-      setClip(new Blob(parts, { type: media.mimeType || "audio/webm" }));
-      setPhase("recorded");
-    };
-    media.start();
-    recorder.current = media;
-    setSeconds(0);
-    setPhase("recording");
-    const began = Date.now();
-    timer.current = window.setInterval(() => {
-      const elapsed = Math.floor((Date.now() - began) / 1000);
-      setSeconds(elapsed);
-      if (elapsed >= MAX_SECONDS) stop();
-    }, 250);
-  };
-
-  const save = async () => {
-    if (!clip) return;
-    setPhase("saving");
-    setError(null);
-    const form = new FormData();
-    form.append("audio", clip, clip.type.includes("mp4") ? "voiceprint.m4a" : "voiceprint.webm");
-    form.append("consent", "true");
-    const response = await fetch("/api/me/voiceprint", { method: "POST", body: form }).catch(() => null);
-    const body = (await response?.json().catch(() => ({}))) as (Status & { message?: string }) | undefined;
-    if (!response?.ok || !body) {
-      setPhase("recorded");
-      return setError(body?.message ?? "没录上，请重试。");
-    }
-    setStatus(body);
-    setClip(null);
-    setPhase("idle");
-    setNote("已录好。之后的会议录音里，天枢会用它预填你是哪位说话人。");
-  };
-
-  const remove = async () => {
-    setError(null);
-    const { response } = await browserApi.DELETE("/api/me/voiceprint");
-    if (!response.ok) return setError("没删掉，请重试。");
-    setNote("已删除。腾讯云和天枢里都不再保存你的声纹。");
-    void load();
-  };
-
-  const recording = phase === "recording";
-  const tooShort = phase === "recorded" && seconds < MIN_SECONDS;
+  const { status, consent, setConsent, phase, seconds, error, note, recording, tooShort, start, stop, save, remove } = useVoiceprintEnrollment();
 
   return (
     <section className={s.card} aria-labelledby="voiceprint-title">
@@ -139,7 +37,7 @@ export function VoiceprintCard() {
                 <Checkbox.Control>
                   <Checkbox.Indicator />
                 </Checkbox.Control>
-                <Label>我同意天枢保存我的声纹特征，只用于在公司会议录音里认出我的发言；我可以随时删除。</Label>
+                <Label>{VOICEPRINT_CONSENT}</Label>
               </Checkbox>
               <blockquote className={s.script} aria-label="请朗读这段文字">
                 {VOICEPRINT_SCRIPT}

@@ -96,7 +96,7 @@ describe("CEO login → real Card journey", () => {
         url: "/api/auth/session",
         headers: { cookie },
       });
-      expect(session.json()).toEqual({ authenticated: true, personId: TEST_CEO.personId, displayName: "测试甲", role: "ceo", loginId: TEST_CEO.loginId });
+      expect(session.json()).toEqual({ authenticated: true, personId: TEST_CEO.personId, displayName: "测试甲", role: "ceo", loginId: TEST_CEO.loginId, onboarded: false });
     } finally {
       await t.close();
     }

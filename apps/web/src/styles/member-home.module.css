@@ -49,6 +49,10 @@
   text-shadow: 0 .5px 1px rgb(0 0 0 / .22);
 }
 
+@media (max-width: 690px) {
+  .quiet { color: var(--ink-muted); text-shadow: none; }
+}
+
 @media (prefers-contrast: more) {
   .panel { border-color: #777; }
   .panel p { color: #444; }

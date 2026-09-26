@@ -3,7 +3,7 @@
 import { useImperativeHandle, useRef, type ChangeEvent, type ClipboardEvent, type KeyboardEvent, type Ref } from "react";
 import a from "@/styles/access.module.css";
 
-export type PinFieldHandle = { clear: () => void; focus: () => void; value: () => string };
+export type PinFieldHandle = { clear: (focus?: boolean) => void; focus: () => void; value: () => string };
 
 /** 逐位数字格（clark `access-form` 的访问码格子）：输满自动回调，支持粘贴、左右键与退格回退；输入显示为圆点。 */
 export function PinField({
@@ -37,12 +37,12 @@ export function PinField({
   };
 
   useImperativeHandle(ref, () => ({
-    clear() {
+    clear(focus = true) {
       digits.current = Array(length).fill("");
       inputs.current.forEach((input) => {
         if (input) input.value = "";
       });
-      requestAnimationFrame(() => focusAt(0));
+      if (focus) requestAnimationFrame(() => focusAt(0));
     },
     focus: () => focusAt(firstEmpty()),
     value: () => digits.current.join(""),
@@ -60,7 +60,8 @@ export function PinField({
       const input = inputs.current[index];
       if (input) input.value = digit;
     });
-    window.setTimeout(() => focusAt(Math.min(start + incoming.length, length - 1)), 0);
+    // 先完成本组焦点移动，再交给 onComplete；不能延后抢回「确认口令」的焦点。
+    focusAt(Math.min(start + incoming.length, length - 1));
     const code = next.join("");
     if (code.length === length) onComplete(code);
   }

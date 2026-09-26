@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AccessScreen, landingPath, loginFailureCopy } from "./AccessScreen";
 import { formatLockDate, formatLockTime } from "./lockscreenTime";
+import { loginDestination, validNextPath, onboardingDestination } from "@/lib/access-paths";
 
 describe("锁屏时钟（clark lockscreen-time）", () => {
   const reference = new Date(Date.UTC(2026, 8, 12, 0, 8));
@@ -26,8 +27,8 @@ describe("锁屏表单", () => {
   });
 
   it("登录后去哪：成员只去 /me 下的页面，CEO 从 /me 来的回首页", () => {
-    expect(landingPath("member", "/")).toBe("/me");
-    expect(landingPath("member", "/radar")).toBe("/me");
+    expect(landingPath("member", "/")).toBe("/me?_entry=unlock");
+    expect(landingPath("member", "/radar")).toBe("/me?_entry=unlock");
     expect(landingPath("member", "/me/tasks/1")).toBe("/me/tasks/1");
     expect(landingPath("ceo", "/")).toBe("/?_entry=unlock");
     expect(landingPath("ceo", "/me")).toBe("/?_entry=unlock");
@@ -41,6 +42,23 @@ describe("锁屏表单", () => {
     expect(html.match(/aria-label="口令第 \d 位"/g)).toHaveLength(4);
     expect(html).not.toContain('role="radiogroup"');
     expect(html).toContain("--:--");
-    expect(html).toContain("tianshu-flow-lock-v3.webp");
+    expect(html).toContain("data-morning-canvas");
+    expect(html).not.toContain("tianshu-flow-lock-v3.webp");
+  });
+
+  it("没看过引导时恢复有效深链；老 API 未返回标记时直接进入", () => {
+    expect(loginDestination("ceo", "/plans/2026-10", false)).toBe("/welcome?next=%2Fplans%2F2026-10");
+    expect(loginDestination("member", undefined, false)).toBe("/welcome");
+    expect(loginDestination("ceo", "/radar")).toBe("/radar");
+    expect(onboardingDestination("ceo", undefined, "/plans/2026-10")).toBe("/plans/2026-10");
+    expect(onboardingDestination("ceo", "/radar?tab=all", "/plans/2026-10")).toBe("/radar?tab=all");
+    expect(onboardingDestination("member", "/plans/2026-10", "/me")).toBe("/me?_entry=unlock");
+  });
+
+  it("只恢复该角色的站内工作路径，不允许外链或引导循环", () => {
+    for (const path of ["https://evil.example", "//evil.example", "/\\evil.example", "/%5cevil.example", "/access", "/welcome?next=/", "/api/auth/logout", "/me"]) {
+      expect(validNextPath("ceo", path)).toBeNull();
+    }
+    expect(validNextPath("member", "/me?tab=items")).toBe("/me?tab=items");
   });
 });

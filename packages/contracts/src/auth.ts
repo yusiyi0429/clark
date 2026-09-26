@@ -20,7 +20,7 @@ export const ChangePasscodeRequest = Type.Object(
 
 /** 登录结果：仍是初始码时不签发会话，只告诉前端去设置自己的口令。 */
 export const LoginResponse = Type.Object(
-  { authenticated: Type.Boolean(), mustChangePasscode: Type.Boolean(), role: Type.Optional(SessionRole) },
+  { authenticated: Type.Boolean(), mustChangePasscode: Type.Boolean(), role: Type.Optional(SessionRole), onboarded: Type.Optional(Type.Boolean()) },
   { additionalProperties: false },
 );
 
@@ -32,6 +32,8 @@ export const SessionResponse = Type.Object(
     role: Type.Optional(SessionRole),
     /** 登录 ID：个人菜单顶部写给本人看，修改口令也要用它。 */
     loginId: Type.Optional(Type.String()),
+    /** 可选以兼容分批部署；当前 API 对已登录的人总会返回。 */
+    onboarded: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );

@@ -6,6 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import type { Card } from "@/lib/api/client";
 import { HomeBoard } from "@/components/HomeBoard";
+import { MorningCanvas } from "@/components/onboarding/MorningCanvas";
+import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
 import { NotificationRail } from "@/components/NotificationRail";
 import type { Account } from "@/components/AccountMenu";
 import { columnHostClass } from "@/conversation/ConversationColumn";
@@ -66,21 +68,7 @@ export function CeoWorkspace({ initialCards, viewerId, account, children }: { in
   const [closing, setClosing] = useState(false);
   const [peek, setPeek] = useState(false);
   const [toast, setToast] = useState("");
-  // 从锁屏解锁进来（clark workspace.tsx:70-80）：去掉 _entry 参数，锁屏壁纸化作环境光淡出，正文从模糊中浮现。
-  const [arriving, setArriving] = useState(false);
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("_entry") !== "unlock") return;
-    url.searchParams.delete("_entry");
-    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-    setArriving(true);
-  }, []);
-  // 计时单独跟着 arriving 走：开发态重复挂载时首个 effect 的清理不会把收尾计时一起清掉。
-  useEffect(() => {
-    if (!arriving) return;
-    const timer = window.setTimeout(() => setArriving(false), prefersReducedMotion() ? 0 : 1300);
-    return () => window.clearTimeout(timer);
-  }, [arriving]);
+  const arriving = useHomeArrival();
   // 对话界面状态（clark：键盘面跨对象保留；历史层、全局视图与窄屏对话列随对象复位）。
   const [keyboard, setKeyboard] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -406,7 +394,7 @@ export function CeoWorkspace({ initialCards, viewerId, account, children }: { in
           swipe.current = null;
         }}
       >
-        {arriving ? <div className={s.entryCarry} aria-hidden="true" /> : null}
+        {arriving ? <div className={s.entryCarry} aria-hidden="true"><MorningCanvas /></div> : null}
         <div className={s.mainArea} ref={main}>
           <div
             className={s.homeSurface}

@@ -17,3 +17,4 @@ export * from "./transcript.js";
 export * from "./threads.js";
 export * from "./tasks.js";
 export * from "./voiceprint.js";
+export * from "./onboarding.js";

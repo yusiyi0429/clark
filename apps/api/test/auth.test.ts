@@ -24,10 +24,10 @@ describe("登录 ID + 4 位口令", () => {
 
       const changed = await t.app.inject({ method: "POST", url: "/api/auth/passcode", headers, payload: { loginId: TEST_MEMBER.loginId, passcode: "4826", newPasscode: "7391" } });
       expect(changed.statusCode).toBe(200);
-      expect(changed.json()).toEqual({ authenticated: true, mustChangePasscode: false, role: "member" });
+      expect(changed.json()).toEqual({ authenticated: true, mustChangePasscode: false, role: "member", onboarded: false });
 
       const session = await t.app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie: cookieOf(changed.headers["set-cookie"]) } });
-      expect(session.json()).toEqual({ authenticated: true, personId: TEST_MEMBER.personId, displayName: "测试乙", role: "member", loginId: TEST_MEMBER.loginId });
+      expect(session.json()).toEqual({ authenticated: true, personId: TEST_MEMBER.personId, displayName: "测试乙", role: "member", loginId: TEST_MEMBER.loginId, onboarded: false });
     } finally {
       await t.close();
     }

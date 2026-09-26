@@ -448,6 +448,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人首次登录引导：按角色投影真实目标、工作、声纹状态与下一件事 */
+        get: operations["getOnboarding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/onboarding/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人完成或跳过引导（幂等，需要同站 Origin） */
+        post: operations["completeOnboarding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/home": {
         parameters: {
             query?: never;
@@ -1227,6 +1261,7 @@ export interface components {
             authenticated: boolean;
             mustChangePasscode: boolean;
             role?: "ceo" | "member";
+            onboarded?: boolean;
         };
         ChangePasscodeRequest: {
             loginId: string;
@@ -1239,6 +1274,7 @@ export interface components {
             displayName?: string;
             role?: "ceo" | "member";
             loginId?: string;
+            onboarded?: boolean;
         };
         PeopleDirectoryResponse: {
             people: {
@@ -2231,6 +2267,74 @@ export interface components {
             enrolled: boolean;
             updatedAt: string | null;
             configured: boolean;
+        };
+        OnboardingResponse: {
+            displayName: string;
+            companyName: string | null;
+            next: {
+                text: string;
+                action: string;
+                href: string;
+            };
+            voiceprint: {
+                enrolled: boolean;
+                updatedAt: string | null;
+                configured: boolean;
+            };
+            /** @constant */
+            role: "ceo";
+            company: {
+                sixMonthGoal: string;
+                battlefields: {
+                    id: string;
+                    code: string;
+                    name: string;
+                    ownerName?: string;
+                }[];
+                capabilities: {
+                    id: string;
+                    code: string;
+                    name: string;
+                }[];
+                people: {
+                    personId: string;
+                    displayName: string;
+                }[];
+            };
+        } | {
+            displayName: string;
+            companyName: string | null;
+            next: {
+                text: string;
+                action: string;
+                href: string;
+            };
+            voiceprint: {
+                enrolled: boolean;
+                updatedAt: string | null;
+                configured: boolean;
+            };
+            /** @constant */
+            role: "member";
+            work: {
+                period: string;
+                planStatus: "none" | ("draft" | "negotiating" | "confirmed");
+                battlefields: {
+                    id: string;
+                    name: string;
+                    monthTarget: string | null;
+                }[];
+                missions: {
+                    id: string;
+                    code: string;
+                    title: string;
+                    battlefieldIds: string[];
+                }[];
+            };
+        };
+        CompleteOnboardingResponse: {
+            /** @constant */
+            onboarded: true;
         };
     };
     responses: never;
@@ -3360,6 +3464,73 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getOnboarding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 引导数据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    completeOnboarding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已看过引导 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompleteOnboardingResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
