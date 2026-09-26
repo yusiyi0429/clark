@@ -6899,6 +6899,7 @@
           "missionCount",
           "line",
           "pending",
+          "firstPendingFeedbackId",
           "mine"
         ],
         "properties": {
@@ -6931,6 +6932,16 @@
           "pending": {
             "minimum": 0,
             "type": "integer"
+          },
+          "firstPendingFeedbackId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "mine": {
             "type": "boolean"
@@ -7118,6 +7129,7 @@
             "additionalProperties": false,
             "type": "object",
             "required": [
+              "cards",
               "feedback",
               "pending",
               "conflicts",
@@ -7125,6 +7137,10 @@
               "late"
             ],
             "properties": {
+              "cards": {
+                "minimum": 0,
+                "type": "integer"
+              },
               "feedback": {
                 "minimum": 0,
                 "type": "integer"
@@ -7160,6 +7176,7 @@
                 "missionCount",
                 "line",
                 "pending",
+                "firstPendingFeedbackId",
                 "mine"
               ],
               "properties": {
@@ -7192,6 +7209,16 @@
                 "pending": {
                   "minimum": 0,
                   "type": "integer"
+                },
+                "firstPendingFeedbackId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "mine": {
                   "type": "boolean"
@@ -7252,6 +7279,42 @@
           }
         }
       },
+      "MissionRoundDecideInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "const": "accept",
+                "type": "string"
+              },
+              {
+                "const": "decline",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "MissionRoundConfirmInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "note"
+        ],
+        "properties": {
+          "note": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S",
+            "type": "string"
+          }
+        }
+      },
       "MissionCardFeedbackView": {
         "additionalProperties": false,
         "type": "object",
@@ -7274,6 +7337,7 @@
           "createdAt",
           "verdict",
           "decision",
+          "acceptBlockedReason",
           "actions"
         ],
         "properties": {
@@ -7487,6 +7551,16 @@
               },
               {
                 "const": "decline",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "acceptBlockedReason": {
+            "anyOf": [
+              {
                 "type": "string"
               },
               {
@@ -7930,6 +8004,7 @@
                 "additionalProperties": false,
                 "type": "object",
                 "required": [
+                  "cards",
                   "feedback",
                   "pending",
                   "conflicts",
@@ -7937,6 +8012,10 @@
                   "late"
                 ],
                 "properties": {
+                  "cards": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
                   "feedback": {
                     "minimum": 0,
                     "type": "integer"
@@ -7972,6 +8051,7 @@
                     "missionCount",
                     "line",
                     "pending",
+                    "firstPendingFeedbackId",
                     "mine"
                   ],
                   "properties": {
@@ -8004,6 +8084,16 @@
                     "pending": {
                       "minimum": 0,
                       "type": "integer"
+                    },
+                    "firstPendingFeedbackId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "mine": {
                       "type": "boolean"
@@ -8367,6 +8457,7 @@
                 "createdAt",
                 "verdict",
                 "decision",
+                "acceptBlockedReason",
                 "actions"
               ],
               "properties": {
@@ -8587,6 +8678,16 @@
                     }
                   ]
                 },
+                "acceptBlockedReason": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "actions": {
                   "type": "array",
                   "items": {
@@ -8791,6 +8892,7 @@
               "createdAt",
               "verdict",
               "decision",
+              "acceptBlockedReason",
               "actions"
             ],
             "properties": {
@@ -9011,6 +9113,16 @@
                   }
                 ]
               },
+              "acceptBlockedReason": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "actions": {
                 "type": "array",
                 "items": {
@@ -9046,12 +9158,17 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "roundVersion",
           "members",
           "lastReadSeq",
           "unread",
           "entries"
         ],
         "properties": {
+          "roundVersion": {
+            "minimum": 1,
+            "type": "integer"
+          },
           "members": {
             "type": "array",
             "items": {
@@ -9131,6 +9248,7 @@
                         "createdAt",
                         "verdict",
                         "decision",
+                        "acceptBlockedReason",
                         "actions"
                       ],
                       "properties": {
@@ -9344,6 +9462,16 @@
                             },
                             {
                               "const": "decline",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "acceptBlockedReason": {
+                          "anyOf": [
+                            {
                               "type": "string"
                             },
                             {

@@ -1,0 +1,14 @@
+{
+  "fixtureId": "06d7370e-865b-4fc3-9a1d-e6cb7088e773",
+  "ready": false,
+  "port": 4500,
+  "webPort": 3500,
+  "pid": 67400,
+  "database": "warmap_test_178e7657bdca",
+  "fixtureDirectory": "C:\\Users\\10021\\AppData\\Local\\Temp\\warmap-04c-browser-1tqeHw",
+  "now": "2026-10-05T02:00:00.000Z",
+  "planSigned": true,
+  "rounds": 0,
+  "memberId": "sun-mingze",
+  "closed": true
+}

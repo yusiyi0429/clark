@@ -110,5 +110,7 @@ describe("Mission 详情渲染", () => {
     const html = render({ placeholder: true, personalCard: { cardId: "personal-01", roundId: "round-01", status: "confirmed" } }, "已签发");
     expect(html).toContain("已确定 · 占位");
     expect(html).not.toContain("编辑 Mission");
+    expect(html).toContain('href="/mission-cards/personal-01"');
+    expect(html).toContain("查看所属个人卡");
   });
 });

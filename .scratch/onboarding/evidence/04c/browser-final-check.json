@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "changedMissions": 1,
+  "unchangedMissions": 11,
+  "updatedFields": [
+    "outcome",
+    "milestones"
+  ],
+  "missionVersion": 2,
+  "roundVersion": 11,
+  "reviews": 2,
+  "snapshotCounts": [
+    4,
+    5
+  ],
+  "feedback": 6,
+  "oldNote": null,
+  "appliedVersions": {
+    "sun-202610-1": 2
+  }
+}

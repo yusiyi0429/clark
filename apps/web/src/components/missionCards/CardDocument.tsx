@@ -28,15 +28,29 @@ export type DocumentControls = {
   onPropose: (mission: PersonalMission, field: TMissionCardField) => void;
   onSelect: (mission: PersonalMission, field: TMissionCardField, node: HTMLElement) => void;
   proposalEditor?: (mission: PersonalMission, field: TMissionCardField) => ReactNode;
+  onDecide?: (item: TPersonalMissionCardPayload["feedback"][number], decision: "accept" | "decline") => void;
+  pending?: boolean;
+  decisionError?: { feedbackId: string; message: string } | null;
 };
 
-export function FeedbackNote({ item }: { item: TPersonalMissionCardPayload["feedback"][number] }) {
-  return <article className={s.remark} data-tone={item.verdict.tone} data-feedback={item.id} tabIndex={-1}>
-    <header><span className={s.remarkWho}>{item.authorName}</span><span>{item.kind === "suggestion" ? "修改建议" : item.kind === "quote" ? "引用评论" : "评论"}</span><time dateTime={item.createdAt}>{monthDayTime(item.createdAt)}</time><span className={s.verdict} data-tone={item.verdict.tone}>{item.verdict.text}</span></header>
+export function FeedbackNote({ item, location, controls }: { item: TPersonalMissionCardPayload["feedback"][number]; location?: string; controls?: DocumentControls }) {
+  const canDecide = controls?.onDecide && item.actions.some((action) => action.actionType === "mission-round.decide");
+  const error = controls?.decisionError?.feedbackId === item.id ? controls.decisionError.message : null;
+  return <article id={`feedback-${item.id}`} className={s.remark} data-tone={item.verdict.tone} data-feedback={item.id} tabIndex={-1} aria-label={location}>
+    <header><span className={s.remarkWho}>{item.authorName}</span><span>{item.kind === "suggestion" ? "修改建议" : item.kind === "quote" ? "引用评论" : "评论"}</span><time dateTime={item.createdAt}>{monthDayTime(item.createdAt)}</time><span className={s.verdict} data-tone={item.verdict.tone} role="status">{item.verdict.text}</span></header>
     {item.sourceVersion !== null ? <p className={s.basis}>对照{item.basis === "candidate" ? "候选版本" : "草稿"} v{item.sourceVersion} · 第 {item.round} 轮</p> : null}
+    {location ? <p className={s.location}>{location}</p> : null}
     {item.quote ? <blockquote>{item.quote}</blockquote> : null}
     {item.kind === "suggestion" ? <div className={s.diff}><p><span>提交时原文</span><del>{item.original || "未提供"}</del></p><p><span>建议改为</span><ins>{item.proposed}</ins></p></div> : null}
     <p>{item.body}</p>
+    {canDecide ? <div className={s.decide}>
+      <div className={s.inlineActions}>
+        <Button variant="primary" className={s.decisionPrimary} isDisabled={Boolean(controls.pending || item.decision === "accept" || item.acceptBlockedReason)} aria-describedby={item.acceptBlockedReason ? `blocked-${item.id}` : undefined} onPress={() => controls.onDecide?.(item, "accept")}>{item.kind === "suggestion" ? "采纳修改" : "已纳入核对"}</Button>
+        <Button variant="ghost" className={s.secondary} isDisabled={Boolean(controls.pending || item.decision === "decline")} onPress={() => controls.onDecide?.(item, "decline")}>不采纳</Button>
+      </div>
+      {item.acceptBlockedReason ? <p id={`blocked-${item.id}`} className={s.blocked}>{item.acceptBlockedReason}</p> : null}
+      {error ? <p className={s.proposalError} role="alert">{error}</p> : null}
+    </div> : null}
   </article>;
 }
 
@@ -51,6 +65,7 @@ export function CardDocument({ payload, controls, artifact }: {
   const canQuote = canDiscuss || round.phase === "closed" || round.phase === "reviewing";
   const sources = [...new Map(card.missions.map((mission) => [`${mission.sourceRef}:${mission.sourceRevision}`, mission])).values()];
   const loose = feedback.filter((item) => !item.missionId || !item.field);
+  const decisionControls = round.approver && round.phase === "reviewing" ? controls : undefined;
   return <article className={s.document} aria-label={`${card.ownerName}的 ${Number(round.period.slice(5))} 月 Mission Card`}>
     <div className={s.version}>
       <div className={s.versionMain}><strong>{card.ownerName}</strong><span>{card.status}</span></div>
@@ -70,13 +85,13 @@ export function CardDocument({ payload, controls, artifact }: {
               {Array.isArray(mission[field]) && (mission[field] as string[]).length ? <ul>{(mission[field] as string[]).map((line, index) => <li key={index}>{line}</li>)}</ul> : <p>{text || <span className={s.missing}>未提供</span>}</p>}
             </div>
             {canQuote ? <div className={s.fieldActions}><Button variant="ghost" className={s.textAction} isDisabled={!text} onPress={() => controls.onQuote(mission, field, text)}>{canDiscuss ? "引用并评论" : "引用到群组"}</Button>{canDiscuss ? <Button variant="ghost" className={s.textAction} onPress={() => controls.onPropose(mission, field)}>建议修改</Button> : null}</div> : null}
-            {controls.proposalEditor?.(mission, field)}
-            {notes.length ? <div className={s.remarks}>{notes.map((item) => <FeedbackNote key={item.id} item={item} />)}</div> : null}
+            {round.phase !== "confirmed" ? controls.proposalEditor?.(mission, field) : null}
+            {notes.length ? <div className={s.remarks}>{notes.map((item) => <FeedbackNote key={item.id} item={item} location={`${card.ownerName}的卡 · ${mission.title} · ${fieldNames[field]}`} controls={decisionControls} />)}</div> : null}
             </dd>
           </div>;
         })}<div className={s.field}><dt>唯一责任人</dt><dd><p className={s.owner}>{card.ownerName}</p></dd></div></dl>
       </section>)}
     </div>}
-    {loose.length ? <section className={s.loose} aria-label="没有指向具体字段的意见"><h2>整张卡上的意见</h2><div className={s.remarks}>{loose.map((item) => <FeedbackNote key={item.id} item={item} />)}</div></section> : null}
+    {loose.length ? <section className={s.loose} aria-label="没有指向具体字段的意见"><h2>整张卡上的意见</h2><div className={s.remarks}>{loose.map((item) => <FeedbackNote key={item.id} item={item} location={`${card.ownerName}的卡 · 整张卡`} controls={decisionControls} />)}</div></section> : null}
   </article>;
 }

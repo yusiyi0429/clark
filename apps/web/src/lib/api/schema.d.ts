@@ -1689,6 +1689,7 @@ export interface components {
             missionCount: number;
             line: string;
             pending: number;
+            firstPendingFeedbackId: string | null;
             mine: boolean;
         };
         MissionRoundPhase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
@@ -1716,6 +1717,7 @@ export interface components {
                 signedAt: string;
             } | null;
             counts: {
+                cards: number;
                 feedback: number;
                 pending: number;
                 conflicts: number;
@@ -1730,6 +1732,7 @@ export interface components {
                 missionCount: number;
                 line: string;
                 pending: number;
+                firstPendingFeedbackId: string | null;
                 mine: boolean;
             }[];
         };
@@ -1747,6 +1750,12 @@ export interface components {
             actionId: string;
             input?: unknown;
             viewCardId?: string;
+        };
+        MissionRoundDecideInput: {
+            decision: "accept" | "decline";
+        };
+        MissionRoundConfirmInput: {
+            note: string;
         };
         MissionCardFeedbackView: {
             id: string;
@@ -1771,6 +1780,7 @@ export interface components {
                 tone: "open" | "accept" | "decline" | "late" | "wait";
             };
             decision: "accept" | "decline" | null;
+            acceptBlockedReason: string | null;
             actions: {
                 /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
                 actionId: string;
@@ -1840,6 +1850,7 @@ export interface components {
                     signedAt: string;
                 } | null;
                 counts: {
+                    cards: number;
                     feedback: number;
                     pending: number;
                     conflicts: number;
@@ -1854,6 +1865,7 @@ export interface components {
                     missionCount: number;
                     line: string;
                     pending: number;
+                    firstPendingFeedbackId: string | null;
                     mine: boolean;
                 }[];
             };
@@ -1929,6 +1941,7 @@ export interface components {
                     tone: "open" | "accept" | "decline" | "late" | "wait";
                 };
                 decision: "accept" | "decline" | null;
+                acceptBlockedReason: string | null;
                 actions: {
                     /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
                     actionId: string;
@@ -1981,6 +1994,7 @@ export interface components {
                     tone: "open" | "accept" | "decline" | "late" | "wait";
                 };
                 decision: "accept" | "decline" | null;
+                acceptBlockedReason: string | null;
                 actions: {
                     /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
                     actionId: string;
@@ -1991,6 +2005,7 @@ export interface components {
             };
         };
         MissionCardGroupView: {
+            roundVersion: number;
             members: {
                 personId: string;
                 displayName: string;
@@ -2024,6 +2039,7 @@ export interface components {
                         tone: "open" | "accept" | "decline" | "late" | "wait";
                     };
                     decision: "accept" | "decline" | null;
+                    acceptBlockedReason: string | null;
                     actions: {
                         /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
                         actionId: string;

@@ -4,6 +4,7 @@ import {
   ExecuteMissionRoundActionRequest, MissionCardField, MissionRoundDraftPayload, MissionRoundSummary,
   CreateMissionRequest, MissionEditInput, MissionCardPayload,
   ConversationScope, CreateMissionCardFeedbackRequest, MissionCardGroupView, MarkMissionCardReadRequest,
+  MissionRoundDecideInput, MissionRoundConfirmInput, MissionCardFeedbackView,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -12,11 +13,29 @@ const summary = {
   roundId: "round-1", period: "2026-10", battlefieldId: "growth", battlefieldName: "增长", version: 1,
   phase: "draft", round: 1, openedAt: null, closesAt: null, reviewAt: null, serverNow: now,
   approver: true, deciderName: "拍板人", todo: "可以统一开放讨论", placeholder: true, goals: null,
-  counts: { feedback: 0, pending: 0, conflicts: 0, dependencies: 1, late: 0 },
-  cards: [{ cardId: "card-1", ownerId: "owner", ownerName: "Owner", roleLabel: null, missionCount: 2, line: "未开放", pending: 0, mine: false }],
+  counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 1, late: 0 },
+  cards: [{ cardId: "card-1", ownerId: "owner", ownerName: "Owner", roleLabel: null, missionCount: 2, line: "未开放", pending: 0, firstPendingFeedbackId: null, mine: false }],
 };
 
 describe("Mission round contracts", () => {
+  it("bounds review decisions and requires a substantive collaboration conclusion", () => {
+    for (const decision of ["accept", "decline"]) expect(Value.Check(MissionRoundDecideInput, { decision })).toBe(true);
+    for (const invalid of [{ decision: "later" }, { decision: "accept", authorId: "forged" }, {}]) expect(Value.Check(MissionRoundDecideInput, invalid)).toBe(false);
+    expect(Value.Check(MissionRoundConfirmInput, { note: "已逐人核对交接时间和验收证据。" })).toBe(true);
+    for (const note of ["", " \n\t ", "字".repeat(2001)]) expect(Value.Check(MissionRoundConfirmInput, { note })).toBe(false);
+    expect(Value.Check(MissionRoundConfirmInput, { note: "已核对", confirmedBy: "forged" })).toBe(false);
+  });
+  it("publishes authoritative conflict reasons and a cross-card pending destination", () => {
+    expect(Value.Check(MissionCardGroupView.properties.roundVersion, 2)).toBe(true);
+    expect(Value.Check(MissionCardGroupView.properties.roundVersion, 0)).toBe(false);
+    expect(Value.Check(MissionCardFeedbackView.properties.acceptBlockedReason, "同一字段已采纳另一条")).toBe(true);
+    expect(Value.Check(MissionCardFeedbackView.properties.acceptBlockedReason, null)).toBe(true);
+    expect(Value.Check(MissionRoundSummary, { ...summary, counts: { ...summary.counts, cards: -1 } })).toBe(false);
+    expect(Value.Check(MissionRoundSummary, { ...summary, cards: [{ ...summary.cards[0], pending: 1, firstPendingFeedbackId: "feedback-1" }] })).toBe(true);
+    const schemas = buildOpenApiDocument().components.schemas;
+    expect(schemas.MissionRoundDecideInput).toBeDefined();
+    expect(schemas.MissionRoundConfirmInput).toBeDefined();
+  });
   it("defines bounded feedback, private card scopes and group event/read shapes", () => {
     const request = { clientId: '00000000-0000-4000-8000-000000000000', kind: 'quote', round: 1, body: '评论', missionId: 'mission', field: 'outcome', quote: '原文', sourceVersion: 1 };
     // UUID format validation is performed by Fastify; schema properties and ranges are checked here.
@@ -26,7 +45,7 @@ describe("Mission round contracts", () => {
     for (const invalid of [{ field: 'ownerId' }, { round: 0 }, { sourceVersion: 0 }, { quote: '字'.repeat(2001) }, { body: '' }, { authorId: 'forged' }]) expect(Value.Check(schema, { ...request, ...invalid })).toBe(false);
     expect(Value.Check(ConversationScope, 'mission-card:00000000-0000-4000-8000-000000000000')).toBe(true);
     expect(Value.Check(MarkMissionCardReadRequest, { lastReadSeq: -1 })).toBe(false);
-    expect(Value.Check(MissionCardGroupView, { members: [], lastReadSeq: 0, unread: 0, entries: [{ type: 'opening', at: now, text: '开场' }, { type: 'divider', at: now, text: '截止' }] })).toBe(true);
+    expect(Value.Check(MissionCardGroupView, { roundVersion: 1, members: [], lastReadSeq: 0, unread: 0, entries: [{ type: 'opening', at: now, text: '开场' }, { type: 'divider', at: now, text: '截止' }] })).toBe(true);
   });
   it("publishes round and personal card endpoints with authenticated reads and versioned actions", () => {
     const doc = buildOpenApiDocument();

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import type { Pool, PoolClient } from "pg";
-import { CreateMissionRequest, type TCard, type TMissionCardField, type TMissionRoundDraftPayload, type TMissionRoundPhase, type TMissionRoundSummary } from "@warmap/contracts";
+import { CreateMissionRequest, type TCard, type TMissionCardField, type TMissionRoundConfirmInput, type TMissionRoundDecideInput, type TMissionRoundDraftPayload, type TMissionRoundPhase, type TMissionRoundSummary } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import type { MemoryPerson } from "./companyMemory.js";
 import type { MeetingActionOutcome, Query } from "./meetingStore.js";
@@ -32,7 +32,7 @@ type FeedbackRow = {
   id: string; card_id: string; mission_id: string | null; field: TMissionCardField | null;
   kind: "comment" | "quote" | "suggestion"; proposed: string | null; late: boolean; created_at: Date;
 };
-type ReviewRow = { id: string; feedback_ids: string[]; taken_at: Date };
+type ReviewRow = { id: string; feedback_ids: string[]; taken_at: Date; mission_versions: Record<string, number> };
 const HOURS_48 = 48 * 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROUND_SELECT = `SELECT r.*, b.owner_id AS battlefield_owner_id, b.name AS battlefield_name,
@@ -109,7 +109,7 @@ export async function projectMissionRoundCard(
     placeholder: row.draft_origin === "placeholder",
     goals: row.goal_snapshot ? { sixMonthOutcome: row.goal_snapshot.sixMonthOutcome, monthOutcome: row.goal_snapshot.monthOutcome, signedAt: row.goal_snapshot.signedAt } : null,
     counts: {
-      feedback: review ? inReview.length : feedback.length, pending,
+      cards: cards.length, feedback: review ? inReview.length : feedback.length, pending,
       conflicts: [...suggestions.values()].filter((count) => count > 1).length,
       dependencies: missions.reduce((total, mission) => total + (acceptedDependencies.get(mission.id) ?? mission.dependencies).split(/\r?\n/).filter((line) => line.trim()).length, 0),
       late: feedback.filter((item) => item.late && row.closes_at && item.created_at >= row.closes_at).length,
@@ -120,13 +120,16 @@ export async function projectMissionRoundCard(
       const outstanding = reviewed.filter((entry) => !decisionMap.has(entry.id)).length;
       return { cardId: item.id, ownerId: item.owner_id, ownerName: names.get(item.owner_id) ?? item.owner_id,
         roleLabel: item.role_label, missionCount: missions.filter((mission) => mission.personal_mission_card_id === item.id).length,
-        line: cardLine(phase, all.length, reviewed.length, outstanding, approver), pending: outstanding, mine: item.owner_id === person.personId };
+        line: cardLine(phase, all.length, reviewed.length, outstanding, approver), pending: outstanding,
+        firstPendingFeedbackId: reviewed.find((entry) => !decisionMap.has(entry.id))?.id ?? null, mine: item.owner_id === person.personId };
     }),
   };
   const actions: TCard["actions"] = [];
   const actionType = approver ? (phase === "draft" ? "mission-round.open" : phase === "reviewing" ? "mission-round.reopen" : null) : null;
   if (actionType) actions.push({ actionType, label: phase === "draft" ? "统一开放 48 小时讨论" : "重新开启 48 小时讨论",
     actionId: signActionId(secret, { actionType, objectType: "mission-round", objectId: row.id, objectVersion: row.version }) });
+  if (approver && phase === "reviewing" && review && pending === 0) actions.push({ actionType: "mission-round.confirm", label: "确认前核对",
+    actionId: signActionId(secret, { actionType: "mission-round.confirm", objectType: "mission-round", objectId: row.id, objectVersion: row.version }) });
   return { schemaVersion: 1, id: `mission-round:${row.id}`, kind: "mission-round", version: row.version,
     objectRef: { type: "mission-round", id: row.id, version: row.version },
     title: `${Number(row.period.slice(5))} 月 Mission Card · ${row.battlefield_name}`, badge: "Mission Card", urgency: "normal", payload,
@@ -193,9 +196,9 @@ function failure(status: number, code: string, message: string): MeetingActionOu
 function appendFingerprint(existing: string[], fingerprint: string): string[] {
   return [...existing.filter((value) => value !== fingerprint), fingerprint].slice(-100);
 }
-async function executeWindowAction(
-  operation: "open" | "reopen", pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson,
-  scope: ActionScope, fingerprint: string, now: () => Date,
+async function executeRoundAction(
+  operation: "open" | "reopen" | "decide" | "confirm", pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson,
+  scope: ActionScope, fingerprint: string, now: () => Date, input: { decision?: "accept" | "decline"; note?: string } = {},
 ): Promise<MeetingActionOutcome> {
   if (!UUID.test(scope.objectId)) return failure(404, "ROUND_NOT_FOUND", "Mission Card 轮次不存在");
   const client = await pool.connect();
@@ -235,13 +238,65 @@ async function executeWindowAction(
         closes_at=$3,goal_snapshot=$4::jsonb,version=version+1,action_fingerprints=$5::jsonb,updated_at=$2 WHERE id=$1 RETURNING *`,
       [row.id, at, new Date(at.getTime() + HOURS_48), JSON.stringify(goal), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
       row = { ...row, ...updated.rows[0] };
-    } else {
+    } else if (operation === "reopen") {
       if (row.status !== "reviewing") return await finish(failure(409, "ROUND_NOT_CLOSED", "讨论还没截止，倒计时不会重置"));
       await client.query("UPDATE mission_round_reviews SET superseded_at=$3 WHERE round_id=$1 AND window_seq=$2 AND superseded_at IS NULL", [row.id, row.window_seq, at]);
       const reopens = [...row.reopens, { by: person.personId, at: at.toISOString(), closedAt: row.closes_at!.toISOString() }];
       const updated = await client.query(`UPDATE mission_rounds SET status='open',window_seq=window_seq+1,opened_at=$2,closes_at=$3,
         reopens=$4::jsonb,version=version+1,action_fingerprints=$5::jsonb,updated_at=$2 WHERE id=$1 RETURNING *`,
       [row.id, at, new Date(at.getTime() + HOURS_48), JSON.stringify(reopens), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
+      row = { ...row, ...updated.rows[0] };
+    } else {
+      if (row.status !== "reviewing") return await finish(failure(409, "ROUND_NOT_REVIEWING", "请先等待讨论截止并完成规则汇总"));
+      const review = (await client.query<ReviewRow>("SELECT id,feedback_ids,taken_at,mission_versions FROM mission_round_reviews WHERE round_id=$1 AND window_seq=$2 AND superseded_at IS NULL", [row.id, row.window_seq])).rows[0];
+      if (!review) return await finish(failure(409, "ROUND_NOT_REVIEWING", "本轮尚未完成规则汇总"));
+      const snapshot = (await client.query<FeedbackRow & { decision: "accept" | "decline" | null }>(`SELECT f.*,d.decision FROM mission_card_feedback f
+        LEFT JOIN mission_review_decisions d ON d.feedback_id=f.id AND d.review_id=$1
+        WHERE f.round_id=$2 AND f.id=ANY($3::uuid[]) ORDER BY f.seq`, [review.id, row.id, review.feedback_ids])).rows;
+      if (operation === "decide") {
+        if (!scope.itemId || !UUID.test(scope.itemId) || !input.decision) return await finish(failure(400, "INVALID_REVIEW_DECISION", "请指定要处理的意见与结论"));
+        const item = snapshot.find((item) => item.id === scope.itemId);
+        if (!item) return await finish(failure(409, "FEEDBACK_NOT_IN_REVIEW", "意见不属于本轮 Review，不能处理"));
+        if (input.decision === "accept" && item.kind === "suggestion" && snapshot.some((other) => other.id !== item.id && other.kind === "suggestion"
+          && other.mission_id === item.mission_id && other.field === item.field && other.decision === "accept")) {
+          return await finish(failure(409, "CONFLICTING_SUGGESTION", "同一字段已采纳另一条"));
+        }
+        await client.query(`INSERT INTO mission_review_decisions (review_id,feedback_id,decision,decided_by,decided_at,carried)
+          VALUES ($1,$2,$3,$4,$5,false) ON CONFLICT (review_id,feedback_id)
+          DO UPDATE SET decision=EXCLUDED.decision,decided_by=EXCLUDED.decided_by,decided_at=EXCLUDED.decided_at,carried=false`,
+        [review.id, item.id, input.decision, person.personId, at]);
+      } else {
+        const note = input.note?.trim() ?? "";
+        if (!note || note.length > 2000) return await finish(failure(400, "INVALID_REVIEW_NOTE", "请填写 1–2000 字的跨人员依赖、冲突与协作核对结论"));
+        if (snapshot.length !== review.feedback_ids.length || snapshot.some((item) => !item.decision)) return await finish(failure(409, "REVIEW_INCOMPLETE", "请逐条处理本轮全部公开意见后再确认"));
+        const accepted = snapshot.filter((item) => item.kind === "suggestion" && item.decision === "accept");
+        const keys = accepted.map((item) => `${item.mission_id}:${item.field}`);
+        if (new Set(keys).size !== keys.length) return await finish(failure(409, "CONFLICTING_SUGGESTION", "同一字段已采纳另一条"));
+        // Lock the complete snapshot before any write, including missions with no accepted change.
+        const missions = (await client.query<{ id: string; version: number }>(`SELECT m.id,m.version FROM missions m
+          JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id WHERE c.round_id=$1 ORDER BY m.id FOR UPDATE OF m`, [row.id])).rows;
+        if (missions.length !== Object.keys(review.mission_versions).length || missions.some((mission) => review.mission_versions[mission.id] !== mission.version)) {
+          return await finish(failure(409, "MISSION_CHANGED", "个人任务版本已变化，请重新审阅后再确认"));
+        }
+        const appliedVersions: Record<string, number> = {};
+        for (const mission of missions) {
+          const changes = accepted.filter((item) => item.mission_id === mission.id);
+          if (!changes.length) continue;
+          // Columns are selected only through the field allowlist, never through request text.
+          const values: unknown[] = [mission.id, at];
+          const sets = changes.map((item) => {
+            const list = item.field === "successEvidence" || item.field === "milestones";
+            values.push(list ? JSON.stringify(item.proposed!.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)) : item.proposed);
+            return `${MISSION_FIELD_COLUMNS[item.field!]}=$${values.length}${list ? "::jsonb" : ""}`;
+          });
+          const updated = await client.query<{ version: number }>(`UPDATE missions SET ${sets.join(",")},version=version+1,updated_at=$2 WHERE id=$1 RETURNING version`, values);
+          appliedVersions[mission.id] = updated.rows[0].version;
+        }
+        await client.query("UPDATE mission_round_reviews SET note=$2,applied_versions=$3::jsonb WHERE id=$1", [review.id, note, JSON.stringify(appliedVersions)]);
+      }
+      const updated = await client.query(`UPDATE mission_rounds SET version=version+1,updated_at=$2,action_fingerprints=$3::jsonb
+        ${operation === "confirm" ? ",status='confirmed',confirmed_at=$2,confirmed_by=$4" : ""} WHERE id=$1 RETURNING *`,
+      [row.id, at, JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint)), ...(operation === "confirm" ? [person.personId] : [])]);
       row = { ...row, ...updated.rows[0] };
     }
     return await finish({ card: await project() });
@@ -251,11 +306,22 @@ async function executeWindowAction(
 }
 
 export function executeOpenMissionRound(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope, fingerprint: string, now: () => Date): Promise<MeetingActionOutcome> {
-  return executeWindowAction("open", pool, people, secret, person, scope, fingerprint, now);
+  return executeRoundAction("open", pool, people, secret, person, scope, fingerprint, now);
 }
 export function executeReopenMissionRound(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope, fingerprint: string, now: () => Date): Promise<MeetingActionOutcome> {
-  return executeWindowAction("reopen", pool, people, secret, person, scope, fingerprint, now);
+  return executeRoundAction("reopen", pool, people, secret, person, scope, fingerprint, now);
 }
+export function executeDecideMissionRound(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope, fingerprint: string, now: () => Date, input: TMissionRoundDecideInput): Promise<MeetingActionOutcome> {
+  return executeRoundAction("decide", pool, people, secret, person, scope, fingerprint, now, input);
+}
+export function executeConfirmMissionRound(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope, fingerprint: string, now: () => Date, input: TMissionRoundConfirmInput): Promise<MeetingActionOutcome> {
+  return executeRoundAction("confirm", pool, people, secret, person, scope, fingerprint, now, input);
+}
+
+const MISSION_FIELD_COLUMNS: Record<TMissionCardField, string> = {
+  title: "title", why: "why", outcome: "outcome", successEvidence: "success_evidence", boundaries: "boundaries", keyPath: "key_path",
+  milestones: "milestones", resources: "resources", dependencies: "dependencies", humanAgentSplit: "human_agent_split", risk: "risk", retrospect: "retrospect",
+};
 
 const DraftText = Type.String({ maxLength: 4000 });
 const DraftLines = Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { maxItems: 30 });

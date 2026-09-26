@@ -37,3 +37,4 @@
 /* 放在展开页滚动区里；页头动作：返回总览 + 编辑 Mission。 */
 .content{display:flex;flex-direction:column;gap:20px;min-width:0}
 .headerActions{display:flex;flex-wrap:wrap;gap:8px;flex:none}
+.personalCardLink{align-self:flex-start;display:inline-flex;align-items:center;min-height:44px;padding:8px 16px;border:1px solid var(--hairline);border-radius:var(--onboarding-control-radius);color:var(--brand-deep);background:var(--morning-start);font-size:14px;text-decoration:underline;text-underline-offset:4px}

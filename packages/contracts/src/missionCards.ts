@@ -29,6 +29,7 @@ export const MissionCardRow = Type.Object({
   missionCount: Count,
   line: Type.String(),
   pending: Count,
+  firstPendingFeedbackId: Type.Union([Type.String(), Type.Null()]),
   mine: Type.Boolean(),
 }, { additionalProperties: false });
 
@@ -55,7 +56,7 @@ export const MissionRoundSummary = Type.Object({
     signedAt: DateTime,
   }, { additionalProperties: false }), Type.Null()]),
   counts: Type.Object({
-    feedback: Count, pending: Count, conflicts: Count, dependencies: Count, late: Count,
+    cards: Count, feedback: Count, pending: Count, conflicts: Count, dependencies: Count, late: Count,
   }, { additionalProperties: false }),
   cards: Type.Array(MissionCardRow),
 }, { additionalProperties: false });
@@ -76,6 +77,13 @@ export const ExecuteMissionRoundActionRequest = Type.Object({
   viewCardId: Type.Optional(Type.String()),
 }, { additionalProperties: false });
 
+export const MissionRoundDecideInput = Type.Object({
+  decision: Type.Union([Type.Literal("accept"), Type.Literal("decline")]),
+}, { additionalProperties: false });
+export const MissionRoundConfirmInput = Type.Object({
+  note: Type.String({ minLength: 1, maxLength: 2000, pattern: "\\S" }),
+}, { additionalProperties: false });
+
 const FeedbackKind = Type.Union([Type.Literal("comment"), Type.Literal("quote"), Type.Literal("suggestion")]);
 const NullableText = Type.Union([Type.String(), Type.Null()]);
 export const MissionCardFeedbackView = Type.Object({
@@ -88,6 +96,7 @@ export const MissionCardFeedbackView = Type.Object({
   late: Type.Boolean(), round: Type.Integer({ minimum: 1 }), createdAt: DateTime,
   verdict: Type.Object({ text: Type.String(), tone: Type.Union([Type.Literal("open"), Type.Literal("accept"), Type.Literal("decline"), Type.Literal("late"), Type.Literal("wait")]) }, { additionalProperties: false }),
   decision: Type.Union([Type.Literal("accept"), Type.Literal("decline"), Type.Null()]),
+  acceptBlockedReason: NullableText,
   actions: Type.Array(ActionDescriptor),
 }, { additionalProperties: false });
 export const PersonalMissionCardMission = Type.Object({
@@ -113,6 +122,7 @@ export const CreateMissionCardFeedbackRequest = Type.Object({
 }, { additionalProperties: false });
 export const CreateMissionCardFeedbackResponse = Type.Object({ feedback: MissionCardFeedbackView }, { additionalProperties: false });
 export const MissionCardGroupView = Type.Object({
+  roundVersion: Type.Integer({ minimum: 1 }),
   members: Type.Array(ThreadMember), lastReadSeq: Count, unread: Count,
   entries: Type.Array(Type.Union([
     Type.Object({ type: Type.Literal("message"), feedback: MissionCardFeedbackView }, { additionalProperties: false }),
@@ -129,6 +139,8 @@ export type TMissionCardRow = Static<typeof MissionCardRow>;
 export type TMissionRoundSummary = Static<typeof MissionRoundSummary>;
 export type TMissionRoundDraftPayload = Static<typeof MissionRoundDraftPayload>;
 export type TExecuteMissionRoundActionRequest = Static<typeof ExecuteMissionRoundActionRequest>;
+export type TMissionRoundDecideInput = Static<typeof MissionRoundDecideInput>;
+export type TMissionRoundConfirmInput = Static<typeof MissionRoundConfirmInput>;
 export type TMissionCardFeedbackView = Static<typeof MissionCardFeedbackView>;
 export type TPersonalMissionCardMission = Static<typeof PersonalMissionCardMission>;
 export type TPersonalMissionCardPayload = Static<typeof PersonalMissionCardPayload>;

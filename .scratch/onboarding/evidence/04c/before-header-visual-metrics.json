@@ -1,0 +1,35 @@
+{
+  "metrics": [
+    {
+      "width": 1440,
+      "overflow": false,
+      "titleLeft": 208,
+      "titlePadding": "0px",
+      "backRight": 140,
+      "outline": "rgb(60, 102, 191) solid 2px",
+      "outlineOffset": "3px",
+      "overlay": false
+    },
+    {
+      "width": 834,
+      "overflow": false,
+      "titleLeft": 140,
+      "titlePadding": "0px",
+      "backRight": 132,
+      "outline": "rgb(60, 102, 191) solid 2px",
+      "outlineOffset": "3px",
+      "overlay": false
+    },
+    {
+      "width": 390,
+      "overflow": false,
+      "titleLeft": 114,
+      "titlePadding": "0px",
+      "backRight": 110,
+      "outline": "rgb(60, 102, 191) solid 2px",
+      "outlineOffset": "3px",
+      "overlay": false
+    }
+  ],
+  "errors": []
+}

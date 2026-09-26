@@ -70,7 +70,7 @@ describe("本月 Mission Card 的 CEO 通知入口", () => {
     roundId: "round-01", period: "2026-10", battlefieldId: "01", battlefieldName: "灯塔项目", version: 1,
     phase: "draft", round: 1, openedAt: null, closesAt: null, reviewAt: null, serverNow: "2026-10-01T02:00:00.000Z",
     approver: true, deciderName: "刘明华", todo: null, placeholder: true, goals: null,
-    counts: { feedback: 0, pending: 0, conflicts: 0, dependencies: 0, late: 0 }, cards: [],
+    counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 0, late: 0 }, cards: [],
   };
   const summaryCard = (overrides: Partial<TMissionRoundSummary> = {}) => card("mission-round", "round-01", "10 月 Mission Card · 灯塔项目", { ...round, ...overrides });
 

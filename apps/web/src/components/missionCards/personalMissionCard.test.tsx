@@ -35,7 +35,7 @@ describe("个人卡正文的阶段与追溯", () => {
     expect(renderToStaticMarkup(<CardDocument payload={{ ...personalPayload, card: { ...personalPayload.card, missions: [mission] } }} controls={controls} />)).toContain("未提供");
   });
   it("建议永远展示保存时的原文和版本，整卡意见保留作者与服务端判定", () => {
-    const feedback = { id: "feedback", seq: 1, missionId: "mission", field: "outcome", kind: "suggestion", authorId: "owner", authorName: "白田田", body: "建议修改「预期结果」", quote: null, proposed: "新的结果", original: "提交那一刻的原文", sourceVersion: 1, basis: "draft", late: false, round: 1, createdAt: "2026-10-01T02:00:00.000Z", verdict: { text: "待拍板人处理", tone: "wait" }, decision: null, actions: [] } as TPersonalMissionCardPayload["feedback"][number];
+    const feedback = { id: "feedback", seq: 1, missionId: "mission", field: "outcome", kind: "suggestion", authorId: "owner", authorName: "白田田", body: "建议修改「预期结果」", quote: null, proposed: "新的结果", original: "提交那一刻的原文", sourceVersion: 1, basis: "draft", late: false, round: 1, createdAt: "2026-10-01T02:00:00.000Z", verdict: { text: "待拍板人处理", tone: "wait" }, decision: null, acceptBlockedReason: null, actions: [] } as TPersonalMissionCardPayload["feedback"][number];
     const html = renderToStaticMarkup(<CardDocument payload={{ ...personalPayload, feedback: [feedback, { ...feedback, id: "loose", kind: "comment", missionId: null, field: null, proposed: null, original: null }] }} controls={controls} />);
     expect(html).toContain("提交那一刻的原文");
     expect(html).toContain("草稿 v1");

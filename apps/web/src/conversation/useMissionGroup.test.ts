@@ -15,7 +15,7 @@ import type { MissionGroupView, PersonalMissionGroup } from "./missionCardGroup"
 
 const cleanups: (() => void)[] = [];
 const response = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body });
-const empty: MissionGroupView = { entries: [], members: [], lastReadSeq: 0, unread: 0 };
+const empty: MissionGroupView = { entries: [], members: [], lastReadSeq: 0, unread: 0, roundVersion: 1 };
 let fetchMock = vi.fn();
 beforeEach(() => {
   hooks.states = []; hooks.effects = [];
@@ -35,6 +35,22 @@ function start(visible = false) {
 const flush = () => vi.advanceTimersByTimeAsync(0);
 
 describe("个人卡群组的请求与重试", () => {
+  it("没有新 seq 的逐条处理也刷新正文并重新取得已有意见的处理结果", async () => {
+    const message = { type: "message", feedback: { id: "f", seq: 7, createdAt: "2026-10-01T00:00:00Z", verdict: { text: "待拍板人处理", tone: "wait" } } };
+    fetchMock.mockResolvedValueOnce(response({ ...empty, entries: [message] }));
+    const { group } = start(); await flush();
+    vi.mocked(group.onRefresh).mockClear();
+    fetchMock.mockResolvedValueOnce(response({ ...empty, roundVersion: 2 }));
+    fetchMock.mockResolvedValueOnce(response({ ...empty, roundVersion: 2, entries: [{ ...message, feedback: { ...message.feedback, verdict: { text: "已采纳 · 拍板前可能变化", tone: "accept" } } }] }));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(fetchMock.mock.calls.at(-1)?.[0]).toContain("after=0");
+    expect(group.onRefresh).toHaveBeenCalledOnce();
+    expect(JSON.stringify(hooks.states[0])).toContain("已采纳 · 拍板前可能变化");
+    fetchMock.mockResolvedValue(response({ ...empty, roundVersion: 2 }));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(fetchMock.mock.calls.at(-1)?.[0]).toContain("after=7");
+    expect(group.onRefresh).toHaveBeenCalledOnce();
+  });
   it("每三秒增量读取，新的公开意见触发整页刷新", async () => {
     const { group } = start(); await flush();
     vi.mocked(group.onRefresh).mockClear();

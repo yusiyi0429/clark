@@ -1,8 +1,8 @@
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import { CreateMissionCardFeedbackRequest, ExecuteMissionRoundActionRequest, MarkMissionCardReadRequest } from "@warmap/contracts";
+import { CreateMissionCardFeedbackRequest, ExecuteMissionRoundActionRequest, MarkMissionCardReadRequest, MissionRoundConfirmInput, MissionRoundDecideInput, type TMissionRoundConfirmInput, type TMissionRoundDecideInput } from "@warmap/contracts";
 import { actionFingerprint, verifyActionId } from "../actionToken.js";
-import { executeDraftMissionRound, executeOpenMissionRound, executeReopenMissionRound, getMissionRoundCard } from "../missionRounds.js";
+import { executeConfirmMissionRound, executeDecideMissionRound, executeDraftMissionRound, executeOpenMissionRound, executeReopenMissionRound, getMissionRoundCard } from "../missionRounds.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 import { createPersonalMissionCardFeedback, getPersonalMissionCard, getPersonalMissionCardGroup, markPersonalMissionCardRead, visiblePersonalMissionCard } from "../personalMissionCards.js";
 
@@ -43,11 +43,13 @@ export function registerMissionCardRoutes(app: AppInstance, ctx: RouteContext): 
     const draft = scope?.actionType === "mission-round.draft";
     if (!scope || (draft
       ? scope.objectType !== "mission-round-slot" || scope.objectVersion !== 1
-      : scope.objectType !== "mission-round" || !["mission-round.open", "mission-round.reopen"].includes(scope.actionType))) {
+      : scope.objectType !== "mission-round" || !["mission-round.open", "mission-round.reopen", "mission-round.decide", "mission-round.confirm"].includes(scope.actionType))) {
       return ctx.fail(reply, 404, "UNKNOWN_ACTION", "无效 actionId");
     }
     const input = req.body.input ?? {};
-    if (!Value.Check(NoInput, input)) return ctx.invalidInput(reply, NoInput, input);
+    const inputSchema = scope.actionType === "mission-round.decide" ? MissionRoundDecideInput
+      : scope.actionType === "mission-round.confirm" ? MissionRoundConfirmInput : NoInput;
+    if (!Value.Check(inputSchema, input)) return ctx.invalidInput(reply, inputSchema, input);
     if (req.body.viewCardId !== undefined) {
       const visible = await visiblePersonalMissionCard(ctx.q, req.person!, req.body.viewCardId);
       if (!visible || draft || visible.round.id !== scope.objectId) return ctx.fail(reply, 404, "PERSONAL_MISSION_CARD_NOT_FOUND", "个人卡不存在或不属于本轮");
@@ -55,8 +57,10 @@ export function registerMissionCardRoutes(app: AppInstance, ctx: RouteContext): 
     ctx.requestContext.set(req, { actionType: scope.actionType, objectRef: `${scope.objectType}:${scope.objectId}` });
     const fingerprint = actionFingerprint(ctx.env.sessionSecret, req.body.actionId, input);
     if (draft) return ctx.respond(reply, await executeDraftMissionRound(ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, scope, fingerprint, ctx.now, ctx.env.missionCardDraftsDir));
-    const execute = scope.actionType === "mission-round.open" ? executeOpenMissionRound : executeReopenMissionRound;
-    const outcome = await execute(ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, scope, fingerprint, ctx.now);
+    const args = [ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, scope, fingerprint, ctx.now] as const;
+    const outcome = scope.actionType === "mission-round.decide" ? await executeDecideMissionRound(...args, input as TMissionRoundDecideInput)
+      : scope.actionType === "mission-round.confirm" ? await executeConfirmMissionRound(...args, input as TMissionRoundConfirmInput)
+      : await (scope.actionType === "mission-round.open" ? executeOpenMissionRound : executeReopenMissionRound)(...args);
     if (req.body.viewCardId && !("error" in outcome)) {
       const card = await getPersonalMissionCard(ctx.q, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.body.viewCardId, ctx.now());
       if (!card) return ctx.fail(reply, 404, "PERSONAL_MISSION_CARD_NOT_FOUND", "个人卡不存在或不可见");

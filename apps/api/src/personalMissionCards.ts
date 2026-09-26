@@ -5,6 +5,7 @@ import type { MemoryPerson } from "./companyMemory.js";
 import type { Query } from "./meetingStore.js";
 import { canApprove, closeIfDue, getMissionRoundRow, projectMissionRoundCard, type MissionRoundPerson, type MissionRoundRow } from "./missionRounds.js";
 import { getMissionRow, projectMissionCard } from "./missions.js";
+import { signActionId } from "./actionToken.js";
 
 type PersonalRow = { id: string; round_id: string; owner_id: string; role_label: string | null; member_ids: string[] };
 type FeedbackRow = {
@@ -38,21 +39,28 @@ async function discussion(q: Query, round: MissionRoundRow, cardId: string): Pro
   const decisions = review ? (await q("SELECT feedback_id,decision FROM mission_review_decisions WHERE review_id=$1", [review.id])).rows as { feedback_id: string; decision: "accept" | "decline" }[] : [];
   return { feedback, review: review ?? null, decisions: new Map(decisions.map((r) => [r.feedback_id, r.decision])) };
 }
-function projectFeedback(item: FeedbackRow, data: Discussion, round: MissionRoundRow, people: MemoryPerson[]): TMissionCardFeedbackView {
+function projectFeedback(item: FeedbackRow, data: Discussion, round: MissionRoundRow, people: MemoryPerson[], person: MissionRoundPerson, secret: string): TMissionCardFeedbackView {
   const decision = data.decisions.get(item.id) ?? null;
   const included = data.review?.feedback_ids.includes(item.id) ?? false;
   let verdict: TMissionCardFeedbackView["verdict"];
   if (round.status === "open" && data.review?.superseded_at && included && decision) {
     verdict = { text: `上一轮${decision === "decline" ? "未采纳" : item.kind === "suggestion" ? "已采纳" : "已纳入核对"} · 下次截止沿用`, tone: decision === "decline" ? "decline" : "accept" };
-  } else if (item.late && !included) verdict = { text: "截止后留言 · 不在这一轮", tone: "late" };
+  } else if (item.late && !included && !(round.status === "open" && round.closes_at && item.created_at < round.closes_at)) verdict = { text: "截止后留言 · 不在这一轮", tone: "late" };
   else if (decision === "decline") verdict = { text: "未采纳", tone: "decline" };
   else if (decision === "accept") verdict = { text: item.kind !== "suggestion" ? "已纳入核对" : round.status === "confirmed" ? "已采纳" : "已采纳 · 拍板前可能变化", tone: "accept" };
-  else if (item.late && included) verdict = { text: "截止后留言 · 已并入这一轮", tone: "wait" };
+  else if (item.late) verdict = { text: "截止后留言 · 已并入这一轮", tone: "wait" };
   else verdict = { text: round.status === "open" ? "讨论中" : "待拍板人处理", tone: round.status === "open" ? "open" : "wait" };
+  const actionable = round.status === "reviewing" && included && !data.review?.superseded_at && canApprove(person, round);
+  const acceptBlockedReason = item.kind === "suggestion" && included && data.feedback.some((other) => other.id !== item.id && other.kind === "suggestion"
+    && other.mission_id === item.mission_id && other.field === item.field && data.review?.feedback_ids.includes(other.id) && data.decisions.get(other.id) === "accept")
+    ? "同一字段已采纳另一条" : null;
   return { id: item.id, seq: Number(item.seq), missionId: item.mission_id, field: item.field, kind: item.kind,
     authorId: item.author_id, authorName: people.find((p) => p.personId === item.author_id)?.displayName ?? item.author_id,
     body: item.body, quote: item.quote, proposed: item.proposed, original: item.original, sourceVersion: item.source_version,
-    basis: item.basis, late: item.late, round: item.window_seq, createdAt: item.created_at.toISOString(), verdict, decision, actions: [] };
+    basis: item.basis, late: item.late, round: item.window_seq, createdAt: item.created_at.toISOString(), verdict, decision, acceptBlockedReason,
+    actions: actionable ? [{ actionType: "mission-round.decide", itemId: item.id, label: "处理意见", actionId: signActionId(secret, {
+      actionType: "mission-round.decide", objectType: "mission-round", objectId: round.id, objectVersion: round.version, itemId: item.id,
+    }) }] : [] };
 }
 async function documentMissions(q: Query, cardId: string, people: MemoryPerson[], secret: string, data: Discussion, candidate: boolean): Promise<TPersonalMissionCardMission[]> {
   const ids = (await q("SELECT id FROM missions WHERE personal_mission_card_id=$1 ORDER BY code,id", [cardId])).rows as { id: string }[];
@@ -98,7 +106,7 @@ export async function getPersonalMissionCard(q: Query, people: MemoryPerson[], s
     round: summary,
     card: { cardId, ownerId: card.owner_id, ownerName: people.find((p) => p.personId === card.owner_id)?.displayName ?? card.owner_id,
       roleLabel: card.role_label, members: members(card, people), status, shown, missions },
-    feedback: data.feedback.map((item) => projectFeedback(item, data, round, people)),
+    feedback: data.feedback.map((item) => projectFeedback(item, data, round, people, person, secret)),
     confirmation: round.confirmed_at && round.confirmed_by ? { by: round.confirmed_by,
       byName: people.find((p) => p.personId === round.confirmed_by)?.displayName ?? round.confirmed_by,
       at: round.confirmed_at.toISOString(), note: data.review?.note ?? "" } : null,
@@ -160,7 +168,7 @@ export async function createPersonalMissionCardFeedback(pool: Pool, people: Memo
     const prior = (await q("SELECT * FROM mission_card_feedback WHERE author_id=$1 AND client_id=$2", [person.personId, input.clientId])).rows[0] as FeedbackRow | undefined;
     if (prior) {
       if (!sameInput(prior, cardId, input)) return await finish(fail(409, "CLIENT_ID_CONFLICT", "同一个 client_id 已提交不同的意见"));
-      return await finish({ feedback: projectFeedback(prior, await discussion(q, round, cardId), round, people) });
+      return await finish({ feedback: projectFeedback(prior, await discussion(q, round, cardId), round, people, person, secret) });
     }
     if (round.status === "draft") return await finish(fail(409, "ROUND_NOT_OPEN", "讨论还没开放"));
     if (round.status === "confirmed") return await finish(fail(409, "ROUND_CONFIRMED", "本月 Mission Card 已确定，不再收留言"));
@@ -181,7 +189,7 @@ export async function createPersonalMissionCardFeedback(pool: Pool, people: Memo
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
     [randomUUID(), round.id, cardId, input.missionId ?? null, input.field ?? null, input.kind, person.personId, input.clientId, input.body,
       input.quote ?? null, input.proposed ?? null, original, input.sourceVersion ?? null, late ? "candidate" : "draft", round.window_seq, late, at])).rows[0] as FeedbackRow;
-    return await finish({ feedback: projectFeedback(inserted, data, round, people) });
+    return await finish({ feedback: projectFeedback(inserted, data, round, people, person, secret) });
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
   finally { client.release(); }
 }
@@ -212,12 +220,12 @@ export async function getPersonalMissionCardGroup(q: Query, people: MemoryPerson
   });
   if (round.closes_at && round.closes_at <= now) entries.push({ type: "divider", at: round.closes_at.toISOString(), text: `${localTime(round.closes_at)} · 讨论截止 · 之后的留言不进这一轮` });
   if (round.confirmed_at) entries.push({ type: "divider", at: round.confirmed_at.toISOString(), text: `${names.get(round.confirmed_by!) ?? round.confirmed_by}确认了本月 Mission Card` });
-  for (const item of data.feedback) if (Number(item.seq) > after) entries.push({ type: "message", feedback: projectFeedback(item, data, round, people) });
+  for (const item of data.feedback) if (Number(item.seq) > after) entries.push({ type: "message", feedback: projectFeedback(item, data, round, people, person, secret) });
   const at = (entry: TMissionCardGroupView["entries"][number]) => entry.type === "message" ? entry.feedback.createdAt : entry.at;
   const rank = { divider: 0, opening: 1, message: 2 };
   entries.sort((a, b) => Date.parse(at(a)) - Date.parse(at(b)) || rank[a.type] - rank[b.type]
     || (a.type === "message" && b.type === "message" ? a.feedback.seq - b.feedback.seq : 0));
-  return { members: members(card, people), ...await readState(q, cardId, person.personId), entries };
+  return { roundVersion: round.version, members: members(card, people), ...await readState(q, cardId, person.personId), entries };
 }
 export async function markPersonalMissionCardRead(q: Query, person: MissionRoundPerson, cardId: string, requested: number, now: Date): Promise<{ lastReadSeq: number; unread: number } | null> {
   if (!await visiblePersonalMissionCard(q, person, cardId)) return null;
