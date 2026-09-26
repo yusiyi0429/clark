@@ -32,3 +32,10 @@ seed/company-people.json
 
 # Windows 上跑部署备份测试时误写到仓库根目录的日志
 *warmap-deploy-*docker.log
+
+# 首次登录引导工单的自查截图、日志和临时预览副本只留在本机；报告与脚本入库
+.scratch/onboarding/evidence/**/*.png
+.scratch/onboarding/evidence/**/*.log
+.scratch/onboarding/evidence/verify/
+.scratch/verify-web/
+.scratch/preview-web*/
