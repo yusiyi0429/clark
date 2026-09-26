@@ -26,3 +26,9 @@ seed/company-people.json
 
 # 本地 Caddy 根证书，供浏览器信任 https://localhost
 .scratch/local-ca/
+
+# Claude Code 本机预览配置（含本机绝对路径）
+.claude/
+
+# Windows 上跑部署备份测试时误写到仓库根目录的日志
+*warmap-deploy-*docker.log
