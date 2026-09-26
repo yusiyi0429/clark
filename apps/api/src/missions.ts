@@ -27,6 +27,14 @@ export type MissionRow = {
   dependencies: string;
   risk: string;
   boundaries: string;
+  key_path: string;
+  resources: string;
+  human_agent_split: string;
+  retrospect: string;
+  placeholder: boolean;
+  personal_mission_card_id: string | null;
+  personal_card_round_id: string | null;
+  personal_card_status: NonNullable<TMissionCardPayload["personalCard"]>["status"] | null;
   source_ref: string;
   source_document_id: string;
   source_revision: number;
@@ -43,13 +51,17 @@ export type MissionRow = {
  */
 const MISSION_COLUMNS = `m.id, m.version, m.code, m.period, m.title, m.owner_id, m.capability_id,
   m.battlefield_ids, m.outcome, m.why, m.success_evidence, m.milestones, m.dependencies, m.risk, m.boundaries,
+  m.key_path, m.resources, m.human_agent_split, m.retrospect, m.placeholder, m.personal_mission_card_id,
+  pc.round_id AS personal_card_round_id, mr.status AS personal_card_status,
   m.source_ref, m.source_document_id, m.source_revision, m.source_title, m.action_fingerprints,
   COALESCE(c.code, '') AS capability_code, COALESCE(c.name, '') AS capability_name,
   COALESCE((SELECT jsonb_agg(COALESCE(b.name, '') ORDER BY t.ord)
               FROM jsonb_array_elements_text(m.battlefield_ids) WITH ORDINALITY AS t(battlefield_id, ord)
               LEFT JOIN battlefield_config b ON b.id = t.battlefield_id), '[]'::jsonb) AS battlefield_names`;
 
-const MISSION_FROM = `FROM missions m LEFT JOIN capability_config c ON c.id = m.capability_id`;
+const MISSION_FROM = `FROM missions m LEFT JOIN capability_config c ON c.id = m.capability_id
+  LEFT JOIN personal_mission_cards pc ON pc.id = m.personal_mission_card_id
+  LEFT JOIN mission_rounds mr ON mr.id = pc.round_id`;
 
 /** 总览与配置页排序：周期倒序，再按能力域 sortOrder、Mission code。period 过滤在 SQL 侧，Web 不再二次筛。 */
 export async function listMissionRows(q: Query, period?: string): Promise<MissionRow[]> {
@@ -87,6 +99,14 @@ export function projectMissionCard(row: MissionRow, secret: string, ownerNames: 
     dependencies: row.dependencies,
     risk: row.risk,
     boundaries: row.boundaries,
+    keyPath: row.key_path,
+    resources: row.resources,
+    humanAgentSplit: row.human_agent_split,
+    retrospect: row.retrospect,
+    placeholder: row.placeholder,
+    personalCard: row.personal_mission_card_id && row.personal_card_round_id && row.personal_card_status
+      ? { cardId: row.personal_mission_card_id, roundId: row.personal_card_round_id, status: row.personal_card_status }
+      : null,
     sourceRef: row.source_ref,
     sourceDocumentId: row.source_document_id,
     sourceRevision: row.source_revision,
@@ -106,7 +126,7 @@ export function projectMissionCard(row: MissionRow, secret: string, ownerNames: 
       { href: `/missions/${row.id}`, label: "Mission" },
       { href: `/config/missions`, label: "配置" },
     ],
-    actions: [{ actionId: signActionId(secret, scope), actionType: "mission.edit", label: "编辑 Mission" }],
+    actions: row.personal_mission_card_id ? [] : [{ actionId: signActionId(secret, scope), actionType: "mission.edit", label: "编辑 Mission" }],
   };
 }
 
@@ -134,8 +154,9 @@ export async function registerMission(q: Query, input: TCreateMissionRequest): P
   const result = await q(
     `INSERT INTO missions (id, version, code, period, title, owner_id, capability_id, battlefield_ids, outcome, why,
                            success_evidence, milestones, dependencies, risk, boundaries,
-                           source_ref, source_document_id, source_revision, source_title)
-     VALUES ($1, 1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17, $18)
+                           source_ref, source_document_id, source_revision, source_title,
+                           key_path, resources, human_agent_split, retrospect)
+     VALUES ($1, 1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
      ON CONFLICT (id) DO NOTHING
      RETURNING id`,
     [
@@ -157,6 +178,10 @@ export async function registerMission(q: Query, input: TCreateMissionRequest): P
       input.sourceDocumentId,
       input.sourceRevision,
       input.sourceTitle,
+      input.keyPath ?? "",
+      input.resources ?? "",
+      input.humanAgentSplit ?? "",
+      input.retrospect ?? "",
     ],
   );
   if (result.rowCount !== 1) return { ok: false, status: 409, code: "MISSION_EXISTS", message: `Mission ${id} 已登记` };
@@ -220,6 +245,10 @@ export async function executeEditMission(
       await client.query("ROLLBACK");
       return { conflict: true, latestCard: projectMissionCard(row, secret, ownerNames) };
     }
+    if (row.personal_mission_card_id) {
+      await client.query("ROLLBACK");
+      return { error: { status: 409, code: "MISSION_IN_MISSION_CARD", message: "讨论中请在个人卡上提修改建议；已确定之后的修改规则待定（GAP-04）" } };
+    }
     const relationError = await validateMissionRelations(q, ownerNames, input);
     if (relationError) {
       await client.query("ROLLBACK");
@@ -237,6 +266,8 @@ export async function executeEditMission(
               why = COALESCE($9, why), success_evidence = COALESCE($10::jsonb, success_evidence),
               milestones = COALESCE($11::jsonb, milestones), dependencies = COALESCE($12, dependencies),
               risk = COALESCE($13, risk), boundaries = COALESCE($14, boundaries),
+              key_path = COALESCE($16, key_path), resources = COALESCE($17, resources),
+              human_agent_split = COALESCE($18, human_agent_split), retrospect = COALESCE($19, retrospect),
               version = version + 1, action_fingerprints = $15::jsonb, updated_at = now()
         WHERE id = $1
         RETURNING id`,
@@ -256,6 +287,10 @@ export async function executeEditMission(
         input.risk ?? null,
         input.boundaries ?? null,
         JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint)),
+        input.keyPath ?? null,
+        input.resources ?? null,
+        input.humanAgentSplit ?? null,
+        input.retrospect ?? null,
       ],
     );
     if (updated.rowCount !== 1) {

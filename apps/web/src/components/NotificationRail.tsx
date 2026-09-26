@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import type { TMissionRoundDraftPayload, TMissionRoundSummary } from "@warmap/contracts";
 import { Card as HeroCard } from "@heroui/react";
 import { ChevronRight, Lock } from "lucide-react";
 import { AccountMenu, type Account } from "./AccountMenu";
@@ -12,12 +14,14 @@ import { HeroButton } from "./HeroButton";
 import { ReferenceButton } from "@/conversation/references";
 import { StrategicConfirmCard, pendingStrategicItems } from "./StrategicConfirmCard";
 import { TianshuMark } from "./TianshuMark";
+import { useConfirm } from "./ConfirmDialog";
+import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
 import { COMPANY_TIMEZONE, monthDayTime } from "@/lib/companyTime";
 import n from "@/styles/notifications.module.css";
 
 type RailKind = "decisions" | "meetings" | "research";
 type Tone = "red" | "amber" | "neutral";
-type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string };
+type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card };
 type RailGroup = { kind: RailKind; title: string; subtitle: string; mark: ContextMarkKind; items: RailItem[] };
 
 const RAIL: Record<RailKind, { title: string; mark: ContextMarkKind }> = {
@@ -43,6 +47,17 @@ export function clock(date: Date): { time: string; weekday: string; day: string 
 
 const sameCompanyDay = (a: Date, b: Date) => clock(a).day === clock(b).day;
 
+function missionRoundMeta(payload: TMissionRoundSummary | TMissionRoundDraftPayload): string {
+  if (!("phase" in payload)) return "可以整理个人卡草稿";
+  if (payload.phase === "draft") return "草稿 · 可以统一开放讨论";
+  if (payload.phase === "open" && payload.closesAt) {
+    const minutes = Math.max(0, Math.ceil((Date.parse(payload.closesAt) - Date.parse(payload.serverNow)) / 60_000));
+    return minutes ? `讨论中 · ${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分` : "已截止 · 汇总中";
+  }
+  if (payload.phase === "reviewing") return payload.counts.pending ? `${payload.counts.pending} 条待你处理` : "意见已全部处理，待你确认";
+  return "已截止 · 汇总中";
+}
+
 /**
  * 把首页 Card 集合整理成三组通知（clark `notifications.tsx` 的分组与顺序）。
  * 只收需要行动的：未签发的月度计划、已排期会议、红色待决议题（v0.3 §645）；打开不会让条目消失（C-05）。
@@ -66,6 +81,13 @@ export function railGroups(cards: Card[], now: Date = new Date()): RailGroup[] {
       tone: "amber",
       href: `/plans/${payloadOf<MonthlyPlanPayload>(card).period}`,
     }));
+
+  const missionRounds = cards.flatMap<RailItem>((card) => {
+    if (card.kind !== "mission-round") return [];
+    const payload = payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(card);
+    if ("phase" in payload && payload.phase === "confirmed") return [];
+    return [{ id: card.id, title: card.title, meta: missionRoundMeta(payload), tone: "amber", href: "/", missionRound: card }];
+  });
 
   const meetings = cards
     .filter((card) => card.kind === "meeting" && payloadOf<MeetingPayload>(card).status === "scheduled")
@@ -107,7 +129,7 @@ export function railGroups(cards: Card[], now: Date = new Date()): RailGroup[] {
   });
 
   const groups: RailGroup[] = [
-    { kind: "decisions", ...RAIL.decisions, subtitle: "月度协商", items: monthly },
+    { kind: "decisions", ...RAIL.decisions, subtitle: missionRounds.length ? "月度目标与个人卡" : "月度协商", items: [...monthly, ...missionRounds] },
     { kind: "meetings", ...RAIL.meetings, subtitle: meetingSubtitle, items: meetingItems },
     { kind: "research", ...RAIL.research, subtitle: researchSubtitle, items: researchItems },
   ];
@@ -183,11 +205,47 @@ export function NotificationRail({
   /** 当前打开的对象（高亮所在分组与那一行）。 */
   currentHref?: string;
 }) {
+  const router = useRouter();
+  const { ask, dialog } = useConfirm();
+  const [notice, setNotice] = useState("");
+  const action = useCardAction((updated) => {
+    onCard?.(updated);
+    router.refresh();
+  }, "/api/mission-rounds/actions/execute");
   const groups = railGroups(cards);
   const rail = useRef<HTMLElement>(null);
   const positions = useRef(new Map<string, number>());
   const strategic = pendingStrategicItems(cards).length;
   const layoutKey = [`strategic:${strategic}`, ...groups.map((group) => `${group.kind}:${group.items.length}`)].join("|");
+
+  // 04a 按分钟重取服务端摘要；04d 再与个人卡页接同一个分钟时钟。
+  const needsRoundRefresh = cards.some((card) => {
+    if (card.kind !== "mission-round") return false;
+    const phase = payloadOf<TMissionRoundSummary>(card).phase;
+    return phase === "open" || phase === "closed";
+  });
+  useEffect(() => {
+    if (!needsRoundRefresh) return;
+    const timer = window.setInterval(() => router.refresh(), 60_000);
+    return () => window.clearInterval(timer);
+  }, [needsRoundRefresh, router]);
+
+  async function openItem(item: RailItem, origin: Element | null) {
+    if (!item.missionRound) {
+      onNavigate(item.href, origin);
+      return;
+    }
+    const draft = item.missionRound.actions.find((descriptor) => descriptor.actionType === "mission-round.draft");
+    if (!draft) {
+      setNotice("个人卡页即将上线");
+      return;
+    }
+    setNotice("");
+    action.reset();
+    if (!await ask("草稿是占位：Agent 起草未接入，由 9 月个人卡生成，待大家讨论修改。整理草稿不会确认个人承诺，也不会开放讨论。", "整理个人卡草稿")) return;
+    const saved = await action.run(draft);
+    if (saved) setNotice("草稿已整理。个人卡页即将上线");
+  }
 
   // 分组出现 / 消失时，其余卡片从旧位置滑到新位置（FLIP，clark 同）。
   useLayoutEffect(() => {
@@ -254,7 +312,8 @@ export function NotificationRail({
                     data-origin={item.href}
                     aria-current={item.href === currentHref ? "true" : undefined}
                     aria-label={`${item.title}，${item.meta}`}
-                    onPress={(event) => onNavigate(item.href, (event.target as Element).closest("[data-notice]"))}
+                    isDisabled={Boolean(item.missionRound) && action.pending}
+                    onPress={(event) => void openItem(item, (event.target as Element).closest("[data-notice]"))}
                   >
                     <span className={n.mark} aria-hidden="true" />
                     <span className={n.itemText}>
@@ -264,11 +323,17 @@ export function NotificationRail({
                     <ChevronRight size={15} aria-hidden="true" />
                   </HeroButton>
                 ))}
+                {group.kind === "decisions" ? <>
+                  {action.pending ? <p role="status">正在整理个人卡草稿…</p> : null}
+                  {notice ? <p role="status">{notice}</p> : null}
+                  <ActionFeedback state={action.state} onRetry={action.retry} label="整理个人卡草稿" />
+                </> : null}
               </div>
             </HeroCard>
           );
         })}
       </div>
+      {dialog}
       {account ? (
         <div className={n.railFoot}>
           <AccountMenu account={account} onNavigate={(href) => onNavigate(href)} />

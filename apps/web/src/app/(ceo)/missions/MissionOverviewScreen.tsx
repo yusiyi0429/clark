@@ -7,6 +7,7 @@ import { DetailHeader } from "@/components/shell/DetailHeader";
 import { ArrowRight, ChevronRight } from "lucide-react";
 import type { MissionPayload } from "@/cards/payloads";
 import type { Card } from "@/lib/api/client";
+import { MissionStatus } from "@/components/MissionStatus";
 import m from "@/styles/mission-overview.module.css";
 import w from "@/styles/app-shell.module.css";
 
@@ -110,7 +111,7 @@ export function MissionOverviewScreen({
       />
       <div className={w.expandedScroll}>
         <div className={m.content}>
-          <p className={m.intro}>查看本月 DRI 对真实结果的承诺，以及每条 Mission 与战场、能力域和月度 PCO 的关系。</p>
+          <p className={m.intro}>查看本月 DRI 的结果承诺与讨论草稿，以及每条 Mission 与战场、能力域和月度 PCO 的关系。</p>
 
           <div className={m.summary} data-testid="mission-summary">
             <Stat value={stats.missions} label={statLabel} />
@@ -148,9 +149,11 @@ export function MissionOverviewScreen({
                     <span className={m.code}>{item.code}</span>
                     <span className={m.rowText}>
                       <span className={m.rowTitle}>{item.title}</span>
+                      <MissionStatus mission={item} />
                       <span className={m.rowMeta}>
                         {item.ownerDisplayName || "待指派"} · {`${item.capabilityCode} ${item.capabilityName}`.trim()} · {battlefieldScope(item, battlefieldIds) || "未关联战场"}
                       </span>
+                      {item.placeholder ? <span className={m.rowMeta}>来源 · {item.sourceTitle}</span> : null}
                     </span>
                     <ChevronRight className={m.arrow} aria-hidden="true" />
                   </button>

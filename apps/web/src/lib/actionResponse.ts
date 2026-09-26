@@ -1,4 +1,16 @@
 import type { ApiError, Card } from "./api/client";
+import type { TMissionRoundDraftPayload } from "@warmap/contracts";
+
+/** 整理草稿把尚未建轮次的 slot 换成真实轮次；其他首页对象仍按稳定 id 更新。 */
+export function replaceActionCard(cards: Card[], updated: Card): Card[] {
+  return cards.map((card) => {
+    if (card.id === updated.id) return updated;
+    if (card.objectRef.type !== "mission-round-slot" || updated.objectRef.type !== "mission-round") return card;
+    const before = card.payload as TMissionRoundDraftPayload;
+    const after = updated.payload as TMissionRoundDraftPayload;
+    return before.battlefieldId === after.battlefieldId && before.period === after.period ? updated : card;
+  });
+}
 
 export type ActionOutcome =
   | { kind: "ok"; card: Card }

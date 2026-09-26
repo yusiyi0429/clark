@@ -7,6 +7,7 @@ import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceCon
 import { DetailHeader } from "@/components/shell/DetailHeader";
 import type { Card } from "@/lib/api/client";
 import type { MissionPayload } from "@/cards/payloads";
+import { MissionStatus, missionStatusLabel } from "@/components/MissionStatus";
 import m from "@/styles/mission-detail.module.css";
 import w from "@/styles/app-shell.module.css";
 
@@ -16,17 +17,18 @@ export function planRelation(period: string, planStatus: string | null): string 
 }
 
 /**
- * Mission 详情只展示正式承诺与关系：不推断进度、不显示完成率，
+ * Mission 详情区分讨论草稿与已确定承诺：不推断进度、不显示完成率，
  * Task/Activity 与执行状态留在外部 DRI 流程。
  */
 export function MissionDetailScreen({ mission, planStatus, card }: { mission: MissionPayload; planStatus: string | null; card?: Card }) {
   const { navigate, close } = useWorkspace();
   const cards = useMemo(() => (card ? [card] : []), [card]);
+  const status = missionStatusLabel(mission) || (planStatus === "已签发" ? "生效中" : "");
   useRegisterDetail({ scope: `mission:${mission.missionId}`, label: mission.title, mark: null, cards });
   return (
     <>
       <DetailHeader
-        eyebrow={`Mission ${mission.code} · ${mission.period}${planStatus === "已签发" ? " · 生效中" : ""}`}
+        eyebrow={`Mission ${mission.code} · ${mission.period}${status ? ` · ${status}` : ""}`}
         title={mission.title}
         actions={
           <div className={m.headerActions}>
@@ -34,10 +36,10 @@ export function MissionDetailScreen({ mission, planStatus, card }: { mission: Mi
               <ChevronLeft size={15} aria-hidden="true" />
               返回总览
             </Button>
-            <Button size="sm" variant="secondary" onPress={() => navigate(`/config/missions?missionId=${mission.missionId}`)}>
+            {!mission.personalCard ? <Button size="sm" variant="secondary" onPress={() => navigate(`/config/missions?missionId=${mission.missionId}`)}>
               <Pencil size={14} aria-hidden="true" />
               编辑 Mission
-            </Button>
+            </Button> : null}
           </div>
         }
         closeLabel="返回全局"
@@ -46,12 +48,13 @@ export function MissionDetailScreen({ mission, planStatus, card }: { mission: Mi
       <div className={w.expandedScroll}>
         <div className={m.content}>
           <p className={m.owner}>唯一 DRI · {mission.ownerDisplayName || "待指派"}</p>
+          <MissionStatus mission={mission} />
 
           <div className={m.relations} data-testid="mission-relations">
             <Relation label="能力域" value={`${mission.capabilityCode} ${mission.capabilityName}`.trim()} />
             <Relation label="关联战场" value={mission.battlefieldNames.join(" · ") || "未关联战场"} tone="battlefield" />
             <Relation label="月度计划" value={planRelation(mission.period, planStatus)} tone="plan" />
-            <Relation label="来源" value={mission.sourceTitle} tone="source" />
+            <Relation label="来源" value={`${mission.placeholder ? "占位 · " : ""}${mission.sourceTitle}`} tone="source" />
           </div>
 
           <div className={m.body}>
@@ -92,7 +95,7 @@ export function MissionDetailScreen({ mission, planStatus, card }: { mission: Mi
                   <br />
                   {mission.sourceRef}
                   <br />
-                  外部文档更新不会自动覆盖当前正式版本
+                  {mission.personalCard && mission.personalCard.status !== "confirmed" ? "讨论草稿，待本轮统一确认；外部文档更新不会自动覆盖当前草稿" : "外部文档更新不会自动覆盖当前正式版本"}
                 </p>
               </section>
             </div>

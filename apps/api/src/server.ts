@@ -17,6 +17,7 @@ import { recoverInterruptedPreflight } from "./meetingPreflight.js";
 import { createMonthlyPlanService } from "./monthlyDraft.js";
 import { createMonthlyDraftAgent } from "./monthlyDraftAgent.js";
 import { createMonthlyPlanScheduler } from "./monthlyPlanScheduler.js";
+import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
 
@@ -36,6 +37,7 @@ const env: AppEnv = {
   companyMemorySeedDir: requiredEnv("COMPANY_MEMORY_SEED_DIR"),
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
   companyName: process.env.COMPANY_NAME,
+  missionCardDraftsDir: process.env.MISSION_CARD_DRAFTS_DIR,
   piBaseUrl: requiredEnv("PI_BASE_URL"),
   piApiKey: requiredEnv("PI_API_KEY"),
   lightModel: requiredEnv("LIGHT_MODEL"),
@@ -111,6 +113,8 @@ const monthlyPlanService = createMonthlyPlanService({
   }),
 });
 const monthlyScheduler = createMonthlyPlanScheduler(monthlyPlanService);
+const now = () => new Date();
+const missionRoundScheduler = createMissionRoundScheduler(pool, now);
 // 启动补偿：崩溃中断的 running 扫描标为 failed（不自动重跑）
 await radarService.recoverStaleRuns();
 // Ticket 07：创建后、预研启动前崩溃留下的超时 pending research 标为 failed:trigger_not_started
@@ -131,6 +135,7 @@ await recordingService.recoverInterrupted();
 const app = await buildApp({
   pool,
   env,
+  now,
   radarService,
   researchService,
   monthlyPlanService,
@@ -141,8 +146,10 @@ const app = await buildApp({
 app.addHook("onClose", async () => {
   scheduler.close();
   monthlyScheduler.close();
+  missionRoundScheduler.close();
 });
 scheduler.start();
 monthlyScheduler.start();
+missionRoundScheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);

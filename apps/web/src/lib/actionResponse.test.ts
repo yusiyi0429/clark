@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Card } from "./api/client";
-import { interpretActionResponse } from "./actionResponse";
+import { interpretActionResponse, replaceActionCard } from "./actionResponse";
 
 const card = (version: number): Card =>
   ({ schemaVersion: 1, id: "issue:1", version, kind: "issue", objectRef: { type: "issue", id: "1", version }, title: "对象", payload: {}, actions: [] }) as Card;
@@ -39,5 +39,20 @@ describe("Action response → 展示状态", () => {
 
   it("401 不带业务提示，交给调用方跳转访问口令页", () => {
     expect(interpretActionResponse(401, undefined, { message: "未登录" })).toEqual({ kind: "unauthorized" });
+  });
+});
+
+describe("首页动作后的 Card 替换", () => {
+  it("新轮次按战场与月份替换原 slot，保留其他战场和月份", () => {
+    const slot = (battlefieldId: string, period: string) => ({ ...card(1), id: `slot:${battlefieldId}:${period}`, kind: "mission-round", payload: { battlefieldId, period }, objectRef: { type: "mission-round-slot", id: `${battlefieldId}:${period}`, version: 1 } }) as Card;
+    const current = [card(1), slot("01", "2026-10"), slot("02", "2026-10"), slot("01", "2026-11")];
+    const actual = { ...slot("01", "2026-10"), id: "mission-round:actual", objectRef: { type: "mission-round", id: "actual", version: 1 } } as Card;
+    expect(replaceActionCard(current, actual)).toEqual([current[0], actual, current[2], current[3]]);
+    expect(replaceActionCard([actual], { ...actual, version: 2 })).toEqual([{ ...actual, version: 2 }]);
+  });
+
+  it("其他对象仍按 id 替换，不把不在首页的对象加入首页", () => {
+    expect(replaceActionCard([card(1)], card(2))).toEqual([card(2)]);
+    expect(replaceActionCard([card(1)], { ...card(2), id: "issue:2" })).toEqual([card(1)]);
   });
 });

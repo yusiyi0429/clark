@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import type { Card } from "@/lib/api/client";
+import { replaceActionCard } from "@/lib/actionResponse";
 import { HomeBoard } from "@/components/HomeBoard";
 import { MorningCanvas } from "@/components/onboarding/MorningCanvas";
 import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
@@ -58,7 +59,7 @@ export function CeoWorkspace({ initialCards, viewerId, account, children }: { in
   const [cards, setCards] = useState(initialCards);
   useEffect(() => setCards(initialCards), [initialCards]);
   const onCard = useCallback((updated: Card) => {
-    setCards((current) => current.map((card) => (card.id === updated.id ? updated : card)));
+    setCards((current) => replaceActionCard(current, updated));
   }, []);
 
   const [detail, setDetail] = useState<DetailInfo | null>(null);

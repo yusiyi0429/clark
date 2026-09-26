@@ -276,6 +276,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mission-rounds/{roundId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取本人可见的 Mission Card 轮次摘要和动作 */
+        get: operations["getMissionRound"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-rounds/actions/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 拍板人整理个人卡草稿、统一开放或重开；版本冲突返回 latestCard */
+        post: operations["executeMissionRoundAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/radar": {
         parameters: {
             query?: never;
@@ -1485,6 +1519,16 @@ export interface components {
             dependencies: string;
             risk: string;
             boundaries: string;
+            keyPath: string;
+            resources: string;
+            humanAgentSplit: string;
+            retrospect: string;
+            placeholder: boolean;
+            personalCard: {
+                cardId: string;
+                roundId: string;
+                status: "draft" | "open" | "reviewing" | "confirmed";
+            } | null;
             sourceRef: string;
             sourceDocumentId: string;
             sourceRevision: number;
@@ -1504,6 +1548,10 @@ export interface components {
             dependencies?: string;
             risk?: string;
             boundaries?: string;
+            keyPath?: string;
+            resources?: string;
+            humanAgentSplit?: string;
+            retrospect?: string;
             sourceRef: string;
             sourceDocumentId: string;
             sourceRevision: number;
@@ -1523,6 +1571,10 @@ export interface components {
             dependencies?: string;
             risk?: string;
             boundaries?: string;
+            keyPath?: string;
+            resources?: string;
+            humanAgentSplit?: string;
+            retrospect?: string;
         };
         MissionManagementResponse: {
             missions: {
@@ -1544,11 +1596,89 @@ export interface components {
                 dependencies: string;
                 risk: string;
                 boundaries: string;
+                keyPath: string;
+                resources: string;
+                humanAgentSplit: string;
+                retrospect: string;
+                placeholder: boolean;
+                personalCard: {
+                    cardId: string;
+                    roundId: string;
+                    status: "draft" | "open" | "reviewing" | "confirmed";
+                } | null;
                 sourceRef: string;
                 sourceDocumentId: string;
                 sourceRevision: number;
                 sourceTitle: string;
             }[];
+        };
+        MissionCardField: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+        MissionCardRow: {
+            cardId: string;
+            ownerId: string;
+            ownerName: string;
+            roleLabel: string | null;
+            missionCount: number;
+            line: string;
+            pending: number;
+            mine: boolean;
+        };
+        MissionRoundPhase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+        MissionRoundSummary: {
+            roundId: string;
+            period: string;
+            battlefieldId: string;
+            battlefieldName: string;
+            version: number;
+            phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+            round: number;
+            openedAt: string | null;
+            closesAt: string | null;
+            reviewAt: string | null;
+            /** @description 应用时钟生成的 ISO 8601 时间 */
+            serverNow: string;
+            approver: boolean;
+            deciderName: string;
+            todo: string | null;
+            placeholder: boolean;
+            goals: {
+                sixMonthOutcome: string;
+                monthOutcome: string;
+                /** @description 应用时钟生成的 ISO 8601 时间 */
+                signedAt: string;
+            } | null;
+            counts: {
+                feedback: number;
+                pending: number;
+                conflicts: number;
+                dependencies: number;
+                late: number;
+            };
+            cards: {
+                cardId: string;
+                ownerId: string;
+                ownerName: string;
+                roleLabel: string | null;
+                missionCount: number;
+                line: string;
+                pending: number;
+                mine: boolean;
+            }[];
+        };
+        MissionRoundDraftPayload: {
+            period: string;
+            battlefieldId: string;
+            battlefieldName: string;
+            /** @constant */
+            placeholder: true;
+            todo: string;
+            /** @description 应用时钟生成的 ISO 8601 时间 */
+            serverNow: string;
+        };
+        ExecuteMissionRoundActionRequest: {
+            actionId: string;
+            input?: unknown;
+            viewCardId?: string;
         };
         CapabilitySupportRef: {
             /** @constant */
@@ -2908,6 +3038,115 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMissionRound: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roundId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mission round Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    executeMissionRoundAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecuteMissionRoundActionRequest"];
+            };
+        };
+        responses: {
+            /** @description 当前 Mission round Card；同一动作重放不重复写入 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

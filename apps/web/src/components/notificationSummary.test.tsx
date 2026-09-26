@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { TMissionRoundSummary } from "@warmap/contracts";
 import type { Card } from "@/lib/api/client";
 import { NotificationRail, railGroups } from "./NotificationRail";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 
 function card(kind: string, id: string, title: string, payload: unknown, extra: Partial<Card> = {}): Card {
   return { schemaVersion: 1, id: `${kind}:${id}`, version: 1, kind, objectRef: { type: kind, id, version: 1 }, title, payload, actions: [], ...extra } as unknown as Card;
@@ -59,5 +62,43 @@ describe("通知栏分组（clark 三组）", () => {
     expect(html).toContain('aria-label="刘明华，打开个人菜单"');
     expect(html).toContain('aria-label="天枢，返回首页"');
     expect(html).toContain('aria-label="8 项通知"');
+  });
+});
+
+describe("本月 Mission Card 的 CEO 通知入口", () => {
+  const round: TMissionRoundSummary = {
+    roundId: "round-01", period: "2026-10", battlefieldId: "01", battlefieldName: "灯塔项目", version: 1,
+    phase: "draft", round: 1, openedAt: null, closesAt: null, reviewAt: null, serverNow: "2026-10-01T02:00:00.000Z",
+    approver: true, deciderName: "刘明华", todo: null, placeholder: true, goals: null,
+    counts: { feedback: 0, pending: 0, conflicts: 0, dependencies: 0, late: 0 }, cards: [],
+  };
+  const summaryCard = (overrides: Partial<TMissionRoundSummary> = {}) => card("mission-round", "round-01", "10 月 Mission Card · 灯塔项目", { ...round, ...overrides });
+
+  it("没有轮次的 slot 与月度计划在战略决策更新同组，不冒充已整理", () => {
+    const draft = card("mission-round", "slot-01", "10 月 Mission Card · 灯塔项目", {
+      period: "2026-10", battlefieldId: "01", battlefieldName: "灯塔项目", placeholder: true,
+      todo: "让 Co-Agent 整理个人卡草稿（占位）", serverNow: round.serverNow,
+    }, { objectRef: { type: "mission-round-slot", id: "01:2026-10", version: 1 }, actions: [{ actionId: "signed-slot", actionType: "mission-round.draft", label: "整理个人卡草稿" }] });
+    const group = railGroups([monthly, draft])[0];
+    expect(group.title).toBe("战略决策更新");
+    expect(group.items).toHaveLength(2);
+    expect(group.items[1].meta).toBe("可以整理个人卡草稿");
+    const html = renderToStaticMarkup(<NotificationRail cards={[draft]} onNavigate={() => undefined} onCard={() => undefined} />);
+    expect(html).toContain("10 月 Mission Card · 灯塔项目，可以整理个人卡草稿");
+  });
+
+  it.each([
+    [{ phase: "draft" }, "草稿 · 可以统一开放讨论"],
+    [{ phase: "open", closesAt: "2026-10-02T09:24:00.000Z" }, "讨论中 · 31 小时 24 分"],
+    [{ phase: "closed" }, "已截止 · 汇总中"],
+    [{ phase: "reviewing", counts: { ...round.counts, pending: 5 } }, "5 条待你处理"],
+    [{ phase: "reviewing" }, "意见已全部处理，待你确认"],
+  ] as const)("已建轮次按服务端阶段给出 %s", (overrides, expected) => {
+    expect(railGroups([summaryCard(overrides)], new Date("2030-01-01"))[0].items[0].meta).toBe(expected);
+  });
+
+  it("越过服务端截止时刻时不显示负数，确认后退出通知栏", () => {
+    expect(railGroups([summaryCard({ phase: "open", closesAt: round.serverNow })])[0].items[0].meta).toBe("已截止 · 汇总中");
+    expect(railGroups([summaryCard({ phase: "confirmed" })])).toEqual([]);
   });
 });

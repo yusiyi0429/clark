@@ -48,6 +48,7 @@ import { registerThreadRoutes } from "./routes/threads.js";
 import { registerRecordingRoutes } from "./routes/recordings.js";
 import { registerMeRoutes } from "./routes/me.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
+import { registerMissionCardRoutes } from "./routes/missionCards.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 
@@ -67,6 +68,8 @@ export type AppEnv = {
   extraOrigins?: string[];
   /** 引导中的公司名，可空；不从其他资料猜测。 */
   companyName?: string;
+  /** mission-card-drafts.v1 占位文件目录；未配置时使用仓库 seed/placeholders。 */
+  missionCardDraftsDir?: string;
   driServiceToken: string;
   mcpServiceToken: string;
   buildSha: string;
@@ -307,6 +310,7 @@ export async function buildApp({
   registerRecordingRoutes(app, ctx);
   registerMeRoutes(app, ctx);
   registerOnboardingRoutes(app, ctx);
+  registerMissionCardRoutes(app, ctx);
 
   return app;
 }

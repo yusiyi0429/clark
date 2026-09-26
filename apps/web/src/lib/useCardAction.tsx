@@ -18,7 +18,7 @@ type Attempt = { action: CardAction; input: unknown };
  * 统一的 Action client：只提交 opaque actionId 与合法 input（对象 version 已固化在签名 actionId 内）。
  * 成功后把返回的新 Card 交给页面；409 用 latestCard 刷新并要求重新核对；其他失败可原样重试。
  */
-export function useCardAction(onCard: (card: Card) => void) {
+export function useCardAction(onCard: (card: Card) => void, endpoint: "/api/actions/execute" | "/api/mission-rounds/actions/execute" = "/api/actions/execute") {
   const [state, setState] = useState<ActionState>({ status: "idle" });
   const lastAttempt = useRef<Attempt | null>(null);
   const router = useRouter();
@@ -27,7 +27,7 @@ export function useCardAction(onCard: (card: Card) => void) {
     async (action: CardAction, input: unknown = {}) => {
       lastAttempt.current = { action, input };
       setState({ status: "pending" });
-      const { data, error, response } = await browserApi.POST("/api/actions/execute", {
+      const { data, error, response } = await browserApi.POST(endpoint, {
         body: { actionId: action.actionId, input },
       });
       const outcome = interpretActionResponse(response.status, data as { cards?: Card[] } | undefined, error);
@@ -47,7 +47,7 @@ export function useCardAction(onCard: (card: Card) => void) {
       }
       setState({ status: "error", message: outcome.message });
     },
-    [onCard, router],
+    [onCard, router, endpoint],
   );
 
   const retry = useCallback(() => {

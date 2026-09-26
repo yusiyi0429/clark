@@ -5,11 +5,11 @@ CEO WarMap 是单公司的桌面 Web 决策驾驶舱，以 CEO 的决策为中�
 ## Language
 
 **CEO WarMap**:
-以 CEO 决策为中心的驾驶舱，拥有决策材料、确认结果和独立对话；成员只参与信号发送、执行事项与事项群组。
+以 CEO 决策为中心的驾驶舱，拥有决策材料、确认结果和独立对话；成员参与信号发送、执行事项与事项群组，并按对象关系读取本月 Mission Card 轮次。
 _Avoid_: 项目管理系统、看板、通用协作平台
 
 **Member**:
-以自己的身份登录天枢的公司成员（company-people seed 里 roles 不含 ceo 的人），在 `/me` 工作台接收发给自己的信号、推进和参与执行事项；看不到 CEO 的决策内容。
+以自己的身份登录天枢的公司成员（company-people seed 里 roles 不含 ceo 的人），在 `/me` 工作台接收发给自己的信号、推进和参与执行事项；可以读取自己相关的本月 Mission Card 轮次，战场 DRI 还可执行该战场的拍板动作。个人卡页与讨论入口归 04b；CEO 决策页面和专用接口仍不向成员开放。
 _Avoid_: 用户账号体系、访客
 
 **Login ID**:
@@ -93,8 +93,28 @@ CEO 维护的长期公司能力注册表：稳定 id、显示编号 code、排�
 _Avoid_: 技能库、执行能力评估、当月能力结果
 
 **Mission**:
-CEO 确认的版本化 Organization Fact，WarMap 的第七个核心实体：稳定 id、周期 period、唯一 DRI personId、一个主要能力域 capabilityId、零到多个战场 battlefieldIds、Outcome、Why、成功证据、关键里程碑、关键依赖、风险、边界与飞书来源元数据。Mission 通过 period 承接同周期 MonthlyPlan 的 PCO，执行过程留在外部 DRI 流程；它不承载 Task、Activity、执行状态或完成率。编辑走 opaque Action `mission.edit`（version 锚 + fingerprint 幂等），首次导入走 CEO 配置写入。
-_Avoid_: 任务、Activity、项目、完成率、执行看板、Mission 进度条
+WarMap 的第七个核心实体，对应个人卡中的一项“个人任务”：稳定 id、周期 period、唯一 DRI personId、一个主要能力域、战场引用和来源元数据，内容包括名称、Why、预期结果、成功证据、责任人、边界、关键路径、里程碑、资源与权限、依赖、人-Agent 分工、风险与升级、复盘沉淀 13 个字段。Mission 通过 period 承接 MonthlyPlan 的 PCO，不承载执行状态或完成率。未挂卡的 Mission 沿用 CEO 首次登记与 `mission.edit`；挂卡的 Mission 可以先以 v1 草稿入库，整轮确认前是候选，只有确认后才成为个人承诺的 Organization Fact。投影用 `personalCard.status` 表达制定状态，`placeholder` 表达来源性质；计划签发不等于个人卡确认。挂卡 Mission 全阶段禁止 `mission.edit`，确认后的纠错规则仍属 GAP-04。
+_Avoid_: 执行事项、Activity、项目、完成率、执行看板、Mission 进度条
+
+**本月 Mission Card（Personal Mission Card）**:
+同一战场、同一月份里一个人的稳定结果承诺容器，保存 Owner、身份与去重后的成员名单，挂接一到多项 Mission。沟通前、沟通中和确认后保留同一个卡 id；草稿与已确定内容必须明确区分。04a 建好数据和 CEO 整理草稿入口，个人卡页与讨论在 04b 实现。
+_Avoid_: 单条 Mission、执行事项、任务看板、飞书原件副本
+
+**Mission Card 轮次（Mission Round）**:
+按战场 × 月份唯一的一轮制定，统一管理个人卡的草稿、48 小时窗口、截止快照、重开与最终确认。整理草稿前必须已签发本战场的月度目标；首次开放冻结六个月目标、本月目标及来源版本，重开不改变依据。每次重开从当前应用时间再开放固定 48 小时，保留卡、意见和历次快照；不同战场独立。04a 提供 draft/open/reopen，整轮确认归 04c。
+_Avoid_: 月度计划签发、单人独立倒计时、演示拨钟、重新生成覆盖讨论
+
+**公开意见（Public Feedback）**:
+个人卡成员与拍板人围绕整张卡或具体个人任务字段提出的评论、划词引用和修改建议，独立保存在 `mission_card_feedback`，保留作者、时间、原文与源版本。意见不直接改 Mission。截止后只接评论与引用，标为截止后留言；当轮快照不收，重开后可进入下一次快照。04a 已建存储与快照，发表入口归 04b。
+_Avoid_: 私聊、自动生效的修改、thread_messages 中的通用群聊
+
+**集中 Review**:
+截止时按 `created_at < closes_at` 快照全战场公开意见和 Mission 版本，按同字段冲突、依赖原文条数形成确定性规则汇总，私聊不收。重开保留旧 Review，下一次截止结转已处理结论并纳入新意见，协作核对结论不结转。逐条处理只改变候选版本；整轮确认才写回承诺，处理与确认入口归 04c。
+_Avoid_: AI 语义判断、逐人孤立确认、采纳即生效、私聊自动并入
+
+**讨论候选（占位草稿）**:
+为 2026 年 10 月首轮讨论，从 9 月五张个人卡整理的 12 项有来源候选，只挂战场 01。Agent 起草尚未接入，里程碑写“待定 · ”，保留原文档版本及占位说明。只读 `mission-card-drafts.v1` 经同一事务导入函数写入；相同文件重跑不变，文件变化拒绝覆盖。占位来源标记在确认后仍保留，不能冒充已形成的新月承诺。
+_Avoid_: Agent 自动生成、正式承诺、日期机械平移、补造其他人或战场的个人卡
 
 **Mission Anchor**:
 战场配置内嵌的只读战略映射 `{code,title}`，可被能力的主要支撑引用（`{type:"mission-anchor",missionCode}`）。它没有表、状态机、负责人或执行 UI，与 Mission 实体是两套命名空间。
@@ -109,15 +129,15 @@ CEO 在预研未完成或失败时，经过二次确认仍直接决定 Issue 的
 _Avoid_: 静默绕过、伪造已完成预研
 
 **Organization Fact**:
-经 CEO 确定性确认后生效的决定、分派、CEO 判断、复议锚点或月度计划。
+经 CEO 确定性确认后生效的决定、分派、CEO 判断、复议锚点或月度计划。个人卡中的 Mission 须经 CEO 或对应战场 DRI 整轮确认后才成为个人承诺事实；该确认动作归 04c，草稿入库不代表生效。
 _Avoid_: Agent 候选、对话意见、卡片引用
 
 **Card**:
-后端业务对象面向 CEO 界面的类型化投影；它携带展示数据、导航、对话范围和当前允许的动作。
+后端业务对象面向 CEO 或有权成员的类型化投影；它携带展示数据、导航、对话范围和当前允许的动作。
 _Avoid_: 通用页面 DSL、独立业务对象
 
 **Action**:
-后端提供、由 CEO 明确触发的确定性命令。Action 可以改变组织事实，对话和 Agent 不能替代它。
+后端提供、由有权操作者明确触发的确定性命令。原 `/api/actions/execute` 仅限 CEO；本月 Mission Card 的新动作端点还允许当前战场 DRI，由服务端逐对象复查。Action 可以改变组织事实，对话和 Agent 不能替代它。
 _Avoid_: 对话指令、前端业务回调、Agent 工具调用
 
 **Agent Runtime**:
@@ -145,8 +165,8 @@ _Avoid_: 实时自动写回、单条 Receipt 的副本
 _Avoid_: Issue 草稿、自动待办
 
 **DRI**:
-负责提供议题、材料、反馈或承接行动的人。可以作为 Member 登录自己的工作台，接收发给自己的信号并推进自己的执行事项；议题导入、月度反馈与 DRI Handoff 仍经机器令牌的导入导出边界。
-_Avoid_: WarMap 共同决策用户
+负责提供议题、材料、反馈或承接行动的人。可以作为 Member 登录自己的工作台，接收发给自己的信号并推进自己的执行事项；当前战场 DRI 可拍板本战场的 Mission Card 制定动作，其他 CEO 决策权限不随之开放。议题导入、月度反馈与 DRI Handoff 仍经机器令牌的导入导出边界。
+_Avoid_: 拥有全部 CEO 决策权限的共同用户
 
 **DRI Handoff**:
 WarMap 向外部 DRI 流程导出的补充请求或已确认行动。没有真实渠道回执时只能称为待外发，不能称为已送达或已分派。

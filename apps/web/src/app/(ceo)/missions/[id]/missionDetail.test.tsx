@@ -28,6 +28,7 @@ const mission: MissionPayload = {
   dependencies: "平台团队提供评测环境",
   risk: "节奏被打断",
   boundaries: "不含模型训练",
+  keyPath: "", resources: "", humanAgentSplit: "", retrospect: "", placeholder: false, personalCard: null,
   sourceRef: "mission-cards/01",
   sourceDocumentId: "doc-01",
   sourceRevision: 3,
@@ -93,5 +94,21 @@ describe("Mission 详情渲染", () => {
   it("planRelation 在无同周期计划时明确写尚未签发", () => {
     expect(planRelation("2026-09", "协商中")).toBe("2026-09 · 协商中");
     expect(planRelation("2026-09", null)).toBe("2026-09 · 尚未签发");
+  });
+
+  it("签发月度目标不能让个人卡草稿冒充生效版本，也不提供普通编辑", () => {
+    for (const status of ["draft", "open", "reviewing"] as const) {
+      const html = render({ placeholder: true, personalCard: { cardId: "personal-01", roundId: "round-01", status } }, "已签发");
+      expect(html).toContain("草稿 · 占位");
+      expect(html).not.toContain("生效中");
+      expect(html).not.toContain("编辑 Mission");
+      expect(html).not.toContain("当前正式版本");
+    }
+  });
+
+  it("已确认的个人卡标已确定，仍保留占位来源且没有普通编辑入口", () => {
+    const html = render({ placeholder: true, personalCard: { cardId: "personal-01", roundId: "round-01", status: "confirmed" } }, "已签发");
+    expect(html).toContain("已确定 · 占位");
+    expect(html).not.toContain("编辑 Mission");
   });
 });

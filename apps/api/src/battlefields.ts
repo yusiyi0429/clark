@@ -76,7 +76,8 @@ export function normalizeBattlefieldSet(ids: string[]): TIssueLocation {
 
 export type DeleteBattlefieldResult =
   | { ok: true; detachedIssues: number }
-  | { ok: false; status: 404; code: "BATTLEFIELD_NOT_FOUND"; message: string };
+  | { ok: false; status: 404; code: "BATTLEFIELD_NOT_FOUND"; message: string }
+  | { ok: false; status: 409; code: "BATTLEFIELD_HAS_MISSION_ROUNDS"; message: string };
 
 /**
  * 删除战场：单事务内把所有受影响议题移出该战场并归一化，清掉能力里指向该战场及其战略锚点的 supportRefs，再删注册行。
@@ -94,6 +95,11 @@ export async function deleteBattlefield(pool: Pool, id: string): Promise<DeleteB
     if (locked.rowCount !== 1) {
       await client.query("ROLLBACK");
       return { ok: false, status: 404, code: "BATTLEFIELD_NOT_FOUND", message: "战场不存在" };
+    }
+    const rounds = await client.query("SELECT id FROM mission_rounds WHERE battlefield_id = $1 LIMIT 1", [id]);
+    if (rounds.rowCount) {
+      await client.query("ROLLBACK");
+      return { ok: false, status: 409, code: "BATTLEFIELD_HAS_MISSION_ROUNDS", message: "战场已有 Mission Card 轮次，不能删除" };
     }
     // 受影响议题：battlefield 级正好是该战场，或 company 集合包含该战场（capability 级主归属是能力，不参与）
     const affected = await client.query<{ id: string; location: TIssueLocation }>(

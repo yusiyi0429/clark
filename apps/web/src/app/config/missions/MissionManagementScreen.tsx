@@ -8,6 +8,7 @@ import type { Card } from "@/lib/api/client";
 import { useCardAction } from "@/lib/useCardAction";
 import { payloadOf, type MissionPayload } from "@/cards/payloads";
 import type { PersonOption } from "@/lib/api/server";
+import { MissionStatus } from "@/components/MissionStatus";
 import m from "@/styles/mission-management.module.css";
 import c from "@/styles/config.module.css";
 
@@ -149,7 +150,7 @@ export function MissionManagementScreen({
 
   /** 动作锚取当前 Card：跨标签页改过同一 Mission 时这里就是旧锚，后端 409 后重读投影。 */
   async function saveMission() {
-    if (!selected || !draft || !result?.ok || !dirty || busy) return;
+    if (!selected || selected.payload.personalCard || !draft || !result?.ok || !dirty || busy) return;
     const descriptor = selected.card.actions.find((item) => item.actionType === "mission.edit");
     if (!descriptor) {
       setMessage({ kind: "error", text: "当前版本没有可用的编辑动作，请刷新后重试" });
@@ -172,7 +173,9 @@ export function MissionManagementScreen({
         <button type="button" className={c.back} onClick={() => router.push("/config")}>
           返回配置
         </button>
-        <span className={c.draft}>Organization Fact · CEO 确认</span>
+        <span className={c.draft}>
+          {selected?.payload.personalCard && selected.payload.personalCard.status !== "confirmed" ? "月度承诺 · 含待确认草稿" : "Organization Fact · CEO 确认"}
+        </span>
       </nav>
 
       <header className={c.header}>
@@ -202,9 +205,10 @@ export function MissionManagementScreen({
                 <span className={m.code}>{payload.code}</span>
                 <span className={m.rowText}>
                   <span className={m.rowTitle}>{payload.title}</span>
+                  <MissionStatus mission={payload} />
                   <span className={m.rowOwner}>{payload.ownerDisplayName || "待指派"}</span>
                 </span>
-                <Pencil className={m.edit} aria-hidden="true" />
+                {payload.personalCard ? null : <Pencil className={m.edit} aria-hidden="true" />}
               </button>
             ))}
             {visible.length ? null : <p className={m.empty}>没有匹配的 Mission。</p>}
@@ -212,7 +216,18 @@ export function MissionManagementScreen({
         </section>
 
         <section className={m.editor} aria-label="Mission 编辑器">
-          {selected && draft ? (
+          {selected?.payload.personalCard ? (
+            <div className={m.fields}>
+              <h2 className={m.editorTitle}>{selected.payload.title}</h2>
+              <MissionStatus mission={selected.payload} />
+              <p className={m.editorMeta} role="status">
+                {selected.payload.personalCard.status === "confirmed"
+                  ? "个人 Mission Card 已确定，确认后的修订暂未开放，不能在配置页单独修改。"
+                  : "此 Mission 属于个人 Mission Card，需在本轮制定中讨论并统一确认，不能在配置页单独修改。"}
+              </p>
+              <p className={m.source}>来源 · {selected.payload.sourceTitle}</p>
+            </div>
+          ) : selected && draft ? (
             <>
               <div className={m.editorHead}>
                 <div>

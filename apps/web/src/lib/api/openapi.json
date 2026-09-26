@@ -629,6 +629,132 @@
         }
       }
     },
+    "/api/mission-rounds/{roundId}": {
+      "get": {
+        "operationId": "getMissionRound",
+        "summary": "读取本人可见的 Mission Card 轮次摘要和动作",
+        "parameters": [
+          {
+            "name": "roundId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mission round Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mission-rounds/actions/execute": {
+      "post": {
+        "operationId": "executeMissionRoundAction",
+        "summary": "拍板人整理个人卡草稿、统一开放或重开；版本冲突返回 latestCard",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteMissionRoundActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "当前 Mission round Card；同一动作重放不重复写入",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cards/radar": {
       "get": {
         "operationId": "getRadarCard",
@@ -5888,6 +6014,12 @@
           "dependencies",
           "risk",
           "boundaries",
+          "keyPath",
+          "resources",
+          "humanAgentSplit",
+          "retrospect",
+          "placeholder",
+          "personalCard",
           "sourceRef",
           "sourceDocumentId",
           "sourceRevision",
@@ -5964,6 +6096,65 @@
           },
           "boundaries": {
             "type": "string"
+          },
+          "keyPath": {
+            "type": "string"
+          },
+          "resources": {
+            "type": "string"
+          },
+          "humanAgentSplit": {
+            "type": "string"
+          },
+          "retrospect": {
+            "type": "string"
+          },
+          "placeholder": {
+            "type": "boolean"
+          },
+          "personalCard": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "cardId",
+                  "roundId",
+                  "status"
+                ],
+                "properties": {
+                  "cardId": {
+                    "type": "string"
+                  },
+                  "roundId": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "const": "draft",
+                        "type": "string"
+                      },
+                      {
+                        "const": "open",
+                        "type": "string"
+                      },
+                      {
+                        "const": "reviewing",
+                        "type": "string"
+                      },
+                      {
+                        "const": "confirmed",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sourceRef": {
             "type": "string"
@@ -6070,6 +6261,22 @@
             "maxLength": 4000,
             "type": "string"
           },
+          "keyPath": {
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "resources": {
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "humanAgentSplit": {
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "retrospect": {
+            "maxLength": 4000,
+            "type": "string"
+          },
           "sourceRef": {
             "minLength": 1,
             "maxLength": 500,
@@ -6168,6 +6375,22 @@
           "boundaries": {
             "maxLength": 4000,
             "type": "string"
+          },
+          "keyPath": {
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "resources": {
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "humanAgentSplit": {
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "retrospect": {
+            "maxLength": 4000,
+            "type": "string"
           }
         }
       },
@@ -6202,6 +6425,12 @@
                 "dependencies",
                 "risk",
                 "boundaries",
+                "keyPath",
+                "resources",
+                "humanAgentSplit",
+                "retrospect",
+                "placeholder",
+                "personalCard",
                 "sourceRef",
                 "sourceDocumentId",
                 "sourceRevision",
@@ -6279,6 +6508,65 @@
                 "boundaries": {
                   "type": "string"
                 },
+                "keyPath": {
+                  "type": "string"
+                },
+                "resources": {
+                  "type": "string"
+                },
+                "humanAgentSplit": {
+                  "type": "string"
+                },
+                "retrospect": {
+                  "type": "string"
+                },
+                "placeholder": {
+                  "type": "boolean"
+                },
+                "personalCard": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "cardId",
+                        "roundId",
+                        "status"
+                      ],
+                      "properties": {
+                        "cardId": {
+                          "type": "string"
+                        },
+                        "roundId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "draft",
+                              "type": "string"
+                            },
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "reviewing",
+                              "type": "string"
+                            },
+                            {
+                              "const": "confirmed",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "sourceRef": {
                   "type": "string"
                 },
@@ -6294,6 +6582,422 @@
                 }
               }
             }
+          }
+        }
+      },
+      "MissionCardField": {
+        "anyOf": [
+          {
+            "const": "title",
+            "type": "string"
+          },
+          {
+            "const": "why",
+            "type": "string"
+          },
+          {
+            "const": "outcome",
+            "type": "string"
+          },
+          {
+            "const": "successEvidence",
+            "type": "string"
+          },
+          {
+            "const": "boundaries",
+            "type": "string"
+          },
+          {
+            "const": "keyPath",
+            "type": "string"
+          },
+          {
+            "const": "milestones",
+            "type": "string"
+          },
+          {
+            "const": "resources",
+            "type": "string"
+          },
+          {
+            "const": "dependencies",
+            "type": "string"
+          },
+          {
+            "const": "humanAgentSplit",
+            "type": "string"
+          },
+          {
+            "const": "risk",
+            "type": "string"
+          },
+          {
+            "const": "retrospect",
+            "type": "string"
+          }
+        ]
+      },
+      "MissionCardRow": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cardId",
+          "ownerId",
+          "ownerName",
+          "roleLabel",
+          "missionCount",
+          "line",
+          "pending",
+          "mine"
+        ],
+        "properties": {
+          "cardId": {
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "ownerName": {
+            "type": "string"
+          },
+          "roleLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missionCount": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line": {
+            "type": "string"
+          },
+          "pending": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "mine": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MissionRoundPhase": {
+        "anyOf": [
+          {
+            "const": "draft",
+            "type": "string"
+          },
+          {
+            "const": "open",
+            "type": "string"
+          },
+          {
+            "const": "closed",
+            "type": "string"
+          },
+          {
+            "const": "reviewing",
+            "type": "string"
+          },
+          {
+            "const": "confirmed",
+            "type": "string"
+          }
+        ]
+      },
+      "MissionRoundSummary": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "roundId",
+          "period",
+          "battlefieldId",
+          "battlefieldName",
+          "version",
+          "phase",
+          "round",
+          "openedAt",
+          "closesAt",
+          "reviewAt",
+          "serverNow",
+          "approver",
+          "deciderName",
+          "todo",
+          "placeholder",
+          "goals",
+          "counts",
+          "cards"
+        ],
+        "properties": {
+          "roundId": {
+            "type": "string"
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "battlefieldId": {
+            "type": "string"
+          },
+          "battlefieldName": {
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "const": "draft",
+                "type": "string"
+              },
+              {
+                "const": "open",
+                "type": "string"
+              },
+              {
+                "const": "closed",
+                "type": "string"
+              },
+              {
+                "const": "reviewing",
+                "type": "string"
+              },
+              {
+                "const": "confirmed",
+                "type": "string"
+              }
+            ]
+          },
+          "round": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "openedAt": {
+            "anyOf": [
+              {
+                "description": "应用时钟生成的 ISO 8601 时间",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closesAt": {
+            "anyOf": [
+              {
+                "description": "应用时钟生成的 ISO 8601 时间",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reviewAt": {
+            "anyOf": [
+              {
+                "description": "应用时钟生成的 ISO 8601 时间",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serverNow": {
+            "description": "应用时钟生成的 ISO 8601 时间",
+            "type": "string"
+          },
+          "approver": {
+            "type": "boolean"
+          },
+          "deciderName": {
+            "type": "string"
+          },
+          "todo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "placeholder": {
+            "type": "boolean"
+          },
+          "goals": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "sixMonthOutcome",
+                  "monthOutcome",
+                  "signedAt"
+                ],
+                "properties": {
+                  "sixMonthOutcome": {
+                    "type": "string"
+                  },
+                  "monthOutcome": {
+                    "type": "string"
+                  },
+                  "signedAt": {
+                    "description": "应用时钟生成的 ISO 8601 时间",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "counts": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "feedback",
+              "pending",
+              "conflicts",
+              "dependencies",
+              "late"
+            ],
+            "properties": {
+              "feedback": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "pending": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "conflicts": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "dependencies": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "late": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            }
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "cardId",
+                "ownerId",
+                "ownerName",
+                "roleLabel",
+                "missionCount",
+                "line",
+                "pending",
+                "mine"
+              ],
+              "properties": {
+                "cardId": {
+                  "type": "string"
+                },
+                "ownerId": {
+                  "type": "string"
+                },
+                "ownerName": {
+                  "type": "string"
+                },
+                "roleLabel": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "missionCount": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "line": {
+                  "type": "string"
+                },
+                "pending": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "mine": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MissionRoundDraftPayload": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period",
+          "battlefieldId",
+          "battlefieldName",
+          "placeholder",
+          "todo",
+          "serverNow"
+        ],
+        "properties": {
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "battlefieldId": {
+            "type": "string"
+          },
+          "battlefieldName": {
+            "type": "string"
+          },
+          "placeholder": {
+            "const": true,
+            "type": "boolean"
+          },
+          "todo": {
+            "type": "string"
+          },
+          "serverNow": {
+            "description": "应用时钟生成的 ISO 8601 时间",
+            "type": "string"
+          }
+        }
+      },
+      "ExecuteMissionRoundActionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actionId"
+        ],
+        "properties": {
+          "actionId": {
+            "type": "string"
+          },
+          "input": {},
+          "viewCardId": {
+            "type": "string"
           }
         }
       },

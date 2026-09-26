@@ -34,6 +34,12 @@ describe("migration", () => {
       expect(names).toContain("ontology_update_requests");
       expect(names).toContain("person_voiceprints");
       expect(names).toContain("person_onboarding");
+      expect(names).toContain("mission_rounds");
+      expect(names).toContain("personal_mission_cards");
+      expect(names).toContain("mission_card_feedback");
+      expect(names).toContain("mission_round_reviews");
+      expect(names).toContain("mission_review_decisions");
+      expect(names).toContain("mission_card_reads");
 
       const applied = await db.query<{ id: number; filename: string }>(
         "SELECT id, filename FROM schema_migrations ORDER BY id",
@@ -69,6 +75,9 @@ describe("migration", () => {
         "028_merge_conversation_sessions.sql",
         "029_voiceprints.sql",
         "030_person_onboarding.sql",
+        "032_mission_card_fields.sql",
+        "033_mission_rounds.sql",
+        "034_mission_card_discussion.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -76,7 +85,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(30);
+      expect(Number(again.rows[0].count)).toBe(33);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(

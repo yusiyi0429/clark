@@ -29,6 +29,7 @@ function mission(overrides: Partial<MissionPayload> = {}): MissionPayload {
     dependencies: "平台团队",
     risk: "节奏被打断",
     boundaries: "不含模型训练",
+    keyPath: "", resources: "", humanAgentSplit: "", retrospect: "", placeholder: false, personalCard: null,
     sourceRef: "mission-cards/01",
     sourceDocumentId: "doc-01",
     sourceRevision: 3,
@@ -127,5 +128,15 @@ describe("Mission 总览渲染", () => {
     const empty = markup(<MissionOverviewScreen missions={[]} battlefields={battlefields} />);
     expect(empty).toContain("当前筛选没有 Mission。");
     expect(empty).toContain("共 0 条 Mission");
+  });
+
+  it("挂卡 Mission 确认前标草稿和占位，确认后保留占位来源", () => {
+    const render = (status: "draft" | "confirmed") => markup(<MissionOverviewScreen missions={[mission({
+      placeholder: true, personalCard: { cardId: "personal-01", roundId: "round-01", status },
+      sourceTitle: "占位（Agent 未接入，沿用 9 月个人卡，待讨论修改）",
+    })]} battlefields={battlefields} />);
+    expect(render("draft")).toContain("草稿 · 占位");
+    expect(render("draft")).toContain("沿用 9 月个人卡");
+    expect(render("confirmed")).toContain("已确定 · 占位");
   });
 });

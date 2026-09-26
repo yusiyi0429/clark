@@ -1,15 +1,17 @@
 # Mission 升为第七个核心实体
 
-Mission 从 `BattlefieldConfig` 内嵌的只读值对象升为版本化 Organization Fact，WarMap 的核心实体从六个变为七个：Signal、Issue、Meeting、MeetingOutcome、MonthlyPlan、Conversation 与 Mission。Mission 承载一个周期的结果承诺（Outcome）、唯一 DRI、一个主要能力域、零到多个战场、成功证据、关键里程碑、关键依赖、风险、边界与来源元数据，通过 `period` 承接同周期 MonthlyPlan 的 PCO；执行过程仍留在外部 DRI 流程，WarMap 不保存 Task、Activity、执行状态或完成率。
+Mission 从 `BattlefieldConfig` 内嵌的只读值对象升为版本化 Organization Fact，WarMap 的核心实体从六个变为七个：Signal、Issue、Meeting、MeetingOutcome、MonthlyPlan、Conversation 与 Mission。Mission 承载一个周期的结果承诺（Outcome）、唯一 DRI、一个主要能力域、零到多个战场、成功证据、关键里程碑、关键依赖、风险、边界与来源元数据，通过 `period` 承接同周期 MonthlyPlan 的 PCO；Mission 不保存 Task、Activity、执行状态或完成率。
+
+> 2026-09-27 修订：[ADR-0022](./0022-persist-monthly-mission-card-rounds.md) 引入本月 Mission Card 制定轮次。挂在个人卡上的 Mission 可以先以草稿入库，整轮确认前属于候选，不是已生效的 Organization Fact；月度计划签发不代替个人承诺确认。
 
 ## 决策
 
 1. **七个核心实体**：核心实体新增 Mission；其余六个生命周期不变。
-2. **Mission 是版本化 Organization Fact**：`missions` 表持有稳定 id、`version`、`period`、`code`、`title`、`owner_id`、`capability_id`、`battlefield_ids`、Outcome、Why、成功证据、关键里程碑、关键依赖、风险、边界与飞书来源元数据。`code` 只在 Mission 表内唯一；它与战场战略锚点的 code 是两套命名空间，可以重名。
+2. **已确认 Mission 是版本化 Organization Fact**：`missions` 表持有稳定 id、`version`、`period`、`code`、`title`、`owner_id`、`capability_id`、`battlefield_ids`、Outcome、Why、成功证据、关键里程碑、关键依赖、风险、边界与飞书来源元数据；本月个人卡补齐关键路径、资源与权限、人-Agent 分工、复盘沉淀。挂卡 Mission 是否已经确认由 `personalCard.status` 表达，`placeholder` 只标来源。`code` 只在 Mission 表内唯一；它与战场战略锚点的 code 是两套命名空间，可以重名。
 3. **旧 `BattlefieldConfig.missions` 改名 `missionAnchors`**：战场图上的 `{code,title}` 只是战略锚点，不再是 Mission Card；`CapabilityConfig.supportRefs` 的 `{type:"mission"}` 同步改为 `{type:"mission-anchor"}`，语义仍是“这个能力支撑某个战场战略锚点”。
-4. **编辑走 opaque Action，首次导入走 CEO 配置 POST**：Mission 已有版本，编辑必须是 `mission.edit`（`version` 锚 + fingerprint 幂等，冲突返回 latestCard）；首次导入没有既有版本可锚，走 `/api/config/missions` 的 CEO 配置写入。
-5. **关系必须命中已登记对象**：`owner_id` 命中 `company-people.v1`，`capability_id` 命中 `capability_config`，`battlefield_ids` 命中 `battlefield_config`，`period` 是 `YYYY-MM`。删除战场必须在同一事务里把该战场从所有 Mission 的 `battlefield_ids` 移除并 `version+1`，与既有的议题归一化同级联。
-6. **来源只做一次性导入**：Mission Card 的飞书正文只在导入时读取；仓库、Card 与证据目录不保存正文副本。来源以 `source_document_id` + `source_revision` 固定，外部文档更新不会自动覆盖已确认字段。
+4. **编辑路径按是否挂个人卡区分**：未挂卡的 Mission 仍用 `mission.edit`（`version` 锚 + fingerprint 幂等，冲突返回 latestCard），首次登记走 `/api/config/missions` 的 CEO 配置写入。挂卡 Mission 在所有阶段都禁止普通编辑，返回 409 `MISSION_IN_MISSION_CARD`；草稿整理走拍板人的 `mission-round.draft` 或共用函数的导入脚本，确认写回由 04c 的整轮动作承担。已确定后不能用普通编辑绕过，最小纠错方式仍待 GAP-04 定义。
+5. **关系必须命中已登记对象**：`owner_id` 命中 `company-people.v1`，`capability_id` 命中 `capability_config`，`battlefield_ids` 命中 `battlefield_config`，`period` 是 `YYYY-MM`。战场下已有 Mission Card 轮次时删除返回 409；没有轮次时，删除仍须在同一事务里把该战场从所有 Mission 的 `battlefield_ids` 移除并 `version+1`，与既有的议题归一化同级联。
+6. **来源可追溯，不自动覆盖**：Mission Card 的飞书全文只作为导入输入，仓库、Card 与证据目录不保存全文副本；结构化个人任务字段与来源元数据可以持久化。来源以 `source_document_id` + `source_revision` 固定，外部文档更新不会自动覆盖已确认字段。10 月讨论候选从 9 月个人卡整理，使用只读 `mission-card-drafts.v1`，明确保留占位说明、原文档版本与文件 sha256；同文件重跑不改内容，变更文件拒绝覆盖，确认后也保留占位来源标记。
 
 ## 影响
 

@@ -9,7 +9,8 @@
     "test": "vitest run",
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "access:issue": "tsx scripts/issue-access.ts"
+    "access:issue": "tsx scripts/issue-access.ts",
+    "mission-cards:import": "tsx scripts/import-mission-card-drafts.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",
