@@ -1,0 +1,63 @@
+/* 战场二级页（clark `battlefield-detail.module.css` 的分节语言）：小灰标题 + 白底描边的块，发丝线分隔。
+   天枢没有健康判断与进度数字：「整体判断」位置放负责人反馈，进展只列有来源的内容。 */
+.detail{display:flex;flex-direction:column;gap:30px;min-width:0;padding-top:4px}
+.owner{margin:-14px 0 0;font-size:13px;line-height:1.6;color:#666d76}
+.lead{display:flex;flex-direction:column;gap:8px;margin:0;padding:16px 18px;border:1px solid #dfe4e9;border-radius:16px;background:linear-gradient(105deg,#f4f7fb,#fff 90%)}
+.lead>span{font-size:12px;color:#84848b;font-variant-numeric:tabular-nums}
+.lead>p{margin:0;font-size:17px;font-weight:500;line-height:1.6;color:#1d1d1f;max-width:720px;overflow-wrap:anywhere}
+.lead>p.muted{font-size:14px;font-weight:400}
+.muted{color:#8a8a90}
+.section{display:flex;flex-direction:column;gap:12px;min-width:0}
+.section>h3,.sectionHead>h3{display:flex;align-items:baseline;gap:8px;margin:0;font-size:13px;font-weight:500;color:#77777c}
+.section>h3 b,.sectionHead>h3 b{font-weight:500;color:#a1a1a6;font-variant-numeric:tabular-nums}
+.sectionHead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.box{background:#fff;border:1px solid #dfe4e9;border-radius:18px;padding:6px 16px;min-width:0}
+.empty{margin:0;padding:10px 4px;color:#888;font-size:13px;line-height:1.8}
+.note{margin:-4px 0 0;font-size:12px;line-height:1.6;color:#8a8a90}
+.summary{margin:0;padding:14px 18px;border:1px solid #dfe4e9;border-radius:16px;background:#fff;font-size:15px;line-height:1.6;color:#1d1d1f;font-variant-numeric:tabular-nums}
+
+.goals{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.goals>div{background:#fff;border:1px solid #dfe4e9;border-radius:18px;padding:18px 20px;min-width:0}
+.goals span{font-size:12px;color:#84848b;font-variant-numeric:tabular-nums}
+.goals p{margin:8px 0 0;font-size:15px;line-height:1.7;color:#1d1d1f;overflow-wrap:anywhere}
+.goals p.muted{font-size:14px;color:#8a8a90}
+
+.campaigns{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.campaigns li{display:flex;align-items:baseline;gap:10px;min-width:0;padding:16px 20px;background:#fff;border:1px solid #dfe4e9;border-radius:18px;font-size:15px;line-height:1.6;color:#1d1d1f}
+.campaigns b{flex:none;font-weight:600;color:#3c66bf;font-variant-numeric:tabular-nums}
+.campaigns span{min-width:0;overflow-wrap:anywhere}
+
+.groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:14px}
+.group{background:#fff;border:1px solid #dfe4e9;border-radius:18px;padding:14px 18px 10px;min-width:0}
+.group>h4{display:flex;align-items:baseline;gap:8px;margin:0 0 4px;font-size:15px;font-weight:600;color:#1d1d1f}
+.group>h4 b{font-size:12px;font-weight:500;color:#a1a1a6}
+.group ul{list-style:none;margin:0;padding:0}
+.group>ul>li+li{border-top:1px solid #1d1d1f0a}
+.mission{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;width:100%;padding:9px 0 4px;border:0;background:none;font:inherit;font-size:14px;line-height:1.5;color:#1d1d1f;text-align:left;cursor:pointer}
+.mission b{flex:none;font-weight:600;color:#3c66bf;font-variant-numeric:tabular-nums}
+.mission span{flex:1;min-width:0;overflow-wrap:anywhere}
+.mission small{flex-basis:100%;order:3;font-size:12px;color:#84848b}
+.mission>svg{flex:none;align-self:center;color:#8c98a6;opacity:.5}
+.mission:hover span{color:#2f6bb4}
+.mission:focus-visible{outline:2px solid #8cb1e8;outline-offset:2px;border-radius:4px}
+/* 原生按钮要压过外壳 .shell button:not([data-slot]){color:inherit}（0,2,1）。 */
+.group .mission{color:#1d1d1f}
+.milestones{margin:2px 0 10px;padding-left:18px;font-size:12px;line-height:1.7;color:#666d76}
+.milestones li{overflow-wrap:anywhere}
+
+.rows{list-style:none;margin:0;padding:0}
+.rows li{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 4px;font-size:14px;line-height:1.6;color:#1d1d1f}
+.rows li+li{border-top:1px solid #1d1d1f0a}
+.rows span{min-width:0;overflow-wrap:anywhere}
+.rows small{flex:none;font-size:12px;color:#84848b;font-variant-numeric:tabular-nums}
+
+.feedback{list-style:none;margin:0;padding:0}
+.feedback li{display:grid;grid-template-columns:86px minmax(0,1fr);column-gap:16px;row-gap:2px;padding:12px 4px}
+.feedback li+li{border-top:1px solid #1d1d1f0a}
+.feedback li>span{grid-row:1/3;font-size:12px;line-height:1.7;color:#8a8a8f;font-variant-numeric:tabular-nums}
+.feedback li>p{margin:0;font-size:14px;line-height:1.7;color:#1d1d1f;overflow-wrap:anywhere}
+.feedback li>small{font-size:12px;color:#a1a1a6;overflow-wrap:anywhere}
+
+@media(max-width:1250px){.goals,.campaigns{grid-template-columns:1fr}}
+@media(max-width:690px){.detail{gap:24px}.lead{padding:14px 15px}.lead>p{font-size:16px}.box{padding:4px 12px}.feedback li{grid-template-columns:1fr}.feedback li>span{grid-row:auto}}
+@media(prefers-contrast:more){.lead,.box,.goals>div,.campaigns li,.group,.summary{border-color:#777}.section>h3,.sectionHead>h3,.note,.owner,.goals span,.mission small{color:#333}.lead{background:#fff}}

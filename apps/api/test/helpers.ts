@@ -1,8 +1,9 @@
-import { randomUUID, scryptSync } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import type { TPreflightCandidate, TWebSearchInput, TWebSearchResponse, TWebSearchResult } from "@warmap/contracts";
 import { migrate } from "../src/migrate.js";
+import { hashSecret } from "../src/session.js";
 import { buildApp, type AppEnv } from "../src/app.js";
 import type { FastifyInstance } from "fastify";
 import type { ConversationRuntime } from "../src/conversations.js";
@@ -80,15 +81,11 @@ export async function createTestDb(fn: (t: TestDb) => Promise<void>): Promise<vo
   }
 }
 
-export const scryptHash = (password: string, salt = "testsalt") =>
-  `scrypt:${salt}:${scryptSync(password, salt, 32).toString("hex")}`;
-
 const FIXTURE_PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people.json", import.meta.url));
 const FIXTURE_MEMORY_DIR = fileURLToPath(new URL("./fixtures/company-memory", import.meta.url));
 
 export const testEnv: AppEnv = {
   sessionSecret: "test-session-secret",
-  ceoPasswordHash: scryptHash("ceo-pass-2024"),
   sessionMaxAgeSeconds: 60 * 60 * 8,
   publicOrigin: "https://warmap.local",
   driServiceToken: "dri-token-test",
@@ -103,7 +100,31 @@ export const testEnv: AppEnv = {
   buildSha: "test-sha",
 };
 
-export const TEST_PASSWORD = "ceo-pass-2024";
+/** fixture seed：person-fixture-001 是 CEO，002 是成员。测试凭据已跳过首次改口令。 */
+export const TEST_CEO = { personId: "person-fixture-001", loginId: "ceshij", passcode: "2468" } as const;
+export const TEST_MEMBER = { personId: "person-fixture-002", loginId: "ceshiy", passcode: "1357" } as const;
+export const TEST_LOGIN = { loginId: TEST_CEO.loginId, passcode: TEST_CEO.passcode };
+
+/** 给一次性测试库写入两份测试凭据；已存在就不动（不让已签发的会话失效）。 */
+export async function seedTestAccess(q: { query: (text: string, params?: unknown[]) => Promise<unknown> }): Promise<void> {
+  for (const who of [TEST_CEO, TEST_MEMBER]) {
+    await q.query(
+      "INSERT INTO member_access (person_id, login_id, passcode_hash, must_change) VALUES ($1, $2, $3, FALSE) ON CONFLICT (person_id) DO NOTHING",
+      [who.personId, who.loginId, hashSecret(who.passcode)],
+    );
+  }
+}
+
+async function loginAs(app: FastifyInstance, who: { loginId: string; passcode: string }): Promise<string> {
+  const login = await app.inject({
+    method: "POST",
+    url: "/api/auth/login",
+    headers: { origin: testEnv.publicOrigin },
+    payload: { loginId: who.loginId, passcode: who.passcode },
+  });
+  if (login.statusCode !== 200) throw new Error(`login failed: ${login.body}`);
+  return (login.headers["set-cookie"] as string).split(";")[0];
+}
 
 export function createFakeWebSearchAdapter(
   fixtures: Record<string, TWebSearchResponse | TWebSearchResult[]>,
@@ -126,6 +147,7 @@ export type TestApp = {
   publicOrigin: string;
   env: AppEnv;
   loginCookie: () => Promise<string>;
+  memberCookie: () => Promise<string>;
   fixtureRow: () => Promise<Record<string, unknown>>;
   conversationState: (scope: string) => Promise<{
     runtimeEntries: unknown[];
@@ -152,7 +174,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "extraOrigins">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
@@ -173,6 +195,7 @@ export async function createTestApp(
   }));
   const client = await pool.connect();
   await migrate(client);
+  await seedTestAccess(client);
   client.release();
   const env = { ...testEnv, ...seedOverrides };
   const { monthlyDraftAgent, monthlyNow, ...appRuntimeOptions } = runtimeOptions;
@@ -186,16 +209,8 @@ export async function createTestApp(
     monthlyPlans,
     publicOrigin: testEnv.publicOrigin,
     env: testEnv,
-    loginCookie: async () => {
-      const login = await app.inject({
-        method: "POST",
-        url: "/api/auth/login",
-        headers: { origin: testEnv.publicOrigin },
-        payload: { password: TEST_PASSWORD },
-      });
-      if (login.statusCode !== 200) throw new Error(`login failed: ${login.body}`);
-      return (login.headers["set-cookie"] as string).split(";")[0];
-    },
+    loginCookie: () => loginAs(app, TEST_CEO),
+    memberCookie: () => loginAs(app, TEST_MEMBER),
     /** 真实 DRI 导入的 pending Issue：目标路由只消费持久对象，测试不再依赖 fixture 表。 */
     createIssue: async (overrides: Record<string, unknown> = {}) => {
       const payload = {

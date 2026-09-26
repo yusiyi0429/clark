@@ -13,8 +13,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** CEO 登录，签发 HttpOnly session cookie */
+        /** 登录 ID + 4 位口令登录；仍是初始码时不签发会话，返回 mustChangePasscode */
         post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/passcode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 校验当前口令后换成新的 4 位口令，并签发会话 */
+        post: operations["changePasscode"];
         delete?: never;
         options?: never;
         head?: never;
@@ -45,7 +62,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 查询当前登录状态 */
+        /** 查询当前登录状态与身份 */
         get: operations["getSession"];
         put?: never;
         post?: never;
@@ -200,6 +217,23 @@ export interface paths {
         };
         /** 战场 Card：正面确认目标，背面按 battlefieldId 投影普通待办与最新 feedback */
         get: operations["listBattlefieldCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/battlefields/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 单个战场 Card（二级页：待决策 / 进展），与列表同一份投影 */
+        get: operations["getBattlefieldCard"];
         put?: never;
         post?: never;
         delete?: never;
@@ -998,10 +1032,24 @@ export interface components {
             };
         };
         LoginRequest: {
-            password: string;
+            loginId: string;
+            passcode: string;
+        };
+        LoginResponse: {
+            authenticated: boolean;
+            mustChangePasscode: boolean;
+            role?: "ceo" | "member";
+        };
+        ChangePasscodeRequest: {
+            loginId: string;
+            passcode: string;
+            newPasscode: string;
         };
         SessionResponse: {
             authenticated: boolean;
+            personId?: string;
+            displayName?: string;
+            role?: "ceo" | "member";
         };
         PeopleDirectoryResponse: {
             people: {
@@ -1701,6 +1749,12 @@ export interface components {
                 sourceRef: string;
                 evidenceRef: string | null;
             } | null;
+            feedback: {
+                text: string;
+                observedAt: string;
+                sourceRef: string;
+                evidenceRef: string | null;
+            }[];
         };
         MonthlyDraftCandidate: {
             companyOutcome: string;
@@ -1893,17 +1947,113 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已登录 */
+            /** @description 已登录，或需要先设置口令 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionResponse"];
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    changePasscode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasscodeRequest"];
+            };
+        };
+        responses: {
+            /** @description 口令已更新并登录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            423: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2238,6 +2388,46 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getBattlefieldCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Battlefield Card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

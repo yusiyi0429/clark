@@ -16,7 +16,7 @@ export type FingerprintedRadarSource = TRadarSourceItem & { sourceFingerprint: s
 
 export type RadarWebAdapter = {
   configured: boolean;
-  search(input: { query: string; domains?: string[] }, signal: AbortSignal): Promise<TRadarSourceItem[]>;
+  search(input: { query: string; domains?: string[]; lookbackHours: number }, signal: AbortSignal): Promise<TRadarSourceItem[]>;
 };
 
 export type RadarWechatAdapter = {
@@ -52,9 +52,13 @@ type RadarConfigRow = {
 const LOCK_KEY = "radar:default";
 /** 单批送入 assess 的来源上限与监测方向上限（doc 03 §6/§11 固定上限，避免无界 prompt）。 */
 const ASSESS_BATCH_SIZE = 5;
+/** assess 批次并发数：串行时单批 9–23 秒，180 秒 scan timeout 内只能跑完约 9 批。 */
+const ASSESS_CONCURRENCY = 3;
 const MAX_ANCHORS = 20;
 /** outlets 是整份 feed，不按 anchor 检索；总量必须受限，保证 180 秒 scan timeout 真正可达。 */
 const MAX_OUTLET_ITEMS = 20;
+/** 网页检索按 anchor 相乘：每个监测方向只取时间窗内最新几条，控制研判量与自动升级的 Issue 量。 */
+const MAX_WEB_ITEMS_PER_ANCHOR = 3;
 
 function companyDay(now: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -152,6 +156,8 @@ export function createRadarService({
         warnings.push(`Radar 监测方向超过上限 ${MAX_ANCHORS}，本次只处理前 ${monitoredAnchors.length} 个`);
       }
       const collected: TRadarSourceItem[] = [];
+      // 网页结果归属的监测方向：时间窗过滤与去重之后按方向截取最新条目
+      const webAnchorOf = new Map<TRadarSourceItem, string>();
       let attempted = 0;
       let succeeded = 0;
       const abort = new AbortController();
@@ -162,7 +168,12 @@ export function createRadarService({
         for (const anchor of monitoredAnchors) {
           attempted += 1;
           try {
-            collected.push(...await web.search({ query: anchor.query, domains: site.domains }, abort.signal));
+            const found = await web.search(
+              { query: anchor.query, domains: site.domains, lookbackHours: config.lookback_hours },
+              abort.signal,
+            );
+            for (const item of found) webAnchorOf.set(item, anchor.id);
+            collected.push(...found);
             succeeded += 1;
           } catch (cause) {
             warnings.push(`Web source ${site.name} failed: ${(cause as Error).message || String(cause)}`);
@@ -221,6 +232,7 @@ export function createRadarService({
 
       const earliest = startedAt.getTime() - config.lookback_hours * 60 * 60 * 1000;
       const unique = new Map<string, FingerprintedRadarSource>();
+      const webAnchorByFingerprint = new Map<string, string | undefined>();
       for (const source of collected) {
         const publishedAt = Date.parse(source.publishedAt);
         if (!Number.isFinite(publishedAt) || publishedAt < earliest || publishedAt > startedAt.getTime()) {
@@ -231,10 +243,28 @@ export function createRadarService({
           const canonicalUrl = canonicalizeRadarUrl(source.url);
           const fingerprint = sourceFingerprint(canonicalUrl);
           unique.set(fingerprint, { ...source, url: canonicalUrl, sourceFingerprint: fingerprint });
+          webAnchorByFingerprint.set(fingerprint, webAnchorOf.get(source));
         } catch {
           warnings.push(`来源 URL 无效: ${source.title}`);
         }
       }
+      // 每个监测方向的网页结果只留最新几条（无发布时间的条目已被时间窗剔除）
+      const webByAnchor = new Map<string, FingerprintedRadarSource[]>();
+      for (const [fingerprint, anchorId] of webAnchorByFingerprint) {
+        if (!anchorId) continue;
+        const items = webByAnchor.get(anchorId) ?? [];
+        items.push(unique.get(fingerprint)!);
+        webByAnchor.set(anchorId, items);
+      }
+      let skippedWeb = 0;
+      for (const items of webByAnchor.values()) {
+        items.sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt));
+        for (const item of items.slice(MAX_WEB_ITEMS_PER_ANCHOR)) {
+          unique.delete(item.sourceFingerprint);
+          skippedWeb += 1;
+        }
+      }
+      if (skippedWeb > 0) warnings.push(`网页搜索每个监测方向只取最新 ${MAX_WEB_ITEMS_PER_ANCHOR} 条，本轮略过 ${skippedWeb} 条`);
 
       let createdSignals = 0;
       let assessFailed = false;
@@ -247,17 +277,36 @@ export function createRadarService({
         }
         const candidates: TRadarCandidateSubmission["candidates"] = [];
         let failedBatches = 0;
-        for (const batch of batches) {
+        let completedBatches = 0;
+        let interruptedSources = 0;
+        let nextBatch = 0;
+        const assessWorker = async () => {
           // 某个 candidate 运行没有及时响应 abort 时，绝不能继续启动后续 batch。
-          // 否则 180 秒 timeout 只会成为提示，扫描仍可能串行跑数分钟。
-          if (abort.signal.aborted) throw abort.signal.reason ?? new Error(`Radar scan exceeded ${scanTimeoutMs}ms`);
-          try {
-            candidates.push(...(await assessor.assess({ anchors: monitoredAnchors, sources: batch }, abort.signal)).candidates);
-          } catch (cause) {
-            // 批失败：该批不保存候选，不影响其他批
-            failedBatches += 1;
-            warnings.push(`Radar assess 批失败: ${(cause as Error).message || String(cause)}`);
+          // 否则 180 秒 timeout 只会成为提示，扫描仍可能跑数分钟。
+          while (nextBatch < batches.length && !abort.signal.aborted) {
+            const batch = batches[nextBatch];
+            nextBatch += 1;
+            try {
+              candidates.push(...(await assessor.assess({ anchors: monitoredAnchors, sources: batch }, abort.signal)).candidates);
+              completedBatches += 1;
+            } catch (cause) {
+              if (abort.signal.aborted) {
+                // 超时中断：计入未研判，不算批失败
+                interruptedSources += batch.length;
+              } else {
+                // 批失败：该批不保存候选，不影响其他批
+                failedBatches += 1;
+                warnings.push(`Radar assess 批失败: ${(cause as Error).message || String(cause)}`);
+              }
+            }
           }
+        };
+        await Promise.all(Array.from({ length: ASSESS_CONCURRENCY }, assessWorker));
+        const unassessed = interruptedSources + batches.slice(nextBatch).flat().length;
+        if (unassessed > 0) {
+          // 超时：已完成批次的候选照常校验落库；一批都没完成时整次扫描仍标为 failed
+          if (completedBatches === 0) throw abort.signal.reason ?? new Error(`Radar scan exceeded ${scanTimeoutMs}ms`);
+          warnings.push(`本轮有 ${unassessed} 条候选未研判（超出 ${scanTimeoutMs / 1000} 秒上限）`);
         }
         assessFailed = failedBatches === batches.length;
         for (const candidate of candidates) {

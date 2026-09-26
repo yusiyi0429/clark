@@ -368,22 +368,21 @@ function belongsTo(feedback: TMonthlyPlanFeedback, battlefieldId: string, todoId
   return feedback.todoId !== undefined && todoIds.has(feedback.todoId);
 }
 
-function latestFeedback(
+/** 归属本战场的反馈，按 observedAt 倒序；第一条就是卡片背面的「最新反馈」。 */
+function battlefieldFeedback(
   feedback: TMonthlyPlanFeedback[],
   battlefieldId: string,
   todoIds: Set<string>,
-): TBattlefieldCardPayload["latestFeedback"] {
-  const matches = feedback
+): TBattlefieldCardPayload["feedback"] {
+  return feedback
     .filter((candidate) => belongsTo(candidate, battlefieldId, todoIds))
-    .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt));
-  const latest = matches[0];
-  if (!latest) return null;
-  return {
-    text: latest.text,
-    observedAt: latest.observedAt,
-    sourceRef: latest.sourceRef,
-    evidenceRef: latest.evidenceRef ?? null,
-  };
+    .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))
+    .map((item) => ({
+      text: item.text,
+      observedAt: item.observedAt,
+      sourceRef: item.sourceRef,
+      evidenceRef: item.evidenceRef ?? null,
+    }));
 }
 
 /**
@@ -422,6 +421,7 @@ export async function listBattlefieldCards(q: Query, period: string, ownerNames:
       };
     });
     const target = plan?.battlefields.find((candidate) => candidate.battlefieldId === battlefield.id)?.outcome ?? null;
+    const feedback = battlefieldFeedback(plan?.negotiation.feedback ?? [], battlefield.id, todoIds);
     const payload: TBattlefieldCardPayload = {
       battlefieldId: battlefield.id,
       code: battlefield.code,
@@ -442,7 +442,8 @@ export async function listBattlefieldCards(q: Query, period: string, ownerNames:
           location: issue.location as TBattlefieldCardPayload["pendingIssues"][number]["location"],
         })),
       todos,
-      latestFeedback: latestFeedback(plan?.negotiation.feedback ?? [], battlefield.id, todoIds),
+      latestFeedback: feedback[0] ?? null,
+      feedback,
     };
     return {
       schemaVersion: 1,
@@ -454,8 +455,8 @@ export async function listBattlefieldCards(q: Query, period: string, ownerNames:
       badge: "Battlefield",
       urgency: "normal",
       payload,
-      // 战场没有独立页面：正面就在首页，导航回首页避免死链。
-      navigation: [{ href: "/", label: "Battlefield" }],
+      // 战场二级页：待决策 / 进展两个页签（id 可能是中文，按路径段编码）。
+      navigation: [{ href: `/battlefields/${encodeURIComponent(battlefield.id)}`, label: "Battlefield" }],
       actions: [],
     };
   });

@@ -58,12 +58,13 @@ export type RadarPayload = {
   scheduledCompanyDay: string | null;
   unreadCount: number;
   lastScheduledAt: string | null;
-  lastRun: { trigger: string; status: string; companyDay: string; warnings: string[] } | null;
+  lastRun: { trigger: string; status: string; companyDay: string; warnings: string[]; startedAt?: string; completedAt?: string } | null;
   sources: Record<string, { configured: boolean; sourceCount: number; message: string }>;
 };
 
 export type SignalPayload = {
-  source: { type: string; title: string; url: string; publishedAt: string; excerpt: string; images?: { src: string; after: number }[] };
+  /** fullText：原文是逐篇抓取的发布方文章页（量子位），而非检索/feed 摘录。 */
+  source: { type: string; title: string; url: string; publishedAt: string; excerpt: string; images?: { src: string; after: number }[]; fullText?: boolean };
   assessment: {
     anchorId: string;
     location: { type: string; id?: string };

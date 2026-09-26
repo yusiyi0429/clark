@@ -15,14 +15,13 @@
   color:var(--heavy-ink);animation:enter .32s cubic-bezier(.2,.8,.2,1) both;
 }
 .preflight{--accent:69 91 142}.monthly{--accent:150 103 23}
-.header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:28px 40px 20px;flex-shrink:0;border-bottom:1px solid #e6e9ed;background:#f7f8fac9;backdrop-filter:blur(22px) saturate(1.08);box-shadow:inset 0 1px #ffffffd9}
-.identity{display:flex;align-items:center;gap:14px;min-width:0}
-.marker{width:8px;height:8px;border-radius:50%;background:rgb(var(--accent)/.85);box-shadow:0 0 0 4px rgb(var(--accent)/.065);flex-shrink:0}
-.workspace .eyebrow{display:block;font-size:12px;font-weight:400;letter-spacing:.035em;color:#5a5a60;margin-bottom:6px}
-.workspace .header h1{font-size:24px;line-height:1.4;letter-spacing:-.025em;font-weight:600;margin:0}
-.workspace .close{height:38px;width:38px;border-radius:50%;background:#fff;border:1px solid #e1e4e9;display:grid;place-items:center;color:#6e6e73;flex-shrink:0;transition:background .14s,box-shadow .14s}
-.workspace .close:hover{background:#f1f3f6;box-shadow:0 1px 2px #0000000a}
-.workspace .close:active{background:#e6e9ed;box-shadow:inset 0 1px 2px #00000012}
+/* 月度工作区作为面板子节点：页头固定、正文自己滚动、签发条贴底（clark 展开页的层次）。 */
+.workspace{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;border-radius:inherit;background:#f7f7f8;color:#1d1d1f}
+/* 页头：clark 月度协商的暖灰渐变（heavy/monthly：115deg #efeeea → #f6f5f2），ContextMark monthly。 */
+.header{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:100px;box-sizing:border-box;padding:25px 26px;flex-shrink:0;border-bottom:1px solid #e7e4dc;background:linear-gradient(115deg,#efeeea,#f6f5f2);backdrop-filter:blur(30px) saturate(1.28);-webkit-backdrop-filter:blur(30px) saturate(1.28);box-shadow:inset 0 1px #fff}
+.identity{display:flex;align-items:center;gap:13px;min-width:0}
+.workspace .eyebrow{display:block;font-size:11px;font-weight:400;color:#77777d;margin-bottom:5px}
+.workspace .header h1{font-size:21px;line-height:1.45;letter-spacing:-.025em;font-weight:600;margin:0}
 .body{flex:1;min-height:0;display:block;padding-bottom:0}
 /* pen 月度计划：结果 Column(fill) + 待办反馈 Column(600)，gap 24，正文整块滚动。 */
 .materials{height:100%;overflow:auto;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) 600px;align-content:start;gap:24px;padding:20px 40px 90px;scrollbar-width:thin;scrollbar-color:#bdc2cb transparent;overscroll-behavior:contain;box-sizing:border-box}
@@ -60,7 +59,7 @@
 .workspace .reviewButton[aria-pressed=true]{background:#eaf4ed;color:#366747;border-color:#c6ddcd;box-shadow:none}
 .workspace .reviewButton[aria-pressed=true]:hover{background:#dfeee4}
 .workspace .notes label{display:block;font-size:var(--type-meta,12px);font-weight:600;color:#525b67;margin-bottom:8px}
-.commitArea{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;padding:0 40px;flex:none}
+.commitArea{display:flex;align-items:center;justify-content:space-between;gap:12px 24px;flex-wrap:wrap;padding:14px 40px 16px;border-top:1px solid #e6e9ed;background:#f7f7f8e8;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);flex:none}
 .commitInfo{display:flex;flex-direction:column;gap:4px}
 .workspace .commitInfo span{font-size:12px;color:#5a5a60}
 .workspace .commitInfo small{font-size:11px;color:#6e6e73}
@@ -73,7 +72,7 @@
 .workspace .submit:hover:not(:disabled){background:#0069db;border-color:#0069db}
 .workspace .submit:active:not(:disabled){background:#0053b3;border-color:#0053b3;box-shadow:inset 0 1px 3px #00316e38}
 /* pen 签发回执：tinted 卡 + 签发 meta，替代原先的纯文本一行。 */
-.workspace .receipt{display:flex;flex-direction:column;gap:3px;margin:0 40px 20px;padding:14px 18px;border:1px solid #cbe5d2;border-radius:12px;background:#edf6ef;font-size:13px;font-weight:500;color:#2f7a44;flex:none}
+.workspace .receipt{display:flex;flex-direction:column;gap:3px;margin:12px 40px 16px;padding:14px 18px;border:1px solid #cbe5d2;border-radius:12px;background:#edf6ef;font-size:13px;font-weight:500;color:#2f7a44;flex:none}
 .workspace .receipt small{font-size:12px;font-weight:400;color:#2f7a44}
 .conversation{border-left:1px solid var(--heavy-separator);background:#f6f7f9;min-width:0;min-height:0;display:flex;flex-direction:column;padding:28px 20px 128px}
 .workspace .conversationHeading h2{font-size:var(--type-meta,12px);font-weight:600}
@@ -95,12 +94,12 @@
   .header{padding:20px 24px 16px}.materials{padding:24px 20px 64px}
 }
 @media(max-width:690px){
-  .header{padding:20px 16px 16px}.body{display:block;padding-bottom:0;position:relative}
+  .header{min-height:0;padding:16px}.body{display:block;padding-bottom:0;position:relative}
   .materials{padding:24px 16px 64px}
-  .commitArea{gap:12px;padding:0 16px}.workspace .receipt{margin:0 16px 20px}.workspace .reviewButton{margin-left:auto}.workspace .message{max-width:94%}
+  .commitArea{gap:10px;padding:12px 16px 14px}.workspace .receipt{margin:0 16px 20px}.workspace .reviewButton{margin-left:auto}.workspace .message{max-width:94%}
 }
 @media(pointer:coarse){
-  .workspace .close{width:44px;height:44px}.workspace .reviewButton,.workspace .submit,.workspace .save,.workspace .mobileTabs button{min-height:44px}
+  .workspace .reviewButton,.workspace .submit,.workspace .save,.workspace .mobileTabs button{min-height:44px}
   .workspace .edit summary{min-height:44px;padding-top:12px}
 }
 @keyframes enter{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
@@ -115,7 +114,7 @@
 @media(forced-colors:active){
   .workspace,.header,.materials{background:Canvas;color:CanvasText;backdrop-filter:none;box-shadow:none}
   .workspace button,.workspace textarea,.workspace .message{border:1px solid ButtonText;box-shadow:none}
-  .workspace .marker{background:Highlight;box-shadow:none}.workspace .submit{background:Highlight;color:HighlightText}
+  .workspace .submit{background:Highlight;color:HighlightText}
 }
 
 .header>[data-reference-id]{margin-left:auto}
@@ -130,3 +129,11 @@
 .workspace .check>span{display:flex;align-items:center;gap:8px;font-size:12px;color:#5a5a60}
 .workspace .check input[type="checkbox"]{flex:none;width:14px;height:14px;margin:0;border-radius:3px;accent-color:#007aff}
 .workspace .edit{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:flex-end}
+.workspace .edit .check{flex:1 1 220px;min-width:0}
+.workspace .edit .check>span{line-height:1.5}
+.workspace .commitInfo{flex:1 1 280px;min-width:0;display:flex;flex-direction:column;gap:2px}
+/* ≤759px 对话收成右下角按钮 + 底部输入条：签发条跟着正文滚动，底部留出输入条与对话按钮的高度。 */
+@media(max-width:759px){.workspace{overflow-y:auto;overscroll-behavior:contain}.body{flex:none}.materials{height:auto;overflow:visible;padding-bottom:16px}.commitArea{border-top:0;background:none;backdrop-filter:none;-webkit-backdrop-filter:none;padding-bottom:calc(150px + env(safe-area-inset-bottom))}}
+.workspace .notes select{display:block;width:100%;box-sizing:border-box;border:1px solid #e1e4e9;border-radius:10px;background:#f5f7fa;font:inherit;font-size:12px;line-height:1.7;padding:7px 10px;color:#5a5a60}
+.workspace .notes select:not(:disabled){border-color:#d9dde5;background:#fff;color:#1d1d1f}
+.workspace .notes select:focus{outline:none;border-color:#3285de;box-shadow:0 0 0 3px #007aff20}

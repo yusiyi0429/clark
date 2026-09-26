@@ -1,0 +1,49 @@
+/* 公司能力详情（clark `capability-issues.module.css` 的详情部分）：与战场详情同一套分节语言；
+   能力域是一张列表，一行一个域，发丝线分隔。左列认人认域，右边两栏并排读六个月与本月，下面一整行是名下 Mission。 */
+.detail{display:flex;flex-direction:column;gap:30px;min-width:0;padding-top:4px}
+.section{display:flex;flex-direction:column;gap:12px;min-width:0}
+.section>h3{display:flex;align-items:baseline;gap:8px;margin:0;font-size:13px;font-weight:500;color:#77777c}
+.section>h3 b{font-weight:500;color:#a1a1a6;font-variant-numeric:tabular-nums}
+.empty,.missing{margin:0;color:#77777c;font-size:12px;line-height:1.6}
+
+.issueList{background:#fff;border:1px solid #dfe4e9;border-radius:18px;padding:6px 16px}
+.issueList>.empty{padding:12px 4px}
+.issueGroup{padding:10px 0 6px}
+.issueGroup+.issueGroup{border-top:1px solid #1d1d1f0a}
+.issueGroup>h4{display:flex;align-items:baseline;gap:6px;margin:0 0 2px;font-size:12px;font-weight:500;line-height:1.6;color:#73777e}
+
+.domains{list-style:none;margin:0;padding:0;background:#fff;border:1px solid #dfe4e9;border-radius:18px;overflow:hidden}
+.domain{display:grid;grid-template-columns:minmax(168px,.72fr) minmax(0,1fr) minmax(0,1fr);column-gap:28px;row-gap:14px;padding:20px 24px}
+.domain+.domain{border-top:1px solid #1d1d1f0a}
+.domainHead{display:flex;flex-direction:column;gap:6px;min-width:0}
+.domainHead h4{display:flex;align-items:baseline;gap:9px;margin:0;font-size:16px;font-weight:600;line-height:1.45;letter-spacing:-.01em;color:#1d1d1f;overflow-wrap:anywhere}
+.domainHead h4 span{flex:none;font-size:13px;font-weight:500;color:#9aa1aa;font-variant-numeric:tabular-nums}
+.owner{margin:0;font-size:13px;line-height:1.6;color:#666d76}
+.supports{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.supports>span{flex:none;font-size:12px;line-height:1.6;color:#84848b}
+.supports ul{display:flex;flex-direction:column;gap:3px;margin:0;padding:0;list-style:none}
+.supports li{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:13px;line-height:1.6;color:#3d4a5c;overflow-wrap:anywhere}
+.supports b{flex:none;font-weight:600;color:#3c66bf;font-variant-numeric:tabular-nums}
+.goal{min-width:0}
+.goal>span,.missions>span{display:block;font-size:12px;line-height:1.6;color:#84848b}
+.goal>p{margin:5px 0 0;font-size:15px;line-height:1.75;color:#1d1d1f;overflow-wrap:anywhere}
+.goal>p.missing{font-size:13px;color:#8a8a90}
+
+/* 名下 Mission：与战场卡「Missions · N」展开列表同一写法，点进 Mission 详情。 */
+.missions{grid-column:1/-1;min-width:0;padding-top:12px;border-top:1px dashed #1d1d1f12}
+.missions>.missing{margin-top:4px}
+.missions ul{list-style:none;margin:4px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));column-gap:24px}
+.missions button{display:flex;align-items:center;gap:8px;width:100%;padding:6px 0;border:0;background:none;font:inherit;font-size:13px;line-height:1.5;color:#3d4a5c;text-align:left;cursor:pointer}
+.missions button:hover{color:#2f6bb4}
+.missions button:focus-visible{outline:2px solid #8cb1e8;outline-offset:2px;border-radius:4px}
+.missions button span{flex:1;min-width:0;overflow-wrap:anywhere}
+.missions button b{flex:none;font-weight:600;color:#3c66bf;font-variant-numeric:tabular-nums}
+.missions button small{flex:none;font-size:12px;color:#84848b}
+.missions button>svg{flex:none;color:#8c98a6}
+/* 原生按钮要压过外壳 .shell button:not([data-slot]){color:inherit}（0,2,1）。 */
+.domains .missions button{color:#3d4a5c}
+.domains .missions button:hover{color:#2f6bb4}
+
+@media(max-width:1250px){.domain{grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:22px}.domainHead{grid-column:1/-1}.supports{flex-direction:row;align-items:baseline;gap:10px}.supports ul{flex-direction:row;flex-wrap:wrap;gap:3px 18px}}
+@media(max-width:690px){.domain{grid-template-columns:minmax(0,1fr);padding:16px}.detail{gap:24px}.issueList{padding:4px 12px}}
+@media(prefers-contrast:more){.issueList,.domains{border-color:#777}.section>h3,.owner,.goal>span,.missions>span,.supports>span,.empty,.missing{color:#333}.supports li,.missions button{color:#1d1d1f}.supports b,.missions button b{color:#1f3f8a}}

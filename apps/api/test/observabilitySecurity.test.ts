@@ -7,7 +7,7 @@ import { SESSION_COOKIE, createSessionToken } from "../src/session.js";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/migrate.js";
 import type { RadarService } from "../src/radar.js";
-import { createTestApp, createTestDb, testEnv } from "./helpers.js";
+import { TEST_CEO, createTestApp, createTestDb, testEnv } from "./helpers.js";
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -48,7 +48,7 @@ describe("security boundaries not covered elsewhere", () => {
   it("rejects an expired or tampered CEO session cookie", async () => {
     const t = await createTestApp({}, fakeRuntime());
     try {
-      const expired = createSessionToken(testEnv.sessionSecret, -1);
+      const expired = createSessionToken(testEnv.sessionSecret, -1, { pid: TEST_CEO.personId, v: 1 });
       const expiredRes = await t.app.inject({
         method: "GET",
         url: "/api/cards/home",
@@ -57,7 +57,7 @@ describe("security boundaries not covered elsewhere", () => {
       expect(expiredRes.statusCode).toBe(401);
       expect(expiredRes.json().code).toBe("UNAUTHORIZED");
 
-      const valid = createSessionToken(testEnv.sessionSecret, 3600);
+      const valid = createSessionToken(testEnv.sessionSecret, 3600, { pid: TEST_CEO.personId, v: 1 });
       const tampered = `${valid.slice(0, -2)}xx`;
       const tamperedRes = await t.app.inject({
         method: "GET",
@@ -105,7 +105,7 @@ describe("structured logs and redaction", () => {
         method: "POST",
         url: "/api/auth/login",
         headers: { origin: t.publicOrigin },
-        payload: { password: "wrong" },
+        payload: { loginId: TEST_CEO.loginId, passcode: "0000" },
       });
       expect(rejected.statusCode).toBe(401);
       const issue = await t.createIssue();

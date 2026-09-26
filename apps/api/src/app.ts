@@ -25,7 +25,9 @@ import { ensureMaterialStorage } from "./materialParser.js";
 import {
   createFail,
   createInvalidInput,
+  createReadSession,
   createRequireCEO,
+  createRequirePerson,
   createRequireServiceToken,
   createRespond,
   createRespondTranscriptImport,
@@ -53,9 +55,10 @@ const DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR = "/tmp/warmap-conversation-at
 
 export type AppEnv = {
   sessionSecret: string;
-  ceoPasswordHash: string;
   sessionMaxAgeSeconds: number;
   publicOrigin: string;
+  /** 本地开发额外允许的浏览器来源（如 127.0.0.1、局域网 IP）；线上不配，只认 publicOrigin。 */
+  extraOrigins?: string[];
   driServiceToken: string;
   mcpServiceToken: string;
   buildSha: string;
@@ -192,6 +195,7 @@ export async function buildApp({
   });
 
   // ponytail: 登录限速用进程内计数器，单进程 MVP 足够；多实例部署时换共享存储
+  app.decorateRequest("person", null);
   await app.register(rateLimit, { global: false });
   // Transcript 是唯一上传格式；大小上限与 service API 共用（各上传路由用 per-request limits 收紧）
   await app.register(multipart, { limits: { fileSize: MAX_TRANSCRIPT_BYTES, files: 1, fields: 5 } });
@@ -201,7 +205,9 @@ export async function buildApp({
   await ensureMaterialStorage(conversationAttachmentStorageDir);
 
   const fail = createFail(requestContext);
-  const requireCEO = createRequireCEO(env, fail);
+  const readSession = createReadSession(env, q, companyMemory);
+  const requirePerson = createRequirePerson(env, readSession, fail);
+  const requireCEO = createRequireCEO(requirePerson, fail);
   const requireServiceToken = createRequireServiceToken(fail);
   const invalidInput = createInvalidInput(fail);
   const respond = createRespond(fail);
@@ -252,6 +258,8 @@ export async function buildApp({
     requestContext,
     fail,
     requireCEO,
+    requirePerson,
+    readSession,
     requireServiceToken,
     invalidInput,
     respond,

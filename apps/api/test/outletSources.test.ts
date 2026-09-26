@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { RadarSources, RADAR_OUTLETS, type TRadarSourceItem } from "@warmap/contracts";
@@ -199,12 +200,55 @@ describe("发布方级来源 outlets", () => {
   });
 
   it("extractArticleContent：段落保留、script 剔除、只取 https 图、10k 截断", () => {
-    const html = `<div class="article"><p>段落一</p><img src="https://cdn.example/a.jpg"><script>alert(1)</script><p>段落二</p><img src="http://bad.example/b.jpg">${"长".repeat(20_000)}</div>`;
+    // 截断之后的段落连同其配图一起丢弃
+    const html = `<div class="article"><p>段落一</p><img src="https://cdn.example/a.jpg"><script>alert(1)</script><p>段落二</p><img src="http://bad.example/b.jpg">${"长".repeat(20_000)}<p>尾段</p><img src="https://cdn.example/c.jpg"></div>`;
     const content = extractArticleContent(html);
     expect(content.text).not.toContain("alert");
     expect(content.text.startsWith("段落一\n\n段落二")).toBe(true);
     expect(content.text.length).toBeLessThanOrEqual(10_000);
     expect(content.images).toEqual([{ src: "https://cdn.example/a.jpg", after: 0 }]);
+  });
+
+  it("extractArticleContent：先剥标签再完整解码实体（命名、十进制、十六进制），不二次解码", () => {
+    const html = `<div class="article"><p>&copy; 2026 &#8220;引号&#8221; &#x2019; &mdash; &hellip; &lt;b&gt;不是标签&lt;/b&gt; &amp;lt;p&amp;gt;</p></div>`;
+    expect(extractArticleContent(html).text).toBe("© 2026 “引号” ’ — … <b>不是标签</b> &lt;p&gt;");
+  });
+});
+
+describe("量子位文章页真实样张", () => {
+  // 真实页面裁剪而来：正文容器原样保留，容器外有作者其他文章、分享框、相关阅读、热门文章、注释掉的搜索框和页脚
+  const page = readFileSync(fileURLToPath(new URL("./fixtures/qbitai-article.html", import.meta.url)), "utf8");
+
+  it("正文止于文章容器的配对闭合：不含标题/作者行、版权声明、容器外列表与页脚，也不漏 `-->` 或未解码实体", () => {
+    const { text } = extractArticleContent(page);
+    const paragraphs = text.split(/\n{2,}/);
+    expect(paragraphs[0]).toBe("联想天禧AI携全场景多端产品矩阵亮相阿里云栖大会");
+    expect(paragraphs.at(-1)).toBe("本文由联想提供，量子位获授权转载，观点归原作者所有。");
+    expect(paragraphs).toHaveLength(13);
+    expect(text).toContain("本届大会以”智以致用”为主题");
+    expect(text).toContain("从”团队”到”人+Agent”：组织的最小生产单元正在改写");
+    for (const junk of ["-->", "&#", "&copy;", "版权所有", "寻求报道", "扫码关注", "扫码分享", "相关阅读", "热门文章", "搜索", "2026-09-23", "来源："]) {
+      expect(text).not.toContain(junk);
+    }
+  });
+
+  it("配图只取正文容器内的图，位置与正文按空行切出的段落对齐", () => {
+    const { text, images } = extractArticleContent(page);
+    expect(images).toEqual([
+      { src: "https://i.qbitai.com/wp-content/uploads/2026/09/34d00d924786c2817e8d9ad91d4de4fa.jpeg", after: 1 },
+      { src: "https://i.qbitai.com/wp-content/uploads/2026/09/47e8cf2cbccf0677048df959b3ee4162.jpeg", after: 3 },
+      { src: "https://i.qbitai.com/wp-content/uploads/2026/09/9e7c8160bed3eac0f26192ae5881f3ac.png", after: 7 },
+      { src: "https://i.qbitai.com/wp-content/uploads/2026/09/1a17a21e7fbb4fa7c289502115c4104d.png", after: 10 },
+    ]);
+    const paragraphs = text.split(/\n{2,}/);
+    expect(paragraphs[1].startsWith("9月22日至24日")).toBe(true);
+    expect(paragraphs[3].startsWith("联想天禧AI战略生态部负责人刘琳琳")).toBe(true);
+    expect(paragraphs[7].startsWith("把视野放大到整个行业")).toBe(true);
+    expect(paragraphs[10].startsWith("产品能力的背后是天禧生态的持续繁荣")).toBe(true);
+  });
+
+  it("找不到正文容器时返回空结果，由调用方退回 feed 摘要", () => {
+    expect(extractArticleContent(page.replace('<div class="article">', '<div class="post">'))).toEqual({ text: "", images: [] });
   });
 });
 

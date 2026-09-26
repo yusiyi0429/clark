@@ -1,29 +1,53 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowLeftRight, ChevronRight, Flag } from "lucide-react";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Button, Card as HeroCard } from "@heroui/react";
+import { ArrowLeft, ArrowLeftRight, ChevronRight, Crown } from "lucide-react";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type BattlefieldPayload, type MissionPayload } from "./payloads";
 import { useBattlefieldDisplay } from "./battlefieldDisplay";
+import { HeroButton } from "@/components/HeroButton";
+import { IssueRow, meetingTimesByIssue } from "@/components/IssueRow";
+import { useWorkspace } from "@/components/shell/WorkspaceContext";
+import { ReferenceButton } from "@/conversation/references";
+import { calendarDate, monthDayTime } from "@/lib/companyTime";
 import s from "@/styles/battlefield-card.module.css";
+import b from "@/styles/home-board.module.css";
 
-const URGENCY_DOT: Record<string, string> = { red: "#e34b43", yellow: "#c79624", gray: "#8e8e93" };
-
-/** 正面确认目标与待决策 Issue；背面只展示真实待办与负责人反馈，不显示百分比。 */
+/**
+ * 战场翻转卡（clark `progress-card.tsx` 的正反面与翻面焦点衔接）。
+ * 正面：负责人、Mission、六个月目标（放在 clark「战场总结」那一格）与待决策议题；
+ * 背面：当月战场结果、普通待办，负责人反馈收在「反馈与依据」里。不计算完成率（§2.4）。
+ */
 export function BattlefieldCard({ card, collection, onNavigate }: CardRenderProps) {
   const payload = payloadOf<BattlefieldPayload>(card);
-  const missions = collection.filter(
-    (item) => item.kind === "mission" && payloadOf<MissionPayload>(item).battlefieldIds.includes(payload.battlefieldId),
-  );
-  const missionCount = missions.length;
+  const id = payload.battlefieldId;
+  const missions = collection.filter((item) => item.kind === "mission" && payloadOf<MissionPayload>(item).battlefieldIds.includes(id));
+  const meetingTimes = useMemo(() => meetingTimesByIssue(collection), [collection]);
+  // 战场卡的引用：本战场待决策议题的 Card（API 只接受议题 / 会议 / 月度计划 / Mission 作引用）。
+  const issueCards = useMemo(() => {
+    const byId = new Map(collection.filter((item) => item.kind === "issue").map((item) => [item.objectRef.id, item]));
+    return new Map(payload.pendingIssues.flatMap((issue) => (byId.has(issue.id) ? [[issue.id, byId.get(issue.id)!] as const] : [])));
+  }, [collection, payload.pendingIssues]);
+  const reference = <ReferenceButton cards={[...issueCards.values()]} title={payload.name} />;
+  // CEO 本人就是负责人：两面卡头都带一枚皇冠（clark progress-card 的 driBadge），正面不再写「负责人 · …」。
+  const { viewerId } = useWorkspace();
+  const ceoOwns = !!viewerId && payload.ownerId === viewerId;
+  const ownerBadge = ceoOwns ? (
+    <span className={s.ownerBadge} role="img" aria-label="你是这个战场的负责人" title="你是这个战场的负责人">
+      <Crown size={17} strokeWidth={1.65} aria-hidden="true" />
+    </span>
+  ) : null;
   const [missionsOpen, setMissionsOpen] = useState(false);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const evidenceId = useId();
   const display = useBattlefieldDisplay();
-  const flipped = display.flipped(payload.battlefieldId);
+  const flipped = display.flipped(id);
   const frontFlip = useRef<HTMLButtonElement>(null);
   const backFlip = useRef<HTMLButtonElement>(null);
   const root = useRef<HTMLElement>(null);
 
-  // 翻面只切展示面：焦点必须留在对应的控制上，不能留在已 inert 的背面。
+  // 翻面只切展示面：焦点留在对应的翻面键上，不能留在已 inert 的那一面。
   useLayoutEffect(() => {
     const active = document.activeElement;
     if (active instanceof HTMLElement && root.current?.contains(active)) {
@@ -32,111 +56,122 @@ export function BattlefieldCard({ card, collection, onNavigate }: CardRenderProp
   }, [flipped]);
 
   const urgent = payload.pendingIssues.filter((issue) => issue.urgency === "red").length;
+  const feedback = payload.latestFeedback;
+  // 标题进战场二级页（clark progress-card 的 .title）：正面进「待决策」，翻到进展面再点就进「进展」页签。
+  const detailHref = `/battlefields/${encodeURIComponent(id)}`;
+  const title = (href: string) => (
+    <HeroButton
+      variant="ghost"
+      size="sm"
+      data-ts-layout="true"
+      type="button"
+      className={s.title}
+      data-origin={href}
+      aria-label={`打开${payload.name}`}
+      onPress={(event) => onNavigate(href, event.target as Element)}
+    >
+      <h2>{payload.name}</h2>
+      <ChevronRight size={14} aria-hidden="true" />
+    </HeroButton>
+  );
 
   return (
-    <article
-      ref={root}
-      className={s.frame}
-      data-origin={payload.battlefieldId}
-      data-testid={`zone-${payload.battlefieldId}`}
-      data-mode={flipped ? "progress" : "decisions"}
-    >
+    <article ref={root} className={s.frame} data-testid={`zone-${id}`} data-mode={flipped ? "progress" : "decisions"}>
       <div className={s.rotor} data-flipped={flipped}>
-        <div className={`${s.face} ${s.front}`} inert={flipped} aria-hidden={flipped}>
+        <HeroCard className={`${s.face} ${s.front}`} inert={flipped} aria-hidden={flipped}>
           <header className={s.header}>
-            <h2 className={s.staticTitle}>{payload.name}</h2>
-            <button
-              ref={frontFlip}
-              type="button"
-              className={s.flip}
-              onClick={() => display.flip(payload.battlefieldId)}
-              aria-label={`查看${payload.name}进展`}
-            >
+            {title(detailHref)}
+            {ownerBadge}
+            {reference}
+            <Button size="sm" variant="secondary" ref={frontFlip} className={s.flip} onPress={() => display.flip(id)} aria-label={`查看${payload.name}进展`}>
               <ArrowLeftRight size={15} aria-hidden="true" />
               <span>进展</span>
-            </button>
+            </Button>
           </header>
-          <div className={s.context}>
-            <span className={s.contextOwner}>负责人 · {payload.ownerDisplayName || "待指派"}</span>
-            <button
-              type="button"
-              className={s.contextMissions}
-              aria-expanded={missionsOpen}
-              aria-controls={`missions-${payload.battlefieldId}`}
-              onClick={() => setMissionsOpen((open) => !open)}
-            >
-              <Flag size={11} aria-hidden="true" />
-              <span>Missions · {missionCount}</span>
-              <ChevronRight size={11} aria-hidden="true" />
-            </button>
+          <div className={s.finding} aria-label="战场概况">
+            <div className={s.findingHeading}>
+              {ceoOwns ? null : <span>负责人 · {payload.ownerDisplayName || "待指派"}</span>}
+              <button
+                type="button"
+                className={s.missionToggle}
+                aria-expanded={missionsOpen}
+                aria-controls={`missions-${id}`}
+                onClick={() => setMissionsOpen((open) => !open)}
+              >
+                Missions · {missions.length}
+                <ChevronRight size={12} aria-hidden="true" />
+              </button>
+            </div>
+            {payload.sixMonthOutcome ? <strong>六个月目标 · {payload.sixMonthOutcome}</strong> : null}
             {missionsOpen ? (
-              <ul id={`missions-${payload.battlefieldId}`} className={s.missionList} aria-label={`${payload.name}的 Mission`}>
+              <ul id={`missions-${id}`} className={s.missionList} aria-label={`${payload.name}的 Mission`}>
                 {missions.map((mission) => {
                   const item = payloadOf<MissionPayload>(mission);
+                  const href = `/missions/${encodeURIComponent(item.missionId)}`;
                   return (
                     <li key={mission.id}>
-                      <button type="button" onClick={() => onNavigate(`/missions/${encodeURIComponent(item.missionId)}`)}>
-                        <Flag size={11} aria-hidden="true" />
-                        <span>{item.code} · {item.title}</span>
-                        <ChevronRight size={12} aria-hidden="true" />
+                      <button type="button" data-origin={href} onClick={(event) => onNavigate(href, event.currentTarget)}>
+                        <b>{item.code}</b>
+                        <span>{item.title}</span>
+                        <ChevronRight size={13} aria-hidden="true" />
                       </button>
                     </li>
                   );
                 })}
               </ul>
             ) : null}
-            {payload.sixMonthOutcome ? <p className={s.outcome}>六个月目标 · {payload.sixMonthOutcome}</p> : null}
           </div>
-          {payload.pendingIssues.length ? (
-            <ul className={s.list}>
-              {payload.pendingIssues.map((issue) => (
-                <li key={issue.id}>
-                  <button type="button" className={s.listButton} onClick={() => onNavigate(`/issues/${issue.id}`)}>
-                    <i className={s.dot} style={{ background: URGENCY_DOT[issue.urgency] }} aria-hidden="true" />
-                    <span>{issue.title}</span>
-                    <ChevronRight size={14} aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className={s.missing}>暂无待决策议题</p>
-          )}
-        </div>
+          <div className={s.issues} role="region" aria-label={`${payload.name}议题列表`}>
+            {payload.pendingIssues.length ? (
+              <div className={b.directIssues}>
+                {payload.pendingIssues.map((issue) => (
+                  <IssueRow
+                    key={issue.id}
+                    issue={{ id: issue.id, title: issue.title, urgency: issue.urgency, meetingTime: meetingTimes.get(issue.id) || undefined }}
+                    card={issueCards.get(issue.id)}
+                    onNavigate={onNavigate}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className={b.empty}>暂无待决策议题</p>
+            )}
+          </div>
+        </HeroCard>
 
-        <div className={`${s.face} ${s.back}`} inert={!flipped} aria-hidden={!flipped}>
+        <HeroCard className={`${s.face} ${s.back}`} inert={!flipped} aria-hidden={!flipped}>
           <div className={s.atmosphere} aria-hidden="true">
             <span />
             <span />
           </div>
           <header className={s.header}>
-            <h2 className={s.staticTitle}>{payload.name}</h2>
-            <button
-              ref={backFlip}
-              type="button"
-              className={s.flip}
-              onClick={() => display.flip(payload.battlefieldId)}
-              aria-label={`返回${payload.name}待决策`}
-            >
+            {title(`${detailHref}?tab=progress`)}
+            {ownerBadge}
+            {reference}
+            <Button size="sm" variant="secondary" ref={backFlip} className={s.flip} onPress={() => display.flip(id)} aria-label={`返回${payload.name}待决策`}>
               <ArrowLeft size={14} aria-hidden="true" />
               <span>待决策</span>
-              {urgent > 0 ? <span className={s.urgent} aria-label={`${urgent} 条紧急议题`}>{urgent}</span> : null}
-            </button>
+              {urgent > 0 ? (
+                <span className={s.urgent} aria-label={`${urgent} 条紧急议题`}>
+                  {urgent}
+                </span>
+              ) : null}
+            </Button>
           </header>
-          <div className={s.progressBody}>
-            <div className={s.progressBlock}>
-              <span className={s.chartEyebrow}>当月战场结果{payload.period ? ` · ${payload.period}` : ""}</span>
+          <div className={s.backBody}>
+            <div className={s.block}>
+              <span className={s.eyebrow}>当月战场结果{payload.period ? ` · ${payload.period}` : ""}</span>
               {payload.target ? <p className={s.target}>{payload.target}</p> : <p className={s.missing}>尚未签发当月目标</p>}
             </div>
-            <div className={s.progressBlock}>
-              <span className={s.chartEyebrow}>普通待办</span>
+            <div className={s.block}>
+              <span className={s.eyebrow}>普通待办</span>
               {payload.todos.length ? (
-                <ul className={s.todoList}>
+                <ul className={s.todos}>
                   {payload.todos.map((todo) => (
                     <li key={todo.id}>
                       <span>{todo.title}</span>
                       <small>
-                        {todo.dueAt ? `${todo.dueAt} · ` : ""}
+                        {todo.dueAt ? `${calendarDate(todo.dueAt)} · ` : ""}
                         {todo.exportStatus === "delivered" ? "已送达" : todo.exportStatus === "failed" ? "外发失败" : "待外发"}
                       </small>
                     </li>
@@ -146,20 +181,35 @@ export function BattlefieldCard({ card, collection, onNavigate }: CardRenderProp
                 <p className={s.missing}>当月没有归属该战场的普通待办</p>
               )}
             </div>
-            <div className={s.progressBlock}>
-              <span className={s.chartEyebrow}>最新负责人反馈</span>
-              {payload.latestFeedback ? (
-                <p className={s.feedback}>
-                  {payload.latestFeedback.text}
-                  <small>采集于 {payload.latestFeedback.observedAt} · {payload.latestFeedback.sourceRef}</small>
-                </p>
+            <p className={s.note}>天枢不计算完成百分比，也不跟踪待办执行状态。</p>
+          </div>
+          <div
+            className={s.evidence}
+            data-open={evidenceOpen}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && evidenceOpen) {
+                event.preventDefault();
+                event.stopPropagation();
+                setEvidenceOpen(false);
+              }
+            }}
+          >
+            <button type="button" aria-expanded={evidenceOpen} aria-controls={evidenceId} onClick={() => setEvidenceOpen((open) => !open)}>
+              反馈与依据
+              <span>{feedback ? `上次收集：${monthDayTime(feedback.observedAt) || feedback.observedAt}` : "尚未收到负责人反馈"}</span>
+            </button>
+            <div id={evidenceId} inert={!evidenceOpen} aria-hidden={!evidenceOpen}>
+              {feedback ? (
+                <>
+                  <p>{feedback.text}</p>
+                  <p>来源：{feedback.sourceRef}</p>
+                </>
               ) : (
-                <p className={s.missing}>尚未收到负责人反馈</p>
+                <p>尚未收到负责人反馈</p>
               )}
             </div>
-            <p className={s.noPercent}>WarMap 不计算完成百分比，也不跟踪待办执行状态。</p>
           </div>
-        </div>
+        </HeroCard>
       </div>
     </article>
   );

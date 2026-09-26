@@ -9,7 +9,7 @@ import { loadCompanyMemory } from "../src/companyMemory.js";
 import { migrate } from "../src/migrate.js";
 import { createMonthlyPlanService, type MonthlyDraftAgent, type MonthlyDraftAgentInput } from "../src/monthlyDraft.js";
 import { signActionId } from "../src/actionToken.js";
-import { createTestApp, createTestDb, testEnv, TEST_PASSWORD, type TestApp } from "./helpers.js";
+import { createTestApp, createTestDb, seedTestAccess, testEnv, TEST_LOGIN, type TestApp } from "./helpers.js";
 
 type FakeAgent = MonthlyDraftAgent & { calls: MonthlyDraftAgentInput[] };
 
@@ -623,11 +623,12 @@ describe("startup recovery of an interrupted MonthlyPlan draft", () => {
         ]);
         expect(await service.recoverInterrupted()).toBe(1);
 
+        await seedTestAccess(db);
         const login = await app.inject({
           method: "POST",
           url: "/api/auth/login",
           headers: { origin: testEnv.publicOrigin },
-          payload: { password: TEST_PASSWORD },
+          payload: TEST_LOGIN,
         });
         const cookie = (login.headers["set-cookie"] as string).split(";")[0];
         const response = await app.inject({ method: "GET", url: `/api/cards/monthly-plans/${planId}`, headers: { cookie } });

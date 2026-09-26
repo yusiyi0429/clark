@@ -7,12 +7,34 @@ import { serverApi } from "./client";
 
 export const SESSION_COOKIE = "warmap_session";
 
-/** 登录守卫：未登录直接回 /access?next=<目标>，不渲染任何 Card。 */
+export type SessionInfo = { personId: string; displayName: string; role: "ceo" | "member" };
+
+/** 读当前会话（服务端）：没有 cookie 不发请求；接口判定无效（过期、口令已重置）时返回 null。 */
+export async function readSession(cookie: string): Promise<SessionInfo | null> {
+  if (!cookie.includes(`${SESSION_COOKIE}=`)) return null;
+  const { data, response } = await serverApi.GET("/api/auth/session", { headers: { cookie } });
+  if (!response.ok || !data?.authenticated || !data.personId || !data.role) return null;
+  return { personId: data.personId, displayName: data.displayName ?? data.personId, role: data.role };
+}
+
+const accessPath = (targetPath: string) => `/access?next=${encodeURIComponent(targetPath)}`;
+
+/** CEO 页面守卫：未登录回锁屏（带 next），不渲染任何 Card；成员登录的去自己的工作台。 */
 export async function requireCeo(targetPath: string): Promise<string> {
-  const jar = await cookies();
-  const cookie = jar.toString();
-  if (!jar.get(SESSION_COOKIE)) redirect(`/access?next=${encodeURIComponent(targetPath)}`);
+  const cookie = (await cookies()).toString();
+  const session = await readSession(cookie);
+  if (!session) redirect(accessPath(targetPath));
+  if (session.role !== "ceo") redirect("/me");
   return cookie;
+}
+
+/** 成员页面守卫：未登录回锁屏（带 next）；CEO 回自己的首页。 */
+export async function requireMember(targetPath: string): Promise<{ cookie: string; session: SessionInfo }> {
+  const cookie = (await cookies()).toString();
+  const session = await readSession(cookie);
+  if (!session) redirect(accessPath(targetPath));
+  if (session.role !== "member") redirect("/");
+  return { cookie, session };
 }
 
 type CardResult = { cards: Card[] };
@@ -45,6 +67,7 @@ export const loadMonthlyPlanCards = (cookie: string) => load("/api/cards/monthly
 export const loadMeetingCards = (cookie: string) => load("/api/cards/meetings", cookie);
 export const loadMissionCards = (cookie: string) => load("/api/cards/missions", cookie);
 export const loadMissionCard = (cookie: string, id: string) => load("/api/cards/missions/{id}", cookie, { id });
+export const loadBattlefieldCard = (cookie: string, id: string) => load("/api/cards/battlefields/{id}", cookie, { id });
 
 export type PersonOption = { personId: string; displayName: string; roles: string[] };
 

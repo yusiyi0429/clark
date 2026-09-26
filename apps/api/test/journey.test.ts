@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context } from "@earendil-works/pi-ai";
-import { Card, SessionResponse } from "@warmap/contracts";
+import { Card, LoginResponse } from "@warmap/contracts";
 import { loadCompanyMemory } from "../src/companyMemory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
-import { TEST_PASSWORD, createTestApp, preflightCandidate, testEnv } from "./helpers.js";
+import { TEST_CEO, TEST_LOGIN, createTestApp, preflightCandidate, testEnv } from "./helpers.js";
 
 const USAGE = {
   input: 4,
@@ -47,7 +47,7 @@ describe("CEO login → real Card journey", () => {
         method: "POST",
         url: "/api/auth/login",
         headers: { origin: t.publicOrigin },
-        payload: { password: "wrong" },
+        payload: { loginId: TEST_CEO.loginId, passcode: "0000" },
       });
       expect(bad.statusCode).toBe(401);
       expect(bad.json()).toMatchObject({ code: "INVALID_CREDENTIALS", retryable: false });
@@ -68,10 +68,10 @@ describe("CEO login → real Card journey", () => {
         method: "POST",
         url: "/api/auth/login",
         headers: { origin: t.publicOrigin },
-        payload: { password: TEST_PASSWORD },
+        payload: TEST_LOGIN,
       });
       expect(login.statusCode).toBe(200);
-      expect(Value.Check(SessionResponse, login.json())).toBe(true);
+      expect(Value.Check(LoginResponse, login.json())).toBe(true);
 
       const setCookie = login.headers["set-cookie"] as string;
       expect(setCookie).toContain("HttpOnly");
@@ -96,7 +96,7 @@ describe("CEO login → real Card journey", () => {
         url: "/api/auth/session",
         headers: { cookie },
       });
-      expect(session.json()).toEqual({ authenticated: true });
+      expect(session.json()).toEqual({ authenticated: true, personId: TEST_CEO.personId, displayName: "测试甲", role: "ceo" });
     } finally {
       await t.close();
     }
@@ -148,7 +148,7 @@ describe("CEO login → real Card journey", () => {
         method: "POST",
         url: "/api/auth/login",
         headers: { origin: "https://evil.example" },
-        payload: { password: TEST_PASSWORD },
+        payload: TEST_LOGIN,
       });
       expect(res.statusCode).toBe(403);
       expect(res.json()).toMatchObject({ code: "ORIGIN_MISMATCH" });
@@ -161,22 +161,23 @@ describe("CEO login → real Card journey", () => {
     const t = await createTestApp();
     const { app } = t;
     try {
-      for (let i = 0; i < 5; i++) {
+      // 按 IP 的上限是 20 次/分钟（按 ID 的 5 次锁定另测）：用 20 个不存在的 ID 打满，第 21 次即使口令正确也 429。
+      for (let i = 0; i < 20; i++) {
         const r = await app.inject({
           method: "POST",
           url: "/api/auth/login",
           headers: { origin: t.publicOrigin },
-          payload: { password: "wrong" },
+          payload: { loginId: `nobody${i}`, passcode: "0000" },
         });
         expect(r.statusCode).toBe(401);
       }
-      const sixth = await app.inject({
+      const next = await app.inject({
         method: "POST",
         url: "/api/auth/login",
         headers: { origin: t.publicOrigin },
-        payload: { password: TEST_PASSWORD },
+        payload: TEST_LOGIN,
       });
-      expect(sixth.statusCode).toBe(429);
+      expect(next.statusCode).toBe(429);
     } finally {
       await t.close();
     }

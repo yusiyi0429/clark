@@ -1,10 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@heroui/react";
 import { X } from "lucide-react";
 import type { CardRenderProps } from "./registry";
 import type { TUpdateMonthlyPlanDraftRequest } from "@warmap/contracts";
 import { payloadOf, type MonthlyPlanPayload } from "./payloads";
+import { registryName } from "./scopeNames";
+import { ContextMark } from "@/components/ContextMark";
+import { useWorkspace } from "@/components/shell/WorkspaceContext";
+import { calendarDate, monthDayTime } from "@/lib/companyTime";
 import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
 import s from "@/styles/monthly-workspace.module.css";
 
@@ -20,6 +25,8 @@ const EXPORT_LABEL: Record<string, string> = {
   delivered: "已送达",
   failed: "外发失败",
 };
+
+type PersonOption = { personId: string; displayName: string };
 
 type TodoDraft = { id?: string; battlefieldId?: string; title: string; ownerId: string; dueAt?: string; sourceRef: string };
 
@@ -48,7 +55,11 @@ export function monthlyDraftPatch(payload: MonthlyPlanPayload, draft: MonthlyDra
 /** MonthlyPlan：CEO 编辑公司/战场结果与普通待办，签发后生效；不跟踪待办执行状态。 */
 export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
   const payload = payloadOf<MonthlyPlanPayload>(card);
+  const { homeCards } = useWorkspace();
   const { state, run, retry, pending } = useCardAction(onCard);
+  // 战场 / 能力写名称（首页注册表），找不到才退回层级，不打印原始 id。
+  const battlefieldName = (id: string) => registryName(homeCards, "battlefield", id) ?? "未登记战场";
+  const capabilityName = (id: string) => registryName(homeCards, "capability", id) ?? "未登记能力";
   const [companyOutcome, setCompanyOutcome] = useState(payload.companyOutcome);
   const [battlefields, setBattlefields] = useState(payload.battlefields);
   const [capabilities, setCapabilities] = useState(payload.capabilities);
@@ -56,6 +67,27 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
   const [note, setNote] = useState(payload.negotiation.note);
   const [checked, setChecked] = useState<string[]>(payload.negotiation.checkedItemIds);
   const [signArmed, setSignArmed] = useState(false);
+  const [people, setPeople] = useState<PersonOption[] | null>(null);
+  const [peopleError, setPeopleError] = useState(false);
+
+  // 普通待办的负责人按姓名选（人员目录与议题页同一个接口），提交的仍是 personId。
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/people", { headers: { accept: "application/json" } });
+        if (cancelled) return;
+        if (!response.ok) return setPeopleError(true);
+        const body = (await response.json()) as { people: PersonOption[] };
+        if (!cancelled) setPeople(body.people);
+      } catch {
+        if (!cancelled) setPeopleError(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // 服务端是唯一事实来源：只回写服务端真正改过的字段，避免任何一次 Action 都吞掉未保存的输入。
   const synced = useRef(payload);
@@ -82,42 +114,47 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
    * 核对项必须有稳定 id：company、battlefield:<id>、capability:<id>、todo:<id>；签发前要求全部核对。
    * 编辑过的字段会被服务端取消核对，所以核对单独提交，不与内容编辑混在同一次 update_draft。
    */
-  function toggleChecked(id: string) {
+  async function toggleChecked(id: string) {
+    const previous = checked;
     const next = checked.includes(id) ? checked.filter((value) => value !== id) : [...checked, id];
     setChecked(next);
     const action = actionOf("monthly-plan.update_draft");
-    if (action) void run(action, { checkedItemIds: next });
+    if (!action) return;
+    // C-04：服务端没接收就退回原勾选（冲突时服务端的最新卡随后会把勾选同步过来），错误与重试由 ActionFeedback 显示。
+    if (!(await run(action, { checkedItemIds: next }))) setChecked(previous);
   }
 
   function checkable(id: string, label: string) {
     return (
       <label className={s.check}>
         <span>
-          <input type="checkbox" checked={checked.includes(id)} disabled={locked} onChange={() => toggleChecked(id)} /> 已核对 {label}
+          <input type="checkbox" checked={checked.includes(id)} disabled={locked} onChange={() => void toggleChecked(id)} /> 已核对 {label}
         </span>
       </label>
     );
   }
 
-  /** pen Eyebrow 只两段：已签发看签发日期，协商中看草案生成状态。 */
-  const eyebrow =
+  /** 眉题（clark 月度协商）：月份 + 状态；已签发看签发日期，协商中看草案生成状态。 */
+  const [year, month] = payload.period.split("-");
+  const status =
     payload.status === "confirmed"
-      ? `已签发${payload.confirmedAt ? ` · ${payload.confirmedAt.slice(0, 10)}` : ""}`
+      ? `已签发${payload.confirmedAt ? ` · ${calendarDate(payload.confirmedAt)}` : ""}`
       : `协商中 · ${GENERATION_LABEL[payload.generation.status] ?? payload.generation.status}`;
+  const eyebrow = `月度协商 · ${year} 年 ${Number(month)} 月 · ${status}`;
 
   return (
     <section className={s.workspace} data-testid="monthly-workspace" aria-labelledby="monthly-title">
       <header className={s.header}>
         <div className={s.identity}>
-          <span className={s.marker} aria-hidden="true" />
+          <ContextMark kind="monthly" />
           <div>
             <span className={s.eyebrow}>{eyebrow}</span>
             <h1 id="monthly-title">月度计划 {payload.period}</h1>
           </div>
         </div>
-        <button type="button" className={s.close} onClick={() => onNavigate("/")} aria-label="返回首页">
+        <Button isIconOnly variant="tertiary" data-close-view onPress={() => onNavigate("/")} aria-label="关闭月度计划">
           <X size={19} aria-hidden="true" />
-        </button>
+        </Button>
       </header>
 
       <div className={s.body}>
@@ -148,9 +185,9 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
 
             {battlefields.map((battlefield) => (
               <section key={battlefield.battlefieldId} className={s.section}>
-                <h2 className={s.sectionTitle}>{battlefield.battlefieldId} 战场结果</h2>
+                <h2 className={s.sectionTitle}>{battlefieldName(battlefield.battlefieldId)} · 战场结果</h2>
                 <textarea
-                  aria-label={`${battlefield.battlefieldId} 战场结果`}
+                  aria-label={`${battlefieldName(battlefield.battlefieldId)} 战场结果`}
                   value={battlefield.outcome}
                   disabled={locked}
                   rows={2}
@@ -160,15 +197,15 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
                     )
                   }
                 />
-                {checkable(`battlefield:${battlefield.battlefieldId}`, `${battlefield.battlefieldId} 战场结果`)}
+                {checkable(`battlefield:${battlefield.battlefieldId}`, `${battlefieldName(battlefield.battlefieldId)} 战场结果`)}
               </section>
             ))}
 
             {capabilities.map((capability) => (
               <section key={capability.capabilityId} className={s.section}>
-                <h2 className={s.sectionTitle}>能力 PCO · {capability.capabilityId}</h2>
+                <h2 className={s.sectionTitle}>{capabilityName(capability.capabilityId)} · 能力 PCO</h2>
                 <textarea
-                  aria-label={`${capability.capabilityId} 能力 PCO`}
+                  aria-label={`${capabilityName(capability.capabilityId)} 能力 PCO`}
                   value={capability.outcome}
                   disabled={locked}
                   rows={2}
@@ -178,7 +215,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
                     )
                   }
                 />
-                {checkable(`capability:${capability.capabilityId}`, `${capability.capabilityId} 能力 PCO`)}
+                {checkable(`capability:${capability.capabilityId}`, `${capabilityName(capability.capabilityId)} 能力 PCO`)}
               </section>
             ))}
           </div>
@@ -190,7 +227,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
                 <article key={todo.id ?? `draft-${index}`} className={s.todo}>
                   <div className={s.todoHead}>
                     <span className={s.todoIndex}>{String(index + 1).padStart(2, "0")}</span>
-                    <span className={s.battlefieldBadge}>{todo.battlefieldId ?? "公司级"}</span>
+                    <span className={s.battlefieldBadge}>{todo.battlefieldId ? battlefieldName(todo.battlefieldId) : "公司级"}</span>
                   </div>
                   <label className={s.notes}>
                     <span>待办</span>
@@ -201,12 +238,31 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
                     />
                   </label>
                   <label className={s.notes}>
-                    <span>负责人（personId）</span>
-                    <input
-                      value={todo.ownerId}
-                      disabled={locked}
-                      onChange={(event) => setTodos((current) => current.map((item, i) => (i === index ? { ...item, ownerId: event.target.value } : item)))}
-                    />
+                    <span>负责人</span>
+                    {people ? (
+                      <select
+                        value={todo.ownerId}
+                        disabled={locked}
+                        onChange={(event) => setTodos((current) => current.map((item, i) => (i === index ? { ...item, ownerId: event.target.value } : item)))}
+                      >
+                        {todo.ownerId && !people.some((person) => person.personId === todo.ownerId) ? (
+                          <option value={todo.ownerId}>未在人员目录中（{todo.ownerId}）</option>
+                        ) : null}
+                        {todo.ownerId ? null : <option value="">选择负责人</option>}
+                        {people.map((person) => (
+                          <option key={person.personId} value={person.personId}>
+                            {person.displayName}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        value={todo.ownerId}
+                        disabled={locked}
+                        aria-describedby={peopleError ? "monthly-people-error" : undefined}
+                        onChange={(event) => setTodos((current) => current.map((item, i) => (i === index ? { ...item, ownerId: event.target.value } : item)))}
+                      />
+                    )}
                   </label>
                   <label className={s.notes}>
                     <span>可选截止</span>
@@ -227,6 +283,11 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
                 </article>
               ))}
               {todos.length === 0 ? <p className={s.empty}>本月没有普通待办。</p> : null}
+              {peopleError && todos.length ? (
+                <p id="monthly-people-error" className={s.source} role="status">
+                  人员目录暂时读取失败，负责人先按 personId 填写。
+                </p>
+              ) : null}
             </section>
 
             <section className={s.section}>
@@ -236,9 +297,9 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
                   <div key={feedback.id} className={s.feedback}>
                     <p className={s.feedbackText}>{feedback.text}</p>
                     <p className={s.feedbackMeta}>
-                      {feedback.observedAt.slice(0, 16).replace("T", " ")}
-                      {feedback.battlefieldId ? ` · ${feedback.battlefieldId}` : ""}
-                      {feedback.todoId ? ` · 待办 ${feedback.todoId}` : ""}
+                      {monthDayTime(feedback.observedAt)}
+                      {feedback.battlefieldId ? ` · ${battlefieldName(feedback.battlefieldId)}` : ""}
+                      {feedback.todoId ? ` · 待办 ${todos.find((todo) => todo.id === feedback.todoId)?.title ?? "已移除的待办"}` : ""}
                     </p>
                   </div>
                 ))
@@ -296,7 +357,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
       {payload.status === "confirmed" ? (
         <p className={s.receipt}>
           本计划已签发，是当月目标的唯一来源。
-          {payload.confirmedAt ? <small>签发于 {payload.confirmedAt.slice(0, 10)}</small> : null}
+          {payload.confirmedAt ? <small>签发于 {calendarDate(payload.confirmedAt)}</small> : null}
         </p>
       ) : null}
     </section>

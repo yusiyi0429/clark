@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # staging 上线 smoke（.tech/08 §11）：只打真实入口，不发起模型/Search 调用，不写 staging 业务对象。
 # 用法：smoke.sh [--dry-run]
-# 需要：PUBLIC_ORIGIN（如 https://staging.example.com）、CEO_PASSWORD（真实 CEO 密码，只从环境读取，不落盘）。
+# 需要：PUBLIC_ORIGIN（如 https://staging.example.com）、CEO_LOGIN_ID 与 CEO_PASSCODE（真实 CEO 的登录 ID 与 4 位口令，只从环境读取，不落盘）。
 set -euo pipefail
 
 DRY_RUN=0
@@ -21,7 +21,7 @@ smoke: dry-run（未发请求）。步骤：
   1. GET  ${ORIGIN}/healthz                 Web 进程存活 + BUILD_SHA
   2. GET  ${ORIGIN}/api/healthz             API health（database/Pi/modelSlots/MCP/search/wechat + BUILD_SHA）
   3. POST ${ORIGIN}/mcp/company-memory      未授权 MCP 必须 401
-  4. POST ${ORIGIN}/api/auth/login          真实 CEO 登录（需要 CEO_PASSWORD）
+  4. POST ${ORIGIN}/api/auth/login          真实 CEO 登录（需要 CEO_LOGIN_ID + CEO_PASSCODE）
   5. GET  ${ORIGIN}/api/cards/home          首页 Card
   6. GET  ${ORIGIN}/api/cards/radar         Radar Card（provider 配置如实显示）
   7. 登录后 GET 对象的 /api/cards/*         写操作只针对专门 staging 对象
@@ -31,7 +31,8 @@ EOF
   exit 0
 fi
 
-: "${CEO_PASSWORD:?smoke: 缺少 CEO_PASSWORD（真实 smoke 需要登录；缺失即 BLOCKED，不跳过）}"
+: "${CEO_LOGIN_ID:?smoke: 缺少 CEO_LOGIN_ID（真实 smoke 需要登录；缺失即 BLOCKED，不跳过）}"
+: "${CEO_PASSCODE:?smoke: 缺少 CEO_PASSCODE}"
 command -v curl >/dev/null || { echo "smoke: 需要 curl" >&2; exit 1; }
 
 failures=0
@@ -60,7 +61,7 @@ cookie=$(mktemp)
 trap 'rm -f "$cookie"' EXIT
 login_code=$(curl -s -o /dev/null -w "%{http_code}" -c "$cookie" -X POST "$ORIGIN/api/auth/login" \
   -H 'content-type: application/json' -H "origin: $ORIGIN" \
-  --data "$(printf '{"password":"%s"}' "$CEO_PASSWORD")")
+  --data "$(printf '{"loginId":"%s","passcode":"%s"}' "$CEO_LOGIN_ID" "$CEO_PASSCODE")")
 [ "$login_code" = "200" ] && echo "PASS  CEO 登录" || { echo "FAIL  CEO 登录 HTTP $login_code"; failures=$((failures + 1)); }
 
 home=$(curl -fsS -b "$cookie" "$ORIGIN/api/cards/home")

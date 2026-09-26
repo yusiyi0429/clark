@@ -9,7 +9,7 @@
     "test": "vitest run",
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "hash-password": "node scripts/hash-password.mjs"
+    "access:issue": "tsx scripts/issue-access.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",

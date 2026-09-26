@@ -68,6 +68,7 @@ describe("openapi contract", () => {
         "/api/auth/login",
         "/api/auth/logout",
         "/api/auth/session",
+        "/api/auth/passcode",
         "/api/cards/home",
         "/api/cards/issues/{id}",
         "/api/cards/radar",
@@ -107,6 +108,8 @@ describe("openapi contract", () => {
         "MonthlyDraftCandidate",
         "UpdateMonthlyPlanDraftRequest",
         "DriMonthlyPlanFeedbackRequest",
+        "LoginResponse",
+        "ChangePasscodeRequest",
       ]),
     );
   });
@@ -657,6 +660,7 @@ describe("monthly plan public contract", () => {
         { id: "todo-1", title: "待办", ownerId: "person-002", dueAt: null, sourceRef: "issue:1", exportStatus: "pending_export", exportRef: null },
       ],
       latestFeedback: { text: "渠道复核已完成", observedAt: "2026-06-10T00:00:00.000Z", sourceRef: "dri://retro/1", evidenceRef: null },
+      feedback: [{ text: "渠道复核已完成", observedAt: "2026-06-10T00:00:00.000Z", sourceRef: "dri://retro/1", evidenceRef: null }],
     };
     expect(Value.Check(BattlefieldCardPayload, battlefield)).toBe(true);
     // 负责人只存 personId，投影现查 displayName

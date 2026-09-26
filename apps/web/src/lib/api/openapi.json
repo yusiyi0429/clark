@@ -14,7 +14,7 @@
     "/api/auth/login": {
       "post": {
         "operationId": "login",
-        "summary": "CEO 登录，签发 HttpOnly session cookie",
+        "summary": "登录 ID + 4 位口令登录；仍是初始码时不签发会话，返回 mustChangePasscode",
         "requestBody": {
           "required": true,
           "content": {
@@ -27,16 +27,124 @@
         },
         "responses": {
           "200": {
-            "description": "已登录",
+            "description": "已登录，或需要先设置口令",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionResponse"
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
           },
           "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "423": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/passcode": {
+      "post": {
+        "operationId": "changePasscode",
+        "summary": "校验当前口令后换成新的 4 位口令，并签发会话",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasscodeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "口令已更新并登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "423": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -80,7 +188,7 @@
     "/api/auth/session": {
       "get": {
         "operationId": "getSession",
-        "summary": "查询当前登录状态",
+        "summary": "查询当前登录状态与身份",
         "responses": {
           "200": {
             "description": "登录状态",
@@ -385,6 +493,54 @@
             }
           },
           "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/battlefields/{id}": {
+      "get": {
+        "operationId": "getBattlefieldCard",
+        "summary": "单个战场 Card（二级页：待决策 / 进展），与列表同一份投影",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Battlefield Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -3706,11 +3862,69 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "password"
+          "loginId",
+          "passcode"
         ],
         "properties": {
-          "password": {
+          "loginId": {
             "minLength": 1,
+            "maxLength": 40,
+            "type": "string"
+          },
+          "passcode": {
+            "pattern": "^[0-9]{4}$",
+            "type": "string"
+          }
+        }
+      },
+      "LoginResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "authenticated",
+          "mustChangePasscode"
+        ],
+        "properties": {
+          "authenticated": {
+            "type": "boolean"
+          },
+          "mustChangePasscode": {
+            "type": "boolean"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "const": "ceo",
+                "type": "string"
+              },
+              {
+                "const": "member",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "ChangePasscodeRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "loginId",
+          "passcode",
+          "newPasscode"
+        ],
+        "properties": {
+          "loginId": {
+            "minLength": 1,
+            "maxLength": 40,
+            "type": "string"
+          },
+          "passcode": {
+            "pattern": "^[0-9]{4}$",
+            "type": "string"
+          },
+          "newPasscode": {
+            "pattern": "^[0-9]{4}$",
             "type": "string"
           }
         }
@@ -3724,6 +3938,24 @@
         "properties": {
           "authenticated": {
             "type": "boolean"
+          },
+          "personId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "const": "ceo",
+                "type": "string"
+              },
+              {
+                "const": "member",
+                "type": "string"
+              }
+            ]
           }
         }
       },
@@ -7206,7 +7438,8 @@
           "target",
           "pendingIssues",
           "todos",
-          "latestFeedback"
+          "latestFeedback",
+          "feedback"
         ],
         "properties": {
           "battlefieldId": {
@@ -7486,6 +7719,40 @@
                 "type": "null"
               }
             ]
+          },
+          "feedback": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "text",
+                "observedAt",
+                "sourceRef",
+                "evidenceRef"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "observedAt": {
+                  "type": "string"
+                },
+                "sourceRef": {
+                  "type": "string"
+                },
+                "evidenceRef": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
           }
         }
       },

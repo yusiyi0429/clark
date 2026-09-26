@@ -26,9 +26,9 @@ function requiredEnv(name: string): string {
 
 const env: AppEnv = {
   sessionSecret: requiredEnv("SESSION_SECRET"),
-  ceoPasswordHash: requiredEnv("CEO_ACCESS_PASSWORD_HASH"),
-  sessionMaxAgeSeconds: Number(process.env.SESSION_MAX_AGE_SECONDS ?? "28800"),
+  sessionMaxAgeSeconds: Number(process.env.SESSION_MAX_AGE_SECONDS ?? "2592000"),
   publicOrigin: requiredEnv("PUBLIC_ORIGIN"),
+  extraOrigins: (process.env.EXTRA_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean),
   driServiceToken: requiredEnv("DRI_SERVICE_TOKEN"),
   mcpServiceToken: requiredEnv("COMPANY_MEMORY_MCP_TOKEN"),
   companyMemorySeedDir: requiredEnv("COMPANY_MEMORY_SEED_DIR"),
@@ -60,6 +60,8 @@ try {
 
 const companyMemory = loadCompanyMemory(env);
 const outletAdapter = createOutletFeedAdapter({});
+// 雷达与对话 web_search 共用一个博查实例：同一 BOCHA_API_KEY 的请求间隔与 429 重试只在一处生效
+const bochaSearch = createBochaWebSearchAdapter({ apiKey: process.env.BOCHA_API_KEY });
 const researchService = createResearchService({
   pool,
   runner: createResearchAgentRunner({
@@ -74,7 +76,7 @@ const researchService = createResearchService({
 const radarService = createRadarService({
   pool,
   // Provider 未配置时不阻断启动：Radar Card 如实显示未配置（Ticket 16 装载真实凭据）
-  web: createBochaRadarWebAdapter({ apiKey: process.env.BOCHA_API_KEY }),
+  web: createBochaRadarWebAdapter(bochaSearch),
   wechat: createWechatMcpAdapter({
     url: process.env.WECHAT_MCP_URL,
     token: process.env.WECHAT_MCP_TOKEN,
@@ -120,7 +122,7 @@ const app = await buildApp({
   radarService,
   researchService,
   monthlyPlanService,
-  webSearch: createBochaWebSearchAdapter({ apiKey: process.env.BOCHA_API_KEY }),
+  webSearch: bochaSearch,
   outlets: outletAdapter,
 });
 app.addHook("onClose", async () => {

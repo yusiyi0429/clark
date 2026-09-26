@@ -439,6 +439,16 @@ describe("MonthlyPlan signing projections", () => {
       expect(growth.payload.pendingIssues.map((issue: { title: string }) => issue.title)).toEqual(["渠道投入是否调整"]);
       expect(growth.payload.latestFeedback).toMatchObject({ text: "最新的战场反馈", observedAt: "2026-06-12T00:00:00.000Z", sourceRef: "dri://fb/new" });
       expect(growth.payload.latestFeedback.evidenceRef).toBeNull();
+      // 本月全部战场级反馈按时间倒序，公司级不进入；卡片跳到战场二级页。
+      expect(growth.payload.feedback.map((item: { text: string }) => item.text)).toEqual(["最新的战场反馈", "较早的战场反馈"]);
+      expect(growth.navigation).toEqual([{ href: "/battlefields/growth", label: "Battlefield" }]);
+
+      // 单个战场：与列表同一份投影；未登记的战场 404。
+      const single = await t.app.inject({ method: "GET", url: "/api/cards/battlefields/growth", headers: { cookie } });
+      expect(single.statusCode).toBe(200);
+      expect(single.json().cards).toEqual([growth]);
+      const missing = await t.app.inject({ method: "GET", url: "/api/cards/battlefields/nope", headers: { cookie } });
+      expect(missing.statusCode).toBe(404);
     } finally {
       await t.close();
     }

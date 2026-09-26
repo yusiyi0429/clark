@@ -5,6 +5,8 @@ WORKDIR /repo
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/contracts packages/contracts
 COPY apps/web/package.json apps/web/
+# ts-design 以 vendored tgz 安装（与 clark-main 同一版本），安装前必须在上下文里
+COPY apps/web/vendor apps/web/vendor
 RUN pnpm install --frozen-lockfile
 
 COPY apps/web apps/web

@@ -7,68 +7,61 @@ function card(kind: string, id: string, title: string, payload: unknown): Card {
   return { schemaVersion: 1, id: `${kind}:${id}`, version: 1, kind, objectRef: { type: kind, id, version: 1 }, title, payload, actions: [] } as unknown as Card;
 }
 
-const capability = card("capability", "cap-delivery", "区域仓配服务", {
-  capabilityId: "cap-delivery",
-  code: "02",
-  sortOrder: 20,
-  name: "区域仓配服务",
-  group: "交付组织",
-  sixMonthOutcome: "覆盖三国本地仓的仓配与退货能力，形成可复制的交付节奏",
-  supportRefs: [],
-});
+const capability = (id: string, name: string, group: string, sortOrder: number) =>
+  card("capability", id, name, { capabilityId: id, code: "", sortOrder, name, group, sixMonthOutcome: `${name}的六个月目标`, supportRefs: [] });
 
-const earlyCapability = card("capability", "cap-agent", "Agent 安全基线", {
-  capabilityId: "cap-agent",
-  code: "01",
-  sortOrder: 10,
-  name: "Agent 安全基线",
-  group: "平台能力",
-  sixMonthOutcome: "权限限制、审批留痕与紧急停机全部可验证",
-  supportRefs: [],
-});
-
-const derivedIssue = card("issue", "issue-1", "是否自建渠道", {
-  origin: "ceo",
-  originRef: null,
-  status: "pending",
-  location: { level: "capability", capabilityId: "cap-delivery" },
-  urgency: { level: "gray" },
-  research: { status: "pending" },
-  receipts: [],
-  dismissedAt: null,
-  dismissReason: null,
-});
-
-/** W5：注册能力（按 sortOrder）∪ Issue 派生分组，同名分组合并。 */
-describe("首页公司能力面板", () => {
-  it("注册能力即使还没有 Issue 也出现在面板里，并展示编号/分组/六个月目标", () => {
-    const html = renderToStaticMarkup(<HomeBoard cards={[capability]} onCard={() => undefined} onNavigate={() => undefined} />);
-    expect(html).toContain('data-capability-category="cap-delivery"');
-    expect(html).toContain("02");
-    expect(html).toContain("区域仓配服务");
-    expect(html).toContain("交付组织");
-    expect(html).toContain("覆盖三国本地仓的仓配与退货能力，形成可复制的交付节奏");
-    expect(html).toContain("暂无待决策议题");
+const issue = (id: string, title: string, capabilityId: string) =>
+  card("issue", id, title, {
+    origin: "ceo",
+    originRef: null,
+    status: "pending",
+    location: { level: "capability", capabilityId },
+    urgency: { level: "gray" },
+    research: { status: "pending" },
+    receipts: [],
+    dismissedAt: null,
+    dismissReason: null,
   });
 
-  it("按 sortOrder 排列，Issue 落在对应能力组内", () => {
-    const html = renderToStaticMarkup(<HomeBoard cards={[capability, earlyCapability, derivedIssue]} onCard={() => undefined} onNavigate={() => undefined} />);
-    expect(html.indexOf("Agent 安全基线")).toBeLessThan(html.indexOf("区域仓配服务"));
-    expect(html.match(/data-capability-category="cap-delivery"/g)).toHaveLength(1);
-    expect(html).toContain("是否自建渠道");
-    // 只有没有 Issue 的 cap-agent 落到空态，Issue 确实落在 cap-delivery 组内
+const render = (cards: Card[]) => renderToStaticMarkup(<HomeBoard cards={cards} onCard={() => undefined} onNavigate={() => undefined} />);
+
+const mission = (id: string, capabilityId: string) => card("mission", id, id, { missionId: id, capabilityId, battlefieldIds: [] });
+
+/** SSOT CEO-01：「公司能力」首页卡与战场卡同样是普通卡片，只列有议题的能力域；能力域本身在点进去的详情里。 */
+describe("首页公司能力卡", () => {
+  it("标题点进公司能力详情；没有能力建设议题时只显示空态，不列能力域、Mission 入口或目标", () => {
+    const html = render([capability("cap-delivery", "区域仓配服务", "交付", 20), mission("m1", "cap-delivery")]);
+    expect(html).toContain("公司能力");
+    expect(html).toContain('data-origin="/capabilities"');
+    expect(html).not.toContain("区域仓配服务");
+    expect(html).not.toContain("Missions · ");
+    expect(html).not.toContain("区域仓配服务的六个月目标");
+    // 两个空态：公司战略议题与公司能力。
+    expect(html.match(/暂无待决策议题/g)).toHaveLength(2);
+  });
+
+  it("只列有议题的能力域并按排序；议题落在所属能力域下，未登记能力的议题归入末尾「其他」", () => {
+    const html = render([
+      capability("cap-delivery", "区域仓配服务", "交付", 20),
+      capability("cap-agent", "Agent 安全基线", "技术", 10),
+      capability("cap-quiet", "没有议题的能力域", "综合", 5),
+      issue("i1", "是否自建渠道", "cap-delivery"),
+      issue("i2", "是否开放写权限", "cap-agent"),
+      issue("i3", "新能力域待登记", "cap-unknown"),
+    ]);
+    expect(html).not.toContain("没有议题的能力域");
+    expect(html.indexOf('data-capability-category="cap-agent"')).toBeLessThan(html.indexOf('data-capability-category="cap-delivery"'));
+    expect(html.indexOf('data-capability-category="cap-delivery"')).toBeLessThan(html.indexOf('data-capability-category="other"'));
+    expect(html.indexOf("是否开放写权限")).toBeLessThan(html.indexOf("是否自建渠道"));
+    expect(html).toContain("新能力域待登记");
+    expect(html).not.toContain("Missions · ");
+    // 能力卡有议题时不落空态。
     expect(html.match(/暂无待决策议题/g)).toHaveLength(1);
   });
 
-  it("Mission 入口与能力域 Mission 数都从同一份 Card 集合派生", () => {
-    const mission = card("mission", "lhr-a", "CEO Agent 架构与质量", { missionId: "lhr-a", capabilityId: "cap-delivery", battlefieldIds: [] });
-    const html = renderToStaticMarkup(
-      <HomeBoard cards={[capability, earlyCapability, mission]} onCard={() => undefined} onNavigate={() => undefined} />,
-    );
-    expect(html).toContain("查看 1 个 Mission");
-    expect(html).toContain("Mission · 1");
-    // 已登记能力域都带 Mission 入口（无 Mission 的能力域显示 0），Issue 派生分组不带
-    expect(html.match(/Mission · /g)).toHaveLength(2);
-    expect(html).toContain("Mission · 0");
+  it("首页战场工具条不再放 Mission 入口（1 号位不从这里看 Mission；Mission 在战场卡与公司能力详情里）", () => {
+    const html = render([mission("lhr-a", "cap-delivery")]);
+    expect(html).not.toContain("个 Mission");
+    expect(html).not.toContain('data-origin="/missions"');
   });
 });

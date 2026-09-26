@@ -1,0 +1,8 @@
+/* clark `.floating-thick`：盖住正文的板要厚——不透明兜底，支持时加 40px 模糊 + 140% 饱和。 */
+.toolbar{position:absolute;z-index:20;display:flex;overflow:hidden;border-radius:8px;background-color:var(--surface,#fdfdfe);box-shadow:var(--mat-edge);isolation:isolate;animation:quoteIn .22s cubic-bezier(.2,0,0,1) both}
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.toolbar{background-color:var(--mat-thick);-webkit-backdrop-filter:blur(40px) saturate(140%);backdrop-filter:blur(40px) saturate(140%)}}
+.toolbar button{display:flex;align-items:center;gap:6px;padding:8px 12px;border:0;background:transparent;font:inherit;font-size:12px;line-height:1.55;font-weight:500;color:var(--ink,#17171b);cursor:pointer;transition:background-color 90ms}
+.toolbar button:hover{background:color-mix(in oklab,#17171b 4%,#fdfdfe)}
+.toolbar button:focus-visible{outline:2px solid #5a97dd;outline-offset:-2px}
+@keyframes quoteIn{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.toolbar{animation:none}}

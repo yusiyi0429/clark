@@ -1,0 +1,8 @@
+services:
+  web:
+    ports: !override []
+  edge:
+    ports: !override
+      - "127.0.0.1:3100:80"
+    volumes:
+      - ../.scratch/local-caddy/Caddyfile:/etc/caddy/Caddyfile:ro

@@ -3,6 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MeetingCard, MaterialReaderModal, materialMeta, materialStateLine, previewKind, splitMaterials, buildSupplementForm, truncateText } from "./MeetingCard";
 import { meetingCard } from "./meetingWorkspace.test";
 
+// 会议页读取外壳的首页集合（关联议题的位置名）；单测里给一个空集合。
+vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ homeCards: [], closing: false }) }));
+
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
 
 const noop = () => undefined;

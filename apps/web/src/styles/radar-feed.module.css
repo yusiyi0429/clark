@@ -1,53 +1,142 @@
-.feed{max-width:1680px;margin:auto;padding:0 40px 80px;color:#25262b}.toolbar,.toolbar>div,.toolbarGroups,.meta,.storyBottom,.editor header,.editor footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.toolbar{flex-wrap:wrap}.toolbarGroups{flex-wrap:wrap;justify-content:flex-start!important}.toolbarActions{margin-left:auto}.toolbar button,.back,.quiet,.editor button,.meta button{border:0;background:transparent;color:#647083;display:inline-flex;align-items:center;gap:7px;font:inherit;font-size:13px;padding:9px 11px;border-radius:12px;cursor:pointer}.toolbar button:hover,.back:hover,.editor button:hover{background:#edf0f5}.filters,.sorts{display:flex;align-items:center;padding:3px;background:#eef0f4;border-radius:12px;gap:2px!important}.filters button,.sorts button{padding:6px 13px;border-radius:10px}.filters button[aria-pressed=true],.sorts button[aria-pressed=true]{background:white;color:#20242c;box-shadow:0 2px 7px #2028400c}.sorts button{white-space:nowrap}.error{color:#9f5930;font-size:13px}.stories{margin-top:24px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px;row-gap:18px}.story{text-align:left;padding:25px;border:1px solid #e8eaf0;border-radius:20px;background:linear-gradient(145deg,#fff,#f6f8fc);color:inherit;cursor:pointer;box-shadow:0 4px 14px #192d5010;transition:transform 220ms,box-shadow 220ms}.story:hover{transform:translateY(-3px);box-shadow:0 9px 24px #192d5015}.story h2{font-size:21px;font-weight:600;line-height:1.5;margin:18px 0 10px;letter-spacing:-.3px}.story p{font-size:14px;line-height:1.85;color:#68707c;margin:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}.meta{font-size:12px;color:#8a909b}.storyBottom{border-top:1px solid #e9ecf2;margin-top:24px;padding-top:16px;color:#7891b3;font-size:12px}.empty{max-width:460px;text-align:center;margin:65px auto;display:grid;justify-items:center;row-gap:12px}.empty h2{font-size:21px;font-weight:500}.empty p{font-size:14px;line-height:1.8;color:#858994}.orbit{width:100px;height:100px;border:1px solid #b5c6de;border-radius:50%;margin:0 auto 16px;background:conic-gradient(from 20deg,#dbe6f700,#dbe6f7a0,#adc4e270,#dbe6f700);box-shadow:inset 0 0 28px #fff}.spinning{animation:spin 3s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.reader{display:grid;grid-template-columns:minmax(0,1fr) var(--issue-chat-width,340px);margin:0;min-height:0;min-width:0;animation:appear 280ms ease;color:#282b30}.article{padding:15px 35px 100px;min-width:0}.article h2{font-size:28px;font-weight:600;line-height:1.4;letter-spacing:-.5px;margin:18px 0}.lead{font-size:18px!important;line-height:1.8!important}.article section{margin-top:28px}.article h3{font-size:16px;margin-bottom:10px}.article p{font-size:15px;line-height:1.9}.anchor{background:#f3f6fb;border-radius:16px;padding:18px;color:#64718a}.anchor>span{font-size:13px;font-weight:600}.anchor p{font-size:13px}.anchor small,.receipt small{font-size:11px;color:#8690a1}.sources{margin-top:25px;border-top:1px solid #e6e9ef;padding-top:20px;color:#7c8490;font-size:12px}.sources a{display:flex;align-items:center;gap:5px;color:#3875b9;margin:15px 0}.issue{padding-top:24px;border-top:1px solid #e6e9ef}.issue h3{font-size:20px}.receipt{background:#edf3fb;border-radius:13px;padding:16px}.receipt button{display:flex;gap:8px;align-items:center;background:#3777c5;color:white;border:0;border-radius:10px;padding:10px 14px;margin-top:12px;cursor:pointer}.conversation{border-left:1px solid #e5e9f0;background:#f5f7fa;padding:30px 23px 120px;min-width:0}.conversation>span{font-size:13px;color:#9096a0}.message{padding:15px 0;font-size:14px;line-height:1.8;overflow-wrap:anywhere}.message small{color:#8792a5}.message[data-role=user]{background:#e9edf5;border-radius:14px;padding:12px;margin-top:20px}.feed button:focus-visible,.reader button:focus-visible{outline:2px solid #4989d6;outline-offset:3px}.feed button:disabled,.reader button:disabled{opacity:.5;cursor:default}@keyframes appear{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}@media(max-width:1100px){.reader{grid-template-columns:1fr}.conversation{border-left:0;border-top:1px solid #e5e9f0}.stories{grid-template-columns:1fr}.article{padding:15px 20px 30px}}@media(max-width:760px){.toolbarActions{width:100%;justify-content:flex-end!important}}@media(prefers-reduced-motion:reduce){.reader,.spinning{animation:none}.story{transition:none}}
+.feed{max-width:1150px;margin:auto;padding:0 4px 80px;color:#25262b}.toolbar,.toolbar>div,.toolbarGroups,.meta,.storyBottom,.editor header,.editor footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.toolbar{flex-wrap:wrap}.toolbarGroups{flex-wrap:wrap;justify-content:flex-start!important}.toolbarActions{margin-left:auto}.editor button{border:0;background:transparent;color:#647083;display:inline-flex;align-items:center;gap:7px;font:inherit;font-size:13px;padding:9px 11px;border-radius:12px;cursor:pointer}.editor button:hover{background:#edf0f5}.filters,.sorts{flex:none}.status{font-size:12px;color:#818590;margin:17px 0 28px}.error{color:#9f5930;font-size:13px}.stories{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.story{text-align:left;padding:25px;border:1px solid #e8eaf0;border-radius:23px;background:linear-gradient(145deg,#fff,#f6f8fc);color:inherit;cursor:pointer;box-shadow:0 4px 14px #192d5010;transition:transform 220ms,box-shadow 220ms}.story:hover{transform:translateY(-3px);box-shadow:0 9px 24px #192d5015}.story h2{font-size:21px;line-height:1.5;margin:18px 0 10px;letter-spacing:-.5px}.story p{font-size:14px;line-height:1.85;color:#68707c;margin:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}.meta{font-size:12px;color:#8a909b}.storyBottom{border-top:1px solid #e9ecf2;margin-top:24px;padding-top:16px;color:#7891b3;font-size:12px}.empty{max-width:460px;text-align:center;margin:65px auto}.empty h2{font-size:21px;font-weight:500;margin:28px 0 12px}.empty p{font-size:14px;line-height:1.8;color:#858994}.orbit{width:100px;height:100px;border:1px solid #b5c6de;border-radius:50%;margin:auto;background:conic-gradient(from 20deg,#dbe6f700,#dbe6f7a0,#adc4e270,#dbe6f700);box-shadow:inset 0 0 28px #fff}.spinning{animation:spin 3s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.editor{background:#f4f6fa;border:1px solid #e0e6ef;border-radius:22px;padding:22px;margin-bottom:24px}.editor h2{font-size:21px}.editor p{font-size:13px;color:#697589}.anchorForm{display:grid;gap:9px;margin:20px 0;padding-bottom:20px;border-bottom:1px solid #e0e5ed}.anchorForm input:not([type=checkbox]),.anchorForm textarea{width:100%;padding:11px;border:1px solid #dce2ec;border-radius:10px;background:white;color:#303640;font:inherit;font-size:14px;box-sizing:border-box}.anchorForm>div{display:flex;align-items:center;gap:16px;font-size:13px}.anchorForm label{display:flex;align-items:center;gap:6px}.editor footer button:last-child{background:#3677c8;color:white}.reader{display:grid;grid-template-columns:minmax(0,1fr) var(--issue-chat-width,340px);margin:0;min-height:0;min-width:0;animation:appear 280ms ease;color:#282b30}.article{padding:15px 35px 100px;min-width:0}.article h2{font-size:29px;line-height:1.4;letter-spacing:-.8px;margin:18px 0}.lead{font-size:19px!important;line-height:1.8!important}.article section{margin-top:28px}.article h3{font-size:16px;margin-bottom:10px}.article p{font-size:15px;line-height:1.9}.anchor{background:#f3f6fb;border-radius:16px;padding:18px;color:#64718a}.anchor>span{font-size:13px;font-weight:600}.anchor p{font-size:13px}.anchor small,.receipt small{font-size:11px;color:#8690a1}.issue{padding-top:24px;border-top:1px solid #e6e9ef}.issue h3{font-size:20px}.choices{display:grid;gap:8px;margin:20px 0}.choices button{padding:12px 14px;border:1px solid #e1e6ee;border-radius:12px;background:#f8f9fb;text-align:left;color:#535e6f;font:inherit;font-size:14px;cursor:pointer}.choices button[aria-pressed=true]{border-color:#699ddd;background:#eaf2ff;color:#2162a9}.receipt{background:#edf3fb;border-radius:13px;padding:16px}.receipt button{display:flex;gap:8px;align-items:center;background:#3777c5;color:white;border:0;border-radius:10px;padding:10px 14px;margin-top:12px;cursor:pointer}.conversation{border-left:1px solid #e5e9f0;background:#f5f7fa;padding:30px 23px 120px;min-width:0}.conversation>span{font-size:13px;color:#9096a0}.prompts{margin-top:55px;font-size:14px;color:#7b818d}.prompts button{background:none;border:0;border-top:1px solid #e5e8ee;padding:20px 0;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}.message{padding:15px 0;font-size:14px;line-height:1.8;overflow-wrap:anywhere}.message small{color:#8792a5}.message[data-role=user]{background:#e9edf5;border-radius:14px;padding:12px;margin-top:20px}.inlineIssue{display:flex;gap:10px;align-items:flex-start;width:100%;border:0;background:none;text-align:left;padding:12px 3px;color:#363d48;font:inherit;font-size:14px;line-height:1.6;cursor:pointer}.inlineIssue:hover{color:#2869b8}.inlineIssue>span{flex:1}.inlineIssue i{height:6px;width:6px;flex:none;border-radius:50%;background:#a0a6b1;margin-top:8px}.inlineIssue i[data-urgency=red]{background:#d96263}.inlineIssue i[data-urgency=yellow]{background:#cd9a4c}.inlineIssue small{display:block;font-size:11px;color:#aa6263}.inlineIssue svg{flex:none;margin-top:4px}.quiet{margin-top:25px}.feed button:focus-visible,.reader button:focus-visible{outline:2px solid #4989d6;outline-offset:3px}.feed button:disabled,.reader button:disabled{opacity:.5;cursor:default}@keyframes appear{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}@media(max-width:1100px){.reader{grid-template-columns:1fr}.conversation{border-left:0;border-top:1px solid #e5e9f0}.stories{grid-template-columns:1fr}.article{padding:15px 20px 30px}}@media(max-width:760px){.toolbarActions{width:100%;justify-content:flex-end!important}}@media(prefers-reduced-motion:reduce){.reader,.spinning{animation:none}.story{transition:none}}
 
-.reader{height:100%;width:100%;min-height:0;min-width:0;grid-template-rows:minmax(0,1fr);overflow:hidden;box-sizing:border-box}.article,.conversation{min-height:0;box-sizing:border-box;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#d5dae3 transparent}.article h2{margin:18px 0!important}.article h3{margin-bottom:10px!important}.article p{margin:10px 0!important}.story h2{margin:18px 0 10px!important}.feed .error{margin:12px 0 20px}.reader .conversation{padding-bottom:110px}@media(max-width:1280px){.reader{height:auto;overflow:visible}.article,.conversation{overflow:visible}.reader .conversation{min-height:330px}}
+.reader{height:100%;width:100%;min-height:0;min-width:0;grid-template-rows:minmax(0,1fr);overflow:hidden;box-sizing:border-box}.article,.conversation{min-height:0;box-sizing:border-box;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#d5dae3 transparent}.article h2{margin:18px 0!important}.article h3{margin-bottom:10px!important}.article p{margin:10px 0!important}.story h2{margin:18px 0 10px!important}.reader .article{background:#ffffff90}.feed .error{margin:12px 0 20px}.reader .conversation{padding-bottom:110px}@media(max-width:1100px){.reader{height:auto;overflow:visible}.article,.conversation{overflow:visible}.reader .conversation{min-height:330px}}
 
-@media(max-width:690px){.filters{flex-wrap:wrap;justify-content:flex-start}.toolbar>div{flex-wrap:wrap}.toolbar button{padding:8px}.story{padding:20px}.reader{margin:0}.article h2{font-size:24px!important}.article .lead{font-size:17px!important}}.storyWrapper>.story{width:100%;height:100%;text-align:left}.clarify{margin-top:18px;border:0;border-radius:20px;background:#f7f8fa;padding:16px 18px;color:#6e6e73}.clarify strong{display:block;font-size:12px;font-weight:600}.clarify ul{margin:8px 0 0!important;padding:0;list-style:none;display:grid;gap:8px}.clarify li{position:relative;padding-left:12px;font-size:12px;line-height:1.7}.clarify li::before{content:'';position:absolute;left:0;top:7px;width:4px;height:4px;border-radius:50%;background:#8a8a90}.article .clarify p{margin:4px 0 0!important;font-size:12px;line-height:1.7}
+@media(max-width:690px){.filters{flex-wrap:wrap;justify-content:flex-start}.toolbar>div{flex-wrap:wrap}.toolbar button{padding:8px}.story{padding:20px}.reader{margin:0}.article h2{font-size:24px!important}.article .lead{font-size:17px!important}}
 
-/* Pen 信号阅读 v2：原文默认折叠，展开后正文内高亮研判引文并按段落插入配图。 */
-.original{margin-top:28px;border:1px solid #e6e9ed;border-radius:16px;background:#fff;overflow:hidden}
-.originalHeader{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px}
-.originalHeader button,.originalHeader a{min-width:0;border:0;background:transparent;color:#1d1d1f;font:inherit;font-size:13px;cursor:pointer}
-.originalHeader button{display:inline-flex;align-items:center;gap:8px;font-weight:600;padding:0}
-.originalHeader a{display:inline-flex;align-items:center;gap:5px;color:#007aff;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.originalChevron{transition:transform 180ms ease}.originalChevronOpen{transform:rotate(90deg);transition:transform 180ms ease}
-.originalBody{border-top:1px solid #e6e9ed;padding:0 18px 16px}
-.originalBody p{margin:14px 0!important;font-size:13px;line-height:1.75;color:#3c4350;white-space:pre-wrap}
-.originalBody p[data-highlight=true]{padding:10px 12px;border-radius:8px;background:#e8f1ff;color:#1d1d1f}
-.originalImage{display:block;max-width:100%;height:auto;margin:14px auto;border-radius:10px;background:#f1f3f6}
-@media(max-width:690px){.originalHeader{align-items:flex-start;flex-direction:column;gap:8px}.originalHeader a{max-width:100%}}
+.storyWrapper{position:relative;min-width:0}
+/* 这张卡是按「一个普通按钮，里面四块从上往下排」写的。换成 HeroUI 的按钮之后，
+   .button 那层底样式跟着进来了：inline-flex、居中、nowrap —— 四块并排挤成一行，
+   从卡片左右两边溢出去。这里把版式说回来：块级从上往下排，长标题照常换行。
+   （选择器带上父级是为了压过 .button，两边都是一个类名的话就要看谁后加载。） */
+.storyWrapper>.story{display:block;width:100%;height:100%;text-align:left;white-space:normal}
+.referenceRow{display:flex;align-items:center;gap:8px;min-width:0}.referenceRow>.inlineIssue{flex:1;min-width:0}.clarify{margin-top:18px;border-left:2px solid #9caab9;background:#f5f7fa;padding:12px 14px;color:#596575}.clarify strong{font-size:12px;font-weight:600}.article .clarify p{margin:4px 0 0!important;font-size:12px;line-height:1.7}
 
-/* Signal 阅读：920 正文 + 400px 本条信号对话栏；正文在剩余宽度内居中（2560 下 x=600）。 */
-.reader{display:grid;grid-template-columns:minmax(0,1fr) 400px;padding-right:40px;height:100%;min-height:0;overflow:hidden;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#d5dae3 transparent;--rail-right:400px}
-.reader .article{max-width:920px;margin:0 auto;padding-bottom:130px}
+/* 二级阅读只保留材料；对话统一由底部全局输入承接。 */
+.reader{display:block;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#d5dae3 transparent}
+.reader .article{max-width:920px;margin:0 auto;padding-bottom:130px;overflow:visible}
 .reader .conversation{display:none}
-@media(max-width:1280px){.reader{grid-template-columns:minmax(0,1fr);padding-right:0;height:100%;overflow:auto}.reader .article{padding-bottom:130px;overflow:visible}}
-/* 对话栏收起时不留 400px 空轨：右列收到 54px stub，恢复入口在 stub 上（箭头指向左）。
-   折叠/展开对列宽做过渡，正文随之平滑重心对齐，不水平跳动。 */
-@media(min-width:1281px){
- .reader{transition:grid-template-columns 260ms cubic-bezier(.22,1,.36,1)}
- .reader:has(> aside[data-testid="meeting-chat-sidebar"][data-open=false]){grid-template-columns:minmax(0,1fr) var(--rail-stub,54px)}
+@media(max-width:1100px){.reader{height:100%;overflow:auto}.reader .article{padding-bottom:130px}}
+
+
+/* 二级阅读重排：一个标题，三块内容（总结 / 对我们的影响 / 原文）。
+   三块是同一份材料的三种读法，不是先后步骤，所以不编号。第三块用引文式缩进，
+   把“别人说的”和“我们的判断”在视觉上分开。
+   （块名原本走页边栏。改成一竖列了，看最后一层。） */
+.reader .article{max-width:900px;padding:24px 40px 150px}
+.article .meta{font-size:12px;color:#8b919c;gap:10px}
+.article .meta>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.article .meta button{padding:8px;border-radius:10px;color:#99a1ae}
+.article .meta button:hover{background:#eceff5;color:#3875b9}
+.reader .article>h2{margin:12px 0 0!important;font-size:clamp(23px,2.1vw,34px)!important;line-height:1.36!important;letter-spacing:-.9px;font-weight:650;color:#1d1f25}
+
+.blocks{margin-top:34px;border-top:1px solid #d8dee8}
+.blocks .block{display:grid;grid-template-columns:112px minmax(0,1fr);gap:0 30px;margin:0!important;padding:28px 0;border-bottom:1px solid #e7eaf1}
+.blocks .block:last-child{border-bottom:0;padding-bottom:4px}
+.blocks .block>h3{align-self:start;margin:0!important;font-size:13px!important;font-weight:600;line-height:1.65;letter-spacing:.03em;color:#6b7280}
+.blocks .blockBody{min-width:0}
+.blocks .blockBody>p{margin:0 0 14px!important;font-size:15.5px!important;line-height:1.95!important;color:#3f4550}
+.blocks .blockBody>p:last-child{margin-bottom:0!important}
+.blocks .blockBody>p.lead{font-size:18px!important;line-height:1.85!important;color:#2b3038!important}
+
+.blocks .note{margin:18px 0 0!important;padding-left:15px;border-left:2px solid #d9e0ea;font-size:13.5px!important;line-height:1.85!important;color:#656d7b}
+.blocks .note>span{display:block;margin-bottom:2px;font-size:11.5px;font-weight:600;letter-spacing:.06em;color:#99a1af}
+
+.blocks .anchor{margin-top:20px;padding:16px 18px;border:1px solid #e4eaf3;border-radius:14px;background:#f2f5fa;color:#5a6579}
+.blocks .anchor>span{display:block;font-size:12px;font-weight:600;letter-spacing:.02em;color:#53617a}
+.blocks .anchor p{margin:7px 0 0!important;font-size:13.5px!important;line-height:1.8!important;color:#64718a}
+.blocks .anchor small{display:block;margin-top:9px;font-size:11px;color:#8b95a6}
+
+.blocks .issue{position:relative;margin-top:20px;padding:20px;border:1px solid #dfe5f0;border-radius:16px;background:linear-gradient(160deg,#fff,#f7f9fd);box-shadow:0 3px 12px rgb(25 45 80/.05)}
+.blocks .issueWhere{display:block;font-size:11.5px;letter-spacing:.02em;color:#8b93a2}
+.blocks .issue h4{margin:8px 40px 0 0;font-size:17px;font-weight:600;line-height:1.5;color:#262930}
+.blocks .issue>p{margin:9px 0 0!important;font-size:14.5px!important;line-height:1.85!important;color:#4b525e}
+.blocks .issue>small{display:block;margin-top:8px;font-size:12px;line-height:1.7;color:#868e9c}
+.blocks .clarify{margin-top:16px}
+
+.blocks .excerpt{position:relative;margin:0;padding:0 0 0 18px;border-left:2px solid #dbe2ec;font-size:14.5px;line-height:2.05;color:#5b6373;white-space:pre-line;overflow:hidden}
+.blocks 
+.blocks 
+.blocks 
+.blocks 
+.blocks .provenance{display:block;margin-top:18px;font-size:11.5px;line-height:1.75;color:#868d9a}
+.blocks 
+.blocks 
+.blocks 
+.reader .quiet{margin-top:34px}
+.reader a:focus-visible{outline:2px solid #4989d6;outline-offset:3px;border-radius:13px}
+
+@media(max-width:880px){
+  .reader .article{padding:20px 22px 140px}
+  .blocks .block{grid-template-columns:minmax(0,1fr);gap:11px 0;padding:24px 0}
 }
-@media(prefers-reduced-motion:reduce){.reader{transition:none}}
+@media(max-width:520px){.reader .article{padding:18px 16px 140px}}
 
-/* Signal 阅读器：观点解释、原文折叠与独立状态。 */
-.signalLead{color:#3c4655}
-.signalStates{display:flex;flex-wrap:wrap;gap:8px;margin-top:26px;padding-top:20px;border-top:1px solid #e6e9ef}
-.signalStates button{border:1px solid #d9dde5;background:#fff;border-radius:10px;padding:9px 14px;font:inherit;font-size:13px;color:#4f5866;cursor:pointer}
-.signalStates button:hover{background:#f2f5f9}
-/* pen 只给了已读态；未读态待设计确认，保持白底。 */
-.signalStates button[data-state=read]{border-color:#007aff66;background:#e8f1ff;color:#0a5dc2}
-.signalStates button[data-state=read]:hover{background:#dceaff}
-.signalStates button:disabled{opacity:.55;cursor:default}
 
-/* 扫描结果 toast：短暂停留后自动消失；失败与可重试错误不在此层。 */
-.toast{position:fixed;right:26px;bottom:110px;z-index:80;max-width:min(440px,86vw);padding:12px 18px;border-radius:14px;border:1px solid #ffffff1f;background:#1d1d1ff2;color:#f5f5f7;font-size:13px;line-height:1.6;box-shadow:0 12px 32px #10131a33;pointer-events:none;animation:toastIn 240ms cubic-bezier(.22,1,.36,1)}
-@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@media(prefers-reduced-motion:reduce){.toast{animation:none}}
 
-/* 扫描状态从常显行改为 hover / focus 提示，图标落在工具栏右端，气泡右对齐避免出屏。 */
-.hintTip{position:relative;display:inline-flex;align-items:center;padding:6px;color:#6e6e73;cursor:default}
-.hintTip:focus-visible{outline:2px solid #8cb1e8;outline-offset:2px;border-radius:8px}
-.hintBubble{position:absolute;right:0;top:calc(100% + 8px);width:max-content;max-width:240px;padding:8px 12px;border-radius:8px;background:#1d1d1f;color:#fff;font-size:12px;font-weight:400;line-height:1.6;text-align:left;white-space:normal;opacity:0;visibility:hidden;transition:opacity 150ms;z-index:30}
-.hintTip:hover .hintBubble,.hintTip:focus-visible .hintBubble{opacity:1;visibility:visible}
-@media(prefers-reduced-motion:reduce){.hintBubble{transition:none}}
+/* 一竖列。
+   雷达是「一直往下读」的地方，不是需要横向比较的看板：两栏卡片每读完一条就要把视线甩回
+   左边，读到第三行已经忘了自己在第几条；一竖列只往下走。列宽收到 772px，中文正文一行
+   28 字上下，是长时间读不累的那一档。**列表和二级阅读同宽同轴**，点进去、退回来，文字
+   都在同一条线上 —— 位置不跳，才敢一直往下刷。 */
+.feed{max-width:772px;padding-bottom:120px}
+.stories{grid-template-columns:minmax(0,1fr);gap:12px}
+.story{padding:21px 24px;border-radius:19px}
+.story h2{font-size:20px!important;line-height:1.5;margin:11px 0 8px!important}
+.story p{-webkit-line-clamp:2;font-size:13.5px;line-height:1.8}
+.storyBottom{margin-top:17px;padding-top:13px}
+.story:hover{transform:translateY(-2px);border-color:#dbe3ef}
+.feed .status{margin:15px 0 20px}
+
+/* 二级阅读也是一竖列：块名从左边栏挪到正文上面，做成一行小字。
+   边栏那一版是报纸的读法（眼睛在两列之间来回），这里要的是手机上那种一条线读到底。 */
+.reader .article{max-width:772px;padding:22px 26px 40px}
+.blocks{margin-top:28px}
+.blocks .block{grid-template-columns:minmax(0,1fr);gap:11px 0;padding:24px 0}
+.blocks .block>h3{font-size:11.5px!important;font-weight:600;letter-spacing:.14em;color:#98a0ad}
+.blocks .blockBody>p.lead{font-size:17.5px!important}
+
+/* 原文按段落排，不再靠 pre-line 把供应商插进来的换行原样搬上屏幕。 */
+.blocks .excerpt{white-space:normal;padding-left:17px}
+.blocks .excerpt p{margin:0 0 13px;font-size:14.5px;line-height:2.05;color:#5b6373}
+.blocks .excerpt p:last-child{margin-bottom:0}
+
+/* 接着看。读完一条，下一条就在下面 —— 不用退回列表，也就没有「读完了，算了」那个停顿。 */
+.upNext{max-width:772px;margin:0 auto;padding:0 26px 150px}
+.upNext>h3{margin:0 0 14px;font-size:11.5px;font-weight:600;letter-spacing:.14em;color:#98a0ad}
+.upNext{border-top:1px solid #e3e7ee;padding-top:26px;margin-top:6px}
+.more{padding:22px 4px 0;text-align:center;font-size:12px;color:#9aa1ae}
+@media(max-width:880px){.reader .article{padding:20px 20px 36px}.upNext{padding:22px 20px 140px}}
+@media(max-width:520px){.reader .article{padding:18px 16px 32px}.upNext{padding:20px 16px 130px}.story{padding:18px 19px}.story h2{font-size:18px!important}}
+
+/* 天枢补充：错误行带重试；原文里与研判证据吻合的段落高亮，原文配图走代理；已读/未读是手动切换。 */
+.feed .error{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.blocks .excerpt p[data-highlight=true]{margin-left:-10px;padding:8px 10px;border-radius:8px;background:#e8f1ff;color:#1d1f25}
+.blocks .excerpt img{display:block;max-width:100%;margin:6px 0 16px;border-radius:10px}
+.reader .quietRow{display:flex;flex-wrap:wrap;gap:8px;margin-top:34px}
+.reader .quietRow .quiet{margin-top:0}
+.reader .error{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:14px;color:#9f5930;font-size:13px}
+
+/* 信号卡（今日头条式单列信息流）：有图时文字在左、配图在右（约三分之一宽，4:3），图陪衬标题而不压过它；
+   来源一行在桌面贴着图的底边，在手机上横跨整张卡。没图（或图加载失败）就是同一套纯文字卡。 */
+.storyWrapper>.story{padding:18px 24px;overflow:hidden}
+.storyWrapper>.story[data-has-image]{display:grid;grid-template-columns:minmax(0,1fr) clamp(112px,31%,232px);grid-template-rows:1fr auto;grid-template-areas:"text cover" "meta cover";column-gap:20px}
+.storyText{grid-area:text;min-width:0;align-self:start}
+.story>.meta{grid-area:meta;margin-top:14px;min-width:0}
+.story>.meta>span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.story>.meta>span:last-child{flex:none}
+.storyCover{grid-area:cover;align-self:center;position:relative;display:block;width:100%;aspect-ratio:4/3;overflow:hidden;border-radius:14px;background:linear-gradient(145deg,#eef2f8,#e4eaf3)}
+.storyCover img{display:block;width:100%;height:100%;object-fit:cover;opacity:0;transform:scale(1.02);transition:opacity .45s ease,transform .6s cubic-bezier(.22,1,.36,1)}
+.storyCover[data-state=ready] img{opacity:1;transform:none}
+.story:hover .storyCover[data-state=ready] img{transform:scale(1.03)}
+.storyCover::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgb(29 31 37/.06);pointer-events:none}
+.story .storyText h2{margin:0 0 7px!important;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.story[data-has-image] .storyText h2{-webkit-line-clamp:3}
+@media(max-width:520px){.storyWrapper>.story{padding:15px 16px}.storyWrapper>.story[data-has-image]{grid-template-columns:minmax(0,1fr) 34%;grid-template-rows:auto auto;grid-template-areas:"text cover" "meta meta";column-gap:12px}.story[data-has-image] .storyText h2{font-size:16px!important;line-height:1.5}.story[data-has-image] .storyText p{display:none}.storyCover{border-radius:10px}.story[data-has-image]>.meta{margin-top:10px}}
+@media(prefers-reduced-motion:reduce){.storyCover img{transition:none;transform:none}.story:hover .storyCover[data-state=ready] img{transform:none}}
+
+/* 原文链接：只作查证用的低存在感文字链接（出处行末），不做按钮、不引导跳离天枢。 */
+.provenance .sourceLink{display:inline-flex;align-items:center;gap:2px;color:#7a8597;text-decoration:underline;text-decoration-color:#c9d0da;text-underline-offset:3px;transition:color .15s}
+.provenance .sourceLink:hover{color:#2f6bb4;text-decoration-color:currentColor}
+.provenance .sourceLink:focus-visible{outline:2px solid #4989d6;outline-offset:2px;border-radius:3px}
+@media(prefers-reduced-motion:reduce){.provenance .sourceLink{transition:none}}

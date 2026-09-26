@@ -107,4 +107,14 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
   app.get("/api/cards/battlefields", { preHandler: requireCEO }, async (): Promise<TCardCollection> => ({
     cards: await listBattlefieldCards(q, companyPeriod(now()), personDisplayNames(companyMemory)),
   }));
+  // 单个战场（二级页）：与列表同一份投影，未登记的战场 404。
+  app.get(
+    "/api/cards/battlefields/:id",
+    { preHandler: requireCEO, schema: { params: idParams } },
+    async (req, reply): Promise<TCardCollection | FastifyReply> => {
+      const cards = await listBattlefieldCards(q, companyPeriod(now()), personDisplayNames(companyMemory));
+      const card = cards.find((item) => item.objectRef.id === req.params.id);
+      return card ? { cards: [card] } : fail(reply, 404, "CARD_NOT_FOUND", "战场不存在");
+    },
+  );
 }

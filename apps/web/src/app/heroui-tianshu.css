@@ -1,0 +1,110 @@
+/* ---------------------------------------------------------------------------
+   HeroUI v3 主题「tianshu」：与 clark-main `src/app/heroui-tianshu.css` 同一份取值，
+   把 HeroUI 的语义变量接到 globals.css 的 token 上。
+
+   挂在 html[data-theme="tianshu"]（layout.tsx 服务端写入）而不是 :root：
+   HeroUI portal 到 body 的浮层（Toast / Tooltip / Modal）也要拿到同一套值，
+   且 :root[data-theme] 的特异度高于 HeroUI 默认主题的 :root，不用 !important。
+--------------------------------------------------------------------------- */
+:root[data-theme="tianshu"] {
+  color-scheme: light;
+
+  /* 纸、面、墨 */
+  --background: var(--paper);
+  --background-secondary: color-mix(in oklab, var(--paper) 96%, var(--ink) 4%);
+  --background-tertiary: color-mix(in oklab, var(--paper) 92%, var(--ink) 8%);
+  --background-inverse: var(--ink);
+  --foreground: var(--ink);
+  /* --surface 两边同名同义：直接用 globals.css 的那一份（写成自引用会让变量作废）。 */
+  --surface-foreground: var(--ink);
+  --surface-secondary: var(--neutral-wash);
+  --surface-secondary-foreground: var(--ink);
+  --surface-tertiary: color-mix(in oklab, var(--ink) 7%, var(--surface));
+  --surface-tertiary-foreground: var(--ink);
+  --surface-hover: color-mix(in oklab, var(--ink) 5%, var(--surface));
+  --overlay: var(--surface);
+  --overlay-foreground: var(--ink);
+  --backdrop: color-mix(in oklab, var(--ink) 22%, transparent);
+
+  /* 文字层级：HeroUI 的 muted 是弱化文字 */
+  --muted: var(--ink-faint);
+
+  /* 天枢蓝配白字。辅助蓝用于渐变与正文链接。 */
+  --tianshu-blue: #3A83F7;
+  --tianshu-blue-secondary: #3C66BF;
+  --tianshu-brand-gradient: linear-gradient(135deg, var(--tianshu-blue), var(--tianshu-blue-secondary));
+  /* CEO 阅读画布：冷灰表面与极轻蓝色环境光，纹理留在通知栏。 */
+  --tianshu-canvas: #f1f4f8;
+  --tianshu-canvas-top: #f7f9fc;
+  --tianshu-canvas-glow: rgb(58 131 247 / 4%);
+  --accent: var(--tianshu-blue);
+  --accent-foreground: #fff;
+  --accent-hover: color-mix(in oklab, var(--tianshu-blue) 86%, black);
+  --accent-soft: color-mix(in oklab, var(--tianshu-blue) 9%, var(--surface));
+  --accent-soft-foreground: var(--tianshu-blue-secondary);
+  --accent-soft-hover: color-mix(in oklab, var(--tianshu-blue) 14%, var(--surface));
+
+  /* 中性动作 */
+  --default: var(--neutral-wash);
+  --default-foreground: var(--ink);
+  --default-hover: color-mix(in oklab, var(--ink) 9%, var(--surface));
+  --default-soft: color-mix(in oklab, var(--ink) 4%, transparent);
+  --default-soft-foreground: var(--ink-muted);
+  --default-soft-hover: color-mix(in oklab, var(--ink) 7%, transparent);
+
+  /* 三个语义色：确认、判断、反证 */
+  --success: var(--confirmed);
+  --success-foreground: var(--solid-fg);
+  --success-hover: color-mix(in oklab, var(--confirmed) 86%, black);
+  --success-soft: var(--confirmed-wash);
+  --success-soft-foreground: var(--confirmed);
+  --success-soft-hover: color-mix(in oklab, var(--confirmed) 12%, var(--surface));
+  --warning: var(--judgment);
+  --warning-foreground: var(--solid-fg);
+  --warning-hover: color-mix(in oklab, var(--judgment) 86%, black);
+  --warning-soft: var(--judgment-wash);
+  --warning-soft-foreground: var(--judgment);
+  --warning-soft-hover: color-mix(in oklab, var(--judgment) 12%, var(--surface));
+  --danger: var(--counter);
+  --danger-foreground: var(--solid-fg);
+  --danger-hover: color-mix(in oklab, var(--counter) 86%, black);
+  --danger-soft: var(--counter-wash);
+  --danger-soft-foreground: var(--counter);
+  --danger-soft-hover: color-mix(in oklab, var(--counter) 11%, var(--surface));
+
+  /* 线 */
+  --border: var(--rule);
+  --border-secondary: var(--hairline);
+  --border-tertiary: var(--hairline-strong);
+  --separator: var(--rule);
+  --separator-secondary: var(--hairline);
+  --separator-tertiary: var(--hairline-strong);
+
+  /* 输入框 */
+  --field-background: var(--surface);
+  --field-foreground: var(--ink);
+  --field-placeholder: var(--ink-faint);
+  --field-border: var(--rule);
+  --field-border-width: 1px;
+  --field-border-hover: var(--hairline-strong);
+  --field-border-focus: var(--brand-deep);
+  --field-hover: var(--surface);
+  --field-focus: var(--surface);
+  --field-shadow: none;
+  --field-radius: calc(var(--radius) * 1.1);
+
+  /* 焦点、链接、分段控件 */
+  --focus: var(--brand-deep);
+  --link: var(--tianshu-blue-secondary);
+  --segment: var(--surface);
+  --segment-foreground: var(--ink);
+
+  /* 厚度：只给真的浮着的东西 */
+  --surface-shadow: var(--elev-2);
+  --overlay-shadow: var(--elev-3);
+
+  --disabled-opacity: 0.45;
+  --scrollbar-thumb: color-mix(in oklab, var(--ink) 18%, transparent);
+  --tooltip-delay: 500ms;
+  --tooltip-close-delay: 0ms;
+}

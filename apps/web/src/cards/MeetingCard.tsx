@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Button, Chip } from "@heroui/react";
 import { Check, ChevronDown, ChevronRight, FileUp, Files, Pencil, RefreshCw, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import type { TTranscriptCandidateProjection } from "@warmap/contracts";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
+import { issueScopeLabel } from "./scopeNames";
+import { ContextMark } from "@/components/ContextMark";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { useWorkspace } from "@/components/shell/WorkspaceContext";
+import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 import { ActionFeedback, useCardAction, type ActionState } from "@/lib/useCardAction";
 import { groupPreflight, pickActiveSection } from "./preflightOutline";
-import { ConversationDock } from "@/conversation/ConversationDock";
 import s from "@/styles/meeting-workspace.module.css";
 
 
@@ -118,7 +123,7 @@ export function activeStageIndex(status: "scheduled" | "held" | "reviewed" | "ca
 }
 
 /** 四步流程条：完成步绿勾、激活步 #E8F1FF/#007AFF、未到步灰；右侧状态行用真实材料/预审事实。 */
-function StageBar({ status, statusLine }: { status: "scheduled" | "held" | "reviewed" | "cancelled"; statusLine: string }) {
+function StageBar({ status, statusLine, actions }: { status: "scheduled" | "held" | "reviewed" | "cancelled"; statusLine: string; actions?: ReactNode }) {
   const active = activeStageIndex(status);
   return (
     <div className={s.stageRow}>
@@ -134,6 +139,7 @@ function StageBar({ status, statusLine }: { status: "scheduled" | "held" | "revi
         </ol>
         <span className={s.stageStatus}>{statusLine}</span>
       </div>
+      {actions ? <div className={s.stageActionsBar}>{actions}</div> : null}
     </div>
   );
 }
@@ -475,8 +481,30 @@ export function TranscriptCandidateDialog({
   );
 }
 
-/** Meeting 页面：会前预审、Transcript 导入/替换与 MeetingOutcome 逐项确认都在这里。 */export function MeetingCard({ card, collection, onCard, onNavigate }: CardRenderProps) {
+/** 会议页头的大时间（clark largeTime）：同一天只写时刻，否则带上日期；按公司时区。 */
+export function meetingLargeTime(iso: string, now: Date = new Date()): string {
+  const at = new Date(iso);
+  if (!Number.isFinite(at.getTime())) return "";
+  const day = (date: Date) => date.toLocaleDateString("sv-SE", { timeZone: COMPANY_TIMEZONE });
+  const time = at.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: COMPANY_TIMEZONE });
+  return day(at) === day(now) ? time : `${at.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric", timeZone: COMPANY_TIMEZONE })} ${time}`;
+}
+
+const MEETING_EYEBROW: Record<MeetingPayload["status"], string> = {
+  scheduled: "会前预审 / 会议材料",
+  held: "Outcome 复核 / 会议材料",
+  reviewed: "Outcome 复核 · 已归档",
+  cancelled: "会议材料 · 已取消",
+};
+
+/**
+ * Meeting 页面（clark MeetingWorkspace 的页头与色调）：会前预审、Transcript 导入/替换与 MeetingOutcome 逐项确认都在这里；
+ * 页头只放身份与大时间，天枢独有的动作排在阶段条右侧。
+ */
+export function MeetingCard({ card, collection, onCard, onNavigate }: CardRenderProps) {
   const payload = payloadOf<MeetingPayload>(card);
+  const { homeCards } = useWorkspace();
+  const { ask, dialog: confirmDialog } = useConfirm();
   const { state, run, retry, pending } = useCardAction(onCard);
   const [note, setNote] = useState(payload.draft.note);
   const [supplementText, setSupplementText] = useState("");
@@ -715,7 +743,7 @@ export function TranscriptCandidateDialog({
       setUploadError("请先选择至少一份会前材料；空选择不会替换现有材料。");
       return;
     }
-    if (payload.materials.length && !window.confirm("替换会清空当前材料集、补充材料与预审候选。是否继续？")) return;
+    if (payload.materials.length && !(await ask("替换会清空当前材料集、补充材料与预审候选。是否继续？"))) return;
     setUploading(true);
     setUploadError(null);
     const form = new FormData();
@@ -815,8 +843,8 @@ export function TranscriptCandidateDialog({
         <button
           type="button"
           disabled={pending}
-          onClick={() => {
-            if (window.confirm("返回编辑会使当前预审候选失效。是否继续？")) void run(actionOf("meeting.edit_materials")!, {});
+          onClick={async () => {
+            if (await ask("返回编辑会使当前预审候选失效。是否继续？")) void run(actionOf("meeting.edit_materials")!, {});
           }}
         >
           <RefreshCw size={13} aria-hidden="true" />
@@ -843,8 +871,8 @@ export function TranscriptCandidateDialog({
         <button
           type="button"
           disabled={pending}
-          onClick={() => {
-            if (window.confirm("重新预审会替换当前条目，并清除旧条目的核对和编辑状态。是否继续？")) {
+          onClick={async () => {
+            if (await ask("重新预审会替换当前条目，并清除旧条目的核对和编辑状态。是否继续？")) {
               void run(actionOf("meeting.regenerate_preflight")!, {});
             }
           }}
@@ -908,69 +936,85 @@ export function TranscriptCandidateDialog({
   );
 
   return (
-    <section className={s.workspace} data-testid="meeting-workspace" aria-labelledby="meeting-title">
+    <section className={s.workspace} data-testid="meeting-workspace" data-status={payload.status} aria-labelledby="meeting-title">
+      {confirmDialog}
       <header className={s.header}>
-        <div className={s.headerTitle}>
-          <span>
-            {payload.status === "scheduled" ? "会前预审" : payload.status === "cancelled" ? "已取消" : "Outcome 复核"} ·{" "}
-            {payload.scheduledAt.slice(0, 16).replace("T", " ")} · 主责 DRI {people.get(payload.leadDriId) ?? payload.leadDriId} ·{" "}
+        <div className={s.identity}>
+          <ContextMark kind="meeting" />
+          <div>
+            <span>{MEETING_EYEBROW[payload.status]}</span>
+            <h1 id="meeting-title">{card.title}</h1>
+            <p className={s.largeTime}>
+              <time dateTime={payload.scheduledAt}>{meetingLargeTime(payload.scheduledAt)}</time>
+            </p>
+          </div>
+        </div>
+        <div className={s.headerMeta}>
+          <Chip size="sm" variant="soft">
+            主责 DRI · {people.get(payload.leadDriId) ?? "待确认"}
+          </Chip>
+          <Chip size="sm" variant="soft">
             {payload.participants.length} 人参会
-          </span>
-          <h1 id="meeting-title">{card.title}</h1>
+          </Chip>
         </div>
-        <div className={s.headerRight}>
-          {payload.status === "scheduled" && actionOf("meeting.edit_details") ? (
-            <button type="button" className={s.editAction} disabled={pending} onClick={() => void openEditDetails()}>
-              <Pencil size={13} aria-hidden="true" />
-              编辑会议
-            </button>
-          ) : null}
-          {segments.length ? (
-            <div className={s.segGroup}>
-              {segments.map((segment, index) => (
-                <span key={segment.key} className={s.segItem}>
-                  {index > 0 ? <span className={s.segDivider} aria-hidden="true" /> : null}
-                  {segment.node}
-                </span>
-              ))}
-            </div>
-          ) : null}
-          {payload.status === "scheduled" ? (
-            <>
-              {payload.transcriptCandidate && !candidateOpen ? (
-                <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>
-                  查看会议记录候选
-                </button>
-              ) : null}
-              <input
-                ref={uploadRef}
-                type="file"
-                accept=".md,.json,application/json,text/markdown"
-                className={s.hiddenInput}
-                aria-label="选择会议记录文件"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (file) void importTranscriptFile(file);
-                }}
-              />
-              <button
-                type="button"
-                className={s.primaryAction}
-                disabled={uploading}
-                onClick={() => uploadRef.current?.click()}
-              >
-                <FileUp size={13} aria-hidden="true" />
-                {uploading ? "上传中…" : payload.transcriptCandidate ? "重新导入会议记录" : "导入会议记录"}
-              </button>
-            </>
-          ) : null}
-          <button type="button" className={s.close} onClick={() => onNavigate("/")} aria-label="返回首页">
-            <X size={17} aria-hidden="true" />
-          </button>
-        </div>
+        <Button isIconOnly variant="tertiary" data-close-view onPress={() => onNavigate("/")} aria-label="关闭会议空间">
+          <X size={19} aria-hidden="true" />
+        </Button>
       </header>
-      <StageBar status={payload.status} statusLine={stageLine} />
+      <StageBar
+        status={payload.status}
+        statusLine={stageLine}
+        actions={
+          <>
+            {payload.status === "scheduled" && actionOf("meeting.edit_details") ? (
+              <button type="button" className={s.editAction} disabled={pending} onClick={() => void openEditDetails()}>
+                <Pencil size={13} aria-hidden="true" />
+                编辑会议
+              </button>
+            ) : null}
+            {segments.length ? (
+              <div className={s.segGroup}>
+                {segments.map((segment, index) => (
+                  <span key={segment.key} className={s.segItem}>
+                    {index > 0 ? <span className={s.segDivider} aria-hidden="true" /> : null}
+                    {segment.node}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {payload.status === "scheduled" ? (
+              <>
+                {payload.transcriptCandidate && !candidateOpen ? (
+                  <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>
+                    查看会议记录候选
+                  </button>
+                ) : null}
+                <input
+                  ref={uploadRef}
+                  type="file"
+                  accept=".md,.json,application/json,text/markdown"
+                  className={s.hiddenInput}
+                  aria-label="选择会议记录文件"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void importTranscriptFile(file);
+                  }}
+                />
+                <button
+                  type="button"
+                  className={s.primaryAction}
+                  disabled={uploading}
+                  onClick={() => uploadRef.current?.click()}
+                >
+                  <FileUp size={13} aria-hidden="true" />
+                  {uploading ? "上传中…" : payload.transcriptCandidate ? "重新导入会议记录" : "导入会议记录"}
+                </button>
+              </>
+            ) : null}
+          </>
+        }
+      />
 
       {editOpen ? (
         <div className={s.editPopover} role="dialog" aria-label="编辑会议">
@@ -1031,7 +1075,7 @@ export function TranscriptCandidateDialog({
                     const carried = payload.draft.carriedIssueIds.includes(issueId);
                     return (
                       <article key={issueId} className={s.linkedIssue} data-read={read}>
-                        <small>{issue ? (issue.payload as IssuePayload).location.level : "Issue"}</small>
+                        <small>{issue ? issueScopeLabel((issue.payload as IssuePayload).location, homeCards) : "议题"}</small>
                         <h4 title={issue?.title ?? issueId}>{issue?.title ?? issueId}</h4>
                         <div className={s.briefActions}>
                           <button type="button" aria-pressed={read} disabled={pending} onClick={() => toggle("readIssueIds", issueId)}>
@@ -1181,21 +1225,23 @@ export function TranscriptCandidateDialog({
                 <span>补充内容</span>
                 <textarea value={supplementText} onChange={(event) => setSupplementText(event.target.value)} rows={2} />
               </label>
-              <div className={s.stageActions}>
-                <button
-                  type="button"
-                  disabled={pending || !supplementText.trim()}
-                  onClick={() =>
-                    void run(actionOf("meeting.request_supplement")!, {
-                      targetDriId: supplementTarget,
-                      text: supplementText.trim(),
-                      ...(supplementEntry ? { entryId: supplementEntry } : {}),
-                    })
-                  }
-                >
-                  记录请求
-                </button>
-              </div>
+              {actionOf("meeting.request_supplement") ? (
+                <div className={s.stageActions}>
+                  <button
+                    type="button"
+                    disabled={pending || !supplementText.trim()}
+                    onClick={() =>
+                      void run(actionOf("meeting.request_supplement")!, {
+                        targetDriId: supplementTarget,
+                        text: supplementText.trim(),
+                        ...(supplementEntry ? { entryId: supplementEntry } : {}),
+                      })
+                    }
+                  >
+                    记录请求
+                  </button>
+                </div>
+              ) : null}
               {payload.draft.supplementRequests.length ? (
                 <ul className={s.requestList}>
                   {payload.draft.supplementRequests.map((request) => (
@@ -1232,15 +1278,22 @@ export function TranscriptCandidateDialog({
                 <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} />
               </label>
               <div className={s.stageActions}>
-                <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.update_draft")!, { note })}>
-                  保存准备状态
-                </button>
-                <label className={s.summaryEdit}>
-                  <input type="checkbox" checked={cancelArmed} onChange={(event) => setCancelArmed(event.target.checked)} /> 我确认取消这场尚未召开的会议
-                </label>
-                <button type="button" disabled={pending || !cancelArmed} onClick={() => void run(actionOf("meeting.cancel")!, {})}>
-                  取消会议
-                </button>
+                {/* 只在服务端下发了对应 Action 时渲染（与页面其他动作一致），不对缺失的 Action 强制断言。 */}
+                {actionOf("meeting.update_draft") ? (
+                  <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.update_draft")!, { note })}>
+                    保存准备状态
+                  </button>
+                ) : null}
+                {actionOf("meeting.cancel") ? (
+                  <>
+                    <label className={s.summaryEdit}>
+                      <input type="checkbox" checked={cancelArmed} onChange={(event) => setCancelArmed(event.target.checked)} /> 我确认取消这场尚未召开的会议
+                    </label>
+                    <button type="button" disabled={pending || !cancelArmed} onClick={() => void run(actionOf("meeting.cancel")!, {})}>
+                      取消会议
+                    </button>
+                  </>
+                ) : null}
               </div>
             </div>
 
@@ -1248,13 +1301,6 @@ export function TranscriptCandidateDialog({
               <ActionFeedback state={state} onRetry={retry} />
             </main>
 
-            <ConversationDock
-              scope={card.conversation?.scope ?? `meeting:${card.objectRef.id}`}
-              label={card.title}
-              availableCards={collection}
-              variant="sidebar"
-              sidebar={{ title: "会前对话 · 本场会议", tone: "light", open: true, placeholder: "问点什么…" }}
-            />
           </section>
         ) : (
           <section className={s.review}>
@@ -1400,13 +1446,6 @@ export function TranscriptCandidateDialog({
               ) : null}
             </div>
 
-            <ConversationDock
-              scope={card.conversation?.scope ?? `meeting:${card.objectRef.id}`}
-              label={card.title}
-              availableCards={collection}
-              variant="sidebar"
-              sidebar={{ title: "会议材料对话", tone: "light", open: true, placeholder: "问点什么…" }}
-            />
           </section>
         )}
 

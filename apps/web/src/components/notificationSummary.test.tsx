@@ -1,59 +1,62 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
-import { NotificationRail } from "./NotificationRail";
+import { NotificationRail, railGroups } from "./NotificationRail";
 
-const css = readFileSync(new URL("../styles/notifications.module.css", import.meta.url), "utf8");
-
-function card(kind: string, payload: unknown): Card {
-  return {
-    schemaVersion: 1,
-    id: `${kind}:1`,
-    version: 1,
-    kind,
-    objectRef: { type: kind, id: "1", version: 1 },
-    title: kind === "issue" ? "TKOS 首期是否内建 Agent 安全控制？" : "月度计划 2026-09",
-    payload,
-    actions: [],
-  } as unknown as Card;
+function card(kind: string, id: string, title: string, payload: unknown, extra: Partial<Card> = {}): Card {
+  return { schemaVersion: 1, id: `${kind}:${id}`, version: 1, kind, objectRef: { type: kind, id, version: 1 }, title, payload, actions: [], ...extra } as unknown as Card;
 }
 
-const issue = card("issue", {
-  origin: "radar",
-  originRef: { strategicImpact: "该变化直接涉及企业 Agent 的授权与执行边界。" },
-  status: "pending",
-  location: { level: "company", relatedBattlefieldIds: [] },
-  urgency: { level: "red", reason: "大客户交付窗口在九月关闭", decisionBy: "2026-09-01T00:00:00.000+08:00" },
-  research: { status: "ready", doc: { summary: "预研结论：先内建最小安全控制，再扩 Skill 准入。" } },
-  receipts: [],
-  dismissedAt: null,
-  dismissReason: null,
-});
+const issue = (id: string, title: string, origin: string, urgency: "red" | "normal", location: unknown) =>
+  card("issue", id, title, { origin, originRef: null, status: "pending", location, urgency: { level: urgency === "red" ? "red" : "yellow" } }, { urgency });
 
-const monthly = card("monthly-plan", { period: "2026-09", companyOutcome: "把 Agent 安全基线纳入九月交付门。" });
+const battlefield = card("battlefield", "01", "灯塔项目", { battlefieldId: "01" });
+const monthly = card("monthly-plan", "p", "月度计划 2026-09", { period: "2026-09", status: "negotiating" });
+const signed = card("monthly-plan", "q", "月度计划 2026-08", { period: "2026-08", status: "confirmed" });
+const meeting = (id: string, scheduledAt: string, lead = "bai") =>
+  card("meeting", id, `会议 ${id}`, { status: "scheduled", scheduledAt, leadDriId: lead, participants: [{ personId: "bai", displayName: "白田田" }], issueIds: [] });
 
-/** W1：提请卡与月度卡的 body 默认收起，只在 hover / 键盘 focus 时卡内展开。 */
-describe("通知卡 hover 摘要", () => {
-  const html = renderToStaticMarkup(<NotificationRail cards={[issue, monthly]} onNavigate={() => undefined} />);
-
-  it("提请卡把 ResearchDoc 摘要放进可展开区，默认态只显示标题与 reason/期限", () => {
-    expect(html).toContain("预研结论：先内建最小安全控制，再扩 Skill 准入。");
-    expect(html).toContain("大客户交付窗口在九月关闭");
-    expect(html).toContain("TKOS 首期是否内建 Agent 安全控制？");
-    expect(html.match(/role="tooltip"/g)).toHaveLength(2);
+describe("通知栏分组（clark 三组）", () => {
+  it("只收需要行动的：未签发月度计划、已排期会议、红色待决议题；顺序固定", () => {
+    const now = new Date("2026-09-23T01:00:00Z");
+    const groups = railGroups(
+      [
+        battlefield,
+        monthly,
+        signed,
+        meeting("m1", "2026-09-23T02:00:00Z"),
+        issue("i1", "首次交付承诺，是否必须包含语音体验？", "dri", "red", { level: "battlefield", battlefieldId: "01" }),
+        issue("i2", "黄色议题不进通知栏", "dri", "normal", { level: "company", relatedBattlefieldIds: [] }),
+        issue("i3", "雷达升级的议题", "radar", "red", { level: "company", relatedBattlefieldIds: [] }),
+      ],
+      now,
+    );
+    expect(groups.map((group) => group.title)).toEqual(["战略决策更新", "战略会议安排", "战略问题研究"]);
+    expect(groups[0].items.map((item) => item.title)).toEqual(["月度计划 2026-09"]);
+    expect(groups[0].items[0].meta).toBe("协商中 · 待签发");
+    expect(groups[1].subtitle).toBe("今天 · 白田田主持");
+    expect(groups[1].items[0].meta).toBe("10:00");
+    expect(groups[2].items.map((item) => item.meta)).toEqual(["灯塔项目 · 提请", "雷达 · 需要尽快判断"]);
+    expect(groups[2].items.some((item) => item.title === "黄色议题不进通知栏")).toBe(false);
   });
 
-  it("月度卡不再常显 companyOutcome，而是与提请卡同一可展开形态", () => {
-    expect(html).toContain("把 Agent 安全基线纳入九月交付门。");
-    expect(css).not.toContain(".headBody");
-    expect(css).toContain(".cardSummary{display:block;max-height:0;overflow:hidden;opacity:0;");
-    expect(css).toContain(".card:hover .cardSummary,.head:focus-visible .cardSummary{max-height:6.8em;opacity:1;margin-top:6px}");
+  it("没有待处理事项的分组整组不出现", () => {
+    expect(railGroups([signed])).toEqual([]);
   });
 
-  // W5：左上角入口从登录态 Lock 换成配置入口。
-  it("左上角入口是配置按钮，不再是锁图标", () => {
+  it("不是今天的会议写日期，副标题写场数", () => {
+    const groups = railGroups([meeting("m1", "2026-09-25T02:00:00Z")], new Date("2026-09-23T01:00:00Z"));
+    expect(groups[0].subtitle).toBe("1 场待开");
+    expect(groups[0].items[0].meta).toBe("9/25 10:00");
+  });
+
+  it("没有「稍后处理」与条数上限（C-05：待拍板事项不能被藏起）；左上角是配置入口；胶囊回首页", () => {
+    const many = Array.from({ length: 8 }, (_, index) => issue(`r${index}`, `议题 ${index}`, "radar", "red", { level: "company", relatedBattlefieldIds: [] }));
+    const html = renderToStaticMarkup(<NotificationRail cards={many} onNavigate={() => undefined} />);
+    expect(html).not.toContain("稍后处理");
+    expect(html.match(/data-tone="red"/g)).toHaveLength(8);
     expect(html).toContain('aria-label="配置"');
-    expect(html).not.toContain('aria-label="已登录 CEO 会话"');
+    expect(html).toContain('aria-label="天枢，返回首页"');
+    expect(html).toContain('aria-label="8 项通知"');
   });
 });

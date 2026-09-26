@@ -37,7 +37,6 @@ describe.skipIf(!hasDocker)("Compose deployment boundaries", () => {
   writeFileSync(envFile, [
     "POSTGRES_PASSWORD=dummy-pg",
     "PUBLIC_DOMAIN=staging.example.com",
-    "CEO_ACCESS_PASSWORD_HASH=scrypt:a:b",
     "SESSION_SECRET=dummy-session",
     "DRI_SERVICE_TOKEN=dummy-dri",
     "COMPANY_MEMORY_MCP_TOKEN=dummy-mcp",

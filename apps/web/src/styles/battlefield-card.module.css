@@ -1,81 +1,77 @@
+/* 战场翻转卡：取值逐项来自 clark-main `progress-card.module.css`。三环、状态药丸与进展看板
+   在天枢没有后端数据（不计算完成率，见 docs/CEOwarmap_目标设计_v0.3.md §2.4），不移植。 */
 .frame{min-width:0;min-height:0;position:relative;border-radius:22px;perspective:1800px;isolation:isolate}
-.rotor{display:grid;height:100%;min-height:0;border:1px solid #1d1d1f1f;border-radius:inherit;background:#fff;box-shadow:0 2px 6px #1d1d1f08,inset 0 1px 0 #fff;transform:translateZ(0);transform-style:preserve-3d;will-change:transform;transition:transform 380ms cubic-bezier(.22,.72,.18,1),border-color 180ms,box-shadow 180ms}
+.rotor{display:grid;height:100%;min-height:0;border:1px solid #dfe4e9;border-radius:inherit;background:#fff;box-shadow:0 2px 6px #1d1d1f08,inset 0 1px 0 #fff;transform:translateZ(0);transform-style:preserve-3d;will-change:transform;transition:transform 380ms cubic-bezier(.22,.72,.18,1),border-color 180ms,box-shadow 180ms}
 .rotor[data-flipped=true]{transform:translateZ(0) rotateY(180deg)}
 .face{grid-area:1/1;min-width:0;min-height:0;overflow:clip;contain:paint;border:0;border-radius:21px;padding:21px 22px;background:#fff;box-shadow:none;backface-visibility:hidden;-webkit-backface-visibility:hidden;clip-path:inset(0 round 21px)}
 .front{transform:rotateY(0deg);display:flex;flex-direction:column}
-/* 正面战略上下文：负责人 + 两行六个月目标，始终在待决策列表之上。 */
-.context{display:flex;flex-direction:column;gap:3px;margin-top:7px}
-.contextOwner{font-size:var(--type-meta,12px);line-height:1.6;color:#6e6e73}
-.contextMissions{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;border:0;border-radius:7px;background:#e8f1ff;padding:4px 7px;font:inherit;font-size:var(--type-meta,11px);line-height:1.6;font-weight:600;color:#0a5dc2;cursor:pointer}
-.contextMissions:hover{background:#d8e7fc}
-.missionList{display:flex;flex-direction:column;gap:1px;max-height:132px;overflow:auto;margin:2px 0 0;padding:2px 0;list-style:none;scrollbar-width:thin}
-.missionList li+li{border-top:1px solid #1d1d1f0d}
-.missionList button{display:flex;align-items:flex-start;gap:6px;width:100%;border:0;border-radius:7px;background:transparent;padding:6px 4px;text-align:left;font:inherit;font-size:11px;line-height:1.45;color:#3c4350;cursor:pointer}
-.missionList button:hover{background:#f2f6fc;color:#0a5dc2}
-.missionList button>span{flex:1;min-width:0}.missionList button>svg:last-child{margin-top:2px;flex:none;color:#8c98a6}.missionList button:focus-visible{outline:2px solid #8cb1e8;outline-offset:2px}
-.outcome{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin:0;font-size:var(--type-meta,12px);line-height:1.6;color:#5b6472}
-.back{transform:rotateY(180deg);background:linear-gradient(155deg,#fff 50%,#f5f8fc);position:relative}
-/* Ambient light belongs to the progress face, never to a status or metric.
-   The clear middle protects the charts; transform-only motion stays inexpensive. */
+.back{transform:rotateY(180deg);background:linear-gradient(155deg,#fff 50%,#f5f8fc);position:relative;display:flex;flex-direction:column}
+/* 进展面上一层轻而静止的环境光，远离指标。 */
 .atmosphere{position:absolute;inset:0;z-index:-1;border-radius:inherit;overflow:clip;contain:paint;pointer-events:none;opacity:0;visibility:hidden;will-change:opacity;transition:opacity 180ms ease,visibility 0s 180ms}
 .rotor[data-flipped=true] .atmosphere{opacity:1;visibility:visible;transition-delay:100ms}
-.atmosphere>span{position:absolute;inset:-24%;will-change:transform;background:radial-gradient(ellipse at 17% 84%,#a2bddf3d 0%,#bed3e724 20%,transparent 45%),radial-gradient(ellipse at 86% 14%,#c5c3e523 0%,transparent 38%);animation:ambientDrift 26s cubic-bezier(.45,0,.55,1) infinite alternate;animation-play-state:paused}
-.atmosphere>span+span{background:radial-gradient(ellipse at 76% 84%,#b3d4d63d 0%,transparent 45%),radial-gradient(ellipse at 30% 12%,#e4d9ca33 0%,transparent 38%);animation-name:ambientReturn;animation-duration:34s;animation-delay:-11s}
-.rotor[data-flipped=true] .atmosphere>span{animation-play-state:running}
-.frame[data-origin=tokenops] .atmosphere>span{animation-delay:-13s}
-.frame[data-origin=tokenops] .atmosphere>span+span{animation-delay:-23s}
-@keyframes ambientDrift{from{transform:translate3d(-5%,2%,0) scale(1)}to{transform:translate3d(8%,-5%,0) scale(1.07)}}
-@keyframes ambientReturn{from{transform:translate3d(5%,-3%,0) scale(1.06)}to{transform:translate3d(-7%,5%,0) scale(1)}}
-@media(prefers-reduced-motion:reduce){.atmosphere{transition:none}.atmosphere>span{animation:none}}
+.atmosphere>span{position:absolute;inset:-24%;background:radial-gradient(ellipse at 17% 84%,#a2bddf26 0%,transparent 45%),radial-gradient(ellipse at 86% 14%,#c5c3e518 0%,transparent 38%)}
+.atmosphere>span+span{background:radial-gradient(ellipse at 76% 84%,#b3d4d626 0%,transparent 45%)}
+@media(prefers-reduced-motion:reduce){.atmosphere{transition:none}}
 @media(prefers-contrast:more){.atmosphere{display:none}}
 .face[aria-hidden=true]{pointer-events:none}
-.header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:5px;min-height:30px}
-.header h2{font-size:var(--type-title,20px);font-weight:600;line-height:1.4;letter-spacing:-.025em;margin:0;color:#1d1d1f}
-.title{display:flex;align-items:center;gap:8px;text-align:left;border:0;padding:0;background:none;cursor:pointer;color:#1d1d1f;min-width:0}
-.title>svg{color:#8c98a6;opacity:.35;flex:none}
-.flip{display:flex;align-items:center;justify-content:center;gap:5px;flex:none;min-height:32px;border:0;border-radius:9px;background:#f1f3f6;color:#626873;padding:6px 9px;font:inherit;font-size:12px;cursor:pointer;transition:background 150ms,color 150ms}
-.flip:hover{background:#e8edf4;color:#245e9d}.flip:active{background:#dfe6f0}
-.flip:focus-visible,.title:focus-visible,.evidence>button:focus-visible{outline:2px solid #8cb1e8;outline-offset:3px}
+.face[data-slot=card]{display:flex;flex-direction:column;gap:0}
+.header{display:flex;flex:none;align-items:center;justify-content:space-between;gap:12px;margin-bottom:5px;min-height:30px}
+.header>[data-reference-id]{margin-left:auto}
+/* CEO 本人是负责人：卡头一枚皇冠（clark .driBadge 的尺寸与颜色；天枢没有 DRI 进展页可去，只作标识不作按钮）。
+   它顶掉引用按钮的 margin-left:auto，排在引用前面。 */
+.header>.ownerBadge{margin-left:auto}.header>.ownerBadge+[data-reference-id]{margin-left:0}
+.ownerBadge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:28px;height:28px;color:#748092}
+.front .header{margin-bottom:0}
+.header h2{font-size:var(--type-title,20px);font-weight:600;line-height:1.4;letter-spacing:-.025em;margin:0;color:#1d1d1f;min-width:0}
+/* 标题即入口（clark progress-card .title）：名称 + 一枚淡色 ›，悬停时箭头显出来。 */
+.header>.title{display:flex;align-items:center;gap:8px;min-width:0;height:auto;padding:0;border:0;border-radius:0;background:none;text-align:left;color:#1d1d1f;cursor:pointer}
+.header>.title>svg{flex:none;color:#8c98a6;opacity:.35;transition:opacity 180ms}
+.header>.title:hover>svg,.header>.title:focus-visible>svg{opacity:1}
+.header>.title:focus-visible{outline:2px solid #8cb1e8;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.header>.title>svg{transition:none}}
+.flip{flex:none}
+.flip:focus-visible,.evidence>button:focus-visible{outline:2px solid #8cb1e8;outline-offset:3px}
 .urgent{display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:8px;background:#c43e3412;color:#b6342c;font-size:10px}
-.back{display:flex;flex-direction:column}
-.chartEyebrow{font-size:12px;font-weight:500;color:#777d88;letter-spacing:.02em}
-.rotor[data-flipped=true] .ambientRing{animation-play-state:running}
-@keyframes ringBreathe{0%,100%{opacity:.45}50%{opacity:.92}}
-.evidence{margin-top:7px;color:#717882;font-size:11px}
+@media(hover:hover){.frame:hover .rotor{box-shadow:0 3px 10px #1d1d1f0e,inset 0 1px 0 #fff}}
+
+/* 正面「战场总结 · 目标进展」一格：天枢放负责人、Mission 与六个月目标（同一版式）。 */
+.finding{flex:none;display:flex;flex-direction:column;align-items:flex-start;gap:5px;width:100%;padding:12px 0 14px;margin:7px 0 12px;border:0;border-bottom:1px solid #e8ebef;border-radius:0;background:none;text-align:left;color:#1d1d1f}
+.findingHeading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;width:100%;font-size:12px;color:#858b94}
+.finding strong{font-weight:500;color:#4c535c;font-size:var(--type-body,14px);line-height:1.65;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.missionToggle{display:inline-flex;align-items:center;gap:4px;margin-left:auto;padding:0;border:0;background:none;font:inherit;font-size:12px;font-weight:600;color:#2f6bb4;cursor:pointer}
+/* 原生按钮要压过外壳 .shell button:not([data-slot]){color:inherit}（0,2,1）。 */
+.frame .finding .missionToggle{color:#2f6bb4}.frame .missionList button{color:#3d4a5c}.frame .missionList button:hover{color:#2f6bb4}
+.missionToggle>svg{flex:none;opacity:.7;transition:transform 160ms}
+.missionToggle[aria-expanded=true]>svg{transform:rotate(90deg)}
+.missionToggle:focus-visible{outline:2px solid #8cb1e8;outline-offset:3px;border-radius:4px}
+.missionList{list-style:none;margin:4px 0 0;padding:0;width:100%;max-height:132px;overflow:auto;scrollbar-width:thin}
+.missionList li+li{border-top:1px solid #27364e0b}
+.missionList button{display:flex;align-items:center;gap:8px;width:100%;padding:6px 0;border:0;background:none;font:inherit;font-size:13px;line-height:1.5;color:#3d4a5c;text-align:left;cursor:pointer}
+.missionList button:hover{color:#2f6bb4}
+.missionList button span{flex:1;min-width:0;overflow-wrap:anywhere}
+.missionList button b{flex:none;font-weight:600;color:#3c66bf;font-variant-numeric:tabular-nums}
+.missionList button>svg{flex:none;color:#8c98a6}
+.issues{flex:none;min-height:0;overflow:visible;margin:0 -6px;padding:0 6px}
+
+/* 背面：天枢的当月战场结果与普通待办；负责人反馈进「反馈与依据」。 */
+.backBody{flex:1;display:flex;flex-direction:column;gap:14px;min-height:0;padding:12px 0 8px}
+.block{display:flex;flex-direction:column;gap:6px;min-width:0}
+.eyebrow{font-size:12px;font-weight:500;color:#777d88;letter-spacing:.02em}
+.target{margin:0;font-size:var(--type-body,14px);line-height:1.65;color:#1d1d1f;overflow-wrap:anywhere}
+.todos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.todos li{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border-radius:10px;background:#f5f7fa;font-size:13px;line-height:1.55;color:#1d1d1f}
+.todos small{font-size:11px;color:#8b9097}
+.missing{margin:0;font-size:13px;line-height:1.6;color:#6d737d}
+.note{margin:0;font-size:11px;line-height:1.6;color:#8b9097}
+.evidence{position:static;margin-top:7px;color:#717882;font-size:11px}
 .evidence>button{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;min-height:28px;list-style:none;border:0;padding:0;width:100%;text-align:left;background:none;color:inherit;font:inherit}
 .evidence>button:before{content:'›';margin-right:0;transition:transform 160ms}.evidence[data-open=true]>button:before{transform:rotate(90deg)}
 .evidence>button>span{margin-left:auto;font-size:10px;color:#92969e}
 .evidence>div{position:absolute;z-index:2;left:16px;right:16px;bottom:49px;max-height:calc(100% - 110px);overflow:auto;border:1px solid #dce2ec;border-radius:12px;background:#fffffff5;box-shadow:0 8px 30px #20305018;padding:12px 14px;backdrop-filter:blur(12px);opacity:0;transform:translateY(5px);visibility:hidden;transition:opacity 160ms ease,transform 200ms cubic-bezier(.22,.72,.18,1),visibility 0s 200ms}
 .evidence[data-open=true]>div{opacity:1;transform:translateY(0);visibility:visible;transition-delay:0s}
 .evidence p{margin:0 0 10px;line-height:1.7}.evidence p:last-child{margin-bottom:0}
-.missing{padding:8px 0 0}.missing p{font-size:13px;color:#6d737d;margin:6px 0}.missing span{font-size:11px;color:#8b9097;line-height:1.6}
-@media(hover:hover){.frame:hover .rotor{border-color:#1d1d1f2b;box-shadow:0 3px 10px #1d1d1f0e,inset 0 1px 0 #fff}}
+
 @media(min-width:1800px){.face{padding:24px 28px}}
 @media(max-width:1100px){.face{padding:17px}.header{gap:6px}.header h2{font-size:18px}.flip{padding:6px}}
-@media(prefers-reduced-motion:reduce){.frame{perspective:none}.rotor,.flip,.evidence>div,.atmosphere{transition:none}.rotor[data-flipped=true],.front,.back{transform:none}.face[aria-hidden=true]{visibility:hidden}}
-@media(prefers-contrast:more){.rotor{border-color:#777}.chartEyebrow,.chartNote,.ringCenter>span,.evidence,.evidence>button>span{color:#444}}
-
-.header>[data-reference-id]{margin-left:auto}.header{justify-content:flex-start}
-
-/* 新 Web：正面议题列表与背面真实待办/反馈。不引入进度百分比或第二套 token。 */
-.staticTitle{font-size:var(--type-title,20px);font-weight:600;line-height:1.4;letter-spacing:-.025em;margin:0;color:#1d1d1f}
-.list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:auto;scrollbar-width:thin}
-.list li+li{border-top:1px solid #1d1d1f0d}
-.listButton{display:flex;align-items:flex-start;gap:10px;width:100%;padding:9px 0;border:0;background:none;text-align:left;font:inherit;font-size:var(--type-body,14px);line-height:1.6;color:#1d1d1f;cursor:pointer;border-radius:9px;transition:background 150ms}
-.listButton:hover{background:#f5f5f7}
-.listButton:focus-visible{outline:2px solid #8cb1e8;outline-offset:3px}
-.listButton>span{flex:1;min-width:0}
-.listButton>svg{color:#8c98a6;margin-top:5px;flex:none;opacity:0;transition:opacity 150ms}
-.listButton:hover>svg{opacity:.8}
-.dot{width:6px;height:6px;border-radius:50%;margin-top:8px;flex:none}
-.progressBody{display:flex;flex-direction:column;gap:16px;min-height:0;overflow:auto;scrollbar-width:thin;padding-top:8px}
-.progressBlock{display:flex;flex-direction:column;gap:6px}
-.target{font-size:var(--type-body,14px);line-height:1.7;color:#2f343c;white-space:pre-line}
-.todoList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-.todoList li{display:flex;flex-direction:column;gap:3px;border-radius:10px;background:#f5f7fa;padding:9px 11px}
-.todoList span{font-size:var(--type-body,14px);line-height:1.6;color:#2f343c}
-.todoList small{font-size:var(--type-meta,12px);color:#767c86}
-.feedback{font-size:var(--type-body,14px);line-height:1.7;color:#2f343c}
-.feedback small{display:block;margin-top:5px;font-size:var(--type-meta,12px);color:#767c86}
-.noPercent{margin-top:auto;font-size:var(--type-meta,12px);color:#8b9097;line-height:1.6}
-@media(prefers-reduced-motion:reduce){.listButton,.listButton>svg{transition:none}}
+@media(prefers-reduced-motion:reduce){.frame{perspective:none}.rotor,.flip,.evidence>div,.atmosphere,.missionToggle>svg{transition:none}.rotor[data-flipped=true],.front,.back{transform:none}.face[aria-hidden=true]{visibility:hidden}}
+@media(prefers-contrast:more){.rotor{border-color:#777}.eyebrow,.evidence,.evidence>button>span,.note{color:#444}.finding{border-color:#777}.ownerBadge{color:#333}}

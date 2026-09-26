@@ -9,7 +9,7 @@ import { Card, MeetingCardPayload, type TPreflightCandidate } from "@warmap/cont
 import { buildApp } from "../src/app.js";
 import { loadCompanyMemory } from "../src/companyMemory.js";
 import { migrate } from "../src/migrate.js";
-import { createTestApp, createTestDb, preflightCandidate, testEnv, TEST_PASSWORD, type TestApp } from "./helpers.js";
+import { createTestApp, createTestDb, preflightCandidate, seedTestAccess, testEnv, TEST_LOGIN, type TestApp } from "./helpers.js";
 import { recoverInterruptedPreflight, runPreflight, type PreflightAgent, type PreflightAgentInput } from "../src/meetingPreflight.js";
 import type { DriExportRequest } from "../src/meetingStore.js";
 
@@ -1016,11 +1016,12 @@ describe("startup recovery of an interrupted preflight", () => {
         ]);
         expect(await recoverInterruptedPreflight(db.query.bind(db), { now: () => new Date("2026-05-02T03:00:00.000Z") })).toBe(1);
 
+        await seedTestAccess(db);
         const login = await app.inject({
           method: "POST",
           url: "/api/auth/login",
           headers: { origin: testEnv.publicOrigin },
-          payload: { password: TEST_PASSWORD },
+          payload: TEST_LOGIN,
         });
         const card = await app.inject({
           method: "GET",

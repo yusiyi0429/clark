@@ -58,6 +58,8 @@ export const BattlefieldCardPayload = Type.Object(
     pendingIssues: Type.Array(BattlefieldPendingIssue),
     todos: Type.Array(BattlefieldTodo),
     latestFeedback: Type.Union([BattlefieldLatestFeedback, Type.Null()]),
+    /** 当月已签发计划里归属本战场的全部负责人反馈，按 observedAt 倒序（二级页「进展」的反馈历史）。 */
+    feedback: Type.Array(BattlefieldLatestFeedback),
   },
   { additionalProperties: false },
 );

@@ -1,0 +1,55 @@
+/* 成员工作台主区：与 CEO 首页看板同一套白色面板、圆角与字号（home-board.module.css），不另起风格。 */
+.board {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 0 88px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  scrollbar-width: none;
+  color: #1d1d1f;
+}
+.board::-webkit-scrollbar { display: none; }
+
+.panel {
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+  border: 1px solid #1d1d1f0d;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 1px 2px #1d1d1f04;
+}
+
+.panel h1 {
+  margin: 0;
+  font-size: var(--type-title, 20px);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -.025em;
+  color: var(--apple-label, #1d1d1f);
+}
+
+.panel p {
+  margin: 0;
+  font-size: var(--type-body, 14px);
+  line-height: 1.55;
+  color: #6e6e73;
+}
+
+/* 通知栏没有条目时的一句说明：放在与通知卡片同一位置（时钟下方）。 */
+.quiet {
+  margin: 0;
+  padding: 4px 6px;
+  color: rgb(255 255 255 / .82);
+  font-size: var(--type-meta, 12px);
+  line-height: 1.6;
+  text-shadow: 0 .5px 1px rgb(0 0 0 / .22);
+}
+
+@media (prefers-contrast: more) {
+  .panel { border-color: #777; }
+  .panel p { color: #444; }
+}

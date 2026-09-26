@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
 import type { MonthlyPlanPayload } from "./payloads";
+import { WorkspaceTestProvider } from "@/components/shell/testing";
 import { MonthlyPlanCard, monthlyDraftPatch, type MonthlyDraftState } from "./MonthlyPlanCard";
 
 // useCardAction 需要 Next 路由上下文；这里只渲染静态标记。
@@ -32,16 +33,26 @@ function planCard(payloadOverrides: Record<string, unknown>, actions: Card["acti
   } as unknown as Card;
 }
 
+/** 首页注册表：月度页用它把战场 / 能力的 id 写成名称。 */
+const registry = [
+  { kind: "battlefield", id: "battlefield:growth", title: "增长战场", payload: { battlefieldId: "growth" } },
+  { kind: "capability", id: "capability:rearc", title: "Re-architecture", payload: { capabilityId: "re-architecture" } },
+] as unknown as Card[];
+
 function render(card: Card): string {
   return renderToStaticMarkup(
-    <MonthlyPlanCard card={card} collection={[card]} onCard={() => undefined} onNavigate={() => undefined} />,
+    <WorkspaceTestProvider api={{ homeCards: registry }}>
+      <MonthlyPlanCard card={card} collection={[card]} onCard={() => undefined} onNavigate={() => undefined} />
+    </WorkspaceTestProvider>,
   );
 }
 
 describe("月度计划 · 已签发", () => {
-  it("Header 只两段眉标，签发回执为卡，且不出现签发/保存按钮", () => {
+  it("页头：月度标记、月份与签发状态，关闭写明关闭月度计划；签发回执为卡，且不出现签发/保存按钮", () => {
     const html = render(planCard({}));
-    expect(html).toContain("已签发 · 2026-09-16");
+    expect(html).toContain("月度协商 · 2026 年 9 月 · 已签发 · 2026-09-16");
+    expect(html).toContain('data-context-mark="monthly"');
+    expect(html).toContain('aria-label="关闭月度计划"');
     expect(html).not.toContain("草案已就绪");
     expect(html).toContain("本计划已签发，是当月目标的唯一来源。");
     expect(html).toContain("签发于 2026-09-16");
@@ -77,12 +88,17 @@ describe("月度计划 · 正文两列", () => {
     );
     for (const title of ["公司结果", "普通待办", "DRI 反馈", "备注"]) expect(html).toContain(title);
     expect(html).toContain("01");
-    expect(html).toContain("growth");
-    expect(html).toContain("负责人（personId）");
+    // 战场写名称，不打印原始 id；时间按公司时区。
+    expect(html).toContain("增长战场");
+    expect(html).not.toContain(">growth<");
+    expect(html).toContain(">负责人<");
+    // 反馈写待办标题，不打印待办 id。
+    expect(html).toContain("待办 跑通首单");
+    expect(html).not.toContain("待办 t1");
     expect(html).toContain("可选截止");
     expect(html).toContain("来源：issue:9");
     expect(html).toContain("首单口径需要先对齐");
-    expect(html).toContain("2026-09-12 03:20");
+    expect(html).toContain("9/12 11:20");
     expect(html).toContain("九月不再开新战场");
     // 只有服务端下发的 Action 才渲染按钮。
     expect(html).toContain("保存计划");
@@ -95,13 +111,13 @@ describe("月度计划 · 正文两列", () => {
         {
           status: "negotiating",
           confirmedAt: null,
-          capabilities: [{ capabilityId: "Re-architecture", outcome: "九月跑通第一个客户交付" }],
+          capabilities: [{ capabilityId: "re-architecture", outcome: "九月跑通第一个客户交付" }],
           negotiation: { edits: [], checkedItemIds: [], note: "", feedback: [] },
         },
         [{ actionId: "a1", actionType: "monthly-plan.update_draft", label: "保存计划" }],
       ),
     );
-    expect(html).toContain("能力 PCO · Re-architecture");
+    expect(html).toContain("Re-architecture · 能力 PCO");
     expect(html).toContain("九月跑通第一个客户交付");
     expect(html).toContain("已核对 Re-architecture 能力 PCO");
     expect(html).toContain("能力结果");

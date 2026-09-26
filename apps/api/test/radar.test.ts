@@ -6,12 +6,13 @@ import { createAssistantMessageEventStream, type AssistantMessage } from "@earen
 import { buildApp } from "../src/app.js";
 import { createRadarService, type RadarAssessor, type RadarWebAdapter } from "../src/radar.js";
 import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "../src/radarSources.js";
+import { createBochaWebSearchAdapter } from "../src/webSearch.js";
 import { createRadarAgentAssessor } from "../src/radarAgent.js";
 import { createRadarScheduler } from "../src/radarScheduler.js";
 import { loadCompanyMemory } from "../src/companyMemory.js";
-import { shortSignalTitle } from "../src/signals.js";
+import { projectSignalCard, shortSignalTitle } from "../src/signals.js";
 import { migrate } from "../src/migrate.js";
-import { createTestDb, testEnv, TEST_PASSWORD } from "./helpers.js";
+import { createTestDb, seedTestAccess, testEnv, TEST_LOGIN } from "./helpers.js";
 
 const NOW = new Date("2026-05-02T03:00:00.000Z");
 const ANCHORS = [{
@@ -85,12 +86,30 @@ function outletItem(index: number): TRadarSourceItem {
   };
 }
 
-async function login(app: Awaited<ReturnType<typeof buildApp>>): Promise<string> {
+function anchorList(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `anchor-${index}`,
+    title: `方向 ${index}`,
+    query: `查询 ${index}`,
+    location: { type: "company" as const },
+  }));
+}
+
+/** 每个监测方向返回 3 条不同 URL 的网页结果（恰好不触发每方向上限）。 */
+const threeWebItemsPerAnchor: RadarWebAdapter = {
+  configured: true,
+  async search(input) {
+    return Array.from({ length: 3 }, (_, index) => webItem(input.query, `https://example.com/${input.query}/${index}`, "2026-05-01T08:00:00.000Z"));
+  },
+};
+
+async function login(app: Awaited<ReturnType<typeof buildApp>>, db: { query: (text: string, params?: unknown[]) => Promise<unknown> }): Promise<string> {
+  await seedTestAccess(db);
   const response = await app.inject({
     method: "POST",
     url: "/api/auth/login",
     headers: { origin: testEnv.publicOrigin },
-    payload: { password: TEST_PASSWORD },
+    payload: TEST_LOGIN,
   });
   return (response.headers["set-cookie"] as string).split(";")[0];
 }
@@ -116,8 +135,8 @@ describe("Radar source adapter public seam", () => {
       }] } } }), { status: 200, headers: { "content-type": "application/json" } });
     };
 
-    const web = createBochaRadarWebAdapter({ apiKey: "bocha-key", endpoint: "https://bocha.invalid/web-search", fetch: fakeFetch });
-    const webItems = await web.search({ query: "市场变化", domains: ["example.com"] }, new AbortController().signal);
+    const web = createBochaRadarWebAdapter(createBochaWebSearchAdapter({ apiKey: "bocha-key", endpoint: "https://bocha.invalid/web-search", fetch: fakeFetch }));
+    const webItems = await web.search({ query: "市场变化", domains: ["example.com"], lookbackHours: 48 }, new AbortController().signal);
     expect(webItems[0]).toEqual({
       sourceType: "web",
       title: "Web 公告",
@@ -206,9 +225,45 @@ describe("Radar source adapter public seam", () => {
   });
 
   it("reports the Web Search provider honestly when BOCHA_API_KEY is absent", async () => {
-    const web = createBochaRadarWebAdapter({});
+    const web = createBochaRadarWebAdapter(createBochaWebSearchAdapter({}));
     expect(web.configured).toBe(false);
-    await expect(web.search({ query: "市场变化" }, new AbortController().signal)).rejects.toThrow(/BOCHA_API_KEY/);
+    await expect(web.search({ query: "市场变化", lookbackHours: 48 }, new AbortController().signal)).rejects.toThrow(/BOCHA_API_KEY/);
+  });
+
+  it("按 lookback_hours 给博查传最小覆盖的 freshness（超过一年不限时间），时间窗过滤仍由 radar 负责", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const web = createBochaRadarWebAdapter(createBochaWebSearchAdapter({
+      apiKey: "bocha-key",
+      endpoint: "https://bocha.invalid/web-search",
+      sleep: async () => undefined,
+      fetch: async (_input, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({ code: 200, data: { webPages: { value: [] } } }), { status: 200 });
+      },
+    }));
+    for (const lookbackHours of [24, 48, 168, 720, 8760, 9000]) {
+      await web.search({ query: "市场变化", lookbackHours }, new AbortController().signal);
+    }
+    expect(bodies.map((body) => body.freshness)).toEqual(["oneDay", "oneWeek", "oneWeek", "oneMonth", "oneYear", undefined]);
+  });
+
+  it("雷达与对话 web_search 共用同一博查适配器时共享请求间隔", async () => {
+    let clock = Date.parse("2026-09-25T00:00:00.000Z");
+    const starts: number[] = [];
+    const bocha = createBochaWebSearchAdapter({
+      apiKey: "bocha-key",
+      endpoint: "https://bocha.invalid/web-search",
+      now: () => clock,
+      sleep: async (ms) => { clock += ms; },
+      fetch: async () => {
+        starts.push(clock);
+        return new Response(JSON.stringify({ code: 200, data: { webPages: { value: [] } } }), { status: 200 });
+      },
+    });
+    const web = createBochaRadarWebAdapter(bocha);
+    await web.search({ query: "市场变化", lookbackHours: 48 }, new AbortController().signal);
+    await bocha.search({ query: "对话检索" }, new AbortController().signal);
+    expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(1100);
   });
 });
 
@@ -258,7 +313,7 @@ describe("Radar scheduled/manual public seam", () => {
       try {
         const anonymous = await app.inject({ method: "POST", url: "/api/radar/scans/manual" });
         expect(anonymous.statusCode).toBe(401);
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const wrongOrigin = await app.inject({ method: "POST", url: "/api/radar/scans/manual", headers: { cookie } });
         expect(wrongOrigin.statusCode).toBe(403);
 
@@ -298,11 +353,13 @@ describe("Radar scheduled/manual public seam", () => {
       await db.query("UPDATE radar_config SET anchors = $1::jsonb, sources = $2::jsonb WHERE id = 'default'", [
         JSON.stringify(ANCHORS), JSON.stringify(SOURCES),
       ]);
+      const lookbacks: number[] = [];
       const radar = createRadarService({
         pool,
         web: {
           configured: true,
           async search(input) {
+            lookbacks.push(input.lookbackHours);
             return [
               { ...webItem(input.query, "https://example.com/dup?utm_medium=x", "2026-05-01T08:00:00.000Z") },
               { ...webItem(input.query, "https://example.com/dup/", "2026-05-01T09:00:00.000Z") },
@@ -325,6 +382,8 @@ describe("Radar scheduled/manual public seam", () => {
       const result = await radar.runManual();
       expect(result).toMatchObject({ status: "completed", createdSignals: 1 });
       expect(result.warnings.join(" ")).toContain("超出时间窗");
+      // 默认 radar_config.lookback_hours = 48，透传给 Web 来源用于博查 freshness
+      expect(lookbacks).toEqual([48]);
       expect(Number((await db.query("SELECT count(*) FROM signals")).rows[0].count)).toBe(1);
     });
   });
@@ -378,19 +437,14 @@ describe("Radar scheduled/manual public seam", () => {
     await createTestDb(async ({ db, pool }) => {
       await migrate(db);
       await db.query("UPDATE radar_config SET anchors = $1::jsonb, sources = $2::jsonb WHERE id = 'default'", [
-        JSON.stringify(ANCHORS), JSON.stringify(SOURCES),
+        JSON.stringify(anchorList(10)), JSON.stringify(SOURCES),
       ]);
       let calls = 0;
       const radar = createRadarService({
         pool,
-        web: {
-          configured: true,
-          async search(input) {
-            return Array.from({ length: 10 }, (_, index) => webItem(input.query, `https://example.com/slow-${index}`, "2026-05-01T08:00:00.000Z"));
-          },
-        },
+        web: threeWebItemsPerAnchor,
         assessor: {
-          // 模拟一个已启动后忽略 abort 的模型调用；修复前它返回后会继续启动后续 batch。
+          // 模拟已启动后忽略 abort 的模型调用：它们在超时后才返回，也绝不能再启动后续 batch。
           async assess() {
             calls += 1;
             await new Promise((resolve) => setTimeout(resolve, 50));
@@ -401,9 +455,200 @@ describe("Radar scheduled/manual public seam", () => {
         scanTimeoutMs: 20,
       });
       const result = await radar.runManual();
-      expect(result.status).toBe("failed");
+      // 30 条来源 = 6 批，并发 3：超时前只启动了前 3 批，超时后不再启动第 4–6 批
+      expect(calls).toBe(3);
+      expect(result.status).toBe("completed");
+      expect(result.warnings.join(" ")).toContain("本轮有 15 条候选未研判");
+    });
+  });
+
+  it("assess 批次以并发 3 执行", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await db.query("UPDATE radar_config SET anchors = $1::jsonb, sources = $2::jsonb WHERE id = 'default'", [
+        JSON.stringify(anchorList(10)), JSON.stringify(SOURCES),
+      ]);
+      let calls = 0;
+      let active = 0;
+      let maxActive = 0;
+      const radar = createRadarService({
+        pool,
+        web: threeWebItemsPerAnchor,
+        assessor: {
+          async assess() {
+            calls += 1;
+            active += 1;
+            maxActive = Math.max(maxActive, active);
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            active -= 1;
+            return { candidates: [] };
+          },
+        },
+        now: () => NOW,
+      });
+      const result = await radar.runManual();
+      expect(result.status).toBe("completed");
+      expect(calls).toBe(6);
+      expect(maxActive).toBe(3);
+    });
+  });
+
+  it("assess 阶段超时：已完成批次的候选照常校验落库，未研判条数如实提示", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await db.query("UPDATE radar_config SET anchors = $1::jsonb, sources = $2::jsonb WHERE id = 'default'", [
+        JSON.stringify(anchorList(10)), JSON.stringify(SOURCES),
+      ]);
+      let calls = 0;
+      const radar = createRadarService({
+        pool,
+        web: threeWebItemsPerAnchor,
+        assessor: {
+          assess({ sources }, signal) {
+            calls += 1;
+            // 第 1 批及时返回；其余批悬挂到超时，由 abort 信号中断
+            if (calls === 1) {
+              return Promise.resolve({ candidates: sources.map((source) => ({
+                sourceFingerprint: source.sourceFingerprint,
+                anchorId: "anchor-0",
+                summary: "超时前完成的候选",
+                strategicImpact: "待判断",
+                evidenceQuote: "连续原文",
+                unknowns: [],
+                score: { relevance: 4, impact: 3, urgency: 2 },
+                promotion: promotionFixture(),
+              })) });
+            }
+            return new Promise((_resolve, reject) => {
+              signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+            });
+          },
+        },
+        now: () => NOW,
+        scanTimeoutMs: 50,
+      });
+      const result = await radar.runManual();
+      // 6 批并发 3：第 1 批完成后补上第 4 批；超时时第 2–4 批被中断，第 5–6 批从未启动
+      expect(calls).toBe(4);
+      expect(result).toMatchObject({ status: "completed", createdSignals: 5 });
+      expect(result.warnings.join(" ")).toContain("本轮有 25 条候选未研判（超出 0.05 秒上限）");
+      expect(result.warnings.join(" ")).not.toContain("批失败");
+      expect(Number((await db.query("SELECT count(*) FROM signals")).rows[0].count)).toBe(5);
+      expect((await db.query("SELECT last_run FROM radar_config WHERE id = 'default'")).rows[0].last_run)
+        .toMatchObject({ status: "completed", createdSignals: 5 });
+    });
+  });
+
+  it("assess 阶段超时且没有任何批次完成：扫描如实标为 failed，不保存候选", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await db.query("UPDATE radar_config SET anchors = $1::jsonb, sources = $2::jsonb WHERE id = 'default'", [
+        JSON.stringify(ANCHORS), JSON.stringify(SOURCES),
+      ]);
+      const radar = createRadarService({
+        pool,
+        web: {
+          configured: true,
+          async search(input) { return [webItem(input.query, "https://example.com/hang", "2026-05-01T08:00:00.000Z")]; },
+        },
+        assessor: {
+          assess(_input, signal) {
+            return new Promise((_resolve, reject) => {
+              signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+            });
+          },
+        },
+        now: () => NOW,
+        scanTimeoutMs: 20,
+      });
+      const result = await radar.runManual();
+      expect(result).toMatchObject({ status: "failed", createdSignals: 0 });
       expect(result.warnings.join(" ")).toContain("Radar scan exceeded 20ms");
-      expect(calls).toBe(1);
+      expect(Number((await db.query("SELECT count(*) FROM signals")).rows[0].count)).toBe(0);
+    });
+  });
+
+  it("超时发生在采集阶段：不启动 assess，扫描如实标为 failed", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await db.query("UPDATE radar_config SET anchors = $1::jsonb, sources = $2::jsonb WHERE id = 'default'", [
+        JSON.stringify(anchorList(2)), JSON.stringify(SOURCES),
+      ]);
+      let calls = 0;
+      const radar = createRadarService({
+        pool,
+        web: {
+          configured: true,
+          search(input, signal) {
+            // 第一个方向正常返回，第二个方向悬挂到超时
+            if (input.query === "查询 0") return Promise.resolve([webItem(input.query, "https://example.com/first", "2026-05-01T08:00:00.000Z")]);
+            return new Promise((_resolve, reject) => {
+              signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+            });
+          },
+        },
+        assessor: {
+          async assess() {
+            calls += 1;
+            return { candidates: [] };
+          },
+        },
+        now: () => NOW,
+        scanTimeoutMs: 20,
+      });
+      const result = await radar.runManual();
+      expect(result).toMatchObject({ status: "failed", createdSignals: 0 });
+      expect(result.warnings.join(" ")).toContain("Radar scan exceeded 20ms");
+      expect(calls).toBe(0);
+    });
+  });
+
+  it("网页结果在时间窗过滤与去重之后，每个监测方向只保留最新 3 条", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await db.query("UPDATE radar_config SET anchors = $1::jsonb, sources = $2::jsonb WHERE id = 'default'", [
+        JSON.stringify(anchorList(2)), JSON.stringify(SOURCES),
+      ]);
+      const assessed: string[] = [];
+      const radar = createRadarService({
+        pool,
+        web: {
+          configured: true,
+          async search(input) {
+            if (input.query === "查询 0") {
+              return [
+                webItem(input.query, "https://example.com/a-1", "2026-05-01T01:00:00.000Z"),
+                webItem(input.query, "https://example.com/a-4", "2026-05-01T04:00:00.000Z"),
+                // 与 a-4 同一 URL：去重后只占一个名额
+                webItem(input.query, "https://example.com/a-4?utm_source=x", "2026-05-01T04:00:00.000Z"),
+                // 超出时间窗（晚于扫描开始）：先被过滤，不占名额
+                webItem(input.query, "https://example.com/a-future", "2026-05-03T00:00:00.000Z"),
+                webItem(input.query, "https://example.com/a-2", "2026-05-01T02:00:00.000Z"),
+                webItem(input.query, "https://example.com/a-0", "2026-04-30T23:00:00.000Z"),
+                webItem(input.query, "https://example.com/a-3", "2026-05-01T03:00:00.000Z"),
+              ];
+            }
+            return [
+              webItem(input.query, "https://example.com/b-1", "2026-05-01T01:00:00.000Z"),
+              webItem(input.query, "https://example.com/b-2", "2026-05-01T02:00:00.000Z"),
+            ];
+          },
+        },
+        assessor: {
+          async assess({ sources }) {
+            assessed.push(...sources.map((source) => source.url));
+            return { candidates: [] };
+          },
+        },
+        now: () => NOW,
+      });
+      const result = await radar.runManual();
+      expect(result.status).toBe("completed");
+      expect(assessed.sort()).toEqual([
+        "https://example.com/a-2", "https://example.com/a-3", "https://example.com/a-4",
+        "https://example.com/b-1", "https://example.com/b-2",
+      ]);
+      expect(result.warnings.join(" ")).toContain("网页搜索每个监测方向只取最新 3 条，本轮略过 2 条");
     });
   });
 
@@ -527,7 +772,7 @@ describe("Radar scheduled/manual public seam", () => {
       });
       try {
         await radar.recoverStaleRuns();
-        const card = await app.inject({ method: "GET", url: "/api/cards/radar", headers: { cookie: await login(app) } });
+        const card = await app.inject({ method: "GET", url: "/api/cards/radar", headers: { cookie: await login(app, db) } });
         expect(card.json().cards[0].payload.lastRun).toMatchObject({ status: "failed", trigger: "scheduled", companyDay: "2026-05-02" });
         expect(card.json().cards[0].payload.lastRun.warnings.join(" ")).toContain("进程重启");
       } finally {
@@ -778,7 +1023,7 @@ describe("Radar and Signal Card/API seam", () => {
         conversationRuntime: { async run(input) { return { assistantMessage: "test", runtimeEntries: input.runtimeEntries }; } },
       });
       try {
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const radar = await app.inject({ method: "GET", url: "/api/cards/radar", headers: { cookie } });
         expect(radar.statusCode).toBe(200);
         expect(Value.Check(Card, radar.json().cards[0])).toBe(true);
@@ -804,7 +1049,7 @@ describe("Radar and Signal Card/API seam", () => {
         }
         const detail = await app.inject({ method: "GET", url: `/api/cards/signals/${id}`, headers: { cookie } });
         expect(detail.json().cards[0].payload).toMatchObject({
-          source: { title: "公告", url: "https://example.com/news", excerpt: "连续原文引文" },
+          source: { title: "公告", url: "https://example.com/news", excerpt: "连续原文引文", fullText: false },
           state: { read: true, saved: true, dismissed: true },
         });
 
@@ -838,6 +1083,37 @@ describe("Radar and Signal Card/API seam", () => {
         await app.close();
       }
     });
+  });
+});
+
+describe("Signal 原文出处标注", () => {
+  it("只有目录标了 fullText 的发布方（量子位）标为发布方原文，其余发布方与检索来源都不宣称全文", () => {
+    const row = (outletId: string) => ({
+      id: "22222222-2222-4222-8222-222222222222",
+      version: 1,
+      source_type: "outlet" as const,
+      source_fingerprint: "c".repeat(64),
+      source_title: "标题",
+      source_url: "https://www.qbitai.com/2026/09/1.html",
+      published_at: new Date(NOW),
+      excerpt: "原文",
+      source_ref: { type: "outlet", provider: "publisher-feed", outletId, outletName: "媒体" },
+      anchor_id: "anchor-market",
+      location: { type: "company" },
+      summary: "摘要",
+      strategic_impact: "影响",
+      evidence_quote: "原文",
+      unknowns: [],
+      score: { relevance: 1, impact: 1, urgency: 1 },
+      read_at: null,
+      saved_at: null,
+      dismissed_at: null,
+      collected_at: new Date(NOW),
+      source_images: [],
+    });
+    const fullTextOf = (outletId: string) => (projectSignalCard(row(outletId)).payload as { source: { fullText: boolean } }).source.fullText;
+    expect(fullTextOf("qbitai")).toBe(true);
+    expect(fullTextOf("bloomberg")).toBe(false);
   });
 });
 

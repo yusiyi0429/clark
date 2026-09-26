@@ -9,7 +9,7 @@ import { recoverInterruptedResearch } from "../src/issues.js";
 import { createResearchService, type ResearchRunner } from "../src/research.js";
 import { createRadarService } from "../src/radar.js";
 import { migrate } from "../src/migrate.js";
-import { createTestDb, testEnv, TEST_PASSWORD } from "./helpers.js";
+import { createTestDb, seedTestAccess, testEnv, TEST_LOGIN } from "./helpers.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import type { AssistantMessage, AssistantMessageEventStream, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
@@ -81,12 +81,13 @@ async function until<T>(check: () => Promise<T | undefined>, timeoutMs = 3000): 
   }
 }
 
-async function login(app: Awaited<ReturnType<typeof buildApp>>): Promise<string> {
+async function login(app: Awaited<ReturnType<typeof buildApp>>, db: { query: (text: string, params?: unknown[]) => Promise<unknown> }): Promise<string> {
+  await seedTestAccess(db);
   const response = await app.inject({
     method: "POST",
     url: "/api/auth/login",
     headers: { origin: testEnv.publicOrigin },
-    payload: { password: TEST_PASSWORD },
+    payload: TEST_LOGIN,
   });
   return (response.headers["set-cookie"] as string).split(";")[0];
 }
@@ -162,7 +163,7 @@ describe("Issue research lifecycle", () => {
         const id = created.json().cards[0].objectRef.id as string;
         expect(created.json().cards[0].payload.research).toMatchObject({ status: "pending" });
 
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const running = await until(async () => {
           const card = await issueCard(app, cookie, id);
           return card.payload.research.status === "running" ? card : undefined;
@@ -195,7 +196,7 @@ describe("Issue research lifecycle", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-failed" });
         const id = created.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const card = await issueCard(app, cookie, id);
         expect(card.payload.research).toMatchObject({ status: "failed", error: { code: "research_failed" } });
         expect(card.actions.map((a) => a.actionType)).toEqual(
@@ -218,7 +219,7 @@ describe("Issue research lifecycle", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-invalid" });
         const id = created.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const card = await issueCard(app, cookie, id);
         expect(card.payload.research).toMatchObject({ status: "failed", error: { code: "invalid_research_doc" } });
         expect(card.payload.research.doc).toBeUndefined();
@@ -239,7 +240,7 @@ describe("Issue research lifecycle", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket24-turn-phrase" });
         const id = created.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const card = await issueCard(app, cookie, id);
         expect(card.payload.research).toMatchObject({ status: "failed", error: { code: "invalid_research_doc" } });
         expect(card.payload.research.doc).toBeUndefined();
@@ -260,7 +261,7 @@ describe("explicit whole-document re-research", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-retry" });
         const id = created.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const ready = await issueCard(app, cookie, id);
         const firstRunId = ready.payload.research.runId as string;
 
@@ -311,7 +312,7 @@ describe("explicit whole-document re-research", () => {
       try {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-running-retry" });
         const id = created.json().cards[0].objectRef.id as string;
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const cookieForRetry = cookie;
         const running = await until(async () => {
           const card = await issueCard(app, cookieForRetry, id);
@@ -346,7 +347,7 @@ describe("explicit whole-document re-research", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-failed-retry" });
         const id = created.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const failed = await issueCard(app, cookie, id);
         expect(failed.payload.research.status).toBe("failed");
         const failedRunId = failed.payload.research.runId as string;
@@ -374,7 +375,7 @@ describe("explicit whole-document re-research", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-conversation" });
         const id = created.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const before = await issueCard(app, cookie, id);
 
         const turn = await app.inject({
@@ -405,7 +406,7 @@ describe("CEO direct decision", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-decide" });
         const id = created.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const ready = await issueCard(app, cookie, id);
         const runId = ready.payload.research.runId as string;
 
@@ -454,7 +455,7 @@ describe("CEO direct decision", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-bad-option" });
         const id = created.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const ready = await issueCard(app, cookie, id);
         const rejected = await execute(app, cookie, action(ready, "issue.decide").actionId, {
           decisionText: "决定",
@@ -479,7 +480,7 @@ describe("Research Override", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-override" });
         const id = created.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const failed = await issueCard(app, cookie, id);
         const override = action(failed, "issue.decide_override");
 
@@ -515,7 +516,7 @@ describe("Research Override", () => {
         const ready = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-override-ready" });
         const readyId = ready.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const readyCard = await issueCard(app, cookie, readyId);
         // ready 时没有 override Action；伪造一个当前 version 的 override 也会被拒
         const forged = signActionId(testEnv.sessionSecret, {
@@ -539,7 +540,7 @@ describe("Research Override", () => {
       try {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-override-pending" });
         const id = created.json().cards[0].objectRef.id as string;
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const pending = await issueCard(app, cookie, id);
         expect(pending.payload.research.status).toBe("pending");
         const decided = await execute(app, cookie, action(pending, "issue.decide_override").actionId, {
@@ -567,7 +568,7 @@ describe("dismissed Issue", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-dismiss" });
         const id = created.json().cards[0].objectRef.id as string;
         const originRef = created.json().cards[0].payload.originRef;
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const pending = await issueCard(app, cookie, id);
 
         const noReason = await execute(app, cookie, action(pending, "issue.dismiss").actionId, {});
@@ -605,7 +606,7 @@ describe("dismissed Issue", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "issue-restore" });
         const id = created.json().cards[0].objectRef.id as string;
         const originRef = created.json().cards[0].payload.originRef;
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const pending = await issueCard(app, cookie, id);
         const researchBefore = pending.payload.research.status;
         const dismissed = await execute(app, cookie, action(pending, "issue.dismiss").actionId, { reason: "误升级" });
@@ -658,7 +659,7 @@ describe("dismissed Issue", () => {
       try {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "issue-restore-guards" });
         const id = created.json().cards[0].objectRef.id as string;
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const pending = await issueCard(app, cookie, id);
 
         const forgedPending = signActionId(testEnv.sessionSecret, {
@@ -716,7 +717,7 @@ describe("dismissed Issue", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-dismiss-decided" });
         const id = created.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const ready = await issueCard(app, cookie, id);
         const decided = await execute(app, cookie, action(ready, "issue.decide").actionId, { decisionText: "决定" });
         const version = decided.json().cards[0].version;
@@ -746,7 +747,7 @@ describe("unified effect revoker", () => {
         const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-revoke" });
         const id = created.json().cards[0].objectRef.id as string;
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         let card = await issueCard(app, cookie, id);
 
         const firstDecide = await execute(app, cookie, action(card, "issue.decide").actionId, { decisionText: "决定 A" });
@@ -808,7 +809,7 @@ describe("notification projection", () => {
           urgency: { level: "red", decisionBy: "2026-06-01T00:00:00.000+08:00", reason: "申报窗口关闭" },
         });
         const redId = red.json().cards[0].objectRef.id as string;
-        const cookie = await login(app);
+        const cookie = await login(app, db);
 
         const home = await app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie } });
         expect(home.statusCode).toBe(200);
@@ -915,7 +916,7 @@ describe("radar promotion triggers research", () => {
         expect(await radar.runManual()).toMatchObject({ status: "completed", createdSignals: 1 });
         expect(promoted).toHaveLength(1);
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const card = await issueCard(app, cookie, promoted[0]);
         expect(card.payload).toMatchObject({ status: "pending", research: { status: "ready" } });
         expect(card.payload.research.doc).toEqual(RESEARCH_DOC);
@@ -934,7 +935,7 @@ describe("radar promotion triggers research", () => {
       try {
         expect(await radar.runManual()).toMatchObject({ status: "completed", createdSignals: 1 });
         await research.idle();
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const pending = await issueCard(app, cookie, promoted[0]);
 
         const dismissed = await execute(app, cookie, action(pending, "issue.dismiss").actionId, { reason: "误升级" });
@@ -1093,7 +1094,7 @@ describe("startup recovery of an interrupted research run", () => {
       const queue = queueRunner([structuredClone(RESEARCH_DOC)]);
       const { app, research } = await setupWithResearch(pool, queue.runner);
       try {
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const card = await issueCard(app, cookie, issueId);
         expect(card.payload.research).toMatchObject({ status: "failed", error: { code: "research_interrupted" } });
 

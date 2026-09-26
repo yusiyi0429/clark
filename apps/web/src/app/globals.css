@@ -1,59 +1,178 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+/* HeroUI v3：组件层与默认主题层；顺序上必须排在 tailwindcss 之后（官方要求）。 */
+@import "@heroui/styles";
+/* 「tianshu」主题：html[data-theme="tianshu"] 下生效（layout.tsx 服务端写入）。 */
+@import "./heroui-tianshu.css";
+
+/* ---------------------------------------------------------------------------
+   设计 token：与 clark-main `src/app/globals.css` 的 :root 同值，只保留 CEO 工作面
+   与 HeroUI「tianshu」主题实际引用的部分。
+--------------------------------------------------------------------------- */
 :root {
-  --brand-bright: #5bd8f6;
+  /* 纸、面、墨 */
+  --paper: #f1f1f3;
+  --surface: #fdfdfe;
+  --ink: #17171b;
+  --ink-muted: #535358;
+  --ink-faint: #6b6b70;
+  --rule: #e7e7ed;
+
+  /* 语义：判断、确认、反证、事实 */
+  --judgment: #b45309;
+  --confirmed: #0f766e;
+  --counter: #be123c;
+  --factual: #0369a1;
+
+  --solid: #17171b;
+  --solid-fg: #fafafb;
+
+  /* 品牌 */
   --brand-deep: #075ccb;
-  color-scheme: light;
+  --brand-bright: #1684ff;
+
+  /* 洗色 */
+  --judgment-wash: color-mix(in oklab, var(--judgment) 7%, var(--surface));
+  --confirmed-wash: color-mix(in oklab, var(--confirmed) 7%, var(--surface));
+  --counter-wash: color-mix(in oklab, var(--counter) 6%, var(--surface));
+  --factual-wash: color-mix(in oklab, var(--factual) 7%, var(--surface));
+  --neutral-wash: color-mix(in oklab, var(--ink) 4%, var(--surface));
+  --wash-hover: color-mix(in oklab, var(--ink) 5%, transparent);
+
+  /* 发丝线 */
+  --hairline: color-mix(in oklab, var(--ink) 9%, transparent);
+  --hairline-strong: color-mix(in oklab, var(--ink) 16%, transparent);
+  --hairline-w: 1px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+    "Segoe UI", "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei UI", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans SC",
+    sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono",
+    "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --radius: 0.625rem;
+  --r-panel: 20px;
+  --r-card: 16px;
+  --r-inset: 12px;
+  --r-control: 10px;
+  --r-bar: 4px;
+  --r-capsule: 999px;
+
+  /* 动效 */
+  --dur-fast: 90ms;
+  --dur-snap: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 320ms;
+  --ease-swift: cubic-bezier(0.2, 0, 0, 1);
+  --ease-brand: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snap: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* 材质与厚度 */
+  --mat-blur: 40px;
+  --mat-sat: 140%;
+  --mat-regular: color-mix(in oklab, var(--surface) 86%, transparent);
+  --mat-thick: color-mix(in oklab, var(--surface) 94%, transparent);
+  --mat-edge: 0 0 0 0.5px color-mix(in oklab, var(--ink) 11%, transparent);
+  --sh-1: color-mix(in oklab, var(--ink) 4%, transparent);
+  --sh-2: color-mix(in oklab, var(--ink) 6%, transparent);
+  --sh-3: color-mix(in oklab, var(--ink) 8%, transparent);
+  --elev-2:
+    0 1px 1px var(--sh-1), 0 3px 6px -2px var(--sh-2), 0 8px 16px -6px var(--sh-2);
+  --elev-3:
+    0 1px 2px var(--sh-1), 0 4px 8px -2px var(--sh-2), 0 12px 24px -8px var(--sh-3),
+    0 24px 48px -16px var(--sh-3);
+
+  --ring: var(--ink-faint);
 }
 
-* {
-  box-sizing: border-box;
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  /* 字标：抖音美好体「天枢」两字子集，由 next/font 注在 <html> 上。 */
+  --font-wordmark: var(--font-douyin), var(--font-sans);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
 }
 
-html,
-body {
-  margin: 0;
-  padding: 0;
-  min-height: 100%;
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+/* 字号尺与字重：与 clark 一致。medium 重定义为 600（Windows 微软雅黑请求 500 会落回 400）。 */
+@theme {
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1.45;
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.55;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.7;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.75;
+  --text-md: 0.9375rem;
+  --text-md--line-height: 1.7;
+  --text-read: 1rem;
+  --text-read--line-height: 1.85;
+  --text-lg: 1.0625rem;
+  --text-lg--line-height: 1.6;
+  --text-xl: 1.3125rem;
+  --text-xl--line-height: 1.5;
+  --font-weight-medium: 600;
 }
 
-body {
-  -webkit-font-smoothing: antialiased;
-}
-
-a {
-  color: inherit;
-}
-
-@keyframes enterWorkspace {
-  from {
-    opacity: 0;
-    transform: translateX(-12px);
+@layer base {
+  * {
+    border-color: var(--rule);
   }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
 
-@keyframes enterSheet {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
+  @media (min-resolution: 2dppx) {
+    :root {
+      --hairline-w: 0.5px;
+    }
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  @media (min-resolution: 3dppx) {
+    :root {
+      --hairline-w: 0.34px;
+    }
   }
-}
 
-@keyframes veilIn {
-  from {
-    opacity: 0;
+  html {
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+    height: 100%;
+    scrollbar-gutter: stable;
   }
-  to {
-    opacity: 1;
+
+  body {
+    min-height: 100%;
+    background-color: var(--paper);
+    color: var(--ink);
+    /* 不设 -webkit-font-smoothing：保留默认次像素渲染（clark 同）。 */
+    text-rendering: optimizeLegibility;
+    font-synthesis-weight: none;
+    font-feature-settings: "kern" 1, "liga" 1;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--judgment) 22%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
   }
 }
 
@@ -61,14 +180,13 @@ a {
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
+    animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
-/* Action 反馈与未知 Card：复用材料页的低干扰视觉语言，不新增设计系统。 */
+/* Action 反馈与未知 Card（天枢独有）：样式在二级页对齐阶段重做。 */
 .action-conflict,
 .action-error {
   display: flex;
@@ -127,4 +245,51 @@ a {
   padding: 2px 6px;
 }
 
-/* 对象页入场过渡由 CardPage 播放（来源矩形 → 面板矩形），这里只保留直达 URL 的终态样式。 */
+/* ---------------------------------------------------------------------------
+   CEO 端：卡片 ⇄ 工作区的转场（View Transitions）。与 clark-main 同值：
+   只有卡片 → 工作区（notice-card）、通知栏 → 窄条（notice-rail）、首页板（home-board）在动；
+   根不参与；快照不缩放（object-fit: none，左上对齐）；打开 240ms、关闭 200ms。
+--------------------------------------------------------------------------- */
+:root { view-transition-name: none; }
+::view-transition-old(root) { animation: none; opacity: 0; }
+::view-transition-new(root) { animation: none; }
+::view-transition-group(*) {
+  animation-duration: 240ms;
+  animation-timing-function: cubic-bezier(.2, 0, 0, 1);
+}
+::view-transition-image-pair(*) { isolation: isolate; }
+::view-transition-old(*),
+::view-transition-new(*) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: none;
+  object-position: left top;
+  mix-blend-mode: normal;
+}
+::view-transition-old(*) { animation: 240ms linear both tianshu-vt-leave-early; }
+::view-transition-new(*) { animation: 240ms ease-out both tianshu-vt-arrive-late; }
+::view-transition-image-pair(notice-card),
+::view-transition-image-pair(notice-panel),
+::view-transition-image-pair(notice-rail),
+::view-transition-image-pair(home-board) { overflow: clip; border-radius: 22px; }
+::view-transition-group(home-board) { z-index: 1; }
+::view-transition-group(notice-rail) { z-index: 2; }
+::view-transition-group(notice-panel) { z-index: 3; }
+::view-transition-group(notice-card) { z-index: 4; }
+html[data-notice-transition="close"]::view-transition-group(*) {
+  animation-duration: 200ms;
+  animation-timing-function: cubic-bezier(.3, 0, .1, 1);
+}
+html[data-notice-transition="close"]::view-transition-old(*),
+html[data-notice-transition="close"]::view-transition-new(*) { animation-duration: 200ms; }
+@keyframes tianshu-vt-leave-early { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
+@keyframes tianshu-vt-arrive-late { 0% { opacity: 0; } 30% { opacity: .12; } 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 120ms !important;
+  }
+}

@@ -5,7 +5,8 @@ import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest, 
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { Pool } from "pg";
 import type { TApiError, TCardCollection } from "@warmap/contracts";
-import { SESSION_COOKIE, parseCookies, verifySessionToken } from "../session.js";
+import { SESSION_COOKIE, parseCookies, readSessionToken } from "../session.js";
+import { currentSessionVersion, roleOf, type SessionRole } from "../memberAccess.js";
 import type { CompanyMemoryRepository } from "../companyMemory.js";
 import type { ConversationRuntime } from "../conversations.js";
 import type { DriExporter, MeetingActionOutcome, Query } from "../meetingStore.js";
@@ -23,6 +24,19 @@ export type AppInstance = FastifyInstance<
   FastifyBaseLogger,
   TypeBoxTypeProvider
 >;
+
+/** 已登录的人：身份按 seed 现算（CEO／成员），不信任会话里自带的角色。 */
+export type SessionPerson = { personId: string; role: SessionRole };
+
+declare module "fastify" {
+  interface FastifyRequest {
+    /** requirePerson / requireCEO 通过后挂上当前的人；未经闸门的路由为 null。 */
+    person: SessionPerson | null;
+  }
+}
+
+/** preHandler 闸门：放行时不返回，拒绝时返回已发送的 reply。 */
+export type Guard = (req: FastifyRequest, reply: FastifyReply) => Promise<FastifyReply | void>;
 
 export type RequestContext = { runId?: string; scope?: string; objectRef?: string; actionType?: string; errorCode?: string };
 export type MaterialLimit = { status: 413 | 400; code: string; message: string };
@@ -47,7 +61,9 @@ export type RouteContext = {
   now: () => Date;
   requestContext: WeakMap<FastifyRequest, RequestContext>;
   fail: (reply: FastifyReply, status: number, code: string, message: string, extra?: Partial<TApiError>) => FastifyReply;
-  requireCEO: (req: FastifyRequest, reply: FastifyReply, done: () => void) => void;
+  requireCEO: Guard;
+  requirePerson: Guard;
+  readSession: (req: FastifyRequest) => Promise<SessionPerson | null>;
   requireServiceToken: (expected: string) => (req: FastifyRequest, reply: FastifyReply, done: () => void) => void;
   invalidInput: (reply: FastifyReply, schema: TSchema, input: unknown) => FastifyReply;
   respond: (reply: FastifyReply, outcome: MeetingActionOutcome) => TCardCollection | FastifyReply;
@@ -89,19 +105,38 @@ export function materialMultipartLimitError(
   return null;
 }
 
-/** CEO 浏览器写请求边界：session + 同源 Origin（CSRF）。 */
-export function createRequireCEO(env: AppEnv, fail: RouteContext["fail"]) {
-  return function requireCEO(req: FastifyRequest, reply: FastifyReply, done: () => void): void {
-    const cookie = parseCookies(req.headers.cookie)[SESSION_COOKIE];
-    if (!verifySessionToken(env.sessionSecret, cookie)) {
-      fail(reply, 401, "UNAUTHORIZED", "未登录");
-      return;
-    }
-    if (req.method !== "GET" && req.headers.origin !== env.publicOrigin) {
-      fail(reply, 403, "ORIGIN_MISMATCH", "Origin 不符");
-      return;
-    }
-    done();
+/** 读会话：签名与有效期之外，人要还在 seed 里，凭据版本要与库里一致（口令重置后旧会话立即失效）。 */
+export function createReadSession(env: AppEnv, q: Query, companyMemory: CompanyMemoryRepository) {
+  return async function readSession(req: FastifyRequest): Promise<SessionPerson | null> {
+    const claims = readSessionToken(env.sessionSecret, parseCookies(req.headers.cookie)[SESSION_COOKIE]);
+    if (!claims) return null;
+    const person = companyMemory.searchPeople(undefined).find((p) => p.personId === claims.pid);
+    if (!person) return null;
+    return (await currentSessionVersion(q, person.personId)) === claims.v ? { personId: person.personId, role: roleOf(person) } : null;
+  };
+}
+
+/** CSRF 来源检查：正式地址，或本地开发额外列出的地址。 */
+export function isAllowedOrigin(env: AppEnv, origin: string | undefined): boolean {
+  return origin !== undefined && (origin === env.publicOrigin || (env.extraOrigins?.includes(origin) ?? false));
+}
+
+/** 浏览器请求边界：有效会话 + 写请求同源 Origin（CSRF）。 */
+export function createRequirePerson(env: AppEnv, readSession: RouteContext["readSession"], fail: RouteContext["fail"]): Guard {
+  return async function requirePerson(req, reply) {
+    const person = await readSession(req);
+    if (!person) return fail(reply, 401, "UNAUTHORIZED", "未登录");
+    if (req.method !== "GET" && !isAllowedOrigin(env, req.headers.origin)) return fail(reply, 403, "ORIGIN_MISMATCH", "Origin 不符");
+    req.person = person;
+  };
+}
+
+/** CEO 专用：成员会话一律 403（不是 401，前端据此不回锁屏）。 */
+export function createRequireCEO(requirePerson: Guard, fail: RouteContext["fail"]): Guard {
+  return async function requireCEO(req, reply) {
+    await requirePerson(req, reply);
+    if (reply.sent) return reply;
+    if (req.person?.role !== "ceo") return fail(reply, 403, "FORBIDDEN", "只有 CEO 可以访问");
   };
 }
 

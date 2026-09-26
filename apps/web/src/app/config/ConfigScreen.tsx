@@ -2,9 +2,10 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Calendar, ChevronDown, ChevronLeft, FileUp, Flag, Layers, Target } from "lucide-react";
+import { ArrowRight, Calendar, ChevronDown, ChevronLeft, FileUp, Flag, Layers, LogOut, Target } from "lucide-react";
 import type { TStrategyConfigResponse } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
+import { logout } from "@/lib/logout";
 import c from "@/styles/config.module.css";
 
 type Person = { personId: string; displayName: string; roles: string[] };
@@ -22,6 +23,7 @@ const MAX_MATERIALS = 10;
 export function ConfigScreen({ people, battlefields, strategy }: { people: Person[]; battlefields: Battlefield[]; strategy: TStrategyConfigResponse }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
   const [ltco, setLtco] = useState(strategy.ltco);
   const [battlefield, setBattlefield] = useState({ code: "", sortOrder: "10", name: "", ownerId: "", sixMonthOutcome: "" });
   const [capability, setCapability] = useState({ code: "", sortOrder: "20", name: "", group: "", sixMonthOutcome: "" });
@@ -166,6 +168,17 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
             <Flag aria-hidden="true" /> 管理 Mission
           </button>
           <span className={c.draft}>配置变更写入业务库并同步 Radar 监测范围</span>
+          <button
+            type="button"
+            className={c.secondary}
+            disabled={leaving}
+            onClick={() => {
+              setLeaving(true);
+              void logout();
+            }}
+          >
+            <LogOut aria-hidden="true" /> 退出登录
+          </button>
         </div>
       </nav>
 

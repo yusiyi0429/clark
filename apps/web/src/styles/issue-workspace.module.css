@@ -1,59 +1,58 @@
-.workspace{position:relative;z-index:70;display:flex;flex-direction:column;width:min(2480px,100%);height:100%;margin:auto;box-sizing:border-box;padding:20px 40px 80px;overflow:hidden;color:#1d1d1f}
-.header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:0 0 22px;background:transparent;border-bottom:1px solid #e6e9ed;flex:none}
-.header span{font-size:13px;color:#6e6e73}.header h1{font-size:26px;font-weight:600;line-height:1.4;margin-top:8px!important;letter-spacing:-.025em}
-.header>button{display:grid;place-items:center;width:40px;height:40px;border:1px solid #d9dde5;border-radius:20px;background:#fff;color:#6e6e73;flex:none;transition:background 150ms,transform 150ms}.header>button:hover{background:#f5f5f7}.header>button:active{transform:scale(.95)}
-.columns{--rail-right:400px;display:grid;grid-template-columns:380px minmax(0,1fr) auto;gap:20px;min-height:0;flex:1;overflow:hidden}
-.leftRail{min-width:0;min-height:0;display:flex;flex-direction:column;gap:16px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
-.reading{min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;line-height:1.8;font-size:14px}
-.reading .note{font-size:12px;color:#797980;margin:0}.researchHead{display:flex;align-items:center;gap:10px;margin-bottom:14px}.reading h2{font-size:15px;font-weight:600;color:#1d1d1f;margin:0}
-.judgment,.discussion,.preflightActions,.unknown{margin:0;border:1px solid #eceef2;border-radius:20px;background:#fff;padding:22px 24px}.judgment>p{font-size:14px;line-height:1.8;letter-spacing:0;color:#3c4350}.judgment>button{border:0;background:#007aff09;color:#006edc;border-radius:8px;padding:7px 10px;font-size:12px;margin-top:14px}
-.section{margin-top:30px;padding-top:24px;border-top:1px solid #1d1d1f0d}.section ol{padding:0;list-style:none;margin:0}.section li{display:flex;gap:14px;margin-top:15px}.section li>span{font-size:11px;color:#8e8e93;padding-top:4px;font-variant-numeric:tabular-nums}.section p+p{margin-top:12px}
-.unknown{background:#fff}.unknown p{color:#56565e;font-size:14px}.dismissedChip{display:flex;width:max-content;align-items:center;gap:6px;margin-top:12px;border:1px solid #d9dde5;border-radius:10px;background:#fff;padding:10px 18px;color:#4f5866;font-size:13px}
-.preflightActions>div:first-child p{font-size:12px;color:#77777c;margin-top:-7px}.actionRow{display:flex;flex-wrap:wrap;gap:12px;margin-top:15px}.actionRow button{display:flex;align-items:center;gap:6px;border:1px solid #d9dde5;border-radius:10px;background:#fff;padding:10px 16px;font-size:13px;color:#4f5866}.actionRow button:hover{border-color:#bfc6cf;background:#f7f8fa}.actionRow button[aria-pressed=true]{border-color:#c7d9cc;background:#f0f7f2;color:#356047}.preflightActions>small{display:block;margin-top:10px;color:#5d7164;font-size:11px}
-.discussion>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}.discussion>header h2{margin-bottom:4px}.discussion>header p{color:#6e6e73;font-size:13px;line-height:1.6}.discussion>header>span{flex:none;border:1px solid #dfe3e8;border-radius:999px;background:#f7f8fa;color:#737982;padding:3px 8px;font-size:10px;line-height:1.5}.discussion>small{display:block;color:#797980;font-size:11px;line-height:1.7;margin-top:11px}.receipt{display:flex;gap:10px;align-items:flex-start;border:1px solid #dce9e2;border-radius:12px;background:#edf3fb;padding:16px 18px}.receipt>svg{color:#34785c;flex:none;margin-top:3px}.receipt p{flex:1;font-size:14px;line-height:1.7}
-.error{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 18px;padding:12px 14px;border:1px solid #f0d3cf;border-radius:12px;background:#fdecea;color:#a1443c;font-size:13px;line-height:1.6}
-.error button{display:flex;align-items:center;gap:6px;border:1px solid #e0b9b4;border-radius:10px;background:#fff;padding:8px 12px;font-size:13px;color:#a1443c}
-.prose h3{font-size:16px;margin:22px 0 10px!important}.prose p{margin:12px 0!important}.prose ul,.prose ol{padding-left:22px}
+/* 议题工作区（clark issue-workspace.module.css）。天枢把它渲染在外壳 .expanded 面板里，所以不用 fixed 定位，
+   圆角与裁切由面板承担；其余色值、字号、间距照 clark。 */
+.workspace{display:flex;flex-direction:column;flex:1;height:100%;min-height:0;overflow:hidden;border-radius:inherit;background:#f8f8fa;color:#1d1d1f;container-type:inline-size;contain:layout paint}
+.header{display:flex;align-items:center;justify-content:space-between;gap:22px;min-height:96px;box-sizing:border-box;padding:25px 27px;background:linear-gradient(145deg,#ffffffa6,#eef1f6a3);border-bottom:1px solid #ffffffc2;backdrop-filter:blur(30px) saturate(1.28);-webkit-backdrop-filter:blur(30px) saturate(1.28);box-shadow:inset 0 1px #fff;flex:none}
+.identity{display:flex;align-items:center;gap:13px;min-width:0;flex:1}.identity>div{min-width:0}
+.header span{font-size:12px;color:#6e6e73}.header h1{font-size:22px;font-weight:600;line-height:1.5;margin:7px 0 0;letter-spacing:-.025em}
+.header>button{flex:none}
+.columns{display:block;min-height:0;flex:1;overflow:hidden}
+.materials{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0;background:#fff}
+.tabs{padding:0 20px;border-bottom:1px solid #1d1d1f0a;flex:none}
+/* HeroUI 的页签默认铺满整行（.tabs__tab{width:100%}）；这里要靠左按内容宽。 */
+.tabs :global(.tabs__tab){width:auto}
+.reading{position:relative;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:24px 28px 48px;min-height:0;line-height:1.8;font-size:16px}
+.reading .note{font-size:11px;color:#797980;margin:0 0 23px}.reading h2{font-size:14px;font-weight:600;color:#63636a;margin:0 0 12px}
+.judgment>p{margin:0;font-size:19px;line-height:1.8;letter-spacing:-.02em}.judgment>button{margin-top:14px}
+.section{margin-top:30px;padding-top:24px;border-top:1px solid #1d1d1f0d}.section ol{padding:0;list-style:none;margin:0}.section li{display:flex;gap:14px;margin-top:15px}.section li>span{font-size:11px;color:#8e8e93;padding-top:4px;font-variant-numeric:tabular-nums}.section p{margin:0}.section p+p{margin-top:12px}
+.section li small{display:block;margin-top:4px;font-size:12px;line-height:1.6;color:#8e8e93}.section li small a{color:inherit;text-decoration:underline;text-decoration-color:#8e8e9366;text-underline-offset:3px}.section li small a:hover{color:#2f6bb4}
+.section>p>a{color:#2f6bb4;text-decoration:none}.section>p>a:hover{text-decoration:underline}
+.sourceQuote{font-size:14px;color:#56565e}
+.unknown{margin-top:28px;border-radius:12px;background:#f5f5f7;padding:18px 20px}.unknown p{margin:0;color:#56565e;font-size:14px}.unknown p+p{margin-top:8px}
+.preflightActions{margin-top:28px;padding-top:22px;border-top:1px solid #1d1d1f0d}.preflightActions>div:first-child p{margin:-7px 0 0;font-size:12px;color:#77777c}.actionRow{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}.actionRow:empty{display:none}.preflightActions>small{display:block;margin-top:10px;color:#5d7164;font-size:11px}
+.discussion{margin-top:26px;border-top:1px solid #1d1d1f10;padding-top:20px}.discussion>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:13px}.discussion>header h2{margin-bottom:3px}.discussion>header p{margin:0;color:#77777c;font-size:12px;line-height:1.6}.discussion>header>span{flex:none;border:1px solid #dfe3e8;border-radius:999px;background:#f7f8fa;color:#737982;padding:3px 8px;font-size:10px;line-height:1.5}.discussion>small{display:block;color:#797980;font-size:11px;line-height:1.7;margin-top:11px}
+.options{display:grid;gap:7px;list-style:none;margin:0;padding:0}.options li{display:flex;align-items:center;gap:11px;border:1px solid #1d1d1f0e;background:#fafafb;color:#303036;border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5}.options li>span{flex:none;color:#92979f;font-size:10px;font-variant-numeric:tabular-nums}.options li>p{margin:0}
+.receipt{display:flex;gap:10px;align-items:flex-start;border:1px solid #dce9e2;border-radius:10px;background:#f4f9f6;padding:12px 14px}.receipt+.receipt{margin-top:7px}.receipt>svg{color:#34785c;flex:none;margin-top:3px}.receipt>div{flex:1;min-width:0}.receipt p{margin:0;font-size:14px;line-height:1.7}.receipt small{display:block;margin-top:2px;font-size:11px;color:#5d7164}.receipt>button{flex:none}
+.prose h3{font-size:16px;margin:0 0 10px}.prose p{margin:12px 0}.prose ul,.prose ol{padding-left:22px;margin:6px 0 0}
+.option+.option{margin-top:18px}.option h4{display:flex;gap:10px;margin:0;font-size:16px;font-weight:600;line-height:1.6}.option h4>span{flex:none;padding-top:3px;font-size:11px;font-weight:400;color:#8e8e93;font-variant-numeric:tabular-nums}.option li{margin-top:6px;color:#3c4350}
+.empty{margin:0;font-size:14px;color:#77777c}
 .workspace button:focus-visible{outline:3px solid #007aff70;outline-offset:3px}
-@media(max-width:1280px){.workspace{width:100%;padding:16px 20px 40px;overflow:auto}.columns{display:block;overflow:visible}.leftRail,.reading{overflow:visible;margin-bottom:18px}.columns>:global([data-testid="meeting-chat-sidebar"]){margin-bottom:18px}.columns>:global([data-testid="meeting-chat-sidebar"])[data-open=true]{min-height:480px}.judgment,.discussion,.preflightActions,.unknown{margin-bottom:18px}}
-@media(max-width:690px){.workspace{padding:14px 14px 32px}.header{padding-bottom:16px}.header h1{font-size:20px}.judgment,.discussion,.preflightActions,.unknown{padding:18px}}
 
-@media(prefers-reduced-transparency:reduce){.header{background:transparent}}
+/* 议题会议安排（clark topic-materials .meetingHeader，挂在页头下方）。 */
+.meetingHeader{display:grid;gap:10px;flex:none;padding:20px 28px 24px;background:#f8fafc;border-bottom:1px solid #e3e7ed}
+.meetingDate{display:flex;flex-wrap:wrap;align-items:center;gap:9px;color:#6b7280;font-size:13px}
+.meetingState{margin-left:auto;color:#3c66bf;font-size:12px}
+.meetingTime{color:#252a32;font-size:clamp(44px,5vw,64px);font-weight:400;letter-spacing:-.055em;line-height:1.18;font-variant-numeric:tabular-nums}
+.meetingMeta{display:flex;flex-wrap:wrap;align-items:center;gap:16px;color:#6b7280;font-size:12px}
+.meetingMeta>span{display:inline-flex;align-items:center;gap:5px;overflow-wrap:anywhere}
+.workspace .meetingMeta .meetingOpen{padding:0;border:0;background:none;font:inherit;font-size:12px;font-weight:600;color:#2f6bb4;cursor:pointer}
+.workspace .meetingMeta .meetingOpen:hover{text-decoration:underline}
+
+/* 天枢独有：预研错误、已移出、决策路径表单（字段沿用 HeroUI 字段 token：radius 11、focus #075ccb）。 */
+.error{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 22px;padding:12px 14px;border:1px solid #f0d3cf;border-radius:12px;background:#fdf3f1;color:#a1443c;font-size:13px;line-height:1.6}.error p{margin:0;flex:1;min-width:0}
+.dismissed{display:flex;align-items:flex-start;gap:10px;margin:0 0 26px;border:1px solid #e3e5ea;border-radius:10px;background:#f7f7f9;padding:12px 14px}.dismissed>svg{flex:none;margin-top:4px;color:#8e8e93}.dismissed>div{flex:1;min-width:0}.dismissed p{margin:0;font-size:14px;line-height:1.7;color:#3c4350}.dismissed small{display:block;margin-top:2px;font-size:11px;color:#8e8e93}.dismissed>button{flex:none}
+.meetingForm{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px 14px;margin-top:16px;padding:16px 18px;border:1px solid #1d1d1f0e;border-radius:12px;background:#fafafb}
+.meetingForm>.actionRow,.meetingForm>fieldset,.meetingForm>.formNote{grid-column:1/-1}.meetingForm>.actionRow{margin-top:2px}
+.formNote{margin:0;font-size:12px;color:#a1443c}
+.joinRow{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin-top:15px}.joinRow>.field{flex:1;min-width:min(100%,220px)}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0;margin:0;padding:0;border:0;font-size:12px;color:#6b6b70}
+.field>legend{padding:0;margin-bottom:6px}
+.field input:not([type=checkbox]),.field select{min-height:36px;box-sizing:border-box;padding:7px 11px;border:1px solid #e7e7ed;border-radius:11px;background:#fdfdfe;color:#17171b;font:inherit;font-size:14px;line-height:1.4;transition:border-color .15s,box-shadow .15s}
+.field input:not([type=checkbox]):hover,.field select:hover{border-color:color-mix(in oklab,#17171b 16%,transparent)}
+.field input:not([type=checkbox]):focus,.field select:focus{outline:none;border-color:#075ccb;box-shadow:0 0 0 3px #075ccb1f}
+.participants{display:flex;flex-wrap:wrap;gap:6px 14px}.participants label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#303036}
+.participants input{width:15px;height:15px;accent-color:#3a83f7}
+
+@media(max-width:690px){.header{padding:16px}.header h1{font-size:18px}.reading{padding:20px 19px 130px}.tabs{padding:0 19px}.judgment>p{font-size:18px}.meetingHeader{padding:16px 19px 18px}}
+@container(max-width:620px){.header{gap:12px;padding:20px}.header h1{font-size:19px}.reading{padding:22px}.discussion>header{flex-wrap:wrap}.discussion>header>span{align-self:flex-start}}
+@media(prefers-reduced-transparency:reduce){.workspace,.header{background:#f5f5f7}}
 @media(prefers-reduced-motion:reduce){.workspace *{transition:none!important;scroll-behavior:auto!important}}
-
-.header>[data-reference-id]{margin-left:auto}.header>div:first-child{min-width:0;flex:1}
-
-/* The opening reveal clips a full-resolution surface; text is never scaled as a bitmap. */
-.workspace{contain:layout paint}
-
-/* 新 Web：决定表单与真实 Receipt/研究文档的补充样式，沿用材料页原有视觉语言。 */
-.field{display:flex;flex-direction:column;gap:6px;font-size:var(--type-meta,12px);color:#6a6f78;min-width:0}
-.field textarea,.field input:not([type=checkbox]),.field select{width:100%;box-sizing:border-box;border:1px solid #d9dde5;border-radius:10px;background:#fff;padding:9px 12px;font:inherit;font-size:13px;line-height:1.6;color:#2f343c}
-.field textarea{resize:vertical}
-.field textarea:focus,.field input:not([type=checkbox]):focus,.field select:focus{outline:3px solid #007aff30;outline-offset:1px;border-color:#8fb6e6}
-.receipt{flex-direction:column;align-items:stretch}
-.receipt small{font-size:var(--type-meta,12px);color:#6d727b;line-height:1.6}
-
-/* 新建 Meeting 表单：与决定表单同一视觉语言；参与者按列铺平。 */
-.meetingForm{display:grid;gap:12px;margin-top:15px}
-.meetingForm .actionRow{margin-top:0}
-.participants{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px 16px}
-.participants label{display:flex;align-items:center;gap:6px;font-size:var(--type-body,14px);color:#2f343c}
-
-/* 决策路径行内按钮与 select 等高且底对齐（select：1px 边框 + 9px padding + 1.6 行高）。 */
-.discussion .actionRow{align-items:flex-end}
-/* 决策路径标题：不换行；提示语改为标题旁 info 图标的 hover / 键盘 focus 气泡。 */
-.discussion>header h2{white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
-.hintTip{position:relative;display:inline-flex;color:#8a8f98;cursor:default}
-.hintTip:focus-visible{outline:2px solid #8cb1e8;outline-offset:2px;border-radius:6px}
-.hintBubble{position:absolute;left:0;top:calc(100% + 8px);width:max-content;max-width:240px;background:#1d1d1f;color:#fff;font-size:12px;font-weight:400;line-height:1.6;padding:8px 12px;border-radius:8px;opacity:0;visibility:hidden;transition:opacity 150ms;z-index:30;white-space:normal}
-.hintTip:hover .hintBubble,.hintTip:focus-visible .hintBubble{opacity:1;visibility:visible}
-@media(prefers-reduced-motion:reduce){.hintBubble{transition:none}}
-.discussion .actionRow button{padding:9px 14px;font-size:13px;line-height:1.6;border-radius:10px}
-.discussion .actionRow button,.discussion .actionRow select{box-sizing:border-box;height:42px}
-.receipt button{align-self:flex-start;margin-top:10px;border:1px solid #d9dde5;background:#fff;border-radius:10px;padding:9px 14px;font-size:13px;color:#4f5866}
-.receipt button:hover{background:#f2f5f8}
-
-/* pen 主行动按钮：判断/决定类的主提交用 accent 底色，其余 actionRow 按钮维持次要样式。 */
-.actionRow button[data-primary]{border-color:#007aff;background:#007aff;color:#fff;border-radius:11px;padding:11px 17px;font-weight:600;font-size:14px}
-.actionRow button[data-primary]:hover{border-color:#0069db;background:#0069db}

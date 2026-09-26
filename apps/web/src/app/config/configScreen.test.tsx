@@ -20,6 +20,7 @@ describe("配置页渲染", () => {
   it("渲染 Top Nav、Page Header 与 Draft Status", () => {
     expect(html).toContain("返回首页");
     expect(html).toContain("配置变更写入业务库并同步 Radar 监测范围");
+    expect(html).toContain("退出登录");
     expect(html).toContain("SETTINGS");
     expect(html).toContain("创建与管理组织级对象：会议、议题、战场与能力。新建后立刻进入对应的决策流程。");
   });
@@ -31,8 +32,8 @@ describe("配置页渲染", () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(html).toContain('maxLength="25"');
     expect(html.match(/type="submit"/g)).toHaveLength(5);
-    // 返回首页 + 管理 Mission + 管理战场 + 管理能力：四个次级入口，都不提交表单
-    expect(html.match(/type="button"/g)).toHaveLength(4);
+    // 返回首页 + 管理 Mission + 退出登录 + 管理战场 + 管理能力：五个次级入口，都不提交表单
+    expect(html.match(/type="button"/g)).toHaveLength(5);
   });
 
   it("战场/能力表单按设计收编号、顺序、六个月目标", () => {

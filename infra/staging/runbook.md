@@ -10,7 +10,8 @@
 3. `docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build`。
    - migration 由 API 启动前内联执行（advisory lock、只向前、失败则不 listen）；没有 down migration，回滚靠部署前备份与旧镜像。
    - `wechat` sidecar 只在内网，无 `ports`，不经 Caddy；首次需访问其内网登录页扫码（见 §5）。
-4. `bash infra/staging/smoke.sh`（需要 `PUBLIC_ORIGIN` 与 `CEO_PASSWORD`）。
+   - 首次上线（或新增人员）后发初始码：`docker compose -f infra/docker-compose.yml --env-file infra/.env exec api pnpm access:issue`，把输出表格里的「ID / 初始码」私下发给每个人；首次登录会要求改成自己的 4 位口令。重置某人：`... exec api pnpm access:issue <personId>`（旧会话立即失效）。
+4. `bash infra/staging/smoke.sh`（需要 `PUBLIC_ORIGIN`、`CEO_LOGIN_ID` 与 `CEO_PASSCODE`）。
 5. Caddy 边界复验：`bash infra/caddy/verify.sh`（本地 stub）或对 staging 复跑 `/`（Web）、`/api/healthz`（API）、`/mcp/company-memory`（401）、SSE 与 multipart。
 
 ## 2. 迁移与版本检查

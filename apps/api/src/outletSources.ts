@@ -49,46 +49,80 @@ function iso(value: string): string {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : "";
 }
 
-function decodeHtml(value: string): string {
-  return value
-    .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'")
-    .replace(/&amp;/g, "&");
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+  copy: "©", reg: "®", trade: "™", deg: "°", plusmn: "±", times: "×", divide: "÷", middot: "·", bull: "•",
+  mdash: "—", ndash: "–", hellip: "…", ldquo: "“", rdquo: "”", lsquo: "‘", rsquo: "’", laquo: "«", raquo: "»",
+  yen: "¥", euro: "€", pound: "£", cent: "¢", sect: "§",
+};
+
+/** 单遍解码 HTML 实体：常用命名实体 + 十进制 `&#NNN;` + 十六进制 `&#xHH;`；不认识的原样保留，不二次解码。 */
+export function decodeHtml(value: string): string {
+  return value.replace(/&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|([a-zA-Z][a-zA-Z0-9]*));/g, (entity, dec?: string, hex?: string, name?: string) => {
+    if (name) return NAMED_ENTITIES[name] ?? entity;
+    const code = dec ? Number.parseInt(dec, 10) : Number.parseInt(hex!, 16);
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : entity;
+  });
 }
+
+/** 从 `<div …>` 开标签处按 div 嵌套深度找配对的 `</div>`，返回其结束位置；不闭合返回 -1。 */
+function matchingDivEnd(html: string, openAt: number): number {
+  const divRe = /<(\/?)div\b[^>]*>/gi;
+  divRe.lastIndex = openAt;
+  let depth = 0;
+  for (let tag = divRe.exec(html); tag; tag = divRe.exec(html)) {
+    depth += tag[1] ? -1 : 1;
+    if (depth === 0) return tag.index + tag[0].length;
+  }
+  return -1;
+}
+
+function removeDiv(html: string, className: string): string {
+  const open = html.match(new RegExp(`<div[^>]*class="[^"]*\\b${className}\\b[^"]*"[^>]*>`, "i"));
+  const end = open ? matchingDivEnd(html, open.index!) : -1;
+  return open && end >= 0 ? html.slice(0, open.index) + html.slice(end) : html;
+}
+
+// section：转载自公众号的正文常把文字直接放在 <section> 里
+const BLOCK_TAG = /^<\/?(?:p|div|h[1-6]|li|blockquote|figcaption|section)\b/i;
 
 /**
  * 文章页正文提取（量子位 WordPress：`<div class="article">…</div>`）。
- * 块级标签转空行保留段落；同时按文档顺序收集 https 配图及其段落位置（after = 前一段索引）。
+ * 先剔除注释/脚本/样式，按 div 深度配对取出正文容器，去掉容器内的标题、作者行与版权声明；
+ * 再按文档顺序切段：块级标签分段、`<br>` 换行、源码空白折叠，段间用空行连接（与阅读器按空行分段一致）；
+ * 配图只取容器内 https 图，after = 它所跟随段落在同一段落流里的索引。
  * 拿不到容器时返回空结果，由调用方诚实退回 feed 摘要。
  */
 export function extractArticleContent(html: string): { text: string; images: { src: string; after: number }[] } {
-  const container = html.match(/<div[^>]*class="[^"]*\barticle\b[^"]*"[^>]*>/i);
-  if (!container) return { text: "", images: [] };
-  const start = container.index! + container[0].length;
-  const body = html.slice(start, start + 300_000);
-  // 配图位置：图片前出现过的块级闭合数 − 1 ≈ 它跟在第几段之后
-  const closeRe = /<\/(?:p|div|h[1-6]|li|blockquote|figcaption)>/gi;
-  const imgRe = /<img[^>]+src="(https:\/\/[^"\s]+)"[^>]*>/gi;
+  const clean = html.replace(/<!--[\s\S]*?-->/g, "").replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, "");
+  const container = clean.match(/<div[^>]*class="[^"]*\barticle\b[^"]*"[^>]*>/i);
+  const end = container ? matchingDivEnd(clean, container.index!) : -1;
+  if (!container || end < 0) return { text: "", images: [] };
+  // 标题与卡片标题重复；作者/日期行、版权声明是版式，不是正文
+  const body = removeDiv(removeDiv(clean.slice(container.index! + container[0].length, end).replace(/<h1\b[\s\S]*?<\/h1>/i, ""), "article_info"), "line_font");
+  const paragraphs: string[] = [];
   const images: { src: string; after: number }[] = [];
-  let seen: RegExpExecArray | null;
-  for (const match of body.matchAll(imgRe)) {
-    if (images.length >= 12) break;
-    closeRe.lastIndex = 0;
-    let closes = 0;
-    while ((seen = closeRe.exec(body)) && seen.index < match.index) closes += 1;
-    images.push({ src: match[1].slice(0, 1000), after: Math.max(0, closes - 1) });
+  let current = "";
+  const flush = () => {
+    const paragraph = current.split("\n").map((line) => line.trim()).filter(Boolean).join("\n");
+    if (paragraph) paragraphs.push(paragraph);
+    current = "";
+  };
+  for (const [token] of body.matchAll(/<[^>]*>|[^<]+/g)) {
+    if (!token.startsWith("<")) current += decodeHtml(token.replace(/\s+/g, " "));
+    else if (/^<br\b/i.test(token)) current += "\n";
+    else if (BLOCK_TAG.test(token)) flush();
+    else {
+      const src = token.match(/^<img\b[^>]*\ssrc="(https:\/\/[^"\s]+)"/i)?.[1];
+      // 图在段中时跟随当前段，否则跟随上一段
+      if (src && images.length < 12) images.push({ src: decodeHtml(src).slice(0, 1000), after: Math.max(0, paragraphs.length - (current.trim() ? 0 : 1)) });
+    }
   }
-  const text = decodeHtml(body)
-    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<\/(p|div|h[1-6]|li|blockquote|figcaption)>/gi, "\n\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[ \t\r\f\v]+/g, " ")
-    .replace(/\n ?\n(?: ?\n)+/g, "\n\n")
-    .split("\n").map((line) => line.trim()).join("\n")
-    .replace(/^\n+|\n+$/g, "")
-    .slice(0, 10_000);
-  return { text, images };
+  flush();
+  const text = paragraphs.join("\n\n").slice(0, 10_000);
+  // 10k 截断后，落在被截掉段落之后的配图不再保留
+  const kept = text.split(/\n{2,}/).length;
+  return { text, images: images.filter((image) => image.after < kept) };
 }
 
 /** fullText outlet：逐条抓文章页提取全文与配图；失败或无正文时诚实退回 feed 摘要，不用抓取时间或标题冒充。 */

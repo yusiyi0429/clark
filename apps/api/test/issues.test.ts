@@ -6,7 +6,7 @@ import { buildApp } from "../src/app.js";
 import { recoverInterruptedResearch } from "../src/issues.js";
 import { createRadarService, type RadarAssessor } from "../src/radar.js";
 import { migrate } from "../src/migrate.js";
-import { createTestDb, testEnv, TEST_PASSWORD } from "./helpers.js";
+import { createTestDb, seedTestAccess, testEnv, TEST_LOGIN } from "./helpers.js";
 
 const NOW = new Date("2026-05-02T03:00:00.000Z");
 const ANCHORS = [{
@@ -64,12 +64,13 @@ function assessor(submission: (sources: { sourceFingerprint: string }[]) => TRad
   return { async assess({ sources }) { return submission(sources); } };
 }
 
-async function login(app: Awaited<ReturnType<typeof buildApp>>): Promise<string> {
+async function login(app: Awaited<ReturnType<typeof buildApp>>, db: { query: (text: string, params?: unknown[]) => Promise<unknown> }): Promise<string> {
+  await seedTestAccess(db);
   const response = await app.inject({
     method: "POST",
     url: "/api/auth/login",
     headers: { origin: testEnv.publicOrigin },
-    payload: { password: TEST_PASSWORD },
+    payload: TEST_LOGIN,
   });
   return (response.headers["set-cookie"] as string).split(";")[0];
 }
@@ -143,7 +144,7 @@ describe("Signal promotion creates one pending Issue", () => {
         expect((issues.rows[0].research as { pendingSince: string }).pendingSince).toBeTruthy();
         expect(await db.query("SELECT id FROM agent_runs")).toMatchObject({ rows: [] });
 
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const card = await app.inject({ method: "GET", url: `/api/cards/issues/${promotedIssueId}`, headers: { cookie } });
         expect(card.statusCode).toBe(200);
         expect(Value.Check(Card, card.json().cards[0])).toBe(true);
@@ -198,7 +199,7 @@ describe("DRI service Issue import", () => {
         expect((await app.inject({ method: "POST", url: "/api/dri/issues", payload: DRI_IMPORT })).statusCode).toBe(401);
         expect((await postDri(app, DRI_IMPORT, "wrong-token")).statusCode).toBe(401);
         expect((await postDri(app, DRI_IMPORT, testEnv.mcpServiceToken)).statusCode).toBe(401);
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const ceoSession = await app.inject({ method: "POST", url: "/api/dri/issues", headers: { cookie }, payload: DRI_IMPORT });
         expect(ceoSession.statusCode).toBe(401);
       } finally {
@@ -230,7 +231,7 @@ describe("DRI service Issue import", () => {
         expect(await db.query("SELECT status FROM issues")).toMatchObject({ rows: [{ status: "pending" }] });
         expect(await db.query("SELECT id FROM agent_runs")).toMatchObject({ rows: [] });
 
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const queried = await app.inject({ method: "GET", url: `/api/cards/issues/${card.objectRef.id}`, headers: { cookie } });
         expect(queried.statusCode).toBe(200);
         expect(queried.json().cards[0].id).toBe(card.id);
@@ -289,7 +290,7 @@ describe("startup recovery of a never-started pre-research", () => {
         const recovered = await recoverInterruptedResearch(db.query.bind(db), { now: () => new Date("2026-05-02T03:00:00.000Z"), staleAfterMs: 15 * 60 * 1000 });
         expect(recovered).toBe(1);
 
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const card = await app.inject({ method: "GET", url: `/api/cards/issues/${issueId}`, headers: { cookie } });
         expect(card.json().cards[0].payload).toMatchObject({
           status: "pending",
@@ -366,7 +367,7 @@ describe("promotion fingerprint dedupe and strategic location", () => {
         expect(issues.rows).toHaveLength(1);
         expect(issues.rows[0].location).toEqual({ level: "company", relatedBattlefieldIds: ["growth", "product"] });
 
-        const cookie = await login(app);
+        const cookie = await login(app, db);
         const card = await app.inject({ method: "GET", url: `/api/cards/issues/${(await db.query("SELECT id FROM issues")).rows[0].id}`, headers: { cookie } });
         expect(card.json().cards[0].payload.location).toEqual({ level: "company", relatedBattlefieldIds: ["growth", "product"] });
       } finally {

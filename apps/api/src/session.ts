@@ -2,6 +2,9 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 
 export const SESSION_COOKIE = "warmap_session";
 
+/** 会话里只放「是谁」与凭据版本；身份（CEO／成员）每次按 seed 现算，版本对不上即视为已登出。 */
+export type SessionClaims = { pid: string; v: number };
+
 function hmac(secret: string, data: string): string {
   return createHmac("sha256", secret).update(data).digest("base64url");
 }
@@ -12,37 +15,43 @@ function safeEqual(a: string, b: string): boolean {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
-/** 校验 `scrypt$salt$hash` 格式的 CEO 密码散列，constant-time 比较。 */
-export function verifyPassword(stored: string, password: string): boolean {
-  const [scheme, salt, hash] = stored.split(":");
-  if (scheme !== "scrypt" || !salt || !hash) return false;
-  const candidate = scryptSync(password, salt, 32).toString("hex");
-  return safeEqual(candidate, hash);
+/** 随机盐 scrypt 散列，格式 `scrypt:salt:hash`。 */
+export function hashSecret(secret: string): string {
+  const salt = randomBytes(16).toString("hex");
+  return `scrypt:${salt}:${scryptSync(secret, salt, 32).toString("hex")}`;
 }
 
-export function createSessionToken(secret: string, maxAgeSeconds: number): string {
+/** 校验 `scrypt:salt:hash`，constant-time 比较。 */
+export function verifySecret(stored: string, secret: string): boolean {
+  const [scheme, salt, hash] = stored.split(":");
+  if (scheme !== "scrypt" || !salt || !hash) return false;
+  return safeEqual(scryptSync(secret, salt, 32).toString("hex"), hash);
+}
+
+export function createSessionToken(secret: string, maxAgeSeconds: number, claims: SessionClaims): string {
   const payload = Buffer.from(
-    JSON.stringify({ exp: Math.floor(Date.now() / 1000) + maxAgeSeconds }),
+    JSON.stringify({ pid: claims.pid, v: claims.v, exp: Math.floor(Date.now() / 1000) + maxAgeSeconds }),
   ).toString("base64url");
   return `${payload}.${hmac(secret, payload)}`;
 }
 
-export function verifySessionToken(secret: string, token: string | undefined): boolean {
-  if (!token) return false;
+/** 签名、有效期与字段齐全才返回；旧格式（只有 exp）一律视为未登录。 */
+export function readSessionToken(secret: string, token: string | undefined): SessionClaims | null {
+  if (!token) return null;
   const [payload, sig] = token.split(".");
-  if (!payload || !sig) return false;
-  if (!safeEqual(hmac(secret, payload), sig)) return false;
+  if (!payload || !sig || !safeEqual(hmac(secret, payload), sig)) return null;
   try {
-    const { exp } = JSON.parse(Buffer.from(payload, "base64url").toString()) as { exp: number };
-    return exp > Math.floor(Date.now() / 1000);
+    const { pid, v, exp } = JSON.parse(Buffer.from(payload, "base64url").toString()) as Record<string, unknown>;
+    if (typeof pid !== "string" || !pid || !Number.isInteger(v) || typeof exp !== "number") return null;
+    return exp > Math.floor(Date.now() / 1000) ? { pid, v: v as number } : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-export function sessionSetCookie(secret: string, maxAgeSeconds: number): string {
-  // Secure 在本地 http 调试时可临时关闭；生产 Caddy TLS 终止后必然满足。
-  return `${SESSION_COOKIE}=${createSessionToken(secret, maxAgeSeconds)}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; Secure; SameSite=Strict`;
+export function sessionSetCookie(secret: string, maxAgeSeconds: number, claims: SessionClaims): string {
+  // Secure：浏览器把 localhost/127.0.0.1 视为安全上下文，本地 http 调试也能写入；线上由 Nginx 终止 TLS。
+  return `${SESSION_COOKIE}=${createSessionToken(secret, maxAgeSeconds, claims)}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; Secure; SameSite=Strict`;
 }
 
 export function sessionClearCookie(): string {
@@ -56,10 +65,4 @@ export function parseCookies(header: string | undefined): Record<string, string>
     if (idx > 0) out[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
   }
   return out;
-}
-
-/** 随机盐 scrypt 散列，用于生成 CEO_ACCESS_PASSWORD_HASH。 */
-export function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString("hex");
-  return `scrypt$${salt}$${scryptSync(password, salt, 32).toString("hex")}`;
 }

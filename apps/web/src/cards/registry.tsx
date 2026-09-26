@@ -14,7 +14,8 @@ export type CardRenderProps = {
   /** 同一页面上一起加载的 Card：Radar 视图需要 Signal 列表，Meeting 需要候选 Issue。 */
   collection: Card[];
   onCard: (card: Card) => void;
-  onNavigate: (href: string) => void;
+  /** origin：触发的来源元素，用于卡片 ⇄ 工作区转场。 */
+  onNavigate: (href: string, origin?: Element | null) => void;
 };
 
 /** kind → 固定 renderer。新增 kind 必须同时在这里和后端 projector 注册。 */

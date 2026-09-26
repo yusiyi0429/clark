@@ -8,174 +8,98 @@
 .panel { border:1px solid #1d1d1f0d; border-radius:22px; background:#fff; box-shadow:0 1px 2px #1d1d1f04; min-width:0; overflow:hidden; }
 .board .radar { grid-column:auto; grid-row:auto; min-height:190px; padding:20px; justify-content:space-between; }
 .board .radar h2 { font-size:var(--type-title,20px); font-weight:600; margin:0; letter-spacing:-.03em; }
-.scanStage { min-height:104px; }
+.scanStage { min-height:104px; max-height:132px; }
+.scanStage > div { height:116px; }
 .strategy { padding:20px 23px 13px; }
+.heading { display:flex; align-items:center; gap:10px; width:100%; border:0; background:none; padding:0; cursor:pointer; }
 .board .heading h2 { font-size:var(--type-title,20px); color:var(--apple-label,#1d1d1f); line-height:1.4; font-weight:600; letter-spacing:-.025em; margin:0; }
+.heading > svg { flex:none; margin-left:auto; color:#8c98a6; opacity:.3; transition:opacity 180ms; }
+.heading:hover > svg,.heading:focus-visible > svg { opacity:1; }
 .strategicIssues { margin-top:11px; }
 .strategicIssues .issueSlot + .issueSlot { border-top:1px solid #e6e9ed; }
+.issueSlot { overflow:hidden; }
 .board .issue { width:100%; border:0; background:transparent; border-radius:9px; padding:4px 0; display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:var(--type-body,14px); line-height:1.55; color:var(--apple-label,#1d1d1f); transition:background 150ms,box-shadow 150ms,color 150ms; text-align:left; }
 .board .issue:hover { background:#f5f5f7; box-shadow:6px 0 #f5f5f7,-6px 0 #f5f5f7; }
-.board .issue[data-selected=true] { background:#007aff0b; box-shadow:6px 0 #007aff0b,-6px 0 #007aff0b; }
-.board .issue:active { background:#007aff12; }
+.board .issue[data-selected=true] { background:#3a83f70d; box-shadow:6px 0 #3a83f70d,-6px 0 #3a83f70d; }
+.board .issue:active { background:#3a83f714; }
 .issue:focus-visible,.heading:focus-visible { outline:2px solid #8cb1e8; outline-offset:3px; }
 .issueText { min-width:0; display:flex; flex-direction:column; gap:1px; overflow-wrap:anywhere; }
 .board .issueText small { font-size:var(--type-meta,12px); line-height:1.6; color:#a1443c; font-weight:400; }
-/* Radar Issue：摘要只在 hover / 键盘 focus 时展开，不占默认卡片密度。 */
-.issuePreview{display:block;max-height:0;overflow:hidden;opacity:0;margin:0;color:#4f5866;font-size:12px;font-weight:400;line-height:1.65;transition:max-height 180ms ease,opacity 180ms ease,margin 180ms ease}
-.issue:hover .issuePreview,.issue:focus-visible .issuePreview{max-height:6.8em;opacity:1;margin-top:5px}
-@media(prefers-reduced-motion:reduce){.issuePreview{transition:none}}
+.meetingState{display:flex;align-items:center;gap:6px;min-width:0;margin-top:2px;color:#666d76;font-size:max(13px,calc(var(--type-body,14px) - 1px));line-height:1.5;font-weight:400;font-variant-numeric:tabular-nums}
+.meetingState svg{flex:none;color:#7b8794}.meetingState>span{min-width:0}
 .dot { flex:none; width:6px; height:6px; border-radius:50%; margin-top:8px; }
-.red { background:#e34b43; box-shadow:0 0 0 3px #ff3b3008; }
+.red { background:#d94a43; }
 .yellow { background:#c79624; }
 .gray { background:#8e8e93; }
 .issueArrow { flex:none; margin-top:5px; margin-left:auto; opacity:0; color:#7c8a9b; transition:opacity 180ms; }
 .issue:hover .issueArrow,.issue:focus-visible .issueArrow { opacity:.8; }
-.battlefields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:auto; gap:13px; flex:1 0 auto; }
+.battlefields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:auto; align-items:stretch; gap:13px; flex:none; }
 .battlefieldToolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none;padding:0 3px;margin-bottom:-4px}
 .battlefieldToolbar>span{font-size:12px;color:#7c8088}
-.modeSwitch{position:relative;display:grid;grid-template-columns:1fr 1fr;border-radius:10px;background:#e9ebef;padding:3px;isolation:isolate}
-.modeSwitch>i{position:absolute;z-index:-1;left:3px;top:3px;bottom:3px;width:calc(50% - 3px);border-radius:7px;background:#fff;box-shadow:0 1px 3px #172b4312;transition:transform 280ms cubic-bezier(.22,.72,.18,1)}
-.modeSwitch[data-mode=progress]>i{transform:translateX(100%)}
-.modeSwitch button{border:0;background:none;color:#7b8089;font:inherit;font-size:12px;min-width:62px;padding:5px 12px;cursor:pointer;line-height:1.5;text-align:center;transition:color 180ms}
-.modeSwitch button[aria-pressed=true]{color:#303741}.modeSwitch button:focus-visible{outline:2px solid #8cb1e8;outline-offset:3px;border-radius:7px}
-@media(prefers-reduced-motion:reduce){.modeSwitch>i,.modeSwitch button{transition:none}}
-.battlefield { height:363px; min-height:0; }
-.board .campaign h3 { margin:0 0 3px; color:#6e6e73; font-size:max(13px,var(--type-meta,12px)); font-weight:600; line-height:1.6; }
+.modeSwitch{flex:none}
+.battlefield { height:auto; min-height:0; }
+.directIssues { margin-top:8px; }
 .board .empty { margin:12px 0 0; color:#77777c; font-size:var(--type-meta,12px); line-height:1.6; }
 .capabilities { display:flex; flex-direction:column; align-items:stretch; gap:16px; padding:20px 22px; flex:none; }
 .capabilities .heading { width:100%; }
 .board .note { margin:0; padding:0 5px; font-size:var(--type-note,11px); line-height:1.5; color:#797980; }
 .receipt { display:flex; align-items:flex-start; gap:9px; font-size:var(--type-body,14px); color:#517868; padding:10px 0; line-height:1.6; }
 .receipt svg { flex:none; margin-top:4px; }
+.resolving { animation:acknowledge 1.3s both; }
 @keyframes acknowledge { 0% { opacity:0; max-height:150px; } 15%,72% { opacity:1; max-height:150px; } 100% { opacity:0; max-height:0; } }
-@media(min-width:1800px) { .board { gap:16px; }.top,.battlefields { gap:16px; }.strategy { padding:24px 28px; }.battlefield { height:390px; }.board .radar { min-height:225px; } }
+@media(min-width:1800px) { .board { gap:16px; }.top,.battlefields { gap:16px; }.strategy { padding:24px 28px; }.board .radar { min-height:225px; }.scanStage { max-height:146px; }.scanStage > div { height:132px; } }
 @media(max-width:1100px) { .top { grid-template-columns:minmax(0,1fr) 142px; }.board .radar { padding:17px 14px; }.strategy { padding:17px; }.capabilities { gap:14px; padding:17px; }.capabilityItems { gap:2px; }.board .capabilityItems button { padding:9px 7px; gap:5px; } }
-@media(max-width:850px) { .top { grid-template-columns:minmax(0,1fr) 120px; }.battlefields { grid-template-columns:minmax(0,1fr); }.battlefield { height:auto; min-height:146px; }.capabilities { align-items:flex-start; flex-direction:column; gap:10px; }.capabilityItems { width:100%; justify-content:space-between; }.board .radar { padding:17px 12px; } }
-@media(max-width:500px) { .top { grid-template-columns:minmax(0,1fr) 100px; gap:9px; }.board .radar h2 { font-size:16px; }.board .radar { padding:15px 9px; }.strategy { padding:15px 12px; }.board .heading h2 { font-size:18px; }.board .issue { gap:7px; }.issueArrow { display:none; }.board { gap:10px; } }
-@media(prefers-reduced-motion:reduce) {.issue,.heading > svg,.issueArrow,.capabilityItems button { transition:none; } }
-@media(prefers-contrast:more){.panel{border-color:#777}.board .empty,.board .note,.board .campaign h3{color:#444}.board .issueText small{color:#92251c}}
+@media(max-width:850px) { .top { grid-template-columns:minmax(0,1fr) 120px; }.battlefields { grid-template-columns:minmax(0,1fr); }.battlefield { height:auto; min-height:146px; }.capabilities { align-items:flex-start; flex-direction:column; gap:10px; }.capabilityItems { width:100%; justify-content:space-between; }.board .radar { padding:17px 12px; }.scanStage > div { height:90px; } }
+@media(max-width:500px) { .top { grid-template-columns:minmax(0,1fr) 100px; gap:9px; }.board .radar h2 { font-size:16px; }.board .radar { padding:15px 9px; }.strategy { padding:15px 12px; }.board .heading h2 { font-size:18px; }.scanStage > div { height:78px; }.board .issue { gap:7px; }.issueArrow { display:none; }.board { gap:10px; } }
+@media(prefers-reduced-motion:reduce) { .resolving { animation:none; }.issue,.heading > svg,.issueArrow,.capabilityItems button { transition:none; } }
+@media(prefers-contrast:more){.panel{border-color:#777}.board .empty,.board .note{color:#444}.board .issueText small{color:#92251c}.heading>svg{opacity:1}}
 
 .radarStatus{position:absolute;left:22px;bottom:17px;font-size:11px;color:#617894;z-index:2}
 
-.panel{position:relative}.panel>.heading{padding-right:28px}.issueSlot>.issue{flex:1;min-width:0}.radarWrapper{position:relative;min-width:0}.radarWrapper>.radar{width:100%;height:100%;box-sizing:border-box}
+.panel{position:relative}.panel>.heading{padding-right:28px}.issueSlot{display:flex;align-items:center;gap:7px}.issueSlot>.issue{flex:1;min-width:0}.issueSlot>[data-reference-id]{margin-right:1px}.radarWrapper{position:relative;min-width:0}.radarWrapper>.radar{width:100%;height:100%;box-sizing:border-box}
 
 /* Shared edge treatment; each area uses its own attention hierarchy. */
-.board .panel,.board .radar{border:1px solid #ffffffed;box-shadow:inset 0 1px #fff,0 3px 10px #29334c08,0 0 0 .5px #929bad18;color:#1d1d1f}
-.board .strategy{background:linear-gradient(165deg,#fff 65%,#f7f9fc);border-color:#fff;box-shadow:inset 0 1px #fff,0 2px 8px #26354b08,0 0 0 .5px #b5becb30}
-.board .capabilities{background:linear-gradient(160deg,#fafbfc,#f5f6f8);border-color:#ffffffc7;box-shadow:inset 0 1px #fff,0 0 0 .5px #b5becb26}
-.board .radar{background:linear-gradient(145deg,#deedff 0%,#f5faff 55%,#e8e8fc 100%);backdrop-filter:none}
+.board .panel,.board .radar{border:1px solid #dfe4e9;box-shadow:0 2px 8px #29334c08;color:#1d1d1f}
+.board .strategy{background:#fff}
+/* 公司能力与战场卡是同一种普通卡片：白底、同一条描边与阴影。 */
+.board .capabilities{background:#fff;box-shadow:0 2px 6px #1d1d1f08,inset 0 1px 0 #fff}
+.board .radar{background:linear-gradient(145deg,#f1f7ff,#f8fafd 75%);backdrop-filter:none}
 .board .strategy .issue:hover,.board .capabilities .issue:hover{background:#e9edf466;box-shadow:6px 0 #e9edf466,-6px 0 #e9edf466}
 @media(prefers-contrast:more){.board .panel,.board .radar{border-color:#777}}
 
 /* Strategy reads as a decision document; capabilities as the foundation beneath it. */
 .board .strategy .heading h2{font-size:calc(var(--type-title,20px) + 1px);font-weight:650;letter-spacing:-.035em}
-.strategy .strategicIssues{margin-top:13px}
-.strategy .issue{padding:10px 0}
+.strategy .strategicIssues{margin-top:9px}
+.strategy .issue{padding:7px 0}
 .strategy .issueText>span{font-weight:500}
 .strategy .strategicIssues .issueSlot+.issueSlot{border-top-color:#27364e0b}
 .strategy .issueText{gap:3px}
-.board .strategy .issue[data-selected=true],.board .capabilities .issue[data-selected=true]{background:#007aff0b;box-shadow:6px 0 #007aff0b,-6px 0 #007aff0b}
-.board .capabilities{display:grid;grid-template-columns:130px minmax(0,1fr);align-items:start;gap:24px;padding:22px 24px}
-.board .capabilities>.heading{padding:0;width:100%;gap:4px;align-items:center}
-.board .capabilities>.heading h2{font-size:var(--type-body,14px);line-height:1.65;font-weight:600;letter-spacing:0;white-space:nowrap}
-.capabilities>.heading>svg{margin-left:0;width:13px}
-.capabilities>[data-reference-id]{top:19px;right:12px}
-.capabilities :global([data-capability-category]){padding:0 0 0 20px;border-top:0;border-left:1px solid #ccd2dc66}
+.board .strategy .issue[data-selected=true],.board .capabilities .issue[data-selected=true]{background:#3a83f70d;box-shadow:6px 0 #3a83f70d,-6px 0 #3a83f70d}
+/* 公司能力是战场网格的最后一格：内边距、标题字号、贴着标题的箭头都跟战场卡一致，同一行的卡等高；只靠略浅的底色读作战场之外的底座。
+   战场数为偶数时它会落在左列，那就独占一行，能力分组恢复并排。 */
+.board .capabilities{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:21px 22px}
+.board .capabilities>.heading{width:auto;align-self:flex-start;min-height:30px;padding:0;gap:8px;align-items:center}
+.capabilities>.heading>svg{margin-left:0;opacity:.35}
+.capabilities>[data-reference-id]{top:22px;right:23px}
+.capabilities :global([data-testid=capability-issues]){grid-template-columns:minmax(0,1fr);gap:0}
+.capabilities :global([data-capability-category]){padding:12px 0 8px;border-top:1px solid #1d1d1f0f}
 .board .capabilities :global([data-capability-category]) h3{font-size:12px;color:#73777e;font-weight:500;margin-bottom:5px}
 .capabilities .issue{padding:5px 0}
 .strategy,.capabilities{transition:box-shadow 200ms ease,border-color 200ms ease}
 .strategy:focus-within,.capabilities:focus-within{border-color:#bdd0e9}
-@media(min-width:1800px){.board .capabilities{grid-template-columns:150px minmax(0,1fr);padding:24px 28px}.board .capabilities>.heading h2{font-size:17px}.board .capabilities :global([data-capability-category]) h3{font-size:14px}}
-@media(max-width:1250px){.board .battlefields{grid-template-columns:repeat(2,minmax(0,1fr))}.board .capabilities{grid-template-columns:1fr;gap:13px;padding:19px 20px}.capabilities :global([data-capability-category]){padding-left:0;border-left:0}.board .capabilities>.heading h2{font-size:16px}}
-@media(max-width:690px){.strategy .issue{padding:9px 0}.board .strategy .heading h2{font-size:18px}.board .capabilities{padding:18px}}
+@media(min-width:1800px){.board .capabilities{padding:24px 28px}.capabilities>[data-reference-id]{top:25px;right:29px}}
+@media(max-width:1100px){.board .capabilities{padding:17px}.board .capabilities>.heading h2{font-size:18px}.capabilities>[data-reference-id]{top:18px;right:18px}}
+@media(max-width:690px){.strategy .issue{padding:7px 0}.board .strategy .heading h2{font-size:18px}.board .capabilities{padding:16px}.capabilities>[data-reference-id]{top:17px;right:17px}}
 @media(prefers-reduced-motion:reduce){.strategy,.capabilities{transition:none}}
 @media(prefers-contrast:more){.board .strategy,.board .capabilities{border-color:#777}.board .capabilities :global([data-capability-category]) h3{color:#444}.capabilities :global([data-capability-category]){border-color:#aaa}}
 
-/* 新 Web：公司能力按 capabilityId 分组，沿用原能力面板的视觉语言。 */
-.capabilityItems{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px 24px;min-width:0;width:100%}
-.capabilityGroup{min-width:0;padding-left:20px;border-left:1px solid #ccd2dc66}
-.capabilityGroup h3{display:flex;align-items:baseline;gap:5px;margin:0 0 5px;color:#73777e;font-size:12px;font-weight:500}
-.capabilityCode{flex:none;border-radius:6px;background:#eef1f6;padding:0 5px;color:#5b6472;font-size:11px}
-.capabilityCategory{margin-left:6px;color:#9aa0a8;font-size:10px;font-weight:500;letter-spacing:.02em}
-/* 六个月目标固定两行，保证能力面板行高一致。 */
-.capabilityOutcome{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin:0 0 4px;font-size:12px;line-height:1.6;color:#5b6472}
-@media(max-width:1250px){.capabilityGroup{padding-left:0;border-left:0}}
+/* 以上逐项来自 clark-main `home-board.module.css`；以下为天枢独有内容，沿用 clark 同一套视觉语言。 */
 
-/* 基线以 2K 视口的面板比例为准；低高度时由 board 自身滚动，不强迫内容继续压缩。 */
-.board .top{height:clamp(250px,31dvh,316px)}
-.board .top>*{height:100%}
-.board .battlefields>.battlefield{height:clamp(290px,37dvh,380px)}
-.board .battlefields>.battlefield>*{height:100%}
-.board .battlefieldToolbar{height:36px;align-items:center;margin-bottom:0}
-.board .capabilities{min-height:124px}
-.board .battlefields{flex:0 0 auto}
+/* 公司能力分组（clark `capability-issues.module.css`）：只列能力建设议题（SSOT CEO-01）。 */
+.groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:12px 25px;min-width:0;width:100%}
+.group{min-width:0;padding-top:14px;border-top:1px solid #e7eaf0}
+.group h3{margin:0 0 6px;color:#1d1d1f;font-size:13px;font-weight:600;line-height:1.6}
 
-/* pen 首页几何（H-04…H-12）：面板平色、雷达盘归位、能力面板纵向、行分隔线。 */
-.board { gap: 14px; }
-.board .top, .board .battlefields { gap: 14px; }
-.board .panel { border: 1px solid #ffffffed; border-radius: 20px; background: #fff; }
-.board .strategy { border-color: #ffffffed; background: #fff; }
-.board .radar {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 8px;
-  padding: 20px 20px 16px;
-  border-color: #ffffffd9;
-  border-radius: 20px;
-  background: #f0f4fa;
-}
-.board .radarStatus {
-  position: static;
-  left: auto;
-  bottom: auto;
-  z-index: 1;
-}
-.scanStage { flex: 1; min-height: 0; max-height: none; }
-.divider { height: 1px; flex: none; margin-top: 11px; background: #e6e9ed; }
-.board .capabilities .divider { margin-top: 0; }
-.board .capabilities {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 14px;
-  padding: 22px 26px;
-  border-color: #ffffffed;
-  background: #fff;
-}
-.board .capabilities > .heading { padding: 0; width: 100%; }
-.board .capabilities > .heading h2 { font-size: var(--type-title, 20px); font-weight: 600; letter-spacing: -.025em; }
-.board .issue { font-size: 15px; }
-.board .issueArrow { opacity: .8; }
-.strategy .issue { padding: 10px 2px; }
-.strategicIssues .issue + .issue { border-top: 1px solid #e6e9ed; }
-.board .top { height: clamp(250px, 31dvh, 316px); }
-.board .battlefields > .battlefield, .board .battlefield { height: clamp(290px, 37dvh, 380px); }
-.board .battlefieldToolbar { padding: 0 4px; height: 36px; }
-.modeSwitch > i { border-radius: 6px; }
-.modeSwitch button { padding: 6px 18px; }
-@media(min-width:1800px) {
-  .board .capabilities { padding: 22px 26px; }
-}
-@media(max-width:1100px), (max-height:820px) {
-  .board { padding-bottom:72px; }
-  .board .top { height:clamp(230px,34dvh,280px); }
-  .board .battlefields > .battlefield, .board .battlefield { height:clamp(270px,40dvh,330px); }
-}
-@media(max-width:850px) {
-  .top { grid-template-columns:minmax(0,1fr) minmax(112px,.45fr); }
-  .board .battlefields { grid-template-columns:minmax(0,1fr); }
-  .board .top { height:auto; min-height:230px; }
-  .board .battlefields > .battlefield, .board .battlefield { height:auto; min-height:250px; }
-}
-@media(prefers-contrast:more) {
-  .board .panel,
-  .board .radar { border-color: #777; }
-}
+/* 标题不可打开时（天枢没有战略 / 能力详情页）：同一排版，不放箭头。 */
+.headingStatic{cursor:default}
 
-/* Mission 入口：首页工具栏跳转总览，能力面板行跳转该能力域的 Mission 列表。 */
-.missionEntry{display:inline-flex;align-items:center;gap:6px;margin-right:auto;border:0;border-radius:8px;background:transparent;padding:5px 8px;font:inherit;font-size:11.5px;font-weight:600;color:#3c4350;cursor:pointer}
-.missionEntry svg{flex:none;color:#4f5866}
-.missionEntry:hover{background:#f2f4f7}
-.capabilityMissions{display:inline-flex;align-items:center;gap:5px;margin:0 0 4px;border:0;border-radius:7px;background:#f2f6fc;padding:3px 8px;font:inherit;font-size:11px;font-weight:600;color:#0a5dc2;cursor:pointer}
-.capabilityMissions:hover{background:#e4eefb}

@@ -1,0 +1,15 @@
+:80 {
+  @api path /api/*
+  handle @api {
+    reverse_proxy api:4000
+  }
+
+  @mcp path /mcp/*
+  handle @mcp {
+    reverse_proxy api:4000
+  }
+
+  handle {
+    reverse_proxy web:3000
+  }
+}

@@ -1,7 +1,13 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
-import { ConversationDock, ExpandedConversationDialog, ExpandedHeaderBrand, messagesEndpoint, sessionLabel, isAttachable, EXPANDED_PLACEHOLDER, conversationTitleFor, scopeChipFor } from "./ConversationDock";
+import { ConversationDock } from "./ConversationDock";
+import { ConversationHistorySheet } from "./ConversationHistorySheet";
+import { TopicConversationRail } from "./TopicConversationRail";
+import { ConversationThinking, ConversationTurn } from "./Transcript";
+import { failureCopy, isAttachable, messagesEndpoint, sessionLabel, type ConversationData } from "./useConversation";
+
+const noop = () => undefined;
 
 function card(id: string, title: string): Card {
   return {
@@ -16,167 +22,60 @@ function card(id: string, title: string): Card {
   } as unknown as Card;
 }
 
-const noop = () => undefined;
-const railNode = (
-  <>
-    <header><span>本次引用</span><span>2 项</span></header>
-    <ul><li>Issue · 增长战场</li><li>note.md</li></ul>
-    <p>回答只引用以上对象，不检索其他数据。</p>
-  </>
-);
-const dialogProps = {
-  dialogRef: { current: null },
-  label: "公司全局",
-  sessions: [{ id: "s-aaaa1111", title: "渠道讨论", createdAt: "2026-09-20T02:00:00.000Z" }, { id: "s-bbbb2222" }],
-  activeSessionId: "s-aaaa1111",
-  sessionError: null,
-  dragOver: false,
-  deleteTarget: null,
-  rail: railNode,
-  onDismiss: noop,
-  onCreateSession: noop,
-  onSelectSession: noop,
-  onDeleteSession: noop,
-  onDeleteCancel: noop,
-  onDeleteConfirm: noop,
-  onUploadFiles: noop,
-  onDragEnter: noop,
-  onDragLeave: noop,
-  header: null,
-  transcript: null,
-  feedback: null,
-  tray: null,
-  composer: null,
-};
-
-const originalFetch = global.fetch;
-
-beforeEach(() => {
-  global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ sessions: [], messages: [] }) })) as unknown as typeof fetch;
-});
-
-afterEach(() => {
-  global.fetch = originalFetch;
-  vi.restoreAllMocks();
-});
-
-function fetchCalls(): string[] {
-  return (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.map((call) => String(call[0]));
+function data(patch: Partial<ConversationData> = {}): ConversationData {
+  return {
+    scope: "global",
+    messages: [],
+    status: "idle",
+    streaming: false,
+    partial: "",
+    stage: "thinking",
+    startedAt: 0,
+    error: null,
+    lastReply: null,
+    sessions: [],
+    activeSessionId: null,
+    sessionError: null,
+    attachments: [],
+    uploading: false,
+    attachmentError: null,
+    loadSessions: async () => undefined,
+    selectSession: noop,
+    createSession: async () => undefined,
+    deleteSession: async () => undefined,
+    uploadFiles: async () => undefined,
+    removeAttachment: noop,
+    send: async () => true,
+    stop: noop,
+    ...patch,
+  } as unknown as ConversationData;
 }
 
-describe("ConversationDock 扩展对话", () => {
+function dock(patch: Partial<Parameters<typeof ConversationDock>[0]> = {}) {
+  return renderToStaticMarkup(
+    <ConversationDock
+      data={data()}
+      label="公司全局"
+      global
+      detail={false}
+      keyboard={false}
+      onKeyboardChange={noop}
+      historyOpen={false}
+      onToggleHistory={noop}
+      references={[]}
+      onRemoveReference={noop}
+      onClearReferences={noop}
+      onRestoreReferences={noop}
+      {...patch}
+    />,
+  );
+}
+
+describe("对话端点与会话", () => {
   it("未选择会话回退 legacy 消息端点，选择后走 session 端点", () => {
     expect(messagesEndpoint("global", null)).toBe("/api/conversations/global/messages");
     expect(messagesEndpoint("global", "s-1")).toBe("/api/conversations/global/sessions/s-1/messages");
     expect(messagesEndpoint("issue:abc", null)).toBe("/api/conversations/issue%3Aabc/messages");
-  });
-
-  it("会话列渲染会话、当前选中与语义删除按钮", () => {
-    const markup = renderToStaticMarkup(<ExpandedConversationDialog {...dialogProps} />);
-    expect(markup).toContain("渠道讨论");
-    expect(markup).toContain("会话 s-bbbb22");
-    expect(markup).toContain('aria-current="true"');
-    expect(markup).toContain("删除会话 渠道讨论");
-    expect(markup).toContain("新建会话");
-    expect(markup).toContain("当前会话独立保存消息与附件。");
-  });
-
-  it("未选择会话时提示 legacy 回退；上传反馈与错误通过 role=alert 渲染", () => {
-    const markup = renderToStaticMarkup(
-      <ExpandedConversationDialog
-        {...dialogProps}
-        activeSessionId={null}
-        sessionError="会话列表加载失败"
-        feedback={
-          <>
-            <p className="x" role="alert">仅支持 PDF、DOCX、Markdown（.md）附件。</p>
-            <p className="y" aria-live="polite">附件上传中…</p>
-          </>
-        }
-      />,
-    );
-    expect(markup).toContain("未选择会话：消息保存到本页默认会话。");
-    expect(markup).toContain("会话列表加载失败");
-    expect(markup).toContain("仅支持 PDF、DOCX、Markdown（.md）附件。");
-    expect(markup).toContain("附件上传中");
-  });
-
-  it("本次引用栏渲染引用与附件并声明只引用声明对象", () => {
-    const markup = renderToStaticMarkup(<ExpandedConversationDialog {...dialogProps} />);
-    expect(markup).toContain('aria-label="本次引用"');
-    expect(markup).toContain("本次引用");
-    expect(markup).toContain("2 项");
-    expect(markup).toContain("Issue · 增长战场");
-    expect(markup).toContain("note.md");
-    expect(markup).toContain("回答只引用以上对象，不检索其他数据。");
-  });
-
-  it("删除确认只在有待删会话时渲染为应用内弹层，不再使用 window.confirm", () => {
-    const idle = renderToStaticMarkup(<ExpandedConversationDialog {...dialogProps} />);
-    expect(idle).not.toContain("删除会话确认");
-
-    const markup = renderToStaticMarkup(
-      <ExpandedConversationDialog {...dialogProps} deleteTarget={{ id: "s-aaaa1111", title: "渠道讨论" }} />,
-    );
-    expect(markup).toContain('aria-label="删除会话确认"');
-    expect(markup).toContain("删除会话");
-    expect(markup).toContain("不再可见，且不可恢复");
-    expect(markup).toContain("取消");
-    expect(markup).toContain("删除");
-    expect(markup).not.toContain("window.confirm");
-  });
-
-  it("扩展对话输入使用设计稿占位文案", () => {
-    expect(EXPANDED_PLACEHOLDER).toBe("问天枢：可引用 Issue、Meeting、计划、Mission、战场、能力与 Radar，或拖入文件…");
-  });
-
-  it("Exp Header 标题从 scope 推导：全局与各对象域", () => {
-    expect(conversationTitleFor("global")).toBe("天枢 · 全局对话");
-    expect(conversationTitleFor("issue:11111111-1111-4111-8111-111111111111")).toBe("天枢 · 议题对话");
-    expect(conversationTitleFor("meeting:11111111-1111-4111-8111-111111111111")).toBe("天枢 · 会议对话");
-    expect(conversationTitleFor("signal:abc-123")).toBe("天枢 · 信号对话");
-    expect(conversationTitleFor("monthly-plan:2026-09")).toBe("天枢 · 月度计划对话");
-    expect(conversationTitleFor("custom:x")).toBe("天枢 · 对话");
-  });
-
-  it("Scope Chip 语义：global 固定首页全公司，对象域为页面 + 对象名", () => {
-    expect(scopeChipFor("global", "公司全局")).toBe("作用域：首页 · 全公司");
-    expect(scopeChipFor("meeting:11111111-1111-4111-8111-111111111111", "周会")).toBe("作用域：会议 · 周会");
-    expect(scopeChipFor("issue:22222222", "追加东南亚渠道预算")).toBe("作用域：议题 · 追加东南亚渠道预算");
-    expect(scopeChipFor("signal:s-1", "头部云厂商降价")).toBe("作用域：信号 · 头部云厂商降价");
-    expect(scopeChipFor("monthly-plan:m-1", "月度计划 2026-09")).toBe("作用域：月度计划 · 月度计划 2026-09");
-    expect(scopeChipFor("custom:x", "自定义")).toBe("作用域：自定义");
-  });
-
-  it("Exp Header 品牌区同行渲染标题与 Scope Chip（FRH4J）", () => {
-    const global = renderToStaticMarkup(<ExpandedHeaderBrand scope="global" label="公司全局" />);
-    expect(global).toContain("天枢 · 全局对话");
-    expect(global).toContain("作用域：首页 · 全公司");
-    expect(global).not.toContain("独立对话 · 公司全局");
-
-    const meeting = renderToStaticMarkup(
-      <ExpandedHeaderBrand scope="meeting:11111111-1111-4111-8111-111111111111" label="周会" />,
-    );
-    expect(meeting).toContain("天枢 · 会议对话");
-    expect(meeting).toContain("作用域：会议 · 周会");
-  });
-
-  it("右栏头部是 Session Tools（新建 + 会话列表 pill），不再跳全局弹层", () => {
-    const markup = renderToStaticMarkup(
-      <ConversationDock
-        scope="meeting:11111111-1111-4111-8111-111111111111"
-        label="周会"
-        availableCards={[card("issue:1", "关联议题")]}
-        variant="sidebar"
-        sidebar={{ title: "会前对话 · 本场会议", tone: "light", open: true, placeholder: "问点什么…" }}
-      />,
-    );
-    expect(markup).toContain('aria-label="新建会话"');
-    expect(markup).toContain('aria-label="会话列表，共 0 个"');
-    expect(markup).toContain("会话 0");
-    expect(markup).not.toContain("的会话管理");
-    expect(markup).toContain('aria-label="折叠会前对话 · 本场会议"');
-    expect(markup).toContain("问点什么…");
   });
 
   it("附件类型白名单只接受 PDF/DOCX/MD", () => {
@@ -190,5 +89,83 @@ describe("ConversationDock 扩展对话", () => {
   it("会话标题回退到短 ID", () => {
     expect(sessionLabel({ id: "abcd1234-5678", title: "标题" })).toBe("标题");
     expect(sessionLabel({ id: "abcd1234-5678" })).toBe("会话 abcd1234");
+  });
+
+  it("失败文案按错误码说明后果，未知错误说明页面操作仍可用（C-04）", () => {
+    expect(failureCopy("TURN_TIMEOUT")).toContain("已停止");
+    expect(failureCopy(undefined)).toBe("对话服务暂时没有接通。页面操作仍可用。");
+  });
+});
+
+describe("全局输入条（clark workspace 614–640）", () => {
+  it("默认是语音面：未接入时主按钮写明「语音未接入」，不请求麦克风", () => {
+    const html = dock();
+    expect(html).toContain("语音未接入");
+    expect(html).toContain('aria-label="语音未接入，改用键盘"');
+    expect(html).toContain('aria-label="切换键盘输入"');
+    expect(html).toContain("查看“公司全局”的对话记录");
+  });
+
+  it("键盘面：首页占位「输入你的想法…」，二级页「继续聊聊…」，引用后改为围绕引用", () => {
+    expect(dock({ keyboard: true })).toContain('placeholder="输入你的想法…"');
+    expect(dock({ keyboard: true })).toContain('aria-label="全局对话输入"');
+    const detail = dock({ keyboard: true, detail: true, global: false, label: "交付力量先支持灯塔" });
+    expect(detail).toContain('placeholder="继续聊聊…"');
+    expect(detail).toContain('aria-label="交付力量先支持灯塔对话输入"');
+    expect(dock({ keyboard: true, references: [card("c1", "议题")] })).toContain('placeholder="围绕引用的卡片，聊聊你的判断…"');
+  });
+
+  it("回答进行中主按钮变成「停止回答」", () => {
+    const html = dock({ data: data({ streaming: true, status: "streaming" }) });
+    expect(html).toContain("停止回答");
+    expect(html).toContain('aria-label="停止本次回答"');
+  });
+
+  it("引用只属于全局对话：二级页不显示引用托盘，改为「在全局讨论」", () => {
+    const refs = [card("c1", "交付力量先支持灯塔，还是 TokenOps？")];
+    expect(dock({ references: refs })).toContain("交付力量先支持灯塔，还是 TokenOps？");
+    const detail = dock({ references: refs, global: false, detail: true, pendingGlobalReferences: 1, onDiscussGlobal: noop });
+    expect(detail).toContain("在全局讨论已引用的 1 张卡片");
+  });
+});
+
+describe("对话记录", () => {
+  it("一轮对话不写角色名，只用无障碍名称区分你与天枢，并写出用时与引用", () => {
+    const html = renderToStaticMarkup(
+      <ConversationTurn
+        message={{
+          sequence: 2,
+          role: "assistant",
+          content: "先确认灯塔的付费意愿。",
+          createdAt: "2026-09-23T02:00:12.000Z",
+          referencesSnapshot: [{ cardId: "c1", version: 1, kind: "issue", title: "灯塔" }],
+        }}
+        ms={12000}
+      />,
+    );
+    expect(html).toContain("先确认灯塔的付费意愿。");
+    expect(html).toContain("天枢");
+    expect(html).not.toContain(">助手<");
+  });
+
+  it("思考中显示阶段文案与停止入口", () => {
+    const html = renderToStaticMarkup(<ConversationThinking stage="researching" startedAt={Date.now()} onStop={noop} />);
+    expect(html).toContain("正在快速查证");
+  });
+
+  it("历史层：全局欢迎语与对象欢迎语不同", () => {
+    const global = renderToStaticMarkup(<ConversationHistorySheet data={data()} label="公司全局" global onClose={noop} />);
+    expect(global).toContain("从你正在想的事情开始。");
+    const topic = renderToStaticMarkup(<ConversationHistorySheet data={data({ scope: "issue:1" })} label="灯塔" global={false} onClose={noop} />);
+    expect(topic).toContain("从“灯塔”里你最想弄清的地方开始。");
+  });
+
+  it("二级页对话列只有「天枢」一个频道，空态给出起手问题", () => {
+    const html = renderToStaticMarkup(
+      <TopicConversationRail data={data({ scope: "issue:1" })} label="灯塔" mobileOpen={false} onMobileOpen={noop} />,
+    );
+    expect(html).toContain("天枢");
+    expect(html).toContain("先一起想一想。");
+    expect(html).not.toContain("同事");
   });
 });

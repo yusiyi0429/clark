@@ -1,5 +1,4 @@
 /* Mission 详情基线（UpgradeDesign.pen 页面/Mission 详情）：Header + 关系条 + 主区/侧栏。 */
-.page{--main-start:56px;--shell-edge:56px}
 .meta{display:flex;gap:8px}
 .tag{border-radius:8px;background:#e8f1ff;padding:4px 9px;font-size:11px;font-weight:600;color:#0a5dc2}
 .tag[data-tone=period]{background:#f1f3f6;color:#4f5866}
@@ -35,3 +34,6 @@
 @media(max-width:1280px){.body{flex-direction:column}.sidebar{width:100%}}
 @media(max-width:900px){.relations{flex-wrap:wrap;gap:16px}.relation{flex:1 1 40%}}
 @media(max-width:690px){.page{--main-start:20px;--shell-edge:20px}}
+/* 放在展开页滚动区里；页头动作：返回总览 + 编辑 Mission。 */
+.content{display:flex;flex-direction:column;gap:20px;min-width:0}
+.headerActions{display:flex;flex-wrap:wrap;gap:8px;flex:none}

@@ -62,7 +62,7 @@ function snippet(text: string, query: string): string {
   return `${start > 0 ? "…" : ""}${text.slice(start, start + 120).trim()}${text.length > start + 120 ? "…" : ""}`;
 }
 
-function loadPeople(seedPath: string): MemoryPerson[] {
+export function loadPeople(seedPath: string): MemoryPerson[] {
   if (!existsSync(seedPath)) {
     throw new Error(`CompanyMemory 人员 seed 不存在: ${seedPath}（不虚构人员，启动失败）`);
   }

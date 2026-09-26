@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import type {
   TWebSearchInput as WebSearchInput,
   TWebSearchResponse as WebSearchResponse,
@@ -21,9 +22,17 @@ export type BochaWebSearchOptions = {
   /** 单次返回条数（博查默认 10，上限 50）。 */
   count?: number;
   fetch?: typeof fetch;
+  /** 请求间隔与 429 退避用的时钟和等待；测试注入假时钟，不真实等待。 */
+  now?: () => number;
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 };
 
 const DEFAULT_ENDPOINT = "https://api.bochaai.com/v1/web-search";
+// 博查按秒限流（HTTP 429 "request limit"）：同一适配器实例的请求起点至少间隔 1100ms。
+const MIN_INTERVAL_MS = 1100;
+// 仅 HTTP 429 重试，最多 2 次、依次退避 1s/2s；有 Retry-After 时以它为准，上限 10s。
+const RETRY_BACKOFF_MS = [1000, 2000];
+const MAX_RETRY_AFTER_MS = 10_000;
 // WebSearchInput.freshness → 博查 freshness 枚举。
 const FRESHNESS: Record<NonNullable<WebSearchInput["freshness"]>, string> = {
   day: "oneDay",
@@ -48,16 +57,34 @@ function dateTime(value: unknown): string | undefined {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : undefined;
 }
 
+/** Retry-After 可以是秒数或 HTTP 日期；无法解析时返回 undefined，走默认退避。 */
+function retryAfterMs(value: string | null, nowMs: number): number | undefined {
+  if (!value) return undefined;
+  const ms = /^\d+$/.test(value.trim()) ? Number(value.trim()) * 1000 : Date.parse(value) - nowMs;
+  return Number.isFinite(ms) ? Math.min(Math.max(ms, 0), MAX_RETRY_AFTER_MS) : undefined;
+}
+
 /**
  * 唯一 Web Search Provider（Ticket 16 决策）：博查。
  * 响应是「HTTP 200 + 业务 code」风格，配额/权限错误可能仍是 200，所以显式检查 code。
+ * 请求间隔在实例内生效：雷达与对话 web_search 必须共用同一个实例（server.ts 装配）。
  */
 export function createBochaWebSearchAdapter({
   apiKey,
   endpoint = DEFAULT_ENDPOINT,
   count = 20,
   fetch: fetchImpl = fetch,
+  now = Date.now,
+  sleep = (ms, signal) => delay(ms, undefined, { signal }),
 }: BochaWebSearchOptions): WebSearchAdapter & { configured: boolean } {
+  let nextStartAt = 0;
+  // 同步占用下一个发送槽位再等待，并发调用者按顺序错开，不会同时醒来
+  async function throttle(signal: AbortSignal): Promise<void> {
+    const startAt = Math.max(now(), nextStartAt);
+    nextStartAt = startAt + MIN_INTERVAL_MS;
+    const wait = startAt - now();
+    if (wait > 0) await sleep(wait, signal);
+  }
   return {
     configured: Boolean(apiKey),
     async search(input, signal): Promise<WebSearchResponse> {
@@ -65,7 +92,7 @@ export function createBochaWebSearchAdapter({
       const query = input.domains?.length
         ? `${input.query} ${input.domains.map((domain) => `site:${domain}`).join(" OR ")}`
         : input.query;
-      const response = await fetchImpl(endpoint, {
+      const init: RequestInit = {
         method: "POST",
         signal,
         headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
@@ -75,7 +102,18 @@ export function createBochaWebSearchAdapter({
           summary: true,
           ...(input.freshness ? { freshness: FRESHNESS[input.freshness] } : {}),
         }),
-      });
+      };
+      const send = async () => {
+        await throttle(signal);
+        return fetchImpl(endpoint, init);
+      };
+      let response = await send();
+      for (const backoff of RETRY_BACKOFF_MS) {
+        if (response.status !== 429) break;
+        await response.body?.cancel();
+        await sleep(retryAfterMs(response.headers.get("retry-after"), now()) ?? backoff, signal);
+        response = await send();
+      }
       if (!response.ok) {
         const detail = await response.text().catch(() => "");
         // 提供商错误体可能回显 Authorization：按已知 key 精确抹除后再进错误信息

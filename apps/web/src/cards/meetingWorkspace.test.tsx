@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
 import type { TTranscriptCandidateProjection } from "@warmap/contracts";
-import { MeetingCard, confirmTranscriptInput, offsetLabel, speakerMappingError, speakerMappingRows } from "./MeetingCard";
+import { MeetingCard, confirmTranscriptInput, meetingLargeTime, offsetLabel, speakerMappingError, speakerMappingRows } from "./MeetingCard";
+
+// 会议页读取外壳的首页集合（关联议题的位置名）；单测里给一个空集合。
+vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ homeCards: [], closing: false }) }));
 
 // useCardAction 需要 Next 路由上下文；这里只渲染静态标记。
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
@@ -121,6 +124,23 @@ const candidateBase: TTranscriptCandidateProjection = {
   warnings: ["“外部顾问”未匹配到人员，请手动选择。"],
 };
 
+describe("Meeting 页头（clark MeetingWorkspace）", () => {
+  it("会议标记、眉题、大时间、主责 DRI 与人数、关闭会议空间", () => {
+    const html = render(meetingCard({}));
+    expect(html).toContain('data-context-mark="meeting"');
+    expect(html).toContain("会前预审 / 会议材料");
+    expect(html).toContain('dateTime="2025-09-24T14:00:00.000Z"');
+    expect(html).toContain("主责 DRI · ");
+    expect(html).toContain(" 人参会");
+    expect(html).toContain('aria-label="关闭会议空间"');
+    expect(html).not.toContain('aria-label="返回首页"');
+  });
+
+  it("大时间同一天只写时刻，否则带日期（公司时区）", () => {
+    expect(meetingLargeTime("2026-09-24T07:00:00.000Z", new Date("2026-09-24T01:00:00.000Z"))).toBe("15:00");
+    expect(meetingLargeTime("2026-09-25T07:00:00.000Z", new Date("2026-09-24T01:00:00.000Z"))).toBe("9/25 15:00");
+  });
+});
 describe("Meeting 会前预审", () => {
   it("一号位追问进左侧参考盒，按陈述列表编号，正文目录不再重复列出", () => {
     const html = render(meetingCard({}));
@@ -152,14 +172,10 @@ describe("Meeting 会前预审", () => {
     expect(render(meetingCard({ status: "held" }, [{ actionId: "a1", actionType: "meeting.edit_details", label: "编辑会议" }]))).not.toContain("编辑会议");
   });
 
-  it("对话栏默认展开为 pen 的浅色 400px 列，仍可折叠", () => {
+  it("会议材料自己不再内嵌对话栏：对话由工作面右侧的对话列提供", () => {
     const html = render(meetingCard({}));
-    expect(html).toContain('data-testid="meeting-chat-sidebar"');
-    expect(html).toContain('data-open="true"');
-    expect(html).toContain('data-tone="light"');
-    expect(html).toContain("会前对话 · 本场会议");
-    expect(html).toContain("问点什么…");
-    expect(html).toContain('aria-label="折叠会前对话 · 本场会议"');
+    expect(html).not.toContain('data-testid="meeting-chat-sidebar"');
+    expect(html).not.toContain('data-testid="conversation-dock"');
   });
 });
 
@@ -217,7 +233,6 @@ describe("Meeting Outcome 复核", () => {
     expect(html).toContain("撤回");
     expect(html).toContain("确认");
     expect(html).toContain("忽略");
-    expect(html).toContain("会议材料对话");
   });
 });
 

@@ -1,0 +1,49 @@
+"use client";
+
+import { createContext, useContext, useLayoutEffect } from "react";
+import type { Card } from "@/lib/api/client";
+import type { ContextMarkKind } from "@/components/ContextMark";
+
+/** 当前详情对象向外壳登记的信息：对话范围、窄条上的工作区标记。 */
+export type DetailInfo = {
+  scope: string;
+  label: string;
+  /** 窄条「当前工作区」标记；只有会议与月度材料显示（clark 同）。 */
+  mark: ContextMarkKind | null;
+  cards: Card[];
+};
+
+export type WorkspaceApi = {
+  /** 打开对象、在对象间切换或回首页（"/"）。origin 是触发的来源元素，用于卡片 ⇄ 工作区转场。 */
+  navigate: (href: string, origin?: Element | null) => void;
+  /** 关闭当前详情：回到打开它的工作面（C-01），没有则回首页。 */
+  close: () => void;
+  detailOpen: boolean;
+  closing: boolean;
+  registerDetail: (info: DetailInfo | null) => void;
+  showToast: (text: string) => void;
+  /** 首页已载入的 Card 集合（战场/能力名称、会议安排等只读展示用，不另发请求）。 */
+  homeCards: Card[];
+  /** 引用正文追问（clark onQuote）：切到键盘面，把「关于“…”，」放进当前对象的输入条。 */
+  quote: (text: string) => void;
+  /** 当前登录 CEO 的 personId（战场卡据此判断「CEO 本人负责」）；测试桩默认 null。 */
+  viewerId: string | null;
+};
+
+export const WorkspaceContext = createContext<WorkspaceApi | null>(null);
+
+export function useWorkspace(): WorkspaceApi {
+  const api = useContext(WorkspaceContext);
+  if (!api) throw new Error("useWorkspace must be used inside CeoWorkspace");
+  return api;
+}
+
+/** 详情页挂载时登记自己，卸载时撤销。 */
+export function useRegisterDetail(info: DetailInfo) {
+  const { registerDetail } = useWorkspace();
+  const { scope, label, mark, cards } = info;
+  useLayoutEffect(() => {
+    registerDetail({ scope, label, mark, cards });
+  }, [registerDetail, scope, label, mark, cards]);
+  useLayoutEffect(() => () => registerDetail(null), [registerDetail]);
+}

@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { TRadarSourceItem } from "@warmap/contracts";
 import type { RadarWebAdapter, RadarWechatAdapter } from "./radar.js";
-import { createBochaWebSearchAdapter, type BochaWebSearchOptions } from "./webSearch.js";
+import type { WebSearchAdapter } from "./webSearch.js";
 
 function obj(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -12,16 +12,28 @@ function str(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** 取覆盖 lookback 的最小博查 freshness 档位；超过一年不限时间。只为少拿窗外结果，时间窗仍由 radar.ts 判定。 */
+function freshnessFor(lookbackHours: number): "day" | "week" | "month" | "year" | undefined {
+  if (lookbackHours <= 24) return "day";
+  if (lookbackHours <= 24 * 7) return "week";
+  if (lookbackHours <= 24 * 30) return "month";
+  if (lookbackHours <= 24 * 365) return "year";
+  return undefined;
+}
+
 /**
  * Web 来源只走博查（Ticket 16 决策，删除 Brave/SEARCH_API_KEY）。
+ * 传入与对话 web_search 共用的博查适配器，二者共享请求间隔与 429 重试。
  * 无发布时间的搜索结果不进入时间窗研判，避免用抓取时间冒充发布时间。
  */
-export function createBochaRadarWebAdapter(options: BochaWebSearchOptions): RadarWebAdapter {
-  const search = createBochaWebSearchAdapter(options);
+export function createBochaRadarWebAdapter(search: WebSearchAdapter & { configured: boolean }): RadarWebAdapter {
   return {
     configured: search.configured,
     async search(input, signal): Promise<TRadarSourceItem[]> {
-      const { results } = await search.search({ query: input.query, domains: input.domains }, signal);
+      const { results } = await search.search(
+        { query: input.query, domains: input.domains, freshness: freshnessFor(input.lookbackHours) },
+        signal,
+      );
       // RadarSourceItem.publishedAt 必填：无发布时间的条目留在管线外，不拿抓取时间冒充发布时间
       return results.flatMap((result) => result.publishedAt ? [{
         sourceType: "web" as const,

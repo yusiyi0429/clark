@@ -1,149 +1,188 @@
-.shell{--apple-label:#1d1d1f;--apple-secondary:#6e6e73;--apple-accent:#007aff;--map-ink:#1d1d1f;--map-muted:#6e6e73;--map-line:#d8d8da;--map-tile:#f4f4f4;--map-grey:#e8e8e8;--radius-surface:20px;position:fixed;inset:0;background-color:#f5f5f7;background-image:linear-gradient(180deg,#f9f8fa 0%,#f7f6f9 52%,#f4f3f7 100%);background-repeat:no-repeat;padding:14px;border-radius:0;box-shadow:none;display:grid;grid-template-columns:minmax(0,7fr) minmax(320px,3fr);gap:14px;color:var(--map-ink);font-family:Arial,'Microsoft YaHei','PingFang SC',sans-serif;overflow:hidden;isolation:isolate}
-:where(.shell button){font:inherit}:where(.shell) button{cursor:pointer;color:inherit;text-align:left;touch-action:manipulation}:where(.shell) button:disabled{cursor:default;opacity:.55}.shell button:focus-visible,.shell input:focus-visible{outline:3px solid #007aff88;outline-offset:4px}.shell h1,.shell h2,.shell h3,.shell p{margin:0}.shell h2{font-weight:650;line-height:1.35}.mainArea{position:relative;min-width:0;min-height:0;overflow:hidden;border-radius:var(--radius-surface)}.map{height:100%;display:grid;grid-template-columns:minmax(155px,1.14fr) minmax(0,2fr) minmax(0,2fr);grid-template-rows:22% 23% minmax(0,1fr);gap:10px}.radar,.capabilities{position:relative;border:0;display:block;border-radius:23px;padding:20px;overflow:hidden;min-height:0}.radar{grid-column:1;grid-row:1;background:linear-gradient(150deg,#454164,#3b398b);color:#e3e2ed!important;isolation:isolate}.radar h2,.capabilities h2{position:relative;z-index:1}.radar :global(.scan-light){opacity:.8}.capabilities{grid-column:1;grid-row:2;background:linear-gradient(155deg,#518eb5,#1a2e48);color:#e6edf3!important}.radar:hover .launchIcon,.capabilities:hover .launchIcon{opacity:.7;transform:translate(2px,-2px)}.strategy{grid-column:1;grid-row:3;position:relative;min-height:0;overflow:auto;background:linear-gradient(160deg,#ededed,#c8c8c8);border-radius:23px;padding:17px 8px 40px;scrollbar-width:thin}.focus{display:block;color:#7a7a7a;font-weight:500;margin-top:4px;padding-left:14px;line-height:1.5}.issueRow{display:flex;align-items:baseline;gap:9px;background:none;border:0;width:100%;padding:5px 0;line-height:1.5;color:#525252;text-align:left}.issueRow>span:nth-child(2){flex:1}.issueRow svg{opacity:0;flex:none}.issueRow:hover svg{opacity:.65}.notificationArea{min-width:0;min-height:0;position:relative;z-index:5}.expanded{position:absolute;inset:0;z-index:20;border-radius:var(--radius-surface);background:#f5f5f7;display:flex;flex-direction:column;transform-origin:0 0;overflow:hidden;will-change:transform}.expandedScroll{overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;margin:0 22px 0;padding:8px 18px 128px;border-left:0;min-height:0;flex:1;scroll-behavior:smooth}.campaignDetail .focus{font-size:14px;color:#444;margin-top:12px}.expandedScroll .issueRow{font-size:15px;padding:16px 8px;border-bottom:1px solid #d5d5d5}.contextNote,.empty{color:#888;font-size:13px;line-height:1.8;margin-top:22px!important}.capabilityGrid,.signals{display:grid;gap:16px}.capabilityGrid article,.signals article{background:#fff;border:1px solid #1d1d1f0a;border-radius:17px;padding:24px}.capabilityGrid p,.signals p{font-size:15px;margin:12px 0!important;line-height:1.8}.capabilityGrid small,.signals small{font-size:11px;color:#888}.signals h2{margin-top:8px!important}.signals button{border:0;background:none;display:flex;align-items:center;gap:8px;font-size:13px}.sheetHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:15px 28px 16px;border-bottom:1px solid #ffffff13;flex:none}.sheetHeader small{font-size:10px;letter-spacing:1.5px;color:#9ca6b6}.sheetHeader h2{font-size:21px;margin-top:7px;line-height:1.6}.sheetHeader>button{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#ffffff12;border:0;flex:none;color:#cdd4df}.sheetScroll{padding:24px 28px 122px;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#77829160 transparent;font-size:15px;line-height:1.9}.sheetScroll p{margin:10px 0}.sheetScroll h3{font-size:16px;font-weight:600;margin:18px 0 10px}.sheetScroll blockquote{font-size:13px;color:#afbbca;margin:20px 0;padding-left:14px;border-left:2px solid #7187a1}.sources{font-size:12px;color:#aab5c5;border-top:1px solid #ffffff18;padding-top:18px;margin-top:24px}.sources summary{cursor:pointer}.message{max-width:90%;margin:0 0 20px;background:#ffffff09;border:1px solid #ffffff12;border-radius:16px;padding:14px 17px;font-size:14px;overflow-wrap:anywhere}.message small{color:#9ca9bd;font-size:11px}.message p{margin:7px 0}.caption{max-width:100%;min-height:26px;border:1px solid #fff5;border-radius:20px;background:#eeeeeec9;box-shadow:0 3px 15px #0000000d;backdrop-filter:blur(20px);padding:6px 13px;pointer-events:auto;animation:lineIn .2s;font-size:12px!important;color:#63666c!important;overflow:hidden}.caption span{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:100%}.inputForm{flex:1;min-width:0;display:flex;align-items:center;gap:6px;animation:inputIn .35s}.inputForm input{height:40px;min-width:0;flex:1;background:transparent;border:0;padding:0 5px;font-size:15px;color:#343b40}.inputForm input::placeholder{color:#92969b;font-size:12px}.inputForm button{width:32px;height:34px;display:flex;align-items:center;justify-content:center;border:0;background:none;color:#518a59}.keyboardLeaving .inputForm{animation:inputOut .2s forwards}
-.shell .goalPreview{flex-shrink:0}.shell .strategyList button{font-size:var(--type-body)}.radar,.capabilities{display:flex;flex-direction:column;align-items:flex-start;text-align:left}.shell .expandedScroll .issueRow{font-size:15px}.shell .sheetAction,.shell .ideaReceipt button{font-size:13px}.shell .optionList button{font-size:14px}
-.map .campaign{padding-top:4px;padding-bottom:4px;margin-bottom:4px}.map .goalPreview{font-size:11px;margin-top:6px;margin-bottom:10px}.map .goalPreview span{-webkit-line-clamp:1}.map .zoneIssues{padding:10px 15px 12px}.map .zoneIssues .issueRow{font-size:13px}.map .zoneHeading{padding-top:20px;padding-bottom:8px}
-@keyframes aurora{to{transform:rotate(360deg)}}@keyframes voiceWave{0%,100%{height:5px;opacity:.5}50%{height:17px;opacity:1}}@keyframes lineIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}@keyframes inputIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}@keyframes inputOut{to{opacity:0;transform:translateX(10px)}}
-@media(min-width:1800px){.shell{inset:0;padding:14px;gap:14px}.map{gap:12px;grid-template-columns:1.14fr 2fr 2fr}.issueRow{padding:5px 0}}
-@media(max-width:1250px){.shell{inset:0;padding:10px;gap:10px;grid-template-columns:minmax(0,7fr) minmax(275px,3fr)}.map{grid-template-columns:minmax(125px,1.15fr) 2fr 2fr;gap:8px}.radar,.capabilities{padding:15px}.strategy{padding-top:15px}.issueRow{gap:6px}.zoneIssues .issueRow svg{display:none}.expandedScroll{margin:0 14px;padding-right:5px}}
-@media(max-width:1000px){.shell{grid-template-columns:minmax(0,1fr) 270px}.map{grid-template-columns:130px minmax(0,1fr);grid-template-rows:170px 165px minmax(300px,1fr) 300px;overflow:auto;scrollbar-width:thin;padding-bottom:80px}.strategy{grid-row:3}.sheetHeader{padding:12px 17px}.sheetHeader h2{font-size:18px}.sheetScroll{padding:18px 20px 120px}}
-@media(max-width:690px){.shell{position:relative;inset:auto;min-height:100dvh;display:flex;flex-direction:column;padding:9px;gap:12px;border-radius:0;overflow:visible}.mainArea{height:1150px;min-height:700px;flex:none}.map{grid-template-columns:minmax(100px,1fr) minmax(0,1.8fr);grid-template-rows:150px 150px 370px 300px;overflow:visible;padding-bottom:0}.radar,.capabilities{padding:13px}.shell h2{font-size:16px}.focus{font-size:9px}.issueRow{font-size:10px;gap:5px}.strategy{padding:14px 7px 30px}.notificationArea{height:850px;flex:none}.expanded{position:fixed;left:9px;right:9px;top:9px;bottom:9px;z-index:50}.expandedScroll{padding-left:12px}.sheetHeader h2{font-size:17px}.caption{font-size:11px!important}.capabilityGrid article,.signals article{padding:18px}}
-@media(min-width:1001px) and (max-height:820px){.map{grid-template-rows:minmax(185px,25%) minmax(205px,27%) minmax(0,1fr)}}
-@media(max-width:1000px){.map{grid-template-rows:190px 210px minmax(300px,1fr) 300px}}
-@media(max-width:690px){.mainArea{height:1280px}.map{grid-template-rows:210px 210px 370px 300px}}
+/* CEO 工作面外壳：取值逐项来自 clark-main `components/ceo-warmap/workspace.module.css`
+   （只保留当前仍在生效的规则）。691–1000px 按 ts-design「未提供专属阅读桌面时沿用普通总览」。 */
+
+.shell{--apple-label:#1d1d1f;--apple-secondary:#6e6e73;--apple-accent:#007aff;--map-ink:#1d1d1f;--map-muted:#6e6e73;--map-line:#d8d8da;--map-tile:#f4f4f4;--map-grey:#e8e8e8;position:fixed;inset:0;background-color:var(--tianshu-canvas);background-image:radial-gradient(ellipse at 85% 0%,var(--tianshu-canvas-glow) 0%,transparent 55%),linear-gradient(180deg,var(--tianshu-canvas-top),var(--tianshu-canvas));background-position:center,center,center 54%;background-size:auto,auto,cover;background-repeat:no-repeat;padding:14px;border-radius:0;box-shadow:none;display:grid;gap:14px;color:var(--map-ink);overflow:hidden;isolation:isolate}
+:where(.shell button:not([data-slot])){font:inherit}
+.shell button{cursor:pointer;touch-action:manipulation}
+.shell button:not([data-slot]){color:inherit;text-align:left}
+.shell button:not([data-slot]):disabled{cursor:default;opacity:.55}
+.shell button:not([data-slot]):focus-visible,.shell input:focus-visible{outline:3px solid #007aff88;outline-offset:4px}
+.shell h1,.shell h2,.shell h3,.shell p{margin:0}
+.mainArea{position:relative;min-width:0;min-height:0;overflow:hidden;border-radius:24px}
+.notificationArea{min-width:0;min-height:0;position:relative;z-index:5}
+
+.expanded{position:absolute;inset:0;z-index:20;border-radius:22px;background:#f5f5f7;display:flex;flex-direction:column;transform-origin:0 0;overflow:hidden;will-change:transform}
+.expandedHeader{display:flex;align-items:center;justify-content:space-between;flex:none;gap:15px;min-height:100px;box-sizing:border-box;padding:25px 27px;background:linear-gradient(145deg,#ffffffa8,#edf1f6a1);border-bottom:1px solid #ffffffbf;-webkit-backdrop-filter:blur(30px) saturate(1.28);backdrop-filter:blur(30px) saturate(1.28);box-shadow:inset 0 1px #fff}
+.expandedIdentity{display:flex;align-items:center;gap:13px;min-width:0;flex:1;flex-wrap:wrap;row-gap:10px}
+.expandedIdentity>div{min-width:0}
+.expandedIdentity>div>span{display:block;margin-bottom:5px;color:#73777f;font-size:11px;letter-spacing:.025em}
+.expandedIdentity>h1{flex:none;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.closeRound{display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;border:0;background:#e7e7eb;color:#6e6e73;transition:background .15s,transform .15s}
+.closeRound:hover{background:#dcdce1}
+.closeRound:active{transform:scale(.95)}
+.expandedScroll{overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;margin:0 22px 0;padding:8px 18px 128px;border-left:0;min-height:0;flex:1;scroll-behavior:smooth;scroll-padding-bottom:128px}
+.sectionIntro{font-size:18px;line-height:1.8;margin:10px 0 30px!important;max-width:660px}
+.contextNote,.empty{color:#888;font-size:13px;line-height:1.8;margin-top:22px!important}
+.noticeToast{position:fixed;bottom:26px;z-index:80;display:flex;align-items:center;gap:8px;background:#172b45ed;color:#fff;border:1px solid #ffffff26;border-radius:12px;padding:12px 16px;font-size:12px;backdrop-filter:blur(14px);animation:lineIn .2s;left:calc(var(--shell-edge) + 10px);right:auto;max-width:calc(var(--notice-width) - 20px)}
+@keyframes lineIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+/* 对话记录层（对话阶段重做内容；外框与 clark 同值） */
+.sheet{position:fixed;left:var(--main-start);right:var(--shell-edge);bottom:16px;height:min(72dvh,800px);z-index:100;border-radius:26px;background:#29292b;border:1px solid #ffffff26;box-shadow:0 16px 64px #0004,inset 0 1px #ffffff12;color:#edf0f5;display:flex;flex-direction:column;overflow:hidden;transform-origin:center bottom}
+.sheetHandle{width:36px;height:4px;background:#b3b6bc61;border-radius:5px;margin:9px auto 0;flex:none}
+.sheetHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:15px 28px 16px;border-bottom:1px solid #ffffff13;flex:none}
+.sheetHeader small{font-size:10px;letter-spacing:1.5px;color:#9ca6b6}
+.sheetHeader h2{font-size:21px;margin-top:7px;line-height:1.6}
+.sheetHeader>button{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#ffffff12;border:0;flex:none;color:#cdd4df;transition:background 150ms ease,transform 150ms ease}
+.sheetHeader>button:hover{background:#ffffff20}
+.sheetHeader>button:active{transform:scale(.97)}
+.sheetScroll{padding:24px 28px 122px;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#77829160 transparent;font-size:15px;line-height:1.9}
+.sheetScroll p{margin:10px 0}
+.sheetScroll h3{font-size:16px;font-weight:600;margin:18px 0 10px}
+.chatWelcome p{font-size:21px;margin-bottom:25px}
+.chatWelcome button{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:15px 0;width:100%;border:0;border-bottom:1px solid #ffffff1a;background:none;font-size:14px}
+.sheetHeader .chatBrand{display:flex;align-items:center;gap:11px}
+.chatBrandMark{width:30px;height:30px;flex:none;--brand-deep:#72a7ed;--brand-bright:#c1e3ff}
+.sheetHeader .chatBrand h2{margin:0;line-height:1.25;letter-spacing:.04em}
+.historySheet{left:calc(var(--main-start) + var(--chat-inset));right:calc(var(--shell-edge) + var(--chat-inset));height:calc(100dvh - clamp(72px,10vh,136px) - 16px);max-height:none;background:#252527;border-color:#ffffff24;border-radius:28px;box-shadow:0 24px 80px #10101826,inset 0 1px 0 #ffffff0b;animation:historyRise 240ms cubic-bezier(.2,0,0,1) both}
+.historySheet .sheetHeader{padding:16px 26px 19px;align-items:center;border-bottom-color:#ffffff0b}
+.historySheet .sheetScroll{padding:28px 36px 130px;flex:1;scroll-padding-bottom:130px}
+.historyContent{width:100%;max-width:720px;margin:0 auto}
+.historySheet .historyContent{padding-bottom:60px}
+.historySheet .chatBrandMark{width:27px;height:27px}
+.shell .historySheet .chatBrand h2{font-size:19px;font-weight:600;letter-spacing:.02em}
+.historyHeaderActions{display:flex;align-items:center;gap:8px}
+.historyHeaderActions>button{display:grid;place-items:center;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border:0;border-radius:50%;background:#ffffff12;color:#cdd4df}
+.historySheet[data-tone=light]{color:#25282e;border-color:#ffffffd9;box-shadow:0 24px 80px #1d293522,0 1px 3px #1d293510,inset 0 1px #fff}
+.historySheet[data-material=monthly]{background:linear-gradient(145deg,#fffcf5 0%,#ffffff 55%,#f7f1e4 100%)}
+.historySheet[data-material=meeting]{background:linear-gradient(145deg,#eef3f5 0%,#f7f9f8 55%,#eaf0ed 100%)}
+.historySheet[data-tone=light] .sheetHeader{border-bottom-color:#1d1d1f0f}
+.historySheet[data-tone=light] .sheetHeader>button,.historySheet[data-tone=light] .historyHeaderActions>button{background:#1d1d1f0a;color:#5c626d}
+.historySheet[data-tone=light] .sheetHandle{background:#1d1d1f2a}
+.historySheet[data-tone=light] .chatBrand small{color:#7b756c}
+.historySheet[data-tone=light] .chatBrandMark{--brand-deep:#566e8a;--brand-bright:#8ea6c4}
+.historySheet[data-tone=light] .chatWelcome p{color:#25282e}
+.historySheet[data-tone=light] .chatWelcome button{border-bottom-color:#1d1d1f12;color:#3f4754}
+.historySheet[data-material=monthly] .chatBrandMark{--brand-deep:#927642;--brand-bright:#c9a45a}
+.historySheet[data-material=meeting] .chatBrandMark{--brand-deep:#536b91;--brand-bright:#8fa7a0}
+@keyframes historyRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.historyBackdrop{position:fixed;z-index:90;left:var(--main-start);right:var(--shell-edge);top:var(--shell-edge);bottom:var(--shell-edge);border:0;border-radius:24px;background:#25252712;cursor:default!important;animation:historyVeil 180ms ease-out both}
 @keyframes historyVeil{from{opacity:0}to{opacity:1}}
+
 :global(html):has(.shell){scrollbar-gutter:auto;scrollbar-width:none}
 :global(html):has(.shell)::-webkit-scrollbar{display:none;width:0}
-.map .zoneIssues{flex-shrink:1;min-height:85px;overflow-y:auto;scrollbar-width:thin;overscroll-behavior:contain}
 @media(prefers-reduced-motion:reduce){.shell *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
-/* Shared type scale: role determines size; narrower screens reflow instead of shrinking body copy. */
-.shell{--type-title:20px;--type-body:14px;--type-meta:12px;--type-note:11px;--type-page:24px;--type-reading:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;font-size:var(--type-body)}
-.shell h2{font-size:var(--type-title);font-weight:600}
-.shell .zoneHeading span{font-size:var(--type-meta);font-weight:500;color:#747780}
-.shell .position{font-size:var(--type-body);line-height:1.6;font-weight:600}
-.shell .campaignName{font-size:var(--type-body);font-weight:600;line-height:1.5}
-.shell .achievement{font-size:var(--type-meta);font-weight:500}
-.shell .focus{font-size:var(--type-meta);font-weight:400;line-height:1.6;color:#686c73}
-.shell .goalPreview,.shell .map .goalPreview{font-size:var(--type-meta);line-height:1.6}
-.shell .goalPreview b{font-size:inherit}
-.shell .issueRow,.shell .map .zoneIssues .issueRow{font-size:var(--type-body);line-height:1.6}
+/* 字号尺：按角色定字号，窄屏重排而不缩小正文。 */
+.shell{--type-title:20px;--type-body:14px;--type-meta:12px;--type-note:11px;--type-page:24px;--type-reading:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;font-size:var(--type-body)}
+.shell h2{font-size:var(--type-title);font-weight:600;line-height:1.35}
 .shell .expandedHeader h1{font-size:var(--type-page);font-weight:600;line-height:1.4}
-.shell .zoneDetailLead,.shell .goals span{font-size:var(--type-meta)}
-.shell .zoneDetailLead p,.shell .sectionIntro{font-size:18px;line-height:1.7}
-.shell .goals p,.shell .capabilityGrid p,.shell .signals p,.shell .expandedScroll .issueRow,.shell .ownerQuestion{font-size:var(--type-reading);line-height:1.75}
-.shell .sectionTitle{font-size:var(--type-body)!important;font-weight:600!important;color:#626973}
-.shell .campaignDetail .campaignName{font-size:var(--type-reading)}
-.shell .campaignDetail .achievement{font-size:var(--type-meta)}
-.shell .campaignDetail .focus{font-size:var(--type-body)}
-.shell .goals small,.shell .capabilityGrid small,.shell .signals small{font-size:var(--type-note)}
-.shell .contextNote,.shell .empty,.shell .signals button{font-size:var(--type-body)}
+.shell .sectionIntro{font-size:18px;line-height:1.7}
+.shell .contextNote,.shell .empty{font-size:var(--type-body)}
 .shell .sheetHeader h2{font-size:var(--type-title);line-height:1.55}
 .shell .sheetHeader small{font-size:var(--type-note);letter-spacing:.06em}
-.shell .sheetScroll,.shell .message{font-size:var(--type-reading);line-height:1.8}
+.shell .sheetScroll{font-size:var(--type-reading);line-height:1.8}
 .shell .sheetScroll h3{font-size:var(--type-reading);line-height:1.6}
-.shell .sheetScroll blockquote,.shell .sources{font-size:var(--type-body);line-height:1.75}
-.shell .sheetScope,.shell .message small,.shell .ideaReceipt small,.shell .sheetPrompt{font-size:var(--type-meta)}
-.shell .optionList button,.shell .sheetAction,.shell .ideaReceipt button,.shell .chatWelcome button,.shell .resultLine,.shell .savedIdea{font-size:var(--type-body);line-height:1.6}
-@media(max-width:1000px){.shell .zoneHeading{gap:5px}.shell .map .campaignName{row-gap:2px}}
+.shell .chatWelcome button{font-size:var(--type-body);line-height:1.6}
+@media(min-width:1800px){.shell{--type-title:22px;--type-body:16px;--type-meta:13px;--type-note:12px;--type-page:26px;--type-reading:17px}}
+@media(max-width:1000px){.shell{--type-title:18px}}
 
-/* Left-side notices and a stable, independent decision workspace. */
-.shell{--notice-width:clamp(290px,calc((100vw - 70px)*.28),430px);--shell-edge:14px;--layout-gap:14px;--main-start:calc(var(--shell-edge) + var(--notice-width) + var(--layout-gap));grid-template-columns:var(--notice-width) minmax(0,1fr)}
+/* 左侧通知 + 稳定独立的决策工作区。 */
+.shell{--chat-inset:clamp(16px,1.6vw,36px);--notice-width:clamp(290px,calc((100vw - 70px)*.28),430px);--peek-width:clamp(290px,calc((100vw - 70px)*.28),430px);--strip-width:56px;--shell-edge:14px;--layout-gap:14px;--main-start:calc(var(--shell-edge) + var(--notice-width) + var(--layout-gap));grid-template-columns:var(--notice-width) minmax(0,1fr);transition:grid-template-columns .32s cubic-bezier(.22,1,.36,1)}
+/* 转场期间快照取终态布局，不取折叠中途。 */
+:global(html[data-notice-transition]) .shell{transition:none}
 .mainArea{grid-column:2;grid-row:1}
 .notificationArea{grid-column:1;grid-row:1}
 .homeSurface{height:100%;min-height:0}
-@media(min-width:1800px){.shell{--shell-edge:14px;--layout-gap:14px}}
-@media(max-width:1250px){.shell{--shell-edge:10px;--layout-gap:10px;--notice-width:280px;grid-template-columns:var(--notice-width) minmax(0,1fr)}}
-@media(max-width:1000px){.shell{--notice-width:270px;grid-template-columns:var(--notice-width) minmax(0,1fr)}}
-@media(max-width:690px){.shell{--shell-edge:9px;--main-start:9px}.mainArea{height:auto;min-height:1050px;order:1;overflow:visible}.notificationArea{order:2}.homeSurface{height:auto;min-height:1050px}}
+@media(min-width:1800px){.shell{inset:0;padding:16px;gap:16px;--shell-edge:16px;--layout-gap:16px}}
+@media(max-width:1250px){.shell{inset:0;padding:10px;gap:10px;--shell-edge:10px;--layout-gap:10px;--notice-width:280px;--peek-width:280px}.expandedHeader{padding:18px}.expandedScroll{margin:0 14px;padding-right:5px}}
+@media(max-width:1000px){.shell{--notice-width:270px;--peek-width:270px;--chat-inset:12px}.noticeToast{max-width:260px}.historySheet .sheetScroll{padding:25px 28px 120px}.historySheet .sheetHeader{padding:12px 22px 16px}}
+@media(min-width:1800px){.historyContent{max-width:800px}}
 
-/* The content plane stays quiet; translucent surfaces belong to controls. */
-.sheetHeader>button,.ideaReceipt button,.sheetAction{transition:background 150ms ease,transform 150ms ease}
-.sheetHeader>button:hover,.ideaReceipt button:hover,.sheetAction:hover{background:#ffffff20}
-.sheetHeader>button:active,.ideaReceipt button:active,.sheetAction:active{transform:scale(.97)}
-.sheetScope,.sheetPrompt,.sources,.sheetScroll blockquote{color:#bdc0c7}
-@media(prefers-reduced-transparency:reduce){.shell{background:#f5f5f7}}
-@media(prefers-contrast:more){.shell{--map-muted:#454549}.expandedHeader,.goals,.campaignDetail,.capabilityGrid article,.signals article{border-color:#8e8e93}.sheetScope,.sheetPrompt,.sources{color:#e5e5ea}}
+@media(prefers-reduced-transparency:reduce){.shell{background:#f5f5f7}.expandedHeader{background:#f5f5f7;backdrop-filter:none}.sheet{background:#28282a;backdrop-filter:none;-webkit-backdrop-filter:none}}
+@media(prefers-contrast:more){.shell{--map-muted:#454549}.expandedHeader{border-color:#8e8e93}.sheet{background:#202022;border-color:#a1a1a6}.closeRound{outline:1px solid #8e8e93}}
 
-.shell{--issue-chat-width:calc((100vw - var(--main-start) - var(--shell-edge)) / 2)}
+.noticePeekBackdrop{display:none}
 
-/* The radar reader owns its two scroll panes; the surrounding frame must not add a third. */
-.expandedScroll[data-radar-reader-layout=true]{margin:0;padding:0;overflow:hidden;display:flex;min-width:0}
-@media(max-width:1100px){.expandedScroll[data-radar-reader-layout=true]{overflow-y:auto;overflow-x:hidden}.expandedScroll[data-radar-reader-layout=true]>div{height:auto;flex:none;grid-template-rows:auto}}
+/* 任何打开的工作区都把通知栏折成窄条（notice-strip.module.css），所有宽度一致。
+   通知栏只以 peek 回来：窄条旁的覆盖层，不重排工作区。 */
+.shell[data-detail-open=true]{--notice-width:var(--strip-width)}
+.shell[data-detail-open=true] .notificationArea{display:none}
+.shell[data-detail-open=true][data-notices-peek=true] .notificationArea{display:block;position:fixed;z-index:1150;left:calc(var(--shell-edge) + var(--notice-width) + 8px);top:var(--shell-edge);bottom:var(--shell-edge);width:var(--peek-width);max-width:calc(100vw - var(--shell-edge) * 2 - var(--notice-width) - 16px);height:auto;border-radius:29px;overflow:hidden;box-shadow:12px 0 50px #19243833;animation:peekIn .26s cubic-bezier(.22,1,.36,1) both}
+.shell[data-detail-open=true] .noticePeekBackdrop{display:block;position:fixed;inset:0 0 0 calc(var(--shell-edge) + var(--notice-width));z-index:1100;border:0;background:#20293830;cursor:default;animation:historyVeil 180ms ease-out both}
+.shell[data-detail-open=true] .noticeToast{left:calc(var(--shell-edge) + var(--notice-width) + 10px);max-width:min(360px,calc(100vw - var(--notice-width) - 60px));z-index:1160}
+@keyframes peekIn{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:translateX(0)}}
+@media(prefers-reduced-motion:reduce){.shell{transition:none}.shell[data-detail-open=true][data-notices-peek=true] .notificationArea,.shell[data-detail-open=true] .noticePeekBackdrop{animation:none}}
+@media(min-width:691px) and (max-width:1000px){.shell[data-detail-open=true][data-notices-peek=true] .notificationArea{width:min(320px,calc(100vw - 100px));border-radius:24px}}
 
-.sheetHeader .chatBrand{display:flex;align-items:center;gap:11px}.chatBrandMark{width:30px;height:30px;flex:none;--brand-deep:#72a7ed;--brand-bright:#c1e3ff}.sheetHeader .chatBrand h2{margin:0;line-height:1.25;letter-spacing:.04em}
-
-
-/* 全局对话展开弹层（pen Dock_全局对话-展开）：尺寸固定 1273×885（视口不够时收缩），
-   原生 dialog 居中（inset:0 + margin:auto）；不用 fit-content，避免空会话坍缩。 */
-.historySheet{position:fixed;inset:0;z-index:900;box-sizing:border-box;width:min(1273px,calc(100vw - 32px));height:min(885px,calc(100dvh - 48px));max-width:none;max-height:none;margin:auto;padding:24px 30px;overflow:hidden;border:1px solid #ffffffb3;border-radius:24px;background:#fffffff2;color:#1d1d1f;box-shadow:0 24px 60px #0a0f1e33,0 4px 18px #e6e9ed;font:inherit}
-.historySheet[open]{display:flex;flex-direction:column;gap:18px}
-.historySheet::backdrop{background:#10151f4d}
-/* Exp Header：品牌区 + 36 圆关闭；下方 1px #E6E9ED 分隔线。 */
-.historySheet .sheetHeader{padding:0 0 18px;align-items:center;border-bottom:1px solid #e6e9ed}
-.historySheet .sheetHeader small{color:#626873}
-.historySheet .sheetHeader>button{width:36px;height:36px;background:#f1f3f6;color:#4f5866}
-.historySheet .sheetHeader>button:hover{background:#e9ecf1}
-.historySheet .sheetScroll{padding:0;flex:1}
-.historyComposer{flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;padding:0}
-.historyContent{width:100%;max-width:720px;margin:0 auto}
-.historySheet .chatBrandMark{width:26px;height:26px}.shell .historySheet .chatBrand h2{font-size:17px;font-weight:600;letter-spacing:.02em}
-
-/* Fold intent: one pane scans, two panes read, three panes command. */
-@media(min-width:691px) and (max-width:1000px){
- .shell{--main-start:10px;--shell-edge:10px;display:block;padding:10px;overflow:hidden;background-image:linear-gradient(180deg,#f9f8fa 0%,#f7f6f9 52%,#f4f3f7 100%)}
- .mainArea{height:100%;min-height:0;border-radius:var(--radius-surface);overflow:hidden}
- .homeSurface{display:none}
- .foldMaterialSurface{display:block}
- .shell[data-detail-open=true] .foldMaterialSurface{display:none}
- .notificationArea{display:none}
- .sheet{left:18px;right:18px}
-}
-
+/* 手机：通知即首页；打开详情是 48px 窄条 + 正文。 */
 @media(max-width:690px){
- .shell{position:fixed;inset:0;display:block;height:100dvh;min-height:0;padding:8px;overflow:hidden;background-image:linear-gradient(180deg,#f9f8fa 0%,#f7f6f9 52%,#f4f3f7 100%)}
+ .shell{--shell-edge:8px;--main-start:8px;--notice-bottom-inset:calc(112px + env(safe-area-inset-bottom));position:fixed;inset:0;display:block;height:100dvh;min-height:0;padding:8px;overflow:hidden}
  .mainArea{display:none;height:auto;min-height:0}
  .notificationArea{display:block;height:100%;min-height:0}
- .shell[data-detail-open=true] .mainArea{display:block;position:fixed;z-index:40;inset:8px;height:auto;min-height:0;border-radius:var(--radius-surface);overflow:hidden}
+ .noticeToast{left:14px;right:14px;max-width:none;bottom:95px}
+ .historyBackdrop{inset:0}
+ .shell[data-detail-open=true]{--main-start:62px;--shell-edge:8px;--strip-width:48px;--notice-width:48px}
+ .shell[data-detail-open=true] .mainArea{display:block;position:fixed;z-index:40;inset:8px 8px 8px 62px;height:auto;min-height:0;border-radius:21px;overflow:hidden}
+ .shell[data-detail-open=true][data-notices-peek=true] .notificationArea{display:block;position:fixed;left:62px;right:8px;top:8px;bottom:8px;width:auto;max-width:320px;height:auto;z-index:1150;border-radius:21px;overflow:hidden;box-shadow:12px 0 50px #19243833}
+ .shell[data-detail-open=true] .noticePeekBackdrop{display:block;position:fixed;inset:0 0 0 56px;z-index:1100;border:0;background:#20293830}
  .shell[data-detail-open=true] .notificationArea{display:none}
- .shell[data-detail-open=true] .homeSurface,.foldMaterialSurface{display:none}
- .expanded{position:absolute;inset:0;border-radius:var(--radius-surface)}
+ .shell[data-detail-open=true] .homeSurface{display:none}
+ .expanded{position:absolute;inset:0;border-radius:23px}
+ .expandedHeader{min-height:88px;padding:18px}
+ .expandedIdentity>span:first-child{width:36px;height:36px}
+ .expandedIdentity h1{font-size:18px}
+ .historySheet{left:62px;right:8px;bottom:8px;height:calc(100dvh - 42px);border-radius:24px}
+ .historySheet .sheetScroll{padding:24px 20px 115px}
+ .historySheet .sheetHeader{padding:12px 19px 15px}
+ .shell:not([data-detail-open=true]) .historySheet{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));height:calc(100dvh - 44px - env(safe-area-inset-bottom))}
+ .shell :global([data-testid="global-controls"]),.shell[data-detail-open=true] :global([data-testid="global-controls"]){bottom:calc(12px + env(safe-area-inset-bottom))}
 }
+
+/* 锁屏风景在进入后化作环境光；内容仍是主平面。 */
+.entryCarry{position:fixed;z-index:4000;inset:-2%;pointer-events:none;background:url('/brand/tianshu-flow-lock-v3.webp') center 54%/cover no-repeat;transform-origin:50% 54%;animation:entryCarryOut 1180ms both cubic-bezier(.32,.72,.22,1);will-change:opacity,transform}
+.entryCarry::after{content:'';position:absolute;inset:0;background:#f7f6f8;animation:entryWashIn 1180ms both cubic-bezier(.32,.72,.22,1)}
 .shell[data-arriving=true]>.mainArea,.shell[data-arriving=true]>.notificationArea,.shell[data-arriving=true]>:global([data-testid="global-controls"]){animation:entryContentIn 900ms 180ms both cubic-bezier(.32,.72,.22,1)}
 @keyframes entryCarryOut{0%,18%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.026)}}
 @keyframes entryWashIn{0%,18%{opacity:.08}100%{opacity:.94}}
 @keyframes entryContentIn{from{opacity:.08;filter:blur(5px)}to{opacity:1;filter:blur(0)}}
-@media(prefers-reduced-motion:reduce){.shell[data-arriving=true]>.mainArea,.shell[data-arriving=true]>.notificationArea,.shell[data-arriving=true]>:global([data-testid="global-controls"]){animation:none}}
-@media(prefers-reduced-transparency:reduce){.shell{background:#f5f5f7}@keyframes entryWashIn{0%,18%{opacity:.08}100%{opacity:1}}}
+@media(prefers-reduced-motion:reduce){.entryCarry{display:none}.shell[data-arriving=true]>.mainArea,.shell[data-arriving=true]>.notificationArea,.shell[data-arriving=true]>:global([data-testid="global-controls"]){animation:none}}
+@media(prefers-reduced-transparency:reduce){.shell{background:#f5f5f7}.entryCarry::after{background:#f5f5f7}}
 
-/* 浏览器缩放会缩小 CSS 视口。中等桌面宽度仍保留首页两区，不切到只显示通知栏的旧折叠态。 */
-@media(min-width:691px) and (max-width:1000px){
- .shell:not([data-layout]){--main-start:calc(20px + max(250px,(100vw - 20px)*.3));display:grid;grid-template-columns:minmax(250px,30%) minmax(0,1fr);padding:10px;gap:10px}
- .shell:not([data-layout]) .mainArea{display:block;height:auto;min-height:0;border-radius:var(--radius-surface);overflow:hidden}
- .shell:not([data-layout]) .homeSurface{display:block}
- .shell:not([data-layout]) .notificationArea{display:block}
+/* 二级阅读的返回：顶栏标题位让给「返回列表」，负左边距让按钮文字与上一行场景标签对齐。 */
+.backToList{display:inline-flex;align-items:center;gap:4px;margin-left:-11px;padding:9px 15px 9px 10px;border:1px solid #dfe3ea;border-radius:13px;background:#fffffff2;color:#2d323a;font:inherit;font-size:15px;font-weight:600;letter-spacing:-.2px;line-height:1.3;box-shadow:0 1px 2px rgb(28 38 56/.06);transition:background .16s,border-color .16s,box-shadow .16s,color .16s,transform .16s}
+.backToList:hover{background:#fff;border-color:#c4d5ea;color:#2f6bb4;box-shadow:0 4px 12px rgb(28 38 56/.1)}
+.backToList:active{transform:translateY(1px);box-shadow:0 1px 2px rgb(28 38 56/.08)}
+.backToList svg{flex:none;transition:transform .16s}
+.backToList:hover svg{transform:translateX(-2px)}
+@media(max-width:520px){.backToList{font-size:14px;padding:8px 13px 8px 9px}}
+@media(prefers-reduced-motion:reduce){.backToList,.backToList svg{transition:none}.backToList:hover svg,.backToList:active{transform:none}}
+
+/* HeroUI 管输入语义与状态；标记为内容面的触发器按内容排版。 */
+.shell [data-ts-layout="true"]{height:auto;min-width:0;white-space:normal;text-align:left;font-weight:inherit;justify-content:flex-start}
+.referenceRow{display:flex;align-items:center;gap:9px;min-width:0}
+.referenceRow>button:first-child{flex:1;min-width:0}
+
+/* 每个二级阅读共用右侧对话列（含 iPad 竖屏）。 */
+.shell{--topic-rail-width:360px;--topic-rail-gap:12px}
+@media(min-width:760px){
+ .shell[data-topic-rail=true] .mainArea{margin-right:calc(var(--topic-rail-width) + var(--topic-rail-gap))}
+ .shell[data-topic-rail=true] .sheet:not(.historySheet){right:calc(var(--shell-edge) + var(--topic-rail-width) + var(--topic-rail-gap))}
+ .shell[data-topic-rail=true] :global([data-testid="global-controls"]){display:flex;left:auto;right:calc(var(--shell-edge) + 16px);width:calc(var(--topic-rail-width) - 32px);bottom:calc(var(--shell-edge) + 20px);transform:none;z-index:106;--composer-width:100%}
+ .shell[data-topic-rail=true] .expandedScroll{margin:0;padding:18px 24px 44px}
+ .shell[data-topic-rail=true] .expandedScroll[data-radar-reader-layout=true]{padding:0}
+}
+@media(min-width:1600px){.shell{--topic-rail-width:400px}}
+@media(min-width:760px) and (max-width:1000px){.shell{--topic-rail-width:310px;--topic-rail-gap:10px}.shell[data-topic-rail=true] .expandedHeader{padding:22px 20px;gap:10px}.shell[data-topic-rail=true] .expandedScroll{padding-left:18px;padding-right:18px}}
+@media(max-width:759px){
+ .shell[data-topic-rail=true] :global([data-testid="global-controls"]){left:auto;right:calc(var(--shell-edge) + 14px);width:calc(100vw - var(--main-start) - var(--shell-edge) - 28px);transform:none;--composer-width:100%}
+ .shell[data-topic-rail=true][data-topic-mobile-open=true] :global([data-testid="global-controls"]){left:auto;right:calc(var(--shell-edge) + 14px);width:calc(100vw - var(--main-start) - var(--shell-edge) - 28px);transform:none;z-index:1050;bottom:calc(var(--shell-edge) + 18px + env(safe-area-inset-bottom))}
 }
 
-/* 对象页不渲染通知栏，因此占满并居中整个内容区。 */
-.shell[data-layout]{--main-start:var(--shell-edge);grid-template-columns:minmax(0,1fr)}
-.shell[data-layout] .mainArea{grid-column:1}
-.feedSurface{height:100%;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
-/* Meeting 自己管理左/中/右三栏滚动；外层不再预留底部 dock 空间。 */
-.expandedScroll[data-card-kind=meeting],.expandedScroll[data-card-kind=issue]{margin:0;padding:0;overflow:hidden}
+/* 战场视角切换（与卡片正反面对应）。 */
+.facetSwitch{flex:none;margin-left:4px}
+@media(max-width:690px){.facetSwitch{margin-left:0}}
 
-/* 缩放/低高度下优先保留可滚动的完整页面，不让 fixed shell 裁掉内容。 */
-@media (max-height:760px) and (min-width:691px){
- .shell{padding:10px;gap:10px}
- .shell:not([data-layout]){--shell-edge:10px;--layout-gap:10px}
- .expandedScroll{padding-bottom:88px}
-}
-
-/* 窄 CSS 视口（包括桌面浏览器高倍缩放）改为上下两块，而非隐藏首页主区。 */
-@media(max-width:690px){
- .shell:not([data-layout]){position:fixed;inset:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(210px,42dvh);height:100dvh;min-height:0;padding:8px;gap:8px;overflow:hidden}
- .shell:not([data-layout]) .mainArea,.shell:not([data-layout]) .notificationArea{display:block;grid-column:1;min-height:0;height:auto;overflow:hidden}
- .shell:not([data-layout]) .mainArea{grid-row:1;order:initial}
- .shell:not([data-layout]) .notificationArea{grid-row:2;order:initial}
- .shell:not([data-layout]) .homeSurface{display:block;height:100%;min-height:0}
- .shell[data-layout]{position:fixed;inset:0;height:100dvh;min-height:0;padding:8px;overflow:hidden}
- .shell[data-layout] .mainArea{display:block;height:100%;min-height:0}
-}
+/* 信号阅读：滚动区去掉内边距，由阅读列自己排版（clark workspace.module.css L87-88、L217、L230）。 */
+.expandedScroll[data-radar-reader-layout=true]{margin:0;padding:0;overflow:hidden;display:flex;min-width:0}
+@media(max-width:1100px){.expandedScroll[data-radar-reader-layout=true]{overflow-y:auto;overflow-x:hidden}.expandedScroll[data-radar-reader-layout=true]>div{height:auto;flex:none;grid-template-rows:auto}}
+.expandedScroll[data-radar-reader-layout=true]{flex-direction:column;overflow-y:auto}.expandedScroll[data-radar-reader-layout=true]>section{margin:0 24px}.expandedScroll[data-radar-reader-layout=true]>div{flex:none;min-height:100%}

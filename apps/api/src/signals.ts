@@ -1,5 +1,6 @@
 import type { QueryResult } from "pg";
 import type { TCard, TRadarSources, TSignalStateRequest } from "@warmap/contracts";
+import { RADAR_OUTLETS } from "@warmap/contracts";
 import type { RadarService } from "./radar.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
@@ -62,6 +63,14 @@ function sourceImages(value: unknown): SourceImage[] {
 export function shortSignalTitle(summary: string): string {
   const chars = Array.from(summary);
   return chars.length > 30 ? `${chars.slice(0, 29).join("")}…` : summary;
+}
+
+const FULL_TEXT_OUTLETS = new Set(RADAR_OUTLETS.filter((outlet) => outlet.fullText).map((outlet) => outlet.outletId));
+
+/** 只有目录标了 fullText 的发布方（量子位）原文是逐篇抓取的文章页；其余来源都是检索或 feed 给的摘录。 */
+function isFullTextSource(sourceRef: unknown): boolean {
+  const ref = sourceRef as { type?: string; outletId?: string } | null;
+  return ref?.type === "outlet" && typeof ref.outletId === "string" && FULL_TEXT_OUTLETS.has(ref.outletId);
 }
 
 /** 发布方来源的徽标用中文媒体名，如实标注归属，避免用站点搜索冒充发布方。 */
@@ -142,6 +151,7 @@ export function projectSignalCard(row: SignalRow): TCard {
         excerpt: row.excerpt,
         sourceRef: row.source_ref,
         images: sourceImages(row.source_images),
+        fullText: isFullTextSource(row.source_ref),
       },
       assessment: {
         anchorId: row.anchor_id,

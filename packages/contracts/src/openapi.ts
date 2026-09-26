@@ -44,6 +44,8 @@ import {
   ResearchDoc,
   JoinMeetingRequest,
   LoginRequest,
+  LoginResponse,
+  ChangePasscodeRequest,
   PeopleDirectoryResponse,
   MonthlyDraftCandidate,
   MonthlyPlanCapability,
@@ -96,16 +98,39 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/auth/login": {
         post: {
           operationId: "login",
-          summary: "CEO 登录，签发 HttpOnly session cookie",
+          summary: "登录 ID + 4 位口令登录；仍是初始码时不签发会话，返回 mustChangePasscode",
           requestBody: jsonBody({ $ref: "#/components/schemas/LoginRequest" }),
           responses: {
             "200": {
-              description: "已登录",
+              description: "已登录，或需要先设置口令",
               content: {
-                "application/json": { schema: { $ref: "#/components/schemas/SessionResponse" } },
+                "application/json": { schema: { $ref: "#/components/schemas/LoginResponse" } },
               },
             },
+            "400": errorResponse,
             "401": errorResponse,
+            "403": errorResponse,
+            "423": errorResponse,
+            "429": errorResponse,
+          },
+        },
+      },
+      "/api/auth/passcode": {
+        post: {
+          operationId: "changePasscode",
+          summary: "校验当前口令后换成新的 4 位口令，并签发会话",
+          requestBody: jsonBody({ $ref: "#/components/schemas/ChangePasscodeRequest" }),
+          responses: {
+            "200": {
+              description: "口令已更新并登录",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/LoginResponse" } },
+              },
+            },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "423": errorResponse,
             "429": errorResponse,
           },
         },
@@ -127,7 +152,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/auth/session": {
         get: {
           operationId: "getSession",
-          summary: "查询当前登录状态",
+          summary: "查询当前登录状态与身份",
           responses: {
             "200": {
               description: "登录状态",
@@ -240,6 +265,18 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: {
             "200": { description: "Battlefield Cards", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
             "401": errorResponse,
+          },
+        },
+      },
+      "/api/cards/battlefields/{id}": {
+        get: {
+          operationId: "getBattlefieldCard",
+          summary: "单个战场 Card（二级页：待决策 / 进展），与列表同一份投影",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Battlefield Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
           },
         },
       },
@@ -952,6 +989,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ActionDescriptor: ActionDescriptor as JsonSchema,
         ApiError: ApiError as JsonSchema,
         LoginRequest: LoginRequest as JsonSchema,
+        LoginResponse: LoginResponse as JsonSchema,
+        ChangePasscodeRequest: ChangePasscodeRequest as JsonSchema,
         SessionResponse: SessionResponse as JsonSchema,
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,
         ExecuteActionRequest: ExecuteActionRequest as JsonSchema,

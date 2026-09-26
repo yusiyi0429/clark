@@ -60,5 +60,6 @@
 .primary svg{width:15px;height:15px}
 
 @media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}.tall,.ltco{height:auto}}
-@media(max-width:690px){.shell{padding:20px 20px 40px}}
+@media(max-width:690px){.shell{padding:20px 20px 40px}.topbar,.topActions{flex-wrap:wrap}}
+.secondary:disabled{opacity:.5;cursor:default}
 @media(prefers-contrast:more){.card{outline-color:#777}.field input,.field select,.field textarea,.ltcoInput{outline-color:#777}}
