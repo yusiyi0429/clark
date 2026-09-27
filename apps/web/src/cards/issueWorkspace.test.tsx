@@ -175,7 +175,8 @@ describe("议题工作区", () => {
       actions: [{ actionType: "issue.retry_research" }],
     } as unknown as Card;
     const html = render(failed);
-    expect(html).toContain("RESEARCH_FAILED：上游超时");
+    expect(html).toContain("上游超时");
+    expect(html).not.toContain("RESEARCH_FAILED：");
     expect(html).toContain("重试预研");
     expect(html).toContain("预研尚未产出判断。");
   });

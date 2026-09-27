@@ -127,8 +127,8 @@ export function projectMonthlyPlanCard(row: MonthlyPlanRow, secret: string): TCa
   if (row.status !== "confirmed" && row.generation.status !== "pending" && row.generation.status !== "running") {
     actions.push(action("monthly-plan.update_draft", "保存计划"), action("monthly-plan.sign", "签发计划"));
   }
-  if (row.status !== "confirmed" && row.generation.status === "failed") {
-    actions.push(action("monthly-plan.retry_draft", "重试生成"));
+  if (row.status !== "confirmed" && (row.generation.status === "failed" || row.generation.status === "ready")) {
+    actions.push(action("monthly-plan.retry_draft", "重新生成草案"));
   }
   return {
     schemaVersion: 1,
@@ -345,7 +345,7 @@ export async function executeUpdateMonthlyPlanDraft(
   });
 }
 
-/** 失败草案只能由 CEO 显式重试；重放同一 Action 不产生第二个 run。 */
+/** 未签发草案由 CEO 显式重新生成；重放同一 Action 不产生第二个 run。 */
 export async function executeRetryMonthlyPlanDraft(
   pool: Pool,
   secret: string,
@@ -356,8 +356,8 @@ export async function executeRetryMonthlyPlanDraft(
     if (row.status === "confirmed") {
       return planError(409, "MONTHLY_PLAN_CONFIRMED", "已签发的 MonthlyPlan 不能重新生成");
     }
-    if (row.generation.status !== "failed") {
-      return planError(409, "MONTHLY_PLAN_DRAFT_NOT_FAILED", "只有失败的草案可以显式重试");
+    if (row.generation.status !== "failed" && row.generation.status !== "ready") {
+      return planError(409, "MONTHLY_PLAN_DRAFT_RUNNING", "草案正在生成，请等待本轮结束后再重新生成");
     }
     const runId = randomUUID();
     const startedAt = new Date().toISOString();

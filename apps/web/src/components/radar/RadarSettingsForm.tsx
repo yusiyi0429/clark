@@ -176,7 +176,7 @@ export function RadarSettingsForm({
               开启雷达
             </span>
             <span id={`${idPrefix}-switch-note`} className={s.switchNote}>
-              {draft.enabled ? "我每天按你的方向替你看一遍，结果只给你自己看。" : "打开后，我每天按你的方向替你看一遍，结果只给你自己看。"}
+              {draft.enabled ? "我每天按你的方向替你看一遍，结果只给你自己看。运营者在后台能看到运行记录。" : "打开后，我每天按你的方向替你看一遍，结果只给你自己看。运营者在后台能看到运行记录。"}
             </span>
           </span>
           <span className={f.switch} data-on={draft.enabled} aria-hidden="true">

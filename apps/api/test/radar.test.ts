@@ -354,6 +354,7 @@ describe("Radar scheduled/manual public seam", () => {
         JSON.stringify(ANCHORS), JSON.stringify(SOURCES),
       ]);
       const lookbacks: number[] = [];
+      const assessed: number[] = [];
       const radar = createRadarService({
         pool,
         web: {
@@ -367,24 +368,31 @@ describe("Radar scheduled/manual public seam", () => {
             ];
           },
         },
-        assessor: assessor((sources) => ({ candidates: sources.map((source) => ({
-          sourceFingerprint: source.sourceFingerprint,
-          anchorId: "anchor-market",
-          summary: "候选",
-          strategicImpact: "待判断",
-          evidenceQuote: "连续原文",
-          unknowns: [],
-          score: { relevance: 4, impact: 3, urgency: 2 },
-          promotion: promotionFixture(),
-        })) })),
+        assessor: assessor((sources) => {
+          assessed.push(sources.length);
+          return { candidates: sources.map((source) => ({
+            sourceFingerprint: source.sourceFingerprint,
+            anchorId: "anchor-market",
+            summary: "候选",
+            strategicImpact: "待判断",
+            evidenceQuote: "连续原文",
+            unknowns: [],
+            score: { relevance: 4, impact: 3, urgency: 2 },
+            promotion: promotionFixture(),
+          })) };
+        }),
         now: () => NOW,
       });
       const result = await radar.runManual();
       expect(result).toMatchObject({ status: "completed", createdSignals: 1 });
-      expect(result.warnings.join(" ")).toContain("超出时间窗");
+      // 出窗过滤是常规记录：只进服务端日志，不展示给 CEO
+      expect(result.warnings).toEqual([]);
       // 默认 radar_config.lookback_hours = 48，透传给 Web 来源用于博查 freshness
       expect(lookbacks).toEqual([48]);
       expect(Number((await db.query("SELECT count(*) FROM signals")).rows[0].count)).toBe(1);
+      // 已存成信号的来源下一轮不再送去研判
+      expect(await radar.runManual()).toMatchObject({ status: "completed", createdSignals: 0, warnings: [] });
+      expect(assessed).toEqual([1]);
     });
   });
 
@@ -458,7 +466,7 @@ describe("Radar scheduled/manual public seam", () => {
       // 30 条来源 = 6 批，并发 3：超时前只启动了前 3 批，超时后不再启动第 4–6 批
       expect(calls).toBe(3);
       expect(result.status).toBe("completed");
-      expect(result.warnings.join(" ")).toContain("本轮有 15 条候选未研判");
+      expect(result.warnings.join(" ")).toContain("本轮有 15 条来源没来得及研判");
     });
   });
 
@@ -531,8 +539,8 @@ describe("Radar scheduled/manual public seam", () => {
       // 6 批并发 3：第 1 批完成后补上第 4 批；超时时第 2–4 批被中断，第 5–6 批从未启动
       expect(calls).toBe(4);
       expect(result).toMatchObject({ status: "completed", createdSignals: 5 });
-      expect(result.warnings.join(" ")).toContain("本轮有 25 条候选未研判（超出 0.05 秒上限）");
-      expect(result.warnings.join(" ")).not.toContain("批失败");
+      expect(result.warnings.join(" ")).toContain("本轮有 25 条来源没来得及研判（扫描超过 0.05 秒上限）");
+      expect(result.warnings.join(" ")).not.toContain("研判失败");
       expect(Number((await db.query("SELECT count(*) FROM signals")).rows[0].count)).toBe(5);
       expect((await db.query("SELECT last_run FROM radar_config WHERE id = 'default'")).rows[0].last_run)
         .toMatchObject({ status: "completed", createdSignals: 5 });
@@ -563,7 +571,7 @@ describe("Radar scheduled/manual public seam", () => {
       });
       const result = await radar.runManual();
       expect(result).toMatchObject({ status: "failed", createdSignals: 0 });
-      expect(result.warnings.join(" ")).toContain("Radar scan exceeded 20ms");
+      expect(result.warnings).toEqual(["扫描超过 0.02 秒上限，没有完成"]);
       expect(Number((await db.query("SELECT count(*) FROM signals")).rows[0].count)).toBe(0);
     });
   });
@@ -598,7 +606,7 @@ describe("Radar scheduled/manual public seam", () => {
       });
       const result = await radar.runManual();
       expect(result).toMatchObject({ status: "failed", createdSignals: 0 });
-      expect(result.warnings.join(" ")).toContain("Radar scan exceeded 20ms");
+      expect(result.warnings).toEqual(["扫描超过 0.02 秒上限，没有完成"]);
       expect(calls).toBe(0);
     });
   });
@@ -648,7 +656,7 @@ describe("Radar scheduled/manual public seam", () => {
         "https://example.com/a-2", "https://example.com/a-3", "https://example.com/a-4",
         "https://example.com/b-1", "https://example.com/b-2",
       ]);
-      expect(result.warnings.join(" ")).toContain("网页搜索每个监测方向只取最新 3 条，本轮略过 2 条");
+      expect(result.warnings).toEqual([]);
     });
   });
 
@@ -687,7 +695,7 @@ describe("Radar scheduled/manual public seam", () => {
       expect(result.status).toBe("completed");
       expect(received).toEqual([{ outletIds: ["ft", "bbc"], lookbackHours: 48 }]);
       expect(batches).toEqual([5, 5, 5, 5]);
-      expect(result.warnings.join(" ")).toContain("超过总上限 20 条，已截断");
+      expect(result.warnings).toEqual([]);
     });
   });
 
@@ -741,8 +749,9 @@ describe("Radar scheduled/manual public seam", () => {
       });
       const result = await radar.runManual();
       expect(result.status).toBe("completed");
-      expect(result.warnings.join(" ")).toContain("Radar 监测方向超过上限");
-      expect(result.warnings.join(" ")).toContain("assess batch outage");
+      expect(result.warnings.join(" ")).toContain("监测方向超过 20 个，本轮只看了前 20 个");
+      expect(result.warnings.join(" ")).toContain("有 5 条来源研判失败");
+      expect(result.warnings.join(" ")).not.toContain("assess batch outage");
       expect(queries).toHaveLength(20);
       // 4 批 × 5 条；第 2 批失败，其余 3 批各保存 5 条候选
       expect(batches).toEqual([5, 5, 5, 5]);
@@ -774,7 +783,7 @@ describe("Radar scheduled/manual public seam", () => {
         await radar.recoverStaleRuns();
         const card = await app.inject({ method: "GET", url: "/api/cards/radar", headers: { cookie: await login(app, db) } });
         expect(card.json().cards[0].payload.lastRun).toMatchObject({ status: "failed", trigger: "scheduled", companyDay: "2026-05-02" });
-        expect(card.json().cards[0].payload.lastRun.warnings.join(" ")).toContain("进程重启");
+        expect(card.json().cards[0].payload.lastRun.warnings).toEqual(["扫描被服务重启打断，没有完成"]);
       } finally {
         await app.close();
       }
@@ -838,7 +847,8 @@ describe("Radar scheduled/manual public seam", () => {
       });
       const result = await radar.runManual();
       expect(result).toMatchObject({ status: "failed", createdSignals: 0 });
-      expect(result.warnings.join(" ")).toContain("assess model down");
+      expect(result.warnings.join(" ")).toContain("研判失败");
+      expect(result.warnings.join(" ")).not.toContain("assess model down");
       expect(Number((await db.query("SELECT count(*) FROM signals")).rows[0].count)).toBe(0);
     });
   });
@@ -896,7 +906,7 @@ describe("Radar scheduled/manual public seam", () => {
       });
       const result = await radar.runManual();
       expect(result).toMatchObject({ status: "failed", createdSignals: 0 });
-      expect(result.warnings.join(" ")).toContain("recorded provider outage");
+      expect(result.warnings).toEqual(["网页搜索有 1 个监测方向没取到结果，这些方向本轮可能有遗漏"]);
       expect(calls).toBe(1);
       expect((await db.query("SELECT last_run FROM radar_config WHERE id = 'default'")).rows[0].last_run).toMatchObject({ status: "failed" });
     });
@@ -991,7 +1001,7 @@ describe("strict Radar Candidate Tool to Signal persistence", () => {
       });
       const result = await radar.runManual();
       expect(result).toMatchObject({ status: "completed", createdSignals: 0 });
-      expect(result.warnings.join(" ")).toContain("引文或归属校验");
+      expect(result.warnings).toEqual([]);
       expect(Number((await db.query("SELECT count(*) FROM signals")).rows[0].count)).toBe(0);
     });
   });

@@ -37,7 +37,7 @@ import { unavailableWebSearchAdapter, type WebSearchAdapter } from "./webSearch.
 
 const SYSTEM_PROMPT = `# 角色
 
-你是 Clark，词元云集 CEO WarMap 的只读决策对话助手。用 CEO 所用的语言回复，避免空话。
+你是天枢里 CEO 的 Agent，负责只读决策对话。用 CEO 所用的语言回复，避免空话。
 
 # 工作方式
 

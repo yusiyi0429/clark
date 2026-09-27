@@ -83,18 +83,19 @@ describe.skipIf(!hasDocker)("Compose deployment boundaries", () => {
     expect(Object.keys(config.services).sort()).toEqual(["api", "edge", "postgres", "storage-init", "web", "wechat"]);
   });
 
-  it("initializes material/attachment volume ownership before the non-root api starts", () => {
+  it("initializes material/attachment/recording volume ownership before the non-root api starts", () => {
     const init = config.services["storage-init"];
     expect(init, "storage-init 必须存在").toBeDefined();
     // 一次性 init 才需要 root；API 自身仍非 root
     expect(init.user).toBe("0:0");
     expect(config.services.api.user).toBeUndefined();
     expect(JSON.stringify(init.entrypoint)).toContain("chown -R 1000:1000");
-    for (const volume of ["meeting_materials", "conversation_attachments"]) {
+    for (const volume of ["meeting_materials", "conversation_attachments", "meeting_recordings"]) {
       expect(JSON.stringify(init.volumes), `storage-init 必须覆盖 ${volume}`).toContain(volume);
       expect(JSON.stringify(config.services.api.volumes), `api 必须挂载 ${volume}`).toContain(volume);
     }
     expect(config.services.api.depends_on?.["storage-init"]?.condition).toBe("service_completed_successfully");
+    expect(config.services.api.environment?.MEETING_RECORDING_STORAGE_DIR).toBe("/var/lib/warmap/meeting_recordings");
   });
 });
 

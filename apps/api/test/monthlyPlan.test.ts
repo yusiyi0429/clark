@@ -159,9 +159,63 @@ describe("MonthlyDraft Agent", () => {
       ]);
       expect(calls).toBe(2);
 
-      // 生成成功后重试 Action 不再是可重试状态
+      // 未签发且生成成功后仍可由 CEO 主动重新生成
       const retryAction = (await card(t, cookie, planId)).actions.find((action: { actionType: string }) => action.actionType === "monthly-plan.retry_draft");
-      expect(retryAction).toBeUndefined();
+      expect(retryAction).toBeTruthy();
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("replaces a ready draft, clears its edits and checks, and replays one action only once", async () => {
+    let revision = 0;
+    const agent = fakeAgent(() => ({ ...validCandidate(), companyOutcome: `草案第 ${++revision} 版` }));
+    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent });
+    try {
+      const planId = await readyPlan(t);
+      const cookie = await t.loginCookie();
+      const changed = await execute(t, cookie, await planAction(t, cookie, planId, "monthly-plan.update_draft"), {
+        companyOutcome: "CEO 修改版", note: "保留原核对", checkedItemIds: ["company"],
+      });
+      expect(changed.statusCode).toBe(200);
+      const checked = await execute(t, cookie, await planAction(t, cookie, planId, "monthly-plan.update_draft"), {
+        checkedItemIds: ["company"],
+      });
+      expect(checked.statusCode).toBe(200);
+      const retryAction = await planAction(t, cookie, planId, "monthly-plan.retry_draft");
+      expect((await execute(t, cookie, retryAction)).statusCode).toBe(200);
+      expect((await execute(t, cookie, retryAction)).statusCode).toBe(200);
+      await t.monthlyPlans!.idle();
+      const current = await card(t, cookie, planId);
+      expect(current.payload.companyOutcome).toBe("草案第 2 版");
+      expect(current.payload.status).toBe("draft");
+      expect(current.payload.negotiation).toMatchObject({ edits: [], checkedItemIds: [], note: "" });
+      expect(agent.calls).toHaveLength(2);
+      expect(current.actions.some((action: { actionType: string }) => action.actionType === "monthly-plan.retry_draft")).toBe(true);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("keeps the previous draft and checks when regeneration fails", async () => {
+    let revision = 0;
+    const agent = fakeAgent(() => ++revision === 1 ? validCandidate() : { ...validCandidate(), extra: true });
+    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent });
+    try {
+      const planId = await readyPlan(t);
+      const cookie = await t.loginCookie();
+      const checked = await execute(t, cookie, await planAction(t, cookie, planId, "monthly-plan.update_draft"), {
+        checkedItemIds: ["company"], note: "CEO 原备注",
+      });
+      expect(checked.statusCode).toBe(200);
+      const before = (await card(t, cookie, planId)).payload;
+      expect((await execute(t, cookie, await planAction(t, cookie, planId, "monthly-plan.retry_draft"))).statusCode).toBe(200);
+      await t.monthlyPlans!.idle();
+      const after = (await card(t, cookie, planId)).payload;
+      expect(after.generation.status).toBe("failed");
+      expect(after.companyOutcome).toBe(before.companyOutcome);
+      expect(after.todos).toEqual(before.todos);
+      expect(after.negotiation).toEqual(before.negotiation);
     } finally {
       await t.close();
     }

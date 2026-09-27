@@ -118,6 +118,13 @@ export function createRadarService({
     let locked = false;
     let client: PoolClient | undefined;
     let scanTimer: NodeJS.Timeout | undefined;
+    let timedOut = false;
+    // warnings 会原样展示给 CEO：只写「本轮真的出了问题」的中文说明；
+    // 截取上限、时间窗过滤、引文校验等常规记录和技术原因只进服务端日志。
+    const notes: string[] = [];
+    const logNotes = () => {
+      if (notes.length) console.info(`radar ${trigger} scan ${day}: ${notes.join("; ")}`);
+    };
     try {
       client = await pool.connect();
       const lock = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtext($1)) AS locked", [LOCK_KEY]);
@@ -150,10 +157,11 @@ export function createRadarService({
       );
 
       const warnings: string[] = [];
+      const reason = (cause: unknown) => (cause as Error).message || String(cause);
       // 固定上限：监测方向与单批 assess 都有上限，避免无界 prompt
       const monitoredAnchors = anchors.slice(0, MAX_ANCHORS);
       if (anchors.length > monitoredAnchors.length) {
-        warnings.push(`Radar 监测方向超过上限 ${MAX_ANCHORS}，本次只处理前 ${monitoredAnchors.length} 个`);
+        warnings.push(`监测方向超过 ${MAX_ANCHORS} 个，本轮只看了前 ${monitoredAnchors.length} 个`);
       }
       const collected: TRadarSourceItem[] = [];
       // 网页结果归属的监测方向：时间窗过滤与去重之后按方向截取最新条目
@@ -162,8 +170,12 @@ export function createRadarService({
       let succeeded = 0;
       const abort = new AbortController();
       // 单次扫描有时限：Provider 悬挂时释放锁并把失败写入 last_run，不无限占用后续扫描
-      scanTimer = setTimeout(() => abort.abort(new Error(`Radar scan exceeded ${scanTimeoutMs}ms`)), scanTimeoutMs);
+      scanTimer = setTimeout(() => {
+        timedOut = true;
+        abort.abort(new Error(`Radar scan exceeded ${scanTimeoutMs}ms`));
+      }, scanTimeoutMs);
       scanTimer.unref();
+      const failedWebAnchors = new Set<string>();
       for (const site of sources.sites.filter((source) => source.enabled)) {
         for (const anchor of monitoredAnchors) {
           attempted += 1;
@@ -176,21 +188,24 @@ export function createRadarService({
             collected.push(...found);
             succeeded += 1;
           } catch (cause) {
-            warnings.push(`Web source ${site.name} failed: ${(cause as Error).message || String(cause)}`);
+            failedWebAnchors.add(anchor.id);
+            notes.push(`Web source ${site.name} failed for ${anchor.id}: ${reason(cause)}`);
           }
         }
       }
+      if (failedWebAnchors.size > 0) warnings.push(`网页搜索有 ${failedWebAnchors.size} 个监测方向没取到结果，这些方向本轮可能有遗漏`);
       for (const account of sources.wechatAccounts.filter((source) => source.enabled)) {
         attempted += 1;
         if (!wechat?.configured) {
-          warnings.push(`微信公众号 ${account.name} 未配置账号级 Provider`);
+          warnings.push(`公众号「${account.name}」还没接通，本轮没有读取`);
           continue;
         }
         try {
           collected.push(...await wechat.fetchLatest({ accountId: account.accountId, accountName: account.name }, abort.signal));
           succeeded += 1;
         } catch (cause) {
-          warnings.push(`微信公众号 ${account.name} failed: ${(cause as Error).message || String(cause)}`);
+          warnings.push(`公众号「${account.name}」读取失败，本轮没有读到`);
+          notes.push(`wechat ${account.name} failed: ${reason(cause)}`);
         }
       }
       // 发布方级来源（方案 A）：一次取整份最新列表，不按 anchor 相乘，不增加博查配额。
@@ -198,12 +213,12 @@ export function createRadarService({
       let outletCollected = 0;
       for (const source of (sources.outlets ?? []).filter((entry) => entry.enabled)) {
         if (outletCollected >= MAX_OUTLET_ITEMS) {
-          warnings.push(`发布方来源超过总上限 ${MAX_OUTLET_ITEMS} 条，剩余来源未采集`);
+          notes.push(`发布方来源超过总上限 ${MAX_OUTLET_ITEMS} 条，剩余来源未采集`);
           break;
         }
         attempted += 1;
         if (!outlets?.configured) {
-          warnings.push(`发布方来源 ${source.name} 未配置 Outlet Feed Adapter`);
+          warnings.push(`媒体来源「${source.name}」还没接通，本轮没有读取`);
           continue;
         }
         try {
@@ -215,18 +230,20 @@ export function createRadarService({
           collected.push(...accepted);
           outletCollected += accepted.length;
           succeeded += 1;
-          if (accepted.length === 0) warnings.push(`发布方来源 ${source.name} 在 ${config.lookback_hours} 小时窗口内无条目`);
-          if (accepted.length < fetched.length) warnings.push(`发布方来源 ${source.name} 超过总上限 ${MAX_OUTLET_ITEMS} 条，已截断`);
+          if (accepted.length === 0) notes.push(`发布方来源 ${source.name} 在 ${config.lookback_hours} 小时窗口内无条目`);
+          if (accepted.length < fetched.length) notes.push(`发布方来源 ${source.name} 超过总上限 ${MAX_OUTLET_ITEMS} 条，已截断`);
         } catch (cause) {
-          warnings.push(`发布方来源 ${source.name} failed: ${(cause as Error).message || String(cause)}`);
+          warnings.push(`媒体来源「${source.name}」读取失败，本轮没有读到`);
+          notes.push(`outlet ${source.name} failed: ${reason(cause)}`);
         }
       }
-      if (attempted === 0) warnings.push("Radar 未配置启用的来源");
+      if (attempted === 0) warnings.push("雷达还没有启用任何来源");
       if (succeeded === 0) {
         const response: TRadarScanResponse = { trigger, status: "failed", companyDay: day, createdSignals: 0, warnings };
         await client.query("UPDATE radar_config SET last_run = $1::jsonb, updated_at = now() WHERE id = 'default'", [
           JSON.stringify({ ...response, startedAt: startedAt.toISOString(), completedAt: now().toISOString() }),
         ]);
+        logNotes();
         return response;
       }
 
@@ -236,7 +253,7 @@ export function createRadarService({
       for (const source of collected) {
         const publishedAt = Date.parse(source.publishedAt);
         if (!Number.isFinite(publishedAt) || publishedAt < earliest || publishedAt > startedAt.getTime()) {
-          warnings.push(`来源超出时间窗: ${source.title}`);
+          notes.push(`来源超出时间窗: ${source.title}`);
           continue;
         }
         try {
@@ -245,13 +262,21 @@ export function createRadarService({
           unique.set(fingerprint, { ...source, url: canonicalUrl, sourceFingerprint: fingerprint });
           webAnchorByFingerprint.set(fingerprint, webAnchorOf.get(source));
         } catch {
-          warnings.push(`来源 URL 无效: ${source.title}`);
+          notes.push(`来源 URL 无效: ${source.title}`);
         }
+      }
+      // 已存成信号的来源不再研判：时间窗跨多天，同一篇文章会被反复检索到
+      if (unique.size > 0) {
+        const known = await client.query<{ source_fingerprint: string }>(
+          "SELECT source_fingerprint FROM signals WHERE source_fingerprint = ANY($1::text[])",
+          [[...unique.keys()]],
+        );
+        for (const { source_fingerprint } of known.rows) unique.delete(source_fingerprint);
       }
       // 每个监测方向的网页结果只留最新几条（无发布时间的条目已被时间窗剔除）
       const webByAnchor = new Map<string, FingerprintedRadarSource[]>();
       for (const [fingerprint, anchorId] of webAnchorByFingerprint) {
-        if (!anchorId) continue;
+        if (!anchorId || !unique.has(fingerprint)) continue;
         const items = webByAnchor.get(anchorId) ?? [];
         items.push(unique.get(fingerprint)!);
         webByAnchor.set(anchorId, items);
@@ -264,7 +289,7 @@ export function createRadarService({
           skippedWeb += 1;
         }
       }
-      if (skippedWeb > 0) warnings.push(`网页搜索每个监测方向只取最新 ${MAX_WEB_ITEMS_PER_ANCHOR} 条，本轮略过 ${skippedWeb} 条`);
+      if (skippedWeb > 0) notes.push(`网页搜索每个监测方向只取最新 ${MAX_WEB_ITEMS_PER_ANCHOR} 条，本轮略过 ${skippedWeb} 条`);
 
       let createdSignals = 0;
       let assessFailed = false;
@@ -277,6 +302,7 @@ export function createRadarService({
         }
         const candidates: TRadarCandidateSubmission["candidates"] = [];
         let failedBatches = 0;
+        let failedSources = 0;
         let completedBatches = 0;
         let interruptedSources = 0;
         let nextBatch = 0;
@@ -296,7 +322,8 @@ export function createRadarService({
               } else {
                 // 批失败：该批不保存候选，不影响其他批
                 failedBatches += 1;
-                warnings.push(`Radar assess 批失败: ${(cause as Error).message || String(cause)}`);
+                failedSources += batch.length;
+                notes.push(`Radar assess 批失败: ${reason(cause)}`);
               }
             }
           }
@@ -306,14 +333,16 @@ export function createRadarService({
         if (unassessed > 0) {
           // 超时：已完成批次的候选照常校验落库；一批都没完成时整次扫描仍标为 failed
           if (completedBatches === 0) throw abort.signal.reason ?? new Error(`Radar scan exceeded ${scanTimeoutMs}ms`);
-          warnings.push(`本轮有 ${unassessed} 条候选未研判（超出 ${scanTimeoutMs / 1000} 秒上限）`);
+          warnings.push(`本轮有 ${unassessed} 条来源没来得及研判（扫描超过 ${scanTimeoutMs / 1000} 秒上限）`);
         }
         assessFailed = failedBatches === batches.length;
+        if (failedSources > 0) warnings.push(`有 ${failedSources} 条来源研判失败，本轮可能漏掉其中的信号`);
+        let failedSaves = 0;
         for (const candidate of candidates) {
           const source = unique.get(candidate.sourceFingerprint);
           const anchor = anchorById.get(candidate.anchorId);
           if (!source || !anchor || !source.excerpt.includes(candidate.evidenceQuote)) {
-            warnings.push(`候选未通过来源引文或归属校验: ${candidate.sourceFingerprint}`);
+            notes.push(`候选未通过来源引文或归属校验: ${candidate.sourceFingerprint}`);
             continue;
           }
           // 单事务：Signal 与自动升级的 pending Issue 要么一起落库，要么都不落
@@ -344,7 +373,7 @@ export function createRadarService({
                 score: candidate.score,
               });
               if (!promoted.ok) {
-                warnings.push(`候选未通过升级门槛: ${promoted.reason}`);
+                notes.push(`候选未通过升级门槛: ${promoted.reason}`);
               } else {
                 const created = await client.query<{ id: string }>(
                   `INSERT INTO issues
@@ -391,9 +420,11 @@ export function createRadarService({
             if (newlyPromotedIssueId) onIssuePromoted?.(newlyPromotedIssueId);
           } catch (cause) {
             await client.query("ROLLBACK").catch(() => undefined);
-            warnings.push(`候选保存失败: ${(cause as Error).message || String(cause)}`);
+            failedSaves += 1;
+            notes.push(`候选保存失败: ${reason(cause)}`);
           }
         }
+        if (failedSaves > 0) warnings.push(`有 ${failedSaves} 条信号保存失败`);
       }
 
       // 全部 assess 批失败等于“没有研判结果”：如实标为 failed，而非 completed
@@ -402,9 +433,12 @@ export function createRadarService({
       await client.query("UPDATE radar_config SET last_run = $1::jsonb, updated_at = now() WHERE id = 'default'", [
         JSON.stringify({ ...response, startedAt: startedAt.toISOString(), completedAt: now().toISOString() }),
       ]);
+      logNotes();
       return response;
     } catch (cause) {
-      const warnings = [(cause as Error).message || String(cause)];
+      notes.push(`scan failed: ${(cause as Error).message || String(cause)}`);
+      logNotes();
+      const warnings = [timedOut ? `扫描超过 ${scanTimeoutMs / 1000} 秒上限，没有完成` : "扫描出错，没有完成，请稍后再试"];
       const response: TRadarScanResponse = { trigger, status: "failed", companyDay: day, createdSignals: 0, warnings };
       if (client && locked) await client.query("UPDATE radar_config SET last_run = $1::jsonb, updated_at = now() WHERE id = 'default'", [
         JSON.stringify({ ...response, startedAt: startedAt.toISOString(), completedAt: now().toISOString() }),
@@ -435,7 +469,7 @@ export function createRadarService({
               SET last_run = jsonb_set(
                     jsonb_set(last_run, '{status}', '"failed"'),
                     '{warnings}',
-                    COALESCE(last_run->'warnings', '[]'::jsonb) || '"扫描被进程重启中断，状态已标为 failed"'::jsonb
+                    COALESCE(last_run->'warnings', '[]'::jsonb) || '"扫描被服务重启打断，没有完成"'::jsonb
                   ),
                   updated_at = now()
             WHERE id = 'default' AND last_run->>'status' = 'running'`,

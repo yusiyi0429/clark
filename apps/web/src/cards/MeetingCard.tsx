@@ -1068,8 +1068,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
           ) : null}
         </section>
         {payload.preflight.error ? (
-          <p className={s.error} role="alert">
-            {payload.preflight.error.code}：{payload.preflight.error.message}
+          <p className={s.error} role="alert" title={payload.preflight.error.code}>
+            {payload.preflight.error.message}
             {actionOf("meeting.retry_preflight") ? (
               <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.retry_preflight")!, {})}>
                 重试预审
@@ -1309,8 +1309,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
               <p className={s.entryBody}>{payload.outcome.summary || "抽取尚未产出摘要。"}</p>
             </section>
             {payload.outcome.error ? (
-              <p className={s.error} role="alert">
-                {payload.outcome.error.code}：{payload.outcome.error.message}
+              <p className={s.error} role="alert" title={payload.outcome.error.code}>
+                {payload.outcome.error.message}
                 {actionOf("meeting.retry_outcome") ? (
                   <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.retry_outcome")!, {})}>
                     重试会后抽取

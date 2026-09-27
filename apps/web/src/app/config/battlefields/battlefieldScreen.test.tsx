@@ -37,7 +37,7 @@ describe("战场管理页渲染", () => {
 
   it("渲染页头与战场列表，默认选中第一个战场", () => {
     expect(html).toContain("战场管理");
-    expect(html).toContain("选择战场后管理其关联议题：可以新建议题，也可以把已有议题加入战场。");
+    expect(html).toContain("选择战场后管理其关联议题，可以把已有议题加入战场。");
     expect(html).toContain("2 个战场 · 选择后管理关联议题");
     expect(html).toContain("负责人 陈珂 · 2 个议题");
     expect(html).toContain("负责人 待指派 · 1 个议题");

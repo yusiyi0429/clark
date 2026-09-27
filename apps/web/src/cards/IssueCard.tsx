@@ -237,9 +237,9 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
               {ORIGIN_LABEL[payload.origin]} · {RESEARCH_LABEL[payload.research.status] ?? payload.research.status}
             </p>
             {payload.research.error ? (
-              <div className={s.error} role="alert">
+              <div className={s.error} role="alert" title={payload.research.error.code}>
                 <p>
-                  {payload.research.error.code}：{payload.research.error.message}
+                  {payload.research.error.message}
                 </p>
                 {actionOf("issue.retry_research") ? (
                   <Button size="sm" variant="secondary" isDisabled={pending} onPress={() => void run(actionOf("issue.retry_research")!, {})}>

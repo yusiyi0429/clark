@@ -303,7 +303,7 @@ describe("代码复核", () => {
       expect(Array.from(judged[0].sources.find((source) => source.title.endsWith("/long"))!.excerpt)).toHaveLength(2_000);
       const saved = (await pool.query("SELECT source_url, direction_text, relevance, excerpt FROM person_radar_signals")).rows;
       expect(saved).toEqual([{ source_url: "https://www.ft.com/content/ok", direction_text: "芯片出口", relevance: 3, excerpt: "这条原文里有连续的引文。" }]);
-      expect((await lastRun(pool, "person-a")).last_run).toMatchObject({ status: "completed", createdSignals: 1, warnings: ["4 条候选没有通过引文或归属复核"] });
+      expect((await lastRun(pool, "person-a")).last_run).toMatchObject({ status: "completed", createdSignals: 1, warnings: [] });
     });
   });
 });
@@ -401,7 +401,7 @@ describe("来源模式", () => {
       const judged = judge.calls.flatMap((call) => call.sources.map((source) => source.title));
       expect(judged.some((title) => /\/(3|4|stale|future)$/.test(title))).toBe(false);
       // 相关度 2 低于门槛：不写，也不算复核失败
-      expect((await lastRun(pool, "person-a")).last_run).toMatchObject({ status: "completed", createdSignals: 0, warnings: ["条目超过上限，只研判最新的 15 条，略过 10 条"] });
+      expect((await lastRun(pool, "person-a")).last_run).toMatchObject({ status: "completed", createdSignals: 0, warnings: [] });
     });
   });
 
@@ -417,7 +417,7 @@ describe("来源模式", () => {
       const judged = judge.calls.flatMap((call) => call.sources.map((source) => source.title));
       expect(judged).toContain("订阅源 https://www.ft.com/content/14");
       for (const index of [15, 19, 20, 24]) expect(judged).not.toContain(`订阅源 https://www.ft.com/content/${index}`);
-      expect((await lastRun(pool, "person-b")).last_run).toMatchObject({ status: "completed", warnings: ["条目超过上限，只研判最新的 30 条，略过 15 条"] });
+      expect((await lastRun(pool, "person-b")).last_run).toMatchObject({ status: "completed", warnings: [] });
     });
   });
 });

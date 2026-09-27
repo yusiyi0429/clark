@@ -213,6 +213,8 @@ export function createMonthlyPlanService({
                 battlefields = $3::jsonb,
                 capabilities = $4::jsonb,
                 todos = $5::jsonb,
+                negotiation = negotiation || '{"edits": [], "checkedItemIds": [], "note": ""}'::jsonb,
+                status = 'draft',
                 generation = generation || jsonb_build_object('status', 'ready', 'error', NULL, 'generatedAt', $6::text),
                 version = version + 1,
                 updated_at = now()

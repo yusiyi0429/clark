@@ -634,7 +634,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       const ceoTools = contexts[1].tools?.map((tool) => tool.name) ?? [];
       expect(ceoTools).toEqual(expect.arrayContaining(["get_warmap_overview", "list_missions", "list_pending_issues"]));
       expect(userPrompt(contexts[1]).globalContext).toEqual({ period: "2026-09" });
-      expect(contexts[1].systemPrompt).toContain("你是 Clark，词元云集 CEO WarMap 的只读决策对话助手");
+      expect(contexts[1].systemPrompt).toContain("你是天枢里 CEO 的 Agent，负责只读决策对话");
     } finally {
       await runtime.close?.();
     }

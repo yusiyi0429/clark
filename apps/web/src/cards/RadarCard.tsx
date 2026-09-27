@@ -23,12 +23,6 @@ type ScanResult = { trigger: string; status: string; companyDay: string; created
 type Filter = "全部" | "未读" | "收藏";
 type SortMode = "time" | "importance";
 
-/** 出窗过滤是常规动作：只计入汇总；其余警告（Provider 失败、候选校验失败等）保持可见。 */
-function splitWarnings(warnings: string[]): { outOfWindow: number; notable: string[] } {
-  const notable = warnings.filter((warning) => !warning.startsWith("来源超出时间窗"));
-  return { outOfWindow: warnings.length - notable.length, notable };
-}
-
 /** 三类来源固定标签：outlets 是发布方级媒体来源，不能与微信公众号混用。 */
 const SOURCE_LABEL: Record<string, string> = { web: "Web 搜索", wechat: "微信公众号", outlets: "发布方级媒体来源" };
 
@@ -129,8 +123,8 @@ export function RadarCard({ card, collection, onCard, onNavigate }: CardRenderPr
     setScanError(response.status === 409 ? "雷达正在运行，请稍后再试。" : body.message ?? "刷新信号失败");
   }
 
-  const warnings = payload.lastRun ? splitWarnings(payload.lastRun.warnings ?? []).notable : [];
-  const scanSummary = scan ? splitWarnings(scan.warnings) : null;
+  // 服务端只把「本轮真的出了问题」写进 warnings（常规记录只进日志），这里原样展示。
+  const warnings = payload.lastRun?.warnings ?? [];
 
   return (
     <>
@@ -187,9 +181,7 @@ export function RadarCard({ card, collection, onCard, onNavigate }: CardRenderPr
             </div>
           </div>
           <div className={f.status} role="status">
-            {scanSummary
-              ? `刷新完成 · 新增 ${scan!.createdSignals} 条信号${scanSummary.outOfWindow ? ` · ${scanSummary.outOfWindow} 条来源超出时间窗` : ""}${scanSummary.notable.length ? ` · ${scanSummary.notable.length} 条其他警告` : ""}`
-              : radarStatusLine(payload, scanPending)}
+            {scan ? `刷新完成 · 新增 ${scan.createdSignals} 条信号` : radarStatusLine(payload, scanPending)}
           </div>
           {scanError ? (
             <p className={f.error} role="alert">

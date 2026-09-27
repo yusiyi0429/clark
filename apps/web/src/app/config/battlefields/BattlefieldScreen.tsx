@@ -190,7 +190,7 @@ export function BattlefieldScreen({ battlefields, issues, people }: TBattlefield
       <header className={c.header}>
         <p className={c.eyebrow}>BATTLEFIELD</p>
         <h1 className={c.title}>战场管理</h1>
-        <p className={c.subtitle}>选择战场后管理其关联议题：可以新建议题，也可以把已有议题加入战场。</p>
+        <p className={c.subtitle}>选择战场后管理其关联议题，可以把已有议题加入战场。</p>
       </header>
 
       <div className={b.body}>

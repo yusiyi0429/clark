@@ -271,10 +271,14 @@ describe("MonthlyPlan signing authority and validation", () => {
 
       // 当前版本签发成功；同一 Action 重放不产生第二份导出或第二组 anchors
       const currentSign = await planAction(t, cookie, planId, "monthly-plan.sign");
+      const staleRegenerate = await planAction(t, cookie, planId, "monthly-plan.retry_draft");
       const signed = await execute(t, cookie, currentSign);
       expect(signed.statusCode).toBe(200);
       const confirmed = signed.json().cards[0];
       expect(confirmed.payload.status).toBe("confirmed");
+      expect(confirmed.actions.some((action: { actionType: string }) => action.actionType === "monthly-plan.retry_draft")).toBe(false);
+      const blockedRegenerate = await execute(t, cookie, staleRegenerate);
+      expect(blockedRegenerate.statusCode).toBe(409);
 
       const replay = await execute(t, cookie, currentSign);
       expect(replay.statusCode).toBe(200);

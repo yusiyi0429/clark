@@ -68,6 +68,23 @@ describe("月度计划 · 已签发", () => {
   });
 });
 
+describe("月度计划 · 重新生成草案", () => {
+  const action = [{ actionId: "regenerate", actionType: "monthly-plan.retry_draft", label: "重新生成草案" }];
+
+  it("未签发且草案就绪时显示入口，签发后不显示", () => {
+    expect(render(planCard({ status: "draft", confirmedAt: null }, action))).toContain("重新生成草案");
+    expect(render(planCard({}, []))).not.toContain("重新生成草案");
+  });
+
+  it("失败时保留草案内容，只显示错误消息和重新生成入口", () => {
+    const html = render(planCard({ status: "draft", confirmedAt: null, generation: { status: "failed", error: { code: "DRAFT_FAILED", message: "生成失败，请稍后再试" } } }, action));
+    expect(html).toContain("守住毛利，东南亚渠道跑通首单");
+    expect(html).toContain("生成失败，请稍后再试");
+    expect(html).not.toContain("DRAFT_FAILED：");
+    expect(html).toContain("重新生成草案");
+  });
+});
+
 describe("月度计划 · 正文两列", () => {
   it("公司结果与待办反馈各自成卡，待办渲染序号、战场徽标与三字段", () => {
     const html = render(

@@ -277,7 +277,8 @@ export function createPersonalRadarService({
       const feedKept = all.filter((item) => item.directionId === undefined && item.sourceType !== "list").sort(newestFirst).slice(0, MAX_FEED_ITEMS);
       const listKept = all.filter((item) => item.sourceType === "list");
       const candidates = [...webKept, ...feedKept, ...listKept].sort(newestFirst).slice(0, MAX_CANDIDATES);
-      if (candidates.length < all.length) warnings.push(`条目超过上限，只研判最新的 ${candidates.length} 条，略过 ${all.length - candidates.length} 条`);
+      // 截取上限与引文复核是常规过滤：只进服务端日志，不展示给成员
+      if (candidates.length < all.length) console.info(`personal radar ${personId}: 条目超过上限，只研判最新的 ${candidates.length} 条，略过 ${all.length - candidates.length} 条`);
       if (candidates.length === 0) {
         if (succeeded > 0) warnings.push(`${LOOKBACK_HOURS} 小时内没有新条目`);
         return { status: "completed", createdSignals: 0 };
@@ -323,7 +324,7 @@ export function createPersonalRadarService({
           else warnings.push(`研判失败：${message(cause)}`);
         }
       }
-      if (rejected > 0) warnings.push(`${rejected} 条候选没有通过引文或归属复核`);
+      if (rejected > 0) console.info(`personal radar ${personId}: ${rejected} 条候选没有通过引文或归属复核`);
       if (unassessed > 0) warnings.push(`有 ${unassessed} 条没来得及研判（${limitText}）`);
       if (completedBatches === 0) return { status: "failed", createdSignals: 0 };
 

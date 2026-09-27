@@ -8,7 +8,9 @@ import type { TUpdateMonthlyPlanDraftRequest } from "@warmap/contracts";
 import { payloadOf, type MonthlyPlanPayload } from "./payloads";
 import { registryName } from "./scopeNames";
 import { ContextMark } from "@/components/ContextMark";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
+import { browserApi } from "@/lib/api/client";
 import { calendarDate, monthDayTime } from "@/lib/companyTime";
 import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
 import s from "@/styles/monthly-workspace.module.css";
@@ -57,6 +59,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
   const payload = payloadOf<MonthlyPlanPayload>(card);
   const { homeCards } = useWorkspace();
   const { state, run, retry, pending } = useCardAction(onCard);
+  const confirm = useConfirm();
   // 战场 / 能力写名称（首页注册表），找不到才退回层级，不打印原始 id。
   const battlefieldName = (id: string) => registryName(homeCards, "battlefield", id) ?? "未登记战场";
   const capabilityName = (id: string) => registryName(homeCards, "capability", id) ?? "未登记能力";
@@ -94,21 +97,50 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
   useEffect(() => {
     const previous = synced.current;
     synced.current = payload;
-    if (payload.companyOutcome !== previous.companyOutcome) setCompanyOutcome(payload.companyOutcome);
-    if (JSON.stringify(payload.battlefields) !== JSON.stringify(previous.battlefields)) setBattlefields(payload.battlefields);
-    if (JSON.stringify(payload.capabilities) !== JSON.stringify(previous.capabilities)) setCapabilities(payload.capabilities);
-    if (JSON.stringify(payload.todos) !== JSON.stringify(previous.todos)) setTodos(payload.todos);
-    if (payload.negotiation.note !== previous.negotiation.note) setNote(payload.negotiation.note);
+    const regenerated = payload.generation.status === "ready" && payload.generation.generatedAt !== previous.generation.generatedAt;
+    if (regenerated || payload.companyOutcome !== previous.companyOutcome) setCompanyOutcome(payload.companyOutcome);
+    if (regenerated || JSON.stringify(payload.battlefields) !== JSON.stringify(previous.battlefields)) setBattlefields(payload.battlefields);
+    if (regenerated || JSON.stringify(payload.capabilities) !== JSON.stringify(previous.capabilities)) setCapabilities(payload.capabilities);
+    if (regenerated || JSON.stringify(payload.todos) !== JSON.stringify(previous.todos)) setTodos(payload.todos);
+    if (regenerated || payload.negotiation.note !== previous.negotiation.note) setNote(payload.negotiation.note);
     // 核对项永远跟着服务端走：编辑过的字段会被服务端取消核对，本地不保留过期勾选。
     setChecked(payload.negotiation.checkedItemIds);
     setSignArmed(false);
   }, [payload]);
+
+  useEffect(() => {
+    if (payload.generation.status !== "pending" && payload.generation.status !== "running") return;
+    let stopped = false;
+    let inFlight = false;
+    const refresh = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const { data } = await browserApi.GET("/api/cards/monthly-plans/{id}", { params: { path: { id: card.objectRef.id } } });
+        const updated = data?.cards[0];
+        if (!stopped && updated && updated.version > card.version) onCard(updated);
+      } catch (error) {
+        console.error("Monthly plan refresh failed", error);
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = window.setInterval(() => void refresh(), 3_000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [card.objectRef.id, card.version, onCard, payload.generation.status]);
 
   const actions = card.actions;
   const actionOf = (type: string) => actions.find((action) => action.actionType === type);
   const locked = payload.status === "confirmed" || payload.generation.status === "pending" || payload.generation.status === "running";
   const patch = monthlyDraftPatch(payload, { companyOutcome, battlefields, capabilities, todos, note });
   const dirty = Object.keys(patch).length > 0;
+
+  async function regenerateDraft() {
+    const action = actionOf("monthly-plan.retry_draft");
+    if (!action || pending) return;
+    if (!(await confirm.ask("重新生成会覆盖当前草案里已有的改动和核对。确定继续吗？", "重新生成"))) return;
+    void run(action, {});
+  }
 
   /**
    * 核对项必须有稳定 id：company、battlefield:<id>、capability:<id>、todo:<id>；签发前要求全部核对。
@@ -161,13 +193,8 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
         <div className={s.materials}>
           <div className={s.resultsColumn}>
             {payload.generation.error ? (
-              <p className={s.basis} role="alert">
-                {payload.generation.error.code}：{payload.generation.error.message}
-                {actionOf("monthly-plan.retry_draft") ? (
-                  <button type="button" disabled={pending} onClick={() => void run(actionOf("monthly-plan.retry_draft")!, {})}>
-                    重试生成
-                  </button>
-                ) : null}
+              <p className={s.basis} role="alert" title={payload.generation.error.code}>
+                {payload.generation.error.message}
               </p>
             ) : null}
 
@@ -322,6 +349,11 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
           <small>已核对 {checked.length} 项 · 签发前必须核对企业结果、战场结果、能力结果与普通待办</small>
         </div>
         <div className={s.edit}>
+          {actionOf("monthly-plan.retry_draft") ? (
+            <button type="button" className={s.save} disabled={pending || locked} onClick={() => void regenerateDraft()}>
+              重新生成草案
+            </button>
+          ) : null}
           {actionOf("monthly-plan.update_draft") ? (
             <button
               type="button"
@@ -353,6 +385,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
         </div>
       </div>
       <ActionFeedback state={state} onRetry={retry} />
+      {confirm.dialog}
 
       {payload.status === "confirmed" ? (
         <p className={s.receipt}>

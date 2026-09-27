@@ -34,6 +34,7 @@ describe("Card renderer registry", () => {
     expect(element.type).toBe(UnsupportedCard);
     const html = renderToStaticMarkup(element);
     expect(html).toContain('role="alert"');
-    expect(html).toContain("mystery");
+    expect(html).toContain("这项内容暂时无法显示，请刷新页面");
+    expect(html).not.toContain("mystery");
   });
 });
