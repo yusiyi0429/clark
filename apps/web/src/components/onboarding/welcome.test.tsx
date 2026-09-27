@@ -36,7 +36,8 @@ vi.mock("react", async (original) => {
   };
 });
 
-import { CompanySnapshot, WorkSnapshot, WelcomeFlow, monthTargetCopy, onboardingSteps, radarSummaryLine, type OnboardingData } from "./WelcomeFlow";
+import { WorkSnapshot, WelcomeFlow, monthTargetCopy, onboardingSteps, radarSummaryLine, type OnboardingData } from "./WelcomeFlow";
+import { WorkspaceSchematic } from "./WorkspaceSchematic";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { RadarSettingsEditor, type RadarSavedSummary } from "@/components/radar/RadarSettingsEditor";
 import { browserApi } from "@/lib/api/client";
@@ -81,6 +82,7 @@ function radarEditor(tree: ReactNode) {
 function reachRadar(data: OnboardingData, nextPath?: string) {
   (button(renderFlow(data, nextPath), "开始").props.onClick as () => void)();
   (button(renderFlow(data, nextPath), "下一步").props.onClick as () => void)();
+  if (data.role === "ceo") (button(renderFlow(data, nextPath), "下一步").props.onClick as () => void)();
   return renderFlow(data, nextPath);
 }
 /** 雷达这一步由编辑器负责前进：默认按「稍后」跳过；传 summary 时当作保存成功。 */
@@ -128,16 +130,40 @@ describe("收尾按钮文案与实际落点一致", () => {
 });
 
 describe("真实数据的首次引导", () => {
-  it("角色决定快照，雷达排在目标与分工之后、声纹之前；声纹不可用时不占步骤", () => {
+  it("CEO 两页导览后才到雷达；成员仍先看工作，声纹未配置时不占步骤", () => {
     expect(onboardingSteps(member)).toEqual(["hello", "work", "radar", "start"]);
-    expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "company", "radar", "voiceprint", "start"]);
+    expect(onboardingSteps(ceo)).toEqual(["hello", "tour-notifications", "tour-board", "radar", "start"]);
+    expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "radar", "voiceprint", "start"]);
   });
   it("空态只说没有登记，不推断没有工作", () => {
     const html = renderToStaticMarkup(<WorkSnapshot data={member} />);
     expect(html).toContain("这个月还没有登记你参与的战场");
     expect(html).toContain("这个月还没有登记你的 Mission");
     expect(html).not.toContain("没有工作");
-    expect(renderToStaticMarkup(<CompanySnapshot data={ceo} />)).toContain("公司的目标和战场还没登记");
+  });
+  it("CEO 两页导览各高亮对应区域，文案说明打开、返回和 Agent", () => {
+    let tree = renderFlow(ceo);
+    expect(text(tree)).toContain("先花一分钟看看工作台。");
+    expect(text(tree)).not.toContain("我先带你看看这个月和你有关的工作");
+    (button(tree, "开始").props.onClick as () => void)();
+    tree = renderFlow(ceo);
+    expect(text(tree)).toContain("左边是通知栏");
+    expect(text(tree)).toContain("点开一条，右边展开详情；看完关掉，回到原处。");
+    expect(elements(tree).find((element) => element.type === WorkspaceSchematic)?.props).toMatchObject({ role: "ceo", focus: "notifications" });
+    (button(tree, "下一步").props.onClick as () => void)();
+    tree = renderFlow(ceo);
+    expect(text(tree)).toContain("右边是公司全局");
+    expect(text(tree)).toContain("底部是你的 Agent：问公司的事，它查了再答。");
+    expect(text(tree)).toContain("详情全屏展开，左上角返回");
+    expect(elements(tree).find((element) => element.type === WorkspaceSchematic)?.props).toMatchObject({ role: "ceo", focus: "board" });
+    expect(text(tree)).not.toContain("这是天枢里登记的");
+    (button(tree, "上一步").props.onClick as () => void)();
+    expect(elements(renderFlow(ceo)).find((element) => element.type === WorkspaceSchematic)?.props).toMatchObject({ focus: "notifications" });
+    const diagram = renderToStaticMarkup(<WorkspaceSchematic role="ceo" focus="notifications" />);
+    expect(diagram).toContain('data-region="notifications"');
+    expect(diagram).toContain('data-region="board"');
+    expect(diagram).toContain("战略决策更新");
+    expect(diagram).toContain("公司战略议题");
   });
   it("目标的三种状态有独立文案，已签发但无对应目标仍说明缺失", () => {
     expect(monthTargetCopy("none", null)).toBe("本月目标还没出来");
@@ -212,7 +238,7 @@ describe("真实数据的首次引导", () => {
   });
 });
 
-describe("引导第 3 步：雷达", () => {
+describe("雷达步骤", () => {
   it("成员：标题问关注哪些变化，嵌本人雷达编辑器；主按钮与「稍后」由编辑器放进底栏，不再有引导自己的「下一步」", () => {
     const tree = reachRadar(member);
     expect(text(tree)).toContain("你想关注哪些变化？");

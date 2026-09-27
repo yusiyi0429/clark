@@ -13,6 +13,7 @@
 .intro h1:focus-visible { outline: none; }
 .subtitle { margin: 12px 0 0; font-size: 20px; color: var(--onboarding-muted); }
 .description { margin: 20px auto 0; max-width: 470px; font-size: 17px; line-height: 1.7; color: var(--onboarding-muted); text-wrap: pretty; }
+.mobileTourCopy { display: none; }
 .details { margin-top: 28px; }
 .details:empty { margin-top: 0; }
 .content[data-step="hello"] { padding-top: 24px; }
@@ -115,6 +116,11 @@
   .summary span { margin-top: 8px; }
   .footer { flex-shrink: 0; margin-top: 24px; padding-top: 0; gap: 16px; }
   .secondary:empty { display: none; }
+  .flow:is([data-step="tour-notifications"], [data-step="tour-board"]) { width: min(960px, 100%); padding-top: 80px; padding-bottom: 24px; }
+  .flow:is([data-step="tour-notifications"], [data-step="tour-board"]) .stage { margin-top: calc(24px - var(--stage-fade)); }
+  .flow:is([data-step="tour-notifications"], [data-step="tour-board"]) .description { max-width: 790px; margin-top: 8px; font-size: 16px; }
+  .flow:is([data-step="tour-notifications"], [data-step="tour-board"]) .details { margin-top: 16px; }
+  .flow:is([data-step="tour-notifications"], [data-step="tour-board"]) .footer { margin-top: 16px; gap: 8px; }
 }
 @media (min-width: 1000px) {
   .flow { width: min(960px, 100%); }
@@ -154,6 +160,10 @@
   .intro h1 { font-size: 25px; }
   .subtitle { font-size: 18px; }
   .description { font-size: 16px; line-height: 1.7; }
+  .desktopTourCopy { display: none; }
+  .mobileTourCopy { display: block; }
+  .content[data-step^="tour-"] .description { margin-top: 10px; font-size: 14px; line-height: 1.55; }
+  .content[data-step^="tour-"] .details { margin-top: 14px; }
   .details { margin-top: 24px; }
   .snapshot { padding: 20px; }
   .battlefields li > span:last-child { max-width: 90px; }

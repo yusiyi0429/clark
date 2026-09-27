@@ -10,10 +10,10 @@ export function CoAgentCapsule({ state = "idle", level = 0, acknowledge = 0 }: {
   acknowledge?: number;
 }) {
   return <div className={s.capsule} aria-hidden="true">
-    <div className={s.capsuleGlass} data-state={state}>
-      <div key={acknowledge} className={acknowledge ? s.acknowledge : s.capsuleBody}>
+    <div key={acknowledge} className={s.capsuleGlass} data-state={state} data-acknowledge={acknowledge > 0}>
+      <div className={acknowledge ? s.acknowledge : s.capsuleBody}>
         <span className={s.sheen} />
-        {state === "listening" ? <SiriWave energy={level} className={s.wave} /> : <><span className={s.idleLight} /><span className={s.ambientLight} /></>}
+        {state === "listening" ? <SiriWave energy={level} className={s.wave} /> : <><span className={s.idleLight} /><span className={s.ambientLight} /><span className={s.cyanLightSpot} /></>}
       </div>
     </div>
   </div>;

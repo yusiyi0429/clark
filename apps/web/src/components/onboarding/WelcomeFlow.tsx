@@ -13,16 +13,17 @@ import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import { MorningCanvas } from "./MorningCanvas";
 import { CoAgentCapsule } from "./CoAgentCapsule";
 import { OnboardingProgress } from "./OnboardingProgress";
+import { WorkspaceSchematic } from "./WorkspaceSchematic";
 import { useOnboardingData } from "./useOnboardingData";
 import f from "./foundation.module.css";
 import s from "./welcome.module.css";
 
 export type OnboardingData = components["schemas"]["OnboardingResponse"];
-type Step = "hello" | "company" | "work" | "radar" | "voiceprint" | "start";
+type Step = "hello" | "tour-notifications" | "tour-board" | "work" | "radar" | "voiceprint" | "start";
 
-/** 雷达（工单 02）排在公司目标与分工／你这个月的工作之后、声纹之前；进度、前后导航与动效不依赖固定步数。 */
+/** CEO 先看工作台两侧；成员仍先看自己的工作。雷达与声纹保持原有顺序。 */
 export function onboardingSteps(data: OnboardingData): Step[] {
-  return ["hello", data.role === "ceo" ? "company" : "work", "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "start"];
+  return ["hello", ...(data.role === "ceo" ? ["tour-notifications" as const, "tour-board" as const] : ["work" as const]), "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "start"];
 }
 
 /** 结束页设置摘要里的雷达一行：成员写开没开；CEO 的公司雷达不能关，写补充了几个方向。 */
@@ -35,32 +36,6 @@ export function monthTargetCopy(status: "none" | "draft" | "negotiating" | "conf
   if (status === "none") return "本月目标还没出来";
   if (status !== "confirmed") return "本月目标还在协商";
   return target || "这个战场的本月目标还没有登记";
-}
-
-export function CompanySnapshot({ data }: { data: Extract<OnboardingData, { role: "ceo" }> }) {
-  const { company } = data;
-  return <>
-    <div className={`${f.glass} ${s.snapshot}`}>
-      {!company.sixMonthGoal && !company.battlefields.length ? <p className={s.empty}>公司的目标和战场还没登记。登记之后，这里会列出目标和分工。</p> : <>
-        <section className={s.snapshotSection}>
-          <h2>六个月目标</h2>
-          <p className={s.clampThree}>{company.sixMonthGoal || "六个月目标还没有登记"}</p>
-        </section>
-        <section className={s.snapshotSection}>
-          <h2>战场 <span>{company.battlefields.length}</span></h2>
-          {company.battlefields.length ? <ul className={s.battlefields}>{company.battlefields.map((battlefield) => <li key={battlefield.id}>
-            <span className={s.code}>{battlefield.code}</span><strong>{battlefield.name}</strong><span>{battlefield.ownerName ?? "待指派"}</span>
-          </li>)}</ul> : <p>战场还没有登记</p>}
-        </section>
-      </>}
-      {company.capabilities.length ? <section className={s.snapshotSection}><h2>能力 <span>{company.capabilities.length}</span></h2><p className={s.clampTwo}>{company.capabilities.map((item) => item.name).join(" · ")}</p></section> : null}
-      <section className={`${s.snapshotSection} ${s.people}`}>
-        <div className={s.avatars} aria-hidden="true">{company.people.slice(0, 5).map((person) => <span key={person.personId}>{Array.from(person.displayName)[0]}</span>)}</div>
-        <p>{company.people.length} 位同事</p>
-      </section>
-    </div>
-    <p className={s.footnote}>哪里不对，在个人菜单的「组织配置」里改。</p>
-  </>;
 }
 
 type WorkMissionCard = Extract<OnboardingData, { role: "member" }>["work"]["missionCards"][number];
@@ -146,7 +121,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
     voice.cancel();
     outgoing.current?.remove();
     if (outgoingTimer.current) clearTimeout(outgoingTimer.current);
-    const old = content.current?.cloneNode(true) as HTMLElement | undefined;
+    const old = steps[next].startsWith("tour-") && steps[current.current].startsWith("tour-") ? undefined : content.current?.cloneNode(true) as HTMLElement | undefined;
     if (old && content.current?.parentElement) {
       old.inert = true;
       old.setAttribute("aria-hidden", "true");
@@ -199,7 +174,9 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
     (step === "radar" ? radarPrimary?.querySelector<HTMLButtonElement>("[data-radar-submit]") : primary.current)?.click();
   }
 
-  const heading = step === "hello" ? `你好，${data.displayName}` : step === "company" ? `这是天枢里登记的${data.companyName || "公司"}` : step === "work" ? "你这个月的工作" : step === "radar" ? data.role === "ceo" ? "公司雷达，还要看什么？" : "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : "可以开始了";
+  const heading = step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? "右边是公司全局" : step === "work" ? "你这个月的工作" : step === "radar" ? data.role === "ceo" ? "公司雷达，还要看什么？" : "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : "可以开始了";
+  // 手机没有左右两栏：通知即首页，点开一条全屏看详情。
+  const phoneHeading = step === "tour-notifications" ? "首页就是通知栏" : step === "tour-board" ? "点开一条，看详情" : null;
   const busy = finishing || voice.phase === "saving";
   const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
   const primaryDisabled = busy || (!error && step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort));
@@ -217,17 +194,19 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
     <div className={s.flow} data-step={step}>
       <CoAgentCapsule acknowledge={acknowledge} state={voice.recording ? "listening" : "idle"} level={voice.level} />
       <div className={s.stage}>
-        <div className={s.content} key={step} ref={content} data-step={step}>
+        <div className={s.content} key={step.startsWith("tour-") ? "tour" : step} ref={content} data-step={step}>
           <div className={s.intro}>
-            <h1 ref={title} tabIndex={-1}>{heading}</h1>
-            {step === "hello" ? <><p className={s.subtitle}>欢迎使用天枢。</p><p className={s.description}>我先带你看看这个月和你有关的工作。<br />{data.voiceprint.configured ? "雷达和声纹" : "雷达"}，可以现在设，也可以以后再说。</p></> : null}
+            <h1 ref={title} tabIndex={-1}>{phoneHeading ? <><span className={s.desktopTourCopy}>{heading}</span><span className={s.mobileTourCopy}>{phoneHeading}</span></> : heading}</h1>
+            {step === "hello" ? <><p className={s.subtitle}>欢迎使用天枢。</p><p className={s.description}>{data.role === "ceo" ? "先花一分钟看看工作台。" : <>我先带你看看这个月和你有关的工作。<br /></>}{data.voiceprint.configured ? "雷达和声纹" : "雷达"}，可以现在设，也可以以后再说。</p></> : null}
+            {step === "tour-notifications" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>要你拍板的事、会议安排和需要研究的问题，按轻重排在这里。点开一条，右边展开详情；看完关掉，回到原处。</p><p className={`${s.description} ${s.mobileTourCopy}`}>要你拍板的事、会议安排和需要研究的问题，按轻重排在这里。</p></> : null}
+            {step === "tour-board" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>战略议题、雷达和各个战场都在这里。<br />底部是你的 Agent：问公司的事，它查了再答。</p><p className={`${s.description} ${s.mobileTourCopy}`}>点开一条，详情全屏展开，左上角返回；底部是你的 Agent。</p></> : null}
             {/* 「这里改的是公司雷达。」由编辑器顶部那一行说，同一屏不重复。 */}
             {step === "radar" && data.role === "ceo" ? <p className={s.description}>我会按你签发的本月目标自动关注；你还可以补充方向和来源。</p> : null}
             {step === "voiceprint" ? <p className={s.description}>录一段 15–30 秒的朗读，帮我在会后建议哪些发言可能来自你——最后仍由人核对。</p> : null}
             {step === "start" && !returnPath ? <p className={s.description}>{data.next.text}</p> : null}
           </div>
           <div className={s.details}>
-            {step === "company" && data.role === "ceo" ? <CompanySnapshot data={data} /> : null}
+            {(step === "tour-notifications" || step === "tour-board") && data.role === "ceo" ? <WorkspaceSchematic role="ceo" focus={step === "tour-notifications" ? "notifications" : "board"} /> : null}
             {step === "work" && data.role === "member" ? <WorkSnapshot data={data} onRefresh={refresh} /> : null}
             {step === "radar" ? <RadarSettingsEditor
               mode={data.role === "ceo" ? "company" : "person"}
