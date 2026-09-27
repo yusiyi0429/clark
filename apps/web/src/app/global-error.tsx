@@ -13,7 +13,7 @@ export default function GlobalError({ retry }: { error: Error & { digest?: strin
             <h1 id="global-error-title" style={{ margin: 0, fontSize: 22 }}>页面暂时无法显示</h1>
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, color: "#566170" }}>请重试，或者回到首页继续使用天枢。</p>
             <button type="button" onClick={() => retry()} style={{ ...action, marginTop: 16, border: 0, background: "#007aff", color: "white" }}>重试</button>
-            <a href="/" style={{ ...action, color: "#075ccb", textDecoration: "none" }}>回到首页</a>
+            <a href="/" style={{ ...action, minHeight: 40, marginTop: 4, padding: "8px 16px", fontSize: 15, fontWeight: 500, color: "#3a83f7", textDecoration: "none" }}>回到首页</a>
           </section>
         </main>
         <style>{`.mark{width:40px;height:40px;margin-bottom:4px}`}</style>

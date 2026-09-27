@@ -345,7 +345,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
 
       <div className={s.commitArea}>
         <div className={s.commitInfo}>
-          <span>签发后刷新战场目标与 Radar 基础 anchors；不直接更新企业知识。</span>
+          <span>签发后会更新各战场的本月目标和雷达的监测方向；不会直接改企业知识。</span>
           <small>已核对 {checked.length} 项 · 签发前必须核对企业结果、战场结果、能力结果与普通待办</small>
         </div>
         <div className={s.edit}>

@@ -4,10 +4,10 @@
 .shell{--apple-label:#1d1d1f;--apple-secondary:#6e6e73;--apple-accent:#007aff;--map-ink:#1d1d1f;--map-muted:#6e6e73;--map-line:#d8d8da;--map-tile:#f4f4f4;--map-grey:#e8e8e8;position:fixed;inset:0;background-color:var(--tianshu-canvas);background-image:radial-gradient(ellipse at 85% 0%,var(--tianshu-canvas-glow) 0%,transparent 55%),linear-gradient(180deg,var(--tianshu-canvas-top),var(--tianshu-canvas));background-position:center,center,center 54%;background-size:auto,auto,cover;background-repeat:no-repeat;padding:14px;border-radius:0;box-shadow:none;display:grid;gap:14px;color:var(--map-ink);overflow:hidden;isolation:isolate}
 :where(.shell button:not([data-slot])){font:inherit}
 .shell button{cursor:pointer;touch-action:manipulation}
-.shell button:not([data-slot]){color:inherit;text-align:left}
+:where(.shell button:not([data-slot])){color:inherit;text-align:left}
 .shell button:not([data-slot]):disabled{cursor:default;opacity:.55}
 .shell button:not([data-slot]):focus-visible,.shell input:focus-visible{outline:3px solid #007aff88;outline-offset:4px}
-.shell h1,.shell h2,.shell h3,.shell p{margin:0}
+:where(.shell h1,.shell h2,.shell h3,.shell p){margin:0}
 .mainArea{position:relative;min-width:0;min-height:0;overflow:hidden;border-radius:24px}
 .notificationArea{min-width:0;min-height:0;position:relative;z-index:5}
 
@@ -74,7 +74,8 @@
 
 /* 字号尺：按角色定字号，窄屏重排而不缩小正文。 */
 .shell{--type-title:20px;--type-body:14px;--type-meta:12px;--type-note:11px;--type-page:24px;--type-reading:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;font-size:var(--type-body)}
-.shell h2{font-size:var(--type-title);font-weight:600;line-height:1.35}
+/* 外壳的通用元素规则用 :where 降到零优先级：组件自己的类选择器总能覆盖（否则按样式表加载顺序时好时坏）。 */
+:where(.shell h2){font-size:var(--type-title);font-weight:600;line-height:1.35}
 .shell .expandedHeader h1{font-size:var(--type-page);font-weight:600;line-height:1.4}
 .shell .sectionIntro{font-size:18px;line-height:1.7}
 .shell .contextNote,.shell .empty{font-size:var(--type-body)}

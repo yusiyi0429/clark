@@ -40,5 +40,9 @@
 }
 .home:hover { background: var(--onboarding-pressed); }
 .home:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 4px; }
+/* 错误页上的第二个动作：文字按钮，不和「重试」抢主按钮的位置。 */
+.secondary { margin-top: 4px; padding: 8px 16px; border-radius: var(--onboarding-pill-radius); color: var(--onboarding-blue); font-size: 15px; font-weight: 500; text-decoration: none; }
+.secondary:hover { background: rgb(58 131 247 / 8%); }
+.secondary:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
 @media (prefers-reduced-transparency: reduce) { .card { background: var(--morning-start); --onboarding-blur: 0px; --onboarding-sat: 100%; } }
 @media (forced-colors: active) { .card { border: 1px solid CanvasText; } .home { background: Highlight; color: HighlightText; } }
