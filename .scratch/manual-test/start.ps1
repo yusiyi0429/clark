@@ -44,7 +44,7 @@ $site = Start-Process -FilePath (Get-Command node).Source -ArgumentList @($next,
 
 # 手机用 Wi-Fi 网卡的地址；找不到时列出所有放行的地址。
 $wifi = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceAlias -match '^(WLAN|Wi-?Fi)' } | Select-Object -First 1 -ExpandProperty IPAddress
-$phone = if ($wifi) { "http://$($wifi):3500" } else { @($meta.lanOrigins) -join '  ' }
+$phone = if ($wifi) { "https://$($wifi):8444（要先启动 .scratch/lan-https/start.ps1）" } else { @($meta.lanOrigins) -join '  ' }
 Write-Host ''
 Write-Host '时间机器环境已启动（应用时间：上海 2026-10-01 10:00，随真实时间往前走）'
 Write-Host '  电脑：http://localhost:3500'

@@ -1,0 +1,30 @@
+# 本机 HTTPS 反代：让同一个 Wi-Fi 的手机用 https 打开这台电脑上的开发服务。
+# 会话 cookie 带 Secure、麦克风要安全上下文，所以手机必须走 https。
+# 证书由 Caddy 自己的本机 CA 签（存在命名卷 tianshu-lan-caddy-data 里，重启不变）；手机装一次根证书即可。
+{
+	local_certs
+	skip_install_trust
+	auto_https disable_redirects
+	# 客户端访问 IP 时不带 SNI，按这个地址选证书。
+	default_sni {$LAN_IP}
+	admin off
+}
+
+# 开发环境：网页 3200（/api 由网页转给 4100）。
+https://{$LAN_IP}:8443 {
+	tls internal
+	reverse_proxy host.docker.internal:3200
+}
+
+# 时间机器：网页 3500（先运行 .scratch/manual-test/start.ps1）。
+https://{$LAN_IP}:8444 {
+	tls internal
+	reverse_proxy host.docker.internal:3500
+}
+
+# 只提供公开的根证书下载，供手机安装；私钥不在这个目录里。
+http://{$LAN_IP}:8480 {
+	root * /srv/ca
+	header Content-Type application/x-x509-ca-cert
+	file_server
+}

@@ -98,8 +98,8 @@ async function main() {
   const { closeDueRounds } = await import("../../apps/api/src/missionRounds.js");
   await mkdir(runDir, { recursive: true });
   testEnv.publicOrigin = "http://localhost:3500";
-  // 同一 Wi-Fi 的手机经本机私有网段地址打开 3500；只放行这些来源。
-  const lanOrigins = Object.values(networkInterfaces()).flat().filter((net) => net && net.family === "IPv4" && !net.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(net.address)).map((net) => `http://${net!.address}:3500`);
+  // 同一 Wi-Fi 的手机经本机私有网段地址打开：http 3500 直连，或 https 8444 经本机反代（.scratch/lan-https）。只放行这些来源。
+  const lanOrigins = Object.values(networkInterfaces()).flat().filter((net) => net && net.family === "IPv4" && !net.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(net.address)).flatMap((net) => [`http://${net!.address}:3500`, `https://${net!.address}:8444`]);
   testEnv.extraOrigins = ["http://127.0.0.1:3500", ...lanOrigins];
   fixtureDir = await mkdtemp(join(tmpdir(), "warmap-manual-test-"));
   const people = JSON.parse(await readFile(join(root, "apps/api/test/fixtures/company-people.json"), "utf8"));

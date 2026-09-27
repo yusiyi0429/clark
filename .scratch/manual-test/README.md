@@ -16,7 +16,7 @@ pwsh -NoProfile -File .scratch/manual-test/stop.ps1    # 关闭：删库、停�
 ```
 
 - **电脑**：打开 `http://localhost:3500`。
-- **手机**（和电脑同一个 Wi‑Fi）：打开 start.ps1 最后打印的地址，例如 `http://192.168.124.44:3500`。
+- **手机**（和电脑同一个 Wi‑Fi）：先启动本机 HTTPS 反代（`pwsh -NoProfile -File .scratch/lan-https/start.ps1`），再打开 `https://192.168.124.44:8444`。登录要 https：会话 cookie 带 Secure，http 的局域网地址存不下。
 - **第一次打开要编译**，等 10–30 秒。
 - **网页是启动那一刻的代码副本**。改了代码要先 stop 再 start。
 - **环境运行期间不要跑 pnpm 的全仓库命令**：副本 `apps/web-manual-preview` 会被当成第二个 `@warmap/web`。

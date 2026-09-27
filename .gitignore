@@ -41,3 +41,4 @@ seed/company-people.json
 .scratch/preview-web*/
 .scratch/manual-test/run/
 apps/web-manual-preview/
+.scratch/lan-https/ca/
