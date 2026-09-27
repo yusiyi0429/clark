@@ -11,6 +11,7 @@ import { networkInterfaces, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TestApp } from "../../apps/api/test/helpers.js";
+import { LUYAO, clearWangLuyao, seedWangLuyao } from "./demo-luyao.js";
 
 const testDatabaseUrl = "postgres://postgres:postgres@localhost:54329/postgres";
 process.env.TEST_PG_URL = testDatabaseUrl;
@@ -110,6 +111,7 @@ async function main() {
   for (const [personId, displayName] of [["browser-dri", "林知行"], ["browser-no-card", "何望舒"], ["browser-empty", "顾清和"]]) {
     people.people.push({ personId, displayName, roles: ["dri"] });
   }
+  people.people.push({ personId: LUYAO.personId, displayName: "王路遥", roles: ["dri"] });
   const peopleFile = join(fixtureDir, "people.json");
   await writeFile(peopleFile, JSON.stringify(people));
   let now = new Date("2026-10-01T02:00:00.000Z");
@@ -135,6 +137,7 @@ async function main() {
     await app.sql("INSERT INTO capability_config (id,version,code,name,six_month_outcome) VALUES ($1,1,$2,$3,'形成可复用的能力成果')", [`cap-${code}`, code, name]);
   }
   const planId = randomUUID();
+  let luyaoTasks: Record<string,string> | undefined;
   const goalText = "让灯塔项目在真实 CEO 与 DRI 的日常战略工作中持续运行，完成从每月目标、个人承诺、执行事项到复盘的完整闭环；形成可复用的验收标准、跨人员交接清单和问题归因记录，确保关键界面的信息层级与反馈一致，并以不少于三组真实场景核对用户能否找到正在推进的事、理解自己的贡献和继续下一步。保留需要人工判断的边界，月底形成可核对的部署就绪结论。";
   async function projectAs(loginId: string, url: string) {
     const login = await app!.app.inject({ method: "POST", url: "/api/auth/login", headers: { origin: testEnv.publicOrigin }, payload: { loginId, passcode: "8742" } });
@@ -146,8 +149,9 @@ async function main() {
     return { value: response.json(), headers };
   }
   async function setPlanStage(stage: "none" | "negotiating" | "issued") {
-    const [{ count }] = await app!.sql("SELECT count(*)::int AS count FROM mission_rounds");
+    const [{ count }] = await app!.sql("SELECT count(*)::int AS count FROM mission_rounds WHERE battlefield_id='growth'");
     if (count !== 0) throw new Error("Target-state fixtures may only change before drafting a round; start a fresh fixture for more target states");
+    if (luyaoTasks) { await clearWangLuyao(app!, luyaoTasks); luyaoTasks = undefined; }
     await app!.sql("DELETE FROM monthly_plans WHERE id=$1", [planId]);
     if (stage !== "none") {
       await app!.sql(`INSERT INTO monthly_plans (id,version,period,status,company_outcome,battlefields,todos,negotiation,generation)
@@ -162,6 +166,7 @@ async function main() {
       if (!sign) throw new Error("Fixture plan cannot be signed");
       const result = await app!.app.inject({ method: "POST", url: "/api/actions/execute", headers, payload: { actionId: sign.actionId, input: {} } });
       if (result.statusCode !== 200) throw new Error(`Fixture plan signing failed: ${result.statusCode}`);
+      luyaoTasks = (await seedWangLuyao(app!,planId,appNow(),"8742",TEST_CEO.personId)).tasks;
     }
     metadata = { ...metadata, planStage: stage, planSigned: stage === "issued" };
     await writeJson(metadataFile, metadata);
@@ -246,8 +251,8 @@ async function main() {
           metadata = { ...metadata, now: now.toISOString() }; await writeJson(metadataFile, metadata);
           result = await inspect();
         }
-        else if (request.command === "welcome-member" || request.command === "welcome-dri" || request.command === "welcome-ceo") {
-          const personId = request.command === "welcome-member" ? "sun-mingze" : request.command === "welcome-dri" ? "browser-dri" : TEST_CEO.personId;
+        else if (request.command === "welcome-member" || request.command === "welcome-dri" || request.command === "welcome-ceo" || request.command === "welcome-luyao") {
+          const personId = request.command === "welcome-member" ? "sun-mingze" : request.command === "welcome-dri" ? "browser-dri" : request.command === "welcome-luyao" ? LUYAO.personId : TEST_CEO.personId;
           await app!.sql("DELETE FROM person_onboarding WHERE person_id=$1", [personId]);
           result = { onboardingReset: request.command };
         }

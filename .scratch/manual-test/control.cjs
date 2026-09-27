@@ -4,8 +4,8 @@ const { readFile, rename, writeFile } = require("node:fs/promises");
 const { join } = require("node:path");
 
 const command = process.argv[2];
-if (!/^(inspect|target-none|target-negotiating|target-issued|draft|open|near|advance|reopen|confirm|confirm-all|next-month|welcome-member|welcome-dri|welcome-ceo|close)$/.test(command || "") || process.argv.length !== 3) {
-  process.stderr.write("用法: node control.cjs inspect|target-none|target-negotiating|target-issued|draft|open|near|advance|reopen|confirm|confirm-all|next-month|welcome-member|welcome-dri|welcome-ceo|close\n");
+if (!/^(inspect|target-none|target-negotiating|target-issued|draft|open|near|advance|reopen|confirm|confirm-all|next-month|welcome-member|welcome-dri|welcome-ceo|welcome-luyao|close)$/.test(command || "") || process.argv.length !== 3) {
+  process.stderr.write("用法: node control.cjs inspect|target-none|target-negotiating|target-issued|draft|open|near|advance|reopen|confirm|confirm-all|next-month|welcome-member|welcome-dri|welcome-ceo|welcome-luyao|close\n");
   process.exitCode = 2;
 } else main().catch((error) => {
   process.stderr.write(`${error instanceof Error ? error.message : "Fixture control failed"}\n`);
