@@ -66,6 +66,7 @@ pwsh -NoProfile -File .scratch/manual-test/stop.ps1    # 关闭：删库、停�
 | `welcome-dri` | 重置林知行的首次登录引导 |
 | `welcome-ceo` | 重置验收 CEO 的首次登录引导 |
 | `welcome-luyao` | 重置王路遥的首次登录引导 |
+| `material-edit` | 模拟「我的 Agent」按上传者的要求改最近上传的一份 Markdown：改写一段、删一个列表项、文末加一段；材料上出现修改标注，群里出现一条说明（时间机器的 Agent 不连模型） |
 | `target-none` / `target-negotiating` / `target-issued` | 本月目标的三种状态；只能在整理草稿之前用 |
 
 时钟只往前拨，不能倒回。想从头来，stop 再 start。

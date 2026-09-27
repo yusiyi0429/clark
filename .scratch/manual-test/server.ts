@@ -131,6 +131,20 @@ async function main() {
     monthlyNow: appNow,
     // 时间机器不连模型：进群介绍走线上同样的兜底说明，不用测试里的假话术。
     threadIntroAgent: { async generate() { throw new Error("时间机器没有连接模型"); } },
+    // 时间机器没有模型：「重新生成草案」用一份演示草案替换，好看到覆盖改动与核对的效果（失败路径由自动测试覆盖）。
+    monthlyDraftAgent: { async generate() {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return { candidate: {
+        companyOutcome: "（重新生成）验证从本月目标到个人承诺、执行事项的完整路径，月底能说清每个战场的进展依据。",
+        battlefields: [
+          { battlefieldId: "growth", outcome: goalText },
+          { battlefieldId: "supporting", outcome: "把跨人员交接与成功证据整理成可共同核对的清单，并完成一次非当事人回看。" },
+          { battlefieldId: "product", outcome: "完成 CEO 与 DRI 双视角走查，按人核对四张个人卡与讨论意见。" },
+        ],
+        capabilities: [],
+        todos: [],
+      } };
+    } },
     voiceprintDeps: { configured: () => false, requireConfig: unavailable, toPcm: async () => unavailable(), enroll: async () => unavailable(), update: async () => unavailable(), remove: async () => unavailable(), groupVerify: async () => unavailable() },
   });
   await app.sql("UPDATE battlefield_config SET code='01',name='灯塔项目',owner_id=$1,six_month_outcome='以真实战略工作验证可复用的交付方式，形成持续运行的 CEO 与 DRI 工作闭环。' WHERE id='growth'", ["browser-dri"]);
@@ -220,6 +234,26 @@ async function main() {
   metadata = { fixtureId, ready: true, port: 4500, webPort: 3500, pid: process.pid, database, fixtureDirectory: fixtureDir,
     now: now.toISOString(), planStage: "issued", planSigned: true, rounds: 0, memberId: "sun-mingze", driId: "browser-dri", noCardId: "browser-no-card", emptyId: "browser-empty", planId, lanOrigins };
   await writeJson(metadataFile, metadata);
+  /** 时间机器没有模型：用 Agent 同一个修改函数，按上传者的要求改最近一份 Markdown，好看到修改标注和群里的说明。 */
+  async function simulateMaterialEdit() {
+    const { editObjectMaterial, readObjectMaterial } = await import("../../apps/api/src/objectMaterials.js");
+    const [row] = await app!.sql("SELECT id::text, object_type, object_id, owner_id FROM object_materials WHERE format='markdown' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1");
+    if (!row) throw new Error("还没有 Markdown 材料：先在执行事项或议题里上传一份 .md");
+    const ref = { objectType: row.object_type as "issue" | "task", objectId: row.object_id as string };
+    const viewer = { personId: row.owner_id as string, role: (row.owner_id === TEST_CEO.personId ? "ceo" : "member") as "ceo" | "member",
+      displayName: (people.people as { personId: string; displayName: string }[]).find((person) => person.personId === row.owner_id)?.displayName ?? (row.owner_id as string) };
+    const current = await readObjectMaterial(commandPool.query.bind(commandPool), ref, row.id as string, viewer);
+    const lines = current.body.split("\n");
+    const paragraph = lines.find((line) => line.trim() && !/^\s*(#|[-*+]\s|\d+[.)]\s|>|\||```)/.test(line) && current.body.split(line).length === 2);
+    const lastItem = [...lines].reverse().find((line) => /^\s*[-*+]\s/.test(line) && current.body.split(line).length === 2);
+    const edits = [
+      ...(paragraph ? [{ find: paragraph, replace: paragraph.replace(/。?$/u, "，并写明负责人和完成证据。") }] : []),
+      ...(lastItem ? [{ find: `\n${lastItem}`, replace: "" }] : []),
+      { append: "## 补充\n\n按群里的讨论，每个场景都要写明异常由谁接回。" },
+    ];
+    return editObjectMaterial(commandPool, ref, row.id as string, viewer, current.currentVersion, edits,
+      "按群里的讨论补上负责人和完成证据，删掉一条已定的待确认项，文末加一段补充", null);
+  }
   let lastCommandId: string | undefined;
   async function poll() {
     let request: { id?: string; fixtureId?: string; command?: string };
@@ -237,6 +271,7 @@ async function main() {
           await close();
           result = { closed: true, database, fixtureDirectory: fixtureDir };
         } else if (request.command === "inspect") result = await inspect();
+        else if (request.command === "material-edit") result = await simulateMaterialEdit();
         else if (request.command === "target-none") result = await setPlanStage("none");
         else if (request.command === "target-negotiating") result = await setPlanStage("negotiating");
         else if (request.command === "target-issued") result = await setPlanStage("issued");

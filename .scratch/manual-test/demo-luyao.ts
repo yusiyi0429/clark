@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { TestApp } from "../../apps/api/test/helpers.js";
 import { setMemberAccess } from "../../apps/api/src/memberAccess.js";
 import { directionId } from "../../apps/api/src/radarSettings.js";
+import { emptyDraft, emptyPreflight } from "../../apps/api/src/meetingStore.js";
 
 export const LUYAO = { personId: "wang-luyao", loginId: "wangluyao" } as const;
 export const PRODUCT_PEOPLE = [LUYAO.personId, "demo-zhou-tinglan", "demo-xu-zhiwei", "sun-mingze"] as const;
@@ -203,7 +204,10 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
   const meetingId = randomUUID();
   await sql(`INSERT INTO meetings (id,version,title,status,scheduled_at,ends_at,lead_dri_id,ceo_participant_id,participants,
     issue_ids,preflight,draft,origin_ref) VALUES ($1,1,'团队协作交接对齐会','reviewed','2026-10-06T02:00:00Z',
-    '2026-10-06T03:00:00Z',$2,$3,$4::jsonb,'[]','{}','{}','{}')`,[meetingId,"sun-mingze",ceoId,JSON.stringify(["sun-mingze",LUYAO.personId])]);
+    '2026-10-06T03:00:00Z',$2,$3,$4::jsonb,'[]',$5::jsonb,$6::jsonb,'{}')`,[meetingId,"sun-mingze",ceoId,
+    JSON.stringify([{ personId:"sun-mingze", displayName:"孙铭泽", roles:["dri"], sourceRef:"fixture://demo-luyao", updatedAt:"2026-10-01T02:00:00.000Z" },
+      { personId:LUYAO.personId, displayName:"王路遥", roles:["ceo","dri"], sourceRef:"fixture://demo-luyao", updatedAt:"2026-10-01T02:00:00.000Z" }]),
+    JSON.stringify(emptyPreflight(new Date("2026-10-05T02:00:00Z"))),JSON.stringify(emptyDraft())]);
   await addTask("meeting","整理会后确认的交接责任与证据", "not_started","meeting",null,null,null,"2026-10-14",LUYAO.personId,
     {meetingId,itemId:"demo-action-1",quote:"王路遥在 10 月 14 日前列出三种交接场景的负责人、接手人及完成证据。"});
   await addTask("done","完成演示资料的访问权限核对", "done","self",null,null,"2026-10-02","2026-10-04");
@@ -270,10 +274,10 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
   const walkthroughId = randomUUID();
   const participant = (personId: string, displayName: string) => ({ personId, displayName, roles:["dri"], sourceRef:"fixture://demo-luyao", updatedAt:at });
   await sql(`INSERT INTO meetings (id,version,title,status,scheduled_at,ends_at,lead_dri_id,ceo_participant_id,participants,
-    issue_ids,preflight,draft,origin_ref) VALUES ($1,1,'产品战场双视角走查会','scheduled',$2,$3,$4,$5,$6::jsonb,$7::jsonb,'{}','{}','{}')`,
+    issue_ids,preflight,draft,origin_ref) VALUES ($1,1,'产品战场双视角走查会','scheduled',$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,'{}')`,
   [walkthroughId,startsAt.toISOString(),new Date(startsAt.getTime() + 60 * 60_000).toISOString(),LUYAO.personId,ceoId,
     JSON.stringify([participant(LUYAO.personId,"王路遥"),participant("sun-mingze","孙铭泽"),participant("demo-zhou-tinglan","周听澜")]),
-    JSON.stringify([issueId])]);
+    JSON.stringify([issueId]),JSON.stringify(emptyPreflight(now)),JSON.stringify(emptyDraft())]);
   for (const personId of [LUYAO.personId, ceoId, "sun-mingze", "demo-zhou-tinglan"])
     await sql("INSERT INTO thread_members (object_type,object_id,person_id,added_by) VALUES ('meeting',$1,$2,'meeting') ON CONFLICT DO NOTHING",[walkthroughId,personId]);
   return { roundId, cardId, productRoundId, productCards, tasks: ids, issueId, walkthroughId };
