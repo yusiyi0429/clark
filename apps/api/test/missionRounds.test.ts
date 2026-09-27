@@ -491,6 +491,14 @@ describe("Co-Agent 起草个人卡", () => {
       const first = await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, undefined, agent);
       const id = ((first as { card: TCard }).card.payload as TMissionRoundSummary).roundId;
       await settledDraft(t, id);
+      // 起草中已经打开的卡链接不失效：占位文件里有的人沿用原来的卡号。
+      const draftingCards = ((first as { card: TCard }).card.payload as TMissionRoundSummary).cards;
+      const finalCards = (await t.db.query("SELECT id::text AS id, owner_id FROM personal_mission_cards WHERE round_id=$1", [id])).rows as { id: string; owner_id: string }[];
+      for (const row of draftingCards) {
+        const kept = finalCards.find((card) => card.owner_id === row.ownerId);
+        if (kept) expect(kept.id).toBe(row.cardId);
+      }
+      expect(draftingCards.some((row) => finalCards.some((card) => card.id === row.cardId))).toBe(true);
       const round = (await t.db.query("SELECT id,status,draft_origin FROM mission_rounds WHERE period='2026-10'")).rows[0];
       expect(round).toMatchObject({ id, status: "draft", draft_origin: "placeholder" });
       expect((await t.db.query("SELECT count(*)::int AS n FROM missions WHERE period='2026-10' AND personal_mission_card_id IS NOT NULL")).rows[0].n).toBe(12);

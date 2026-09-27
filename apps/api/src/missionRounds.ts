@@ -429,11 +429,15 @@ async function importedCards(q: Query, roundId: string): Promise<MissionDraftImp
 
 async function insertPlaceholderCards(
   client: PoolClient, value: DraftFileValue, roundId: string, battlefieldId: string, battlefieldOwnerId: string,
-  capabilities: Map<string, string>, people: MemoryPerson[], at: Date,
+  capabilities: Map<string, string>, people: MemoryPerson[], at: Date, existingCards: Map<string, string> = new Map(),
 ): Promise<void> {
   for (const card of value.cards) {
-    const cardId = randomUUID();
-    await client.query(`INSERT INTO personal_mission_cards (id,round_id,owner_id,sort_order,role_label,member_ids,created_at)
+    // 起草中已经为这个人建过卡时沿用那张卡的编号，已经打开的链接不失效。
+    const existing = existingCards.get(card.ownerId);
+    const cardId = existing ?? randomUUID();
+    if (existing) await client.query("UPDATE personal_mission_cards SET sort_order=$2,role_label=$3,member_ids=$4::jsonb WHERE id=$1",
+      [cardId, card.sortOrder, card.roleLabel ?? null, JSON.stringify(missionCardMembers(card.ownerId, battlefieldOwnerId, people))]);
+    else await client.query(`INSERT INTO personal_mission_cards (id,round_id,owner_id,sort_order,role_label,member_ids,created_at)
       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)`,
     [cardId, roundId, card.ownerId, card.sortOrder, card.roleLabel ?? null, JSON.stringify(missionCardMembers(card.ownerId, battlefieldOwnerId, people)), at]);
     for (const mission of card.missions) await client.query(`INSERT INTO missions
@@ -593,9 +597,11 @@ export async function completeMissionRoundDraft(
         for (const card of value.cards) {
           if (!known.has(card.ownerId) || card.missions.some((mission) => !capabilities.has(mission.capabilityCode))) throw new MissionDraftImportError(400, "INVALID_DRAFT_SCHEMA", "占位文件引用了未登记的人或能力域");
         }
-        await client.query("DELETE FROM personal_mission_cards WHERE round_id=$1", [roundId]);
+        const fileOwners = value.cards.map((card) => card.ownerId);
+        await client.query("DELETE FROM personal_mission_cards WHERE round_id=$1 AND NOT (owner_id = ANY($2::text[]))", [roundId, fileOwners]);
+        const existingCards = new Map((await client.query<{ id: string; owner_id: string }>("SELECT id::text, owner_id FROM personal_mission_cards WHERE round_id=$1", [roundId])).rows.map((item) => [item.owner_id, item.id]));
         const at = now();
-        await insertPlaceholderCards(client, value, roundId, row.battlefield_id, row.battlefield_owner_id, capabilities, people, at);
+        await insertPlaceholderCards(client, value, roundId, row.battlefield_id, row.battlefield_owner_id, capabilities, people, at, existingCards);
         await client.query("UPDATE mission_rounds SET status='draft',draft_origin='placeholder',draft_source=$2::jsonb,version=version+1,updated_at=$3 WHERE id=$1",
           [roundId, JSON.stringify({ file: basename(file), sha256, schema: value.schema, importedAt: at.toISOString(), source: value.source }), at]);
         await client.query("COMMIT");

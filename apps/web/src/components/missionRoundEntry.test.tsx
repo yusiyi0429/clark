@@ -57,7 +57,7 @@ describe("CEO 整理个人卡草稿交互", () => {
   it("先说明占位来源并确认；取消时不执行动作", async () => {
     ui.ask.mockResolvedValue(false);
     await render().press();
-    expect(ui.ask).toHaveBeenCalledWith(expect.stringContaining("草稿是占位：Agent 起草未接入，由 9 月个人卡生成，待大家讨论修改"), "整理个人卡草稿");
+    expect(ui.ask).toHaveBeenCalledWith(expect.stringContaining("这个战场还没有可以起草的人，先用占位文件整理草稿"), "整理个人卡草稿");
     expect(ui.run).not.toHaveBeenCalled();
   });
 

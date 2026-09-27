@@ -253,9 +253,15 @@ export function NotificationRail({
     }
     setNotice("");
     action.reset();
-    if (!await ask("草稿是占位：Agent 起草未接入，由 9 月个人卡生成，待大家讨论修改。整理草稿不会确认个人承诺，也不会开放讨论。", "整理个人卡草稿")) return;
+    // 没有可起草的人时只能导入占位文件；否则 Co-Agent 逐人起草（工单 10）。
+    const onlyPlaceholder = payloadOf<TMissionRoundDraftPayload>(item.missionRound).placeholder;
+    if (!await ask(onlyPlaceholder
+      ? "这个战场还没有可以起草的人，先用占位文件整理草稿，待大家讨论修改。整理草稿不会确认个人承诺，也不会开放讨论。"
+      : "Co-Agent 会按签发的本月计划和上个月的个人卡，为这个战场的每个人起草个人卡，需要一两分钟；起草不成的人先沿用上个月的卡。整理草稿不会确认个人承诺，也不会开放讨论。", "整理个人卡草稿")) return;
     const saved = await action.run(draft);
     if (saved) {
+      // Co-Agent 在后台起草：留在通知栏看「正在起草」，好了再点进去；这时的卡可能在起草失败后被替换。
+      if (payloadOf<TMissionRoundSummary>(saved).phase === "drafting") { setNotice("Co-Agent 已开始起草个人卡，起草好的卡会列在这一轮下面。"); return; }
       const firstCard = payloadOf<TMissionRoundSummary>(saved).cards[0];
       if (firstCard) onNavigate(`/mission-cards/${firstCard.cardId}`, origin);
       else setNotice("草稿已整理，这一轮暂无可打开的个人卡。");
