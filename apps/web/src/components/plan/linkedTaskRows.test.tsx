@@ -1,0 +1,21 @@
+import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { TTaskView } from "@warmap/contracts";
+import { LinkedTaskRows } from "./MonthPlan";
+
+const task: TTaskView = {
+  id: "00000000-0000-4000-8000-000000000001", version: 1, title: "准备上线", status: "in_progress", source: "plan",
+  startDate: null, dueDate: "2026-10-08", doneDefinition: null, mission: { missionId: "m", title: "上线", cardId: "c", period: "2026-10", battlefieldName: "增长", step: 1, steps: 2 },
+  waitingOn: null, owner: { personId: "owner", name: "孙铭泽" }, collaborators: [],
+  latestProgress: { body: "完成接口核对", source: "codex", author: { personId: "owner", name: "孙铭泽" }, createdAt: "2026-10-05T06:20:00Z" },
+  returnReason: null, origin: null, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-05T06:20:00Z",
+};
+describe("个人卡执行事项行", () => {
+  it("拍板人可读摘要和最新进展，但行不可打开；成员可打开", () => {
+    const decider = renderToStaticMarkup(<LinkedTaskRows tasks={[task]} viewerId="ceo" />);
+    expect(decider).toContain("准备上线"); expect(decider).toContain("最新进展 · Codex");
+    expect(decider).toContain("完成接口核对"); expect(decider).not.toContain("data-target");
+    const owner = renderToStaticMarkup(<LinkedTaskRows tasks={[task]} viewerId="owner" />);
+    expect(owner).toContain("data-target");
+  });
+});

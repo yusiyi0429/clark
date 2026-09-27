@@ -790,6 +790,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出本人未撤销的个人 MCP 令牌 */
+        get: operations["listPersonalTokens"];
+        put?: never;
+        /** 创建个人 MCP 令牌，明文只返回一次 */
+        post: operations["createPersonalToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 撤销本人令牌 */
+        delete: operations["revokePersonalToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 推进人或在职协作者手写进展，按 clientEventId 幂等 */
+        post: operations["appendTaskProgress"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-cards/{cardId}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 卡主人、当轮拍板人及 CEO 读取个人卡各任务下的执行事项摘要 */
+        get: operations["getMissionCardItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/plan": {
         parameters: {
             query?: never;
@@ -1610,6 +1679,15 @@ export interface components {
                     personId: string;
                     name: string;
                 }[];
+                latestProgress: {
+                    body: string;
+                    source: "web" | "codex" | "claude" | "github";
+                    author: {
+                        personId: string;
+                        name: string;
+                    };
+                    createdAt: string;
+                } | null;
                 returnReason: string | null;
                 origin: {
                     /** @constant */
@@ -3151,6 +3229,15 @@ export interface components {
                 personId: string;
                 name: string;
             }[];
+            latestProgress: {
+                body: string;
+                source: "web" | "codex" | "claude" | "github";
+                author: {
+                    personId: string;
+                    name: string;
+                };
+                createdAt: string;
+            } | null;
             returnReason: string | null;
             origin: {
                 /** @constant */
@@ -3161,6 +3248,141 @@ export interface components {
             } | null;
             createdAt: string;
             updatedAt: string;
+        };
+        TaskProgressSource: "web" | "codex" | "claude" | "github";
+        TaskProgressLink: {
+            url: string;
+            title?: string;
+        };
+        TaskProgressEntry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            taskId: string;
+            author: {
+                personId: string;
+                name: string;
+            };
+            source: "web" | "codex" | "claude" | "github";
+            body: string;
+            links: {
+                url: string;
+                title?: string;
+            }[];
+            createdAt: string;
+        };
+        TaskLatestProgress: {
+            body: string;
+            source: "web" | "codex" | "claude" | "github";
+            author: {
+                personId: string;
+                name: string;
+            };
+            createdAt: string;
+        };
+        AppendTaskProgressRequest: {
+            /** Format: uuid */
+            clientEventId: string;
+            body: string;
+            links?: {
+                url: string;
+                title?: string;
+            }[];
+        };
+        MissionCardItemsResponse: {
+            missions: {
+                missionId: string;
+                items: {
+                    id: string;
+                    version: number;
+                    title: string;
+                    status: "not_started" | "in_progress" | "done" | "returned";
+                    source: "meeting" | "self" | "plan";
+                    startDate: string | null;
+                    dueDate: string | null;
+                    doneDefinition: string | null;
+                    mission: {
+                        missionId: string;
+                        title: string;
+                        cardId: string;
+                        period: string;
+                        battlefieldName: string;
+                        step: number;
+                        steps: number;
+                    } | null;
+                    waitingOn: {
+                        taskId: string;
+                        title: string;
+                    } | null;
+                    owner: {
+                        personId: string;
+                        name: string;
+                    };
+                    collaborators: {
+                        personId: string;
+                        name: string;
+                    }[];
+                    latestProgress: {
+                        body: string;
+                        source: "web" | "codex" | "claude" | "github";
+                        author: {
+                            personId: string;
+                            name: string;
+                        };
+                        createdAt: string;
+                    } | null;
+                    returnReason: string | null;
+                    origin: {
+                        /** @constant */
+                        type: "meeting";
+                        meetingId: string;
+                        meetingTitle: string;
+                        quote: string | null;
+                    } | null;
+                    createdAt: string;
+                    updatedAt: string;
+                }[];
+            }[];
+        };
+        PersonalTokenClient: "codex" | "claude";
+        PersonalTokenView: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            client: "codex" | "claude";
+            createdAt: string;
+            expiresAt: string | null;
+            lastUsedAt: string | null;
+        };
+        ListPersonalTokensResponse: {
+            tokens: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                client: "codex" | "claude";
+                createdAt: string;
+                expiresAt: string | null;
+                lastUsedAt: string | null;
+            }[];
+            /** @constant */
+            mcpPath: "/mcp/me";
+        };
+        CreatePersonalTokenRequest: {
+            name: string;
+            client: "codex" | "claude";
+            expiresInDays: 30 | 90 | null;
+        };
+        CreatePersonalTokenResponse: {
+            token: string;
+            view: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                client: "codex" | "claude";
+                createdAt: string;
+                expiresAt: string | null;
+                lastUsedAt: string | null;
+            };
         };
         TaskPerson: {
             personId: string;
@@ -3215,6 +3437,15 @@ export interface components {
                     personId: string;
                     name: string;
                 }[];
+                latestProgress: {
+                    body: string;
+                    source: "web" | "codex" | "claude" | "github";
+                    author: {
+                        personId: string;
+                        name: string;
+                    };
+                    createdAt: string;
+                } | null;
                 returnReason: string | null;
                 origin: {
                     /** @constant */
@@ -3240,6 +3471,23 @@ export interface components {
             collaboratorOptions: {
                 personId: string;
                 name: string;
+            }[];
+            progress: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                taskId: string;
+                author: {
+                    personId: string;
+                    name: string;
+                };
+                source: "web" | "codex" | "claude" | "github";
+                body: string;
+                links: {
+                    url: string;
+                    title?: string;
+                }[];
+                createdAt: string;
             }[];
         };
         PutMyTaskNoteRequest: {
@@ -3290,6 +3538,15 @@ export interface components {
                     personId: string;
                     name: string;
                 }[];
+                latestProgress: {
+                    body: string;
+                    source: "web" | "codex" | "claude" | "github";
+                    author: {
+                        personId: string;
+                        name: string;
+                    };
+                    createdAt: string;
+                } | null;
                 returnReason: string | null;
                 origin: {
                     /** @constant */
@@ -3348,6 +3605,15 @@ export interface components {
                         personId: string;
                         name: string;
                     }[];
+                    latestProgress: {
+                        body: string;
+                        source: "web" | "codex" | "claude" | "github";
+                        author: {
+                            personId: string;
+                            name: string;
+                        };
+                        createdAt: string;
+                    } | null;
                     returnReason: string | null;
                     origin: {
                         /** @constant */
@@ -3406,6 +3672,15 @@ export interface components {
                     personId: string;
                     name: string;
                 }[];
+                latestProgress: {
+                    body: string;
+                    source: "web" | "codex" | "claude" | "github";
+                    author: {
+                        personId: string;
+                        name: string;
+                    };
+                    createdAt: string;
+                } | null;
                 returnReason: string | null;
                 origin: {
                     /** @constant */
@@ -6201,6 +6476,235 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listPersonalTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 令牌列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPersonalTokensResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createPersonalToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePersonalTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description 新令牌 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatePersonalTokenResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    revokePersonalToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已撤销 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    appendTaskProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppendTaskProgressRequest"];
+            };
+        };
+        responses: {
+            /** @description 进展记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskProgressEntry"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMissionCardItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 个人任务下的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissionCardItemsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

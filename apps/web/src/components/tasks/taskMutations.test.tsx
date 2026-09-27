@@ -63,10 +63,10 @@ it("邀请只提交选中的 collaboratorOptions 人员", async () => {
   await vi.waitFor(() => expect(props.onAdded).toHaveBeenCalledOnce());
 });
 
-const task = { id: "task-1", version: 2, title: "核对试点", source: "self", status: "in_progress", startDate: null, dueDate: null, doneDefinition: null, mission: null, waitingOn: null, owner: { personId: "sun", name: "孙铭泽" }, collaborators: [{ personId: "lin", name: "林晓" }], returnReason: null, origin: null, createdAt: "2026-09-27T00:00:00Z", updatedAt: "2026-09-27T00:00:00Z" } as const;
+const task = { id: "task-1", version: 2, title: "核对试点", source: "self", status: "in_progress", startDate: null, dueDate: null, doneDefinition: null, mission: null, waitingOn: null, owner: { personId: "sun", name: "孙铭泽" }, collaborators: [{ personId: "lin", name: "林晓" }], latestProgress: null, returnReason: null, origin: null, createdAt: "2026-09-27T00:00:00Z", updatedAt: "2026-09-27T00:00:00Z" } as const;
 
 it("推进人直接在判断块保存，PATCH 只写判断", async () => {
-  const detail = { task, judgment: "原判断", myNote: null, role: "owner", missionOptions: [], collaboratorOptions: [] } as never;
+  const detail = { task, judgment: "原判断", myNote: null, role: "owner", missionOptions: [], collaboratorOptions: [], progress: [] } as never;
   let tree = render(() => TaskScreen({ initialDetail: detail }));
   (find(tree, (node) => node.props?.label === "写下这件事的判断")!.props!.onChange as (value: string) => void)("更新判断");
   tree = render(() => TaskScreen({ initialDetail: detail }));
@@ -77,7 +77,7 @@ it("推进人直接在判断块保存，PATCH 只写判断", async () => {
 });
 
 it("协作者直接在批注块保存，PUT 不覆盖推进人判断", async () => {
-  const detail = { task, judgment: "推进人判断", myNote: "旧批注", role: "collaborator", missionOptions: [], collaboratorOptions: [] } as never;
+  const detail = { task, judgment: "推进人判断", myNote: "旧批注", role: "collaborator", missionOptions: [], collaboratorOptions: [], progress: [] } as never;
   let tree = render(() => TaskScreen({ initialDetail: detail }));
   (find(tree, (node) => node.props?.label === "我的批注（只属于你，不覆盖这件事的判断）")!.props!.onChange as (value: string) => void)("我的新批注");
   tree = render(() => TaskScreen({ initialDetail: detail }));
@@ -88,7 +88,7 @@ it("协作者直接在批注块保存，PUT 不覆盖推进人判断", async () 
 });
 
 it("会后事项退回先填写原因并确认，再调用原退回接口", async () => {
-  const detail = { task: { ...task, source: "meeting" }, judgment: null, myNote: null, role: "owner", missionOptions: [], collaboratorOptions: [] } as never;
+  const detail = { task: { ...task, source: "meeting" }, judgment: null, myNote: null, role: "owner", missionOptions: [], collaboratorOptions: [], progress: [] } as never;
   let tree = render(() => TaskScreen({ initialDetail: detail }));
   (find(tree, (node) => node.props?.children === "退回")!.props!.onPress as () => void)();
   tree = render(() => TaskScreen({ initialDetail: detail }));

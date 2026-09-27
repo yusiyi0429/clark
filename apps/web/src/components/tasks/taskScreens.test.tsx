@@ -33,13 +33,19 @@ import { CollaboratorsDialog } from "./CollaboratorsDialog";
 type Task = components["schemas"]["TaskView"];
 type Detail = components["schemas"]["TaskDetailResponse"];
 const task = (id = "task-1", extra: Partial<Task> = {}): Task => ({
-  id, version: 2, title: `事项 ${id}`, status: "not_started", source: "self", startDate: "2026-10-01", dueDate: "2026-10-12", doneDefinition: "留下结论", mission: { missionId: "mission-1", title: "上线验证", cardId: "card-1", period: "2026-10", battlefieldName: "灯塔客户", step: 2, steps: 4 }, waitingOn: { taskId: "task-0", title: "确认范围" }, owner: { personId: "sun", name: "孙铭泽" }, collaborators: [{ personId: "lin", name: "林晓" }], returnReason: null, origin: null, createdAt: "2026-09-27T00:00:00Z", updatedAt: "2026-09-27T00:00:00Z", ...extra,
+  id, version: 2, title: `事项 ${id}`, status: "not_started", source: "self", startDate: "2026-10-01", dueDate: "2026-10-12", doneDefinition: "留下结论", mission: { missionId: "mission-1", title: "上线验证", cardId: "card-1", period: "2026-10", battlefieldName: "灯塔客户", step: 2, steps: 4 }, waitingOn: { taskId: "task-0", title: "确认范围" }, owner: { personId: "sun", name: "孙铭泽" }, collaborators: [{ personId: "lin", name: "林晓" }], latestProgress: null, returnReason: null, origin: null, createdAt: "2026-09-27T00:00:00Z", updatedAt: "2026-09-27T00:00:00Z", ...extra,
 });
-const detail = (role: Detail["role"]): Detail => ({ task: task(), judgment: "先验证两家", judgmentAt: "2026-10-03T02:05:00.000Z", myNote: role === "owner" ? null : "我看到依赖风险", myNoteAt: role === "owner" ? null : "2026-10-04T06:30:00.000Z", role, missionOptions: role === "owner" ? [{ missionId: "mission-2", title: "客户试点", battlefieldName: "灯塔客户", period: "2026-10" }] : [], collaboratorOptions: role === "owner" ? [{ personId: "bai", name: "白田田" }] : [] });
+const detail = (role: Detail["role"]): Detail => ({ task: task(), judgment: "先验证两家", judgmentAt: "2026-10-03T02:05:00.000Z", myNote: role === "owner" ? null : "我看到依赖风险", myNoteAt: role === "owner" ? null : "2026-10-04T06:30:00.000Z", role, missionOptions: role === "owner" ? [{ missionId: "mission-2", title: "客户试点", battlefieldName: "灯塔客户", period: "2026-10" }] : [], collaboratorOptions: role === "owner" ? [{ personId: "bai", name: "白田田" }] : [], progress: [] });
 
 beforeEach(() => { vi.clearAllMocks(); state.press.clear(); state.cardClick.clear(); vi.stubGlobal("window", { dispatchEvent: vi.fn() }); });
 
 describe("成员首页执行事项", () => {
+  it("最新进展仅在有记录时显示，并给悬停与读屏提供正文", () => {
+    const html = renderToStaticMarkup(<MemberTasks tasks={[task("new", { latestProgress: { body: "完成接口核对", source: "codex", author: { personId: "sun", name: "孙铭泽" }, createdAt: "2026-10-05T06:20:00Z" } })]} onStatus={vi.fn()} />);
+    expect(html).toContain("最新进展 · Codex");
+    expect(html).toContain('title="完成接口核对"');
+    expect(html).toContain('aria-label="最新进展：完成接口核对"');
+  });
   it("按截止排并保留同截止顺序；卡上有归属、步骤、等待、日期、协作者和新建入口", () => {
     const items = [task("a", { dueDate: null }), task("b", { dueDate: "2026-10-12" }), task("c", { dueDate: "2026-10-02" })];
     expect(tasksByDue(items).map((item) => item.id)).toEqual(["c", "b", "a"]);
@@ -60,6 +66,11 @@ describe("成员首页执行事项", () => {
 });
 
 describe("执行事项新建与详情", () => {
+  it("详情列出进展来源、正文和链接，并允许成员写一条", () => {
+    const entry = { id: "00000000-0000-4000-8000-000000000001", taskId: "task-1", author: { personId: "lin", name: "林晓" }, source: "claude" as const, body: "完成测试", links: [{ url: "https://example.com/pr", title: "证据" }], createdAt: "2026-10-05T06:20:00Z" };
+    const html = renderToStaticMarkup(<TaskScreen initialDetail={{ ...detail("collaborator"), progress: [entry] }} />);
+    expect(html).toContain("Claude Code"); expect(html).toContain("完成测试"); expect(html).toContain("https://example.com/pr"); expect(html).toContain("写一条进展");
+  });
   it("新建页明确允许独立事项，保留计划开始、截止和完成定义", () => {
     const html = renderToStaticMarkup(<CreateTaskScreen />);
     expect(html).toContain("不挂个人任务（独立事项）"); expect(html).toContain("计划开始日期"); expect(html).toContain("截止日期"); expect(html).toContain("完成时应该留下什么");

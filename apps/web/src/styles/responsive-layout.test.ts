@@ -4,6 +4,14 @@ import { describe, expect, it } from "vitest";
 const css = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
 
 describe("responsive workspace CSS", () => {
+  it("bounds the connection dialog and wraps commands at 390px", () => {
+    const menu = css("./account-menu.module.css");
+    const connection = css("./connection-dialog.module.css");
+    expect(menu).toContain(".dialog.wide { box-sizing: border-box; width: min(560px, calc(100vw - 32px))");
+    expect(menu).toContain("@media (max-width: 759px) { .dialog.wide { width: calc(100vw - 20px)");
+    expect(connection).toContain(".command code{flex:1;min-width:0;overflow-wrap:anywhere;white-space:pre-wrap");
+    expect(connection).toContain("@media(max-width:520px){.fields{grid-template-columns:minmax(0,1fr)}");
+  });
   it("keeps the member home widgets and tasks visible on phones, with notifications in the same scroll", () => {
     const source = css("./app-shell.module.css");
     expect(source).toContain('.shell[data-testid="member-workspace"][data-detail-open=false]');

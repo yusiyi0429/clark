@@ -91,8 +91,9 @@
 .saveLine>button:not(:first-child){padding:6px;border:0;background:none;color:var(--ts-text-muted);font:inherit;cursor:pointer}
 .taskList{--line:var(--hairline);--ts-text:var(--ink);--ts-text-muted:var(--ink-faint);display:grid;border-top:1px solid var(--line);margin-top:22px}
 .taskRow{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);padding:16px 0;min-width:0}
-.taskMain{flex:1;min-width:0}.taskMain p{font-size:11px;line-height:1.8;color:var(--ts-text-muted);margin:6px 0 0}
-.taskLink{display:flex;align-items:center;gap:4px;min-width:0;padding:0;border:0;background:none;font-size:14px;line-height:1.7;text-decoration:none;text-align:left;font-weight:500;color:var(--ts-text);cursor:pointer}
+.taskRow .latestProgress{color:#8090a5;font-size:11px;overflow-wrap:anywhere}
+.taskMain{flex:1;min-width:0}.taskMain p{font-size:11px;line-height:1.8;color:var(--ts-text-muted);margin:6px 0 0;overflow-wrap:anywhere}
+.taskLink{display:flex;align-items:center;gap:4px;min-width:0;padding:0;border:0;background:none;font-size:14px;line-height:1.7;text-decoration:none;text-align:left;font-weight:500;color:var(--ts-text);cursor:pointer;overflow-wrap:anywhere}
 .taskLink svg{flex:none}.taskStatus{flex:none;font-size:12px;color:var(--ts-text-muted)}
 .muted{color:var(--ts-text-muted);font-size:12px;line-height:1.8;margin:16px 0}
 @media(max-width:760px){.gantt{width:100%}.inlineEdit{align-items:stretch}.inlineEdit label{flex:1 1 100%}.inlineEdit input{width:100%}.taskRow{flex-wrap:wrap}.taskMain{flex-basis:100%}}

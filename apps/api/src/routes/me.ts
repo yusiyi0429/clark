@@ -1,6 +1,6 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AddTaskCollaboratorsRequest, CreateMyTaskRequest, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskDetailResponse, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AddTaskCollaboratorsRequest, AppendTaskProgressRequest, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskDetailResponse, TaskProgressEntry, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
 import { addTaskCollaborators, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
@@ -12,6 +12,8 @@ import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 import { readMemberWork } from "../memberWork.js";
 import { readMemberBattlefield } from "../memberBattlefields.js";
 import { readMemberRadarBrief } from "../personalSignals.js";
+import { appendTaskProgress } from "../taskProgress.js";
+import { createPersonalToken, listPersonalTokens, revokePersonalToken } from "../personalTokens.js";
 
 // 成员侧（CEO 也可调用，只看到自己的）：普通视图对象，不走 Card/Action 签名（spec §3.5）。
 export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -35,6 +37,19 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     return { myTasks, work, radar };
   });
 
+  app.get("/api/me/tokens", { preHandler: requirePerson, schema: { response: { 200: ListPersonalTokensResponse } } }, async (req) => ({
+    tokens: await listPersonalTokens(q, req.person!.personId), mcpPath: "/mcp/me" as const,
+  }));
+  app.post("/api/me/tokens", { preHandler: requirePerson, schema: { body: CreatePersonalTokenRequest, response: { 200: CreatePersonalTokenResponse } } }, async (req, reply) => {
+    if (req.person!.role !== "member") return fail(reply, 403, "MEMBER_REQUIRED", "只有成员可以创建个人令牌");
+    if (!req.body.name.trim()) return fail(reply, 400, "INVALID_INPUT", "请填写令牌名称");
+    const created = await createPersonalToken(pool, req.person!.personId, req.body, ctx.env.sessionSecret, ctx.now());
+    reply.header("Cache-Control", "no-store");
+    return created ?? fail(reply, 409, "TOKEN_LIMIT", "最多保留 5 个有效令牌");
+  });
+  app.delete("/api/me/tokens/:id", { preHandler: requirePerson, schema: { params: idParams } }, async (req, reply) =>
+    await revokePersonalToken(q, req.person!.personId, req.params.id) ? reply.code(204).send() : fail(reply, 404, "TOKEN_NOT_FOUND", "令牌不存在"));
+
   app.get("/api/me/battlefields/:id", { preHandler: requirePerson, schema: { params: idParams, response: { 200: MemberBattlefieldResponse } } }, async (req, reply) => {
     const detail = await readMemberBattlefield(q, companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.id, ctx.now());
     return detail ?? fail(reply, 404, "BATTLEFIELD_NOT_FOUND", "战场不存在");
@@ -54,6 +69,11 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
 
   app.get("/api/me/tasks/:id", { preHandler: requirePerson, schema: { params: idParams, response: { 200: TaskDetailResponse } } }, async (req, reply) =>
     await getTaskDetail(q, req.params.id, req.person!.personId, names(), ctx.now(), invitable()) ?? fail(reply, 404, "TASK_NOT_FOUND", "执行事项不存在"));
+  app.post("/api/me/tasks/:id/progress", { preHandler: requirePerson, schema: { params: idParams, body: AppendTaskProgressRequest, response: { 200: TaskProgressEntry } } }, async (req, reply) => {
+    if (!req.body.body.trim()) return fail(reply, 400, "INVALID_INPUT", "请填写进展正文");
+    const saved = await appendTaskProgress(pool, req.params.id, req.person!.personId, "web", req.body, names());
+    return "entry" in saved ? saved.entry : fail(reply, saved.error.status, saved.error.code, saved.error.message);
+  });
   app.post("/api/me/tasks", { preHandler: requirePerson, schema: { body: CreateMyTaskRequest } }, async (req, reply) =>
     respondTask(reply, await createMyTask(pool, req.person!.personId, names(), req.body, ctx.now())));
   app.delete("/api/me/tasks/:id", { preHandler: requirePerson, schema: { params: idParams,

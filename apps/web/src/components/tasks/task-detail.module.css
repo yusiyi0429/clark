@@ -18,6 +18,9 @@
 .longLink svg{flex:none}
 .paneNote,.paneBlock .paneNote{margin:0;color:var(--ts-text-muted,#6b7482);font-size:12px;line-height:1.7;overflow-wrap:anywhere}
 .separator{height:1px;background:var(--ts-border,#dce3ec)}
+.progressList{display:grid;gap:0;min-width:0}.progressEntry{display:grid;gap:6px;min-width:0;padding:12px 0;border-bottom:1px solid var(--ts-border,#dce3ec)}
+.progressMeta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;color:var(--ts-text-muted,#6b7482);font-size:12px}.progressSource{padding:2px 8px;border-radius:20px;background:#edf4ff;color:#2369d4;font-weight:600}
+.progressLinks{display:flex;flex-wrap:wrap;gap:6px 12px;min-width:0}.progressLinks a{color:#3a83f7;font-size:12px;overflow-wrap:anywhere}
 .returnForm{display:grid;gap:12px;min-width:0}
 .returnForm button{justify-self:start}
 .error{margin:0;color:#a44d3e;font-size:13px;line-height:1.7}

@@ -4,6 +4,7 @@ import type { TAddTaskCollaboratorsRequest, TCreateMyTaskRequest, TMeetingOutcom
 import { companyPeriod } from "./monthlyPlans.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { insertNotification } from "./notifications.js";
+import { listTaskProgress } from "./taskProgress.js";
 
 type TaskRow = {
   id: string; version: number; title: string; status: TTaskView["status"]; created_by: TTaskView["source"];
@@ -13,6 +14,8 @@ type TaskRow = {
   mission_title: string | null; card_id: string | null; period: string | null; battlefield_name: string | null;
   step_order: number | null; steps: number | null; previous_id: string | null; previous_title: string | null; previous_status: string | null;
   collaborators: string[]; created_at: Date; updated_at: Date;
+  latest_progress_body: string | null; latest_progress_source: "web" | "codex" | "claude" | "github" | null;
+  latest_progress_author_id: string | null; latest_progress_created_at: Date | null;
 };
 
 const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t.start_date::text AS start_date,
@@ -22,14 +25,16 @@ const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t
  (SELECT count(*)::int FROM tasks s WHERE s.mission_id=t.mission_id) AS steps,
  prev.id::text AS previous_id,prev.title AS previous_title,prev.status AS previous_status,
  ARRAY(SELECT tm.person_id FROM task_members tm WHERE tm.task_id=t.id AND tm.role='collaborator' AND tm.left_at IS NULL ORDER BY tm.added_at,tm.person_id) AS collaborators,
- t.created_at,t.updated_at
+ t.created_at,t.updated_at,lp.body AS latest_progress_body,lp.source AS latest_progress_source,
+ lp.author_id AS latest_progress_author_id,lp.created_at AS latest_progress_created_at
  FROM tasks t
  LEFT JOIN meetings mt ON mt.id=t.origin_meeting_id
  LEFT JOIN missions m ON m.id=t.mission_id
  LEFT JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id
  LEFT JOIN mission_rounds r ON r.id=c.round_id
  LEFT JOIN battlefield_config b ON b.id=r.battlefield_id
- LEFT JOIN tasks prev ON prev.mission_id=t.mission_id AND prev.step_order=t.step_order-1`;
+ LEFT JOIN tasks prev ON prev.mission_id=t.mission_id AND prev.step_order=t.step_order-1
+ LEFT JOIN LATERAL (SELECT body,source,author_id,created_at FROM task_progress WHERE task_id=t.id ORDER BY created_at DESC,id DESC LIMIT 1) lp ON true`;
 
 const queryOf = (client: PoolClient): Query => (sql, params) => client.query(sql, params);
 const person = (id: string, names: Map<string, string>) => ({ personId: id, name: names.get(id) ?? id });
@@ -42,6 +47,8 @@ function projectTask(row: TaskRow, names: Map<string, string>): TTaskView {
           battlefieldName: row.battlefield_name ?? "", step: row.step_order, steps: row.steps ?? 1 } : null,
     waitingOn: row.previous_id && row.previous_status !== "done" ? { taskId: row.previous_id, title: row.previous_title! } : null,
     owner: person(row.owner_id, names), collaborators: row.collaborators.map((id) => person(id, names)),
+    latestProgress: row.latest_progress_body && row.latest_progress_source && row.latest_progress_author_id && row.latest_progress_created_at
+      ? { body: row.latest_progress_body, source: row.latest_progress_source, author: person(row.latest_progress_author_id, names), createdAt: row.latest_progress_created_at.toISOString() } : null,
     returnReason: row.return_reason,
     origin: row.origin_meeting_id ? { type: "meeting", meetingId: row.origin_meeting_id,
       meetingTitle: row.meeting_title ?? "", quote: row.source_quote } : null,
@@ -58,6 +65,10 @@ export async function getTaskView(q: Query, id: string, names: Map<string, strin
 }
 export async function listMyTasks(q: Query, ownerId: string, names: Map<string, string>): Promise<TTaskView[]> {
   const rows = (await q(`${TASK_SELECT} WHERE t.owner_id=$1 ORDER BY t.created_at DESC,t.id`, [ownerId])).rows as TaskRow[];
+  return rows.map((row) => projectTask(row, names));
+}
+export async function listMissionItems(q: Query, missionId: string, names: Map<string, string>): Promise<TTaskView[]> {
+  const rows = (await q(`${TASK_SELECT} WHERE t.mission_id=$1 ORDER BY t.step_order,t.id`, [missionId])).rows as TaskRow[];
   return rows.map((row) => projectTask(row, names));
 }
 export async function canReadTask(q: Query, id: string, personId: string): Promise<boolean> {
@@ -219,7 +230,8 @@ export async function getTaskDetail(q: Query, taskId: string, viewerId: string, 
   const excluded = new Set([row.owner_id,...row.collaborators]);
   const collaboratorOptions = owner ? [...names].filter(([id])=>!excluded.has(id) && invitable.has(id)).map(([id])=>person(id,names)) : [];
   return { task:projectTask(row,names),judgment:row.judgment,judgmentAt:row.judgment_at?.toISOString() ?? null,
-    myNote:note?.note ?? null,myNoteAt:note?.updated_at.toISOString() ?? null,role:owner?"owner":"collaborator",missionOptions,collaboratorOptions };
+    myNote:note?.note ?? null,myNoteAt:note?.updated_at.toISOString() ?? null,role:owner?"owner":"collaborator",missionOptions,collaboratorOptions,
+    progress: await listTaskProgress(q,taskId,names) };
 }
 export async function putMyTaskNote(pool: Pool, viewerId: string, taskId: string, note: string | null): Promise<{ myNote:string | null } | { notFound:true }> {
   const q: Query = (sql,params)=>pool.query(sql,params);

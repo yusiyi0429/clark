@@ -37,10 +37,12 @@ export type LogFields = {
   model?: string;
   durationMs?: number;
   status?: string;
-  errorCode?: string;
+  errorCode?: string | null;
 };
 
 export function logEvent(fields: LogFields & Record<string, unknown>): void {
   const entry = redactSecrets({ ts: new Date().toISOString(), ...fields }) as Record<string, unknown>;
+  // MCP 审计只保留令牌的 UUID 标识；明文令牌与 secret_hash 仍按通用规则脱敏。
+  if (fields.event === "mcp.tool" && typeof fields.tokenId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fields.tokenId)) entry.tokenId = fields.tokenId;
   process.stdout.write(`${JSON.stringify(entry)}\n`);
 }

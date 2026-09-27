@@ -6,6 +6,10 @@ import { createMissionCardCorrection, decideMissionCardCorrection } from "../mis
 import { executeConfirmMissionRound, executeDecideMissionRound, executeDraftMissionRound, executeOpenMissionRound, executeReopenMissionRound, getMissionRoundCard, listMissionRoundCards } from "../missionRounds.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 import { createPersonalMissionCardFeedback, getPersonalMissionCard, getPersonalMissionCardGroup, markPersonalMissionCardRead, visiblePersonalMissionCard } from "../personalMissionCards.js";
+import { MissionCardItemsResponse } from "@warmap/contracts";
+import { canApprove } from "../missionRounds.js";
+import { listMissionItems } from "../tasks.js";
+import { personDisplayNames } from "../people.js";
 
 const NoInput = Type.Object({}, { additionalProperties: false });
 
@@ -23,6 +27,14 @@ export function registerMissionCardRoutes(app: AppInstance, ctx: RouteContext): 
   app.get("/api/mission-cards/:cardId", { preHandler: ctx.requirePerson, schema: { params: cardParams } }, async (req, reply) => {
     const card = await getPersonalMissionCard(ctx.q, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.cardId, ctx.now());
     return card ? { cards: [card] } : ctx.fail(reply, 404, "PERSONAL_MISSION_CARD_NOT_FOUND", "个人卡不存在或不可见");
+  });
+  app.get("/api/mission-cards/:cardId/items", { preHandler: ctx.requirePerson, schema: { params: cardParams, response: { 200: MissionCardItemsResponse } } }, async (req, reply) => {
+    const visible = await visiblePersonalMissionCard(ctx.q, req.person!, req.params.cardId);
+    if (!visible || visible.card.owner_id !== req.person!.personId && !canApprove(req.person!, visible.round))
+      return ctx.fail(reply, 404, "PERSONAL_MISSION_CARD_NOT_FOUND", "个人卡不存在或不可见");
+    const missionRows = (await ctx.q("SELECT id FROM missions WHERE personal_mission_card_id=$1 ORDER BY code,id", [req.params.cardId])).rows as { id: string }[];
+    const names = personDisplayNames(ctx.companyMemory);
+    return { missions: await Promise.all(missionRows.map(async ({ id }) => ({ missionId: id, items: await listMissionItems(ctx.q, id, names) }))) };
   });
   app.post("/api/mission-cards/:cardId/feedback", { preHandler: ctx.requirePerson, schema: { params: cardParams, body: CreateMissionCardFeedbackRequest } }, async (req, reply) => {
     const result = await createPersonalMissionCardFeedback(ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.cardId, req.body, ctx.now);

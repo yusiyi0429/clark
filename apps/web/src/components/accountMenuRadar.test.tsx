@@ -49,6 +49,10 @@ const item = (tree: ReactNode, label: string) => elements(tree).find((element) =
 afterEach(() => hooks.reset());
 
 describe("个人菜单里的雷达", () => {
+  it("只给成员显示连接入口", () => {
+    expect(item(render("member"), "连接 Codex / Claude Code")).toBeDefined();
+    expect(item(render("ceo"), "连接 Codex / Claude Code")).toBeUndefined();
+  });
   it("成员叫「我的雷达」，紧挨在「我的声纹」后面；打开是本人雷达的编辑器，底部能去看我的雷达信号", () => {
     const navigate = vi.fn();
     const labels = elements(render("member", navigate)).filter((element) => typeof element.props.onPress === "function").map((element) => text(element.props.children as ReactNode));

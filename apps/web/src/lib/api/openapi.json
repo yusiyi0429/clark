@@ -2585,6 +2585,269 @@
         }
       }
     },
+    "/api/me/tokens": {
+      "get": {
+        "operationId": "listPersonalTokens",
+        "summary": "列出本人未撤销的个人 MCP 令牌",
+        "responses": {
+          "200": {
+            "description": "令牌列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPersonalTokensResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPersonalToken",
+        "summary": "创建个人 MCP 令牌，明文只返回一次",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePersonalTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "新令牌",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePersonalTokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tokens/{id}": {
+      "delete": {
+        "operationId": "revokePersonalToken",
+        "summary": "撤销本人令牌",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已撤销"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{id}/progress": {
+      "post": {
+        "operationId": "appendTaskProgress",
+        "summary": "推进人或在职协作者手写进展，按 clientEventId 幂等",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppendTaskProgressRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "进展记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskProgressEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mission-cards/{cardId}/items": {
+      "get": {
+        "operationId": "getMissionCardItems",
+        "summary": "卡主人、当轮拍板人及 CEO 读取个人卡各任务下的执行事项摘要",
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "个人任务下的执行事项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionCardItemsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/plan": {
       "get": {
         "operationId": "getMyMonthPlan",
@@ -6248,6 +6511,7 @@
               "waitingOn",
               "owner",
               "collaborators",
+              "latestProgress",
               "returnReason",
               "origin",
               "createdAt",
@@ -6449,6 +6713,72 @@
                     }
                   }
                 }
+              },
+              "latestProgress": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "body",
+                      "source",
+                      "author",
+                      "createdAt"
+                    ],
+                    "properties": {
+                      "body": {
+                        "minLength": 1,
+                        "maxLength": 2000,
+                        "type": "string"
+                      },
+                      "source": {
+                        "anyOf": [
+                          {
+                            "const": "web",
+                            "type": "string"
+                          },
+                          {
+                            "const": "codex",
+                            "type": "string"
+                          },
+                          {
+                            "const": "claude",
+                            "type": "string"
+                          },
+                          {
+                            "const": "github",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "author": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "personId",
+                          "name"
+                        ],
+                        "properties": {
+                          "personId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "createdAt": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "returnReason": {
                 "anyOf": [
@@ -15806,6 +16136,7 @@
           "waitingOn",
           "owner",
           "collaborators",
+          "latestProgress",
           "returnReason",
           "origin",
           "createdAt",
@@ -16008,6 +16339,72 @@
               }
             }
           },
+          "latestProgress": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "body",
+                  "source",
+                  "author",
+                  "createdAt"
+                ],
+                "properties": {
+                  "body": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "source": {
+                    "anyOf": [
+                      {
+                        "const": "web",
+                        "type": "string"
+                      },
+                      {
+                        "const": "codex",
+                        "type": "string"
+                      },
+                      {
+                        "const": "claude",
+                        "type": "string"
+                      },
+                      {
+                        "const": "github",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "author": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "name"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "createdAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "returnReason": {
             "anyOf": [
               {
@@ -16068,6 +16465,882 @@
           "updatedAt": {
             "minLength": 1,
             "type": "string"
+          }
+        }
+      },
+      "TaskProgressSource": {
+        "anyOf": [
+          {
+            "const": "web",
+            "type": "string"
+          },
+          {
+            "const": "codex",
+            "type": "string"
+          },
+          {
+            "const": "claude",
+            "type": "string"
+          },
+          {
+            "const": "github",
+            "type": "string"
+          }
+        ]
+      },
+      "TaskProgressLink": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "pattern": "^https?://",
+            "maxLength": 500,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "type": "string"
+          }
+        }
+      },
+      "TaskProgressEntry": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "taskId",
+          "author",
+          "source",
+          "body",
+          "links",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "taskId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "author": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "name"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "source": {
+            "anyOf": [
+              {
+                "const": "web",
+                "type": "string"
+              },
+              {
+                "const": "codex",
+                "type": "string"
+              },
+              {
+                "const": "claude",
+                "type": "string"
+              },
+              {
+                "const": "github",
+                "type": "string"
+              }
+            ]
+          },
+          "body": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "links": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "url"
+              ],
+              "properties": {
+                "url": {
+                  "pattern": "^https?://",
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "title": {
+                  "maxLength": 120,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "TaskLatestProgress": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "body",
+          "source",
+          "author",
+          "createdAt"
+        ],
+        "properties": {
+          "body": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "const": "web",
+                "type": "string"
+              },
+              {
+                "const": "codex",
+                "type": "string"
+              },
+              {
+                "const": "claude",
+                "type": "string"
+              },
+              {
+                "const": "github",
+                "type": "string"
+              }
+            ]
+          },
+          "author": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "name"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "AppendTaskProgressRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientEventId",
+          "body"
+        ],
+        "properties": {
+          "clientEventId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "body": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "links": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "url"
+              ],
+              "properties": {
+                "url": {
+                  "pattern": "^https?://",
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "title": {
+                  "maxLength": 120,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MissionCardItemsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "missions"
+        ],
+        "properties": {
+          "missions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "missionId",
+                "items"
+              ],
+              "properties": {
+                "missionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "version",
+                      "title",
+                      "status",
+                      "source",
+                      "startDate",
+                      "dueDate",
+                      "doneDefinition",
+                      "mission",
+                      "waitingOn",
+                      "owner",
+                      "collaborators",
+                      "latestProgress",
+                      "returnReason",
+                      "origin",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "properties": {
+                      "id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "version": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "title": {
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "type": "string"
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "not_started",
+                            "type": "string"
+                          },
+                          {
+                            "const": "in_progress",
+                            "type": "string"
+                          },
+                          {
+                            "const": "done",
+                            "type": "string"
+                          },
+                          {
+                            "const": "returned",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "source": {
+                        "anyOf": [
+                          {
+                            "const": "meeting",
+                            "type": "string"
+                          },
+                          {
+                            "const": "self",
+                            "type": "string"
+                          },
+                          {
+                            "const": "plan",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "startDate": {
+                        "anyOf": [
+                          {
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "dueDate": {
+                        "anyOf": [
+                          {
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "doneDefinition": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "maxLength": 500,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mission": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "missionId",
+                              "title",
+                              "cardId",
+                              "period",
+                              "battlefieldName",
+                              "step",
+                              "steps"
+                            ],
+                            "properties": {
+                              "missionId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "title": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "cardId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "period": {
+                                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                                "type": "string"
+                              },
+                              "battlefieldName": {
+                                "type": "string"
+                              },
+                              "step": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "steps": {
+                                "minimum": 1,
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "waitingOn": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "taskId",
+                              "title"
+                            ],
+                            "properties": {
+                              "taskId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "title": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "owner": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "personId",
+                          "name"
+                        ],
+                        "properties": {
+                          "personId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "collaborators": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "name"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "latestProgress": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "body",
+                              "source",
+                              "author",
+                              "createdAt"
+                            ],
+                            "properties": {
+                              "body": {
+                                "minLength": 1,
+                                "maxLength": 2000,
+                                "type": "string"
+                              },
+                              "source": {
+                                "anyOf": [
+                                  {
+                                    "const": "web",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "codex",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "claude",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "github",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "author": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "personId",
+                                  "name"
+                                ],
+                                "properties": {
+                                  "personId": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "createdAt": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "returnReason": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "origin": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "type",
+                              "meetingId",
+                              "meetingTitle",
+                              "quote"
+                            ],
+                            "properties": {
+                              "type": {
+                                "const": "meeting",
+                                "type": "string"
+                              },
+                              "meetingId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "meetingTitle": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "quote": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "createdAt": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "updatedAt": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PersonalTokenClient": {
+        "anyOf": [
+          {
+            "const": "codex",
+            "type": "string"
+          },
+          {
+            "const": "claude",
+            "type": "string"
+          }
+        ]
+      },
+      "PersonalTokenView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "client",
+          "createdAt",
+          "expiresAt",
+          "lastUsedAt"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "maxLength": 40,
+            "type": "string"
+          },
+          "client": {
+            "anyOf": [
+              {
+                "const": "codex",
+                "type": "string"
+              },
+              {
+                "const": "claude",
+                "type": "string"
+              }
+            ]
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ListPersonalTokensResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tokens",
+          "mcpPath"
+        ],
+        "properties": {
+          "tokens": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "client",
+                "createdAt",
+                "expiresAt",
+                "lastUsedAt"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "client": {
+                  "anyOf": [
+                    {
+                      "const": "codex",
+                      "type": "string"
+                    },
+                    {
+                      "const": "claude",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "expiresAt": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "lastUsedAt": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "mcpPath": {
+            "const": "/mcp/me",
+            "type": "string"
+          }
+        }
+      },
+      "CreatePersonalTokenRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "client",
+          "expiresInDays"
+        ],
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "maxLength": 40,
+            "type": "string"
+          },
+          "client": {
+            "anyOf": [
+              {
+                "const": "codex",
+                "type": "string"
+              },
+              {
+                "const": "claude",
+                "type": "string"
+              }
+            ]
+          },
+          "expiresInDays": {
+            "anyOf": [
+              {
+                "const": 30,
+                "type": "number"
+              },
+              {
+                "const": 90,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CreatePersonalTokenResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "view"
+        ],
+        "properties": {
+          "token": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "view": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "client",
+              "createdAt",
+              "expiresAt",
+              "lastUsedAt"
+            ],
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "maxLength": 40,
+                "type": "string"
+              },
+              "client": {
+                "anyOf": [
+                  {
+                    "const": "codex",
+                    "type": "string"
+                  },
+                  {
+                    "const": "claude",
+                    "type": "string"
+                  }
+                ]
+              },
+              "createdAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "expiresAt": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lastUsedAt": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
           }
         }
       },
@@ -16186,7 +17459,8 @@
           "myNoteAt",
           "role",
           "missionOptions",
-          "collaboratorOptions"
+          "collaboratorOptions",
+          "progress"
         ],
         "properties": {
           "task": {
@@ -16205,6 +17479,7 @@
               "waitingOn",
               "owner",
               "collaborators",
+              "latestProgress",
               "returnReason",
               "origin",
               "createdAt",
@@ -16407,6 +17682,72 @@
                   }
                 }
               },
+              "latestProgress": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "body",
+                      "source",
+                      "author",
+                      "createdAt"
+                    ],
+                    "properties": {
+                      "body": {
+                        "minLength": 1,
+                        "maxLength": 2000,
+                        "type": "string"
+                      },
+                      "source": {
+                        "anyOf": [
+                          {
+                            "const": "web",
+                            "type": "string"
+                          },
+                          {
+                            "const": "codex",
+                            "type": "string"
+                          },
+                          {
+                            "const": "claude",
+                            "type": "string"
+                          },
+                          {
+                            "const": "github",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "author": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "personId",
+                          "name"
+                        ],
+                        "properties": {
+                          "personId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "createdAt": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "returnReason": {
                 "anyOf": [
                   {
@@ -16578,6 +17919,102 @@
                 }
               }
             }
+          },
+          "progress": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "taskId",
+                "author",
+                "source",
+                "body",
+                "links",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "taskId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "author": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "name"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "const": "web",
+                      "type": "string"
+                    },
+                    {
+                      "const": "codex",
+                      "type": "string"
+                    },
+                    {
+                      "const": "claude",
+                      "type": "string"
+                    },
+                    {
+                      "const": "github",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                "links": {
+                  "maxItems": 5,
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "url"
+                    ],
+                    "properties": {
+                      "url": {
+                        "pattern": "^https?://",
+                        "maxLength": 500,
+                        "type": "string"
+                      },
+                      "title": {
+                        "maxLength": 120,
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -16736,6 +18173,7 @@
                 "waitingOn",
                 "owner",
                 "collaborators",
+                "latestProgress",
                 "returnReason",
                 "origin",
                 "createdAt",
@@ -16937,6 +18375,72 @@
                       }
                     }
                   }
+                },
+                "latestProgress": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "body",
+                        "source",
+                        "author",
+                        "createdAt"
+                      ],
+                      "properties": {
+                        "body": {
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "type": "string"
+                        },
+                        "source": {
+                          "anyOf": [
+                            {
+                              "const": "web",
+                              "type": "string"
+                            },
+                            {
+                              "const": "codex",
+                              "type": "string"
+                            },
+                            {
+                              "const": "claude",
+                              "type": "string"
+                            },
+                            {
+                              "const": "github",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "author": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "name"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "createdAt": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "returnReason": {
                   "anyOf": [
@@ -17143,6 +18647,7 @@
                       "waitingOn",
                       "owner",
                       "collaborators",
+                      "latestProgress",
                       "returnReason",
                       "origin",
                       "createdAt",
@@ -17345,6 +18850,72 @@
                           }
                         }
                       },
+                      "latestProgress": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "body",
+                              "source",
+                              "author",
+                              "createdAt"
+                            ],
+                            "properties": {
+                              "body": {
+                                "minLength": 1,
+                                "maxLength": 2000,
+                                "type": "string"
+                              },
+                              "source": {
+                                "anyOf": [
+                                  {
+                                    "const": "web",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "codex",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "claude",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "github",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "author": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "personId",
+                                  "name"
+                                ],
+                                "properties": {
+                                  "personId": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "createdAt": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "returnReason": {
                         "anyOf": [
                           {
@@ -17525,6 +19096,7 @@
                 "waitingOn",
                 "owner",
                 "collaborators",
+                "latestProgress",
                 "returnReason",
                 "origin",
                 "createdAt",
@@ -17726,6 +19298,72 @@
                       }
                     }
                   }
+                },
+                "latestProgress": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "body",
+                        "source",
+                        "author",
+                        "createdAt"
+                      ],
+                      "properties": {
+                        "body": {
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "type": "string"
+                        },
+                        "source": {
+                          "anyOf": [
+                            {
+                              "const": "web",
+                              "type": "string"
+                            },
+                            {
+                              "const": "codex",
+                              "type": "string"
+                            },
+                            {
+                              "const": "claude",
+                              "type": "string"
+                            },
+                            {
+                              "const": "github",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "author": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "name"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "createdAt": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "returnReason": {
                   "anyOf": [

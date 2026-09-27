@@ -22,6 +22,32 @@ export const TaskPerson = Type.Object(
   { additionalProperties: false },
 );
 
+export const TaskProgressSource = Type.Union([Type.Literal("web"), Type.Literal("codex"), Type.Literal("claude"), Type.Literal("github")]);
+export const TaskProgressLink = Type.Object({
+  url: Type.String({ pattern: "^https?://", maxLength: 500 }),
+  title: Type.Optional(Type.String({ maxLength: 120 })),
+}, { additionalProperties: false });
+export const TaskProgressEntry = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  taskId: Type.String({ format: "uuid" }),
+  author: TaskPerson,
+  source: TaskProgressSource,
+  body: Type.String({ minLength: 1, maxLength: 2000 }),
+  links: Type.Array(TaskProgressLink, { maxItems: 5 }),
+  createdAt: Type.String({ minLength: 1 }),
+}, { additionalProperties: false });
+export const TaskLatestProgress = Type.Object({
+  body: Type.String({ minLength: 1, maxLength: 2000 }),
+  source: TaskProgressSource,
+  author: TaskPerson,
+  createdAt: Type.String({ minLength: 1 }),
+}, { additionalProperties: false });
+export const AppendTaskProgressRequest = Type.Object({
+  clientEventId: Type.String({ format: "uuid" }),
+  body: Type.String({ minLength: 1, maxLength: 2000 }),
+  links: Type.Optional(Type.Array(TaskProgressLink, { maxItems: 5 })),
+}, { additionalProperties: false });
+
 /** 所属个人任务：本人已确定个人卡上的一项；同一项个人任务下的执行事项按先后排成第 1..steps 步。 */
 export const TaskMissionRef = Type.Object(
   {
@@ -67,6 +93,7 @@ export const TaskView = Type.Object(
     /** 推进人；协作者不转移推进责任。 */
     owner: TaskPerson,
     collaborators: Type.Array(TaskPerson),
+    latestProgress: Type.Union([TaskLatestProgress, Type.Null()]),
     returnReason: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     origin: Type.Union([TaskOrigin, Type.Null()]),
     /** ISO 8601 */
@@ -75,6 +102,13 @@ export const TaskView = Type.Object(
   },
   { additionalProperties: false },
 );
+
+export const MissionCardItemsResponse = Type.Object({
+  missions: Type.Array(Type.Object({
+    missionId: Type.String({ minLength: 1 }),
+    items: Type.Array(TaskView),
+  }, { additionalProperties: false })),
+}, { additionalProperties: false });
 
 /** 成员工作台：参与的本月工作、我负责的执行事项（全部状态，新到旧），以及开着时的个人雷达小组件。 */
 export const MeHomeResponse = Type.Object(
@@ -132,6 +166,7 @@ export const TaskDetailResponse = Type.Object(
     )),
     /** 可邀请的同事：人员名单里除本人和现有成员以外的人。 */
     collaboratorOptions: Type.Array(TaskPerson),
+    progress: Type.Array(TaskProgressEntry, { maxItems: 50 }),
   },
   { additionalProperties: false },
 );
@@ -255,6 +290,11 @@ export const MarkNotificationsSeenRequest = Type.Object(
 );
 
 export type TTaskStatus = Static<typeof TaskStatus>;
+export type TTaskProgressSource = Static<typeof TaskProgressSource>;
+export type TTaskProgressEntry = Static<typeof TaskProgressEntry>;
+export type TTaskLatestProgress = Static<typeof TaskLatestProgress>;
+export type TAppendTaskProgressRequest = Static<typeof AppendTaskProgressRequest>;
+export type TMissionCardItemsResponse = Static<typeof MissionCardItemsResponse>;
 export type TTaskSource = Static<typeof TaskSource>;
 export type TTaskPerson = Static<typeof TaskPerson>;
 export type TTaskMissionRef = Static<typeof TaskMissionRef>;

@@ -35,6 +35,8 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [progressText, setProgressText] = useState("");
+  const [progressEventId, setProgressEventId] = useState<string | null>(null);
   const task = detail.task;
   const owner = detail.role === "owner";
   const missionOptions = task.mission && !detail.missionOptions.some((option) => option.missionId === task.mission?.missionId)
@@ -80,6 +82,22 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
       if (data) { setDetail((current) => ({ ...current, myNote: data.myNote, myNoteAt: data.myNote ? new Date().toISOString() : null })); setNotice("已保存我的批注"); }
       else setError(failure?.message ?? "批注没保存，请重试。");
     } catch { setError("批注没保存，请重试。"); }
+    finally { setBusy(false); }
+  };
+  const saveProgress = async () => {
+    if (!progressText.trim() || busy) return;
+    const clientEventId = progressEventId ?? crypto.randomUUID();
+    setProgressEventId(clientEventId); setBusy(true); setError("");
+    try {
+      const { data, error: failure } = await browserApi.POST("/api/me/tasks/{id}/progress", {
+        params: { path: { id: task.id } }, body: { clientEventId, body: progressText.trim() },
+      });
+      if (!data) throw new Error(failure?.message ?? "进展没保存，请重试");
+      setDetail((current) => ({ ...current, progress: [data, ...current.progress.filter((entry) => entry.id !== data.id)].slice(0, 50),
+        task: { ...current.task, latestProgress: { body: data.body, source: data.source, author: data.author, createdAt: data.createdAt } } }));
+      setProgressText(""); setProgressEventId(null); setNotice("进展已保存");
+      window.dispatchEvent(new Event("member-tasks-changed"));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "进展没保存，输入已保留"); }
     finally { setBusy(false); }
   };
   const returnTask = async () => {
@@ -128,6 +146,14 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
           {owner ? <><FormField label="写下这件事的判断" value={draft.judgment} onChange={(value) => set("judgment", value)} multiline rows={3} /><div className={s.paneRow}><ActionButton intent="secondary" isDisabled={busy} onPress={() => void patch({ judgment: draft.judgment.trim() || null }, "已保存这件事的判断")}>保存</ActionButton></div></> : <><FormField label="我的批注（只属于你，不覆盖这件事的判断）" value={note} onChange={setNote} multiline rows={3} /><div className={s.paneRow}><ActionButton intent="secondary" isDisabled={busy} onPress={() => void saveNote()}>保存</ActionButton>{detail.myNote && detail.myNoteAt ? <span className={s.paneNote}>上次写于 {monthDayTime(detail.myNoteAt)}</span> : null}</div></>}
         </section>
         <section className={s.paneBlock}><h3>报进度</h3>{owner && task.status !== "returned" ? <><p className={s.paneNote}>进度只认推进人自报。没报过是「还没报」，不是 0%。</p><ToggleButtonGroup selectionMode="single" disallowEmptySelection selectedKeys={[task.status]} aria-label="报进度" onSelectionChange={(keys) => { const next = [...keys][0]; if (next === "not_started" || next === "in_progress" || next === "done") void patch({ status: next }, "状态已更新"); }}>{(["not_started", "in_progress", "done"] as const).map((status) => <ToggleButton key={status} id={status} isDisabled={busy}>{TASK_STATUS[status]}</ToggleButton>)}</ToggleButtonGroup>{task.source === "meeting" ? <><Button variant="ghost" onPress={() => setReturnOpen((open) => !open)}>退回</Button>{returnOpen ? <div className={s.returnForm}><FormField label="退回原因" value={returnReason} onChange={setReturnReason} multiline rows={2} /><ActionButton intent="secondary" isDisabled={busy || !returnReason.trim()} onPress={() => void returnTask()}>确认退回</ActionButton></div> : null}</> : null}</> : <p className={s.paneNote}>{task.status === "returned" ? `这件事已退回。${task.returnReason ? `原因：${task.returnReason}` : ""}` : `这件事由${task.owner.name}推进，进度只认他自报的。你的看法写在上面的批注里。`}</p>}</section>
+        <section className={s.paneBlock}><h3>进展</h3>
+          {detail.progress.length ? <div className={s.progressList}>{detail.progress.map((entry) => <article key={entry.id} className={s.progressEntry}>
+            <div className={s.progressMeta}><span className={s.progressSource}>{({ web: "网页", codex: "Codex", claude: "Claude Code", github: "GitHub" })[entry.source]}</span><span>{entry.author.name}</span><time dateTime={entry.createdAt}>{monthDayTime(entry.createdAt)}</time></div>
+            <p>{entry.body}</p>{entry.links.length ? <div className={s.progressLinks}>{entry.links.map((link) => <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.title || link.url}</a>)}</div> : null}
+          </article>)}</div> : <p className={s.paneNote}>还没有进展。可以在这里写，也可以从 Codex 或 Claude Code 同步。</p>}
+          <FormField label="写一条进展" value={progressText} onChange={(value) => { setProgressText(value); setProgressEventId(null); }} multiline rows={3} />
+          <div className={s.paneRow}><ActionButton intent="secondary" isDisabled={busy || !progressText.trim() || progressText.length > 2000} onPress={() => void saveProgress()}>保存</ActionButton></div>
+        </section>
         {task.origin ? <section className={s.paneBlock}><h3>会议来源</h3><p>{task.origin.meetingTitle}</p>{task.origin.quote ? <blockquote>{task.origin.quote}</blockquote> : null}</section> : null}
         {owner && task.status === "not_started" && (task.source === "self" || task.source === "plan") ? <div className={s.paneRow}><Button variant="ghost" isDisabled={busy} onPress={() => void remove()}>删除执行事项</Button></div> : null}
         {error ? <p className={s.error} role="alert">{error}</p> : null}{notice ? <p className={s.notice} role="status">{notice}</p> : null}

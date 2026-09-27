@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@heroui/react";
 import { Button } from "ts-design/primitives";
-import type { TMissionCardField, TPersonalMissionCardPayload } from "@warmap/contracts";
+import type { TMissionCardField, TPersonalMissionCardPayload, TTaskView } from "@warmap/contracts";
 import { browserApi, type Card, type CardAction } from "@/lib/api/client";
 import { monthDayTime } from "@/lib/companyTime";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
@@ -48,6 +48,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [planSelected, setPlanSelected] = useState(false);
   const [planDirty, setPlanDirty] = useState(false);
+  const [linkedItems, setLinkedItems] = useState<Record<string, TTaskView[]> | undefined>();
   const [noteDraft, setNoteDraft] = useState({ roundKey: "", text: "" });
   const [decisionError, setDecisionError] = useState<{ feedbackId: string; message: string } | null>(null);
   const [correction, setCorrection] = useState<CorrectionDraft | null>(null);
@@ -115,6 +116,11 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
     return () => clearInterval(timer);
   }, [effectivePhase, refresh]);
   const { plan, setPlan, error: planError, loading: planLoading } = useMonthPlan(round.period, isOwner);
+  const loadLinkedItems = useCallback(async () => {
+    const { data } = await browserApi.GET("/api/mission-cards/{cardId}/items", { params: { path: { cardId: card.cardId } } });
+    if (data) setLinkedItems(Object.fromEntries(data.missions.map((mission) => [mission.missionId, mission.items])));
+  }, [card.cardId]);
+  useEffect(() => { void loadLinkedItems().catch(() => undefined); }, [loadLinkedItems]);
   const removeReference = useCallback(() => setReference(null), []);
   const cards = useMemo(() => [view], [view]);
   const group = useMemo(() => ({ cardId: card.cardId, viewerId: workspace.viewerId ?? card.ownerId, members: card.members, phase: effectivePhase, round: round.round, reference, onRemoveReference: removeReference, onRefresh: refresh }), [card.cardId, card.ownerId, workspace.viewerId, card.members, effectivePhase, round.round, reference, removeReference, refresh]);
@@ -205,7 +211,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
         <RoundLine payload={shownPayload} actions={view.actions} viewerId={workspace.viewerId} pending={pending} onAction={(action, input) => void runAction(action, input)} onSelectCard={(id) => workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${id}`)} onViewGoals={() => setGoalsOpen(true)} onStartProcessing={startProcessing} note={note} onNoteChange={(text) => { setNoteDraft({ roundKey, text }); saveRoundNote(noteViewer, round.roundId, round.round, text); }} error={error} />
         {error && !(effectivePhase === "reviewing" && round.approver && !round.counts.pending) ? <p className={s.error} role="alert">{error}</p> : null}
         {notice ? <p className={s.notice} role="status">{notice}</p> : null}
-        <CardDocument payload={shownPayload} ownerPlan={isOwner ? { selected: planSelected, onSelect: selectPlan, plan, error: planError, loading: planLoading, content: plan ? <MonthPlan key={plan.period} plan={plan} onSaved={setPlan} onDirtyChange={onPlanDirtyChange} /> : null } : undefined} controls={{ onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); },
+        <CardDocument payload={shownPayload} linkedItems={linkedItems} viewerId={workspace.viewerId} ownerPlan={isOwner ? { selected: planSelected, onSelect: selectPlan, plan, error: planError, loading: planLoading, content: plan ? <MonthPlan key={plan.period} plan={plan} onSaved={(next) => { setPlan(next); void loadLinkedItems(); }} onDirtyChange={onPlanDirtyChange} /> : null } : undefined} controls={{ onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); },
           corrections: { draft: correction, draftError: correctionError, history: correctionHistory, rejecting, decisionError: correctionDecisionError, busy: posting || pending, onOpen: openCorrection, onEdit: (patch) => setCorrection((current) => current && { ...current, ...patch, clientId: crypto.randomUUID() }), onCancel: () => setCorrection(null), onSubmit: () => void sendCorrection(), onHistory: setCorrectionHistory, onRejecting: setRejecting, onDecide: (item, decision) => void decideCorrection(item, decision) },
           proposalEditor: (mission, field) => proposal?.missionId === mission.missionId && proposal.field === field && effectivePhase !== "confirmed" ? <div className={s.proposal}>
           <label htmlFor={`proposal-${mission.missionId}-${field}`}>建议修改：{fieldNames[field]}</label>

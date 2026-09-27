@@ -9,7 +9,7 @@ import type { TMissionCardField, TPersonalMissionCardPayload } from "@warmap/con
 import { monthDayTime } from "@/lib/companyTime";
 import { CorrectionPanel, type CorrectionControls } from "./CorrectionPanel";
 import { LinkedTaskRows } from "@/components/plan/MonthPlan";
-import type { TMonthPlanResponse } from "@warmap/contracts";
+import type { TMonthPlanResponse, TTaskView } from "@warmap/contracts";
 import s from "./mission-card.module.css";
 
 export type PersonalMission = TPersonalMissionCardPayload["card"]["missions"][number];
@@ -60,11 +60,13 @@ export function FeedbackNote({ item, location, controls }: { item: TPersonalMiss
 }
 
 /** 原件分支仅保留可接入的阅读方式。10 月 API 不提供原件，也不出页签或下载入口。 */
-export function CardDocument({ payload, controls, artifact, ownerPlan }: {
+export function CardDocument({ payload, controls, artifact, ownerPlan, linkedItems, viewerId }: {
   payload: TPersonalMissionCardPayload;
   controls: DocumentControls;
   artifact?: { content: string; note: string; showOriginal: boolean; onSelect: (original: boolean) => void };
   ownerPlan?: { selected: boolean; onSelect: (selected: boolean) => void; plan: TMonthPlanResponse | null; content: ReactNode; loading: boolean; error: string };
+  linkedItems?: Record<string, TTaskView[]>;
+  viewerId?: string | null;
 }) {
   const { card, round, feedback, corrections, correctionAccess: access } = payload;
   const canDiscuss = round.phase === "open";
@@ -107,7 +109,7 @@ export function CardDocument({ payload, controls, artifact, ownerPlan }: {
             </dd>
           </div>;
         })}<div className={s.field}><dt>唯一责任人</dt><dd><p className={s.owner}>{card.ownerName}</p></dd></div></dl>
-        {ownerPlan && ownerPlan.plan ? <LinkedTaskRows tasks={ownerPlan.plan.groups.find(group => group.missionId === mission.missionId)?.items ?? []} /> : null}
+        {linkedItems || ownerPlan?.plan ? <LinkedTaskRows tasks={linkedItems?.[mission.missionId] ?? ownerPlan?.plan?.groups.find(group => group.missionId === mission.missionId)?.items ?? []} viewerId={viewerId} /> : null}
       </section>)}
     </div>}
     {!ownerPlan?.selected && loose.length ? <section className={s.loose} aria-label="没有指向具体字段的意见"><h2>整张卡上的意见</h2><div className={s.remarks}>{loose.map((item) => <FeedbackNote key={item.id} item={item} location={`${card.ownerName}的卡 · 整张卡`} controls={decisionControls} />)}</div></section> : null}

@@ -10,12 +10,13 @@
 import { useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { ArrowRight, AudioLines, KeyRound, LogOut, Radar, Settings2, X } from "lucide-react";
+import { ArrowRight, AudioLines, KeyRound, LogOut, PlugZap, Radar, Settings2, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { logout } from "@/lib/logout";
 import { VoiceprintCard } from "@/components/member/VoiceprintCard";
 import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import m from "@/styles/account-menu.module.css";
+import { ConnectionDialog } from "@/components/ConnectionDialog";
 
 export interface Account {
   displayName: string;
@@ -30,7 +31,7 @@ export function avatarInitial(name: string): string {
   return chars.length >= 3 ? chars[1] : chars[0];
 }
 
-type Dialog = "voiceprint" | "radar" | "passcode" | null;
+type Dialog = "voiceprint" | "radar" | "connection" | "passcode" | null;
 
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -71,6 +72,9 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                 <Radar size={16} aria-hidden="true" />
                 {radarTitle}
               </Button>
+              {account.role === "member" ? <Button variant="ghost" className={m.item} onPress={() => pick("connection")}>
+                <PlugZap size={16} aria-hidden="true" />连接 Codex / Claude Code
+              </Button> : null}
               <Button variant="ghost" className={m.item} onPress={() => pick("passcode")}>
                 <KeyRound size={16} aria-hidden="true" />
                 修改口令
@@ -136,6 +140,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <PasscodeForm loginId={account.loginId} onDone={() => setDialog(null)} />
         </MenuDialog>
       ) : null}
+      {dialog === "connection" ? <MenuDialog title="连接 Codex / Claude Code" wide onClose={() => setDialog(null)}><ConnectionDialog /></MenuDialog> : null}
     </>
   );
 }

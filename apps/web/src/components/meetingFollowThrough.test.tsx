@@ -104,6 +104,7 @@ describe("成员首页的执行事项", () => {
     waitingOn: null,
     owner: { personId: "p1", name: "孙铭泽" },
     collaborators: [],
+    latestProgress: null,
     returnReason: null,
     origin: { type: "meeting", meetingId: "m1", meetingTitle: "灯塔项目：产品交互对齐会议", quote: "下周三前给我" },
     createdAt: "2026-09-26T08:00:00.000Z",

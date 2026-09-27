@@ -12,7 +12,7 @@ const step = {
   startDate: "2026-10-05", dueDate: "2026-10-08", doneDefinition: null,
   mission: { missionId: "sun-202610-1", title: "CEO Agent 核心体验", cardId: "card-1", period: "2026-10", battlefieldName: "灯塔项目", step: 2, steps: 4 },
   waitingOn: { taskId: "7b0c3c1e-0000-4000-8000-000000000000", title: "对齐验收口径" },
-  owner: person, collaborators: [{ personId: "bai-tiantian", name: "白田田" }],
+  owner: person, collaborators: [{ personId: "bai-tiantian", name: "白田田" }], latestProgress: null,
   returnReason: null, origin: null, createdAt: now, updatedAt: now,
 };
 /** uuid 格式由 Fastify 校验；这里只查字段与范围。 */
@@ -46,7 +46,7 @@ describe("执行事项契约（工单 05）", () => {
   });
 
   it("详情区分推进人与协作者，批注只属于本人", () => {
-    const detail = { task: step, judgment: null, judgmentAt: null, myNote: "我这边周三能给数据", myNoteAt: now, role: "collaborator", missionOptions: [], collaboratorOptions: [] };
+    const detail = { task: step, judgment: null, judgmentAt: null, myNote: "我这边周三能给数据", myNoteAt: now, role: "collaborator", missionOptions: [], collaboratorOptions: [], progress: [] };
     expect(Value.Check(TaskDetailResponse, detail)).toBe(true);
     expect(Value.Check(TaskDetailResponse, { ...detail, role: "ceo" })).toBe(false);
   });
