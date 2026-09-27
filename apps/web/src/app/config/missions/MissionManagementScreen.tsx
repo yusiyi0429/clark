@@ -222,7 +222,7 @@ export function MissionManagementScreen({
               <MissionStatus mission={selected.payload} />
               <p className={m.editorMeta} role="status">
                 {selected.payload.personalCard.status === "confirmed"
-                  ? "个人 Mission Card 已确定，确认后的修订暂未开放，不能在配置页单独修改。"
+                  ? "个人 Mission Card 已确定，不能在配置页单独修改；要改字段，请在个人卡上更正。"
                   : "此 Mission 属于个人 Mission Card，需在本轮制定中讨论并统一确认，不能在配置页单独修改。"}
               </p>
               <p className={m.source}>来源 · {selected.payload.sourceTitle}</p>

@@ -214,7 +214,7 @@ describe("Mission 配置页渲染", () => {
   it("已确定个人卡继续锁住普通编辑，并说明修订暂未开放", () => {
     const locked = { ...card, actions: [], payload: { ...payload, personalCard: { cardId: "personal-01", roundId: "round-01", status: "confirmed" } } } as Card;
     const html = renderToStaticMarkup(<MissionManagementScreen missions={[locked]} battlefields={battlefields} capabilities={capabilities} people={people} initialMissionId="lhr-a" />);
-    expect(html).toContain("个人 Mission Card 已确定，确认后的修订暂未开放，不能在配置页单独修改。");
+    expect(html).toContain("个人 Mission Card 已确定，不能在配置页单独修改；要改字段，请在个人卡上更正。");
     expect(html).toContain("Organization Fact · CEO 确认");
     expect(html).not.toContain("月度承诺 · 含待确认草稿");
     expect(html).not.toContain("保存新版本");
