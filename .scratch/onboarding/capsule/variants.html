@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>胶囊方案</title>
+<style>
+  :root { --ease-brand: cubic-bezier(.22, 1, .36, 1); }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #1c2433;
+    background: radial-gradient(90% 70% at 30% 0%, #dfe9ff 0%, transparent 60%), radial-gradient(80% 60% at 90% 100%, #dff6ff 0%, transparent 60%), #f4f7fd; }
+  main { max-width: 1180px; margin: 0 auto; padding: 36px 24px 48px; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  p.lead { margin: 0 0 28px; color: #5b6576; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 18px; }
+  .cell { background: #ffffffb8; border: 1px solid #e3e8f2; border-radius: 22px; padding: 26px 18px 18px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .cell h2 { margin: 0; font-size: 15px; }
+  .cell small { color: #6b7485; font-size: 12.5px; line-height: 1.6; text-align: center; min-height: 40px; }
+  .stage { width: 100%; display: grid; place-items: center; padding: 18px 0 8px; }
+  .zoom { transform: scale(1.6); transform-origin: center; margin: 22px 0; }
+  button { font: inherit; font-size: 13px; border: 1px solid #d6deec; background: #fff; border-radius: 99px; padding: 7px 16px; cursor: pointer; color: #2f5fd8; }
+  button:hover { border-color: #9fb9ee; }
+
+  /* 共用骨架：与现在的 CoAgentCapsule 一样的层次（玻璃体 + 高光 + 三团光）。 */
+  .glass { position: relative; width: 224px; height: 64px; }
+  .glass::before { content: ""; position: absolute; inset: -9px -13px; border-radius: 99px; opacity: 0; pointer-events: none; filter: blur(12px); }
+  .glass.ack::before { animation: halo 1.4s ease-out both; }
+  .body { position: absolute; inset: 0; overflow: hidden; isolation: isolate; border-radius: 99px; }
+  .glass.ack .body { animation: breathe 1.4s var(--ease-brand); }
+  .glass.ack .body::after { content: ""; position: absolute; inset: 0 -35%; z-index: 4; border-radius: inherit; animation: sweep 1.4s var(--ease-brand) both; }
+  .light { position: absolute; border-radius: 50%; }
+  .gloss, .rim { position: absolute; pointer-events: none; }
+  @keyframes halo { 0%, 100% { opacity: 0; transform: scale(.97); } 38% { opacity: .75; transform: scale(1.05); } }
+  @keyframes breathe { 0%, 100% { transform: scaleX(1); } 36% { transform: scaleX(1.05); } }
+  @keyframes sweep { from { transform: translateX(-85%); opacity: 0; } 30% { opacity: 1; } to { transform: translateX(85%); opacity: 0; } }
+
+  /* 现在（对照）。 */
+  .now .body { background: linear-gradient(180deg, #0011fd, #0600a6 56%, #07058e); box-shadow: inset 0 0 0 1px #ffffff52, inset 0 1px 0 #ffffff73, inset 0 -8px 12px -8px #00002d99; }
+  .now .gloss { inset: 1px; border-radius: inherit; background: radial-gradient(ellipse 80% 68% at 50% -18%, #e1f4ff57, transparent 78%); z-index: 2; }
+  .now .l1 { top: 17%; left: 8%; width: 47%; height: 69%; background: radial-gradient(ellipse, #b9f6ffed 0%, #48c5ffbd 32%, transparent 70%); filter: blur(7px); animation: f1 7s ease-in-out infinite alternate; }
+  .now .l2 { top: 5%; right: 10%; width: 44%; height: 74%; background: radial-gradient(ellipse, #e8fcffed 0%, #72c8ffba 35%, transparent 72%); filter: blur(8px); animation: f2 8s -2s ease-in-out infinite alternate; }
+  .now .l3 { bottom: 7%; left: 37%; width: 37%; height: 67%; background: radial-gradient(ellipse, #a0fff2d9, #38c9e0a3 39%, transparent 72%); filter: blur(7px); animation: f3 6.5s -3s ease-in-out infinite alternate; }
+  .now::before { background: linear-gradient(90deg, #61ceeb77, #9b93e45c); }
+  .now .body::after { background: linear-gradient(105deg, transparent 39%, #b8f8ff24 46%, #ffffffa8 50%, #7bd9ff36 54%, transparent 61%); }
+
+  /* A 通透亮蓝：更亮更纯的蓝，玻璃边缘和上沿高光清楚；三团光换成青、紫、粉，模糊减半，用「滤色」叠出亮度而不是雾。 */
+  .a .body { background: linear-gradient(180deg, #4d86ff 0%, #2459ff 42%, #1437e6 100%);
+    box-shadow: inset 0 0 0 1px #ffffff80, inset 0 1.5px 0 #ffffffd9, inset 0 -12px 18px -12px #9ae8ffcc, 0 8px 18px -12px #1b3fd966; }
+  .a .gloss { left: 7%; right: 7%; top: 3px; height: 44%; border-radius: 99px 99px 60% 60% / 99px 99px 40% 40%; z-index: 3;
+    background: linear-gradient(180deg, #ffffff8c, #ffffff1f 70%, transparent); }
+  .a .rim { left: 16%; right: 16%; bottom: 3px; height: 3px; border-radius: 50%; z-index: 3; background: linear-gradient(90deg, transparent, #b8f6ffd9 50%, transparent); filter: blur(.6px); }
+  .a .light { mix-blend-mode: screen; }
+  .a .l1 { top: 16%; left: 6%; width: 42%; height: 72%; background: radial-gradient(ellipse, #8ff6ff 0%, #3fd3ffcc 38%, transparent 70%); filter: blur(4px); animation: f1 7s ease-in-out infinite alternate; }
+  .a .l2 { top: 10%; right: 8%; width: 40%; height: 78%; background: radial-gradient(ellipse, #c2a8ff 0%, #8a63ffcc 40%, transparent 70%); filter: blur(4.5px); animation: f2 8s -2s ease-in-out infinite alternate; }
+  .a .l3 { bottom: 4%; left: 38%; width: 30%; height: 60%; background: radial-gradient(ellipse, #ffc2ea 0%, #ff7fcfb3 38%, transparent 70%); filter: blur(4px); animation: f3 6.5s -3s ease-in-out infinite alternate; }
+  .a::before { background: conic-gradient(from 200deg, #5ee7ffaa, #8f7bffaa, #ff8ad6aa, #5ee7ffaa); }
+  .a .body::after { background: linear-gradient(105deg, transparent 38%, #9ff0ff33 45%, #ffffffd9 50%, #d6b8ff4d 55%, transparent 62%); }
+
+  /* B 极光深蓝：保留深蓝的分量，但光换成边缘清楚的极光带（青 → 紫 → 粉），上半有一层干净的玻璃反光。 */
+  .b .body { background: radial-gradient(120% 140% at 50% 120%, #0b1aa8 0%, transparent 60%), linear-gradient(180deg, #1640ff, #0a22d6 50%, #0816a3);
+    box-shadow: inset 0 0 0 1px #ffffff6b, inset 0 1.5px 0 #ffffffcc, inset 0 -10px 16px -10px #7fdcff99, 0 8px 18px -12px #0b1aa866; }
+  .b .gloss { left: 5%; right: 5%; top: 2px; height: 46%; border-radius: 99px 99px 50% 50% / 99px 99px 30% 30%; z-index: 3; background: linear-gradient(180deg, #ffffff66, #ffffff12 75%, transparent); }
+  .b .light { mix-blend-mode: screen; border-radius: 999px; }
+  .b .l1 { top: 30%; left: -10%; width: 90%; height: 26%; background: linear-gradient(90deg, transparent, #58f0ff 30%, #7aa8ff 60%, transparent); filter: blur(2.5px); transform: rotate(-9deg); animation: ribbon1 7s ease-in-out infinite alternate; }
+  .b .l2 { top: 48%; left: 20%; width: 85%; height: 22%; background: linear-gradient(90deg, transparent, #a07cff 35%, #ff86d2 70%, transparent); filter: blur(2.5px); transform: rotate(7deg); animation: ribbon2 8.5s -2s ease-in-out infinite alternate; }
+  .b .l3 { top: 18%; left: 35%; width: 45%; height: 50%; border-radius: 50%; background: radial-gradient(ellipse, #d9fbffcc, transparent 68%); filter: blur(5px); animation: f3 6.5s -3s ease-in-out infinite alternate; }
+  .b::before { background: linear-gradient(90deg, #4ee6ffaa, #9b7dffaa, #ff86d2aa); }
+  .b .body::after { background: linear-gradient(105deg, transparent 38%, #58f0ff2e 45%, #ffffffcc 50%, #ff86d24d 55%, transparent 62%); }
+
+  /* C 液态玻璃：半透明的玻璃壳，透出后面的画布；里面是清楚的彩色液体，边缘有折射一样的亮边。 */
+  .c .body { background: linear-gradient(180deg, #5b8cffcc, #2f5dffd9 55%, #2346eee6); backdrop-filter: blur(10px) saturate(170%);
+    box-shadow: inset 0 0 0 1px #ffffffa6, inset 0 2px 0 #ffffffe6, inset 0 -2px 0 #ffffff4d, inset 0 -14px 20px -14px #b5f2ffe6, 0 10px 22px -14px #2346ee80; }
+  .c .gloss { left: 6%; right: 30%; top: 4px; height: 36%; border-radius: 99px; z-index: 3; background: linear-gradient(180deg, #ffffffb3, #ffffff26 80%, transparent); }
+  .c .rim { right: 9%; bottom: 7px; width: 22%; height: 30%; border-radius: 99px; z-index: 3; background: radial-gradient(ellipse at 60% 80%, #ffffff8c, transparent 65%); }
+  .c .light { mix-blend-mode: screen; }
+  .c .l1 { top: 14%; left: 4%; width: 46%; height: 78%; background: radial-gradient(ellipse, #7ff9ff 0%, #36d2ffd9 40%, transparent 70%); filter: blur(3.5px); animation: f1 7s ease-in-out infinite alternate; }
+  .c .l2 { top: 8%; right: 6%; width: 42%; height: 80%; background: radial-gradient(ellipse, #b89bff 0%, #7b5cffd9 42%, transparent 70%); filter: blur(3.5px); animation: f2 8s -2s ease-in-out infinite alternate; }
+  .c .l3 { bottom: 2%; left: 34%; width: 34%; height: 64%; background: radial-gradient(ellipse, #ffd0ee 0%, #ff78c8cc 40%, transparent 70%); filter: blur(3.5px); animation: f3 6.5s -3s ease-in-out infinite alternate; }
+  .c::before { background: conic-gradient(from 160deg, #7ff9ffb3, #b89bffb3, #ff9ad8b3, #7ff9ffb3); }
+  .c .body::after { background: linear-gradient(105deg, transparent 38%, #ffffff40 45%, #ffffffe6 50%, #ffd0ee59 55%, transparent 62%); }
+
+  @keyframes f1 { to { transform: translate3d(22%, -10%, 0) rotate(12deg) scale(1.2, .85); } }
+  @keyframes f2 { to { transform: translate3d(-24%, 13%, 0) rotate(-13deg) scale(.86, 1.17); } }
+  @keyframes f3 { to { transform: translate3d(17%, -13%, 0) rotate(16deg) scale(1.15, .88); } }
+  @keyframes ribbon1 { to { transform: translate3d(14%, 10%, 0) rotate(-3deg) scaleX(1.1); } }
+  @keyframes ribbon2 { to { transform: translate3d(-18%, -14%, 0) rotate(2deg) scaleX(.92); } }
+  @media (prefers-reduced-motion: reduce) { .light, .glass.ack .body, .glass.ack .body::after, .glass.ack::before { animation: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>引导里的 Co-Agent 胶囊：更通透、加一点色彩</h1>
+  <p class="lead">每个方案上面是实际大小（224×64），下面放大 1.6 倍看细节；「下一步」模拟点击后的回应。</p>
+  <div class="grid">
+    <section class="cell">
+      <h2>现在（对照）</h2>
+      <div class="stage"><div class="glass now"><div class="body"><span class="gloss"></span><span class="light l1"></span><span class="light l2"></span><span class="light l3"></span></div></div></div>
+      <div class="stage zoom"><div class="glass now"><div class="body"><span class="gloss"></span><span class="light l1"></span><span class="light l2"></span><span class="light l3"></span></div></div></div>
+      <small>深蓝底上三团模糊的浅蓝光，边缘软，看起来像没对上焦。</small>
+      <button type="button">下一步</button>
+    </section>
+    <section class="cell">
+      <h2>A 通透亮蓝</h2>
+      <div class="stage"><div class="glass a"><div class="body"><span class="gloss"></span><span class="rim"></span><span class="light l1"></span><span class="light l2"></span><span class="light l3"></span></div></div></div>
+      <div class="stage zoom"><div class="glass a"><div class="body"><span class="gloss"></span><span class="rim"></span><span class="light l1"></span><span class="light l2"></span><span class="light l3"></span></div></div></div>
+      <small>更亮更纯的蓝，上沿一层清楚的玻璃反光、下沿一道亮边；里面青、紫、一点粉在慢慢流。</small>
+      <button type="button">下一步</button>
+    </section>
+    <section class="cell">
+      <h2>B 极光深蓝</h2>
+      <div class="stage"><div class="glass b"><div class="body"><span class="gloss"></span><span class="light l1"></span><span class="light l2"></span><span class="light l3"></span></div></div></div>
+      <div class="stage zoom"><div class="glass b"><div class="body"><span class="gloss"></span><span class="light l1"></span><span class="light l2"></span><span class="light l3"></span></div></div></div>
+      <small>保留深蓝的分量，光换成边缘清楚的极光带（青 → 紫 → 粉），科技感更强。</small>
+      <button type="button">下一步</button>
+    </section>
+    <section class="cell">
+      <h2>C 液态玻璃</h2>
+      <div class="stage"><div class="glass c"><div class="body"><span class="gloss"></span><span class="rim"></span><span class="light l1"></span><span class="light l2"></span><span class="light l3"></span></div></div></div>
+      <div class="stage zoom"><div class="glass c"><div class="body"><span class="gloss"></span><span class="rim"></span><span class="light l1"></span><span class="light l2"></span><span class="light l3"></span></div></div></div>
+      <small>半透明的玻璃壳，透出后面的画布；里面是清楚的彩色液体，边缘像折射一样发亮，最通透。</small>
+      <button type="button">下一步</button>
+    </section>
+  </div>
+</main>
+<script>
+  for (const button of document.querySelectorAll("button")) {
+    button.addEventListener("click", () => {
+      for (const glass of button.closest(".cell").querySelectorAll(".glass")) {
+        glass.classList.remove("ack"); void glass.offsetWidth; glass.classList.add("ack");
+      }
+    });
+  }
+</script>
+</body>
+</html>

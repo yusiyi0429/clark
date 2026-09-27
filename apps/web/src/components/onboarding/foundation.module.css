@@ -53,7 +53,7 @@
 
 .capsule { display: flex; flex-shrink: 0; justify-content: center; height: 64px; animation: condense 460ms var(--onboarding-ease) both; }
 .capsuleGlass { position: relative; width: 224px; height: 64px; }
-.capsuleGlass::before { content: ""; position: absolute; inset: -8px -11px; border-radius: 99px; background: linear-gradient(90deg, #61ceeb77, #9b93e45c); filter: blur(11px); opacity: 0; pointer-events: none; }
+.capsuleGlass::before { content: ""; position: absolute; inset: -9px -13px; border-radius: 99px; background: linear-gradient(90deg, #4ee6ffaa, #9b7dffaa, #ff86d2aa); filter: blur(12px); opacity: 0; pointer-events: none; }
 .capsuleGlass[data-acknowledge="true"]::before { animation: capsuleHalo 1.45s ease-out both; }
 .capsuleBody, .acknowledge {
   position: absolute;
@@ -61,28 +61,28 @@
   overflow: hidden;
   isolation: isolate;
   border-radius: var(--onboarding-pill-radius);
-  background: linear-gradient(180deg, #0011fd, #0600a6 56%, #07058e);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 32%), inset 0 1px 0 rgb(255 255 255 / 45%), inset 0 -8px 12px -8px rgb(0 0 45 / 60%), 0 4px 8px -7px rgb(7 5 142 / 16%);
+  background: radial-gradient(120% 140% at 50% 120%, #0b1aa8 0%, transparent 60%), linear-gradient(180deg, #1640ff, #0a22d6 50%, #0816a3);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 42%), inset 0 1.5px 0 rgb(255 255 255 / 80%), inset 0 -10px 16px -10px rgb(127 220 255 / 60%), 0 8px 18px -12px rgb(11 26 168 / 40%);
 }
-.sheen { position: absolute; z-index: 2; inset: 1px; border-radius: inherit; background: radial-gradient(ellipse 80% 68% at 50% -18%, rgb(225 244 255 / 34%), transparent 78%); }
+.sheen { position: absolute; z-index: 3; left: 5%; right: 5%; top: 2px; height: 46%; border-radius: 99px 99px 50% 50% / 99px 99px 30% 30%; background: linear-gradient(180deg, rgb(255 255 255 / 40%), rgb(255 255 255 / 7%) 75%, transparent); }
 .sheen::before { content: ""; position: absolute; top: 2px; left: 10px; width: 78px; height: 2px; border-radius: 50%; background: linear-gradient(90deg, transparent, #f2fcffdd 50%, transparent); filter: blur(.5px); animation: specularPass 6s ease-in-out infinite; }
-.idleLight { position: absolute; top: 17%; left: 8%; width: 47%; height: 69%; opacity: .85; border-radius: 54% 46% 58% 42%; background: radial-gradient(ellipse, #b9f6ffed 0%, #48c5ffbd 32%, transparent 70%); filter: blur(7px); animation: idleFlow 7s ease-in-out infinite alternate; }
-.ambientLight { position: absolute; top: 5%; right: 10%; width: 44%; height: 74%; opacity: .8; border-radius: 42% 58% 38% 62%; background: radial-gradient(ellipse, #e8fcffed 0%, #72c8ffba 35%, transparent 72%); filter: blur(8px); animation: ambientFlow 8s -2s ease-in-out infinite alternate; }
-.cyanLightSpot { position: absolute; bottom: 7%; left: 37%; width: 37%; height: 67%; opacity: .74; border-radius: 61% 39% 52% 48%; background: radial-gradient(ellipse, #a0fff2d9, #38c9e0a3 39%, transparent 72%); filter: blur(7px); animation: cyanFlow 6.5s -3s ease-in-out infinite alternate; }
+.idleLight { position: absolute; top: 30%; left: -10%; width: 90%; height: 26%; border-radius: 999px; mix-blend-mode: screen; background: linear-gradient(90deg, transparent, #58f0ff 30%, #7aa8ff 60%, transparent); filter: blur(2.5px); transform: rotate(-9deg); animation: idleFlow 7s ease-in-out infinite alternate; }
+.ambientLight { position: absolute; top: 48%; left: 20%; width: 85%; height: 22%; border-radius: 999px; mix-blend-mode: screen; background: linear-gradient(90deg, transparent, #a07cff 35%, #ff86d2 70%, transparent); filter: blur(2.5px); transform: rotate(7deg); animation: ambientFlow 8.5s -2s ease-in-out infinite alternate; }
+.cyanLightSpot { position: absolute; top: 18%; left: 35%; width: 45%; height: 50%; border-radius: 50%; mix-blend-mode: screen; background: radial-gradient(ellipse, rgb(217 251 255 / 80%), transparent 68%); filter: blur(5px); animation: cyanFlow 6.5s -3s ease-in-out infinite alternate; }
 .wave { position: absolute; inset: 8% 0; width: 100%; height: 84%; mix-blend-mode: screen; filter: blur(1px); opacity: .88; }
 .acknowledge { animation: acknowledge 1.45s var(--onboarding-ease-brand); }
-.acknowledge::after { content: ""; position: absolute; inset: 0 -35% 0; border-radius: inherit; z-index: 3; background: linear-gradient(105deg, transparent 39%, rgb(184 248 255 / 14%) 46%, rgb(255 255 255 / 66%) 50%, rgb(123 217 255 / 21%) 54%, transparent 61%); filter: blur(2px); animation: sweep 1.45s var(--onboarding-ease-brand) both; }
+.acknowledge::after { content: ""; position: absolute; inset: 0 -35% 0; border-radius: inherit; z-index: 4; background: linear-gradient(105deg, transparent 38%, rgb(88 240 255 / 18%) 45%, rgb(255 255 255 / 80%) 50%, rgb(255 134 210 / 30%) 55%, transparent 62%); filter: blur(1.5px); animation: sweep 1.45s var(--onboarding-ease-brand) both; }
 .acknowledge .idleLight { animation: awakeFlow 1.45s ease-in-out, idleFlow 7s 1.45s ease-in-out infinite alternate; }
 .acknowledge .ambientLight { animation: awakeAmbient 1.45s ease-in-out, ambientFlow 8s 1.45s ease-in-out infinite alternate; }
 .acknowledge .cyanLightSpot { animation: awakeCyan 1.45s ease-in-out, cyanFlow 6.5s 1.45s ease-in-out infinite alternate; }
 @keyframes condense { from { opacity: 0; transform: scale(.94); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
 @keyframes specularPass { 0%, 12% { transform: translateX(-84px); opacity: 0; } 20% { opacity: 1; } 55% { transform: translateX(200px); opacity: .8; } 62%, 100% { transform: translateX(200px); opacity: 0; } }
-@keyframes idleFlow { to { transform: translate3d(22%, -10%, 0) rotate(12deg) scale(1.2, .85); opacity: .65; } }
-@keyframes ambientFlow { to { transform: translate3d(-24%, 13%, 0) rotate(-13deg) scale(.86, 1.17); opacity: .63; } }
-@keyframes cyanFlow { to { transform: translate3d(17%, -13%, 0) rotate(16deg) scale(1.15, .88); opacity: .55; } }
-@keyframes awakeFlow { 45% { transform: translate3d(32%, -17%, 0) rotate(18deg) scale(1.3, .8); opacity: 1; } }
-@keyframes awakeAmbient { 45% { transform: translate3d(-32%, 18%, 0) rotate(-19deg) scale(.8, 1.3); opacity: 1; } }
-@keyframes awakeCyan { 45% { transform: translate3d(28%, -22%, 0) rotate(22deg) scale(1.25, .78); opacity: .95; } }
+@keyframes idleFlow { to { transform: translate3d(14%, 10%, 0) rotate(-3deg) scaleX(1.1); } }
+@keyframes ambientFlow { to { transform: translate3d(-18%, -14%, 0) rotate(2deg) scaleX(.92); } }
+@keyframes cyanFlow { to { transform: translate3d(17%, -13%, 0) rotate(16deg) scale(1.15, .88); opacity: .7; } }
+@keyframes awakeFlow { 45% { transform: translate3d(24%, 4%, 0) rotate(-1deg) scaleX(1.25); } }
+@keyframes awakeAmbient { 45% { transform: translate3d(-28%, -10%, 0) rotate(0deg) scaleX(1.2); } }
+@keyframes awakeCyan { 45% { transform: translate3d(28%, -22%, 0) rotate(22deg) scale(1.25, .78); opacity: 1; } }
 @keyframes acknowledge { 0%, 100% { transform: scaleX(1); } 36% { transform: scaleX(1.055); } }
 @keyframes capsuleHalo { 0%, 100% { opacity: 0; transform: scale(.98); } 38% { opacity: .55; transform: scale(1.04); } }
 @keyframes sweep { from { transform: translateX(-85%); opacity: 0; } 32% { opacity: 1; } to { transform: translateX(85%); opacity: 0; } }
