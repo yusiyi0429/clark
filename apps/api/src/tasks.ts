@@ -5,6 +5,9 @@ import { companyPeriod } from "./monthlyPlans.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { insertNotification } from "./notifications.js";
 import { listTaskProgress } from "./taskProgress.js";
+import { postThreadIntro, type ThreadIntroAgent } from "./threadIntro.js";
+import { threadIntroInput } from "./threads.js";
+import type { CompanyMemoryRepository } from "./companyMemory.js";
 
 type TaskRow = {
   id: string; version: number; title: string; status: TTaskView["status"]; created_by: TTaskView["source"];
@@ -242,7 +245,7 @@ export async function putMyTaskNote(pool: Pool, viewerId: string, taskId: string
     ON CONFLICT(task_id,person_id) DO UPDATE SET note=EXCLUDED.note,updated_at=now()`,[taskId,viewerId,note]);
   return { myNote:note };
 }
-export async function addTaskCollaborators(pool: Pool, ownerId: string, taskId: string, names: Map<string,string>, input: TAddTaskCollaboratorsRequest, invitable: Set<string>): Promise<TaskResult> {
+export async function addTaskCollaborators(pool: Pool, ownerId: string, taskId: string, names: Map<string,string>, input: TAddTaskCollaboratorsRequest, invitable: Set<string>, intro?: { agent: ThreadIntroAgent; companyMemory: CompanyMemoryRepository }): Promise<TaskResult> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -256,15 +259,22 @@ export async function addTaskCollaborators(pool: Pool, ownerId: string, taskId: 
         ON CONFLICT(task_id,person_id) DO UPDATE SET role='collaborator',left_at=NULL,added_by=EXCLUDED.added_by`,[taskId,id,ownerId]);
       await client.query(`INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('task',$1,$2,$3)
         ON CONFLICT(object_type,object_id,person_id) DO UPDATE SET left_at=NULL`,[taskId,id,ownerId]);
+      await client.query(`INSERT INTO thread_reads(object_type,object_id,person_id,last_read_id)
+        SELECT 'task',$1,$2,COALESCE(MAX(id),0) FROM thread_messages WHERE object_type='task' AND object_id=$1
+        ON CONFLICT(object_type,object_id,person_id) DO UPDATE SET last_read_id=GREATEST(thread_reads.last_read_id,EXCLUDED.last_read_id),updated_at=now()`,[taskId,id]);
       await insertNotification(client,{personId:id,kind:"task_collaborator_added",objectType:"task",objectId:taskId,actorId:ownerId});
     }
-    if (ids.length) {
-      const id = await threadMessage(client,taskId,`${names.get(ownerId) ?? ownerId} 邀请 ${ids.map((personId)=>names.get(personId)).join("、")} 加入协作。`);
-      await readThrough(client,taskId,ownerId,id);
-      await client.query("UPDATE tasks SET version=version+1,updated_at=now() WHERE id=$1",[taskId]);
-    }
+    if (ids.length) await client.query("UPDATE tasks SET version=version+1,updated_at=now() WHERE id=$1",[taskId]);
     const task = (await getTaskView(queryOf(client),taskId,names))!;
-    await client.query("COMMIT"); return { task };
+    await client.query("COMMIT");
+    if (ids.length && intro) {
+      const ref = { objectType: "task" as const, objectId: taskId };
+      setImmediate(() => { void (async () => {
+        const context = await threadIntroInput(pool.query.bind(pool), intro.companyMemory, ref, ownerId, ids);
+        await postThreadIntro(pool, intro.agent, context, [ownerId, ...row.collaborators]);
+      })().catch(() => undefined); });
+    }
+    return { task };
   } catch(e) { await client.query("ROLLBACK").catch(()=>undefined); throw e; } finally { client.release(); }
 }
 

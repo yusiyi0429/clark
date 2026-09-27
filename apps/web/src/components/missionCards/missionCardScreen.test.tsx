@@ -31,7 +31,7 @@ vi.mock("@/components/shell/DetailFrame", () => ({ DetailFrame: ({ children }: {
 vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: ui.ask, dialog: null }) }));
 vi.mock("./useRoundNow", () => ({ useRoundNow: (_at: string, now: string) => Date.parse(now) }));
 vi.mock("@heroui/react", () => { const part = ({ children }: { children: ReactNode }) => <>{children}</>; return { Modal: Object.assign(() => null, { Backdrop: part, Container: part, Dialog: part }) }; });
-vi.mock("ts-design/primitives", () => ({ Button: ({ children, onPress, isDisabled }: { children: ReactNode; onPress?: () => Promise<void> | void; isDisabled?: boolean }) => { ui.buttons.set(String(children), { onPress, isDisabled }); return <button disabled={isDisabled}>{children}</button>; } }));
+vi.mock("ts-design/primitives", () => ({ Button: ({ children, onPress, isDisabled, "aria-label": label }: { children: ReactNode; onPress?: () => Promise<void> | void; isDisabled?: boolean; "aria-label"?: string }) => { ui.buttons.set(String(children), { onPress, isDisabled }); if (label) ui.buttons.set(label, { onPress, isDisabled }); return <button disabled={isDisabled} aria-label={label}>{children}</button>; } }));
 vi.mock("./RoundLine", () => ({ RoundLine: (props: ComponentProps<typeof RoundLine>) => { ui.roundProps = props; return null; } }));
 vi.mock("./CardDocument", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./CardDocument")>();
@@ -53,6 +53,18 @@ beforeEach(() => { ui.state = []; ui.cursor = 0; ui.controls = null; ui.ownerPla
 afterEach(() => vi.unstubAllGlobals());
 
 describe("个人卡建议交互", () => {
+  it("拍板人可在页头切换各人的卡；普通卡主人没有人员页签", () => {
+    const second = { ...personalPayload.round.cards[0], cardId: "other", ownerId: "other", ownerName: "孙铭泽", line: "待处理 1", placeholder: false };
+    const changed = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, cards: [personalPayload.round.cards[0], second] } } } as Card;
+    const html = renderToStaticMarkup(<MissionCardScreen initialCard={changed} entry="member" />);
+    expect(html).toContain('aria-label="切换个人卡"');
+    expect(html).toContain("孙铭泽");
+    ui.buttons.get("打开孙铭泽的 Mission Card · 待处理 1")!.onPress!();
+    expect(ui.navigate).toHaveBeenCalledWith("/me/mission-cards/other");
+    ui.state = []; ui.cursor = 0;
+    const ordinary = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, approver: false, cards: [personalPayload.round.cards[0]] } } } as Card;
+    expect(renderToStaticMarkup(<MissionCardScreen initialCard={ordinary} entry="member" />)).not.toContain('aria-label="切换个人卡"');
+  });
   it("只有卡主人接入个人任务与本月计划页签", () => {
     render();
     expect(ui.ownerPlan).toBeUndefined();

@@ -107,7 +107,7 @@ export async function getPersonalMissionCard(q: Query, people: MemoryPerson[], s
   const roundCard = await projectMissionRoundCard(q, people, secret, person, round, now);
   const summary = roundCard.payload as TMissionRoundSummary;
   // Draft readers can inspect the already signed basis; only the open action freezes it.
-  if (round.status === "draft" && !summary.goals) {
+  if ((round.status === "draft" || round.status === "drafting") && !summary.goals) {
     const plan = (await q("SELECT status,battlefields,confirmed_at FROM monthly_plans WHERE id=$1", [round.monthly_plan_id])).rows[0] as { status: string; battlefields: { battlefieldId: string; outcome: string }[]; confirmed_at: Date | null } | undefined;
     const goal = plan?.battlefields.find((item) => item.battlefieldId === round.battlefield_id);
     if (plan?.status === "confirmed" && plan.confirmed_at && goal) summary.goals = {
@@ -121,10 +121,12 @@ export async function getPersonalMissionCard(q: Query, people: MemoryPerson[], s
   const corrections = (await q("SELECT * FROM mission_card_corrections WHERE card_id=$1 ORDER BY created_at DESC,id DESC", [cardId])).rows as CorrectionRow[];
   const corrected = corrections.filter((item) => item.status === "applied").length;
   const byName = people.find((p) => p.personId === round.confirmed_by)?.displayName ?? round.confirmed_by;
-  const status = shown === "confirmed" ? `已确定 · ${byName} ${localTime(round.confirmed_at!)}${corrected ? ` · 更正 ${corrected} 处` : ""}`
+  const status = round.status === "drafting" ? "Co-Agent 正在起草"
+    : shown === "confirmed" ? `已确定 · ${byName} ${localTime(round.confirmed_at!)}${corrected ? ` · 更正 ${corrected} 处` : ""}`
     : shown === "candidate" ? `候选版本 · 相比草稿 ${changed} 处改动 · 等${summary.deciderName}拍板`
     : `草稿${summary.phase === "open" ? " · 讨论中" : ""}${card.role_label ? ` · ${card.role_label}` : ""}`;
-  const closedReason = round.status !== "confirmed" ? "还没确定：讨论中请用修改建议"
+  const closedReason = round.status === "drafting" ? "Co-Agent 正在起草，完成后可讨论修改"
+    : round.status !== "confirmed" ? "还没确定：讨论中请用修改建议"
     : correctionPeriodClosed(round, now) ? "月份已过，这张卡只读" : null;
   const payload: TPersonalMissionCardPayload = {
     round: summary,
@@ -203,7 +205,7 @@ export async function createPersonalMissionCardFeedback(pool: Pool, people: Memo
       if (!sameInput(prior, cardId, input)) return await finish(fail(409, "CLIENT_ID_CONFLICT", "同一个 client_id 已提交不同的意见"));
       return await finish({ feedback: projectFeedback(prior, await discussion(q, round, cardId), round, people, person, secret) });
     }
-    if (round.status === "draft") return await finish(fail(409, "ROUND_NOT_OPEN", "讨论还没开放"));
+    if (round.status === "draft" || round.status === "drafting") return await finish(fail(409, "ROUND_NOT_OPEN", "讨论还没开放"));
     if (round.status === "confirmed") return await finish(fail(409, "ROUND_CONFIRMED", "本月 Mission Card 已确定，不再收留言"));
     if (round.window_seq !== input.round) return await finish(fail(409, "ROUND_CHANGED", "讨论轮次已变化，请刷新后重新提交"));
     const late = round.status === "reviewing";
@@ -243,9 +245,13 @@ export async function getPersonalMissionCardGroup(q: Query, people: MemoryPerson
   if (round.first_opened_at) {
     const at = round.first_opened_at.toISOString();
     entries.push({ type: "divider", at, text: `${localTime(round.first_opened_at)} · 全战场统一开放 48 小时讨论` });
-    const count = Number((await q("SELECT count(*) AS n FROM missions WHERE personal_mission_card_id=$1", [cardId])).rows[0].n);
+    const countRow = (await q("SELECT count(*) AS n,bool_or(placeholder) AS placeholder FROM missions WHERE personal_mission_card_id=$1", [cardId])).rows[0];
+    const count = Number(countRow.n);
     const deciderId = round.battlefield_owner_id || people.find((p) => p.roles.includes("ceo"))?.personId || "CEO";
-    entries.push({ type: "opening", at, text: `这个群讨论${names.get(card.owner_id) ?? card.owner_id}的 ${Number(round.period.slice(5))} 月 Mission Card（${count} 项个人任务），开放到 ${localTime(new Date(round.first_opened_at.getTime() + 48 * 3600000))}：可以在字段上评论、划词引用、提修改建议。截止后 Co-Agent 汇总大家的意见，交${names.get(deciderId) ?? deciderId}拍板。${round.draft_origin === "placeholder" ? "本月草稿是占位（Co-Agent 起草未接入，沿用 9 月个人卡）。" : ""}` });
+    const previous = Number(round.period.slice(5)) === 1 ? 12 : Number(round.period.slice(5)) - 1;
+    const origin = round.draft_origin === "agent" ? "Co-Agent 起草 · 待大家讨论修改。"
+      : `占位 · 沿用 ${previous} 月个人卡；仍需讨论修改。`;
+    entries.push({ type: "opening", at, text: `这个群讨论${names.get(card.owner_id) ?? card.owner_id}的 ${Number(round.period.slice(5))} 月 Mission Card（${count} 项个人任务），开放到 ${localTime(new Date(round.first_opened_at.getTime() + 48 * 3600000))}：可以在字段上评论、划词引用、提修改建议。截止后 Co-Agent 汇总大家的意见，交${names.get(deciderId) ?? deciderId}拍板。${origin}${round.draft_origin === "agent" && countRow.placeholder ? "这张卡是占位，需重点核对。" : ""}` });
   }
   round.reopens.forEach((reopen, i) => {
     entries.push({ type: "divider", at: reopen.closedAt, text: `${localTime(new Date(reopen.closedAt))} · 讨论截止` });

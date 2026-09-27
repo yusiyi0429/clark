@@ -27,7 +27,7 @@ async function monthMissions(q:Query,ownerId:string,period:string):Promise<{ car
   const missions = (await q(`SELECT m.id,m.title,c.id::text AS card_id,b.name AS battlefield_name,m.milestones
     FROM missions m JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id
     JOIN mission_rounds r ON r.id=c.round_id JOIN battlefield_config b ON b.id=r.battlefield_id
-    WHERE c.owner_id=$1 AND r.period=$2 ORDER BY c.sort_order,m.code,m.id`,[ownerId,period])).rows as Mission[];
+    WHERE c.owner_id=$1 AND r.period=$2 AND r.status='confirmed' ORDER BY c.sort_order,m.code,m.id`,[ownerId,period])).rows as Mission[];
   return {cards,missions};
 }
 export async function readMonthPlan(q:Query,ownerId:string,period:string,names:Map<string,string>,now:Date):Promise<TMonthPlanResponse> {
@@ -35,7 +35,8 @@ export async function readMonthPlan(q:Query,ownerId:string,period:string,names:M
   const today=localDay(now);
   const firstDay=`${period}-01`;
   const lastDay=new Date(Date.UTC(Number(period.slice(0,4)),Number(period.slice(5,7)),0)).toISOString().slice(0,10);
-  const closedReason=!cards.length ? "这个月还没有你的个人卡" : cards.some((card)=>card.status!=="confirmed")
+  // 已确定的卡就能拆；同月别的战场还在讨论的卡，确定后再出现在计划里。
+  const closedReason=!cards.length ? "这个月还没有你的个人卡" : !cards.some((card)=>card.status==="confirmed")
     ? "个人卡确定之后才能拆成执行事项" : period<companyPeriod(now) ? "月份已过，计划只读" : null;
   const result=await q(`SELECT id::text
     FROM tasks WHERE owner_id=$1 AND (mission_id=ANY($2::text[]) OR (mission_id IS NULL AND

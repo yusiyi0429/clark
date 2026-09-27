@@ -18,6 +18,7 @@ import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type Meet
 import type { VoiceprintDeps } from "../src/voiceprints.js";
 import type { RadarService } from "../src/radar.js";
 import type { PersonalRadarService } from "../src/personalRadar.js";
+import type { ThreadIntroAgent } from "../src/threadIntro.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
@@ -148,6 +149,7 @@ export function createFakeWebSearchAdapter(
 
 export type TestApp = {
   app: FastifyInstance;
+  pool: Pool;
   publicOrigin: string;
   env: AppEnv;
   loginCookie: () => Promise<string>;
@@ -186,6 +188,7 @@ export async function createTestApp(
     conversationTurnTimeoutMs?: number;
     preflightAgent?: PreflightAgent;
     outcomeAgent?: PostMeetingAgent;
+    threadIntroAgent?: ThreadIntroAgent;
     driExporter?: DriExporter;
     ontologyUpdater?: OntologyUpdater;
     monthlyDraftAgent?: MonthlyDraftAgent;
@@ -219,10 +222,13 @@ export async function createTestApp(
   const recordings = recordingDeps
     ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, companyMemory: loadCompanyMemory(env), deps: recordingDeps })
     : undefined;
-  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, recordingService: recordings, now: monthlyNow, ...appRuntimeOptions });
+  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, recordingService: recordings, now: monthlyNow,
+    threadIntroAgent: { async generate(input) { return { message: `${input.inviter}邀请${input.newcomers.join("、")}加入「${input.title}」，请查看对象进展。` }; } },
+    ...appRuntimeOptions });
   const apps = [app];
   return {
     app,
+    pool,
     monthlyPlans,
     recordings,
     publicOrigin: testEnv.publicOrigin,

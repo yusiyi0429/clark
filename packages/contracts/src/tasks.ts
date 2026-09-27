@@ -260,6 +260,8 @@ export const NotificationKind = Type.Union([
   Type.Literal("task_returned"),
   Type.Literal("strategic_rejected"),
   Type.Literal("task_collaborator_added"),
+  /** 被拉进议题群或会议群（工单 08）；payload {objectType, objectId, inviterId, note?}。 */
+  Type.Literal("thread_member_added"),
 ]);
 
 /** 通知只指向对象；text 在读取时按对象当前状态组合。 */
@@ -268,7 +270,8 @@ export const NotificationView = Type.Object(
     id: Type.String({ minLength: 1 }),
     kind: NotificationKind,
     text: Type.String({ minLength: 1 }),
-    objectType: Type.Union([Type.Literal("task"), Type.Literal("meeting")]),
+    /** issue：被拉进议题群（工单 08），点开进 /me/issues/{objectId}。 */
+    objectType: Type.Union([Type.Literal("task"), Type.Literal("meeting"), Type.Literal("issue")]),
     objectId: Type.String({ minLength: 1 }),
     /** ISO 8601 */
     createdAt: Type.String({ minLength: 1 }),

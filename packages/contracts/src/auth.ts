@@ -34,7 +34,15 @@ export const SessionResponse = Type.Object(
     loginId: Type.Optional(Type.String()),
     /** 可选以兼容分批部署；当前 API 对已登录的人总会返回。 */
     onboarded: Type.Optional(Type.Boolean()),
+    /** 同时是 CEO 和 DRI 的人可以在两种工作台之间切换；role 是当前视角。 */
+    canSwitchView: Type.Optional(Type.Boolean()),
   },
+  { additionalProperties: false },
+);
+
+/** 切换当前视角（工单 07）：只有 canSwitchView 的人能调；重签会话，返回新的 SessionResponse。 */
+export const SetViewRequest = Type.Object(
+  { view: SessionRole },
   { additionalProperties: false },
 );
 
@@ -43,3 +51,4 @@ export type TLoginRequest = Static<typeof LoginRequest>;
 export type TChangePasscodeRequest = Static<typeof ChangePasscodeRequest>;
 export type TLoginResponse = Static<typeof LoginResponse>;
 export type TSessionResponse = Static<typeof SessionResponse>;
+export type TSetViewRequest = Static<typeof SetViewRequest>;

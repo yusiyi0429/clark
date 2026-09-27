@@ -69,6 +69,7 @@ export function ConversationColumn({
   ariaLabel,
   testId,
   children,
+  headerAction,
 }: {
   channels: ConversationChannel[];
   channel: string;
@@ -86,6 +87,7 @@ export function ConversationColumn({
   testId: string;
   /** 当前频道的正文：日志、空态、说明。自己滚动。 */
   children: ReactNode;
+  headerAction?: ReactNode;
 }) {
   const narrow = useNarrowColumn();
   const strip = !narrow && mode === "strip";
@@ -205,6 +207,7 @@ export function ConversationColumn({
                 {current.kind === "agent" ? <TianshuMark className={c.headerMark} /> : <Users size={16} strokeWidth={1.8} aria-hidden />}
                 <span className={current.kind === "agent" ? c.wordmark : undefined}>{current.title ?? current.label}</span>
               </h2>
+              {headerAction}
             </header>
           ) : null}
           <div className={c.body}>{children}</div>

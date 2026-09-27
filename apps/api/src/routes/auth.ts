@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { ChangePasscodeRequest, LoginRequest, LoginResponse, SessionResponse, type TLoginResponse, type TSessionRole } from "@warmap/contracts";
+import { ChangePasscodeRequest, LoginRequest, LoginResponse, SessionResponse, SetViewRequest, type TLoginResponse, type TSessionRole } from "@warmap/contracts";
 import { LOCK_AFTER_FAILURES, changePasscode, roleOf, verifyCredentials, type Rejected } from "../memberAccess.js";
 import { sessionClearCookie, sessionSetCookie } from "../session.js";
 import { hasCompletedOnboarding } from "../onboarding.js";
@@ -29,7 +29,7 @@ export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
 
   async function signIn(reply: FastifyReply, personId: string, version: number, role: TSessionRole): Promise<TLoginResponse> {
     const onboarded = await hasCompletedOnboarding(q, personId);
-    reply.header("set-cookie", sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds, { pid: personId, v: version }));
+    reply.header("set-cookie", sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds, { pid: personId, v: version, view: role }));
     return { authenticated: true, mustChangePasscode: false, role, onboarded };
   }
 
@@ -61,9 +61,7 @@ export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
     return { authenticated: false };
   });
 
-  app.get("/api/auth/session", { schema: { response: { 200: SessionResponse } } }, async (req) => {
-    const person = await readSession(req);
-    if (!person) return { authenticated: false };
+  async function sessionResponse(person: NonNullable<Awaited<ReturnType<typeof readSession>>>) {
     const access = await q("SELECT login_id FROM member_access WHERE person_id = $1", [person.personId]);
     const loginId = access.rows[0]?.login_id as string | undefined;
     return {
@@ -71,8 +69,22 @@ export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
       personId: person.personId,
       displayName: findPerson(person.personId)?.displayName ?? person.personId,
       role: person.role,
+      canSwitchView: person.canSwitchView,
       onboarded: await hasCompletedOnboarding(q, person.personId),
       ...(loginId ? { loginId } : {}),
     };
+  }
+
+  app.get("/api/auth/session", { schema: { response: { 200: SessionResponse } } }, async (req) => {
+    const person = await readSession(req);
+    return person ? sessionResponse(person) : { authenticated: false };
+  });
+
+  app.post("/api/auth/view", { preHandler: requirePerson, schema: { body: SetViewRequest, response: { 200: SessionResponse } } }, async (req, reply) => {
+    const person = req.person!;
+    if (!person.canSwitchView) return fail(reply, 403, "FORBIDDEN", "这个账号不能切换工作台");
+    reply.header("set-cookie", sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds,
+      { pid: person.personId, v: person.sessionVersion, view: req.body.view }));
+    return sessionResponse({ ...person, role: req.body.view });
   });
 }

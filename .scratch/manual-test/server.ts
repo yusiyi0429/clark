@@ -111,7 +111,9 @@ async function main() {
   for (const [personId, displayName] of [["browser-dri", "林知行"], ["browser-no-card", "何望舒"], ["browser-empty", "顾清和"]]) {
     people.people.push({ personId, displayName, roles: ["dri"] });
   }
-  people.people.push({ personId: LUYAO.personId, displayName: "王路遥", roles: ["dri"] });
+  people.people.push({ personId: LUYAO.personId, displayName: "王路遥", roles: ["ceo", "dri"] });
+  people.people.push({ personId: "demo-zhou-tinglan", displayName: "周听澜", roles: ["dri"] });
+  people.people.push({ personId: "demo-xu-zhiwei", displayName: "许知微", roles: ["dri"] });
   const peopleFile = join(fixtureDir, "people.json");
   await writeFile(peopleFile, JSON.stringify(people));
   let now = new Date("2026-10-01T02:00:00.000Z");
@@ -133,6 +135,7 @@ async function main() {
   for (const [id, code, name, order] of [["supporting", "02", "团队协作", 2], ["private-field", "09", "不可见的验收战场", 9]] as const) {
     await app.sql("INSERT INTO battlefield_config (id,version,code,name,owner_id,six_month_outcome,sort_order) VALUES ($1,1,$2,$3,$4,'建立可复用的协作方式，完成从讨论到交付的闭环。',$5)", [id, code, name, TEST_CEO.personId, order]);
   }
+  await app.sql("INSERT INTO battlefield_config (id,version,code,name,owner_id,six_month_outcome,sort_order) VALUES ('product',1,'03','产品战场',$1,'验证 CEO 与 DRI 共用身份时的产品工作闭环，形成可复核的界面与权限证据。',3)", [LUYAO.personId]);
   for (const [code, name] of [["03", "Method"], ["04", "Agents"], ["05", "E&O"]]) {
     await app.sql("INSERT INTO capability_config (id,version,code,name,six_month_outcome) VALUES ($1,1,$2,$3,'形成可复用的能力成果')", [`cap-${code}`, code, name]);
   }
@@ -156,9 +159,10 @@ async function main() {
     if (stage !== "none") {
       await app!.sql(`INSERT INTO monthly_plans (id,version,period,status,company_outcome,battlefields,todos,negotiation,generation)
         VALUES ($1,1,'2026-10','negotiating','验证从本月目标到个人承诺的完整路径',$2::jsonb,'[]',
-        '{"edits":[],"checkedItemIds":["company","battlefield:growth","battlefield:supporting"],"feedback":[],"note":"隔离验收已核对目标"}',
+        '{"edits":[],"checkedItemIds":["company","battlefield:growth","battlefield:supporting","battlefield:product"],"feedback":[],"note":"隔离验收已核对目标"}',
         '{"status":"ready","pendingSince":null,"runId":null,"previousRunIds":[],"error":null,"generatedAt":"2026-10-01T00:00:00.000Z"}')`,
-        [planId, JSON.stringify([{ battlefieldId: "growth", outcome: goalText }, { battlefieldId: "supporting", outcome: "把跨人员交接与成功证据整理成可共同核对的清单。" }])]);
+        [planId, JSON.stringify([{ battlefieldId: "growth", outcome: goalText }, { battlefieldId: "supporting", outcome: "把跨人员交接与成功证据整理成可共同核对的清单。" },
+          { battlefieldId: "product", outcome: "完成 CEO 与 DRI 双视角走查，按人核对四张个人卡与五条讨论意见。" }])]);
     }
     if (stage === "issued") {
       const { value, headers } = await projectAs("browserceo", `/api/cards/monthly-plans/${planId}`);

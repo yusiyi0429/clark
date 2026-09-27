@@ -12,7 +12,8 @@ import { useReferences } from "./references";
 import { useColumnMode } from "./useColumnMode";
 import { useConversation, type ConversationData } from "./useConversation";
 import { useMissionGroup } from "./useMissionGroup";
-import { useTaskGroup } from "./useTaskGroup";
+import { useThreadGroup } from "./useTaskGroup";
+import { ThreadMembersMenu } from "./ThreadMembersMenu";
 import { TaskGroupTranscript } from "./TaskGroupTranscript";
 import { MissionGroupTranscript } from "./MissionGroupTranscript";
 import { MissionGroupComposer } from "./MissionGroupComposer";
@@ -129,18 +130,54 @@ function RailConversation({
 }) {
   const column = useColumnMode();
   const [composerHeight, setComposerHeight] = useState(90);
-  const [channel, setChannel] = useState(target.group ? "group" : "agent");
+  const [channel, setChannel] = useState("agent");
   const end = useRef<HTMLDivElement>(null);
   const taskGroup = target.group?.kind === "task" ? target.group : undefined;
-  const missionGroup = target.group?.kind !== "task" ? target.group : undefined;
+  const otherThread = target.group?.kind === "thread" ? target.group : undefined;
+  const threadGroup = taskGroup || otherThread;
+  const missionGroup = target.group && target.group.kind !== "task" && target.group.kind !== "thread" ? target.group : undefined;
   const groupVisible = channel === "group" && (column.narrow ? ui.railMobileOpen : column.mode === "expanded");
   const group = useMissionGroup(missionGroup, groupVisible);
-  const thread = useTaskGroup(taskGroup?.taskId, groupVisible);
-  const members = taskGroup ? (thread.view?.members ?? taskGroup.members) : (group.view?.members ?? missionGroup?.members ?? []);
+  const thread = useThreadGroup(otherThread?.objectType ?? "task", taskGroup?.taskId ?? otherThread?.objectId, groupVisible);
+  const members = threadGroup ? (thread.view?.members ?? threadGroup.members) : (group.view?.members ?? missionGroup?.members ?? []);
+  const groupLabel = otherThread?.objectType === "issue" ? "议题群聊" : otherThread?.objectType === "meeting" ? "会议群聊" : "事项群组";
   const channels: ConversationChannel[] = [
     { id: "agent", kind: "agent", label: "我的 Agent", title: agentTitle, unread: 0 },
-    ...(target.group ? [{ id: "group", kind: "group" as const, label: `事项群组 · ${members.length + 1}`, title: `事项群组 · ${members.length + 1}`, unread: taskGroup ? (thread.view?.unread ?? 0) : (group.view?.unread ?? 0) }] : []),
+    ...(target.group ? [{ id: "group", kind: "group" as const, label: `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
+      title: otherThread ? `${target.label} · ${members.length} 人` : `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
+      unread: threadGroup ? (thread.view?.unread ?? 0) : (group.view?.unread ?? 0) }] : []),
   ];
+  useEffect(() => {
+    if (!target.group || new URLSearchParams(window.location.search).get("channel") !== "group") return;
+    setChannel("group");
+    if (column.narrow) ui.setRailMobileOpen(true);
+    else column.setMode("expanded");
+    // 只在通过通知明确打开群聊时切换。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.scope, column.narrow]);
+  useEffect(() => {
+    if (!threadGroup) return;
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ objectType: string; objectId: string }>).detail;
+      if (detail?.objectType !== (otherThread?.objectType ?? "task") || detail.objectId !== (taskGroup?.taskId ?? otherThread?.objectId)) return;
+      setChannel("group");
+      if (column.narrow) ui.setRailMobileOpen(true);
+      else column.setMode("expanded");
+    };
+    window.addEventListener("open-thread-channel", open);
+    return () => window.removeEventListener("open-thread-channel", open);
+  }, [threadGroup, taskGroup?.taskId, otherThread?.objectType, otherThread?.objectId, column, ui]);
+  useEffect(() => {
+    if (!missionGroup) return;
+    const open = (event: Event) => {
+      if ((event as CustomEvent<{ cardId: string }>).detail?.cardId !== missionGroup.cardId) return;
+      setChannel("group");
+      if (column.narrow) ui.setRailMobileOpen(true);
+      else column.setMode("expanded");
+    };
+    window.addEventListener("open-mission-group-channel", open);
+    return () => window.removeEventListener("open-mission-group-channel", open);
+  }, [missionGroup?.cardId, column, ui]);
   useEffect(() => {
     if (!missionGroup?.reference) return;
     setChannel("group");
@@ -167,19 +204,20 @@ function RailConversation({
         mobileOpen={ui.railMobileOpen}
         onMobileOpen={ui.setRailMobileOpen}
         composerHeight={composerHeight}
+        headerAction={channel === "group" && threadGroup && !thread.left ? <ThreadMembersMenu objectType={otherThread?.objectType ?? "task"} objectId={taskGroup?.taskId ?? otherThread!.objectId} viewerId={threadGroup.viewerId} members={(thread.view?.members ?? threadGroup.members.map((member) => ({ ...member, title: null })))} onChanged={() => void thread.refresh()} /> : undefined}
       >
         {channel === "agent" ? <AttachmentStatus data={data} className={cs.error} /> : null}
         <div className={cs.log} role="log" aria-label={channel === "group" ? "事项群组公开讨论" : `与${agentTitle}的对话`} aria-live="polite" aria-relevant="additions text">
-          {channel === "group" ? taskGroup ? <TaskGroupTranscript messages={thread.view?.messages ?? []} /> : <MissionGroupTranscript entries={group.view?.entries ?? []} /> : <>
+          {channel === "group" ? threadGroup ? <TaskGroupTranscript messages={thread.view?.messages ?? []} /> : <MissionGroupTranscript entries={group.view?.entries ?? []} /> : <>
             {data.messages.length ? <ConversationTurns messages={data.messages} /> : !data.streaming ? <p className={cs.empty}>暂无消息</p> : null}
             {data.error && !data.streaming ? <ConversationNotice text={data.error} /> : null}
             {data.streaming ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} /> : null}
           </>}
           <div ref={end} />
         </div>
-        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? taskGroup && thread.left ? "你已不在这个群" : `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : missionGroup ? "仅你可见 · 只读：不改这张卡、不进集中 Review" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
+        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? threadGroup && thread.left ? "你已不在这个群" : `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : missionGroup ? "仅你可见 · 只读：不改这张卡、不进集中 Review" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
       </ConversationColumn>
-      {channel === "group" && target.group ? <MissionGroupComposer cardId={taskGroup?.taskId ?? missionGroup!.cardId} taskId={taskGroup?.taskId} viewerId={target.group.viewerId} phase={taskGroup ? "open" : missionGroup!.phase} channels={channels} channel={channel} onChannel={setChannel} narrow={column.narrow} mobileOpen={ui.railMobileOpen} onMobileOpen={ui.setRailMobileOpen} onHeightChange={setComposerHeight} reference={missionGroup?.reference ?? null} onRemoveReference={missionGroup?.onRemoveReference ?? (() => {})} busy={taskGroup ? thread.sending : group.sending} readOnly={thread.left} error={taskGroup ? thread.error : group.error} onSend={taskGroup ? (body) => thread.send(body) : group.send} /> : <ColumnComposer
+      {channel === "group" && target.group ? <MissionGroupComposer cardId={taskGroup?.taskId ?? otherThread?.objectId ?? missionGroup!.cardId} taskId={taskGroup?.taskId ?? otherThread?.objectId} viewerId={target.group.viewerId} phase={threadGroup ? "open" : missionGroup!.phase} channels={channels} channel={channel} onChannel={setChannel} narrow={column.narrow} mobileOpen={ui.railMobileOpen} onMobileOpen={ui.setRailMobileOpen} onHeightChange={setComposerHeight} reference={missionGroup?.reference ?? null} onRemoveReference={missionGroup?.onRemoveReference ?? (() => {})} busy={threadGroup ? thread.sending : group.sending} readOnly={thread.left} error={threadGroup ? thread.error : group.error} onSend={threadGroup ? (body) => thread.send(body) : group.send} /> : <ColumnComposer
         data={data}
         label={target.label}
         channels={channels}

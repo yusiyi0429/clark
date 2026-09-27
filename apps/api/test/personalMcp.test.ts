@@ -70,7 +70,7 @@ describe("个人令牌与执行事项 MCP", () => {
       expect((await sendCollaborator(2, "update_status", { itemId: task.id, status: "done", version: 1 })).json().result.content[0].text).toContain("找不到这件执行事项");
       const ceoItems = await call(f, f.ceo, "GET", `/api/mission-cards/${f.card}/items`);
       expect(ceoItems.json().missions[0].items[0].latestProgress.body).toBe("Claude 补充证据");
-      expect((await call(f, f.ceo, "GET", `/api/me/tasks/${task.id}`)).statusCode).toBe(404);
+      expect((await call(f, f.ceo, "GET", `/api/me/tasks/${task.id}`)).statusCode).toBe(403);
       expect((await call(f, f.third, "GET", `/api/mission-cards/${f.card}/items`)).statusCode).toBe(404);
       const tokens = [];
       for (let i = 0; i < 5; i++) tokens.push((await call(f, f.member, "POST", "/api/me/tokens", { name: `设备${i}`, client: "claude", expiresInDays: null })).json());

@@ -373,7 +373,7 @@ describe("POST /api/me/radar/scan", () => {
 });
 
 describe("首页与引导", () => {
-  it("/api/me/home：没保存过或关着为 null；开着时带最近一次扫描、未读数和最多 3 条亮点；CEO 为 null", async () => {
+  it("/api/me/home：没保存过或关着为 null；开着时带最近一次扫描、未读数和最多 3 条亮点；CEO 视角不可访问", async () => {
     const { t, ceo, member } = await open();
     try {
       const home = async (cookie: string) => {
@@ -383,7 +383,7 @@ describe("首页与引导", () => {
         return res.json().radar;
       };
       expect(await home(member)).toBeNull();
-      expect(await home(ceo)).toBeNull();
+      expect((await call(t, "GET", "/api/me/home", ceo)).statusCode).toBe(403);
 
       await call(t, "PUT", "/api/me/radar", member, { enabled: true, directions: ["大模型定价"], sources: [] });
       expect(await home(member)).toEqual({ lastRun: null, unreadCount: 0, highlights: [] });

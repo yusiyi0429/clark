@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe,expect,it } from "vitest";
 import { call,executionFixture,newTask } from "./executionFixture.js";
+import { TEST_MEMBER } from "./helpers.js";
 
 describe("本月计划",()=>{
   it("按个人卡分组、解析开头里程碑日期并区分三种只读原因",async()=>{
@@ -22,6 +23,29 @@ describe("本月计划",()=>{
     const open=await executionFixture("open");
     try { expect((await call(open,open.member,"GET","/api/me/plan?period=2026-10")).json().closedReason).toBe("个人卡确定之后才能拆成执行事项"); }
     finally { await open.t.close(); }
+  });
+
+  it("同月另一个战场的卡还在讨论时，已确定的卡照常能拆，讨论中的卡不进计划",async()=>{
+    const f=await executionFixture();
+    try {
+      const round=randomUUID(),card=randomUUID();
+      await f.t.sql("INSERT INTO battlefield_config (id,version,code,name,six_month_outcome) VALUES ('product',1,'03','产品战场','产品半年目标')");
+      await f.t.sql(`INSERT INTO mission_rounds(id,version,battlefield_id,period,monthly_plan_id,status,draft_origin,draft_source,window_seq,
+        first_opened_at,opened_at,closes_at,created_at,updated_at)
+        SELECT $1,1,'product','2026-10',monthly_plan_id,'open','placeholder','{}',1,$2,$2,$3,$2,$2 FROM mission_rounds WHERE id=$4`,
+      [round,"2026-10-09T02:00:00Z","2026-10-11T02:00:00Z",f.round]);
+      await f.t.sql(`INSERT INTO personal_mission_cards(id,round_id,owner_id,sort_order,member_ids,created_at)
+        VALUES($1,$2,$3,1,'[]'::jsonb,$4)`,[card,round,TEST_MEMBER.personId,"2026-10-09T02:00:00Z"]);
+      await f.t.sql(`INSERT INTO missions(id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,milestones,
+        source_ref,source_document_id,source_revision,source_title,personal_mission_card_id)
+        SELECT 'product-one',1,'product-one','2026-10','讨论中',owner_id,'method','["product"]','目标','[]','fixture://p','fixture',1,'fixture',$1
+        FROM personal_mission_cards WHERE id=$1`,[card]);
+      const plan=(await call(f,f.member,"GET","/api/me/plan?period=2026-10")).json();
+      expect(plan).toMatchObject({editable:true,closedReason:null});
+      expect(plan.groups.map((group:{missionId:string|null})=>group.missionId)).toEqual(["execution-one","execution-two",null]);
+      const blocked=await call(f,f.member,"PUT","/api/me/plan",{period:"2026-10",groups:[{missionId:"product-one",items:[{clientId:randomUUID(),title:"不该建"}]}]});
+      expect(blocked.json().code).toBe("PLAN_GROUP_INVALID");
+    } finally { await f.t.close(); }
   });
 
   it("只保存传来的组，允许无日期步骤，并保留其他组与后来新增的事项",async()=>{

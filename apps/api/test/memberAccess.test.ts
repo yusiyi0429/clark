@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { migrate } from "../src/migrate.js";
 import {
   LOCK_AFTER_FAILURES,
+  canSwitchView,
+  canUseMemberView,
   changePasscode,
   currentSessionVersion,
   loginIdFor,
@@ -20,6 +22,13 @@ const findPerson = (id: string) => people.find((p) => p.personId === id);
 const at = (iso: string) => new Date(iso);
 
 describe("登录 ID 与初始码", () => {
+  it("仅 CEO 兼 DRI 或 participant 能切换；被邀请资格看成员身份", () => {
+    for (const roles of [["ceo"], ["dri"], ["ceo", "dri"], ["ceo", "participant"]]) {
+      const person = { personId: "p", displayName: "测试", roles };
+      expect(canSwitchView(person)).toBe(roles.includes("ceo") && roles.some((role) => role === "dri" || role === "participant"));
+      expect(canUseMemberView(person)).toBe(roles.some((role) => role === "dri" || role === "participant"));
+    }
+  });
   it("姓全拼 + 名首字母；不是「姓-名」格式时交给管理员指定", () => {
     expect(loginIdFor("sun-mingze")).toBe("sunm");
     expect(loginIdFor("chen-xinan")).toBe("chenx");

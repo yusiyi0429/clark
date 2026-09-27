@@ -6,7 +6,7 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { Pool } from "pg";
 import type { TApiError, TCardCollection } from "@warmap/contracts";
 import { SESSION_COOKIE, parseCookies, readSessionToken } from "../session.js";
-import { currentSessionVersion, roleOf, type SessionRole } from "../memberAccess.js";
+import { canSwitchView, canUseMemberView, currentSessionVersion, roleOf, type SessionRole } from "../memberAccess.js";
 import type { CompanyMemoryRepository } from "../companyMemory.js";
 import type { ConversationRuntime } from "../conversations.js";
 import type { DriExporter, MeetingActionOutcome, Query } from "../meetingStore.js";
@@ -18,6 +18,7 @@ import type { ResearchService } from "../research.js";
 import type { MonthlyPlanService } from "../monthlyDraft.js";
 import type { MeetingRecordingService } from "../meetingRecordings.js";
 import type { VoiceprintDeps } from "../voiceprints.js";
+import type { ThreadIntroAgent } from "../threadIntro.js";
 import type { AppEnv } from "../app.js";
 
 export type AppInstance = FastifyInstance<
@@ -28,8 +29,8 @@ export type AppInstance = FastifyInstance<
   TypeBoxTypeProvider
 >;
 
-/** 已登录的人：身份按 seed 现算（CEO／成员），不信任会话里自带的角色。 */
-export type SessionPerson = { personId: string; role: SessionRole };
+/** 已登录的人：cookie 的当前视角须仍被 seed 中的身份允许。 */
+export type SessionPerson = { personId: string; role: SessionRole; canSwitchView: boolean; sessionVersion: number };
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -61,6 +62,7 @@ export type RouteContext = {
   monthlyPlanService?: MonthlyPlanService;
   recordings: MeetingRecordingService;
   voiceprints: VoiceprintDeps;
+  threadIntroAgent: ThreadIntroAgent;
   materialStorageDir: string;
   conversationAttachmentStorageDir: string;
   conversationTurnTimeoutMs: number;
@@ -119,7 +121,10 @@ export function createReadSession(env: AppEnv, q: Query, companyMemory: CompanyM
     if (!claims) return null;
     const person = companyMemory.searchPeople(undefined).find((p) => p.personId === claims.pid);
     if (!person) return null;
-    return (await currentSessionVersion(q, person.personId)) === claims.v ? { personId: person.personId, role: roleOf(person) } : null;
+    if ((await currentSessionVersion(q, person.personId)) !== claims.v) return null;
+    const role = claims.view ?? roleOf(person);
+    if (role === "ceo" ? !person.roles.includes("ceo") : !canUseMemberView(person)) return null;
+    return { personId: person.personId, role, canSwitchView: canSwitchView(person), sessionVersion: claims.v };
   };
 }
 

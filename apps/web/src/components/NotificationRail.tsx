@@ -50,6 +50,7 @@ const sameCompanyDay = (a: Date, b: Date) => clock(a).day === clock(b).day;
 
 function missionRoundMeta(payload: TMissionRoundSummary | TMissionRoundDraftPayload): string {
   if (!("phase" in payload)) return "可以整理个人卡草稿";
+  if (payload.phase === "drafting") return "Co-Agent 正在起草";
   if (payload.phase === "draft") return "草稿 · 可以统一开放讨论";
   if (payload.phase === "open" && payload.closesAt) {
     const minutes = Math.max(0, Math.ceil((Date.parse(payload.closesAt) - Date.parse(payload.serverNow)) / 60_000));

@@ -45,7 +45,7 @@ export function registerDriRoutes(app: AppInstance, ctx: RouteContext): void {
     "/api/dri/meetings",
     { onRequest: requireServiceToken(env.driServiceToken), schema: { body: DriMeetingImportRequest } },
     async (req, reply) => {
-      const result = await importDriMeeting(pool, companyMemory, preflight, env.sessionSecret, req.body);
+      const result = await importDriMeeting(pool, companyMemory, preflight, env.sessionSecret, req.body, ctx.threadIntroAgent);
       if ("code" in result) {
         return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
       }

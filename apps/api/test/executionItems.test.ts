@@ -33,11 +33,11 @@ describe("执行事项",()=>{
         `task:${first.json().id}`,f.t.env.sessionSecret,{person:{personId:"person-fixture-002",role:"member"},
           people:loadCompanyMemory(f.t.env).searchPeople(undefined),now:new Date("2026-10-10T02:00:00Z")});
       expect(context.snapshot?.payload).toMatchObject({task:{id:first.json().id},mission:{title:"验证",battlefield_name:"增长战场"},monthOutcome:"本月目标"});
-      expect((await call(f,f.ceo,"PATCH",`/api/me/tasks/${second.id}`,{version:1,status:"done"})).statusCode).toBe(404);
+      expect((await call(f,f.ceo,"PATCH",`/api/me/tasks/${second.id}`,{version:1,status:"done"})).statusCode).toBe(403);
     } finally { await f.t.close(); }
   });
 
-  it("邀请同步群组、通知、私有批注与 task 对话权限；CEO 不在邀请名单里",async()=>{
+  it("邀请同步群组、通知、私有批注与 task 对话权限；只有 CEO 身份的人不在邀请名单里",async()=>{
     const f=await executionFixture();
     try {
       const task=(await call(f,f.member,"POST","/api/me/tasks",newTask(null))).json();
@@ -45,7 +45,7 @@ describe("执行事项",()=>{
       expect((await call(f,f.third,"GET",`/api/me/tasks/${id}`)).statusCode).toBe(404);
       expect((await call(f,f.third,"GET",`/api/conversations/task:${id}/messages`)).statusCode).toBe(404);
       expect((await call(f,f.member,"GET",`/api/threads/task/${id}`)).json().unread).toBe(0);
-      // CEO 工作台还打不开执行事项：不在可邀请名单里，直接邀请也会被拒。
+      // 只有 CEO 身份的人不能使用 DRI 工作台，不在可邀请名单里。
       expect((await call(f,f.member,"GET",`/api/me/tasks/${id}`)).json().collaboratorOptions.map((person:{personId:string})=>person.personId)).toEqual(["person-fixture-003"]);
       expect((await call(f,f.member,"POST",`/api/me/tasks/${id}/collaborators`,{personIds:["person-fixture-001"]})).json().code).toBe("COLLABORATOR_NOT_AVAILABLE");
       const invited=await call(f,f.member,"POST",`/api/me/tasks/${id}/collaborators`,{personIds:["person-fixture-003"]});

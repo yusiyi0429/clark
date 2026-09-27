@@ -1,7 +1,9 @@
 import type { TThreadMember, TThreadMessage, TThreadObjectType, TThreadQuote } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import type { Query } from "./meetingStore.js";
+import type { PoolClient } from "pg";
 import { personDisplayNames } from "./people.js";
+import type { IntroInput } from "./threadIntro.js";
 
 /** 群组挂在对象上：一个对象一个群。 */
 export type ThreadRef = { objectType: TThreadObjectType; objectId: string };
@@ -126,4 +128,52 @@ export async function readState(q: Query, ref: ThreadRef, personId: string): Pro
     [ref.objectType, ref.objectId, lastReadId, personId],
   );
   return { lastReadId, unread: unread.rows[0].n as number };
+}
+
+export async function threadIntroInput(q: Query, companyMemory: CompanyMemoryRepository, ref: ThreadRef, inviterId: string, newcomers: string[], note?: string): Promise<IntroInput> {
+  const names = personDisplayNames(companyMemory);
+  let title = "";
+  let description = "";
+  if (ref.objectType === "issue") {
+    const row = (await q("SELECT title, origin_ref FROM issues WHERE id::text=$1", [ref.objectId])).rows[0];
+    title = row?.title ?? "议题";
+    description = typeof row?.origin_ref?.whyNow === "string" ? row.origin_ref.whyNow : "请查看议题的研究与进展";
+  } else if (ref.objectType === "meeting") {
+    const row = (await q("SELECT title, scheduled_at, preflight FROM meetings WHERE id::text=$1", [ref.objectId])).rows[0];
+    title = row?.title ?? "会议";
+    description = row ? `时间 ${new Date(row.scheduled_at).toISOString()}，目的：${row.preflight?.taskDefinition?.reviewPurpose || title}` : "请查看会议安排";
+  } else if (ref.objectType === "task") {
+    const row = (await q("SELECT t.title,t.due_date,m.title AS mission_title FROM tasks t LEFT JOIN missions m ON m.id=t.mission_id WHERE t.id::text=$1", [ref.objectId])).rows[0];
+    title = row?.title ?? "执行事项";
+    description = `所属个人任务：${row?.mission_title ?? "独立事项"}；截止：${row?.due_date ?? "待定"}`;
+  }
+  const history = (await q("SELECT content FROM thread_messages WHERE object_type=$1 AND object_id=$2 ORDER BY id DESC LIMIT 20", [ref.objectType, ref.objectId])).rows
+    .reverse().map((row) => String(row.content));
+  return { objectType: ref.objectType, objectId: ref.objectId, title, description,
+    inviter: names.get(inviterId) ?? inviterId, newcomers: newcomers.map((id) => names.get(id) ?? id), note, history };
+}
+
+export async function unreadThreads(q: Query, personId: string) {
+  const rows = (await q(`SELECT tm.object_type,tm.object_id,
+    count(msg.id)::int AS unread,
+    COALESCE(i.title,m.title,t.title,'群聊') AS title
+    FROM thread_members tm
+    LEFT JOIN thread_reads rd ON rd.object_type=tm.object_type AND rd.object_id=tm.object_id AND rd.person_id=tm.person_id
+    JOIN thread_messages msg ON msg.object_type=tm.object_type AND msg.object_id=tm.object_id
+      AND msg.id>COALESCE(rd.last_read_id,0) AND msg.author_id IS DISTINCT FROM tm.person_id
+    LEFT JOIN issues i ON tm.object_type='issue' AND i.id::text=tm.object_id
+    LEFT JOIN meetings m ON tm.object_type='meeting' AND m.id::text=tm.object_id
+    LEFT JOIN tasks t ON tm.object_type='task' AND t.id::text=tm.object_id
+    WHERE tm.person_id=$1 AND tm.left_at IS NULL AND tm.object_type IN ('issue','meeting','task')
+    GROUP BY tm.object_type,tm.object_id,i.title,m.title,t.title ORDER BY max(msg.id) DESC`, [personId])).rows;
+  return { threads: rows.map((row) => ({ objectType: row.object_type, objectId: row.object_id, title: row.title,
+    unread: row.unread, href: row.object_type === "task" ? `/me/tasks/${row.object_id}` : `/me/${row.object_type === "issue" ? "issues" : "meetings"}/${row.object_id}` })) };
+}
+
+/** 参会名单是真相源；保留离群历史，新增或重新列入参会人时恢复群资格。 */
+export async function syncMeetingMembers(client: PoolClient, meetingId: string, participantIds: string[]): Promise<void> {
+  await client.query(`UPDATE thread_members SET left_at=now() WHERE object_type='meeting' AND object_id=$1
+    AND person_id <> ALL($2::text[]) AND left_at IS NULL`, [meetingId, participantIds]);
+  for (const id of new Set(participantIds)) await client.query(`INSERT INTO thread_members(object_type,object_id,person_id,added_by)
+    VALUES('meeting',$1,$2,'meeting') ON CONFLICT(object_type,object_id,person_id) DO UPDATE SET left_at=NULL`, [meetingId, id]);
 }

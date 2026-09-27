@@ -13,9 +13,9 @@ const now = "2026-10-01T00:00:00.000Z";
 const summary = {
   roundId: "round-1", period: "2026-10", battlefieldId: "growth", battlefieldName: "增长", version: 1,
   phase: "draft", round: 1, openedAt: null, closesAt: null, reviewAt: null, serverNow: now,
-  approver: true, deciderName: "拍板人", todo: "可以统一开放讨论", placeholder: true, goals: null,
+  approver: true, deciderName: "拍板人", todo: "可以统一开放讨论", placeholder: true, draftOrigin: "placeholder", goals: null,
   counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 1, late: 0, corrections: 0 },
-  cards: [{ cardId: "card-1", ownerId: "owner", ownerName: "Owner", roleLabel: null, missionCount: 2, line: "未开放", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: false }],
+  cards: [{ cardId: "card-1", ownerId: "owner", ownerName: "Owner", roleLabel: null, missionCount: 2, line: "未开放", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: false, placeholder: true }],
 };
 
 describe("Mission round contracts", () => {

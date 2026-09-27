@@ -49,7 +49,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       // Ticket 09：Issue 侧 Meeting Action 先于 Ticket 08 的通用 Issue Action 分派
       if (scope.actionType === "issue.create_meeting") {
         if (!Value.Check(CreateMeetingRequest, input)) return invalidInput(reply, CreateMeetingRequest, input);
-        return respond(reply, await executeCreateMeeting(pool, companyMemory, preflight, env.sessionSecret, scope, input, fingerprint));
+        return respond(reply, await executeCreateMeeting(pool, companyMemory, preflight, env.sessionSecret, scope, input, fingerprint, ctx.threadIntroAgent));
       }
       if (scope.actionType === "issue.join_meeting") {
         if (!Value.Check(JoinMeetingRequest, input)) return invalidInput(reply, JoinMeetingRequest, input);
@@ -61,7 +61,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       }
       if (scope.actionType === "meeting.edit_details") {
         if (!Value.Check(EditMeetingDetailsRequest, input)) return invalidInput(reply, EditMeetingDetailsRequest, input);
-        return respond(reply, await executeEditMeetingDetails(pool, companyMemory, env.sessionSecret, scope, input, fingerprint));
+        return respond(reply, await executeEditMeetingDetails(pool, companyMemory, env.sessionSecret, scope, input, fingerprint, ctx.threadIntroAgent));
       }
       if (scope.actionType === "meeting.request_supplement") {
         if (!Value.Check(RequestSupplementRequest, input)) return invalidInput(reply, RequestSupplementRequest, input);

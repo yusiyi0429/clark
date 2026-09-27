@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TMissionRoundSummary } from "@warmap/contracts";
+import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { RADAR_SETTINGS_CHANGED, type MemberRadarBrief } from "@/components/radar/personalRadar";
 import type { MemberTask, TaskStatus } from "./MemberTasks";
@@ -14,13 +15,14 @@ import type { MemberWork } from "./MemberHomeWidgets";
 
 export interface MemberNotification {
   id: string;
-  kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added";
+  kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added";
   text: string;
-  objectType: "task" | "meeting";
+  objectType: "task" | "meeting" | "issue";
   objectId: string;
   createdAt: string;
   readAt: string | null;
 }
+export type UnreadMissionGroup = { cardId: string; title: string; unread: number; href: string };
 
 const REFRESH_MS = 20_000;
 const REFRESH_ERROR = "工作台暂时没有连接成功，已保留当前内容；稍后会自动重试。";
@@ -31,6 +33,9 @@ const failed = (error: unknown, fallback: string): Result => ({ ok: false, error
 export function useMemberHome() {
   const [tasks, setTasks] = useState<MemberTask[]>([]);
   const [notifications, setNotifications] = useState<MemberNotification[]>([]);
+  const [meetings, setMeetings] = useState<components["schemas"]["MemberMeetingsResponse"]["meetings"]>([]);
+  const [unreadThreads, setUnreadThreads] = useState<components["schemas"]["UnreadThreadsResponse"]["threads"]>([]);
+  const [unreadMissionGroups, setUnreadMissionGroups] = useState<UnreadMissionGroup[]>([]);
   const [rounds, setRounds] = useState<TMissionRoundSummary[]>([]);
   const [work, setWork] = useState<MemberWork | null>(null);
   /** 雷达关着时为 null，首页整块不出现。 */
@@ -43,7 +48,7 @@ export function useMemberHome() {
   const load = useCallback(() => {
     if (loadInFlight.current) return loadInFlight.current;
     loadInFlight.current = (async () => { try {
-      const [home, list, missionCards] = await Promise.all([browserApi.GET("/api/me/home"), browserApi.GET("/api/me/notifications"), browserApi.GET("/api/me/mission-cards")]);
+      const [home, list, missionCards, meetingList, threads] = await Promise.all([browserApi.GET("/api/me/home"), browserApi.GET("/api/me/notifications"), browserApi.GET("/api/me/mission-cards"), browserApi.GET("/api/me/meetings"), browserApi.GET("/api/me/threads/unread")]);
       if (home.response.status === 401 || list.response.status === 401 || missionCards.response.status === 401) {
         window.location.assign("/access?next=%2Fme");
         return;
@@ -51,7 +56,20 @@ export function useMemberHome() {
       if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setWork(home.data.work); setRadar(home.data.radar ?? null); }
       setHomeError(home.data ? null : REFRESH_ERROR);
       if (list.data) setNotifications(list.data.notifications as MemberNotification[]);
-      if (missionCards.data) setRounds(missionCards.data.rounds);
+      if (meetingList.data) setMeetings(meetingList.data.meetings);
+      if (threads.data) setUnreadThreads(threads.data.threads);
+      if (missionCards.data) {
+        setRounds(missionCards.data.rounds);
+        const cards = missionCards.data.rounds.flatMap((round) => round.cards ?? []);
+        const missionUnread = await Promise.all(cards.map(async (card) => {
+          try {
+            const { data } = await browserApi.GET("/api/mission-cards/{cardId}/group", { params: { path: { cardId: card.cardId } } });
+            return data?.unread ? { cardId: card.cardId, title: card.ownerName, unread: data.unread,
+              href: `/me/mission-cards/${card.cardId}` } : null;
+          } catch { return null; }
+        }));
+        setUnreadMissionGroups(missionUnread.filter((item): item is UnreadMissionGroup => item !== null));
+      }
       if (home.data && list.data && missionCards.data) setTaskError((current) => current === REFRESH_ERROR ? null : current);
     } catch {
       // 首页在详情背后仍保持挂载；后台轮询断网不能打断当前阅读与讨论。
@@ -146,5 +164,5 @@ export function useMemberHome() {
     [load],
   );
 
-  return { tasks, notifications, rounds, work, radar, homeError, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, readRadarNotice, settle };
+  return { tasks, notifications, meetings, unreadThreads, unreadMissionGroups, rounds, work, radar, homeError, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, readRadarNotice, settle };
 }

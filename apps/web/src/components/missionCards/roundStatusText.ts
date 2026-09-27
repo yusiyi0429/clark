@@ -9,6 +9,7 @@ export function roundStatusText(round: TMissionRoundSummary, { cardId, feedbackC
   /** 这张卡已采纳的更正数（GAP-04）。 */
   corrected?: number;
 }): string {
+  if (round.phase === "drafting") return "Co-Agent 正在起草";
   if (round.phase === "draft") return round.approver ? round.todo ?? "个人卡草稿已就绪，可以统一开放讨论" : `草稿已整理 · 等${round.deciderName}统一开放讨论`;
   if (round.phase === "open") return `讨论中 · ${round.approver || !cardId ? `全战场 ${round.counts.feedback}` : `这张卡 ${feedbackCount}`} 条意见`;
   if (round.phase === "closed") return "已截止 · 汇总中";

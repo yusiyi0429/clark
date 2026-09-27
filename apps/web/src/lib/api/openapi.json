@@ -203,6 +203,64 @@
         }
       }
     },
+    "/api/auth/view": {
+      "post": {
+        "operationId": "setSessionView",
+        "summary": "同时是 CEO 和 DRI 的人切换当前视角（工单 07）；重签会话；不能切换的人 403",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetViewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "切换后的会话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/people": {
       "get": {
         "operationId": "listPeople",
@@ -1933,6 +1991,377 @@
         }
       }
     },
+    "/api/threads/{objectType}/{objectId}/members": {
+      "post": {
+        "operationId": "addThreadMembers",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "signal",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "拉人进群（工单 08）：群成员都能拉；议题第一次由 CEO 拉人时建群；被拉即加入，Co-Agent 在后台写进群介绍",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddThreadMembersRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "群成员",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMembersResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{objectType}/{objectId}/leave": {
+      "post": {
+        "operationId": "leaveThread",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "signal",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "自己退出群；对象的主人（执行事项推进人、会议主持人、议题群里的 CEO）不能退，返回 409",
+        "responses": {
+          "204": {
+            "description": "已退出"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{objectType}/{objectId}/candidates": {
+      "get": {
+        "operationId": "listThreadCandidates",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "signal",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "可以拉进这个群的人；群成员（议题未建群时为 CEO）才能读",
+        "responses": {
+          "200": {
+            "description": "候选人",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadCandidatesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/threads/unread": {
+      "get": {
+        "operationId": "listMyUnreadThreads",
+        "summary": "我所在各群的未读条数（只列有未读的），给通知栏「群聊新消息」用",
+        "responses": {
+          "200": {
+            "description": "有未读的群",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadThreadsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/meetings": {
+      "get": {
+        "operationId": "listMyMeetings",
+        "summary": "我在群里、还没开完的会，按开始时间排，给成员通知栏「会议安排」用",
+        "responses": {
+          "200": {
+            "description": "会议安排",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberMeetingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/cards/issues/{id}": {
+      "get": {
+        "operationId": "getMemberIssueCard",
+        "summary": "被拉进议题群的成员读议题：同一种卡片信封，actions 为空，去掉 CEO 专用内容；非群成员 404",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "只读的议题卡片",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/cards/meetings/{id}": {
+      "get": {
+        "operationId": "getMemberMeetingCard",
+        "summary": "会议群成员读会议：同一种卡片信封，actions 为空，去掉 CEO 专用内容；非群成员 404",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "只读的会议卡片",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/onboarding": {
       "get": {
         "operationId": "getOnboarding",
@@ -1975,6 +2404,35 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "resetOnboarding",
+        "summary": "本人重看首次引导：删掉自己的「看过」记录（工单 07）",
+        "responses": {
+          "204": {
+            "description": "已清除"
           },
           "401": {
             "description": "ApiError 统一错误",
@@ -6952,6 +7410,9 @@
           },
           "onboarded": {
             "type": "boolean"
+          },
+          "canSwitchView": {
+            "type": "boolean"
           }
         }
       },
@@ -8526,7 +8987,8 @@
           "firstPendingFeedbackId",
           "pendingCorrections",
           "firstPendingCorrectionId",
-          "mine"
+          "mine",
+          "placeholder"
         ],
         "properties": {
           "cardId": {
@@ -8585,11 +9047,18 @@
           },
           "mine": {
             "type": "boolean"
+          },
+          "placeholder": {
+            "type": "boolean"
           }
         }
       },
       "MissionRoundPhase": {
         "anyOf": [
+          {
+            "const": "drafting",
+            "type": "string"
+          },
           {
             "const": "draft",
             "type": "string"
@@ -8631,6 +9100,7 @@
           "deciderName",
           "todo",
           "placeholder",
+          "draftOrigin",
           "goals",
           "counts",
           "cards"
@@ -8655,6 +9125,10 @@
           },
           "phase": {
             "anyOf": [
+              {
+                "const": "drafting",
+                "type": "string"
+              },
               {
                 "const": "draft",
                 "type": "string"
@@ -8736,6 +9210,21 @@
           },
           "placeholder": {
             "type": "boolean"
+          },
+          "draftOrigin": {
+            "anyOf": [
+              {
+                "const": "agent",
+                "type": "string"
+              },
+              {
+                "const": "placeholder",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "goals": {
             "anyOf": [
@@ -8824,7 +9313,8 @@
                 "firstPendingFeedbackId",
                 "pendingCorrections",
                 "firstPendingCorrectionId",
-                "mine"
+                "mine",
+                "placeholder"
               ],
               "properties": {
                 "cardId": {
@@ -8883,6 +9373,9 @@
                 },
                 "mine": {
                   "type": "boolean"
+                },
+                "placeholder": {
+                  "type": "boolean"
                 }
               }
             }
@@ -8917,6 +9410,7 @@
                 "deciderName",
                 "todo",
                 "placeholder",
+                "draftOrigin",
                 "goals",
                 "counts",
                 "cards"
@@ -8941,6 +9435,10 @@
                 },
                 "phase": {
                   "anyOf": [
+                    {
+                      "const": "drafting",
+                      "type": "string"
+                    },
                     {
                       "const": "draft",
                       "type": "string"
@@ -9022,6 +9520,21 @@
                 },
                 "placeholder": {
                   "type": "boolean"
+                },
+                "draftOrigin": {
+                  "anyOf": [
+                    {
+                      "const": "agent",
+                      "type": "string"
+                    },
+                    {
+                      "const": "placeholder",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "goals": {
                   "anyOf": [
@@ -9110,7 +9623,8 @@
                       "firstPendingFeedbackId",
                       "pendingCorrections",
                       "firstPendingCorrectionId",
-                      "mine"
+                      "mine",
+                      "placeholder"
                     ],
                     "properties": {
                       "cardId": {
@@ -9169,6 +9683,9 @@
                       },
                       "mine": {
                         "type": "boolean"
+                      },
+                      "placeholder": {
+                        "type": "boolean"
                       }
                     }
                   }
@@ -9201,7 +9718,6 @@
             "type": "string"
           },
           "placeholder": {
-            "const": true,
             "type": "boolean"
           },
           "todo": {
@@ -9818,6 +10334,7 @@
               "deciderName",
               "todo",
               "placeholder",
+              "draftOrigin",
               "goals",
               "counts",
               "cards"
@@ -9842,6 +10359,10 @@
               },
               "phase": {
                 "anyOf": [
+                  {
+                    "const": "drafting",
+                    "type": "string"
+                  },
                   {
                     "const": "draft",
                     "type": "string"
@@ -9923,6 +10444,21 @@
               },
               "placeholder": {
                 "type": "boolean"
+              },
+              "draftOrigin": {
+                "anyOf": [
+                  {
+                    "const": "agent",
+                    "type": "string"
+                  },
+                  {
+                    "const": "placeholder",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "goals": {
                 "anyOf": [
@@ -10011,7 +10547,8 @@
                     "firstPendingFeedbackId",
                     "pendingCorrections",
                     "firstPendingCorrectionId",
-                    "mine"
+                    "mine",
+                    "placeholder"
                   ],
                   "properties": {
                     "cardId": {
@@ -10069,6 +10606,9 @@
                       ]
                     },
                     "mine": {
+                      "type": "boolean"
+                    },
+                    "placeholder": {
                       "type": "boolean"
                     }
                   }
@@ -15883,6 +16423,335 @@
           }
         }
       },
+      "SetViewRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "view"
+        ],
+        "properties": {
+          "view": {
+            "anyOf": [
+              {
+                "const": "ceo",
+                "type": "string"
+              },
+              {
+                "const": "member",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "AddThreadMembersRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "personIds"
+        ],
+        "properties": {
+          "personIds": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          "note": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
+      "ThreadMembersResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "members"
+        ],
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName",
+                "title"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "displayName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "ThreadCandidatesResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "people"
+        ],
+        "properties": {
+          "people": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "displayName": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "UnreadThreadItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "objectType",
+          "objectId",
+          "title",
+          "unread",
+          "href"
+        ],
+        "properties": {
+          "objectType": {
+            "anyOf": [
+              {
+                "const": "issue",
+                "type": "string"
+              },
+              {
+                "const": "signal",
+                "type": "string"
+              },
+              {
+                "const": "task",
+                "type": "string"
+              },
+              {
+                "const": "meeting",
+                "type": "string"
+              }
+            ]
+          },
+          "objectId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "unread": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "href": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "UnreadThreadsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "threads"
+        ],
+        "properties": {
+          "threads": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "objectType",
+                "objectId",
+                "title",
+                "unread",
+                "href"
+              ],
+              "properties": {
+                "objectType": {
+                  "anyOf": [
+                    {
+                      "const": "issue",
+                      "type": "string"
+                    },
+                    {
+                      "const": "signal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "task",
+                      "type": "string"
+                    },
+                    {
+                      "const": "meeting",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "objectId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "unread": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "href": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MemberMeetingItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "meetingId",
+          "title",
+          "startsAt",
+          "endsAt",
+          "hostName",
+          "href"
+        ],
+        "properties": {
+          "meetingId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startsAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "endsAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hostName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "href": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "MemberMeetingsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "meetings"
+        ],
+        "properties": {
+          "meetings": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "meetingId",
+                "title",
+                "startsAt",
+                "endsAt",
+                "hostName",
+                "href"
+              ],
+              "properties": {
+                "meetingId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "startsAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "endsAt": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "hostName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "href": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
       "ThreadMessage": {
         "additionalProperties": false,
         "type": "object",
@@ -19592,6 +20461,10 @@
                     "phase": {
                       "anyOf": [
                         {
+                          "const": "drafting",
+                          "type": "string"
+                        },
+                        {
                           "const": "draft",
                           "type": "string"
                         },
@@ -20114,6 +20987,10 @@
                 "phase": {
                   "anyOf": [
                     {
+                      "const": "drafting",
+                      "type": "string"
+                    },
+                    {
                       "const": "draft",
                       "type": "string"
                     },
@@ -20511,6 +21388,7 @@
                   "deciderName",
                   "todo",
                   "placeholder",
+                  "draftOrigin",
                   "goals",
                   "counts",
                   "cards"
@@ -20535,6 +21413,10 @@
                   },
                   "phase": {
                     "anyOf": [
+                      {
+                        "const": "drafting",
+                        "type": "string"
+                      },
                       {
                         "const": "draft",
                         "type": "string"
@@ -20616,6 +21498,21 @@
                   },
                   "placeholder": {
                     "type": "boolean"
+                  },
+                  "draftOrigin": {
+                    "anyOf": [
+                      {
+                        "const": "agent",
+                        "type": "string"
+                      },
+                      {
+                        "const": "placeholder",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "goals": {
                     "anyOf": [
@@ -20704,7 +21601,8 @@
                         "firstPendingFeedbackId",
                         "pendingCorrections",
                         "firstPendingCorrectionId",
-                        "mine"
+                        "mine",
+                        "placeholder"
                       ],
                       "properties": {
                         "cardId": {
@@ -20762,6 +21660,9 @@
                           ]
                         },
                         "mine": {
+                          "type": "boolean"
+                        },
+                        "placeholder": {
                           "type": "boolean"
                         }
                       }
@@ -22527,6 +23428,10 @@
                     {
                       "const": "task_collaborator_added",
                       "type": "string"
+                    },
+                    {
+                      "const": "thread_member_added",
+                      "type": "string"
                     }
                   ]
                 },
@@ -22542,6 +23447,10 @@
                     },
                     {
                       "const": "meeting",
+                      "type": "string"
+                    },
+                    {
+                      "const": "issue",
                       "type": "string"
                     }
                   ]
@@ -23124,6 +24033,10 @@
                         },
                         "phase": {
                           "anyOf": [
+                            {
+                              "const": "drafting",
+                              "type": "string"
+                            },
                             {
                               "const": "draft",
                               "type": "string"

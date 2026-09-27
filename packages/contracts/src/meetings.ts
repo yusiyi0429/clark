@@ -246,6 +246,23 @@ export const StartMeetingRecordingResponse = Type.Object(
   { additionalProperties: false },
 );
 
+/** 成员通知栏「会议安排」：我在群里、还没开完的会，按开始时间排（工单 08）。 */
+export const MemberMeetingItem = Type.Object(
+  {
+    meetingId: Type.String({ minLength: 1 }),
+    title: Type.String({ minLength: 1 }),
+    startsAt: Type.String({ minLength: 1 }),
+    endsAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    hostName: Type.String({ minLength: 1 }),
+    href: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+export const MemberMeetingsResponse = Type.Object(
+  { meetings: Type.Array(MemberMeetingItem) },
+  { additionalProperties: false },
+);
+
 export const MeetingCardPayload = Type.Object(
   {
     status: MeetingStatus,

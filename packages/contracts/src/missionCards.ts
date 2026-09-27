@@ -13,6 +13,8 @@ export const MissionCardField = Type.Union([
 
 /** closed 是已到截止但尚未写入快照的投影态，不写入轮次 status。 */
 export const MissionRoundPhase = Type.Union([
+  /** drafting：Co-Agent 正在起草个人卡（工单 10），完成后进入 draft。 */
+  Type.Literal("drafting"),
   Type.Literal("draft"), Type.Literal("open"), Type.Literal("closed"),
   Type.Literal("reviewing"), Type.Literal("confirmed"),
 ]);
@@ -33,6 +35,8 @@ export const MissionCardRow = Type.Object({
   pendingCorrections: Count,
   firstPendingCorrectionId: Type.Union([Type.String(), Type.Null()]),
   mine: Type.Boolean(),
+  /** 这张卡是占位：Co-Agent 起草失败时沿用上个月的卡，或整轮来自占位文件。 */
+  placeholder: Type.Boolean(),
 }, { additionalProperties: false });
 
 /** 同一轮次的公开事实；动作权限单独通过 approver 与 Card actions 投影。 */
@@ -52,6 +56,8 @@ export const MissionRoundSummary = Type.Object({
   deciderName: Type.String(),
   todo: Type.Union([Type.String(), Type.Null()]),
   placeholder: Type.Boolean(),
+  /** 草稿来源：agent 为 Co-Agent 起草，placeholder 为占位文件；还没起草为 null。 */
+  draftOrigin: Type.Union([Type.Literal("agent"), Type.Literal("placeholder"), Type.Null()]),
   goals: Type.Union([Type.Object({
     sixMonthOutcome: Type.String(),
     monthOutcome: Type.String(),
@@ -73,7 +79,8 @@ export const MissionRoundDraftPayload = Type.Object({
   period: MonthlyPlanPeriod,
   battlefieldId: Type.String(),
   battlefieldName: Type.String(),
-  placeholder: Type.Literal(true),
+  /** 整理草稿时是否只能用占位文件（Co-Agent 起草不可用）。 */
+  placeholder: Type.Boolean(),
   todo: Type.String(),
   serverNow: DateTime,
 }, { additionalProperties: false });

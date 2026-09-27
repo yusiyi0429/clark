@@ -110,7 +110,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
     else workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${target.cardId}?${kind}=${encodeURIComponent(id)}`);
   };
   useEffect(() => {
-    if (effectivePhase !== "closed") return;
+    if (effectivePhase !== "closed" && effectivePhase !== "drafting") return;
     void refresh();
     const timer = setInterval(() => void refresh(), 3_000);
     return () => clearInterval(timer);
@@ -123,7 +123,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   useEffect(() => { void loadLinkedItems().catch(() => undefined); }, [loadLinkedItems]);
   const removeReference = useCallback(() => setReference(null), []);
   const cards = useMemo(() => [view], [view]);
-  const group = useMemo(() => ({ cardId: card.cardId, viewerId: workspace.viewerId ?? card.ownerId, members: card.members, phase: effectivePhase, round: round.round, reference, onRemoveReference: removeReference, onRefresh: refresh }), [card.cardId, card.ownerId, workspace.viewerId, card.members, effectivePhase, round.round, reference, removeReference, refresh]);
+  const group = useMemo(() => ({ cardId: card.cardId, viewerId: workspace.viewerId ?? card.ownerId, members: card.members, phase: effectivePhase === "drafting" ? "draft" as const : effectivePhase, round: round.round, reference, onRemoveReference: removeReference, onRefresh: refresh }), [card.cardId, card.ownerId, workspace.viewerId, card.members, effectivePhase, round.round, reference, removeReference, refresh]);
   const title = `${card.ownerName} · ${Number(round.period.slice(5))} 月 Mission Card`;
   useRegisterDetail({ scope: `mission-card:${card.cardId}`, label: title, mark: null, cards, group });
 
@@ -208,9 +208,10 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   return <div className={s.screen}>
     <DetailFrame title={title} subtitle={round.battlefieldName} onBack={leaveCard} actions={<RoundClock round={shownPayload.round} now={now} />}>
       <div className={s.content}>
-        <RoundLine payload={shownPayload} actions={view.actions} viewerId={workspace.viewerId} pending={pending} onAction={(action, input) => void runAction(action, input)} onSelectCard={(id) => workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${id}`)} onViewGoals={() => setGoalsOpen(true)} onStartProcessing={startProcessing} note={note} onNoteChange={(text) => { setNoteDraft({ roundKey, text }); saveRoundNote(noteViewer, round.roundId, round.round, text); }} error={error} />
+        <RoundLine payload={shownPayload} actions={view.actions} viewerId={workspace.viewerId} pending={pending} onAction={(action, input) => void runAction(action, input)} onViewGoals={() => setGoalsOpen(true)} onStartProcessing={startProcessing} note={note} onNoteChange={(text) => { setNoteDraft({ roundKey, text }); saveRoundNote(noteViewer, round.roundId, round.round, text); }} error={error} />
         {error && !(effectivePhase === "reviewing" && round.approver && !round.counts.pending) ? <p className={s.error} role="alert">{error}</p> : null}
         {notice ? <p className={s.notice} role="status">{notice}</p> : null}
+        {round.approver && round.cards.length ? <nav className={s.peopleTabs} aria-label="切换个人卡">{round.cards.map((row) => <Button key={row.cardId} variant="ghost" className={s.peopleTab} aria-current={row.cardId === card.cardId ? "page" : undefined} aria-label={`打开${row.ownerName}的 Mission Card · ${row.line}`} onPress={() => workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${row.cardId}`)}><span className={s.peopleInitial} aria-hidden>{row.ownerName.slice(0, 1)}</span><span className={s.peopleText}><strong>{row.ownerName}{row.placeholder ? " · 占位" : ""}</strong><small>{row.line}</small></span></Button>)}</nav> : null}
         <CardDocument payload={shownPayload} linkedItems={linkedItems} viewerId={workspace.viewerId} ownerPlan={isOwner ? { selected: planSelected, onSelect: selectPlan, plan, error: planError, loading: planLoading, content: plan ? <MonthPlan key={plan.period} plan={plan} onSaved={(next) => { setPlan(next); void loadLinkedItems(); }} onDirtyChange={onPlanDirtyChange} /> : null } : undefined} controls={{ onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); },
           corrections: { draft: correction, draftError: correctionError, history: correctionHistory, rejecting, decisionError: correctionDecisionError, busy: posting || pending, onOpen: openCorrection, onEdit: (patch) => setCorrection((current) => current && { ...current, ...patch, clientId: crypto.randomUUID() }), onCancel: () => setCorrection(null), onSubmit: () => void sendCorrection(), onHistory: setCorrectionHistory, onRejecting: setRejecting, onDecide: (item, decision) => void decideCorrection(item, decision) },
           proposalEditor: (mission, field) => proposal?.missionId === mission.missionId && proposal.field === field && effectivePhase !== "confirmed" ? <div className={s.proposal}>

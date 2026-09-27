@@ -11,6 +11,8 @@ import type { CompanyMemoryRepository } from "./companyMemory.js";
 import { getIssueRow, projectIssueCard } from "./issues.js";
 import type { ParsedMaterial } from "./materialParser.js";
 import { replaceMeetingMaterials } from "./meetingMaterials.js";
+import { syncMeetingMembers, threadIntroInput } from "./threads.js";
+import { postThreadIntro, type ThreadIntroAgent } from "./threadIntro.js";
 import { runPreflight, type PreflightAgent } from "./meetingPreflight.js";
 import {
   appendFingerprint,
@@ -60,6 +62,15 @@ function resolveParticipants(
   };
 }
 
+function scheduleMeetingIntro(pool: Pool, companyMemory: CompanyMemoryRepository, agent: ThreadIntroAgent | undefined,
+  meetingId: string, inviterId: string, newcomers: string[], existingIds: string[]): void {
+  if (!agent || !newcomers.length) return;
+  setImmediate(() => { void (async () => {
+    const input = await threadIntroInput(pool.query.bind(pool), companyMemory, { objectType: "meeting", objectId: meetingId }, inviterId, newcomers);
+    await postThreadIntro(pool, agent, input, existingIds);
+  })().catch(() => undefined); });
+}
+
 async function issuesExist(q: Query, issueIds: string[]): Promise<boolean> {
   if (issueIds.some((id) => !UUID_PATTERN.test(id))) return false;
   const result = await q("SELECT count(*)::int AS count FROM issues WHERE id = ANY($1::uuid[])", [issueIds]);
@@ -100,6 +111,7 @@ export async function executeCreateMeeting(
   scope: ActionScope,
   input: { title: string; scheduledAt: string; endsAt?: string; leadDriId: string; ceoParticipantId: string; participants: string[]; issueIds: string[] },
   fingerprint: string,
+  introAgent?: ThreadIntroAgent,
 ): Promise<MeetingActionOutcome> {
   if (scope.objectType !== "issue") return { error: { status: 404, code: "UNKNOWN_ACTION", message: "无效 actionId" } };
   const issue = await getIssueRow(pool.query.bind(pool), scope.objectId);
@@ -158,6 +170,7 @@ export async function executeCreateMeeting(
         ],
       );
       created = inserted.rows[0];
+      await syncMeetingMembers(client, created.id, resolved.participants.map((person) => person.personId));
       isNew = true;
     }
     await client.query("COMMIT");
@@ -168,7 +181,11 @@ export async function executeCreateMeeting(
     client.release();
   }
 
-  if (isNew) await runPreflight(pool, companyMemory, preflightAgent, created.id);
+  if (isNew) {
+    scheduleMeetingIntro(pool, companyMemory, introAgent, created.id, created.lead_dri_id,
+      created.participants.map((person) => person.personId).filter((id) => id !== created.lead_dri_id), [created.lead_dri_id]);
+    await runPreflight(pool, companyMemory, preflightAgent, created.id);
+  }
   const row = await getMeetingRow(pool.query.bind(pool), created.id);
   return { card: projectMeetingCard(row ?? created, secret) };
 }
@@ -184,6 +201,7 @@ export async function createConfigMeeting(
   preflightAgent: PreflightAgent,
   secret: string,
   input: { title: string; scheduledAt: string; endsAt?: string; leadDriId: string; issueIds?: string[]; materials?: ParsedMaterial[]; materialStorageDir: string },
+  introAgent?: ThreadIntroAgent,
 ): Promise<{ card: TCard } | { error: MeetingActionError }> {
   const scheduledAt = parseScheduledAt(input.scheduledAt);
   if (!scheduledAt) return { error: { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } } };
@@ -218,6 +236,11 @@ export async function createConfigMeeting(
     ],
   );
   const created = inserted.rows[0];
+  const memberClient = await pool.connect();
+  try { await syncMeetingMembers(memberClient, created.id, resolved.participants.map((person) => person.personId)); }
+  finally { memberClient.release(); }
+  scheduleMeetingIntro(pool, companyMemory, introAgent, created.id, created.lead_dri_id,
+    created.participants.map((person) => person.personId).filter((id) => id !== created.lead_dri_id), [created.lead_dri_id]);
   if (input.materials?.length) {
     const stored = await replaceMeetingMaterials(pool, secret, created.id, input.materials, input.materialStorageDir);
     if ("error" in stored) return stored;
@@ -305,6 +328,7 @@ export async function executeEditMeetingDetails(
   scope: ActionScope,
   input: { title?: string; scheduledAt?: string; endsAt?: string; leadDriId?: string },
   fingerprint: string,
+  introAgent?: ThreadIntroAgent,
 ): Promise<MeetingActionOutcome> {
   let scheduledAt: Date | null = null;
   if (input.scheduledAt !== undefined) {
@@ -338,7 +362,14 @@ export async function executeEditMeetingDetails(
         endsAt,
       ],
     );
-    return commit(client, updated, secret);
+    if (participants) await syncMeetingMembers(client, row.id, participants.map((person) => person.personId));
+    const result = await commit(client, updated, secret);
+    if (participants) {
+      const existingIds = row.participants.map((person) => person.personId);
+      scheduleMeetingIntro(pool, companyMemory, introAgent, row.id, row.lead_dri_id,
+        participants.map((person) => person.personId).filter((id) => !existingIds.includes(id)), existingIds);
+    }
+    return result;
   });
 }
 
@@ -507,6 +538,7 @@ export async function importDriMeeting(
   body: {
     externalId: string; title: string; scheduledAt: string; endsAt?: string; leadDriId: string; ceoParticipantId: string; participants: string[]; issueIds: string[];
   },
+  introAgent?: ThreadIntroAgent,
 ): Promise<DriMeetingImportResult> {
   const scheduledAt = parseScheduledAt(body.scheduledAt);
   if (!scheduledAt) return { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } };
@@ -555,6 +587,7 @@ export async function importDriMeeting(
       );
       if (inserted.rowCount === 1) {
         meetingId = inserted.rows[0].id;
+        await syncMeetingMembers(client, meetingId, resolved.participants.map((person) => person.personId));
         await client.query("COMMIT");
       } else {
         await client.query("ROLLBACK");
@@ -576,6 +609,8 @@ export async function importDriMeeting(
       ? { status: 200, card: projectMeetingCard(existing, secret) }
       : { status: 409, code: "DRI_MEETING_EXTERNAL_ID_CONFLICT", message: "同一 externalId 已存在且内容不同" };
   }
+  scheduleMeetingIntro(pool, companyMemory, introAgent, meetingId, resolved.lead.personId,
+    resolved.participants.map((person) => person.personId).filter((id) => id !== resolved.lead.personId), [resolved.lead.personId]);
   await runPreflight(pool, companyMemory, preflightAgent, meetingId);
   return { status: 201, card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), meetingId))!, secret) };
 }

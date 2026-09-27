@@ -53,10 +53,11 @@ describe("个人菜单里的雷达", () => {
     expect(item(render("member"), "连接 Codex / Claude Code")).toBeDefined();
     expect(item(render("ceo"), "连接 Codex / Claude Code")).toBeUndefined();
   });
-  it("成员叫「我的雷达」，紧挨在「我的声纹」后面；打开是本人雷达的编辑器，底部能去看我的雷达信号", () => {
+  it("成员叫「我的雷达」；声纹状态未确认时不显示声纹入口；打开后能去看我的雷达信号", () => {
     const navigate = vi.fn();
     const labels = elements(render("member", navigate)).filter((element) => typeof element.props.onPress === "function").map((element) => text(element.props.children as ReactNode));
-    expect(labels.indexOf("我的雷达")).toBe(labels.indexOf("我的声纹") + 1);
+    expect(labels).toContain("我的雷达");
+    expect(labels).not.toContain("我的声纹");
     (item(render("member", navigate), "我的雷达")!.props.onPress as () => void)();
     const tree = render("member", navigate);
     const dialog = elements(tree).find((element) => element.type === MenuDialog);

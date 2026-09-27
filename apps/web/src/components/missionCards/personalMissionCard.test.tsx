@@ -30,7 +30,7 @@ describe("个人卡正文的阶段与追溯", () => {
     expect(html).toContain("白田田、同事");
     expect(renderToStaticMarkup(<CardDocument payload={personalPayload} controls={controls} />)).not.toContain("本月计划");
   });
-  it.each(["draft", "open", "closed", "reviewing", "confirmed"] as const)("%s 阶段只显示允许的字段动作，责任人始终不可建议", (phase) => {
+  it.each(["drafting", "draft", "open", "closed", "reviewing", "confirmed"] as const)("%s 阶段只显示允许的字段动作，责任人始终不可建议", (phase) => {
     const html = renderToStaticMarkup(<CardDocument payload={{ ...personalPayload, round: { ...personalPayload.round, phase } }} controls={controls} />);
     expect((html.match(/>建议修改</g) ?? []).length).toBe(phase === "open" ? 12 : 0);
     expect((html.match(/>引用并评论</g) ?? []).length).toBe(phase === "open" ? 12 : 0);
@@ -70,8 +70,19 @@ describe("本轮状态与倒计时", () => {
     ["closed", "已截止 · 汇总中", 0],
   ] as const)("%s 的本轮状态与通知使用同一句", (phase, text, pending) => {
     const round = { ...personalPayload.round, phase, todo: phase === "closed" ? null : text, counts: { ...personalPayload.round.counts, pending } };
-    const html = renderToStaticMarkup(<RoundLine payload={{ ...personalPayload, round }} actions={[]} viewerId="ceo" pending={false} onAction={vi.fn()} onSelectCard={vi.fn()} onViewGoals={vi.fn()} />);
+    const html = renderToStaticMarkup(<RoundLine payload={{ ...personalPayload, round }} actions={[]} viewerId="ceo" pending={false} onAction={vi.fn()} onViewGoals={vi.fn()} />);
     expect(html).toContain(text);
+  });
+  it("Agent 来源逐任务展示起草依据，失败卡显式标占位", () => {
+    const mission = { ...personalPayload.card.missions[0], sourceRef: "mission-card-agent://round/owner", sourceTitle: "起草依据：签发的本月计划", placeholder: false };
+    const payload = { ...personalPayload, round: { ...personalPayload.round, draftOrigin: "agent" as const, placeholder: false, cards: [{ ...personalPayload.round.cards[0], placeholder: false }] },
+      card: { ...personalPayload.card, missions: [mission] } };
+    const html = renderToStaticMarkup(<CardDocument payload={payload} controls={controls} />);
+    expect(html).toContain("Co-Agent 起草 · 待大家讨论修改");
+    expect(html).toContain("起草依据：签发的本月计划");
+    expect(html).not.toContain("打开来源");
+    const fallback = renderToStaticMarkup(<CardDocument payload={{ ...payload, round: { ...payload.round, cards: [{ ...payload.round.cards[0], placeholder: true }] } }} controls={controls} />);
+    expect(fallback).toContain("这张卡占位");
   });
   it("首次打开自动展开五步，同一个人的同一轮只自动展开一次", () => {
     const stored = new Map<string, string>();

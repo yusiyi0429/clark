@@ -21,6 +21,7 @@ import { createMonthlyPlanService } from "./monthlyDraft.js";
 import { createMonthlyDraftAgent } from "./monthlyDraftAgent.js";
 import { createMonthlyPlanScheduler } from "./monthlyPlanScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
+import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
 
@@ -135,6 +136,7 @@ const monthlyPlanService = createMonthlyPlanService({
 const monthlyScheduler = createMonthlyPlanScheduler(monthlyPlanService);
 const now = () => new Date();
 const missionRoundScheduler = createMissionRoundScheduler(pool, now);
+await recoverStaleMissionDrafts(pool, now());
 // 启动补偿：崩溃中断的 running 扫描标为 failed（不自动重跑）
 await radarService.recoverStaleRuns();
 await personalRadarService.recoverStaleRuns();

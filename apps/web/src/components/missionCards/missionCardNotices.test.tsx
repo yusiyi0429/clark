@@ -13,8 +13,8 @@ vi.mock("@/components/HeroButton", () => ({ HeroButton: ({ children, onPress, is
 import { MissionCardNoticeGroup } from "./MissionCardNoticeGroup";
 
 const rows: TMissionRoundSummary["cards"] = [
-  { cardId: "first", ownerId: "bai", ownerName: "白田田", roleLabel: "01-1 战役 DRI", missionCount: 4, line: "已处理", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: false },
-  { cardId: "mine", ownerId: "sun", ownerName: "孙铭泽", roleLabel: "01-3 战役 DRI", missionCount: 2, line: "待处理 2", pending: 2, firstPendingFeedbackId: "feedback-2", pendingCorrections: 0, firstPendingCorrectionId: null, mine: true },
+  { cardId: "first", ownerId: "bai", ownerName: "白田田", roleLabel: "01-1 战役 DRI", missionCount: 4, line: "已处理", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: false, placeholder: false },
+  { cardId: "mine", ownerId: "sun", ownerName: "孙铭泽", roleLabel: "01-3 战役 DRI", missionCount: 2, line: "待处理 2", pending: 2, firstPendingFeedbackId: "feedback-2", pendingCorrections: 0, firstPendingCorrectionId: null, mine: true, placeholder: false },
 ];
 const summary = (overrides: Partial<TMissionRoundSummary> = {}): TMissionRoundSummary => ({ ...personalPayload.round, phase: "reviewing", approver: true, todo: "2 条意见待你处理", cards: rows, ...overrides });
 beforeEach(() => ui.presses.clear());
@@ -25,7 +25,7 @@ describe("本月 Mission Card 通知分组", () => {
     expect(html.indexOf("白田田")).toBeLessThan(html.indexOf("孙铭泽"));
     expect(html).toContain("01-3 战役"); expect(html).toContain("待处理 2");
     expect(html).toContain('data-waiting="true"'); expect(html).toContain("2 条意见待你处理");
-    expect(html.match(/>草稿</g)).toHaveLength(1); expect(html.match(/<time /g)).toHaveLength(1);
+    expect(html.match(/>占位</g)).toHaveLength(1); expect(html.match(/<time /g)).toHaveLength(1);
   });
 
   it("成员只有自己的行，没有拍板人的待办", () => {
@@ -34,9 +34,17 @@ describe("本月 Mission Card 通知分组", () => {
     expect(html).not.toContain('data-waiting="true"'); expect(html).not.toContain("2 条意见待你处理");
   });
 
-  it.each(["draft", "open", "closed", "reviewing"] as const)("%s 阶段保留通知，确认后退掉整组", (phase) => {
+  it.each(["drafting", "draft", "open", "closed", "reviewing"] as const)("%s 阶段保留通知，确认后退掉整组", (phase) => {
     const render = (phase: TMissionRoundSummary["phase"]) => renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ phase })} entry="member" onNavigate={vi.fn()} onRefresh={vi.fn()} />);
     expect(render(phase)).toContain("Mission Card"); expect(render("confirmed")).toBe("");
+  });
+  it("起草期间用工作中状态，完成后逐卡显示占位", () => {
+    const drafting = renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ phase: "drafting", draftOrigin: null, todo: "Co-Agent 正在起草", cards: rows.map((row) => ({ ...row, line: "Co-Agent 正在起草" })) })} entry="ceo" onNavigate={vi.fn()} onRefresh={vi.fn()} />);
+    expect(drafting).toContain("工作中");
+    expect(drafting).toContain("Co-Agent 正在起草");
+    const ready = renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ phase: "draft", draftOrigin: "agent", cards: [{ ...rows[0], placeholder: true }, rows[1]] })} entry="ceo" onNavigate={vi.fn()} onRefresh={vi.fn()} />);
+    expect(ready).toContain("Co-Agent 起草");
+    expect(ready.match(/>占位</g)).toHaveLength(1);
   });
 
   it("行进入对应个人卡，待处理提示直接定位第一条未处理意见", () => {

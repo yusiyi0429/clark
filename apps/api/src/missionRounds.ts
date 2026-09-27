@@ -8,6 +8,8 @@ import type { Pool, PoolClient } from "pg";
 import { CreateMissionRequest, type TCard, type TMissionCardField, type TMissionRoundConfirmInput, type TMissionRoundDecideInput, type TMissionRoundDraftPayload, type TMissionRoundPhase, type TMissionRoundSummary } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import type { MemoryPerson } from "./companyMemory.js";
+import type { CompanyMemoryRepository } from "./companyMemory.js";
+import { MissionCardDraftCandidate, type MissionCardDraftAgent, type MissionCardDraftCandidateValue, type MissionCardDraftInput } from "./missionCardDraftAgent.js";
 import type { MeetingActionOutcome, Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 
@@ -18,8 +20,8 @@ type GoalSnapshot = {
 };
 export type MissionRoundRow = {
   id: string; version: number; battlefield_id: string; period: string; monthly_plan_id: string;
-  status: "draft" | "open" | "reviewing" | "confirmed";
-  draft_origin: "placeholder" | "agent"; draft_source: Record<string, unknown>; goal_snapshot: GoalSnapshot | null;
+  status: "drafting" | "draft" | "open" | "reviewing" | "confirmed";
+  draft_origin: "placeholder" | "agent" | null; draft_source: Record<string, unknown>; goal_snapshot: GoalSnapshot | null;
   window_seq: number; first_opened_at: Date | null; opened_at: Date | null; closes_at: Date | null;
   reopens: { by: string; at: string; closedAt: string }[];
   confirmed_by: string | null; confirmed_at: Date | null; action_fingerprints: string[];
@@ -27,7 +29,7 @@ export type MissionRoundRow = {
   battlefield_owner_id: string; battlefield_name: string; battlefield_version: number; six_month_outcome: string;
 };
 type PersonalCardRow = {
-  id: string; owner_id: string; sort_order: number; role_label: string | null; member_ids: string[];
+  id: string; owner_id: string; sort_order: number; role_label: string | null; member_ids: string[]; placeholder: boolean;
 };
 type FeedbackRow = {
   id: string; card_id: string; mission_id: string | null; field: TMissionCardField | null;
@@ -54,7 +56,9 @@ export async function getMissionRoundRow(q: Query, roundId: string): Promise<Mis
   return (await q(`${ROUND_SELECT} WHERE r.id=$1`, [roundId])).rows[0] as MissionRoundRow | undefined ?? null;
 }
 async function personalCards(q: Query, roundId: string): Promise<PersonalCardRow[]> {
-  return (await q("SELECT id,owner_id,sort_order,role_label,member_ids FROM personal_mission_cards WHERE round_id=$1 ORDER BY sort_order,owner_id,id", [roundId])).rows as PersonalCardRow[];
+  return (await q(`SELECT c.id,c.owner_id,c.sort_order,c.role_label,c.member_ids,
+    EXISTS (SELECT 1 FROM missions m WHERE m.personal_mission_card_id=c.id AND m.placeholder) AS placeholder
+    FROM personal_mission_cards c WHERE c.round_id=$1 ORDER BY c.sort_order,c.owner_id,c.id`, [roundId])).rows as PersonalCardRow[];
 }
 async function canRead(q: Query, person: MissionRoundPerson, row: MissionRoundRow): Promise<boolean> {
   if (canApprove(person, row)) return true;
@@ -69,6 +73,7 @@ export function correctionPeriodClosed(row: Pick<MissionRoundRow, "period">, now
   return row.period < companyPeriod(now);
 }
 export function missionCardLine(phase: TMissionRoundPhase, feedback: number, inReview: number, pending: number, approver: boolean, corrections = 0): string {
+  if (phase === "drafting") return "Co-Agent 正在起草";
   if (phase === "draft") return "未开放";
   if (phase === "open") return feedback ? `${feedback} 条意见` : "无意见";
   if (phase === "closed") return "汇总中";
@@ -113,10 +118,11 @@ export async function projectMissionRoundCard(
     version: row.version, phase, round: Math.max(1, row.window_seq), openedAt: row.opened_at?.toISOString() ?? null,
     closesAt: row.closes_at?.toISOString() ?? null, reviewAt: review?.taken_at.toISOString() ?? null,
     serverNow: now.toISOString(), approver, deciderName: (deciderId && names.get(deciderId)) || deciderId || "CEO",
-    todo: !approver ? null : phase === "draft" ? "个人卡草稿已就绪，可以统一开放讨论"
+    todo: !approver ? null : phase === "drafting" ? "Co-Agent 正在起草" : phase === "draft" ? "个人卡草稿已就绪，可以统一开放讨论"
       : phase === "reviewing" ? pending > 0 ? `${pending} 条待你处理` : "意见已全部处理，待你确认"
       : phase === "confirmed" && corrections.length > 0 && correctable ? `${corrections.length} 条更正申请待你处理` : null,
     placeholder: row.draft_origin === "placeholder",
+    draftOrigin: row.draft_origin,
     goals: row.goal_snapshot ? { sixMonthOutcome: row.goal_snapshot.sixMonthOutcome, monthOutcome: row.goal_snapshot.monthOutcome, signedAt: row.goal_snapshot.signedAt } : null,
     counts: {
       cards: cards.length, feedback: review ? inReview.length : feedback.length, pending,
@@ -134,7 +140,8 @@ export async function projectMissionRoundCard(
         roleLabel: item.role_label, missionCount: missions.filter((mission) => mission.personal_mission_card_id === item.id).length,
         line: missionCardLine(phase, all.length, reviewed.length, outstanding, approver, correctable ? waiting.length : 0), pending: outstanding,
         firstPendingFeedbackId: reviewed.find((entry) => !decisionMap.has(entry.id))?.id ?? null,
-        pendingCorrections: waiting.length, firstPendingCorrectionId: waiting[0]?.id ?? null, mine: item.owner_id === person.personId };
+        pendingCorrections: waiting.length, firstPendingCorrectionId: waiting[0]?.id ?? null, mine: item.owner_id === person.personId,
+        placeholder: item.placeholder };
     }),
   };
   const actions: TCard["actions"] = [];
@@ -420,6 +427,27 @@ async function importedCards(q: Query, roundId: string): Promise<MissionDraftImp
     LEFT JOIN missions m ON m.personal_mission_card_id=c.id WHERE c.round_id=$1 GROUP BY c.id ORDER BY c.sort_order,c.owner_id,c.id`, [roundId])).rows as MissionDraftImportResult["cards"];
 }
 
+async function insertPlaceholderCards(
+  client: PoolClient, value: DraftFileValue, roundId: string, battlefieldId: string, battlefieldOwnerId: string,
+  capabilities: Map<string, string>, people: MemoryPerson[], at: Date,
+): Promise<void> {
+  for (const card of value.cards) {
+    const cardId = randomUUID();
+    await client.query(`INSERT INTO personal_mission_cards (id,round_id,owner_id,sort_order,role_label,member_ids,created_at)
+      VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)`,
+    [cardId, roundId, card.ownerId, card.sortOrder, card.roleLabel ?? null, JSON.stringify(missionCardMembers(card.ownerId, battlefieldOwnerId, people)), at]);
+    for (const mission of card.missions) await client.query(`INSERT INTO missions
+      (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,why,success_evidence,boundaries,key_path,
+       milestones,resources,dependencies,human_agent_split,risk,retrospect,source_ref,source_document_id,source_revision,
+       source_title,placeholder,personal_mission_card_id,created_at,updated_at)
+      VALUES ($1,1,$1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9::jsonb,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20,$21,true,$22,$23,$23)`,
+    [mission.code, value.period, mission.title, card.ownerId, capabilities.get(mission.capabilityCode)!, JSON.stringify([battlefieldId]),
+      mission.outcome, mission.why, JSON.stringify(mission.successEvidence), mission.boundaries, mission.keyPath,
+      JSON.stringify(mission.milestones), mission.resources, mission.dependencies, mission.humanAgentSplit, mission.risk,
+      mission.retrospect, mission.source.url, mission.source.documentId, mission.source.revision, value.placeholderNote, cardId, at]);
+  }
+}
+
 /** CLI 与整理草稿动作共用：先校验完整候选，锁定战场 slot 后在同一事务建轮次、卡、个人任务。 */
 export async function importMissionCardDrafts(
   pool: Pool, people: MemoryPerson[], file: string, now: Date | (() => Date), action?: DraftActionContext,
@@ -462,21 +490,7 @@ export async function importMissionCardDrafts(
     await client.query(`INSERT INTO mission_rounds (id,version,battlefield_id,period,monthly_plan_id,status,draft_origin,draft_source,action_fingerprints,created_at,updated_at)
       VALUES ($1,1,$2,$3,$4,'draft','placeholder',$5::jsonb,$6::jsonb,$7,$7)`,
     [roundId, battlefield.id, value.period, plan.id, JSON.stringify(source), JSON.stringify(action ? [action.fingerprint] : []), at]);
-    for (const card of value.cards) {
-      const cardId = randomUUID();
-      await client.query(`INSERT INTO personal_mission_cards (id,round_id,owner_id,sort_order,role_label,member_ids,created_at)
-        VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)`,
-      [cardId, roundId, card.ownerId, card.sortOrder, card.roleLabel ?? null, JSON.stringify(missionCardMembers(card.ownerId, battlefield.owner_id, people)), at]);
-      for (const mission of card.missions) await client.query(`INSERT INTO missions
-        (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,why,success_evidence,boundaries,key_path,
-         milestones,resources,dependencies,human_agent_split,risk,retrospect,source_ref,source_document_id,source_revision,
-         source_title,placeholder,personal_mission_card_id,created_at,updated_at)
-        VALUES ($1,1,$1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9::jsonb,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20,$21,true,$22,$23,$23)`,
-      [mission.code, value.period, mission.title, card.ownerId, capabilities.get(mission.capabilityCode)!, JSON.stringify([battlefield.id]),
-        mission.outcome, mission.why, JSON.stringify(mission.successEvidence), mission.boundaries, mission.keyPath,
-        JSON.stringify(mission.milestones), mission.resources, mission.dependencies, mission.humanAgentSplit, mission.risk,
-        mission.retrospect, mission.source.url, mission.source.documentId, mission.source.revision, value.placeholderNote, cardId, at]);
-    }
+    await insertPlaceholderCards(client, value, roundId, battlefield.id, battlefield.owner_id, capabilities, people, at);
     const cards = await importedCards(q, roundId);
     await client.query("COMMIT"); return { roundId, imported: true, cards };
   } catch (error) {
@@ -486,9 +500,181 @@ export async function importMissionCardDrafts(
   } finally { client.release(); }
 }
 
+function previousPeriod(period: string): string {
+  const year = Number(period.slice(0, 4)); const month = Number(period.slice(5));
+  return `${month === 1 ? year - 1 : year}-${String(month === 1 ? 12 : month - 1).padStart(2, "0")}`;
+}
+
+type DraftOwner = { owner_id: string };
+type PreviousMission = {
+  title: string; why: string; outcome: string; success_evidence: string[]; boundaries: string; key_path: string;
+  milestones: string[]; resources: string; dependencies: string; human_agent_split: string; risk: string; retrospect: string;
+  capability_code: string; source_ref: string; source_document_id: string; source_revision: number;
+};
+async function draftOwners(q: Query, people: MemoryPerson[], battlefieldId: string, period: string): Promise<DraftOwner[]> {
+  const rows = (await q(`SELECT owner_id FROM (
+    SELECT c.owner_id FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id
+      WHERE r.battlefield_id=$1 AND r.period=$2
+    UNION SELECT m.owner_id FROM missions m WHERE m.period=$3 AND m.battlefield_ids @> $4::jsonb
+  ) owners ORDER BY owner_id`, [battlefieldId, previousPeriod(period), period, JSON.stringify([battlefieldId])])).rows as { owner_id: string }[];
+  const known = new Set(people.map((item) => item.personId));
+  return rows.filter((item) => known.has(item.owner_id));
+}
+
+/** 启动时只释放超时的空草稿；未完成的 Agent 结果不能覆盖重新整理的轮次。 */
+export async function recoverStaleMissionDrafts(pool: Pool, now: Date): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const stale = await client.query<{ id: string }>("SELECT id FROM mission_rounds WHERE status='drafting' AND updated_at < $1 FOR UPDATE", [new Date(now.getTime() - 10 * 60_000)]);
+    for (const row of stale.rows) {
+      await client.query("DELETE FROM personal_mission_cards WHERE round_id=$1", [row.id]);
+      await client.query("DELETE FROM mission_rounds WHERE id=$1", [row.id]);
+    }
+    await client.query("COMMIT");
+    return stale.rowCount ?? 0;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+  finally { client.release(); }
+}
+
+/** 每人独立超时与降级；最后一次事务只在仍为 drafting 时写入整轮草稿。 */
+export async function completeMissionRoundDraft(
+  pool: Pool, people: MemoryPerson[], roundId: string, agent: MissionCardDraftAgent,
+  memory: CompanyMemoryRepository | undefined, now: () => Date, directory?: string,
+): Promise<void> {
+  const q: Query = (sql, params) => pool.query(sql, params);
+  const row = await getMissionRoundRow(q, roundId);
+  if (!row || row.status !== "drafting") return;
+  const plan = (await q("SELECT company_outcome,battlefields,confirmed_at FROM monthly_plans WHERE id=$1", [row.monthly_plan_id])).rows[0] as { company_outcome: string; battlefields: { battlefieldId: string; outcome: string }[]; confirmed_at: Date };
+  const battlefield = (await q("SELECT code,name,six_month_outcome,mission_anchors FROM battlefield_config WHERE id=$1", [row.battlefield_id])).rows[0] as { code: string; name: string; six_month_outcome: string; mission_anchors: unknown };
+  const capabilities = (await q("SELECT code,name FROM capability_config ORDER BY code")).rows as { code: string; name: string }[];
+  const owners = (await q("SELECT id,owner_id FROM personal_mission_cards WHERE round_id=$1 ORDER BY sort_order", [roundId])).rows as { id: string; owner_id: string }[];
+  const names = new Map(people.map((item) => [item.personId, item.displayName]));
+  const results = await Promise.all(owners.map(async (owner) => {
+    const previous = (await q(`SELECT m.title,m.why,m.outcome,m.success_evidence,m.boundaries,m.key_path,m.milestones,m.resources,
+      m.dependencies,m.human_agent_split,m.risk,m.retrospect,cap.code AS capability_code,
+      m.source_ref,m.source_document_id,m.source_revision
+      FROM mission_rounds r JOIN personal_mission_cards c ON c.round_id=r.id
+      JOIN missions m ON m.personal_mission_card_id=c.id JOIN capability_config cap ON cap.id=m.capability_id
+      WHERE r.battlefield_id=$1 AND r.period=$2 AND c.owner_id=$3 ORDER BY m.code`,
+    [row.battlefield_id, previousPeriod(row.period), owner.owner_id])).rows as PreviousMission[];
+    const matches = memory?.searchSections(`${battlefield.name} ${names.get(owner.owner_id) ?? owner.owner_id}`, 3) ?? [];
+    const input: MissionCardDraftInput = {
+      period: row.period,
+      battlefield: { id: row.battlefield_id, code: battlefield.code, name: battlefield.name, sixMonthOutcome: battlefield.six_month_outcome, missionAnchors: battlefield.mission_anchors },
+      plan: { companyOutcome: plan.company_outcome, monthOutcome: plan.battlefields.find((item) => item.battlefieldId === row.battlefield_id)?.outcome ?? "", signedAt: plan.confirmed_at.toISOString() },
+      owner: { personId: owner.owner_id, displayName: names.get(owner.owner_id) ?? owner.owner_id },
+      previousCard: previous.length ? { missions: previous } : null, capabilities,
+      companyMemory: matches.map((match) => ({ title: match.title, sourceRef: match.sourceRef,
+        passages: memory!.getPassages(match.id, undefined, 2).passages.map((passage) => ({ text: passage.text, sourceRef: passage.sourceRef })) })),
+    };
+    try {
+      const { candidate, runId } = await agent.generate(input, AbortSignal.timeout(90_000));
+      if (!Value.Check(MissionCardDraftCandidate, candidate)) throw new Error("Mission Card candidate schema invalid");
+      if (candidate.missions.some((mission) => !capabilities.some((capability) => capability.code === mission.capabilityCode))) throw new Error("Mission Card capability unknown");
+      return { owner, missions: candidate.missions as MissionCardDraftCandidateValue["missions"], previous, runId, placeholder: false };
+    } catch (error) {
+      console.warn(`mission card draft failed for ${owner.owner_id}: ${(error as Error).message || String(error)}`);
+      return { owner, missions: null, previous, runId: undefined, placeholder: true };
+    }
+  }));
+  if (results.every((result) => result.placeholder)) {
+    const file = draftPath(directory, row.period, battlefield.code);
+    if (await isDraftFile(file)) {
+      const { value, sha256 } = await readDraft(file);
+      if (value.period !== row.period || value.battlefieldCode !== battlefield.code) throw new MissionDraftImportError(400, "INVALID_DRAFT_SCHEMA", "占位文件的战场或月份与轮次不一致");
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const current = (await client.query<{ status: string }>("SELECT status FROM mission_rounds WHERE id=$1 FOR UPDATE", [roundId])).rows[0];
+        if (current?.status !== "drafting") { await client.query("ROLLBACK"); return; }
+        const capabilities = new Map((await client.query<{ id: string; code: string }>("SELECT id,code FROM capability_config")).rows.map((item) => [item.code, item.id]));
+        const known = new Set(people.map((person) => person.personId));
+        for (const card of value.cards) {
+          if (!known.has(card.ownerId) || card.missions.some((mission) => !capabilities.has(mission.capabilityCode))) throw new MissionDraftImportError(400, "INVALID_DRAFT_SCHEMA", "占位文件引用了未登记的人或能力域");
+        }
+        await client.query("DELETE FROM personal_mission_cards WHERE round_id=$1", [roundId]);
+        const at = now();
+        await insertPlaceholderCards(client, value, roundId, row.battlefield_id, row.battlefield_owner_id, capabilities, people, at);
+        await client.query("UPDATE mission_rounds SET status='draft',draft_origin='placeholder',draft_source=$2::jsonb,version=version+1,updated_at=$3 WHERE id=$1",
+          [roundId, JSON.stringify({ file: basename(file), sha256, schema: value.schema, importedAt: at.toISOString(), source: value.source }), at]);
+        await client.query("COMMIT");
+      } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+      finally { client.release(); }
+    } else await recoverDraftRound(pool, roundId);
+    return;
+  }
+  const needsFile = results.some((result) => result.placeholder && !result.previous.length);
+  const fallbackFile = needsFile && await isDraftFile(draftPath(directory, row.period, battlefield.code))
+    ? await readDraft(draftPath(directory, row.period, battlefield.code)).then((draft) => draft.value).catch(() => null) : null;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const current = (await client.query<{ status: string }>("SELECT status FROM mission_rounds WHERE id=$1 FOR UPDATE", [roundId])).rows[0];
+    if (current?.status !== "drafting") { await client.query("ROLLBACK"); return; }
+    const capabilityIds = new Map((await client.query<{ id: string; code: string }>("SELECT id,code FROM capability_config")).rows.map((item) => [item.code, item.id]));
+    const at = now();
+    let written = 0;
+    for (const [ownerIndex, result] of results.entries()) {
+      const previousMissions = result.previous.slice(0, 4).map((mission) => ({
+        capabilityCode: mission.capability_code, title: mission.title, why: mission.why || "待定", outcome: mission.outcome || "待定",
+        successEvidence: mission.success_evidence.length ? mission.success_evidence : ["待定"], boundaries: mission.boundaries || "待定",
+        keyPath: mission.key_path || "待定", milestones: mission.milestones.length ? mission.milestones : ["待定"],
+        resources: mission.resources || "待定", dependencies: mission.dependencies || "待定", humanAgentSplit: mission.human_agent_split || "待定",
+        risk: mission.risk || "待定", retrospect: mission.retrospect || "待定", basis: `沿用 ${Number(previousPeriod(row.period).slice(5))} 月个人卡`,
+      }));
+      const fileCard = fallbackFile?.cards.find((card) => card.ownerId === result.owner.owner_id);
+      const fileMissions = fileCard?.missions.slice(0, 4).map((mission) => ({ ...mission, basis: fallbackFile!.placeholderNote }));
+      // 这个人起草失败、又没有上月卡和占位候选：只去掉他这张卡，不拖垮整轮。
+      if (!result.missions && !previousMissions.length && !fileMissions?.length) {
+        console.warn(`mission card draft skipped for ${result.owner.owner_id}: no agent draft, previous card or placeholder`);
+        await client.query("DELETE FROM personal_mission_cards WHERE id=$1", [result.owner.id]);
+        continue;
+      }
+      written += 1;
+      const missions = result.missions ?? (previousMissions.length ? previousMissions : fileMissions!);
+      for (const [index, mission] of missions.entries()) {
+        const id = randomUUID();
+        // 可读且全局唯一：月份-战场编号-第几个人-第几项；本月计划按 code 排序。
+        const code = `${row.period}-${battlefield.code}-${String(ownerIndex + 1).padStart(2, "0")}-${index + 1}`;
+        const source = result.placeholder ? result.previous[index] : null;
+        const fileSource = result.placeholder ? fileCard?.missions[index]?.source : null;
+        await client.query(`INSERT INTO missions (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,why,success_evidence,boundaries,key_path,
+          milestones,resources,dependencies,human_agent_split,risk,retrospect,source_ref,source_document_id,source_revision,source_title,placeholder,personal_mission_card_id,created_at,updated_at)
+          VALUES ($1,1,$25,$2,$3,$4,$5,$6::jsonb,$7,$8,$9::jsonb,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$24)`,
+        [id, row.period, mission.title, result.owner.owner_id, capabilityIds.get(mission.capabilityCode), JSON.stringify([row.battlefield_id]),
+          mission.outcome, mission.why, JSON.stringify(mission.successEvidence), mission.boundaries, mission.keyPath, JSON.stringify(mission.milestones),
+          mission.resources, mission.dependencies, mission.humanAgentSplit, mission.risk, mission.retrospect,
+          source?.source_ref ?? fileSource?.url ?? `mission-card-agent://${roundId}/${result.owner.owner_id}`,
+          source?.source_document_id ?? fileSource?.documentId ?? `mission-card-agent:${roundId}`, source?.source_revision ?? fileSource?.revision ?? 1,
+          `起草依据：${mission.basis}`, result.placeholder, result.owner.id, at, code]);
+      }
+    }
+    if (!written) throw new MissionDraftImportError(409, "MISSION_DRAFTS_NOT_FOUND", "没有起草成功的个人卡，也没有上月卡或占位候选");
+    await client.query("UPDATE mission_rounds SET status='draft',draft_origin='agent',draft_source=$2::jsonb,version=version+1,updated_at=$3 WHERE id=$1", [roundId,
+      JSON.stringify({ runIds: results.map((result) => result.runId).filter(Boolean), placeholderOwners: results.filter((result) => result.placeholder).map((result) => result.owner.owner_id) }), at]);
+    await client.query("COMMIT");
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+  finally { client.release(); }
+}
+
+async function recoverDraftRound(pool: Pool, roundId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const current = (await client.query<{ status: string }>("SELECT status FROM mission_rounds WHERE id=$1 FOR UPDATE", [roundId])).rows[0];
+    if (current?.status === "drafting") {
+      await client.query("DELETE FROM personal_mission_cards WHERE round_id=$1", [roundId]);
+      await client.query("DELETE FROM mission_rounds WHERE id=$1", [roundId]);
+    }
+    await client.query("COMMIT");
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+  finally { client.release(); }
+}
+
 export async function executeDraftMissionRound(
   pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope,
-  fingerprint: string, now: () => Date, directory?: string,
+  fingerprint: string, now: () => Date, directory?: string, agent?: MissionCardDraftAgent, memory?: CompanyMemoryRepository,
 ): Promise<MeetingActionOutcome> {
   const match = /^(.*):(\d{4}-(?:0[1-9]|1[0-2]))$/.exec(scope.objectId);
   if (!match || scope.objectVersion !== 1) return failure(404, "UNKNOWN_ACTION", "无效的整理草稿入口");
@@ -497,6 +683,64 @@ export async function executeDraftMissionRound(
   if (!battlefield) return failure(404, "ROUND_NOT_FOUND", "战场不存在");
   if (!canApprove(person, { battlefield_owner_id: battlefield.owner_id })) return failure(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以整理个人卡草稿");
   try {
+    if (agent) {
+      const client = await pool.connect();
+      let roundId: string | undefined;
+      let replayed = false;
+      try {
+        await client.query("BEGIN");
+        const locked = (await client.query<{ id: string; code: string; owner_id: string }>("SELECT id,code,owner_id FROM battlefield_config WHERE id=$1 FOR UPDATE", [battlefield.id])).rows[0];
+        if (!locked || !canApprove(person, { battlefield_owner_id: locked.owner_id })) {
+          await client.query("ROLLBACK"); return failure(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以整理个人卡草稿");
+        }
+        const existing = (await client.query<{ id: string; status: string; draft_origin: string | null; draft_source: { sha256?: string }; action_fingerprints: string[] }>(
+          "SELECT id,status,draft_origin,draft_source,action_fingerprints FROM mission_rounds WHERE battlefield_id=$1 AND period=$2 FOR UPDATE", [battlefield.id, match[2]])).rows[0];
+        if (existing) {
+          if (existing.status === "drafting" && !existing.action_fingerprints.includes(fingerprint)) {
+            await client.query("ROLLBACK"); return failure(409, "ROUND_DRAFTING", "Co-Agent 正在起草，稍后刷新即可查看");
+          }
+          if (existing.draft_origin === "placeholder" && existing.draft_source.sha256) {
+            const { sha256 } = await readDraft(draftPath(directory, match[2], battlefield.code));
+            if (sha256 !== existing.draft_source.sha256) {
+              await client.query("ROLLBACK"); return failure(409, "MISSION_DRAFT_SOURCE_CHANGED", "本轮已存在且占位文件已改变，不能覆盖已经整理或讨论的内容");
+            }
+          }
+          roundId = existing.id; replayed = true;
+        } else {
+          const plan = (await client.query<{ id: string; status: string; confirmed_at: Date | null; battlefields: { battlefieldId: string; outcome: string }[] }>(
+            "SELECT id,status,confirmed_at,battlefields FROM monthly_plans WHERE period=$1 FOR SHARE", [match[2]])).rows[0];
+          if (!plan || plan.status !== "confirmed" || !plan.confirmed_at) {
+            await client.query("ROLLBACK"); return failure(409, "MONTHLY_PLAN_NOT_CONFIRMED", "月度计划还没签发：先签发再整理草稿");
+          }
+          if (!plan.battlefields.some((item) => item.battlefieldId === battlefield.id && item.outcome.trim())) {
+            await client.query("ROLLBACK"); return failure(409, "ROUND_GOALS_MISSING", "已签发月度计划里没有本战场的本月结果");
+          }
+          const owners = await draftOwners((sql, params) => client.query(sql, params), people, battlefield.id, match[2]);
+          if (!owners.length) {
+            await client.query("ROLLBACK");
+            if (!await isDraftFile(draftPath(directory, match[2], battlefield.code))) return failure(409, "NO_DRAFT_OWNERS", "没有可起草的人");
+            const imported = await importMissionCardDrafts(pool, people, draftPath(directory, match[2], battlefield.code), now, { person, scope, fingerprint });
+            const card = await getMissionRoundCard(q, people, secret, person, imported.roundId, now());
+            return card ? { card, ...(imported.imported ? {} : { replayed: true }) } : failure(404, "ROUND_NOT_FOUND", "Mission Card 轮次不存在");
+          }
+          const at = now(); roundId = randomUUID();
+          await client.query(`INSERT INTO mission_rounds (id,version,battlefield_id,period,monthly_plan_id,status,draft_origin,draft_source,action_fingerprints,created_at,updated_at)
+            VALUES ($1,1,$2,$3,$4,'drafting',NULL,'{}'::jsonb,$5::jsonb,$6,$6)`,
+          [roundId, battlefield.id, match[2], plan.id, JSON.stringify([fingerprint]), at]);
+          for (const [index, owner] of owners.entries()) await client.query(`INSERT INTO personal_mission_cards
+            (id,round_id,owner_id,sort_order,role_label,member_ids,created_at) VALUES ($1,$2,$3,$4,NULL,$5::jsonb,$6)`,
+          [randomUUID(), roundId, owner.owner_id, index, JSON.stringify(missionCardMembers(owner.owner_id, battlefield.owner_id, people)), at]);
+        }
+        await client.query("COMMIT");
+      } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+      finally { client.release(); }
+      if (!replayed) void completeMissionRoundDraft(pool, people, roundId!, agent, memory, now, directory).catch(async (error) => {
+        await recoverDraftRound(pool, roundId!).catch((recovery) => console.error(`mission card draft recovery ${roundId} failed: ${String(recovery)}`));
+        console.error(`mission card draft ${roundId} failed: ${(error as Error).message || String(error)}`);
+      });
+      const card = await getMissionRoundCard(q, people, secret, person, roundId!, now());
+      return card ? { card, ...(replayed ? { replayed: true } : {}) } : failure(404, "ROUND_NOT_FOUND", "Mission Card 轮次不存在");
+    }
     const imported = await importMissionCardDrafts(pool, people, draftPath(directory, match[2], battlefield.code), now, { person, scope, fingerprint });
     const card = await getMissionRoundCard(q, people, secret, person, imported.roundId, now());
     return card ? { card, ...(imported.imported ? {} : { replayed: true }) } : failure(404, "ROUND_NOT_FOUND", "Mission Card 轮次不存在");
@@ -507,7 +751,7 @@ export async function executeDraftMissionRound(
 }
 
 export async function listMissionRoundDraftCards(
-  q: Query, _people: MemoryPerson[], secret: string, person: MissionRoundPerson, period: string, now: Date, directory?: string,
+  q: Query, people: MemoryPerson[], secret: string, person: MissionRoundPerson, period: string, now: Date, directory?: string,
 ): Promise<TCard[]> {
   const plan = (await q("SELECT battlefields FROM monthly_plans WHERE period=$1 AND status='confirmed' AND confirmed_at IS NOT NULL", [period])).rows[0] as { battlefields: { battlefieldId: string; outcome: string }[] } | undefined;
   if (!plan) return [];
@@ -517,10 +761,10 @@ export async function listMissionRoundDraftCards(
   const cards: TCard[] = [];
   for (const battlefield of battlefields) {
     if (!canApprove(person, { battlefield_owner_id: battlefield.owner_id }) || !plan.battlefields.some((item) => item.battlefieldId === battlefield.id && item.outcome.trim())) continue;
-    if (/[/\\]/.test(battlefield.code) || !await isDraftFile(draftPath(directory, period, battlefield.code))) continue;
+    const owners = await draftOwners(q, people, battlefield.id, period);
     const slotId = `${battlefield.id}:${period}`;
     const payload: TMissionRoundDraftPayload = { period, battlefieldId: battlefield.id, battlefieldName: battlefield.name,
-      placeholder: true, todo: "可以整理个人卡草稿", serverNow: now.toISOString() };
+      placeholder: !owners.length, todo: "可以整理个人卡草稿", serverNow: now.toISOString() };
     const scope: ActionScope = { actionType: "mission-round.draft", objectType: "mission-round-slot", objectId: slotId, objectVersion: 1 };
     cards.push({ schemaVersion: 1, id: `mission-round-slot:${slotId}`, kind: "mission-round", version: 1,
       objectRef: { type: "mission-round-slot", id: slotId, version: 1 },

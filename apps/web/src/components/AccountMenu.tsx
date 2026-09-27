@@ -2,15 +2,15 @@
 
 /**
  * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。本人能改的设置都收在这里 ——
- * 我的声纹、雷达（成员是「我的雷达」，CEO 是「雷达设置」，改的是公司雷达）、修改口令；
- * CEO 多一项组织配置（会议、议题、战场、能力、长期目标）；最后是退出登录。
+ * 声纹（已配置时）、雷达、修改口令、重看首次引导；双身份者还能切换工作台。
+ * CEO 多一项组织配置；最后是退出登录。
  * 声纹、雷达和口令各开一个小弹窗，不离开当前页面。
  */
 
 import { useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { ArrowRight, AudioLines, KeyRound, LogOut, PlugZap, Radar, Settings2, X } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, AudioLines, KeyRound, LogOut, PlugZap, Radar, RotateCcw, Settings2, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { logout } from "@/lib/logout";
 import { VoiceprintCard } from "@/components/member/VoiceprintCard";
@@ -37,7 +37,45 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [leaving, setLeaving] = useState(false);
+  const [canSwitchView, setCanSwitchView] = useState(false);
+  const [voiceConfigured, setVoiceConfigured] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const radarTitle = account.role === "ceo" ? "雷达设置" : "我的雷达";
+  const openMenu = (next: boolean) => {
+    setOpen(next);
+    if (!next) return;
+    setError(null);
+    void Promise.all([browserApi.GET("/api/auth/session"), browserApi.GET("/api/me/voiceprint")]).then(([session, voiceprint]) => {
+      setCanSwitchView(Boolean(session.response.ok && session.data?.authenticated && session.data.canSwitchView));
+      setVoiceConfigured(Boolean(voiceprint.response.ok && voiceprint.data?.configured));
+    }).catch(() => setError("个人设置暂时无法读取，请重试。"));
+  };
+  const switchView = async () => {
+    const view = account.role === "ceo" ? "member" : "ceo";
+    setBusy(true);
+    setError(null);
+    try {
+      const { response } = await browserApi.POST("/api/auth/view", { body: { view } });
+      if (!response.ok) throw new Error("switch failed");
+      window.location.assign(view === "ceo" ? "/" : "/me");
+    } catch {
+      setError("切换工作台失败，请重试。");
+      setBusy(false);
+    }
+  };
+  const replayOnboarding = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { response } = await browserApi.DELETE("/api/me/onboarding/complete");
+      if (!response.ok) throw new Error("reset failed");
+      window.location.assign("/welcome");
+    } catch {
+      setError("首次引导暂时无法重看，请重试。");
+      setBusy(false);
+    }
+  };
   const pick = (next: Dialog) => {
     setOpen(false);
     setDialog(next);
@@ -45,7 +83,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
 
   return (
     <>
-      <Popover isOpen={open} onOpenChange={setOpen}>
+      <Popover isOpen={open} onOpenChange={openMenu}>
         <Button variant="ghost" className={compact ? m.avatarButton : m.chip} aria-label={`${account.displayName}，打开个人菜单`} data-account-menu>
           <span className={m.avatar} aria-hidden="true">
             {avatarInitial(account.displayName)}
@@ -64,10 +102,10 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                   <small>{[account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ")}</small>
                 </span>
               </div>
-              <Button variant="ghost" className={m.item} onPress={() => pick("voiceprint")}>
+              {voiceConfigured ? <Button variant="ghost" className={m.item} onPress={() => pick("voiceprint")}>
                 <AudioLines size={16} aria-hidden="true" />
                 我的声纹
-              </Button>
+              </Button> : null}
               <Button variant="ghost" className={m.item} onPress={() => pick("radar")}>
                 <Radar size={16} aria-hidden="true" />
                 {radarTitle}
@@ -92,6 +130,15 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                   组织配置
                 </Button>
               ) : null}
+              {canSwitchView ? <Button variant="ghost" className={m.item} isDisabled={busy} onPress={() => void switchView()}>
+                <ArrowLeftRight size={16} aria-hidden="true" />
+                {account.role === "ceo" ? "切换到 DRI 工作台" : "切换到 CEO 工作台"}
+              </Button> : null}
+              <Button variant="ghost" className={m.item} isDisabled={busy} onPress={() => void replayOnboarding()}>
+                <RotateCcw size={16} aria-hidden="true" />
+                重看首次引导
+              </Button>
+              {error ? <p className={m.error} role="alert">{error}</p> : null}
               <hr className={m.rule} />
               <Button
                 variant="ghost"

@@ -1,5 +1,5 @@
 import { CompleteOnboardingResponse, OnboardingResponse } from "@warmap/contracts";
-import { completeOnboarding, readOnboarding } from "../onboarding.js";
+import { completeOnboarding, readOnboarding, resetOnboarding } from "../onboarding.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerOnboardingRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -17,4 +17,8 @@ export function registerOnboardingRoutes(app: AppInstance, ctx: RouteContext): v
       return { onboarded: true as const };
     },
   );
+  app.delete("/api/me/onboarding/complete", { preHandler: requirePerson }, async (req, reply) => {
+    await resetOnboarding(q, req.person!.personId);
+    return reply.code(204).send();
+  });
 }

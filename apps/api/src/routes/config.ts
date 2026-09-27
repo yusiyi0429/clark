@@ -168,7 +168,7 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
           ...body.value,
           materials: parsed?.materials,
           materialStorageDir,
-        });
+        }, ctx.threadIntroAgent);
         if ("error" in result) {
           return fail(reply, result.error.status, result.error.code, result.error.message, result.error.fieldErrors ? { fieldErrors: result.error.fieldErrors } : undefined);
         }

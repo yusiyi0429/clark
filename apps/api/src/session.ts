@@ -2,8 +2,8 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 
 export const SESSION_COOKIE = "warmap_session";
 
-/** 会话里只放「是谁」与凭据版本；身份（CEO／成员）每次按 seed 现算，版本对不上即视为已登出。 */
-export type SessionClaims = { pid: string; v: number };
+/** 会话存人员、凭据版本和当前视角；视角每次按 seed 身份校验，版本变化后旧会话失效。 */
+export type SessionClaims = { pid: string; v: number; view?: "ceo" | "member" };
 
 function hmac(secret: string, data: string): string {
   return createHmac("sha256", secret).update(data).digest("base64url");
@@ -30,7 +30,7 @@ export function verifySecret(stored: string, secret: string): boolean {
 
 export function createSessionToken(secret: string, maxAgeSeconds: number, claims: SessionClaims): string {
   const payload = Buffer.from(
-    JSON.stringify({ pid: claims.pid, v: claims.v, exp: Math.floor(Date.now() / 1000) + maxAgeSeconds }),
+    JSON.stringify({ pid: claims.pid, v: claims.v, view: claims.view, exp: Math.floor(Date.now() / 1000) + maxAgeSeconds }),
   ).toString("base64url");
   return `${payload}.${hmac(secret, payload)}`;
 }
@@ -41,9 +41,9 @@ export function readSessionToken(secret: string, token: string | undefined): Ses
   const [payload, sig] = token.split(".");
   if (!payload || !sig || !safeEqual(hmac(secret, payload), sig)) return null;
   try {
-    const { pid, v, exp } = JSON.parse(Buffer.from(payload, "base64url").toString()) as Record<string, unknown>;
-    if (typeof pid !== "string" || !pid || !Number.isInteger(v) || typeof exp !== "number") return null;
-    return exp > Math.floor(Date.now() / 1000) ? { pid, v: v as number } : null;
+    const { pid, v, view, exp } = JSON.parse(Buffer.from(payload, "base64url").toString()) as Record<string, unknown>;
+    if (typeof pid !== "string" || !pid || !Number.isInteger(v) || typeof exp !== "number" || (view !== undefined && view !== "ceo" && view !== "member")) return null;
+    return exp > Math.floor(Date.now() / 1000) ? { pid, v: v as number, ...(view ? { view } : {}) } : null;
   } catch {
     return null;
   }

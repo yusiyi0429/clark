@@ -22,6 +22,10 @@ export async function completeOnboarding(q: Query, personId: string, now: Date):
   );
 }
 
+export async function resetOnboarding(q: Query, personId: string): Promise<void> {
+  await q("DELETE FROM person_onboarding WHERE person_id = $1", [personId]);
+}
+
 type Plan = Pick<MonthlyPlanRow, "status" | "battlefields">;
 type Next = TOnboardingResponse["next"];
 type WorkCard = Extract<TOnboardingResponse, { role: "member" }>["work"]["missionCards"][number];

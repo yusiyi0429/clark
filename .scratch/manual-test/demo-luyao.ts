@@ -5,6 +5,7 @@ import { setMemberAccess } from "../../apps/api/src/memberAccess.js";
 import { directionId } from "../../apps/api/src/radarSettings.js";
 
 export const LUYAO = { personId: "wang-luyao", loginId: "wangluyao" } as const;
+export const PRODUCT_PEOPLE = [LUYAO.personId, "demo-zhou-tinglan", "demo-xu-zhiwei", "sun-mingze"] as const;
 
 /** 切换本月目标状态前移走这套演示事实，保证 growth 的阶段命令仍可从头演练。 */
 export async function clearWangLuyao(app: TestApp, taskIds: Record<string,string>) {
@@ -20,14 +21,19 @@ export async function clearWangLuyao(app: TestApp, taskIds: Record<string,string
   await sql("DELETE FROM meetings WHERE title='团队协作交接对齐会' AND lead_dri_id='sun-mingze'");
   await sql(`DELETE FROM mission_review_decisions WHERE review_id IN
     (SELECT id FROM mission_round_reviews WHERE round_id IN
-      (SELECT id FROM mission_rounds WHERE battlefield_id='supporting' AND period='2026-10'))`);
-  await sql("DELETE FROM mission_round_reviews WHERE round_id IN (SELECT id FROM mission_rounds WHERE battlefield_id='supporting' AND period='2026-10')");
+      (SELECT id FROM mission_rounds WHERE battlefield_id IN ('supporting','product') AND period='2026-10'))`);
+  await sql("DELETE FROM mission_round_reviews WHERE round_id IN (SELECT id FROM mission_rounds WHERE battlefield_id IN ('supporting','product') AND period='2026-10')");
   await sql("DELETE FROM mission_card_corrections WHERE card_id IN (SELECT id FROM personal_mission_cards WHERE owner_id=$1)",[LUYAO.personId]);
   await sql("DELETE FROM mission_card_feedback WHERE card_id IN (SELECT id FROM personal_mission_cards WHERE owner_id=$1)",[LUYAO.personId]);
   await sql("DELETE FROM mission_card_reads WHERE card_id IN (SELECT id FROM personal_mission_cards WHERE owner_id=$1)",[LUYAO.personId]);
+  for (const table of ["mission_card_corrections", "mission_card_feedback", "mission_card_reads"])
+    await sql(`DELETE FROM ${table} WHERE card_id IN (SELECT id FROM personal_mission_cards WHERE round_id IN (SELECT id FROM mission_rounds WHERE battlefield_id='product' AND period='2026-10'))`);
   await sql("DELETE FROM missions WHERE source_document_id='demo-luyao'");
+  await sql("DELETE FROM missions WHERE source_document_id='demo-luyao-product'");
   await sql("DELETE FROM personal_mission_cards WHERE owner_id=$1",[LUYAO.personId]);
+  await sql("DELETE FROM personal_mission_cards WHERE round_id IN (SELECT id FROM mission_rounds WHERE battlefield_id='product' AND period='2026-10')");
   await sql("DELETE FROM mission_rounds WHERE battlefield_id='supporting' AND period='2026-10'");
+  await sql("DELETE FROM mission_rounds WHERE battlefield_id='product' AND period='2026-10'");
   await sql("DELETE FROM person_radar_signals WHERE person_id=$1",[LUYAO.personId]);
   await sql("DELETE FROM person_radar WHERE person_id=$1",[LUYAO.personId]);
 }
@@ -92,6 +98,75 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
     source_ref,source_document_id,source_revision,source_title)
     VALUES ('demo-luyao-growth',1,'DEMO-LY-03','2026-10','参与灯塔项目的交接验收',$1,'cap-03','["growth"]',
       '把灯塔项目交付物交给另一位同事独立核验','fixture://demo-luyao','demo-luyao',1,'演示参与登记')`,[LUYAO.personId]);
+
+  const productRoundId = randomUUID();
+  const productOpenedAt = new Date(now.getTime() - 12 * 60 * 60_000).toISOString();
+  const productClosesAt = new Date(now.getTime() + 36 * 60 * 60_000).toISOString();
+  const [{ six_month_outcome: productSixMonth }] = await sql("SELECT six_month_outcome FROM battlefield_config WHERE id='product'");
+  const productMonth = (battlefields as { battlefieldId: string; outcome: string }[]).find((item) => item.battlefieldId === "product")?.outcome;
+  await sql(`INSERT INTO mission_rounds (id,version,battlefield_id,period,monthly_plan_id,status,draft_origin,draft_source,
+    goal_snapshot,window_seq,first_opened_at,opened_at,closes_at,created_at,updated_at)
+    VALUES ($1,1,'product','2026-10',$2,'open','placeholder','{}',$3::jsonb,1,$4,$4,$5,$4,$4)`,
+    [productRoundId,planId,JSON.stringify({sixMonthOutcome:productSixMonth,monthOutcome:productMonth,signedAt:at}),productOpenedAt,productClosesAt]);
+  const productCards: { ownerId: string; cardId: string; missions: { id: string; outcome: string; why: string; dependencies: string; risk: string }[] }[] = [];
+  const topics = [
+    { ownerId: LUYAO.personId, name: "王路遥", role: "产品战场拍板与验证", items: [
+      ["明确产品战场的十月验收边界", "产出产品战场十月验收表，列清场景、负责人和拍板条件。", "当前各项产品验证没有统一验收口径，月底难以形成可追溯判断。", "依赖孙铭泽提供 CEO 与 DRI 两端的走查结果。", "验收表若只写功能是否可用，会漏掉角色边界和真实完成证据。"],
+      ["组织 CEO 与 DRI 双视角走查", "完成四人参与的双视角走查，并把阻塞项逐条指定责任人。", "同一人切换视角时，工作入口与权限反馈需要在真实路径里验证。", "依赖何望舒整理观察提纲及孙铭泽安排走查时间。", "只看静态截图会错过切换后的权限与数据差异。"],
+    ] },
+    { ownerId: "demo-zhou-tinglan", name: "周听澜", role: "体验研究与场景核对", items: [
+      ["完成四位使用者的场景访谈", "整理四份按人归档的访谈摘要，指出每人下一步行动是否清晰。", "产品战场需要真实使用者反馈来判断入口和任务解释是否准确。", "依赖王路遥确认访谈对象与可公开范围。", "如果只记录好评，可能掩盖找不到下一步的阻塞。"],
+      ["建立走查问题与改动追踪表", "把走查中的问题、引用原话与处理结论连成一张可回看的表。", "讨论意见散落在卡片和群组中，拍板时需要逐条定位。", "依赖顾清和提供界面修订版本。", "同一问题重复登记会让待办数量失真。"],
+    ] },
+    { ownerId: "demo-xu-zhiwei", name: "许知微", role: "交互实现与核验", items: [
+      ["完成双视角关键页面的交互核验", "核验登录、视角切换、通知和个人卡四条路径，并留下复现步骤。", "一号位与 DRI 共用账号时，切换后应看到各自的工作入口。", "依赖王路遥提供两种视角的验收清单。", "只验证页面跳转而漏验 API 权限会造成假通过。"],
+      ["修订移动端个人卡阅读路径", "在 390 宽屏完成四张个人卡和意见入口的走查，记录可点区域。", "移动端人员切换和字段讨论需要保持连续上下文。", "依赖周听澜提供优先级最高的阅读阻塞。", "长字段可能挤出屏幕并遮住意见入口。"],
+    ] },
+    { ownerId: "sun-mingze", name: "孙铭泽", role: "CEO 与 DRI 界面反馈", items: [
+      ["核对 CEO 工作台的四人卡入口", "让 CEO 从通知栏进入四张个人卡，并在每张卡上找到讨论状态。", "拍板人需要按人查看草稿，不能靠轮次总数猜谁有意见。", "依赖许知微提供最新界面构建。", "人员页签如果只显示姓名，容易漏看未处理意见。"],
+      ["核对 DRI 工作台的个人任务", "确认个人卡两项任务与执行事项在 DRI 首页各有清楚入口。", "成员需要区分每月个人任务与具体推进的执行事项。", "依赖王路遥确认任务文案和战场归属。", "如果把任务当成 Mission，会误导用户对承诺层级的理解。"],
+    ] },
+  ] as const;
+  for (const [sortOrder, person] of topics.entries()) {
+    const productCardId = randomUUID();
+    await sql(`INSERT INTO personal_mission_cards (id,round_id,owner_id,sort_order,role_label,member_ids,created_at)
+      VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)`,
+      [productCardId,productRoundId,person.ownerId,sortOrder,person.role,JSON.stringify(PRODUCT_PEOPLE),now]);
+    const productMissions = [];
+    for (const [index, [title,outcome,why,dependencies,risk]] of person.items.entries()) {
+      const missionId = `demo-product-${sortOrder + 1}-${index + 1}`;
+      await sql(`INSERT INTO missions (id,version,code,period,title,owner_id,capability_id,battlefield_ids,
+        outcome,why,success_evidence,boundaries,key_path,milestones,resources,dependencies,human_agent_split,risk,retrospect,
+        source_ref,source_document_id,source_revision,source_title,personal_mission_card_id)
+        VALUES ($1,1,$2,'2026-10',$3,$4,'cap-03','["product"]',$5,$6,$7::jsonb,$8,$9,$10::jsonb,$11,$12,$13,$14,$15,
+          'fixture://demo-luyao-product','demo-luyao-product',1,'产品战场演示个人卡',$16)`,
+        [missionId,`DEMO-P${sortOrder + 1}-${index + 1}`,title,person.ownerId,outcome,why,
+          JSON.stringify([`${person.name}提交可查看的成果`,"王路遥核对完成证据并记录结论"]),
+          "只覆盖产品战场十月演示范围；正式业务结论仍由负责人确认。",
+          `先核对现状与原话，再完成「${title}」，最后请相关人独立复核。`,
+          JSON.stringify([`10/${12 + index * 5} 完成初稿与样例`,`10/${24 + index * 3} 完成复核并记录结论`]),
+          "使用产品战场走查材料、个人卡讨论和现有工作台，不接入外部真实业务资料。",
+          dependencies,`${person.name}判断和确认；Co-Agent 整理访谈与意见，不代替人拍板。`,risk,
+          "月底按可查看的证据、未解决的问题和复核意见决定下月改进顺序。",productCardId]);
+      productMissions.push({ id: missionId, outcome, why, dependencies, risk });
+    }
+    productCards.push({ ownerId: person.ownerId, cardId: productCardId, missions: productMissions });
+  }
+  const productFeedback = [
+    [0,0,"comment","sun-mingze","outcome","建议把验收表中的四张个人卡入口也列为必查项。",null,null],
+    [1,0,"quote",LUYAO.personId,"why","这句说明了访谈为什么要按人归档，建议保留。","真实使用者反馈",null],
+    [2,0,"suggestion","sun-mingze","dependencies","建议先拿到双视角验收清单，再做权限核验。",null,"依赖王路遥先提供双视角验收清单及测试账号。"],
+    [3,0,"suggestion","demo-zhou-tinglan","outcome","通知栏入口需要把讨论状态直接展示给 CEO。",null,"让 CEO 从通知栏进入四张个人卡，并直接看到每张卡的讨论状态与意见数。"],
+    [0,1,"quote","demo-xu-zhiwei","risk","移动端也要检查切换后 API 权限的结果。","只看静态截图",null],
+  ] as const;
+  for (const [cardIndex,missionIndex,kind,author,field,body,quote,proposed] of productFeedback) {
+    const card = productCards[cardIndex], mission = card.missions[missionIndex];
+    await sql(`INSERT INTO mission_card_feedback (id,round_id,card_id,mission_id,field,kind,author_id,client_id,
+      body,quote,proposed,original,source_version,basis,window_seq,late,created_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,1,'draft',1,false,$13)`,
+      [randomUUID(),productRoundId,card.cardId,mission.id,field,kind,author,randomUUID(),body,quote,proposed,
+        kind === "suggestion" ? mission[field] : null,now]);
+  }
 
   const ids: Record<string,string> = {};
   const addTask = async (key: string, title: string, status: string, source: string, missionId: string | null,
@@ -165,5 +240,5 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
         directionId(direction,"person"),direction,title,reason,title,relevance,read ? "2026-10-01T01:30:00Z" : null,
         `2026-10-01T01:0${index}:00Z`]);
   }
-  return { roundId, cardId, tasks: ids };
+  return { roundId, cardId, productRoundId, productCards, tasks: ids };
 }

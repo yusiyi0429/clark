@@ -29,6 +29,10 @@ export function randomInitialPasscode(): string {
 }
 
 export const roleOf = (person: MemoryPerson): SessionRole => (person.roles.includes("ceo") ? "ceo" : "member");
+export const canSwitchView = (person: MemoryPerson): boolean =>
+  person.roles.includes("ceo") && (person.roles.includes("dri") || person.roles.includes("participant"));
+export const canUseMemberView = (person: MemoryPerson): boolean =>
+  person.roles.includes("dri") || person.roles.includes("participant");
 
 export type AccessRow = {
   person_id: string;

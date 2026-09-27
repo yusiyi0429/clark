@@ -52,9 +52,9 @@ describe("常驻成员首页的网络恢复", () => {
     render(); const cleanup = hooks.effects[0]();
     api.GET.mockResolvedValue({ response: { status: 200, ok: true }, data: { myTasks: [], notifications: [], rounds: [] } });
     events.dispatchEvent(new Event("mission-round-changed"));
-    expect(api.GET).toHaveBeenCalledTimes(3);
+    expect(api.GET).toHaveBeenCalledTimes(5);
     release({ response: { status: 200, ok: true }, data: { myTasks: [], notifications: [], rounds: [{ roundId: "round-01" }] } });
-    await vi.waitFor(() => expect(api.GET).toHaveBeenCalledTimes(6));
+    await vi.waitFor(() => expect(api.GET).toHaveBeenCalledTimes(10));
     expect(render().rounds).toEqual([]);
     cleanup?.();
   });
@@ -63,9 +63,9 @@ describe("常驻成员首页的网络恢复", () => {
     vi.stubGlobal("window", { addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events), setInterval: vi.fn(), clearInterval: vi.fn() });
     vi.stubGlobal("document", { addEventListener: vi.fn(), removeEventListener: vi.fn(), visibilityState: "visible" });
     online(); render(); const cleanup = hooks.effects[0]();
-    await vi.waitFor(() => expect(api.GET).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(api.GET).toHaveBeenCalledTimes(5));
     events.dispatchEvent(new Event("member-tasks-changed"));
-    await vi.waitFor(() => expect(api.GET).toHaveBeenCalledTimes(6));
+    await vi.waitFor(() => expect(api.GET).toHaveBeenCalledTimes(10));
     cleanup?.();
   });
   it("倒计时、轮询同时请求时共用一次读取，避免旧结果覆盖确认后的退组", async () => {
@@ -73,7 +73,7 @@ describe("常驻成员首页的网络恢复", () => {
     api.GET.mockReturnValue(new Promise((resolve) => { release = resolve; }));
     render();
     const first = refresh(); const second = refresh();
-    expect(api.GET).toHaveBeenCalledTimes(3);
+    expect(api.GET).toHaveBeenCalledTimes(5);
     release({ response: { status: 200, ok: true }, data: { myTasks: [], notifications: [], rounds: [] } });
     await Promise.all([first, second]);
   });
@@ -83,6 +83,27 @@ describe("常驻成员首页的网络恢复", () => {
     expect(api.GET).toHaveBeenCalledWith("/api/me/mission-cards");
     api.GET.mockImplementation(async (path: string) => ({ response: { status: 200, ok: true }, data: path === "/api/me/home" ? { myTasks: [task], radar: null } : path === "/api/me/mission-cards" ? { rounds: [] } : { notifications: [notification] } }));
     await refresh(); expect(render().rounds).toEqual([]);
+  });
+
+  it("把个人卡群的未读消息合入通知数据，并在刷新后清退已读项", async () => {
+    api.GET.mockImplementation(async (path: string) => ({ response: { status: 200, ok: true }, data:
+      path === "/api/me/home" ? { myTasks: [], work, radar: null }
+        : path === "/api/me/mission-cards" ? { rounds: [{ roundId: "round-01", cards: [{ cardId: "card-01", ownerName: "测试乙" }] }] }
+        : path === "/api/mission-cards/{cardId}/group" ? { unread: 2 }
+        : path === "/api/me/meetings" ? { meetings: [] }
+        : path === "/api/me/threads/unread" ? { threads: [] }
+        : { notifications: [] } }));
+    render(); await refresh();
+    expect(render().unreadMissionGroups).toEqual([{ cardId: "card-01", title: "测试乙", unread: 2, href: "/me/mission-cards/card-01" }]);
+    expect(api.GET).toHaveBeenCalledWith("/api/mission-cards/{cardId}/group", { params: { path: { cardId: "card-01" } } });
+    api.GET.mockImplementation(async (path: string) => ({ response: { status: 200, ok: true }, data:
+      path === "/api/me/home" ? { myTasks: [], work, radar: null }
+        : path === "/api/me/mission-cards" ? { rounds: [{ roundId: "round-01", cards: [{ cardId: "card-01", ownerName: "测试乙" }] }] }
+        : path === "/api/mission-cards/{cardId}/group" ? { unread: 0 }
+        : path === "/api/me/meetings" ? { meetings: [] }
+        : path === "/api/me/threads/unread" ? { threads: [] }
+        : { notifications: [] } }));
+    await refresh(); expect(render().unreadMissionGroups).toEqual([]);
   });
 
   it("首次载入断网时 load 自行处理失败，不向后台 effect 抛出未处理拒绝", async () => {

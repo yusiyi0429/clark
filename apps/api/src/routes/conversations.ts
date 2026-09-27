@@ -21,6 +21,10 @@ import { recordAgentTrace } from "../langsmith.js";
 import { MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch } from "../materialParser.js";
 import { logEvent } from "../observability.js";
 import { personDisplayNames } from "../people.js";
+import { getIssueRow } from "../issues.js";
+import { getMeetingRow } from "../meetingStore.js";
+import { projectMemberIssueCard, projectMemberMeetingCard } from "../memberCards.js";
+import { isActiveMember } from "../threads.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -28,10 +32,21 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
   // 我的 Agent 按「人 × 页面」私有；个人卡 scope 始终复查对象成员及当前拍板权。
-  const scopeObjectFor = async (person: SessionPerson, scope: TConversationScope) =>
-    person.role === "ceo" || scope === "global" || scope.startsWith("mission-card:") || scope.startsWith("task:")
+  const scopeObjectFor = async (person: SessionPerson, scope: TConversationScope) => {
+    if (person.role !== "ceo" && (scope.startsWith("issue:") || scope.startsWith("meeting:"))) {
+      const [objectType, objectId] = scope.split(":", 2) as ["issue" | "meeting", string];
+      if (!await isActiveMember(q, { objectType, objectId }, person.personId)) return { snapshot: null, visible: false };
+      const card = objectType === "issue"
+        ? await getIssueRow(q, objectId).then((row) => row && projectMemberIssueCard(row, env.sessionSecret))
+        : await getMeetingRow(q, objectId).then((row) => row && projectMemberMeetingCard(row, env.sessionSecret));
+      if (!card) return { snapshot: null, visible: false };
+      return { visible: true, snapshot: { cardId: card.id, version: card.version, kind: card.kind, title: card.title,
+        objectRef: card.objectRef, payload: card.payload } };
+    }
+    return person.role === "ceo" || scope === "global" || scope.startsWith("mission-card:") || scope.startsWith("task:")
       ? getScopeObject(q, scope, env.sessionSecret, { person, people: companyMemory.searchPeople(undefined), now: ctx.now() })
       : { snapshot: null, visible: false };
+  };
   const conversationScopeVisible = async (person: SessionPerson, scope: TConversationScope) =>
     (await scopeObjectFor(person, scope)).visible;
 

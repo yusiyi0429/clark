@@ -3,6 +3,9 @@ import { personalPayload } from "./personalMissionFixture";
 import { roundStatusText } from "./roundStatusText";
 
 describe("个人卡与成员战场共用本轮状态句", () => {
+  it("起草中直接写 Co-Agent 正在起草", () => {
+    expect(roundStatusText({ ...personalPayload.round, phase: "drafting" }, { feedbackCount: 0 })).toBe("Co-Agent 正在起草");
+  });
   it("普通 Owner 的页头和战场状态使用同一句话", () => {
     const round = { ...personalPayload.round, approver: false };
     expect(roundStatusText(round, { cardId: "card", feedbackCount: 3 })).toBe("讨论中 · 这张卡 3 条意见");

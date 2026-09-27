@@ -30,7 +30,15 @@ export type TaskGroup = {
   members: { personId: string; displayName: string }[];
 };
 
-export type DetailGroup = PersonalMissionGroup | TaskGroup;
+export type ThreadGroup = {
+  kind: "thread";
+  objectType: "issue" | "meeting";
+  objectId: string;
+  viewerId: string;
+  members: { personId: string; displayName: string }[];
+};
+
+export type DetailGroup = PersonalMissionGroup | TaskGroup | ThreadGroup;
 
 export function groupInputState(phase: MissionGroupPhase) {
   if (phase === "draft") return { writable: false, placeholder: "讨论还没开放" };

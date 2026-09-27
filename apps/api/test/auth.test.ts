@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setMemberAccess } from "../src/memberAccess.js";
+import { readSessionToken } from "../src/session.js";
 import type { Query } from "../src/meetingStore.js";
 import { TEST_CEO, TEST_MEMBER, createTestApp, type TestApp } from "./helpers.js";
 
@@ -27,7 +32,7 @@ describe("登录 ID + 4 位口令", () => {
       expect(changed.json()).toEqual({ authenticated: true, mustChangePasscode: false, role: "member", onboarded: false });
 
       const session = await t.app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie: cookieOf(changed.headers["set-cookie"]) } });
-      expect(session.json()).toEqual({ authenticated: true, personId: TEST_MEMBER.personId, displayName: "测试乙", role: "member", loginId: TEST_MEMBER.loginId, onboarded: false });
+      expect(session.json()).toEqual({ authenticated: true, personId: TEST_MEMBER.personId, displayName: "测试乙", role: "member", canSwitchView: false, loginId: TEST_MEMBER.loginId, onboarded: false });
     } finally {
       await t.close();
     }
@@ -62,6 +67,8 @@ describe("登录 ID + 4 位口令", () => {
       expect(denied.json()).toMatchObject({ code: "FORBIDDEN" });
       const ceo = await t.loginCookie();
       expect((await t.app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie: ceo } })).statusCode).toBe(200);
+      for (const [cookie, view] of [[ceo, "member"], [member, "ceo"]])
+        expect((await t.app.inject({ method: "POST", url: "/api/auth/view", headers: { cookie, origin: t.publicOrigin }, payload: { view } })).statusCode).toBe(403);
       const session = await t.app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie: ceo } });
       expect(session.json()).toMatchObject({ authenticated: true, personId: TEST_CEO.personId, role: "ceo" });
     } finally {
@@ -79,6 +86,53 @@ describe("登录 ID + 4 位口令", () => {
     } finally {
       await t.close();
     }
+  });
+
+  it("双身份默认 CEO；切换重签同版本 cookie，两个视角各进自己的接口，旧 cookie 仍遵守版本失效规则", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "warmap-view-test-"));
+    const seed = join(dir, "people.json");
+    await writeFile(seed, JSON.stringify({ schemaVersion: "company-people.v1", people: [
+      { personId: TEST_CEO.personId, displayName: "测试甲", roles: ["ceo", "dri"] },
+      { personId: TEST_MEMBER.personId, displayName: "测试乙", roles: ["dri"] },
+    ] }));
+    let t: TestApp | undefined;
+    try {
+      t = await createTestApp({ companyPeopleSeed: seed });
+      const ceoCookie = await t.loginCookie();
+      const get = (cookie: string, url: string) => t!.app.inject({ method: "GET", url, headers: { cookie } });
+      const switchTo = (cookie: string, view: "ceo" | "member") => t!.app.inject({ method: "POST", url: "/api/auth/view", headers: { cookie, origin: t!.publicOrigin }, payload: { view } });
+      expect((await get(ceoCookie, "/api/auth/session")).json()).toMatchObject({ role: "ceo", canSwitchView: true });
+      expect((await get(ceoCookie, "/api/cards/home")).statusCode).toBe(200);
+      expect((await get(ceoCookie, "/api/me/home")).statusCode).toBe(403);
+      const switched = await switchTo(ceoCookie, "member");
+      expect(switched.statusCode).toBe(200);
+      expect(switched.json()).toMatchObject({ role: "member", canSwitchView: true, personId: TEST_CEO.personId });
+      const memberCookie = cookieOf(switched.headers["set-cookie"]);
+      expect(readSessionToken("test-session-secret", memberCookie.split("=")[1])).toMatchObject({ pid: TEST_CEO.personId, view: "member", v: 1 });
+      expect((await get(memberCookie, "/api/me/home")).statusCode).toBe(200);
+      expect((await get(memberCookie, "/api/cards/home")).statusCode).toBe(403);
+      expect((await get(memberCookie, "/api/auth/session")).json()).toMatchObject({ role: "member", canSwitchView: true });
+      const colleague = await t.memberCookie();
+      const task = await t.app.inject({ method: "POST", url: "/api/me/tasks", headers: { cookie: colleague, origin: t.publicOrigin },
+        payload: { clientId: randomUUID(), title: "邀请双身份同事核对", missionId: null } });
+      expect(task.statusCode).toBe(200);
+      const taskUrl = `/api/me/tasks/${task.json().id}`;
+      expect((await get(colleague, taskUrl)).json().collaboratorOptions.map((entry: { personId: string }) => entry.personId)).toContain(TEST_CEO.personId);
+      expect((await t.app.inject({ method: "POST", url: `${taskUrl}/collaborators`, headers: { cookie: colleague, origin: t.publicOrigin },
+        payload: { personIds: [TEST_CEO.personId] } })).statusCode).toBe(200);
+      expect((await get(ceoCookie, taskUrl)).statusCode).toBe(403);
+      expect((await get(memberCookie, taskUrl)).json().role).toBe("collaborator");
+      const back = await switchTo(memberCookie, "ceo");
+      expect(back.json()).toMatchObject({ role: "ceo", canSwitchView: true });
+      expect((await get(cookieOf(back.headers["set-cookie"]), "/api/cards/home")).statusCode).toBe(200);
+      expect((await get(ceoCookie, "/api/cards/home")).statusCode).toBe(200);
+      await setMemberAccess(queryOf(t), { personId: TEST_CEO.personId, loginId: TEST_CEO.loginId, passcode: "9173", mustChange: true });
+      for (const cookie of [ceoCookie, memberCookie, cookieOf(back.headers["set-cookie"])]) {
+        expect((await get(cookie, "/api/auth/session")).json()).toEqual({ authenticated: false });
+      }
+      expect((await switchTo(ceoCookie, "member")).statusCode).toBe(401);
+      expect((await switchTo(await t.memberCookie(), "ceo")).statusCode).toBe(403);
+    } finally { await t?.close(); await rm(dir, { recursive: true, force: true }); }
   });
 
   it("本地可额外允许的来源（如 127.0.0.1）能登录和写入；未列出的来源仍 403", async () => {

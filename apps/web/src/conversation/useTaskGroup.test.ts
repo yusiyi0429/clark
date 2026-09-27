@@ -10,7 +10,7 @@ vi.mock("react", () => ({
 }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: api.get, POST: api.post } }));
 
-import { useTaskGroup } from "./useTaskGroup";
+import { useTaskGroup, useThreadGroup } from "./useTaskGroup";
 
 const message = { id: 2, kind: "member", authorId: "sun", authorName: "孙铭泽", content: "先核对试点", quote: null, createdAt: "2026-09-27T00:00:00Z" };
 const view = { members: [{ personId: "sun", displayName: "孙铭泽", title: null }], messages: [{ ...message, id: 0, kind: "co-agent" }, message], lastReadId: 0, unread: 1 };
@@ -43,4 +43,14 @@ it("群组未展开时保留未读，发送走事项线程", async () => {
   expect(api.post).not.toHaveBeenCalled();
   expect(await group.send("请一起核对")).toBe(true);
   expect(api.post).toHaveBeenCalledWith("/api/threads/{objectType}/{objectId}/messages", { params: { path: { objectType: "task", objectId: "task-1" } }, body: { content: "请一起核对" } });
+});
+
+it("会议群复用轮询、已读与发送路径", async () => {
+  const group = useThreadGroup("meeting", "meeting-1", true);
+  hooks.effects.forEach((effect) => { const cleanup = effect(); if (cleanup) cleanups.push(cleanup); });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(api.get).toHaveBeenCalledWith("/api/threads/{objectType}/{objectId}", { params: { path: { objectType: "meeting", objectId: "meeting-1" } } });
+  expect(api.post).toHaveBeenCalledWith("/api/threads/{objectType}/{objectId}/read", { params: { path: { objectType: "meeting", objectId: "meeting-1" } }, body: { lastReadId: 2 } });
+  expect(await group.send("会前看材料")).toBe(true);
+  expect(api.post).toHaveBeenCalledWith("/api/threads/{objectType}/{objectId}/messages", { params: { path: { objectType: "meeting", objectId: "meeting-1" } }, body: { content: "会前看材料" } });
 });

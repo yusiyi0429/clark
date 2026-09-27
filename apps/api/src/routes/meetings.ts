@@ -5,12 +5,13 @@ import { MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanu
 import { renderMaterialPreview } from "../materialPreview.js";
 import { appendSupplementMaterial, replaceMeetingMaterials } from "../meetingMaterials.js";
 import { getMeetingRow } from "../meetingStore.js";
+import { isActiveMember } from "../threads.js";
 import { importTranscript } from "../outcome.js";
 import { createTranscriptCandidate } from "../transcriptCandidate.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
 export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, companyMemory, fail, requireCEO, outcome, materialStorageDir, materialMultipartLimitError, respond, respondTranscriptImport, maxTranscriptBytes } = ctx;
+  const { pool, q, env, companyMemory, fail, requireCEO, requirePerson, outcome, materialStorageDir, materialMultipartLimitError, respond, respondTranscriptImport, maxTranscriptBytes } = ctx;
 
   app.post(
     "/api/meetings/:id/transcript",
@@ -139,8 +140,10 @@ export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void
 
   app.get(
     "/api/meetings/:id/materials/:materialId/preview",
-    { preHandler: requireCEO, schema: { params: Type.Object({ id: Type.String(), materialId: Type.String() }) } },
+    { preHandler: requirePerson, schema: { params: Type.Object({ id: Type.String(), materialId: Type.String() }) } },
     async (req, reply): Promise<FastifyReply> => {
+      if (req.person!.role !== "ceo" && !await isActiveMember(q, { objectType: "meeting", objectId: req.params.id }, req.person!.personId))
+        return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在");
       const meeting = await getMeetingRow(q, req.params.id);
       const material = meeting?.materials.find((candidate) => candidate.id === req.params.materialId);
       if (!material) return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在");
@@ -160,8 +163,10 @@ export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void
 
   app.get(
     "/api/meetings/:id/materials/:materialId/download",
-    { preHandler: requireCEO, schema: { params: Type.Object({ id: Type.String(), materialId: Type.String() }) } },
+    { preHandler: requirePerson, schema: { params: Type.Object({ id: Type.String(), materialId: Type.String() }) } },
     async (req, reply): Promise<FastifyReply> => {
+      if (req.person!.role !== "ceo" && !await isActiveMember(q, { objectType: "meeting", objectId: req.params.id }, req.person!.personId))
+        return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在");
       const meeting = await getMeetingRow(q, req.params.id);
       const material = meeting?.materials.find((candidate) => candidate.id === req.params.materialId);
       if (!material) return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在");

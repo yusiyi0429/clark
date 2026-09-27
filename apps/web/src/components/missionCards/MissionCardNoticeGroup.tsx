@@ -44,7 +44,7 @@ export function MissionCardNoticeGroup({ round, entry, embedded = false, current
     <header className={embedded ? s.embeddedHeader : `${n.glassHeader} ${s.header}`} data-subline="true">
       {!embedded ? <ContextMark kind="monthly" className={n.glyph} /> : null}
       <div className={embedded ? s.embeddedIdentity : n.identity}>
-        <strong className={s.heading}><span className={s.titleWords}><span className={s.monthTitle}>{month} 月 Mission Card</span>{embedded ? <span className={s.battlefieldTitle}> · {round.battlefieldName}</span> : null}</span><span className={s.badges}><b className={embedded ? s.count : n.count} aria-label={`${round.cards.length} 张个人卡`}>{round.cards.length}</b>{confirmed ? null : <em className={s.tag}>草稿</em>}</span></strong>
+        <strong className={s.heading}><span className={s.titleWords}><span className={s.monthTitle}>{month} 月 Mission Card</span>{embedded ? <span className={s.battlefieldTitle}> · {round.battlefieldName}</span> : null}</span><span className={s.badges}><b className={embedded ? s.count : n.count} aria-label={`${round.cards.length} 张个人卡`}>{round.cards.length}</b>{confirmed ? null : <em className={s.tag}>{round.phase === "drafting" ? "工作中" : round.draftOrigin === "agent" ? "Co-Agent 起草" : round.draftOrigin === "placeholder" ? "占位" : "草稿"}</em>}</span></strong>
         <RoundClock round={live} now={now} tone="glass" />
       </div>
     </header>
@@ -58,7 +58,7 @@ export function MissionCardNoticeGroup({ round, entry, embedded = false, current
             aria-label={`${card.ownerName}${card.mine ? "（你）" : ""} · ${card.roleLabel ?? "参与 DRI"} · ${card.missionCount} 项个人任务 · ${awaitingSnapshot ? "汇总中" : card.line}，查看详情：${card.ownerName}的 ${month} 月 Mission Card`}
             onPress={(event) => onNavigate(path(card.cardId), (event.target as Element).closest("[data-notice-group]"))}>
             <span className={s.initial} aria-hidden="true">{card.ownerName.slice(0, 1)}</span>
-            <span className={s.who}><span className={s.name}>{card.ownerName}{card.mine ? <em className={s.mine}>你</em> : null}</span><span className={s.role}>{(card.roleLabel ?? "参与 DRI").replace(/ 战役 DRI$/, " 战役")} · <span className={s.missionCount}>{card.missionCount} 项</span></span></span>
+            <span className={s.who}><span className={s.name}>{card.ownerName}{card.mine ? <em className={s.mine}>你</em> : null}{card.placeholder ? <em className={s.mine}>占位</em> : null}</span><span className={s.role}>{(card.roleLabel ?? "参与 DRI").replace(/ 战役 DRI$/, " 战役")} · <span className={s.missionCount}>{card.missionCount} 项</span></span></span>
             <span className={s.line}>{awaitingSnapshot ? "汇总中" : card.line}</span><ChevronRight size={15} aria-hidden="true" />
           </HeroButton>
         </li>)}

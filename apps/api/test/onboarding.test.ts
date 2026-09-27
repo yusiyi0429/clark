@@ -106,6 +106,12 @@ describe("首次登录引导", () => {
       }
       expect(await t.sql("SELECT person_id, completed_at FROM person_onboarding")).toEqual([{ person_id: TEST_MEMBER.personId, completed_at: new Date(NOW) }]);
       expect((await session(cookie)).json().onboarded).toBe(true);
+      expect((await t.app.inject({ method: "DELETE", url: "/api/me/onboarding/complete", headers: { cookie, origin: t.publicOrigin } })).statusCode).toBe(204);
+      expect((await session(cookie)).json().onboarded).toBe(false);
+      expect(await t.sql("SELECT person_id FROM person_onboarding WHERE person_id = $1", [TEST_MEMBER.personId])).toEqual([]);
+      expect((await t.app.inject({ method: "DELETE", url: "/api/me/onboarding/complete", headers: { cookie, origin: t.publicOrigin } })).statusCode).toBe(204);
+      expect((await t.app.inject({ method: "DELETE", url: "/api/me/onboarding/complete", headers: { cookie } })).statusCode).toBe(403);
+      await t.app.inject({ method: "POST", url: "/api/me/onboarding/complete", headers: { cookie, origin: t.publicOrigin } });
       const anotherLogin = await login();
       expect(anotherLogin.json().onboarded).toBe(true);
       expect((await session(String(anotherLogin.headers["set-cookie"]).split(";")[0])).json().onboarded).toBe(true);

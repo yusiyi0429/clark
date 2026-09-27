@@ -6,6 +6,7 @@ import s from "./round-clock.module.css";
 
 /** clark countdown.tsx；截止仍以服务端为准，数字不出现负数，不以颜色表达紧迫。 */
 export function roundClockText(round: Pick<TMissionRoundSummary, "phase" | "closesAt">, now: number): string {
+  if (round.phase === "drafting") return "Co-Agent 正在起草";
   if (round.phase === "draft") return "本轮未开放";
   if (round.phase === "confirmed") return "已确定";
   const left = round.closesAt ? Date.parse(round.closesAt) - now : 0;

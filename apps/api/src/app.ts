@@ -53,6 +53,7 @@ import { registerMissionCardRoutes } from "./routes/missionCards.js";
 import { registerMyRadarRoutes } from "./routes/myRadar.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
+import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js";
 
 type ValidationItem = { instancePath?: string; dataPath?: string; message?: string };
 
@@ -104,6 +105,7 @@ export async function buildApp({
   monthlyPlanService,
   recordingService,
   voiceprintDeps = realVoiceprintDeps,
+  threadIntroAgent,
   webSearch,
   outlets,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
@@ -126,6 +128,7 @@ export async function buildApp({
   recordingService?: MeetingRecordingService;
   /** 本人声纹录入/删除用的 ffmpeg 与腾讯云依赖；缺省为真实实现（测试注入假实现）。 */
   voiceprintDeps?: VoiceprintDeps;
+  threadIntroAgent?: ThreadIntroAgent;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
@@ -187,8 +190,8 @@ export async function buildApp({
   const radar = radarService ?? {
     providerStatus: { web: false, wechat: false, outlets: false },
     async recoverStaleRuns() {},
-    runManual: async () => ({ trigger: "manual" as const, status: "failed" as const, companyDay: new Date().toISOString().slice(0, 10), createdSignals: 0, warnings: ["Radar providers are not configured"] }),
-    runScheduled: async () => ({ trigger: "scheduled" as const, status: "failed" as const, companyDay: new Date().toISOString().slice(0, 10), createdSignals: 0, warnings: ["Radar providers are not configured"] }),
+    runManual: async () => ({ trigger: "manual" as const, status: "failed" as const, companyDay: new Date().toISOString().slice(0, 10), createdSignals: 0, warnings: ["雷达服务尚未配置，请联系运营者完成配置。"] }),
+    runScheduled: async () => ({ trigger: "scheduled" as const, status: "failed" as const, companyDay: new Date().toISOString().slice(0, 10), createdSignals: 0, warnings: ["雷达服务尚未配置，请联系运营者完成配置。"] }),
   };
   const personalRadar: PersonalRadarService = personalRadarService ?? {
     providerStatus: { webSearch: false },
@@ -294,6 +297,7 @@ export async function buildApp({
     monthlyPlanService,
     recordings,
     voiceprints: voiceprintDeps,
+    threadIntroAgent: threadIntroAgent ?? createThreadIntroAgent(pool, env),
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,

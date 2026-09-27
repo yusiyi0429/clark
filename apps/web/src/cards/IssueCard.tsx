@@ -11,6 +11,7 @@ import { SelectionToolbar, useSelectionQuote } from "@/components/SelectionQuote
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { COMPANY_TIMEZONE, calendarDate } from "@/lib/companyTime";
 import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
+import { ThreadMembersMenu } from "@/conversation/ThreadMembersMenu";
 import s from "@/styles/issue-workspace.module.css";
 
 const RESEARCH_LABEL: Record<string, string> = {
@@ -50,7 +51,7 @@ const meetingClock = (iso: string) =>
  */
 export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
   const payload = payloadOf<IssuePayload>(card);
-  const { homeCards, quote } = useWorkspace();
+  const { homeCards, quote, viewerId } = useWorkspace();
   const { state, run, retry, pending } = useCardAction(onCard);
   const [tab, setTab] = useState<"summary" | "research">("summary");
   const [dismissReason, setDismissReason] = useState("");
@@ -181,6 +182,7 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
             <h1 id="issue-title">{card.title}</h1>
           </div>
         </div>
+        <ThreadMembersMenu objectType="issue" objectId={card.objectRef.id} viewerId={viewerId ?? ""} members={[]} inviteOnly onChanged={() => undefined} />
         <Button isIconOnly variant="tertiary" data-close-view onPress={() => onNavigate("/")} aria-label="关闭议题，返回原位置">
           <X size={19} aria-hidden="true" />
         </Button>

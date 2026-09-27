@@ -51,6 +51,45 @@ export const ThreadView = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 拉人进群（工单 08）：群成员都能拉；议题第一次由 CEO 拉人时建群。
+ * 被拉即加入；note 是拉人者的一句话，Co-Agent 写进群介绍时优先用它。
+ */
+export const AddThreadMembersRequest = Type.Object(
+  {
+    personIds: Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { minItems: 1, maxItems: 10 }),
+    note: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  },
+  { additionalProperties: false },
+);
+
+export const ThreadMembersResponse = Type.Object(
+  { members: Type.Array(ThreadMember) },
+  { additionalProperties: false },
+);
+
+/** 可以拉进这个群的人：人员名单里除现有成员以外的人（执行事项群另按工单 05／07 的规则排除只有 CEO 身份的人）。 */
+export const ThreadCandidatesResponse = Type.Object(
+  { people: Type.Array(Type.Object({ personId: Type.String({ minLength: 1 }), displayName: Type.String({ minLength: 1 }) }, { additionalProperties: false })) },
+  { additionalProperties: false },
+);
+
+/** 成员通知栏「群聊新消息」：按群列出，按 thread_reads 现算，不存通知行。 */
+export const UnreadThreadItem = Type.Object(
+  {
+    objectType: ThreadObjectType,
+    objectId: Type.String({ minLength: 1 }),
+    title: Type.String({ minLength: 1 }),
+    unread: Type.Integer({ minimum: 1 }),
+    href: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+export const UnreadThreadsResponse = Type.Object(
+  { threads: Type.Array(UnreadThreadItem) },
+  { additionalProperties: false },
+);
+
 export const ThreadMessageList = Type.Object(
   { messages: Type.Array(ThreadMessage) },
   { additionalProperties: false },

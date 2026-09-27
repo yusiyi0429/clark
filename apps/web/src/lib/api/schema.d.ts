@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 同时是 CEO 和 DRI 的人切换当前视角（工单 07）；重签会话；不能切换的人 403 */
+        post: operations["setSessionView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/people": {
         parameters: {
             query?: never;
@@ -601,6 +618,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/threads/{objectType}/{objectId}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 拉人进群（工单 08）：群成员都能拉；议题第一次由 CEO 拉人时建群；被拉即加入，Co-Agent 在后台写进群介绍 */
+        post: operations["addThreadMembers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/threads/{objectType}/{objectId}/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 自己退出群；对象的主人（执行事项推进人、会议主持人、议题群里的 CEO）不能退，返回 409 */
+        post: operations["leaveThread"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/threads/{objectType}/{objectId}/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 可以拉进这个群的人；群成员（议题未建群时为 CEO）才能读 */
+        get: operations["listThreadCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/threads/unread": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我所在各群的未读条数（只列有未读的），给通知栏「群聊新消息」用 */
+        get: operations["listMyUnreadThreads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/meetings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我在群里、还没开完的会，按开始时间排，给成员通知栏「会议安排」用 */
+        get: operations["listMyMeetings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/cards/issues/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 被拉进议题群的成员读议题：同一种卡片信封，actions 为空，去掉 CEO 专用内容；非群成员 404 */
+        get: operations["getMemberIssueCard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/cards/meetings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 会议群成员读会议：同一种卡片信封，actions 为空，去掉 CEO 专用内容；非群成员 404 */
+        get: operations["getMemberMeetingCard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/onboarding": {
         parameters: {
             query?: never;
@@ -629,7 +765,8 @@ export interface paths {
         put?: never;
         /** 本人完成或跳过引导（幂等，需要同站 Origin） */
         post: operations["completeOnboarding"];
-        delete?: never;
+        /** 本人重看首次引导：删掉自己的「看过」记录（工单 07） */
+        delete: operations["resetOnboarding"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1722,6 +1859,7 @@ export interface components {
             role?: "ceo" | "member";
             loginId?: string;
             onboarded?: boolean;
+            canSwitchView?: boolean;
         };
         PeopleDirectoryResponse: {
             people: {
@@ -2038,15 +2176,16 @@ export interface components {
             pendingCorrections: number;
             firstPendingCorrectionId: string | null;
             mine: boolean;
+            placeholder: boolean;
         };
-        MissionRoundPhase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+        MissionRoundPhase: "drafting" | "draft" | "open" | "closed" | "reviewing" | "confirmed";
         MissionRoundSummary: {
             roundId: string;
             period: string;
             battlefieldId: string;
             battlefieldName: string;
             version: number;
-            phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+            phase: "drafting" | "draft" | "open" | "closed" | "reviewing" | "confirmed";
             round: number;
             openedAt: string | null;
             closesAt: string | null;
@@ -2057,6 +2196,7 @@ export interface components {
             deciderName: string;
             todo: string | null;
             placeholder: boolean;
+            draftOrigin: "agent" | "placeholder" | null;
             goals: {
                 sixMonthOutcome: string;
                 monthOutcome: string;
@@ -2084,6 +2224,7 @@ export interface components {
                 pendingCorrections: number;
                 firstPendingCorrectionId: string | null;
                 mine: boolean;
+                placeholder: boolean;
             }[];
         };
         MyMissionRoundsResponse: {
@@ -2093,7 +2234,7 @@ export interface components {
                 battlefieldId: string;
                 battlefieldName: string;
                 version: number;
-                phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                phase: "drafting" | "draft" | "open" | "closed" | "reviewing" | "confirmed";
                 round: number;
                 openedAt: string | null;
                 closesAt: string | null;
@@ -2104,6 +2245,7 @@ export interface components {
                 deciderName: string;
                 todo: string | null;
                 placeholder: boolean;
+                draftOrigin: "agent" | "placeholder" | null;
                 goals: {
                     sixMonthOutcome: string;
                     monthOutcome: string;
@@ -2131,6 +2273,7 @@ export interface components {
                     pendingCorrections: number;
                     firstPendingCorrectionId: string | null;
                     mine: boolean;
+                    placeholder: boolean;
                 }[];
             }[];
         };
@@ -2138,8 +2281,7 @@ export interface components {
             period: string;
             battlefieldId: string;
             battlefieldName: string;
-            /** @constant */
-            placeholder: true;
+            placeholder: boolean;
             todo: string;
             /** @description 应用时钟生成的 ISO 8601 时间 */
             serverNow: string;
@@ -2230,7 +2372,7 @@ export interface components {
                 battlefieldId: string;
                 battlefieldName: string;
                 version: number;
-                phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                phase: "drafting" | "draft" | "open" | "closed" | "reviewing" | "confirmed";
                 round: number;
                 openedAt: string | null;
                 closesAt: string | null;
@@ -2241,6 +2383,7 @@ export interface components {
                 deciderName: string;
                 todo: string | null;
                 placeholder: boolean;
+                draftOrigin: "agent" | "placeholder" | null;
                 goals: {
                     sixMonthOutcome: string;
                     monthOutcome: string;
@@ -2268,6 +2411,7 @@ export interface components {
                     pendingCorrections: number;
                     firstPendingCorrectionId: string | null;
                     mine: boolean;
+                    placeholder: boolean;
                 }[];
             };
             card: {
@@ -3160,6 +3304,60 @@ export interface components {
             lastReadId: number;
             unread: number;
         };
+        SetViewRequest: {
+            view: "ceo" | "member";
+        };
+        AddThreadMembersRequest: {
+            personIds: string[];
+            note?: string;
+        };
+        ThreadMembersResponse: {
+            members: {
+                personId: string;
+                displayName: string;
+                title: string | null;
+            }[];
+        };
+        ThreadCandidatesResponse: {
+            people: {
+                personId: string;
+                displayName: string;
+            }[];
+        };
+        UnreadThreadItem: {
+            objectType: "issue" | "signal" | "task" | "meeting";
+            objectId: string;
+            title: string;
+            unread: number;
+            href: string;
+        };
+        UnreadThreadsResponse: {
+            threads: {
+                objectType: "issue" | "signal" | "task" | "meeting";
+                objectId: string;
+                title: string;
+                unread: number;
+                href: string;
+            }[];
+        };
+        MemberMeetingItem: {
+            meetingId: string;
+            title: string;
+            startsAt: string;
+            endsAt: string | null;
+            hostName: string;
+            href: string;
+        };
+        MemberMeetingsResponse: {
+            meetings: {
+                meetingId: string;
+                title: string;
+                startsAt: string;
+                endsAt: string | null;
+                hostName: string;
+                href: string;
+            }[];
+        };
         ThreadMessage: {
             id: number;
             kind: "member" | "co-agent";
@@ -3715,7 +3913,7 @@ export interface components {
                     period: string;
                     battlefieldId: string;
                     battlefieldName: string;
-                    phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                    phase: "drafting" | "draft" | "open" | "closed" | "reviewing" | "confirmed";
                     status: string;
                     closesAt: string | null;
                     serverNow: string;
@@ -3794,7 +3992,7 @@ export interface components {
                 period: string;
                 battlefieldId: string;
                 battlefieldName: string;
-                phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                phase: "drafting" | "draft" | "open" | "closed" | "reviewing" | "confirmed";
                 status: string;
                 closesAt: string | null;
                 serverNow: string;
@@ -3867,7 +4065,7 @@ export interface components {
                 battlefieldId: string;
                 battlefieldName: string;
                 version: number;
-                phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                phase: "drafting" | "draft" | "open" | "closed" | "reviewing" | "confirmed";
                 round: number;
                 openedAt: string | null;
                 closesAt: string | null;
@@ -3878,6 +4076,7 @@ export interface components {
                 deciderName: string;
                 todo: string | null;
                 placeholder: boolean;
+                draftOrigin: "agent" | "placeholder" | null;
                 goals: {
                     sixMonthOutcome: string;
                     monthOutcome: string;
@@ -3905,6 +4104,7 @@ export interface components {
                     pendingCorrections: number;
                     firstPendingCorrectionId: string | null;
                     mine: boolean;
+                    placeholder: boolean;
                 }[];
             } | null;
             confirmation: {
@@ -4170,9 +4370,9 @@ export interface components {
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added";
                 text: string;
-                objectType: "task" | "meeting";
+                objectType: "task" | "meeting" | "issue";
                 objectId: string;
                 createdAt: string;
                 readAt: string | null;
@@ -4275,7 +4475,7 @@ export interface components {
                     period: string;
                     battlefieldId: string;
                     battlefieldName: string;
-                    phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                    phase: "drafting" | "draft" | "open" | "closed" | "reviewing" | "confirmed";
                     status: string;
                     closesAt: string | null;
                     serverNow: string;
@@ -4472,6 +4672,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+        };
+    };
+    setSessionView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetViewRequest"];
+            };
+        };
+        responses: {
+            /** @description 切换后的会话 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };
@@ -5895,6 +6146,296 @@ export interface operations {
             };
         };
     };
+    addThreadMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "signal" | "task" | "meeting";
+                objectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddThreadMembersRequest"];
+            };
+        };
+        responses: {
+            /** @description 群成员 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadMembersResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    leaveThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "signal" | "task" | "meeting";
+                objectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已退出 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listThreadCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "signal" | "task" | "meeting";
+                objectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 候选人 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadCandidatesResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMyUnreadThreads: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 有未读的群 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadThreadsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMyMeetings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 会议安排 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberMeetingsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMemberIssueCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 只读的议题卡片 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Card"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMemberMeetingCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 只读的会议卡片 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Card"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getOnboarding: {
         parameters: {
             query?: never;
@@ -5941,6 +6482,42 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CompleteOnboardingResponse"];
                 };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    resetOnboarding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已清除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description ApiError 统一错误 */
             401: {

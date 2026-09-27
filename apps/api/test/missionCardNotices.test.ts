@@ -131,14 +131,14 @@ describe("Mission Card notices and onboarding", () => {
     } finally { await t.close(); }
   });
 
-  it("offers a concrete draft slot only when a signed target has an available source", async () => {
+  it("签发后提供整理入口；没有人和占位文件时由动作返回具体提示", async () => {
     const directory = await mkdtemp(join(tmpdir(), "warmap-04d-drafts-"));
     const t = await createTestApp({ missionCardDraftsDir: directory }, undefined, { monthlyNow: () => START });
     try {
       const ids = await seed(t); const ceo = await t.loginCookie();
       await t.sql("DELETE FROM personal_mission_cards"); await t.sql("DELETE FROM mission_rounds");
       await t.sql("UPDATE battlefield_config SET code='01' WHERE id='growth'");
-      expect((await read(t, ceo, "/api/me/onboarding")).next.href).toBe("/");
+      expect((await read(t, ceo, "/api/me/onboarding")).next.href).toBe("/?missionRoundDraft=growth%3A2026-10");
       await writeFile(join(directory, "2026-10-mission-cards.battlefield-01.json"), "{}", "utf8");
       expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月目标已签发，可以整理个人卡草稿", action: "整理 10 月个人卡", href: "/?missionRoundDraft=growth%3A2026-10" });
       await t.sql("UPDATE monthly_plans SET status='negotiating',confirmed_at=NULL WHERE id=$1", [ids.plan]);

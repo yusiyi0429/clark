@@ -70,6 +70,14 @@ import {
   ReplaceTranscriptRequest,
   RequestSupplementRequest,
   SessionResponse,
+  SetViewRequest,
+  AddThreadMembersRequest,
+  ThreadMembersResponse,
+  ThreadCandidatesResponse,
+  UnreadThreadItem,
+  UnreadThreadsResponse,
+  MemberMeetingItem,
+  MemberMeetingsResponse,
   SignalStateRequest,
   UpdateMeetingDraftRequest,
   EditMeetingDetailsRequest,
@@ -227,6 +235,19 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
                 "application/json": { schema: { $ref: "#/components/schemas/SessionResponse" } },
               },
             },
+          },
+        },
+      },
+      "/api/auth/view": {
+        post: {
+          operationId: "setSessionView",
+          summary: "同时是 CEO 和 DRI 的人切换当前视角（工单 07）；重签会话；不能切换的人 403",
+          requestBody: jsonBody({ $ref: "#/components/schemas/SetViewRequest" }),
+          responses: {
+            "200": { description: "切换后的会话", content: { "application/json": { schema: { $ref: "#/components/schemas/SessionResponse" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
           },
         },
       },
@@ -601,6 +622,90 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/threads/{objectType}/{objectId}/members": {
+        post: {
+          operationId: "addThreadMembers",
+          parameters: threadParameters,
+          summary: "拉人进群（工单 08）：群成员都能拉；议题第一次由 CEO 拉人时建群；被拉即加入，Co-Agent 在后台写进群介绍",
+          requestBody: jsonBody({ $ref: "#/components/schemas/AddThreadMembersRequest" }),
+          responses: {
+            "200": { description: "群成员", content: { "application/json": { schema: { $ref: "#/components/schemas/ThreadMembersResponse" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/threads/{objectType}/{objectId}/leave": {
+        post: {
+          operationId: "leaveThread",
+          parameters: threadParameters,
+          summary: "自己退出群；对象的主人（执行事项推进人、会议主持人、议题群里的 CEO）不能退，返回 409",
+          responses: {
+            "204": { description: "已退出" },
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/threads/{objectType}/{objectId}/candidates": {
+        get: {
+          operationId: "listThreadCandidates",
+          parameters: threadParameters,
+          summary: "可以拉进这个群的人；群成员（议题未建群时为 CEO）才能读",
+          responses: {
+            "200": { description: "候选人", content: { "application/json": { schema: { $ref: "#/components/schemas/ThreadCandidatesResponse" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/me/threads/unread": {
+        get: {
+          operationId: "listMyUnreadThreads",
+          summary: "我所在各群的未读条数（只列有未读的），给通知栏「群聊新消息」用",
+          responses: {
+            "200": { description: "有未读的群", content: { "application/json": { schema: { $ref: "#/components/schemas/UnreadThreadsResponse" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/me/meetings": {
+        get: {
+          operationId: "listMyMeetings",
+          summary: "我在群里、还没开完的会，按开始时间排，给成员通知栏「会议安排」用",
+          responses: {
+            "200": { description: "会议安排", content: { "application/json": { schema: { $ref: "#/components/schemas/MemberMeetingsResponse" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/me/cards/issues/{id}": {
+        get: {
+          operationId: "getMemberIssueCard",
+          summary: "被拉进议题群的成员读议题：同一种卡片信封，actions 为空，去掉 CEO 专用内容；非群成员 404",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "只读的议题卡片", content: { "application/json": { schema: { $ref: "#/components/schemas/Card" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/me/cards/meetings/{id}": {
+        get: {
+          operationId: "getMemberMeetingCard",
+          summary: "会议群成员读会议：同一种卡片信封，actions 为空，去掉 CEO 专用内容；非群成员 404",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "只读的会议卡片", content: { "application/json": { schema: { $ref: "#/components/schemas/Card" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
       "/api/me/onboarding": {
         get: {
           operationId: "getOnboarding",
@@ -617,6 +722,15 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           summary: "本人完成或跳过引导（幂等，需要同站 Origin）",
           responses: {
             "200": { description: "已看过引导", content: { "application/json": { schema: { $ref: "#/components/schemas/CompleteOnboardingResponse" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+          },
+        },
+        delete: {
+          operationId: "resetOnboarding",
+          summary: "本人重看首次引导：删掉自己的「看过」记录（工单 07）",
+          responses: {
+            "204": { description: "已清除" },
             "401": errorResponse,
             "403": errorResponse,
           },
@@ -1649,6 +1763,14 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingDismissItemInput: MeetingDismissItemInput as JsonSchema,
         MeetingRevokeEffectInput: MeetingRevokeEffectInput as JsonSchema,
         ThreadView: ThreadView as JsonSchema,
+        SetViewRequest: SetViewRequest as JsonSchema,
+        AddThreadMembersRequest: AddThreadMembersRequest as JsonSchema,
+        ThreadMembersResponse: ThreadMembersResponse as JsonSchema,
+        ThreadCandidatesResponse: ThreadCandidatesResponse as JsonSchema,
+        UnreadThreadItem: UnreadThreadItem as JsonSchema,
+        UnreadThreadsResponse: UnreadThreadsResponse as JsonSchema,
+        MemberMeetingItem: MemberMeetingItem as JsonSchema,
+        MemberMeetingsResponse: MemberMeetingsResponse as JsonSchema,
         ThreadMessage: ThreadMessage as JsonSchema,
         ThreadMessageList: ThreadMessageList as JsonSchema,
         PostThreadMessageRequest: PostThreadMessageRequest as JsonSchema,
