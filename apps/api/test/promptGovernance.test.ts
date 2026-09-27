@@ -12,6 +12,7 @@ import { RADAR_PROMPT } from "../src/radarAgent.js";
 import { RESEARCH_PROMPT } from "../src/researchAgent.js";
 import { POST_MEETING_PROMPT } from "../src/postMeetingAgent.js";
 import { MONTHLY_DRAFT_PROMPT } from "../src/monthlyDraftAgent.js";
+import { PERSONAL_RADAR_PROMPT } from "../src/personalRadarAgent.js";
 
 describe("turn-phrase validation", () => {
   it("hits the four core variants", () => {
@@ -43,8 +44,15 @@ describe("shared rules reach the prompts", () => {
     expect(MONTHLY_DRAFT_PROMPT).toContain("不得把长期表述原样复制成当月结果");
   });
 
+  it("personal radar prompt is versioned, owner-only and asks for no promotion", () => {
+    expect(PERSONAL_RADAR_PROMPT.startsWith("Tianshu Personal Radar Assess v1\n")).toBe(true);
+    expect(PERSONAL_RADAR_PROMPT).toContain("这些结果只给他本人看：不要提出决策问题、选项、紧急程度或升级建议。");
+    expect(PERSONAL_RADAR_PROMPT).toContain('{"candidates":[]}');
+    expect(PERSONAL_RADAR_PROMPT).not.toContain("promotion");
+  });
+
   it("every candidate prompt carries the shared style block", () => {
-    for (const prompt of [PREFLIGHT_PROMPT, RADAR_PROMPT, RESEARCH_PROMPT, POST_MEETING_PROMPT, MONTHLY_DRAFT_PROMPT]) {
+    for (const prompt of [PREFLIGHT_PROMPT, RADAR_PROMPT, RESEARCH_PROMPT, POST_MEETING_PROMPT, MONTHLY_DRAFT_PROMPT, PERSONAL_RADAR_PROMPT]) {
       expect(prompt).toContain(HUMAN_WRITING_STYLE);
       expect(prompt).toContain("不是……而是……");
     }

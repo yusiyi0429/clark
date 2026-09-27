@@ -5,6 +5,8 @@ import { Pool } from "pg";
 import { createRadarService } from "./radar.js";
 import { createRadarAgentAssessor } from "./radarAgent.js";
 import { createRadarScheduler } from "./radarScheduler.js";
+import { createPersonalRadarService } from "./personalRadar.js";
+import { createPersonalRadarJudge } from "./personalRadarAgent.js";
 import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "./radarSources.js";
 import { createOutletFeedAdapter } from "./outletSources.js";
 import { createBochaWebSearchAdapter } from "./webSearch.js";
@@ -69,6 +71,7 @@ await assignLegacyConversations(pool.query.bind(pool), companyMemory);
 const outletAdapter = createOutletFeedAdapter({});
 // 雷达与对话 web_search 共用一个博查实例：同一 BOCHA_API_KEY 的请求间隔与 429 重试只在一处生效
 const bochaSearch = createBochaWebSearchAdapter({ apiKey: process.env.BOCHA_API_KEY });
+const radarWeb = createBochaRadarWebAdapter(bochaSearch);
 const researchService = createResearchService({
   pool,
   runner: createResearchAgentRunner({
@@ -83,7 +86,7 @@ const researchService = createResearchService({
 const radarService = createRadarService({
   pool,
   // Provider 未配置时不阻断启动：Radar Card 如实显示未配置（Ticket 16 装载真实凭据）
-  web: createBochaRadarWebAdapter(bochaSearch),
+  web: radarWeb,
   wechat: createWechatMcpAdapter({
     url: process.env.WECHAT_MCP_URL,
     token: process.env.WECHAT_MCP_TOKEN,
@@ -101,7 +104,21 @@ const radarService = createRadarService({
     researchService.start(issueId).catch((err) => console.error("research start failed", err));
   },
 });
-const scheduler = createRadarScheduler(radarService);
+// 个人雷达（ADR-0021）与公司雷达共用博查（同一请求间隔）和发布方 feed adapter；判定用轻模型
+const personalRadarService = createPersonalRadarService({
+  pool,
+  companyMemory,
+  web: radarWeb,
+  outlets: outletAdapter,
+  judge: createPersonalRadarJudge({
+    query: pool.query.bind(pool),
+    baseUrl: env.piBaseUrl,
+    apiKey: env.piApiKey,
+    modelId: env.lightModel,
+  }),
+});
+// 公司每日扫描结束（busy 除外）之后才排个人扫描
+const scheduler = createRadarScheduler(radarService, 60_000, () => personalRadarService.runScheduled());
 const monthlyPlanService = createMonthlyPlanService({
   pool,
   companyMemory,
@@ -117,6 +134,7 @@ const now = () => new Date();
 const missionRoundScheduler = createMissionRoundScheduler(pool, now);
 // 启动补偿：崩溃中断的 running 扫描标为 failed（不自动重跑）
 await radarService.recoverStaleRuns();
+await personalRadarService.recoverStaleRuns();
 // Ticket 07：创建后、预研启动前崩溃留下的超时 pending research 标为 failed:trigger_not_started
 await recoverInterruptedResearch(pool.query.bind(pool));
 // Ticket 09：崩溃留下的未完成预审标为可见 failed，等待 CEO 显式重试
@@ -137,6 +155,7 @@ const app = await buildApp({
   env,
   now,
   radarService,
+  personalRadarService,
   researchService,
   monthlyPlanService,
   recordingService,

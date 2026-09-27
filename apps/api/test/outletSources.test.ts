@@ -70,9 +70,9 @@ describe("发布方级来源 outlets", () => {
     })).toBe(false);
   });
 
-  it("白名单目录：8 家，每家都配了渠道；量子位标记全文抓取", () => {
+  it("白名单目录：9 家，每家都配了渠道；量子位标记全文抓取", () => {
     expect(RADAR_OUTLETS.map((outlet) => outlet.outletId)).toEqual([
-      "bbc", "wsj", "bloomberg", "reuters", "ft", "cnbc", "economist", "qbitai",
+      "bbc", "wsj", "bloomberg", "reuters", "ft", "cnbc", "economist", "qbitai", "theinformation",
     ]);
     expect(RADAR_OUTLETS.find((outlet) => outlet.outletId === "qbitai")?.fullText).toBe(true);
     for (const outlet of RADAR_OUTLETS) {
@@ -197,6 +197,73 @@ describe("发布方级来源 outlets", () => {
       { src: "https://cdn.qbitai.com/two.jpg", after: 1 },
     ]);
     expect(articleFetches).toBeGreaterThanOrEqual(1);
+  });
+
+  it("Atom：链接取 rel=alternate（或不写 rel）的 href，时间取 published 或 updated，摘要取 summary 或 content 并去标签", async () => {
+    const atom = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>The Information</title>
+  <link rel="self" href="https://www.theinformation.com/feed"/>
+  <updated>2026-09-21T10:00:00Z</updated>
+  <entry>
+    <title>OpenAI Weighs New Pricing for Enterprise Agents</title>
+    <link rel="alternate" type="text/html" href="https://www.theinformation.com/articles/openai-weighs-new-pricing"/>
+    <id>tag:theinformation.com,2026:1</id>
+    <published>2026-09-21T09:00:00Z</published>
+    <updated>2026-09-21T09:30:00Z</updated>
+    <summary type="html">&lt;p&gt;OpenAI is discussing &amp;amp; testing a new price tier.&lt;/p&gt;</summary>
+  </entry>
+  <entry>
+    <title type="html">Nvidia&apos;s Next Chip</title>
+    <link href="https://www.theinformation.com/articles/nvidia-next-chip"/>
+    <updated>2026-09-20T08:00:00Z</updated>
+    <content type="html">&lt;div&gt;&lt;p&gt;Nvidia plans&lt;/p&gt;&lt;p&gt;a new chip.&lt;/p&gt;&lt;/div&gt;</content>
+  </entry>
+  <entry>
+    <title>Enclosure first</title>
+    <link rel="enclosure" href="https://cdn.theinformation.com/a.mp3"/>
+    <link rel="alternate" href="https://www.theinformation.com/articles/podcast"/>
+    <published>2026-09-19T08:00:00Z</published>
+  </entry>
+  <entry>
+    <title>Impostor</title>
+    <link rel="alternate" href="https://theinformation.example.net/copy"/>
+    <published>2026-09-21T08:00:00Z</published>
+    <summary>should be rejected</summary>
+  </entry>
+  <entry>
+    <title>Stale</title>
+    <link rel="alternate" href="https://www.theinformation.com/articles/old"/>
+    <published>2019-01-01T00:00:00Z</published>
+  </entry>
+</feed>`;
+    const runtime = createOutletFeedAdapter({
+      now: () => FIXED_NOW,
+      limit: 10,
+      fetch: (async (url: string | URL | globalThis.Request) => {
+        const body = String(url) === "https://www.theinformation.com/feed" ? atom : "";
+        return { ok: true, status: 200, text: async () => body } as Response;
+      }) as typeof fetch,
+    });
+    const items = await runtime.fetchLatest({ outletIds: ["theinformation"], lookbackHours: WINDOW_HOURS }, new AbortController().signal);
+    const sourceRef = { type: "outlet", provider: "publisher-feed", outletId: "theinformation", outletName: "The Information" };
+    expect(items).toEqual([
+      {
+        sourceType: "outlet", title: "OpenAI Weighs New Pricing for Enterprise Agents",
+        url: "https://www.theinformation.com/articles/openai-weighs-new-pricing", publishedAt: "2026-09-21T09:00:00.000Z",
+        excerpt: "OpenAI is discussing & testing a new price tier.", sourceRef,
+      },
+      {
+        sourceType: "outlet", title: "Nvidia's Next Chip",
+        url: "https://www.theinformation.com/articles/nvidia-next-chip", publishedAt: "2026-09-20T08:00:00.000Z",
+        excerpt: "Nvidia plans a new chip.", sourceRef,
+      },
+      {
+        sourceType: "outlet", title: "Enclosure first",
+        url: "https://www.theinformation.com/articles/podcast", publishedAt: "2026-09-19T08:00:00.000Z",
+        excerpt: "Enclosure first", sourceRef,
+      },
+    ]);
   });
 
   it("extractArticleContent：段落保留、script 剔除、只取 https 图、10k 截断", () => {

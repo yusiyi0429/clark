@@ -12,6 +12,7 @@ import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
 import { MemberTasks } from "./MemberTasks";
 import { MemberHomeWidgets } from "./MemberHomeWidgets";
+import { MemberRadarWidget } from "./MemberRadarWidget";
 import { memberNoticeGroups } from "./memberNotices";
 import { useMemberHome } from "./useMemberHome";
 import n from "@/styles/notifications.module.css";
@@ -61,7 +62,8 @@ function MemberHomeBody({ displayName, home }: { displayName: string; home: Retu
   return <div className={m.board}>
     <header className={m.heading}><h1>{displayName}</h1><span>我的工作台</span></header>
     {home.homeError ? <div className={m.error} role="alert"><span>{home.homeError}</span><HeroButton variant="ghost" size="sm" onPress={() => void home.refresh()}>重试</HeroButton></div> : null}
-    {home.work || !home.homeError ? <MemberHomeWidgets work={home.work} onNavigate={navigate} onRefresh={home.refresh} /> : null}
+    {home.work || !home.homeError ? <MemberHomeWidgets work={home.work} onNavigate={navigate} onRefresh={home.refresh}
+      radar={home.radar ? <MemberRadarWidget radar={home.radar} onNavigate={navigate} onRefresh={() => void home.refresh()} /> : undefined} /> : null}
     <MemberTasks tasks={home.tasks} busyId={home.busyId} error={home.taskError === home.homeError ? null : home.taskError} onStatus={(task, status) => void home.setStatus(task, status)} />
   </div>;
 }

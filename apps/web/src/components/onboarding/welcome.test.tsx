@@ -36,13 +36,15 @@ vi.mock("react", async (original) => {
   };
 });
 
-import { CompanySnapshot, WorkSnapshot, WelcomeFlow, monthTargetCopy, onboardingSteps, type OnboardingData } from "./WelcomeFlow";
+import { CompanySnapshot, WorkSnapshot, WelcomeFlow, monthTargetCopy, onboardingSteps, radarSummaryLine, type OnboardingData } from "./WelcomeFlow";
 import { OnboardingProgress } from "./OnboardingProgress";
+import { RadarSettingsEditor, type RadarSavedSummary } from "@/components/radar/RadarSettingsEditor";
 import { browserApi } from "@/lib/api/client";
 
 const base = { displayName: "测试", companyName: null, voiceprint: { configured: false, enrolled: false, updatedAt: null }, next: { text: "可以开始工作", action: "进入工作台", href: "/me" } };
-const member: Extract<OnboardingData, { role: "member" }> = { ...base, role: "member", work: { period: "2026-10", planStatus: "none", battlefields: [], missions: [], missionCards: [] } };
-const ceo: Extract<OnboardingData, { role: "ceo" }> = { ...base, role: "ceo", company: { sixMonthGoal: "", battlefields: [], capabilities: [], people: [] } };
+const member: Extract<OnboardingData, { role: "member" }> = { ...base, role: "member", radar: { configured: false, enabled: false, directions: 0 }, work: { period: "2026-10", planStatus: "none", battlefields: [], missions: [], missionCards: [] } };
+// CEO 的雷达就是公司雷达，不能关闭（enabled 恒为 true）。
+const ceo: Extract<OnboardingData, { role: "ceo" }> = { ...base, role: "ceo", radar: { configured: false, enabled: true, directions: 0 }, company: { sixMonthGoal: "", battlefields: [], capabilities: [], people: [] } };
 const missionCard = {
   cardId: "my-card", roundId: "my-round", period: "2026-10", battlefieldId: "bf", battlefieldName: "灯塔项目",
   phase: "open" as const, status: "草稿 · 讨论中", closesAt: "2026-10-03T10:00:00.000Z", serverNow: "2026-10-01T10:00:00.000Z",
@@ -70,9 +72,22 @@ function renderFlow(data: OnboardingData, nextPath?: string) {
   hooks.begin();
   return WelcomeFlow({ data, nextPath });
 }
-function reachFinish(data: OnboardingData, nextPath?: string) {
+type RadarEditorProps = { mode: "person" | "company"; submitLabel?: string; onSaved?: (summary: RadarSavedSummary) => void; onLater?: () => void; actionsTarget?: unknown };
+function radarEditor(tree: ReactNode) {
+  const match = elements(tree).find((element) => element.type === RadarSettingsEditor);
+  expect(match, "雷达这一步应嵌入共享的雷达设置编辑器").toBeDefined();
+  return match!.props as unknown as RadarEditorProps;
+}
+function reachRadar(data: OnboardingData, nextPath?: string) {
   (button(renderFlow(data, nextPath), "开始").props.onClick as () => void)();
   (button(renderFlow(data, nextPath), "下一步").props.onClick as () => void)();
+  return renderFlow(data, nextPath);
+}
+/** 雷达这一步由编辑器负责前进：默认按「稍后」跳过；传 summary 时当作保存成功。 */
+function reachFinish(data: OnboardingData, nextPath?: string, summary?: RadarSavedSummary) {
+  const editor = radarEditor(reachRadar(data, nextPath));
+  if (summary) editor.onSaved!(summary);
+  else editor.onLater!();
   return renderFlow(data, nextPath);
 }
 
@@ -113,9 +128,9 @@ describe("收尾按钮文案与实际落点一致", () => {
 });
 
 describe("真实数据的首次引导", () => {
-  it("角色决定快照，声纹不可用时不占步骤，不包含未交付的雷达", () => {
-    expect(onboardingSteps(member)).toEqual(["hello", "work", "start"]);
-    expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "company", "voiceprint", "start"]);
+  it("角色决定快照，雷达排在目标与分工之后、声纹之前；声纹不可用时不占步骤", () => {
+    expect(onboardingSteps(member)).toEqual(["hello", "work", "radar", "start"]);
+    expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "company", "radar", "voiceprint", "start"]);
   });
   it("空态只说没有登记，不推断没有工作", () => {
     const html = renderToStaticMarkup(<WorkSnapshot data={member} />);
@@ -187,5 +202,48 @@ describe("真实数据的首次引导", () => {
     expect(html).toContain("data-morning-canvas");
     expect(html).not.toContain("声纹，可以现在录");
     expect(renderToStaticMarkup(<OnboardingProgress current={2} total={3} />)).toContain("第 2 步，共 3 步");
+  });
+  it("第 1 步照 spec 说雷达和声纹都可以稍后；声纹没开通时只说雷达", () => {
+    expect(renderToStaticMarkup(<WelcomeFlow data={member} />)).toContain("我先带你看看这个月和你有关的工作。<br/>雷达，可以现在设，也可以以后再说。");
+    const withVoice = renderToStaticMarkup(<WelcomeFlow data={{ ...member, voiceprint: { ...base.voiceprint, configured: true } }} />);
+    expect(withVoice).toContain("雷达和声纹，可以现在设，也可以以后再说。");
+  });
+});
+
+describe("引导第 3 步：雷达", () => {
+  it("成员：标题问关注哪些变化，嵌本人雷达编辑器；主按钮与「稍后」由编辑器放进底栏，不再有引导自己的「下一步」", () => {
+    const tree = reachRadar(member);
+    expect(text(tree)).toContain("你想关注哪些变化？");
+    const editor = radarEditor(tree);
+    expect(editor).toMatchObject({ mode: "person", submitLabel: "保存并继续" });
+    expect(editor.onLater).toBeTypeOf("function");
+    expect(editor.actionsTarget).toBeDefined();
+    const footerButtons = elements(tree).filter((element) => element.type === "button").map((element) => text(element.props.children as ReactNode));
+    expect(footerButtons).not.toContain("下一步");
+    expect(footerButtons).toContain("上一步");
+  });
+  it("CEO：写明按签发的本月目标自动关注，编辑的是公司雷达", () => {
+    const tree = reachRadar(ceo);
+    expect(text(tree)).toContain("公司雷达，还要看什么？");
+    expect(text(tree)).toContain("我会按你签发的本月目标自动关注；你还可以补充方向和来源。");
+    expect(radarEditor(tree)).toMatchObject({ mode: "company", submitLabel: "保存并继续" });
+  });
+  it("结束页设置摘要加雷达一行：成员按开没开，CEO 按补充的方向数；本步保存后立刻换成新的", () => {
+    expect(radarSummaryLine("member", { enabled: true, directions: 2 })).toBe("雷达 · 已开启");
+    expect(radarSummaryLine("member", { enabled: false, directions: 0 })).toBe("雷达 · 未开启");
+    expect(radarSummaryLine("ceo", { enabled: true, directions: 0 })).toBe("雷达 · 按本月目标自动关注");
+    expect(radarSummaryLine("ceo", { enabled: true, directions: 3 })).toBe("雷达 · 已补充 3 个方向");
+    expect(text(reachFinish(member))).toContain("雷达 · 未开启");
+    hooks.reset();
+    const saved = text(reachFinish(member, undefined, { enabled: true, directions: 1, sources: 0 }));
+    expect(saved).toContain("雷达 · 已开启");
+    expect(saved).toContain("都可以在个人菜单里改");
+    expect(saved).not.toContain("声纹 ·");
+    hooks.reset();
+    expect(text(reachFinish(ceo))).toContain("雷达 · 按本月目标自动关注");
+    hooks.reset();
+    expect(text(reachFinish({ ...ceo, radar: { configured: true, enabled: true, directions: 2 } }))).toContain("雷达 · 已补充 2 个方向");
+    hooks.reset();
+    expect(text(reachFinish(ceo, undefined, { enabled: true, directions: 4, sources: 1 }))).toContain("雷达 · 已补充 4 个方向");
   });
 });

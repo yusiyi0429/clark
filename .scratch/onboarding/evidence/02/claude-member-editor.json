@@ -1,0 +1,157 @@
+{
+  "scenario": "member-editor",
+  "log": [
+    {
+      "step": "shot member-home-off-1440",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:327x216@412,74",
+        "battlefield:327x216@755,74",
+        "mission-cards:327x216@1099,74"
+      ]
+    },
+    {
+      "step": "shot member-home-off-390",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:366x183@12,131",
+        "battlefield:366x183@12,326",
+        "mission-cards:366x120@12,520"
+      ]
+    },
+    {
+      "step": "shot member-editor-off-1440",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:327x216@412,74",
+        "battlefield:327x216@755,74",
+        "mission-cards:327x216@1099,74"
+      ]
+    },
+    {
+      "step": "shot member-editor-off-390",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:366x183@12,131",
+        "battlefield:366x183@12,326",
+        "mission-cards:366x120@12,520"
+      ]
+    },
+    {
+      "step": "switch on",
+      "checked": "true"
+    },
+    {
+      "step": "shot member-editor-on-1440",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:327x216@412,74",
+        "battlefield:327x216@755,74",
+        "mission-cards:327x216@1099,74"
+      ]
+    },
+    {
+      "step": "shot member-editor-on-390",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:366x183@12,131",
+        "battlefield:366x183@12,326",
+        "mission-cards:366x120@12,520"
+      ]
+    },
+    {
+      "step": "before save",
+      "text": "我的雷达\n开启雷达\n我每天按你的方向替你看一遍，结果只给你自己看。\n方向\n一句话一条，最多 5 条\nAI Agent 产品的交互设计\n1 号位产品的设计\n0/40\n\n可能相关\n灯塔项目\n· 参与的战场\nAgents\n· 能力域\n来源\n可不填\n最多 10 个\n\n不填时，按你的方向在全网检索。\n\nHTTPS://WWW.FT.COM/world?x=1#y\nqbitai.com\n量子位 · 订阅源\n36kr.com\n36氪 · 全网检索后按域名筛，结果可能很少\ngithub.com/trending\n\n常用来源\n订阅源\n金融时报\nThe Information\nBBC\n彭博\n路透社\nCNBC\n经济学人\n全网检索后按域名筛，结果可能很少\n机器之心\n保存\n看我的雷达信号"
+    },
+    {
+      "step": "shot member-editor-filled-1440",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:327x216@412,74",
+        "battlefield:327x216@755,74",
+        "mission-cards:327x216@1099,74"
+      ]
+    },
+    {
+      "step": "shot member-editor-filled-390",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:366x183@12,131",
+        "battlefield:366x183@12,326",
+        "mission-cards:366x120@12,520"
+      ]
+    },
+    {
+      "step": "after save",
+      "text": "我的雷达\n开启雷达\n我每天按你的方向替你看一遍，结果只给你自己看。\n方向\n一句话一条，最多 5 条\nAI Agent 产品的交互设计\n1 号位产品的设计\n0/40\n\n可能相关\n把 DRI 的交接场景落到一致的界面反馈\n· 9 月 Mission\n灯塔项目\n· 参与的战场\nAgents\n· 能力域\n来源\n可不填\n最多 10 个\n\n不填时，按你的方向在全网检索。\n\nft.com\n金融时报 · 订阅源\nqbitai.com\n量子位 · 订阅源\n36kr.com\n36氪 · 全网检索后按域名筛，结果可能很少\ngithub.com/trending\nGitHub Trending · 榜单读取器还在开发，暂不支持\n\n常用来源\n订阅源\nThe Information\nBBC\n彭博\n路透社\nCNBC\n经济学人\n全网检索后按域名筛，结果可能很少\n机器之心\n\n设置已保存\n\n已在后台扫描\n\n保存\n看我的雷达信号"
+    },
+    {
+      "step": "shot member-editor-saved-1440",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:327x216@412,74",
+        "battlefield:327x216@755,74",
+        "mission-cards:327x216@1099,74",
+        "radar:1014x167@412,306"
+      ]
+    },
+    {
+      "step": "shot member-editor-saved-390",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:366x183@12,131",
+        "battlefield:366x183@12,326",
+        "mission-cards:366x120@12,520",
+        "radar:366x163@12,652"
+      ]
+    },
+    {
+      "0": {
+        "person_id": "sun-mingze",
+        "enabled": true,
+        "directions": [
+          "AI Agent 产品的交互设计",
+          "1 号位产品的设计"
+        ],
+        "sources": [
+          "ft.com",
+          "qbitai.com",
+          "36kr.com",
+          "github.com/trending"
+        ],
+        "updated_at": "2026-09-27T02:26:40.444Z",
+        "last_scan_day": "2026-09-27",
+        "last_run": {
+          "status": "running",
+          "trigger": "manual",
+          "queuedAt": "2026-09-27T02:26:40.484Z",
+          "warnings": [],
+          "startedAt": "2026-09-27T02:26:40.484Z",
+          "createdSignals": 0
+        }
+      },
+      "step": "inspect"
+    }
+  ],
+  "errors": []
+}

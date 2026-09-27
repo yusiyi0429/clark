@@ -8,11 +8,21 @@ const Next = Type.Object(
   { additionalProperties: false },
 );
 
+/** 引导第 3 步与结束摘要：成员是本人雷达，CEO 是公司雷达（不能关闭，enabled 恒为 true）。 */
+const RadarSummary = Type.Object({
+  /** 做过这一步：成员保存过设置；CEO 已有手工方向或媒体来源。 */
+  configured: Type.Boolean(),
+  enabled: Type.Boolean(),
+  /** 成员是本人方向数；CEO 是手工补充的方向数。 */
+  directions: Type.Integer({ minimum: 0 }),
+}, { additionalProperties: false });
+
 const common = {
   displayName: Type.String(),
   companyName: Type.Union([Type.String(), Type.Null()]),
   next: Next,
   voiceprint: VoiceprintStatus,
+  radar: RadarSummary,
 };
 
 /** 按会话角色返回最小投影；成员响应不包含 CEO 公司快照或其他人的 Mission。 */

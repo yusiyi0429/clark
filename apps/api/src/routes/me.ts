@@ -6,6 +6,7 @@ import { deleteVoiceprint, enrollVoiceprint, MAX_VOICEPRINT_UPLOAD_BYTES, voicep
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 import { readMemberWork } from "../memberWork.js";
 import { readMemberBattlefield } from "../memberBattlefields.js";
+import { readMemberRadarBrief } from "../personalSignals.js";
 
 // 成员侧（CEO 也可调用，只看到自己的）：普通视图对象，不走 Card/Action 签名（spec §3.5）。
 export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -18,11 +19,12 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   };
 
   app.get("/api/me/home", { preHandler: requirePerson, schema: { response: { 200: MeHomeResponse } } }, async (req) => {
-    const [myTasks, { work }] = await Promise.all([
+    const [myTasks, { work }, radar] = await Promise.all([
       listMyTasks(q, req.person!.personId),
       readMemberWork(q, companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, ctx.now()),
+      readMemberRadarBrief(q, req.person!, ctx.now()),
     ]);
-    return { myTasks, work };
+    return { myTasks, work, radar };
   });
 
   app.get("/api/me/battlefields/:id", { preHandler: requirePerson, schema: { params: idParams, response: { 200: MemberBattlefieldResponse } } }, async (req, reply) => {

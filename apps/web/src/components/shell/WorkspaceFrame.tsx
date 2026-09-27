@@ -58,8 +58,8 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   const router = useRouter();
   const pathname = usePathname();
   const detailOpen = pathname !== homeHref;
-  // 雷达列表与成员战场是浏览面；成员战场尚未开放独立 Agent scope。
-  const railAllowed = detailOpen && pathname !== `${homeHref === "/" ? "" : homeHref}/radar` && !(homeHref === "/me" && pathname.startsWith("/me/battlefields/"));
+  // 雷达列表与成员战场是浏览面；成员战场尚未开放独立 Agent scope，个人信号不挂对话（成员只有全局对话）。
+  const railAllowed = detailOpen && pathname !== `${homeHref === "/" ? "" : homeHref}/radar` && !(homeHref === "/me" && (pathname.startsWith("/me/battlefields/") || pathname.startsWith("/me/radar/")));
 
   const [detail, setDetail] = useState<DetailInfo | null>(null);
   const registerDetail = useCallback((info: DetailInfo | null) => setDetail(info), []);

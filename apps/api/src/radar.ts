@@ -84,7 +84,7 @@ export function canonicalizeRadarUrl(value: string): string {
   return url.toString().replace(/\/$/, "");
 }
 
-function sourceFingerprint(canonicalUrl: string): string {
+export function sourceFingerprint(canonicalUrl: string): string {
   return createHash("sha256").update(`v1\n${canonicalUrl}`).digest("hex");
 }
 

@@ -608,7 +608,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 成员工作台：参与的战场、本月个人卡与执行事项 */
+        /** 成员工作台：参与的战场、本月个人卡、执行事项，以及开着时的个人雷达小组件 */
         get: operations["getMyHome"];
         put?: never;
         post?: never;
@@ -628,6 +628,110 @@ export interface paths {
         /** 成员可参与的战场：目标、本月个人卡与制定轮次 */
         get: operations["getMyBattlefield"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/radar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人雷达（仅成员）：开关、方向、来源及读法、最近一次扫描、未读数与建议；从没保存过时 enabled=false、updatedAt=null */
+        get: operations["getMyRadar"];
+        /** 保存本人雷达设置（仅成员）：方向与来源先规范化再存；只写设置，不触发扫描 */
+        put: operations["putMyRadar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/radar/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的个人信号（不含已隐藏），按收集时间倒序；默认 50 条 */
+        get: operations["listMyRadarSignals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/radar/signals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取本人的一条个人信号；不是 UUID、不存在、属于别人一律 404 SIGNAL_NOT_FOUND */
+        get: operations["getMyRadarSignal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/radar/signals/{id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 独立设置本人个人信号的 read、saved、dismissed；状态没变不写 */
+        patch: operations["setMyRadarSignalState"];
+        trace?: never;
+    };
+    "/api/me/radar/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 排队扫描一次本人雷达；没开 409 RADAR_DISABLED，正在扫 409 RADAR_SCAN_IN_PROGRESS，今天已收满 409 RADAR_DAILY_CAP_REACHED，10 分钟冷却 429 带 retry-after */
+        post: operations["scanMyRadar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/config/radar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 公司雷达的手工方向与媒体来源（CEO）；自动方向只读 */
+        get: operations["getCompanyRadarSettings"];
+        /** 替换公司雷达的手工方向与媒体来源（CEO）；其余方向、网站与公众号不动，不触发公司扫描 */
+        put: operations["putCompanyRadarSettings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2859,6 +2963,47 @@ export interface components {
                     href: string;
                 }[];
             };
+            radar: {
+                lastRun: {
+                    trigger: "scheduled" | "manual";
+                    status: "queued" | "running" | "completed" | "failed";
+                    /** Format: date-time */
+                    queuedAt?: string;
+                    /** Format: date-time */
+                    startedAt?: string;
+                    /** Format: date-time */
+                    completedAt?: string;
+                    createdSignals: number;
+                    warnings: string[];
+                } | null;
+                unreadCount: number;
+                highlights: {
+                    /** Format: uuid */
+                    id: string;
+                    source: {
+                        type: "web" | "outlet" | "list";
+                        label: string;
+                        title: string;
+                        url: string;
+                        publishedAt: string | null;
+                        listedOn: string | null;
+                    };
+                    direction: {
+                        id: string;
+                        text: string;
+                    };
+                    summary: string;
+                    reason: string;
+                    relevance: number;
+                    state: {
+                        read: boolean;
+                        saved: boolean;
+                        dismissed: boolean;
+                    };
+                    /** Format: date-time */
+                    collectedAt: string;
+                }[];
+            } | null;
         };
         MemberWork: {
             period: string;
@@ -2998,6 +3143,227 @@ export interface components {
                 at: string;
             } | null;
         };
+        MyRadar: {
+            enabled: boolean;
+            directions: {
+                id: string;
+                text: string;
+            }[];
+            sources: {
+                value: string;
+                name?: string;
+                kind: "feed" | "site" | "list" | "unsupported";
+                note: string;
+            }[];
+            updatedAt: string | null;
+            lastRun: {
+                trigger: "scheduled" | "manual";
+                status: "queued" | "running" | "completed" | "failed";
+                /** Format: date-time */
+                queuedAt?: string;
+                /** Format: date-time */
+                startedAt?: string;
+                /** Format: date-time */
+                completedAt?: string;
+                createdSignals: number;
+                warnings: string[];
+            } | null;
+            unreadCount: number;
+            webSearch: boolean;
+            suggestions: {
+                directions: {
+                    text: string;
+                    from: string;
+                }[];
+                sources: {
+                    value: string;
+                    name?: string;
+                    kind: "feed" | "site" | "list" | "unsupported";
+                    note: string;
+                }[];
+            };
+        };
+        PutMyRadarRequest: {
+            enabled: boolean;
+            directions: string[];
+            sources: string[];
+        };
+        PersonalSignal: {
+            /** Format: uuid */
+            id: string;
+            source: {
+                type: "web" | "outlet" | "list";
+                label: string;
+                title: string;
+                url: string;
+                publishedAt: string | null;
+                listedOn: string | null;
+            };
+            direction: {
+                id: string;
+                text: string;
+            };
+            summary: string;
+            reason: string;
+            relevance: number;
+            state: {
+                read: boolean;
+                saved: boolean;
+                dismissed: boolean;
+            };
+            /** Format: date-time */
+            collectedAt: string;
+            excerpt: string;
+            fullText: boolean;
+            evidenceQuote: string;
+        };
+        PersonalSignalBrief: {
+            /** Format: uuid */
+            id: string;
+            source: {
+                type: "web" | "outlet" | "list";
+                label: string;
+                title: string;
+                url: string;
+                publishedAt: string | null;
+                listedOn: string | null;
+            };
+            direction: {
+                id: string;
+                text: string;
+            };
+            summary: string;
+            reason: string;
+            relevance: number;
+            state: {
+                read: boolean;
+                saved: boolean;
+                dismissed: boolean;
+            };
+            /** Format: date-time */
+            collectedAt: string;
+        };
+        PersonalSignalList: {
+            signals: {
+                /** Format: uuid */
+                id: string;
+                source: {
+                    type: "web" | "outlet" | "list";
+                    label: string;
+                    title: string;
+                    url: string;
+                    publishedAt: string | null;
+                    listedOn: string | null;
+                };
+                direction: {
+                    id: string;
+                    text: string;
+                };
+                summary: string;
+                reason: string;
+                relevance: number;
+                state: {
+                    read: boolean;
+                    saved: boolean;
+                    dismissed: boolean;
+                };
+                /** Format: date-time */
+                collectedAt: string;
+            }[];
+        };
+        MyRadarScanAccepted: {
+            /** @constant */
+            queued: true;
+        };
+        MemberRadarBrief: {
+            lastRun: {
+                trigger: "scheduled" | "manual";
+                status: "queued" | "running" | "completed" | "failed";
+                /** Format: date-time */
+                queuedAt?: string;
+                /** Format: date-time */
+                startedAt?: string;
+                /** Format: date-time */
+                completedAt?: string;
+                createdSignals: number;
+                warnings: string[];
+            } | null;
+            unreadCount: number;
+            highlights: {
+                /** Format: uuid */
+                id: string;
+                source: {
+                    type: "web" | "outlet" | "list";
+                    label: string;
+                    title: string;
+                    url: string;
+                    publishedAt: string | null;
+                    listedOn: string | null;
+                };
+                direction: {
+                    id: string;
+                    text: string;
+                };
+                summary: string;
+                reason: string;
+                relevance: number;
+                state: {
+                    read: boolean;
+                    saved: boolean;
+                    dismissed: boolean;
+                };
+                /** Format: date-time */
+                collectedAt: string;
+            }[];
+        };
+        CompanyRadarSettings: {
+            directions: {
+                id: string;
+                text: string;
+            }[];
+            sources: {
+                value: string;
+                name?: string;
+                kind: "feed" | "site" | "list" | "unsupported";
+                note: string;
+            }[];
+            automatic: string[];
+            webSearch: boolean;
+            suggestions: {
+                sources: {
+                    value: string;
+                    name?: string;
+                    kind: "feed" | "site" | "list" | "unsupported";
+                    note: string;
+                }[];
+            };
+        };
+        PutCompanyRadarRequest: {
+            directions: string[];
+            sources: string[];
+        };
+        RadarDirection: {
+            id: string;
+            text: string;
+        };
+        RadarSourceSetting: {
+            value: string;
+            name?: string;
+            kind: "feed" | "site" | "list" | "unsupported";
+            note: string;
+        };
+        PersonalRadarRun: {
+            trigger: "scheduled" | "manual";
+            status: "queued" | "running" | "completed" | "failed";
+            /** Format: date-time */
+            queuedAt?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            createdSignals: number;
+            warnings: string[];
+        };
         PatchMyTaskRequest: {
             version: number;
             status: "not_started" | "in_progress" | "done";
@@ -3049,6 +3415,11 @@ export interface components {
                 updatedAt: string | null;
                 configured: boolean;
             };
+            radar: {
+                configured: boolean;
+                enabled: boolean;
+                directions: number;
+            };
             /** @constant */
             role: "ceo";
             company: {
@@ -3081,6 +3452,11 @@ export interface components {
                 enrolled: boolean;
                 updatedAt: string | null;
                 configured: boolean;
+            };
+            radar: {
+                configured: boolean;
+                enabled: boolean;
+                directions: number;
             };
             /** @constant */
             role: "member";
@@ -4717,6 +5093,400 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyRadar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人雷达 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyRadar"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    putMyRadar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutMyRadarRequest"];
+            };
+        };
+        responses: {
+            /** @description 规范化后的本人雷达 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyRadar"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMyRadarSignals: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 个人信号列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalSignalList"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyRadarSignal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 个人信号 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalSignal"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setMyRadarSignalState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignalStateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的个人信号 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalSignal"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    scanMyRadar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已排队 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyRadarScanAccepted"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getCompanyRadarSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 公司雷达设置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyRadarSettings"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    putCompanyRadarSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutCompanyRadarRequest"];
+            };
+        };
+        responses: {
+            /** @description 保存后的公司雷达设置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyRadarSettings"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

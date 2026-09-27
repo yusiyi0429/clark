@@ -13,6 +13,7 @@ import type { DriExporter, MeetingActionOutcome, Query } from "../meetingStore.j
 import type { PreflightAgent } from "../meetingPreflight.js";
 import type { OntologyUpdater, PostMeetingAgent, TranscriptImportResult } from "../outcome.js";
 import type { RadarService } from "../radar.js";
+import type { PersonalRadarService } from "../personalRadar.js";
 import type { ResearchService } from "../research.js";
 import type { MonthlyPlanService } from "../monthlyDraft.js";
 import type { MeetingRecordingService } from "../meetingRecordings.js";
@@ -53,6 +54,7 @@ export type RouteContext = {
   outcome: PostMeetingAgent;
   runtime: ConversationRuntime;
   radar: RadarService;
+  personalRadar: PersonalRadarService;
   research: ResearchService;
   driExporter?: DriExporter;
   ontologyUpdater: OntologyUpdater;

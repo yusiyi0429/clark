@@ -59,7 +59,8 @@ export type RadarPayload = {
   unreadCount: number;
   lastScheduledAt: string | null;
   lastRun: { trigger: string; status: string; companyDay: string; warnings: string[]; startedAt?: string; completedAt?: string } | null;
-  sources: Record<string, { configured: boolean; sourceCount: number; message: string }>;
+  /** outlets 带当前启用的发布方中文名（names），「监测范围」据此如实列出。 */
+  sources: Record<string, { configured: boolean; sourceCount: number; message: string; names?: string[] }>;
 };
 
 export type SignalPayload = {

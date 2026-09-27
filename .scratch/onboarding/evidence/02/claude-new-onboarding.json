@@ -1,0 +1,60 @@
+{
+  "scenario": "new-onboarding",
+  "log": [
+    {
+      "step": "landing",
+      "url": "http://localhost:3500/welcome?next=%2Fme"
+    },
+    {
+      "step": "step 3",
+      "text": "天枢\n先进入工作台\n你想关注哪些变化？\n开启雷达\n打开后，我每天按你的方向替你看一遍，结果只给你自己看。\n方向\n一句话一条，最多 5 条\n0/40\n\n来源\n可不填\n最多 10 个\n\n不填时，按你的方向在全网检索。\n\n常用来源\n订阅源\n金融时报\n量子位\nThe Information\nBBC\n彭博\n路透社\nCNBC\n经济学人\n全网检索后按域名筛，结果可能很少\n36氪\n机器之心\n第 3 步，共 4 步\n保存并继续\n上一步\n稍后"
+    },
+    {
+      "step": "shot new-onboarding-radar-off-1440",
+      "url": "/welcome?next=%2Fme",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "shot new-onboarding-radar-off-390",
+      "url": "/welcome?next=%2Fme",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "shot new-onboarding-radar-on-1440",
+      "url": "/welcome?next=%2Fme",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "shot new-onboarding-radar-on-390",
+      "url": "/welcome?next=%2Fme",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "finish",
+      "text": "天枢\n可以开始了\n\n会后分给你的事，会出现在首页和通知栏\n\n雷达 · 已开启\n都可以在个人菜单里改\n\n第 4 步，共 4 步\n进入工作台\n上一步"
+    },
+    {
+      "step": "shot new-onboarding-finish-1440",
+      "url": "/welcome?next=%2Fme",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "shot new-onboarding-finish-390",
+      "url": "/welcome?next=%2Fme",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    }
+  ],
+  "errors": []
+}

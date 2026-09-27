@@ -39,7 +39,7 @@ export const RadarWechatAccountSource = Type.Object({
 }, { additionalProperties: false });
 
 export const RadarOutletChannel = Type.Object({
-  kind: Type.Union([Type.Literal("rss"), Type.Literal("news-sitemap")]),
+  kind: Type.Union([Type.Literal("rss"), Type.Literal("atom"), Type.Literal("news-sitemap")]),
   url: Type.String({ minLength: 1, maxLength: 500 }),
 }, { additionalProperties: false });
 
@@ -59,7 +59,7 @@ export const RadarOutlet = Type.Object({
 export type TRadarOutlet = Static<typeof RadarOutlet>;
 
 /**
- * 8 家白名单媒体。纯数据，不是运营配置。
+ * 9 家白名单媒体。纯数据，不是运营配置。
  * cnbctv18.com 是被许可方（印度 CNBC-TV18）、bloomberglaw.com 是独立产品线、
  * bloomberg.co.jp 与 jp.reuters.com 是独立日文版、ftchinese.com 是独立中文品牌——都刻意不纳入。
  * 不要把「漏配的域名」补进去；它们属于别的编辑部。
@@ -136,6 +136,15 @@ export const RADAR_OUTLETS = [
     ],
     // WordPress feed 只有 20-30 字摘要；Signal 要完整原文，需逐条抓文章页提取
     fullText: true,
+  },
+  {
+    outletId: "theinformation",
+    name: "The Information",
+    articleDomains: ["theinformation.com"],
+    // Atom 1.0：链接在 <link rel="alternate" href>，时间取 <published> 或 <updated>（2026-09-27 实测 19 条）
+    channels: [
+      { kind: "atom", url: "https://www.theinformation.com/feed" },
+    ],
   },
 ] satisfies Static<typeof RadarOutlet>[];
 

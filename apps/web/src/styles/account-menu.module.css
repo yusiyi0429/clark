@@ -148,3 +148,14 @@
 .primary.primary:disabled { opacity: .5; }
 .error { margin: 0; color: #a44d3e; font-size: 12.5px; }
 .done { margin: 0; color: #2f7a44; font-size: 13.5px; line-height: 1.7; }
+
+/* 雷达设置：内容栏与引导同宽（560px），内容长时在弹窗里滚动；编辑器自己的厚玻璃卡在这里并进弹窗，不叠第二层。 */
+.dialog.wide { width: min(560px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 48px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 20px 24px 24px; border-radius: var(--onboarding-card-radius); }
+.wide > section { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.dialogLink { display: inline-flex; align-items: center; justify-self: start; gap: 6px; min-height: 44px; padding: 0 4px; border-radius: 10px; color: var(--onboarding-pressed); font-size: 14px; font-weight: 500; text-decoration: none; }
+.dialogLink:hover { color: var(--onboarding-blue); }
+.dialogLink svg { transition: transform var(--dur-snap) var(--ease-swift); }
+.dialogLink:hover svg { transform: translateX(2px); }
+.dialogLink:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+@media (max-width: 759px) { .dialog.wide { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); padding: 16px 16px 20px; } }
+@media (prefers-reduced-motion: reduce) { .dialogLink svg { transition: none; } .dialogLink:hover svg { transform: none; } }

@@ -1,0 +1,12 @@
+{
+  "fixtureId": "bc4e6171-37da-40e3-b857-58eed3b7b180",
+  "ready": false,
+  "port": 4500,
+  "webPort": 3500,
+  "pid": 50872,
+  "database": "warmap_test_350b5085558e",
+  "fixtureDirectory": "C:\\Users\\10021\\AppData\\Local\\Temp\\warmap-02-radar-IeExNQ",
+  "period": "2026-09",
+  "realScan": true,
+  "closed": true
+}

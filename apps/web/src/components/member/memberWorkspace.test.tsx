@@ -46,4 +46,12 @@ describe("成员工作台外壳", () => {
     expect(html).toContain('data-topic-rail="false"');
     navigation.pathname = "/me";
   });
+
+  it.each(["/me/radar", "/me/radar/signals/0f0f0f0f-0000-4000-8000-000000000001"])("我的雷达 %s 在展开区里打开，不挂对话右列（成员只有全局对话）", (pathname) => {
+    navigation.pathname = pathname;
+    const html = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽"><h1>我的雷达</h1></MemberWorkspace>);
+    expect(html).toContain('data-testid="expanded-panel"');
+    expect(html).toContain('data-topic-rail="false"');
+    navigation.pathname = "/me";
+  });
 });

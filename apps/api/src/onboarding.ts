@@ -8,6 +8,7 @@ import { getStrategyConfig } from "./strategy.js";
 import { voiceprintStatus, type VoiceprintDeps } from "./voiceprints.js";
 import { listMissionRoundCards, listMissionRoundDraftCards } from "./missionRounds.js";
 import { readMemberWork } from "./memberWork.js";
+import { readRadarSummary } from "./radarSettings.js";
 
 export async function hasCompletedOnboarding(q: Query, personId: string): Promise<boolean> {
   const result = await q("SELECT 1 FROM person_onboarding WHERE person_id = $1", [personId]);
@@ -85,16 +86,18 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
 }): Promise<TOnboardingResponse> {
   const period = companyPeriod(now);
   const people = companyMemory.searchPeople(undefined);
-  const [voiceprint, battlefields, plans] = await Promise.all([
+  const [voiceprint, battlefields, plans, radar] = await Promise.all([
     voiceprintStatus(q, voiceprints, person.personId),
     listBattlefieldRows(q),
     q("SELECT status, battlefields FROM monthly_plans WHERE period = $1", [period]),
+    readRadarSummary(q, person),
   ]);
   const plan = plans.rows[0] as Plan | undefined;
   const common = {
     displayName: people.find((entry) => entry.personId === person.personId)!.displayName,
     companyName: companyName?.trim() || null,
     voiceprint,
+    radar,
   };
   if (person.role === "ceo") {
     const [strategy, capabilities, rounds, slots] = await Promise.all([

@@ -1,0 +1,35 @@
+{
+  "scenario": "polish",
+  "log": [
+    {
+      "step": "direction field 390",
+      "box": {
+        "x": 31,
+        "y": 328.1875,
+        "width": 283.90625,
+        "height": 68
+      }
+    },
+    {
+      "step": "shot polish-direction-390",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:366x183@12,-846",
+        "battlefield:366x183@12,-651",
+        "mission-cards:366x120@12,-457",
+        "radar:366x554@12,-325"
+      ]
+    },
+    {
+      "step": "onboarding stage",
+      "scrollable": true,
+      "className": "welcome-module__kyWkea__stage",
+      "scrollHeight": 752,
+      "clientHeight": 544,
+      "mask": "none"
+    }
+  ],
+  "errors": []
+}

@@ -35,7 +35,29 @@
 .empty, .loading { margin: 0; color: var(--ink-faint); font-size: 14px; line-height: 1.7; }
 .empty { padding-top: 8px; }
 .loading { padding: 20px 4px; }
+/* 雷达小组件（02）：标题一行右边是「全部」，下面一行写最近一次扫描；三条信号在小组件够宽时并排，窄了上下叠。 */
+.widget[data-widget="radar"] { gap: 12px; container-type: inline-size; }
+.allLink.allLink { flex: none; gap: 2px; min-height: 44px; height: auto; margin-right: -8px; padding: 0 6px 0 10px; border-radius: var(--onboarding-inset-radius); color: var(--ink-muted); font-size: 14px; font-weight: 500; }
+.allLink:hover { color: var(--ink); }
+.radarStatus { margin: -10px 0 0; color: var(--ink-faint); font-size: 13px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.radarStatus[data-tone="error"] { color: var(--onboarding-error); }
+.radarFailure { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 8px 8px 8px 14px; border-radius: var(--onboarding-inset-radius); background: var(--counter-wash); }
+.radarFailure p { margin: 0; color: var(--onboarding-error); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.retry.retry { min-height: 36px; height: auto; padding: 4px 12px; border-radius: var(--onboarding-pill-radius); color: var(--onboarding-error); font-size: 14px; }
+.radarNote { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.7; }
+.highlights { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 0; padding: 0; list-style: none; }
+@container (min-width: 620px) { .highlights { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.highlights li { display: flex; min-width: 0; }
+.signal.signal { display: grid; flex: 1; justify-content: stretch; justify-items: start; align-content: start; gap: 6px; min-width: 0; width: 100%; height: auto; padding: 14px 16px; border-radius: var(--onboarding-inset-radius); background: var(--morning-start); color: var(--ink); text-align: left; white-space: normal; font-weight: 400; transition: background var(--dur-base) var(--ease-swift); }
+.signal.signal:hover { background: color-mix(in srgb, var(--onboarding-blue) 6%, var(--morning-start)); }
+.signalMeta { display: flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; color: var(--ink-faint); font-size: 12px; line-height: 1.6; }
+.signalMeta > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.unread { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--onboarding-blue); }
+.signalTitle, .signalReason { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.signalTitle { color: var(--ink); font-size: 15px; font-weight: 600; line-height: 1.55; }
+.signalReason { color: var(--ink-muted); font-size: 13px; line-height: 1.65; }
+.allLink:focus-visible, .signal:focus-visible, .retry:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
 @media (max-width: 1000px) { .widget { min-height: 0; } }
-@media (max-width: 759px) { .widgets { grid-template-columns: minmax(0, 1fr); gap: 12px; } .widget { padding: 20px; gap: 14px; } .expand { min-height: 36px; } }
-@media (prefers-reduced-motion: reduce) { .titleLink svg, .expand svg { transition: none; } }
-@media (prefers-contrast: more) { .widget { border-color: var(--ink-muted); } .goal, .cardStatus, .cardMeta, .deadline, .empty { color: var(--ink); } }
+@media (max-width: 759px) { .widgets { grid-template-columns: minmax(0, 1fr); gap: 12px; } .widget { padding: 20px; gap: 14px; } .expand { min-height: 36px; } .retry.retry { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .titleLink svg, .expand svg, .signal.signal { transition: none; } }
+@media (prefers-contrast: more) { .widget { border-color: var(--ink-muted); } .goal, .cardStatus, .cardMeta, .deadline, .empty, .radarStatus, .signalMeta, .signalReason { color: var(--ink); } .signal.signal { box-shadow: inset 0 0 0 1px var(--ink-muted); } }

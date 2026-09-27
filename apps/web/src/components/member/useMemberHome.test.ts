@@ -24,7 +24,7 @@ const task = { id: "task-01", title: "已载入的执行事项" };
 const notification = { id: "notice-01", text: "已载入的通知" };
 const work = { period: "2026-10", planStatus: "confirmed", battlefields: [{ id: "growth", monthTargetText: "已签发目标" }], missions: [], missionCards: [{ cardId: "mine", phase: "confirmed" }] };
 function online() {
-  api.GET.mockImplementation(async (path: string) => ({ response: { status: 200, ok: true }, data: path === "/api/me/home" ? { myTasks: [task], work } : path === "/api/me/mission-cards" ? { rounds: [{ roundId: "round-01", phase: "open" }] } : { notifications: [notification] } }));
+  api.GET.mockImplementation(async (path: string) => ({ response: { status: 200, ok: true }, data: path === "/api/me/home" ? { myTasks: [task], work, radar: null } : path === "/api/me/mission-cards" ? { rounds: [{ roundId: "round-01", phase: "open" }] } : { notifications: [notification] } }));
 }
 
 beforeEach(() => { hooks.values = []; hooks.effects = []; vi.clearAllMocks(); vi.stubGlobal("window", { location: { assign: vi.fn() } }); });
@@ -71,7 +71,7 @@ describe("常驻成员首页的网络恢复", () => {
     online(); render(); await refresh();
     expect(render().rounds).toEqual([{ roundId: "round-01", phase: "open" }]);
     expect(api.GET).toHaveBeenCalledWith("/api/me/mission-cards");
-    api.GET.mockImplementation(async (path: string) => ({ response: { status: 200, ok: true }, data: path === "/api/me/home" ? { myTasks: [task] } : path === "/api/me/mission-cards" ? { rounds: [] } : { notifications: [notification] } }));
+    api.GET.mockImplementation(async (path: string) => ({ response: { status: 200, ok: true }, data: path === "/api/me/home" ? { myTasks: [task], radar: null } : path === "/api/me/mission-cards" ? { rounds: [] } : { notifications: [notification] } }));
     await refresh(); expect(render().rounds).toEqual([]);
   });
 
@@ -96,5 +96,19 @@ describe("常驻成员首页的网络恢复", () => {
     const recovered = render();
     expect(recovered.tasks).toEqual([task]); expect(recovered.notifications).toEqual([notification]);
     expect(recovered.taskError).toBeNull();
+  });
+
+  it("雷达开着时读出小组件的数据，关着是 null；在个人菜单里改了雷达设置马上重读", async () => {
+    const events = new EventTarget();
+    vi.stubGlobal("window", { addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events), setInterval: vi.fn(), clearInterval: vi.fn(), location: { assign: vi.fn() } });
+    vi.stubGlobal("document", { addEventListener: vi.fn(), removeEventListener: vi.fn(), visibilityState: "visible" });
+    const radar = { lastRun: null, unreadCount: 0, highlights: [] };
+    api.GET.mockImplementation(async (path: string) => ({ response: { status: 200, ok: true }, data: path === "/api/me/home" ? { myTasks: [], work, radar } : path === "/api/me/mission-cards" ? { rounds: [] } : { notifications: [] } }));
+    render(); const cleanup = hooks.effects[0]();
+    await vi.waitFor(() => expect(render().radar).toEqual(radar));
+    api.GET.mockImplementation(async (path: string) => ({ response: { status: 200, ok: true }, data: path === "/api/me/home" ? { myTasks: [], work, radar: null } : path === "/api/me/mission-cards" ? { rounds: [] } : { notifications: [] } }));
+    events.dispatchEvent(new Event("radar-settings-changed"));
+    await vi.waitFor(() => expect(render().radar).toBeNull());
+    cleanup?.();
   });
 });

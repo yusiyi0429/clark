@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Modal, ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { Database, Link2, RefreshCw, SlidersHorizontal, X } from "lucide-react";
+import { MenuDialog } from "@/components/AccountMenu";
+import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
+import { RADAR_SETTINGS_CHANGED } from "@/components/radar/personalRadar";
 import { browserApi, type Card } from "@/lib/api/client";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type RadarPayload, type SignalPayload } from "./payloads";
@@ -29,20 +32,13 @@ function splitWarnings(warnings: string[]): { outOfWindow: number; notable: stri
 /** 三类来源固定标签：outlets 是发布方级媒体来源，不能与微信公众号混用。 */
 const SOURCE_LABEL: Record<string, string> = { web: "Web 搜索", wechat: "微信公众号", outlets: "发布方级媒体来源" };
 
-/**
- * 发布方级来源的展示名单。运行时启用清单存在 Radar 配置里，API 只回数量；
- * 这里按当前生效的发布方如实列出，避免为了展示名单新增 API。
- */
-// ponytail: 名单写死；运行配置增减发布方时改这里，或等 API 暴露 outletId 列表。
-const OUTLET_NAMES = ["BBC", "彭博", "路透社", "金融时报", "CNBC", "经济学人"];
-
 export function radarSourceLabel(key: string): string {
   return SOURCE_LABEL[key] ?? key;
 }
 
-/** outlets 只读展示生效名单；其余来源直接用 API 的说明。 */
-export function radarSourceMessage(key: string, source: { configured: boolean; message: string }): string {
-  if (key === "outlets" && source.configured) return `${OUTLET_NAMES.join("、")} · 只读`;
+/** outlets 如实列出负载里当前启用的发布方（在「雷达设置」里增减）；其余来源直接用 API 的说明。 */
+export function radarSourceMessage(key: string, source: { configured: boolean; message: string; names?: string[] }): string {
+  if (key === "outlets" && source.configured && source.names?.length) return `${source.names.join("、")} · 只读`;
   return source.message;
 }
 
@@ -69,17 +65,30 @@ function anchorScope(location: { type: string; id?: string }, homeCards: Card[])
 }
 
 /** 雷达展开页（clark `radar-feed.tsx` 列表态）：一竖列信号，筛选 / 排序 / 监测范围 / 刷新信号。 */
-export function RadarCard({ card, collection, onNavigate }: CardRenderProps) {
+export function RadarCard({ card, collection, onCard, onNavigate }: CardRenderProps) {
   const payload = payloadOf<RadarPayload>(card);
   const { homeCards } = useWorkspace();
   const signals = useMemo(() => collection.filter((item) => item.kind === "signal"), [collection]);
   const [filter, setFilter] = useState<Filter>("全部");
   const [sortMode, setSortMode] = useState<SortMode>("time");
   const [configOpen, setConfigOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [scanPending, setScanPending] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const router = useRouter();
+
+  // 在「雷达设置」（这里或个人菜单）改了公司雷达：重读雷达卡，「监测范围」马上是新的方向与媒体。
+  useEffect(() => {
+    const changed = () => {
+      void browserApi.GET("/api/cards/radar").then(({ data }) => {
+        const updated = data?.cards[0];
+        if (updated) onCard(updated);
+      }, () => undefined);
+    };
+    window.addEventListener(RADAR_SETTINGS_CHANGED, changed);
+    return () => window.removeEventListener(RADAR_SETTINGS_CHANGED, changed);
+  }, [onCard]);
 
   // 扫描结果只短暂停留；可重试的失败保持可见。
   useEffect(() => {
@@ -290,10 +299,19 @@ export function RadarCard({ card, collection, onNavigate }: CardRenderProps) {
                   </section>
                 </div>
                 <footer className={a.footer}>
-                  <div>刷新信号与定时扫描共用同一条管线；监测配置在运营侧维护。</div>
+                  <div>刷新信号与定时扫描共用同一条管线；手工方向和媒体来源在个人菜单「雷达设置」里改；公众号和全网检索仍在运营侧。</div>
                   <div className={a.actions}>
                     <Button variant="tertiary" onPress={() => setConfigOpen(false)}>
                       关闭
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onPress={() => {
+                        setConfigOpen(false);
+                        setSettingsOpen(true);
+                      }}
+                    >
+                      在雷达设置里修改
                     </Button>
                   </div>
                 </footer>
@@ -301,6 +319,11 @@ export function RadarCard({ card, collection, onNavigate }: CardRenderProps) {
             </Modal.Container>
           </Modal.Backdrop>
         </Modal>
+      ) : null}
+      {settingsOpen ? (
+        <MenuDialog title="雷达设置" wide onClose={() => setSettingsOpen(false)}>
+          <RadarSettingsEditor mode="company" />
+        </MenuDialog>
       ) : null}
     </>
   );

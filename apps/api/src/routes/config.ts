@@ -11,6 +11,8 @@ import {
   CreateCeoIssueRequest,
   CreateConfigMeetingRequest,
   CreateMissionRequest,
+  CompanyRadarSettings,
+  PutCompanyRadarRequest,
   type TBattlefieldManagementResponse,
   type TCapabilityManagementResponse,
   type TCardCollection,
@@ -26,10 +28,11 @@ import { companyPeriod } from "../monthlyPlans.js";
 import { isKnownOwner, personDisplayNames } from "../people.js";
 import { getStrategyConfig, updateStrategyConfig } from "../strategy.js";
 import { MAX_MATERIAL_BATCH_BYTES, MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch } from "../materialParser.js";
+import { readCompanyRadarSettings, saveCompanyRadarSettings } from "../radarSettings.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
 export function registerConfigRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requireCEO, companyMemory, preflight, research, materialStorageDir, materialMultipartLimitError, now } = ctx;
+  const { pool, q, env, fail, requireCEO, companyMemory, preflight, research, radar, materialStorageDir, materialMultipartLimitError, now } = ctx;
 
 function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreateConfigMeetingRequest } | { error: string } {
   const body: Record<string, unknown> = {};
@@ -57,6 +60,21 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
   return { value: body as TCreateConfigMeetingRequest };
 }
   app.get("/api/config/strategy", { preHandler: requireCEO }, async () => getStrategyConfig(q));
+  // 公司雷达设置（ADR-0021）：CEO 在同一个编辑器里改手工方向与目录里的发布方；保存不触发公司扫描。
+  app.get(
+    "/api/config/radar",
+    { preHandler: requireCEO, schema: { response: { 200: CompanyRadarSettings } } },
+    async () => readCompanyRadarSettings(q, radar.providerStatus.web),
+  );
+  app.put(
+    "/api/config/radar",
+    { preHandler: requireCEO, schema: { body: PutCompanyRadarRequest, response: { 200: CompanyRadarSettings } } },
+    async (req, reply) => {
+      const saved = await saveCompanyRadarSettings(pool, req.body);
+      if (!saved.ok) return fail(reply, saved.status, saved.code, saved.message, saved.fieldErrors ? { fieldErrors: saved.fieldErrors } : undefined);
+      return readCompanyRadarSettings(q, radar.providerStatus.web);
+    },
+  );
   app.patch(
     "/api/config/strategy",
     { preHandler: requireCEO, schema: { body: PatchStrategyConfigRequest } },

@@ -45,6 +45,11 @@
 .textButton:hover { color: var(--onboarding-ink); background: var(--wash-hover); }
 .textButton:disabled { opacity: .45; cursor: default; }
 .primary:focus-visible, .textButton:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 4px; }
+/* 开关的轨道与圆钮（工单 02 补）：开是实心天枢蓝，关是淡墨；可点的是外面那一整行（role="switch"），这里只画样子。 */
+.switch { position: relative; display: inline-flex; flex: none; width: 52px; height: 32px; border-radius: var(--onboarding-pill-radius); background: color-mix(in srgb, var(--ink) 16%, transparent); transition: background var(--onboarding-feedback) var(--onboarding-ease); }
+.switch > span { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(23 23 27 / 18%), 0 0 0 .5px rgb(23 23 27 / 6%); transition: transform var(--onboarding-feedback) var(--onboarding-ease); }
+.switch[data-on="true"] { background: var(--onboarding-blue); }
+.switch[data-on="true"] > span { transform: translateX(20px); }
 
 .capsule { display: flex; flex-shrink: 0; justify-content: center; height: 64px; animation: condense 460ms var(--onboarding-ease) both; }
 .capsuleGlass { position: relative; width: 224px; height: 64px; }
@@ -80,7 +85,8 @@
   .blueLight, .cyanLight, .capsule, .sheen, .idleLight, .acknowledge { animation: none; }
   .acknowledge::after { display: none; }
   .primary:active { transform: none; }
+  .switch, .switch > span { transition: none; }
 }
 @media (prefers-reduced-transparency: reduce) { .glass { background: var(--morning-start); --onboarding-blur: 0px; --onboarding-sat: 100%; } }
 @media (prefers-contrast: more) { .glass { border: 1px solid var(--ink-muted); } }
-@media (forced-colors: active) { .glass { border: 1px solid CanvasText; } .primary { background: Highlight; color: HighlightText; } .dots span { background: Highlight; } }
+@media (forced-colors: active) { .glass { border: 1px solid CanvasText; } .primary { background: Highlight; color: HighlightText; } .dots span { background: Highlight; } .switch { border: 1px solid CanvasText; } .switch[data-on="true"] { background: Highlight; } }

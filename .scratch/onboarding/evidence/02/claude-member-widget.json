@@ -1,0 +1,94 @@
+{
+  "scenario": "member-widget",
+  "log": [
+    {
+      "step": "home with radar",
+      "text": "雷达\n全部\n\n最近扫描 · 4 分钟前 · 4 条未读\n\n量子位 · 4 小时前\nAgent 产品开始把「可打断」做成默认交互\n直接回应你关注的 AI Agent 产品交互：讲清了让人随时接管的界面做法。\nexample-design-notes.cn · 10 小时前\n三家团队如何为 Agent 设计进度与确认\n给出了进度提示和确认节点的对比，可用于你的设计规范。\nThe Information · 21 小时前\nWhy AI agent startups are rethinking onboarding\n讲首次引导如何建立信任，和你的交接场景设计相关。"
+    },
+    {
+      "step": "shot member-home-radar-1440",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:327x216@412,74",
+        "battlefield:327x216@755,74",
+        "mission-cards:327x216@1099,74",
+        "radar:1014x283@412,306"
+      ]
+    },
+    {
+      "step": "shot member-home-radar-390",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:366x183@12,131",
+        "battlefield:366x183@12,326",
+        "mission-cards:366x120@12,520",
+        "radar:366x554@12,652"
+      ]
+    },
+    {
+      "step": "shot member-home-radar-834",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:534x165@290,67",
+        "battlefield:534x165@290,248",
+        "mission-cards:534x126@290,429",
+        "radar:534x470@290,571"
+      ]
+    },
+    {
+      "step": "widget failed",
+      "text": "雷达\n全部\n\n扫描失败 · 刚刚 · 4 条未读\n\n全网检索「AI Agent 产品的交互设计」失败：博查返回 HTTP 503\n\n重试\n量子位 · 4 小时前\nAgent 产品开始把「可打断」做成默认交互\n直接回应你关注的 AI Agent 产品交互：讲清了让人随时接管的界面做法。\nexample-design-notes.cn · 10 小时前\n三家团队如何为 Agent 设计进度与确认\n给出了进度提示和确认节点的对比，可用于你的设计规范。\nThe Information · 21 小时前\nWhy AI agent startups are rethinking onboarding\n讲首次引导如何建立信任，和你的交接场景设计相关。"
+    },
+    {
+      "step": "shot member-home-radar-failed-1440",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:327x216@412,74",
+        "battlefield:327x216@755,74",
+        "mission-cards:327x216@1099,74",
+        "radar:1014x347@412,306"
+      ]
+    },
+    {
+      "step": "widget queued",
+      "text": "雷达\n全部\n\n正在排队扫描\n\n量子位 · 4 小时前\nAgent 产品开始把「可打断」做成默认交互\n直接回应你关注的 AI Agent 产品交互：讲清了让人随时接管的界面做法。\nexample-design-notes.cn · 10 小时前\n三家团队如何为 Agent 设计进度与确认\n给出了进度提示和确认节点的对比，可用于你的设计规范。\nThe Information · 21 小时前\nWhy AI agent startups are rethinking onboarding\n讲首次引导如何建立信任，和你的交接场景设计相关。"
+    },
+    {
+      "step": "shot member-home-radar-queued-1440",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:327x216@412,74",
+        "battlefield:327x216@755,74",
+        "mission-cards:327x216@1099,74",
+        "radar:1014x283@412,306"
+      ]
+    },
+    {
+      "step": "widget completed-empty",
+      "text": "雷达\n全部\n\n最近扫描 · 刚刚 · 4 条未读\n\n量子位 · 4 小时前\nAgent 产品开始把「可打断」做成默认交互\n直接回应你关注的 AI Agent 产品交互：讲清了让人随时接管的界面做法。\nexample-design-notes.cn · 10 小时前\n三家团队如何为 Agent 设计进度与确认\n给出了进度提示和确认节点的对比，可用于你的设计规范。\nThe Information · 21 小时前\nWhy AI agent startups are rethinking onboarding\n讲首次引导如何建立信任，和你的交接场景设计相关。"
+    },
+    {
+      "step": "shot member-home-radar-completed-empty-1440",
+      "url": "/me",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:327x216@412,74",
+        "battlefield:327x216@755,74",
+        "mission-cards:327x216@1099,74",
+        "radar:1014x283@412,306"
+      ]
+    }
+  ],
+  "errors": []
+}

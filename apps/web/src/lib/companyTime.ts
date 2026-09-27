@@ -16,6 +16,12 @@ export function monthDayTime(iso: string | null | undefined): string {
   return `${day} ${time}`;
 }
 
+/** 信号的发布日期「2026/9/22」（公司时区）；没有日期时如实写「日期未提供」。 */
+export const publishedDate = (value?: string | null) => {
+  const date = valid(value);
+  return date ? date.toLocaleDateString("zh-CN", { timeZone: COMPANY_TIMEZONE }) : "日期未提供";
+};
+
 /** 「2026-10-01」。纯日期字符串原样返回，带时间的按公司时区取日期。 */
 export function calendarDate(value: string | null | undefined): string {
   if (!value) return "";

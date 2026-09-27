@@ -1,12 +1,14 @@
 "use client";
 
 /**
- * 成员首页的数据：我的执行事项、我的通知，以及卡上那几件事（改状态、退回、看过）。通知每 20 秒刷新一次（页面在前台时）。
+ * 成员首页的数据：我的执行事项、我的通知、开着时的个人雷达小组件，以及卡上那几件事（改状态、退回、看过）。
+ * 通知每 20 秒刷新一次（页面在前台时）；在个人菜单里改了雷达设置时马上重读。
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TMissionRoundSummary } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
+import { RADAR_SETTINGS_CHANGED, type MemberRadarBrief } from "@/components/radar/personalRadar";
 import type { MemberTask, TaskStatus } from "./MemberTasks";
 import type { MemberWork } from "./MemberHomeWidgets";
 
@@ -31,6 +33,8 @@ export function useMemberHome() {
   const [notifications, setNotifications] = useState<MemberNotification[]>([]);
   const [rounds, setRounds] = useState<TMissionRoundSummary[]>([]);
   const [work, setWork] = useState<MemberWork | null>(null);
+  /** 雷达关着时为 null，首页整块不出现。 */
+  const [radar, setRadar] = useState<MemberRadarBrief | null>(null);
   const [homeError, setHomeError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -44,7 +48,7 @@ export function useMemberHome() {
         window.location.assign("/access?next=%2Fme");
         return;
       }
-      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setWork(home.data.work); }
+      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setWork(home.data.work); setRadar(home.data.radar ?? null); }
       setHomeError(home.data ? null : REFRESH_ERROR);
       if (list.data) setNotifications(list.data.notifications as MemberNotification[]);
       if (missionCards.data) setRounds(missionCards.data.rounds);
@@ -67,8 +71,9 @@ export function useMemberHome() {
     const roundChanged = () => { if (loadInFlight.current) void loadInFlight.current.then(load); else void load(); };
     window.addEventListener("focus", resume);
     window.addEventListener("mission-round-changed", roundChanged);
+    window.addEventListener(RADAR_SETTINGS_CHANGED, roundChanged);
     document.addEventListener("visibilitychange", resume);
-    return () => { window.clearInterval(timer); window.removeEventListener("focus", resume); window.removeEventListener("mission-round-changed", roundChanged); document.removeEventListener("visibilitychange", resume); };
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", resume); window.removeEventListener("mission-round-changed", roundChanged); window.removeEventListener(RADAR_SETTINGS_CHANGED, roundChanged); document.removeEventListener("visibilitychange", resume); };
   }, [load]);
 
   const replaceTask = (task: MemberTask) => setTasks((current) => current.map((item) => (item.id === task.id ? task : item)));
@@ -121,5 +126,5 @@ export function useMemberHome() {
     [load],
   );
 
-  return { tasks, notifications, rounds, work, homeError, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, settle };
+  return { tasks, notifications, rounds, work, radar, homeError, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, settle };
 }

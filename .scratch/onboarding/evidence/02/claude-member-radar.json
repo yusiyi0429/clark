@@ -1,0 +1,62 @@
+{
+  "scenario": "member-radar",
+  "log": [
+    {
+      "step": "radar page",
+      "text": "孙铭泽\n我的工作台\n灯塔项目\n本月目标\n\n让 AI Agent 产品在真实 CEO 与 DRI 的日常工作中持续运行。\n\n团队协作\n本月目标\n\n把跨人员交接与成功证据整理成可共同核对的清单。\n\n我的本月卡\n9 月\n\n这个月还没有你的卡\n\n雷达\n全部\n\n最近扫描 · 刚刚 · 7 条未读\n\nk.sina.com.cn · 9/25\n大模型开车目前最大的技术瓶颈是什么|GPT-6|Grok 4.6|Claude|丰田|Token_新浪新闻\n报道给出通用大模型控制实车时的token消耗和单位里程成本，直接反映实时推理成本。\nphp.cn · 20 小时前\nJev模型如何降低推理成本?看完学会低成本批量判断-人工智能-PHP中文网\n报道提出将判断任务改为固定槽位并行输出，并给出推理延迟和单次成本数据。\n量子位 · 4 小时前\nAgent 产品开始把「可打断」做成默认交互\n直接回应你关注的 AI Agent 产品交互：讲清了让人随时接管的界面做法。\n2 项执行事项在推进\n未开始\n10 月 4 日前\n补齐个人信号阅读页的验收记录\n开始推进\n标记完成\n推进中\n10 月 4 日前\n核对雷达设置的读法说明\n标记完成\n外部信息 · 只给你看\n我的雷达\n设置\n刷新\n全部\n未读\n收藏\n手动刷新已完成 · 9/27 10:37 · 新增 3 条 · 7 条未读\nAgent 产品开始把「可打断」做成默认交互\n\nAgent 产品把可打断做成默认交互\n\n量子位 · 2026/9/27 · AI Agent 产品的交互设计\n已收藏\n三家团队如何为 Agent 设计进度与确认\n\n三家团队的 Agent 进度与确认设计\n\nexample-design-notes.cn · 2026/9/27 · AI Agent 产品的交互设计\n新信号\nJev模型如何降低推理成本?看完学会低成本批量判断-人工智能-PHP中文网\n\nJev称固定槽位判断可把单次成本降至0.0004美元。\n\nphp.cn · 2026/9/26 · 大模型推理成本\n新信号\nWhy AI agent startups are rethinking onboarding\n\nAgent 创业公司重做首次引导\n\nThe Information · 2026/9/26 · AI Agent 产品的交互设计\n新信号\n跨团队交接清单的五个常见缺口\n\n跨团队交接清单的常见缺口\n\nexample-ops-weekly.cn · 2026/9/26 · DRI 交接\n新信号\nCompanies test AI agents for internal operations\n\n企业在内部运营中试用 AI Agent\n\n金融时报 · 2026/9/25 · AI Agent 产品的交互设计\n新信号\n大模型开车目前最大的技术瓶颈是什么|GPT-6|Grok 4"
+    },
+    {
+      "step": "shot member-radar-list-real-1440",
+      "url": "/me/radar",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:324x216@84,74",
+        "battlefield:324x216@424,74",
+        "mission-cards:324x216@763,74",
+        "radar:1342x283@84,306"
+      ]
+    },
+    {
+      "step": "shot member-radar-list-real-390",
+      "url": "/me/radar",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:0x0@0,0",
+        "battlefield:0x0@0,0",
+        "mission-cards:0x0@0,0",
+        "radar:0x0@0,0"
+      ]
+    },
+    {
+      "step": "reader",
+      "text": "孙铭泽\n我的工作台\n灯塔项目\n本月目标\n\n让 AI Agent 产品在真实 CEO 与 DRI 的日常工作中持续运行。\n\n团队协作\n本月目标\n\n把跨人员交接与成功证据整理成可共同核对的清单。\n\n我的本月卡\n9 月\n\n这个月还没有你的卡\n\n雷达\n全部\n\n最近扫描 · 刚刚 · 7 条未读\n\nk.sina.com.cn · 9/25\n大模型开车目前最大的技术瓶颈是什么|GPT-6|Grok 4.6|Claude|丰田|Token_新浪新闻\n报道给出通用大模型控制实车时的token消耗和单位里程成本，直接反映实时推理成本。\nphp.cn · 20 小时前\nJev模型如何降低推理成本?看完学会低成本批量判断-人工智能-PHP中文网\n报道提出将判断任务改为固定槽位并行输出，并给出推理延迟和单次成本数据。\n量子位 · 4 小时前\nAgent 产品开始把「可打断」做成默认交互\n直接回应你关注的 AI Agent 产品交互：讲清了让人随时接管的界面做法。\n2 项执行事项在推进\n未开始\n10 月 4 日前\n补齐个人信号阅读页的验收记录\n开始推进\n标记完成\n推进中\n10 月 4 日前\n核对雷达设置的读法说明\n标记完成\n信号详情 · 我的雷达\n返回我的雷达\n量子位 · 2026/9/27\nAgent 产品开始把「可打断」做成默认交互\n总结\n\nAgent 产品把可打断做成默认交互\n\n和你的方向\n\n直接回应你关注的 AI Agent 产品交互：讲清了让人随时接管的界面做法。\n\n你的方向 · AI Agent 产品的交互设计\n原文\n\nAgent 产品开始把「可打断」做成默认交互。隔离验收用的合成原文：直接回应你关注的 AI Agent 产品交互：讲清了让人随时接管的界面做法。（这不是真实报道。）\n\n发布方原文（自动抓取） · 共 82 字 · 采集于 2026/9/27 07:28:39 · 原文链接\n不再出现在阅读列表\n标记为未读\n继续浏览\n三家团队如何为 Agent 设计进度与确认\n\n三家团队的 Agent 进度与确认设计\n\nexample-design-notes.cn · 2026/9/27 · AI Agent 产品的交互设计\n新信号\nJev模型如何降低推理成本?看完学会低成本批量判断-人工智能-PHP中文网\n\nJev称固定槽位判断可把单次成本降至0.0004美元。\n\nphp.cn · 2026/9/26 · 大模型推理成本\n新信号\nWhy AI agent startups are rethinking onboarding\n\nAgent 创业公司重做首次引导\n\nThe Information · 2026/9/26 · AI Agent 产品的交互设计\n新信号\n跨团队交接清单的五个常见缺口\n\n跨团队交接清单的常见缺口\n\nexample-ops-weekly.cn · 2026/9/26 · DRI 交接\n新信号\n还有 3 条\n铭\n语音未接入"
+    },
+    {
+      "step": "shot member-reader-real-1440",
+      "url": "/me/radar/signals/3d286e4d-040d-4712-80d0-7239d0ecdd3b",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:324x216@84,74",
+        "battlefield:324x216@424,74",
+        "mission-cards:324x216@763,74",
+        "radar:1342x283@84,306"
+      ]
+    },
+    {
+      "step": "shot member-reader-real-390",
+      "url": "/me/radar/signals/3d286e4d-040d-4712-80d0-7239d0ecdd3b",
+      "overflow": false,
+      "overlay": false,
+      "widgets": [
+        "battlefield:0x0@0,0",
+        "battlefield:0x0@0,0",
+        "mission-cards:0x0@0,0",
+        "radar:0x0@0,0"
+      ]
+    }
+  ],
+  "errors": []
+}

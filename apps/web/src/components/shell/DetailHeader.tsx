@@ -1,10 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
 import { ChevronLeft, X } from "lucide-react";
 import { ContextMark, type ContextMarkKind } from "@/components/ContextMark";
 import { HeroButton } from "@/components/HeroButton";
-import { useWorkspace } from "./WorkspaceContext";
+import { WorkspaceContext } from "./WorkspaceContext";
 import s from "@/styles/app-shell.module.css";
 
 /**
@@ -33,7 +33,8 @@ export function DetailHeader({
   closeLabel: string;
   onClose: () => void;
 }) {
-  const { closing } = useWorkspace();
+  // 不在工作区外壳里时（例如单独渲染的成员页）没有关闭中的状态。
+  const closing = useContext(WorkspaceContext)?.closing ?? false;
   return (
     <header className={s.expandedHeader}>
       <div className={s.expandedIdentity}>

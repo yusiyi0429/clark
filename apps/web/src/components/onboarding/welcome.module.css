@@ -88,8 +88,13 @@
 .enrolled button { margin-top: 12px; }
 .summary { text-align: center; margin: 32px 0 0; font-size: 14px; line-height: 1.8; color: var(--onboarding-muted); }
 .summary span { display: block; margin-top: 4px; color: var(--onboarding-faint); font-size: 12px; }
+.summary .summaryItem { margin-top: 0; color: var(--onboarding-muted); font-size: 14px; }
+.summary .summaryItem + span:not(.summaryItem) { margin-top: 8px; }
 .footer { margin-top: auto; padding-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .footer > button { gap: 12px; min-width: 240px; animation: enter 320ms 180ms var(--onboarding-ease-brand) both; }
+/* 雷达这一步：编辑器把主按钮放进 .radarActions、把「稍后」放进 .radarSlot，排版与其他步骤的主按钮、次按钮一致。 */
+.radarActions, .radarSlot { display: contents; }
+.radarActions > button { gap: 12px; min-width: 240px; animation: enter 320ms 180ms var(--onboarding-ease-brand) both; }
 .footer .actionHint { margin: 0; color: var(--onboarding-faint); font-size: 12px; line-height: 1.7; text-align: center; text-wrap: balance; }
 .footer .footnote { margin: 0; }
 .secondary { display: flex; justify-content: center; align-items: center; min-height: 44px; gap: 24px; }
@@ -107,13 +112,15 @@
   .secondary:empty { display: none; }
 }
 @media (min-width: 760px) and (max-height: 950px) {
-  .flow:is([data-step="voiceprint"], [data-step="company"], [data-step="work"]) { padding-top: 80px; padding-bottom: 24px; }
-  .flow:is([data-step="voiceprint"], [data-step="company"], [data-step="work"]) .stage { margin-top: 24px; }
+  .flow:is([data-step="voiceprint"], [data-step="company"], [data-step="work"], [data-step="radar"]) { padding-top: 80px; padding-bottom: 24px; }
+  .flow:is([data-step="voiceprint"], [data-step="company"], [data-step="work"], [data-step="radar"]) .stage { margin-top: 24px; }
   .flow[data-step="voiceprint"] .description { margin-top: 8px; }
   .flow[data-step="voiceprint"] .details { margin-top: 16px; }
   .flow[data-step="voiceprint"] .script { margin-top: 16px; padding-block: 16px; font-size: 15px; line-height: 1.7; }
   .flow[data-step="voiceprint"] .recordControl { margin-top: 16px; }
-  .flow:is([data-step="voiceprint"], [data-step="company"], [data-step="work"]) .footer { margin-top: 16px; gap: 8px; }
+  .flow:is([data-step="voiceprint"], [data-step="company"], [data-step="work"], [data-step="radar"]) .footer { margin-top: 16px; gap: 8px; }
+  .flow[data-step="radar"] .description { margin-top: 8px; }
+  .flow[data-step="radar"] .details { margin-top: 16px; }
   .snapshot { padding-block: 24px; }
 }
 @media (max-width: 759px) {
@@ -136,11 +143,11 @@
   .footer { position: fixed; z-index: 5; bottom: 0; left: 16px; right: 16px; margin: 0; padding: 12px 0 max(12px, env(safe-area-inset-bottom)); gap: 8px; isolation: isolate; }
   .footer::before { content: ""; position: absolute; z-index: -1; inset: -24px -16px 0; background: linear-gradient(180deg, transparent, var(--morning-start) 28%); pointer-events: none; }
   .footer > div[role="status"] { height: 28px; }
-  .footer > button { width: 100%; }
+  .footer > button, .radarActions > button { width: 100%; }
   .secondary { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .content .intro h1, .content .subtitle, .content .description, .content .details, .footer > button { animation: fadeIn 150ms both !important; }
+  .content .intro h1, .content .subtitle, .content .description, .content .details, .footer > button, .radarActions > button { animation: fadeIn 150ms both !important; }
   .outgoing { animation: fadeOut 150ms both !important; }
   .outgoing * { animation: none !important; }
 }

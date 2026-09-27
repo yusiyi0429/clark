@@ -43,6 +43,21 @@ function tag(block: string, name: string): string {
   return match ? decodeXml(match[1]) : "";
 }
 
+/** Atom 的链接在属性里：取 rel="alternate" 的 href，不写 rel 的按规范视为 alternate。 */
+function atomLink(entry: string): string {
+  for (const [link] of entry.matchAll(/<link\b[^>]*>/gi)) {
+    const rel = link.match(/\brel=["']([^"']*)["']/i)?.[1];
+    const href = link.match(/\bhref=["']([^"']*)["']/i)?.[1];
+    if (href && (!rel || rel === "alternate")) return decodeXml(href);
+  }
+  return "";
+}
+
+/** Atom 的 summary／content 常是转义后的 HTML：去掉标签再解码实体，只留文字。 */
+function plainText(value: string): string {
+  return decodeHtml(value.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
 /** 发布时间无法解析为合法时刻时不伪造；该条目会被时间窗管线外的丢弃规则剔除。 */
 function iso(value: string): string {
   const parsed = new Date(value);
@@ -182,15 +197,18 @@ export function createOutletFeedAdapter(options: {
           }
           if (!response.ok) continue;
           const text = await response.text().catch(() => "");
+          const atom = channel.kind === "atom";
           const blocks = channel.kind === "news-sitemap"
             ? text.match(/<url>[\s\S]*?<\/url>/g) ?? []
-            : text.match(/<item[\s>][\s\S]*?<\/item>/g) ?? [];
+            : text.match(atom ? /<entry[\s>][\s\S]*?<\/entry>/g : /<item[\s>][\s\S]*?<\/item>/g) ?? [];
           for (const block of blocks) {
             const title = tag(block, channel.kind === "news-sitemap" ? "news:title" : "title");
-            const link = tag(block, channel.kind === "news-sitemap" ? "loc" : "link");
-            const publishedAt = iso(tag(block, channel.kind === "news-sitemap" ? "news:publication_date" : "pubDate"));
+            const link = atom ? atomLink(block) : tag(block, channel.kind === "news-sitemap" ? "loc" : "link");
+            const publishedAt = iso(atom
+              ? tag(block, "published") || tag(block, "updated")
+              : tag(block, channel.kind === "news-sitemap" ? "news:publication_date" : "pubDate"));
             // Reuters 的 news-sitemap 没有 description：excerpt 退回标题，并如实标注，不用正文抓取冒充
-            const excerpt = tag(block, "description") || title;
+            const excerpt = (atom ? plainText(tag(block, "summary") || tag(block, "content")) : tag(block, "description")) || title;
             if (!title || !link || !publishedAt) continue;
             if (!ownedHost(link, outlet.articleDomains)) continue;
             const at = Date.parse(publishedAt);

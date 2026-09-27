@@ -16,6 +16,8 @@ import type { OntologyUpdater, PostMeetingAgent } from "../src/outcome.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService, type RecordingDeps } from "../src/meetingRecordings.js";
 import type { VoiceprintDeps } from "../src/voiceprints.js";
+import type { RadarService } from "../src/radar.js";
+import type { PersonalRadarService } from "../src/personalRadar.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
@@ -192,6 +194,9 @@ export async function createTestApp(
     recordingDeps?: RecordingDeps;
     /** /api/me/voiceprint 的假 ffmpeg/腾讯云；不注入时按环境变量判断未配置。 */
     voiceprintDeps?: VoiceprintDeps;
+    /** 公司雷达与个人雷达服务替身；不注入时 app 用未配置的桩。 */
+    radarService?: RadarService;
+    personalRadarService?: PersonalRadarService;
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {

@@ -2,17 +2,19 @@
 
 /**
  * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。本人能改的设置都收在这里 ——
- * 我的声纹、修改口令；CEO 多一项组织配置（会议、议题、战场、能力、长期目标）；最后是退出登录。
- * 声纹和口令各开一个小弹窗，不离开当前页面。
+ * 我的声纹、雷达（成员是「我的雷达」，CEO 是「雷达设置」，改的是公司雷达）、修改口令；
+ * CEO 多一项组织配置（会议、议题、战场、能力、长期目标）；最后是退出登录。
+ * 声纹、雷达和口令各开一个小弹窗，不离开当前页面。
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { AudioLines, KeyRound, LogOut, Settings2, X } from "lucide-react";
+import { ArrowRight, AudioLines, KeyRound, LogOut, Radar, Settings2, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { logout } from "@/lib/logout";
 import { VoiceprintCard } from "@/components/member/VoiceprintCard";
+import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import m from "@/styles/account-menu.module.css";
 
 export interface Account {
@@ -28,12 +30,13 @@ export function avatarInitial(name: string): string {
   return chars.length >= 3 ? chars[1] : chars[0];
 }
 
-type Dialog = "voiceprint" | "passcode" | null;
+type Dialog = "voiceprint" | "radar" | "passcode" | null;
 
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [leaving, setLeaving] = useState(false);
+  const radarTitle = account.role === "ceo" ? "雷达设置" : "我的雷达";
   const pick = (next: Dialog) => {
     setOpen(false);
     setDialog(next);
@@ -63,6 +66,10 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
               <Button variant="ghost" className={m.item} onPress={() => pick("voiceprint")}>
                 <AudioLines size={16} aria-hidden="true" />
                 我的声纹
+              </Button>
+              <Button variant="ghost" className={m.item} onPress={() => pick("radar")}>
+                <Radar size={16} aria-hidden="true" />
+                {radarTitle}
               </Button>
               <Button variant="ghost" className={m.item} onPress={() => pick("passcode")}>
                 <KeyRound size={16} aria-hidden="true" />
@@ -104,6 +111,26 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <VoiceprintCard />
         </MenuDialog>
       ) : null}
+      {dialog === "radar" ? (
+        <MenuDialog title={radarTitle} wide onClose={() => setDialog(null)}>
+          <RadarSettingsEditor mode={account.role === "ceo" ? "company" : "person"} />
+          {account.role === "member" ? (
+            <a
+              className={m.dialogLink}
+              href="/me/radar"
+              onClick={(event) => {
+                if (!onNavigate) return;
+                event.preventDefault();
+                setDialog(null);
+                onNavigate("/me/radar");
+              }}
+            >
+              看我的雷达信号
+              <ArrowRight size={15} aria-hidden="true" />
+            </a>
+          ) : null}
+        </MenuDialog>
+      ) : null}
       {dialog === "passcode" ? (
         <MenuDialog title="修改口令" onClose={() => setDialog(null)}>
           <PasscodeForm loginId={account.loginId} onDone={() => setDialog(null)} />
@@ -113,12 +140,13 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   );
 }
 
-function MenuDialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+/** 个人菜单里的小弹窗；雷达设置也从「我的雷达」页头和 CEO 雷达页的「监测范围」打开同一个（wide：内容栏 560px，可滚动）。 */
+export function MenuDialog({ title, wide = false, onClose, children }: { title: string; wide?: boolean; onClose: () => void; children: ReactNode }) {
   return (
     <Modal isOpen onOpenChange={(isOpen) => (isOpen ? undefined : onClose())}>
       <Modal.Backdrop className={m.backdrop} isDismissable>
-        <Modal.Container size="md">
-          <Modal.Dialog className={m.dialog} aria-label={title}>
+        <Modal.Container size={wide ? "lg" : "md"}>
+          <Modal.Dialog className={wide ? `${m.dialog} ${m.wide}` : m.dialog} aria-label={title}>
             <header className={m.dialogHead}>
               <h2>{title}</h2>
               <Button variant="ghost" isIconOnly className={m.close} onPress={onClose} aria-label={`关闭${title}`}>

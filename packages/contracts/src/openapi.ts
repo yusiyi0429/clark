@@ -101,6 +101,18 @@ import {
   VoiceprintStatus,
   OnboardingResponse,
   CompleteOnboardingResponse,
+  MyRadar,
+  PutMyRadarRequest,
+  PersonalSignal,
+  PersonalSignalBrief,
+  PersonalSignalList,
+  MyRadarScanAccepted,
+  MemberRadarBrief,
+  CompanyRadarSettings,
+  PutCompanyRadarRequest,
+  RadarDirection,
+  RadarSourceSetting,
+  PersonalRadarRun,
 } from "./index.js";
 
 const errorResponse = {
@@ -575,7 +587,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/me/home": {
         get: {
           operationId: "getMyHome",
-          summary: "成员工作台：参与的战场、本月个人卡与执行事项",
+          summary: "成员工作台：参与的战场、本月个人卡、执行事项，以及开着时的个人雷达小组件",
           responses: {
             "200": { description: "我的执行事项", content: { "application/json": { schema: { $ref: "#/components/schemas/MeHomeResponse" } } } },
             "401": errorResponse,
@@ -591,6 +603,104 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "200": { description: "成员战场详情", content: { "application/json": { schema: { $ref: "#/components/schemas/MemberBattlefieldResponse" } } } },
             "401": errorResponse,
             "404": errorResponse,
+          },
+        },
+      },
+      "/api/me/radar": {
+        get: {
+          operationId: "getMyRadar",
+          summary: "本人雷达（仅成员）：开关、方向、来源及读法、最近一次扫描、未读数与建议；从没保存过时 enabled=false、updatedAt=null",
+          responses: {
+            "200": { description: "本人雷达", content: { "application/json": { schema: { $ref: "#/components/schemas/MyRadar" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+          },
+        },
+        put: {
+          operationId: "putMyRadar",
+          summary: "保存本人雷达设置（仅成员）：方向与来源先规范化再存；只写设置，不触发扫描",
+          requestBody: jsonBody({ $ref: "#/components/schemas/PutMyRadarRequest" }),
+          responses: {
+            "200": { description: "规范化后的本人雷达", content: { "application/json": { schema: { $ref: "#/components/schemas/MyRadar" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+          },
+        },
+      },
+      "/api/me/radar/signals": {
+        get: {
+          operationId: "listMyRadarSignals",
+          summary: "本人的个人信号（不含已隐藏），按收集时间倒序；默认 50 条",
+          parameters: [{ name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 100 } }],
+          responses: {
+            "200": { description: "个人信号列表", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalSignalList" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+          },
+        },
+      },
+      "/api/me/radar/signals/{id}": {
+        get: {
+          operationId: "getMyRadarSignal",
+          summary: "读取本人的一条个人信号；不是 UUID、不存在、属于别人一律 404 SIGNAL_NOT_FOUND",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "个人信号", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalSignal" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/me/radar/signals/{id}/state": {
+        patch: {
+          operationId: "setMyRadarSignalState",
+          summary: "独立设置本人个人信号的 read、saved、dismissed；状态没变不写",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/SignalStateRequest" }),
+          responses: {
+            "200": { description: "更新后的个人信号", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalSignal" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/me/radar/scan": {
+        post: {
+          operationId: "scanMyRadar",
+          summary: "排队扫描一次本人雷达；没开 409 RADAR_DISABLED，正在扫 409 RADAR_SCAN_IN_PROGRESS，今天已收满 409 RADAR_DAILY_CAP_REACHED，10 分钟冷却 429 带 retry-after",
+          responses: {
+            "202": { description: "已排队", content: { "application/json": { schema: { $ref: "#/components/schemas/MyRadarScanAccepted" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+            "409": errorResponse,
+            "429": errorResponse,
+          },
+        },
+      },
+      "/api/config/radar": {
+        get: {
+          operationId: "getCompanyRadarSettings",
+          summary: "公司雷达的手工方向与媒体来源（CEO）；自动方向只读",
+          responses: {
+            "200": { description: "公司雷达设置", content: { "application/json": { schema: { $ref: "#/components/schemas/CompanyRadarSettings" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+          },
+        },
+        put: {
+          operationId: "putCompanyRadarSettings",
+          summary: "替换公司雷达的手工方向与媒体来源（CEO）；其余方向、网站与公众号不动，不触发公司扫描",
+          requestBody: jsonBody({ $ref: "#/components/schemas/PutCompanyRadarRequest" }),
+          responses: {
+            "200": { description: "保存后的公司雷达设置", content: { "application/json": { schema: { $ref: "#/components/schemas/CompanyRadarSettings" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
           },
         },
       },
@@ -1383,6 +1493,18 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeHomeResponse: MeHomeResponse as JsonSchema,
         MemberWork: MemberWork as JsonSchema,
         MemberBattlefieldResponse: MemberBattlefieldResponse as JsonSchema,
+        MyRadar: MyRadar as JsonSchema,
+        PutMyRadarRequest: PutMyRadarRequest as JsonSchema,
+        PersonalSignal: PersonalSignal as JsonSchema,
+        PersonalSignalBrief: PersonalSignalBrief as JsonSchema,
+        PersonalSignalList: PersonalSignalList as JsonSchema,
+        MyRadarScanAccepted: MyRadarScanAccepted as JsonSchema,
+        MemberRadarBrief: MemberRadarBrief as JsonSchema,
+        CompanyRadarSettings: CompanyRadarSettings as JsonSchema,
+        PutCompanyRadarRequest: PutCompanyRadarRequest as JsonSchema,
+        RadarDirection: RadarDirection as JsonSchema,
+        RadarSourceSetting: RadarSourceSetting as JsonSchema,
+        PersonalRadarRun: PersonalRadarRun as JsonSchema,
         PatchMyTaskRequest: PatchMyTaskRequest as JsonSchema,
         ReturnMyTaskRequest: ReturnMyTaskRequest as JsonSchema,
         NotificationList: NotificationList as JsonSchema,

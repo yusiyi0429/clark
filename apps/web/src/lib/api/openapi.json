@@ -1828,7 +1828,7 @@
     "/api/me/home": {
       "get": {
         "operationId": "getMyHome",
-        "summary": "成员工作台：参与的战场、本月个人卡与执行事项",
+        "summary": "成员工作台：参与的战场、本月个人卡、执行事项，以及开着时的个人雷达小组件",
         "responses": {
           "200": {
             "description": "我的执行事项",
@@ -1889,6 +1889,448 @@
             }
           },
           "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/radar": {
+      "get": {
+        "operationId": "getMyRadar",
+        "summary": "本人雷达（仅成员）：开关、方向、来源及读法、最近一次扫描、未读数与建议；从没保存过时 enabled=false、updatedAt=null",
+        "responses": {
+          "200": {
+            "description": "本人雷达",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyRadar"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putMyRadar",
+        "summary": "保存本人雷达设置（仅成员）：方向与来源先规范化再存；只写设置，不触发扫描",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutMyRadarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "规范化后的本人雷达",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyRadar"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/radar/signals": {
+      "get": {
+        "operationId": "listMyRadarSignals",
+        "summary": "本人的个人信号（不含已隐藏），按收集时间倒序；默认 50 条",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "个人信号列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalSignalList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/radar/signals/{id}": {
+      "get": {
+        "operationId": "getMyRadarSignal",
+        "summary": "读取本人的一条个人信号；不是 UUID、不存在、属于别人一律 404 SIGNAL_NOT_FOUND",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "个人信号",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalSignal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/radar/signals/{id}/state": {
+      "patch": {
+        "operationId": "setMyRadarSignalState",
+        "summary": "独立设置本人个人信号的 read、saved、dismissed；状态没变不写",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignalStateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新后的个人信号",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalSignal"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/radar/scan": {
+      "post": {
+        "operationId": "scanMyRadar",
+        "summary": "排队扫描一次本人雷达；没开 409 RADAR_DISABLED，正在扫 409 RADAR_SCAN_IN_PROGRESS，今天已收满 409 RADAR_DAILY_CAP_REACHED，10 分钟冷却 429 带 retry-after",
+        "responses": {
+          "202": {
+            "description": "已排队",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyRadarScanAccepted"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config/radar": {
+      "get": {
+        "operationId": "getCompanyRadarSettings",
+        "summary": "公司雷达的手工方向与媒体来源（CEO）；自动方向只读",
+        "responses": {
+          "200": {
+            "description": "公司雷达设置",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyRadarSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putCompanyRadarSettings",
+        "summary": "替换公司雷达的手工方向与媒体来源（CEO）；其余方向、网站与公众号不动，不触发公司扫描",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutCompanyRadarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "保存后的公司雷达设置",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyRadarSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -13910,7 +14352,8 @@
         "type": "object",
         "required": [
           "myTasks",
-          "work"
+          "work",
+          "radar"
         ],
         "properties": {
           "myTasks": {
@@ -14252,6 +14695,253 @@
                 }
               }
             }
+          },
+          "radar": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "lastRun",
+                  "unreadCount",
+                  "highlights"
+                ],
+                "properties": {
+                  "lastRun": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "trigger",
+                          "status",
+                          "createdSignals",
+                          "warnings"
+                        ],
+                        "properties": {
+                          "trigger": {
+                            "anyOf": [
+                              {
+                                "const": "scheduled",
+                                "type": "string"
+                              },
+                              {
+                                "const": "manual",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "const": "queued",
+                                "type": "string"
+                              },
+                              {
+                                "const": "running",
+                                "type": "string"
+                              },
+                              {
+                                "const": "completed",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failed",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "queuedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "startedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "completedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "createdSignals": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "warnings": {
+                            "maxItems": 50,
+                            "type": "array",
+                            "items": {
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "unreadCount": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "highlights": {
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "source",
+                        "direction",
+                        "summary",
+                        "reason",
+                        "relevance",
+                        "state",
+                        "collectedAt"
+                      ],
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "source": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "type",
+                            "label",
+                            "title",
+                            "url",
+                            "publishedAt",
+                            "listedOn"
+                          ],
+                          "properties": {
+                            "type": {
+                              "anyOf": [
+                                {
+                                  "const": "web",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "outlet",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "list",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "label": {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            "title": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            },
+                            "url": {
+                              "minLength": 1,
+                              "maxLength": 2000,
+                              "type": "string"
+                            },
+                            "publishedAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "listedOn": {
+                              "anyOf": [
+                                {
+                                  "format": "date",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "direction": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "text"
+                          ],
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            "text": {
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "summary": {
+                          "minLength": 1,
+                          "maxLength": 60,
+                          "type": "string"
+                        },
+                        "reason": {
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "type": "string"
+                        },
+                        "relevance": {
+                          "minimum": 1,
+                          "maximum": 5,
+                          "type": "integer"
+                        },
+                        "state": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "read",
+                            "saved",
+                            "dismissed"
+                          ],
+                          "properties": {
+                            "read": {
+                              "type": "boolean"
+                            },
+                            "saved": {
+                              "type": "boolean"
+                            },
+                            "dismissed": {
+                              "type": "boolean"
+                            }
+                          }
+                        },
+                        "collectedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -15082,6 +15772,1348 @@
           }
         }
       },
+      "MyRadar": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled",
+          "directions",
+          "sources",
+          "updatedAt",
+          "lastRun",
+          "unreadCount",
+          "webSearch",
+          "suggestions"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "directions": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "text"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "text": {
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "sources": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "value",
+                "kind",
+                "note"
+              ],
+              "properties": {
+                "value": {
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "feed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "site",
+                      "type": "string"
+                    },
+                    {
+                      "const": "list",
+                      "type": "string"
+                    },
+                    {
+                      "const": "unsupported",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "note": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastRun": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "trigger",
+                  "status",
+                  "createdSignals",
+                  "warnings"
+                ],
+                "properties": {
+                  "trigger": {
+                    "anyOf": [
+                      {
+                        "const": "scheduled",
+                        "type": "string"
+                      },
+                      {
+                        "const": "manual",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "const": "queued",
+                        "type": "string"
+                      },
+                      {
+                        "const": "running",
+                        "type": "string"
+                      },
+                      {
+                        "const": "completed",
+                        "type": "string"
+                      },
+                      {
+                        "const": "failed",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "queuedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "completedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "createdSignals": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "warnings": {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "maxLength": 500,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unreadCount": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "webSearch": {
+            "type": "boolean"
+          },
+          "suggestions": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "directions",
+              "sources"
+            ],
+            "properties": {
+              "directions": {
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "text",
+                    "from"
+                  ],
+                  "properties": {
+                    "text": {
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "type": "string"
+                    },
+                    "from": {
+                      "minLength": 1,
+                      "maxLength": 60,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "sources": {
+                "maxItems": 12,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "value",
+                    "kind",
+                    "note"
+                  ],
+                  "properties": {
+                    "value": {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "feed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "site",
+                          "type": "string"
+                        },
+                        {
+                          "const": "list",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unsupported",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "note": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PutMyRadarRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled",
+          "directions",
+          "sources"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "directions": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 80,
+              "type": "string"
+            }
+          },
+          "sources": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 300,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PersonalSignal": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "direction",
+          "summary",
+          "reason",
+          "relevance",
+          "state",
+          "collectedAt",
+          "excerpt",
+          "fullText",
+          "evidenceQuote"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "source": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "type",
+              "label",
+              "title",
+              "url",
+              "publishedAt",
+              "listedOn"
+            ],
+            "properties": {
+              "type": {
+                "anyOf": [
+                  {
+                    "const": "web",
+                    "type": "string"
+                  },
+                  {
+                    "const": "outlet",
+                    "type": "string"
+                  },
+                  {
+                    "const": "list",
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              "title": {
+                "minLength": 1,
+                "maxLength": 500,
+                "type": "string"
+              },
+              "url": {
+                "minLength": 1,
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "publishedAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "listedOn": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "direction": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "maxLength": 100,
+                "type": "string"
+              },
+              "text": {
+                "minLength": 1,
+                "maxLength": 80,
+                "type": "string"
+              }
+            }
+          },
+          "summary": {
+            "minLength": 1,
+            "maxLength": 60,
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "maxLength": 300,
+            "type": "string"
+          },
+          "relevance": {
+            "minimum": 1,
+            "maximum": 5,
+            "type": "integer"
+          },
+          "state": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "read",
+              "saved",
+              "dismissed"
+            ],
+            "properties": {
+              "read": {
+                "type": "boolean"
+              },
+              "saved": {
+                "type": "boolean"
+              },
+              "dismissed": {
+                "type": "boolean"
+              }
+            }
+          },
+          "collectedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "excerpt": {
+            "minLength": 1,
+            "maxLength": 10000,
+            "type": "string"
+          },
+          "fullText": {
+            "type": "boolean"
+          },
+          "evidenceQuote": {
+            "minLength": 1,
+            "maxLength": 1000,
+            "type": "string"
+          }
+        }
+      },
+      "PersonalSignalBrief": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "direction",
+          "summary",
+          "reason",
+          "relevance",
+          "state",
+          "collectedAt"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "source": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "type",
+              "label",
+              "title",
+              "url",
+              "publishedAt",
+              "listedOn"
+            ],
+            "properties": {
+              "type": {
+                "anyOf": [
+                  {
+                    "const": "web",
+                    "type": "string"
+                  },
+                  {
+                    "const": "outlet",
+                    "type": "string"
+                  },
+                  {
+                    "const": "list",
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              "title": {
+                "minLength": 1,
+                "maxLength": 500,
+                "type": "string"
+              },
+              "url": {
+                "minLength": 1,
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "publishedAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "listedOn": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "direction": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "maxLength": 100,
+                "type": "string"
+              },
+              "text": {
+                "minLength": 1,
+                "maxLength": 80,
+                "type": "string"
+              }
+            }
+          },
+          "summary": {
+            "minLength": 1,
+            "maxLength": 60,
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "maxLength": 300,
+            "type": "string"
+          },
+          "relevance": {
+            "minimum": 1,
+            "maximum": 5,
+            "type": "integer"
+          },
+          "state": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "read",
+              "saved",
+              "dismissed"
+            ],
+            "properties": {
+              "read": {
+                "type": "boolean"
+              },
+              "saved": {
+                "type": "boolean"
+              },
+              "dismissed": {
+                "type": "boolean"
+              }
+            }
+          },
+          "collectedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "PersonalSignalList": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "signals"
+        ],
+        "properties": {
+          "signals": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "source",
+                "direction",
+                "summary",
+                "reason",
+                "relevance",
+                "state",
+                "collectedAt"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "source": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "label",
+                    "title",
+                    "url",
+                    "publishedAt",
+                    "listedOn"
+                  ],
+                  "properties": {
+                    "type": {
+                      "anyOf": [
+                        {
+                          "const": "web",
+                          "type": "string"
+                        },
+                        {
+                          "const": "outlet",
+                          "type": "string"
+                        },
+                        {
+                          "const": "list",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "label": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "title": {
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    "url": {
+                      "minLength": 1,
+                      "maxLength": 2000,
+                      "type": "string"
+                    },
+                    "publishedAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "listedOn": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "direction": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "text"
+                  ],
+                  "properties": {
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "text": {
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "type": "string"
+                    }
+                  }
+                },
+                "summary": {
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "type": "string"
+                },
+                "reason": {
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                "relevance": {
+                  "minimum": 1,
+                  "maximum": 5,
+                  "type": "integer"
+                },
+                "state": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "read",
+                    "saved",
+                    "dismissed"
+                  ],
+                  "properties": {
+                    "read": {
+                      "type": "boolean"
+                    },
+                    "saved": {
+                      "type": "boolean"
+                    },
+                    "dismissed": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "collectedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MyRadarScanAccepted": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "queued"
+        ],
+        "properties": {
+          "queued": {
+            "const": true,
+            "type": "boolean"
+          }
+        }
+      },
+      "MemberRadarBrief": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lastRun",
+          "unreadCount",
+          "highlights"
+        ],
+        "properties": {
+          "lastRun": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "trigger",
+                  "status",
+                  "createdSignals",
+                  "warnings"
+                ],
+                "properties": {
+                  "trigger": {
+                    "anyOf": [
+                      {
+                        "const": "scheduled",
+                        "type": "string"
+                      },
+                      {
+                        "const": "manual",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "const": "queued",
+                        "type": "string"
+                      },
+                      {
+                        "const": "running",
+                        "type": "string"
+                      },
+                      {
+                        "const": "completed",
+                        "type": "string"
+                      },
+                      {
+                        "const": "failed",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "queuedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "completedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "createdSignals": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "warnings": {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "maxLength": 500,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unreadCount": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "highlights": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "source",
+                "direction",
+                "summary",
+                "reason",
+                "relevance",
+                "state",
+                "collectedAt"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "source": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "label",
+                    "title",
+                    "url",
+                    "publishedAt",
+                    "listedOn"
+                  ],
+                  "properties": {
+                    "type": {
+                      "anyOf": [
+                        {
+                          "const": "web",
+                          "type": "string"
+                        },
+                        {
+                          "const": "outlet",
+                          "type": "string"
+                        },
+                        {
+                          "const": "list",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "label": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "title": {
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    "url": {
+                      "minLength": 1,
+                      "maxLength": 2000,
+                      "type": "string"
+                    },
+                    "publishedAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "listedOn": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "direction": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "text"
+                  ],
+                  "properties": {
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "text": {
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "type": "string"
+                    }
+                  }
+                },
+                "summary": {
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "type": "string"
+                },
+                "reason": {
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                "relevance": {
+                  "minimum": 1,
+                  "maximum": 5,
+                  "type": "integer"
+                },
+                "state": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "read",
+                    "saved",
+                    "dismissed"
+                  ],
+                  "properties": {
+                    "read": {
+                      "type": "boolean"
+                    },
+                    "saved": {
+                      "type": "boolean"
+                    },
+                    "dismissed": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "collectedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CompanyRadarSettings": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "directions",
+          "sources",
+          "automatic",
+          "webSearch",
+          "suggestions"
+        ],
+        "properties": {
+          "directions": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "text"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "text": {
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "sources": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "value",
+                "kind",
+                "note"
+              ],
+              "properties": {
+                "value": {
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "feed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "site",
+                      "type": "string"
+                    },
+                    {
+                      "const": "list",
+                      "type": "string"
+                    },
+                    {
+                      "const": "unsupported",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "note": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "automatic": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          "webSearch": {
+            "type": "boolean"
+          },
+          "suggestions": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "sources"
+            ],
+            "properties": {
+              "sources": {
+                "maxItems": 12,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "value",
+                    "kind",
+                    "note"
+                  ],
+                  "properties": {
+                    "value": {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "feed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "site",
+                          "type": "string"
+                        },
+                        {
+                          "const": "list",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unsupported",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "note": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PutCompanyRadarRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "directions",
+          "sources"
+        ],
+        "properties": {
+          "directions": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 80,
+              "type": "string"
+            }
+          },
+          "sources": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 300,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RadarDirection": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "text"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "maxLength": 80,
+            "type": "string"
+          }
+        }
+      },
+      "RadarSourceSetting": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value",
+          "kind",
+          "note"
+        ],
+        "properties": {
+          "value": {
+            "minLength": 1,
+            "maxLength": 300,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "feed",
+                "type": "string"
+              },
+              {
+                "const": "site",
+                "type": "string"
+              },
+              {
+                "const": "list",
+                "type": "string"
+              },
+              {
+                "const": "unsupported",
+                "type": "string"
+              }
+            ]
+          },
+          "note": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
+      "PersonalRadarRun": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "trigger",
+          "status",
+          "createdSignals",
+          "warnings"
+        ],
+        "properties": {
+          "trigger": {
+            "anyOf": [
+              {
+                "const": "scheduled",
+                "type": "string"
+              },
+              {
+                "const": "manual",
+                "type": "string"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "queued",
+                "type": "string"
+              },
+              {
+                "const": "running",
+                "type": "string"
+              },
+              {
+                "const": "completed",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "queuedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "completedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdSignals": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "warnings": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "maxLength": 500,
+              "type": "string"
+            }
+          }
+        }
+      },
       "PatchMyTaskRequest": {
         "additionalProperties": false,
         "type": "object",
@@ -15358,6 +17390,7 @@
               "companyName",
               "next",
               "voiceprint",
+              "radar",
               "role",
               "company"
             ],
@@ -15419,6 +17452,27 @@
                   },
                   "configured": {
                     "type": "boolean"
+                  }
+                }
+              },
+              "radar": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "configured",
+                  "enabled",
+                  "directions"
+                ],
+                "properties": {
+                  "configured": {
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "directions": {
+                    "minimum": 0,
+                    "type": "integer"
                   }
                 }
               },
@@ -15519,6 +17573,7 @@
               "companyName",
               "next",
               "voiceprint",
+              "radar",
               "role",
               "work"
             ],
@@ -15580,6 +17635,27 @@
                   },
                   "configured": {
                     "type": "boolean"
+                  }
+                }
+              },
+              "radar": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "configured",
+                  "enabled",
+                  "directions"
+                ],
+                "properties": {
+                  "configured": {
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "directions": {
+                    "minimum": 0,
+                    "type": "integer"
                   }
                 }
               },

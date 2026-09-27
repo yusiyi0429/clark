@@ -40,6 +40,8 @@ describe("migration", () => {
       expect(names).toContain("mission_round_reviews");
       expect(names).toContain("mission_review_decisions");
       expect(names).toContain("mission_card_reads");
+      expect(names).toContain("person_radar");
+      expect(names).toContain("person_radar_signals");
 
       const applied = await db.query<{ id: number; filename: string }>(
         "SELECT id, filename FROM schema_migrations ORDER BY id",
@@ -75,6 +77,7 @@ describe("migration", () => {
         "028_merge_conversation_sessions.sql",
         "029_voiceprints.sql",
         "030_person_onboarding.sql",
+        "031_person_radar.sql",
         "032_mission_card_fields.sql",
         "033_mission_rounds.sql",
         "034_mission_card_discussion.sql",
@@ -85,7 +88,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(33);
+      expect(Number(again.rows[0].count)).toBe(34);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(
@@ -103,6 +106,21 @@ describe("migration", () => {
            VALUES ('bad-period', 1, 'BAD-PERIOD', '2026-99', '标题', 'owner', 'capability', 'outcome', 'ref', 'doc', 1, '来源')`,
         ),
       ).rejects.toThrow(/missions_period_check/);
+
+      // 个人雷达：开启至少要有 1 条方向；关着可以什么都不写
+      await expect(db.query("INSERT INTO person_radar (person_id, enabled) VALUES ('person-a', TRUE)")).rejects.toThrow(/person_radar_check/);
+      await db.query("INSERT INTO person_radar (person_id) VALUES ('person-a')");
+      await db.query(`UPDATE person_radar SET enabled = TRUE, directions = '["方向"]'::jsonb WHERE person_id = 'person-a'`);
+      // 同一人同一网址只一行；不同的人各自一行
+      const signal = (person: string) => db.query(
+        `INSERT INTO person_radar_signals (id, person_id, source_type, source_fingerprint, source_title, source_url, published_at, excerpt,
+           source_ref, direction_id, direction_text, summary, reason, evidence_quote, relevance)
+         VALUES (gen_random_uuid(), $1, 'web', $2, '标题', 'https://example.com/a', now(), '原文', '{}'::jsonb, 'd_1', '方向', '结论', '理由', '原文', 3)`,
+        [person, "f".repeat(64)],
+      );
+      await signal("person-a");
+      await signal("person-b");
+      await expect(signal("person-a")).rejects.toThrow(/person_radar_signals_person_id_source_fingerprint_key/);
 
       await admin.query("SELECT 1"); // admin 连接可用
     });

@@ -11,6 +11,7 @@ import { createPiConversationRuntime } from "./piConversationRuntime.js";
 import type { WebSearchAdapter } from "./webSearch.js";
 import type { ConversationRuntime } from "./conversations.js";
 import type { RadarOutletAdapter, RadarService } from "./radar.js";
+import type { PersonalRadarService } from "./personalRadar.js";
 import { resolveConfiguredOutletIds } from "./outletSources.js";
 import type { ResearchService } from "./research.js";
 import type { PreflightAgent } from "./meetingPreflight.js";
@@ -49,6 +50,7 @@ import { registerRecordingRoutes } from "./routes/recordings.js";
 import { registerMeRoutes } from "./routes/me.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerMissionCardRoutes } from "./routes/missionCards.js";
+import { registerMyRadarRoutes } from "./routes/myRadar.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 
@@ -93,6 +95,7 @@ export async function buildApp({
   env,
   conversationRuntime,
   radarService,
+  personalRadarService,
   researchService,
   preflightAgent,
   outcomeAgent,
@@ -110,6 +113,8 @@ export async function buildApp({
   env: AppEnv;
   conversationRuntime?: ConversationRuntime;
   radarService?: RadarService;
+  /** 个人雷达扫描队列；缺省为不扫描的桩（server.ts 注入与公司雷达共用博查与发布方 adapter 的真实服务）。 */
+  personalRadarService?: PersonalRadarService;
   researchService?: ResearchService;
   preflightAgent?: PreflightAgent;
   outcomeAgent?: PostMeetingAgent;
@@ -185,6 +190,13 @@ export async function buildApp({
     runManual: async () => ({ trigger: "manual" as const, status: "failed" as const, companyDay: new Date().toISOString().slice(0, 10), createdSignals: 0, warnings: ["Radar providers are not configured"] }),
     runScheduled: async () => ({ trigger: "scheduled" as const, status: "failed" as const, companyDay: new Date().toISOString().slice(0, 10), createdSignals: 0, warnings: ["Radar providers are not configured"] }),
   };
+  const personalRadar: PersonalRadarService = personalRadarService ?? {
+    providerStatus: { webSearch: false },
+    enqueue() {},
+    async runScheduled() {},
+    async recoverStaleRuns() {},
+    async idle() {},
+  };
   const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
   // 未注入真实 Runner 时不虚构预研：Issue 保留 pending，等显式配置
   const research = researchService ?? {
@@ -194,6 +206,7 @@ export async function buildApp({
   };
   app.addHook("onClose", async () => {
     await research.idle();
+    await personalRadar.idle();
     await runtime.close?.();
   });
   const q = pool.query.bind(pool);
@@ -274,6 +287,7 @@ export async function buildApp({
     outcome,
     runtime,
     radar,
+    personalRadar,
     research,
     driExporter,
     ontologyUpdater,
@@ -311,6 +325,7 @@ export async function buildApp({
   registerMeRoutes(app, ctx);
   registerOnboardingRoutes(app, ctx);
   registerMissionCardRoutes(app, ctx);
+  registerMyRadarRoutes(app, ctx);
 
   return app;
 }

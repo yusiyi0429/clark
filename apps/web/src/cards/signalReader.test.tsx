@@ -4,6 +4,8 @@ import type { Card } from "@/lib/api/client";
 import { WorkspaceTestProvider } from "@/components/shell/testing";
 import { SignalCard, joinSentences, signalSourceLabel, upNextSignals } from "./SignalCard";
 import { SignalStory } from "./SignalStory";
+import { SignalArticle } from "./SignalArticle";
+import { personalReading } from "@/components/radar/MemberSignalScreen";
 
 function signalCard(type: string, badge?: string, patch: Record<string, unknown> = {}): Card {
   return {
@@ -130,5 +132,33 @@ describe("Signal 阅读", () => {
     expect(html).toContain('src="/api/signals/1/images/0"');
     expect(html).toContain("data-has-image");
     expect(renderToStaticMarkup(<SignalStory card={signalCard("outlet", "CNBC")} onOpen={() => undefined} />)).not.toContain("<img");
+  });
+
+  it("成员版正文与公司版同一份排版：关系写「和你的方向」、正文用命中理由、标签写你的方向；没有尚未确定与配图", () => {
+    const personal = {
+      id: "7f1c0e0a-2b1d-4c55-9a55-0a0b0c0d0e0f",
+      source: { type: "outlet" as const, label: "金融时报", title: "欧洲的企业 Agent 采购开始按结果付费", url: "https://www.ft.com/a", publishedAt: "2026-09-26T02:00:00.000Z", listedOn: null },
+      direction: { id: "d_1", text: "Agent 的定价方式" },
+      summary: "采购方开始按结果付费",
+      reason: "直接回答了按结果收费能否被大客户接受",
+      relevance: 5,
+      state: { read: false, saved: false, dismissed: false },
+      collectedAt: "2026-09-26T03:00:00.000Z",
+      excerpt: "第一段原文。",
+      fullText: false,
+      evidenceQuote: "第一段原文",
+    };
+    const html = renderToStaticMarkup(
+      <SignalArticle reading={personalReading(personal)} state={personal.state} pending={false} error={null} onUpdate={async () => true} onRetry={() => undefined} upNext={[]} />,
+    );
+    expect(html).toContain(">和你的方向<");
+    expect(html).toContain("直接回答了按结果收费能否被大客户接受");
+    expect(html).toContain("你的方向 · Agent 的定价方式");
+    expect(html).toContain("金融时报 · 2026/9/26");
+    expect(html).not.toContain("对我们的影响");
+    expect(html).not.toContain("战略锚点");
+    expect(html).not.toContain("尚未确定");
+    expect(html).not.toContain("<img");
+    expect(html).toContain("不再出现在阅读列表");
   });
 });

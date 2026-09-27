@@ -9,6 +9,7 @@ import type { components } from "@/lib/api/schema";
 import { onboardingDestination, onboardingReturnPath } from "@/lib/access-paths";
 import { monthDayTime } from "@/lib/companyTime";
 import { useRoundNow } from "@/components/missionCards/useRoundNow";
+import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import { MorningCanvas } from "./MorningCanvas";
 import { CoAgentCapsule } from "./CoAgentCapsule";
 import { OnboardingProgress } from "./OnboardingProgress";
@@ -17,11 +18,17 @@ import f from "./foundation.module.css";
 import s from "./welcome.module.css";
 
 export type OnboardingData = components["schemas"]["OnboardingResponse"];
-type Step = "hello" | "company" | "work" | "voiceprint" | "start";
+type Step = "hello" | "company" | "work" | "radar" | "voiceprint" | "start";
 
-/** 工单 02 只需在 company/work 后插入 radar；进度、前后导航与动效不依赖固定步数。 */
+/** 雷达（工单 02）排在公司目标与分工／你这个月的工作之后、声纹之前；进度、前后导航与动效不依赖固定步数。 */
 export function onboardingSteps(data: OnboardingData): Step[] {
-  return ["hello", data.role === "ceo" ? "company" : "work", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "start"];
+  return ["hello", data.role === "ceo" ? "company" : "work", "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "start"];
+}
+
+/** 结束页设置摘要里的雷达一行：成员写开没开；CEO 的公司雷达不能关，写补充了几个方向。 */
+export function radarSummaryLine(role: OnboardingData["role"], radar: { enabled: boolean; directions: number }): string {
+  if (role === "ceo") return radar.directions ? `雷达 · 已补充 ${radar.directions} 个方向` : "雷达 · 按本月目标自动关注";
+  return radar.enabled ? "雷达 · 已开启" : "雷达 · 未开启";
 }
 
 export function monthTargetCopy(status: "none" | "draft" | "negotiating" | "confirmed", target: string | null): string {
@@ -105,6 +112,11 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rerecord, setRerecord] = useState(false);
+  /** 本步保存后的雷达摘要；没保存过就用服务端的。 */
+  const [radarSaved, setRadarSaved] = useState<{ enabled: boolean; directions: number } | null>(null);
+  /** 雷达这一步由编辑器负责前进：它的主按钮与「稍后」放进下面的底栏，位置和其他步骤一样。 */
+  const [radarPrimary, setRadarPrimary] = useState<HTMLDivElement | null>(null);
+  const [radarLater, setRadarLater] = useState<HTMLSpanElement | null>(null);
   const step = steps[index];
   const voice = useVoiceprintEnrollment({ initialStatus: data.voiceprint });
   const current = useRef(0);
@@ -184,10 +196,10 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
     const target = event.target as HTMLElement;
     if (target.closest("input, textarea, select, button, a, [contenteditable=true]")) return;
     event.preventDefault();
-    primary.current?.click();
+    (step === "radar" ? radarPrimary?.querySelector<HTMLButtonElement>("[data-radar-submit]") : primary.current)?.click();
   }
 
-  const heading = step === "hello" ? `你好，${data.displayName}` : step === "company" ? `这是天枢里登记的${data.companyName || "公司"}` : step === "work" ? "你这个月的工作" : step === "voiceprint" ? "让我在会上认出你的声音" : "可以开始了";
+  const heading = step === "hello" ? `你好，${data.displayName}` : step === "company" ? `这是天枢里登记的${data.companyName || "公司"}` : step === "work" ? "你这个月的工作" : step === "radar" ? data.role === "ceo" ? "公司雷达，还要看什么？" : "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : "可以开始了";
   const busy = finishing || voice.phase === "saving";
   const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
   const primaryDisabled = busy || (!error && step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort));
@@ -208,13 +220,22 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
         <div className={s.content} key={step} ref={content} data-step={step}>
           <div className={s.intro}>
             <h1 ref={title} tabIndex={-1}>{heading}</h1>
-            {step === "hello" ? <><p className={s.subtitle}>我是你的 Co-Agent</p><p className={s.description}>我先带你看看这个月和你有关的工作。{data.voiceprint.configured ? <><br />声纹，可以现在录，也可以以后再说。</> : null}</p></> : null}
+            {step === "hello" ? <><p className={s.subtitle}>我是你的 Co-Agent</p><p className={s.description}>我先带你看看这个月和你有关的工作。<br />{data.voiceprint.configured ? "雷达和声纹" : "雷达"}，可以现在设，也可以以后再说。</p></> : null}
+            {/* 「这里改的是公司雷达。」由编辑器顶部那一行说，同一屏不重复。 */}
+            {step === "radar" && data.role === "ceo" ? <p className={s.description}>我会按你签发的本月目标自动关注；你还可以补充方向和来源。</p> : null}
             {step === "voiceprint" ? <p className={s.description}>录一段 15–30 秒的朗读，帮我在会后建议哪些发言可能来自你——最后仍由人核对。</p> : null}
             {step === "start" && !returnPath ? <p className={s.description}>{data.next.text}</p> : null}
           </div>
           <div className={s.details}>
             {step === "company" && data.role === "ceo" ? <CompanySnapshot data={data} /> : null}
             {step === "work" && data.role === "member" ? <WorkSnapshot data={data} onRefresh={refresh} /> : null}
+            {step === "radar" ? <RadarSettingsEditor
+              mode={data.role === "ceo" ? "company" : "person"}
+              submitLabel="保存并继续"
+              onSaved={(summary) => { setRadarSaved({ enabled: summary.enabled, directions: summary.directions }); move(1); }}
+              onLater={() => move(1)}
+              actionsTarget={{ primary: radarPrimary, secondary: radarLater }}
+            /> : null}
             {step === "voiceprint" ? <>
               {voiceReady ? <div className={`${f.glass} ${s.enrolled}`}>
                 <span className={s.successIcon}><Check size={24} /></span>
@@ -237,7 +258,11 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
               </>}
               {voice.error ? <p className={s.error} role="alert">{voice.error}</p> : null}
             </> : null}
-            {step === "start" && data.voiceprint.configured ? <p className={s.summary}>声纹 · {voice.status?.enrolled ? "已录好" : "稍后在个人菜单里录"}<span>都可以在个人菜单里改</span></p> : null}
+            {step === "start" ? <p className={s.summary}>
+              <span className={s.summaryItem}>{radarSummaryLine(data.role, radarSaved ?? data.radar)}</span>
+              {data.voiceprint.configured ? <span className={s.summaryItem}>声纹 · {voice.status?.enrolled ? "已录好" : "稍后在个人菜单里录"}</span> : null}
+              <span>都可以在个人菜单里改</span>
+            </p> : null}
           </div>
         </div>
       </div>
@@ -247,10 +272,11 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
         {refreshError ? <p className={s.footnote} role="status">{refreshError}</p> : null}
         {step === "start" && returnPath ? <p className={s.footnote}>{data.next.text}</p> : null}
         {disabledHint ? <p id="welcome-action-hint" className={s.actionHint}>{disabledHint}</p> : null}
-        <button key={step} ref={primary} className={f.primary} type="button" onClick={() => void forward()} disabled={primaryDisabled} aria-describedby={disabledHint ? "welcome-action-hint" : undefined}>{error ? "重试" : primaryLabel}{!busy ? <ArrowRight size={18} aria-hidden="true" /> : null}</button>
+        {step === "radar" && !error ? <div key={step} ref={setRadarPrimary} className={s.radarActions} /> : <button key={step} ref={primary} className={f.primary} type="button" onClick={() => void forward()} disabled={primaryDisabled} aria-describedby={disabledHint ? "welcome-action-hint" : undefined}>{error ? "重试" : primaryLabel}{!busy ? <ArrowRight size={18} aria-hidden="true" /> : null}</button>}
         <div className={s.secondary}>
           {index > 0 ? <button className={f.textButton} type="button" onClick={() => move(-1)} disabled={busy}>上一步</button> : null}
           {step === "voiceprint" ? <button className={f.textButton} type="button" onClick={() => move(1)} disabled={busy}>稍后</button> : null}
+          {step === "radar" ? <span ref={setRadarLater} className={s.radarSlot} /> : null}
         </div>
       </footer>
     </div>

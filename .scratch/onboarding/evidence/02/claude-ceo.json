@@ -1,0 +1,109 @@
+{
+  "scenario": "ceo",
+  "log": [
+    {
+      "step": "ceo step 3",
+      "text": "天枢\n先进入工作台\n公司雷达，还要看什么？\n\n我会按你签发的本月目标自动关注；你还可以补充方向和来源。\n\n这里改的是公司雷达\n\n方向\n一句话一条，最多 5 条\nAI 芯片出口管制\n0/40\n\n来源\n可不填\n最多 10 个\n\n全网检索暂未开通：现在只读订阅源和公众号，方向用来从中筛选。\n\ntheinformation.com\nThe Information · 订阅源\n\n常用来源\n订阅源\n金融时报\n量子位\nBBC\n彭博\n路透社\nCNBC\n经济学人\n第 3 步，共 4 步\n保存并继续\n上一步\n稍后"
+    },
+    {
+      "step": "shot ceo-onboarding-radar-1440",
+      "url": "/welcome?next=%2F",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "shot ceo-onboarding-radar-390",
+      "url": "/welcome?next=%2F",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "shot ceo-onboarding-radar-filled-1440",
+      "url": "/welcome?next=%2F",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "ceo finish",
+      "text": "天枢\n可以开始了\n\n首页上暂时没有要你马上处理的事\n\n雷达 · 已补充 1 个方向\n都可以在个人菜单里改\n\n第 4 步，共 4 步\n进入工作台\n上一步"
+    },
+    {
+      "step": "shot ceo-onboarding-finish-1440",
+      "url": "/welcome?next=%2F",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "scope dialog",
+      "text": "雷达 · 公司级监测\n监测范围\n\n从公司本体出发，持续观察可能改变公司判断的外部变化。\n\n监测锚点\n\n1 条 · 时区 Asia/Shanghai · 回溯 48 小时\n\n当前生效 · 只读\n01\n公司\nAI 芯片出口管制\n\nAI 芯片出口管制\n\n监测来源\n\n当前启用的外部检索渠道。\n\n01\nWeb 搜索\n\n未配置 Web 来源\n\n未配置\n02\n微信公众号\n\n未配置微信公众号账号级来源\n\n未配置\n03\n发布方级媒体来源\n\n未配置发布方级媒体来源\n\n未配置\n刷新信号与定时扫描共用同一条管线；手工方向和媒体来源在个人菜单「雷达设置」里改；公众号和全网检索仍在运营侧。\n关闭\n在雷达设置里修改"
+    },
+    {
+      "step": "shot ceo-radar-scope-1440",
+      "url": "/radar",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "shot ceo-radar-scope-390",
+      "url": "/radar",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "ceo editor",
+      "text": "雷达设置\n\n这里改的是公司雷达\n\n方向\n一句话一条，最多 5 条\nAI 芯片出口管制\n0/40\n\n来源\n可不填\n最多 10 个\n\n全网检索暂未开通：现在只读订阅源和公众号，方向用来从中筛选。\n\ntheinformation.com\nThe Information · 订阅源\n\n常用来源\n订阅源\n金融时报\n量子位\nBBC\n彭博\n路透社\nCNBC\n经济学人\n保存"
+    },
+    {
+      "step": "shot ceo-radar-editor-1440",
+      "url": "/radar",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "shot ceo-radar-editor-390",
+      "url": "/radar",
+      "overflow": false,
+      "overlay": false,
+      "widgets": []
+    },
+    {
+      "step": "inspect company",
+      "signals": 0,
+      "issues": 0,
+      "judge_runs": 2,
+      "anchors": [
+        {
+          "id": "manual:a7d1d14461d1",
+          "query": "AI 芯片出口管制",
+          "title": "AI 芯片出口管制",
+          "source": "manual",
+          "location": {
+            "type": "company"
+          }
+        }
+      ],
+      "sources": {
+        "sites": [],
+        "outlets": [
+          {
+            "id": "settings",
+            "name": "雷达设置",
+            "enabled": true,
+            "outlets": [
+              "theinformation"
+            ]
+          }
+        ],
+        "wechatAccounts": []
+      }
+    }
+  ],
+  "errors": []
+}

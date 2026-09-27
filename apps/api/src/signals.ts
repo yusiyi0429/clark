@@ -68,7 +68,7 @@ export function shortSignalTitle(summary: string): string {
 const FULL_TEXT_OUTLETS = new Set(RADAR_OUTLETS.filter((outlet) => outlet.fullText).map((outlet) => outlet.outletId));
 
 /** 只有目录标了 fullText 的发布方（量子位）原文是逐篇抓取的文章页；其余来源都是检索或 feed 给的摘录。 */
-function isFullTextSource(sourceRef: unknown): boolean {
+export function isFullTextSource(sourceRef: unknown): boolean {
   const ref = sourceRef as { type?: string; outletId?: string } | null;
   return ref?.type === "outlet" && typeof ref.outletId === "string" && FULL_TEXT_OUTLETS.has(ref.outletId);
 }
@@ -91,7 +91,8 @@ export async function projectRadarCard(q: Query, providers: RadarService["provid
   const wechatSources = row.sources.wechatAccounts.filter((source) => source.enabled).length;
   const outletSources = row.sources.outlets ?? [];
   const outletEntries = outletSources.filter((source) => source.enabled);
-  const outletCount = new Set(outletEntries.flatMap((source) => source.outlets)).size;
+  const enabledOutlets = new Set(outletEntries.flatMap((source) => source.outlets));
+  const outletCount = enabledOutlets.size;
   const wechatConfigured = providers.wechat && wechatSources > 0;
   const outletConfigured = providers.outlets && outletCount > 0;
   return {
@@ -124,6 +125,8 @@ export async function projectRadarCard(q: Query, providers: RadarService["provid
           configured: outletConfigured,
           sourceCount: outletCount,
           message: outletConfigured ? `已配置 ${outletCount} 家发布方级媒体来源` : "未配置发布方级媒体来源",
+          // 已启用发布方的中文名：按目录顺序、去重，雷达卡据此列名单，不再写死
+          names: RADAR_OUTLETS.filter((outlet) => enabledOutlets.has(outlet.outletId)).map((outlet) => outlet.name),
         },
       },
     },

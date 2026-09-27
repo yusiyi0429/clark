@@ -1,0 +1,140 @@
+/*
+ * 雷达设置（components/radar/RadarSettingsForm）：一张厚白玻璃卡，先方向、后来源。
+ * 材质、圆角、字号与留白都取 01 底座（foundation.module.css 的 .glass / .primary / .textButton / .switch）和晨光 token：
+ * 主卡 24、输入 16、内嵌 12；选中的胶囊是实心天枢蓝白字，建议是玻璃描边。卡里不再叠第二层玻璃。
+ */
+
+.editor { display: block; min-width: 0; padding: 24px 28px; color: var(--onboarding-ink); font-family: var(--font-sans); text-align: left; }
+/* 自己画的键先继承字体，字号在各自的规则里写；01 的 .primary / .textButton 保留自己的字号。 */
+.switchRow, .chipText, .chipRemove, .suggestion { font: inherit; }
+/* 外壳（app-shell）给裸按钮套了一圈半透明的聚焦环；这里统一回 01 的 2px 实心天枢蓝。 */
+.editor.editor button:not([data-slot]):focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
+
+.company { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--onboarding-ink); font-size: 15px; font-weight: 600; line-height: 1.6; }
+.company svg { flex: none; color: var(--onboarding-blue); }
+
+.state { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; padding: 8px 0; color: var(--onboarding-muted); font-size: 15px; line-height: 1.7; }
+.state p { margin: 0; }
+.state[role="alert"] p { color: var(--onboarding-error); }
+
+/* 开关这一整行都可以点（role="switch"），触控目标远大于 44px。 */
+.switchRow { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: calc(100% + 16px); min-height: 64px; margin: -8px -8px 0; padding: 8px; border: 0; border-radius: var(--onboarding-inset-radius); background: none; color: inherit; text-align: left; cursor: pointer; transition: background var(--onboarding-feedback); }
+.switchRow:hover { background: var(--wash-hover); }
+.switchText { display: grid; gap: 4px; min-width: 0; }
+.switchLabel { color: var(--onboarding-ink); font-size: 17px; font-weight: 600; line-height: 1.5; }
+.switchNote { color: var(--onboarding-muted); font-size: 14px; line-height: 1.65; text-wrap: pretty; }
+
+/* 关着时两栏收起（inert），打开时顺着真实状态展开；减少动效时直接出现。 */
+.body { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows var(--onboarding-enter) var(--onboarding-ease), opacity var(--onboarding-feedback) var(--onboarding-ease); }
+.body[data-open="false"] { grid-template-rows: 0fr; opacity: 0; }
+/* 收起时要裁掉内容；留 6px 让输入框的聚焦环不被裁到。 */
+.bodyInner { min-height: 0; margin: -6px; padding: 6px; overflow: hidden; }
+
+.section { display: grid; gap: 12px; min-width: 0; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--rule); }
+.company + .body .section:first-child, .company + .state { margin-top: 16px; }
+.sectionHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sectionTitle.sectionTitle { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--onboarding-ink); font-size: 16px; font-weight: 600; line-height: 1.5; }
+.optional { padding: 1px 8px; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-pill-radius); color: var(--onboarding-muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
+.sectionHint { flex: none; color: var(--onboarding-faint); font-size: 13px; line-height: 1.5; }
+.sectionNote { margin: -4px 0 0; color: var(--onboarding-faint); font-size: 13px; line-height: 1.65; }
+.sectionNote[data-tone="warn"] { color: var(--judgment); }
+
+/* 公司雷达的自动方向：只读的一列，不做成可点的胶囊。 */
+.automatic { padding: 12px 14px; border-radius: var(--onboarding-inset-radius); background: var(--morning-start); color: var(--onboarding-muted); font-size: 14px; line-height: 1.7; }
+.automaticLabel { margin: 0 0 4px; color: var(--onboarding-faint); font-size: 12px; line-height: 1.6; }
+.automatic ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.automatic li { position: relative; padding-left: 12px; overflow-wrap: anywhere; }
+.automatic li::before { content: ""; position: absolute; top: 11px; left: 0; width: 4px; height: 4px; border-radius: 50%; background: var(--onboarding-faint); }
+.automatic details { margin-top: 2px; }
+.automatic summary { display: inline-flex; align-items: center; min-height: 44px; margin-block: -6px; color: var(--onboarding-muted); font-size: 13px; cursor: pointer; }
+.automatic summary:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; border-radius: 6px; }
+
+/* 已加的胶囊：一行一条，按内容宽；长方向自动折行成圆角矩形。 */
+.chips { display: grid; justify-items: start; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.chips li { display: grid; justify-items: start; gap: 4px; max-width: 100%; min-width: 0; }
+.chips li:has(.editField) { justify-items: stretch; width: 100%; }
+.chip { display: inline-flex; align-items: center; max-width: 100%; min-height: 36px; border-radius: 18px; background: var(--onboarding-blue); color: #fff; box-shadow: 0 1px 2px rgb(20 58 128 / 16%); }
+.chips li[data-fresh] .chip { animation: chipIn var(--onboarding-feedback) var(--onboarding-ease) both; }
+/* 字和 × 各自是一个键；上下各向外借 4px，点按区域到 44px，胶囊本身仍是 36px。 */
+.chipText { min-width: 0; min-height: 44px; margin-block: -4px; padding: 0 2px 0 16px; border: 0; border-radius: 18px 0 0 18px; background: none; color: inherit; font-size: 15px; font-weight: 500; line-height: 1.45; text-align: left; overflow-wrap: anywhere; cursor: text; }
+.chipRemove { display: grid; flex: none; place-items: center; width: 40px; min-height: 44px; margin-block: -4px; padding: 0; border: 0; border-radius: 0 18px 18px 0; background: none; color: rgb(255 255 255 / 78%); cursor: pointer; transition: color var(--dur-snap), background var(--dur-snap); }
+.chipRemove:hover { color: #fff; background: rgb(255 255 255 / 14%); }
+.chip[data-invalid="true"] { background: var(--counter-wash); color: var(--onboarding-error); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--onboarding-error) 36%, transparent); }
+.chip[data-invalid="true"] .chipRemove { color: var(--onboarding-error); }
+.chip[data-invalid="true"] .chipRemove:hover { background: color-mix(in srgb, var(--onboarding-error) 10%, transparent); }
+.chipNote { padding-left: 16px; color: var(--onboarding-faint); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.chipNote[data-tone="error"] { color: var(--onboarding-error); }
+@keyframes chipIn { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+
+/* 输入行：照 01 锁屏输入框的样子（16 圆角、发丝边、顶光），在卡里用实白底，不再叠一层模糊。 */
+.field { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 52px; padding: 4px 16px 4px 4px; border: 1px solid var(--onboarding-edge); border-radius: var(--onboarding-control-radius); background: var(--surface); box-shadow: var(--onboarding-highlight), var(--onboarding-shadow); transition: border-color var(--onboarding-feedback); }
+.field:focus-within { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+.field[data-invalid] { border-color: var(--onboarding-error); }
+.field[data-invalid]:focus-within { outline-color: var(--onboarding-error); }
+.field[data-disabled] { background: var(--morning-start); }
+.field input { flex: 1; min-width: 0; height: 44px; padding: 0 12px; border: 0; border-radius: var(--onboarding-inset-radius); outline: none; background: transparent; color: var(--onboarding-ink); font: 16px/1.5 var(--font-sans); caret-color: var(--onboarding-blue); }
+.field textarea { flex: 1 1 0; min-width: 0; min-height: 44px; max-height: calc(4lh + 20px); padding: 10px 12px; border: 0; border-radius: var(--onboarding-inset-radius); outline: none; background: transparent; color: var(--onboarding-ink); font: 16px/1.5 var(--font-sans); caret-color: var(--onboarding-blue); resize: none; field-sizing: content; overflow-wrap: anywhere; }
+.field :is(input, textarea)::placeholder { color: var(--onboarding-faint); opacity: 1; }
+.field :is(input, textarea):disabled { cursor: not-allowed; }
+.field :is(input, textarea):disabled::placeholder { color: color-mix(in srgb, var(--onboarding-faint) 70%, transparent); }
+.editField { min-height: 48px; padding-block: 1px; }
+.counter { flex: none; color: var(--onboarding-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.counter[data-over] { color: var(--onboarding-error); font-weight: 600; }
+.fieldNote { min-height: 20px; margin: -6px 0 -4px 16px; color: var(--onboarding-faint); font-size: 12px; line-height: 1.65; }
+.fieldNote:empty { min-height: 0; margin-block: -12px 0; }
+.fieldNote[data-tone="error"] { color: var(--onboarding-error); }
+.warning { margin: 0; padding: 10px 14px; border-radius: var(--onboarding-inset-radius); background: var(--judgment-wash); color: var(--judgment); font-size: 13px; line-height: 1.65; }
+
+/* 建议：玻璃描边，点一下加上；已选中的不再出现在这里。 */
+.suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.suggestionsLabel { color: var(--onboarding-faint); font-size: 12px; line-height: 1.6; }
+.suggestions > .suggestionsLabel { margin-right: 4px; }
+.suggestion { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 36px; padding: 6px 14px 6px 10px; border: 1px solid var(--hairline-strong); border-radius: 18px; background: var(--onboarding-glass); color: var(--onboarding-ink); font-size: 14px; line-height: 1.45; text-align: left; overflow-wrap: anywhere; cursor: pointer; transition: border-color var(--dur-snap), background var(--dur-snap), transform var(--dur-snap); }
+.suggestion svg { flex: none; color: var(--onboarding-blue); }
+.suggestion small { color: var(--onboarding-faint); font-size: 12px; }
+.suggestion:hover { border-color: color-mix(in srgb, var(--onboarding-blue) 45%, transparent); background: #fff; }
+.suggestion:active { transform: scale(.98); }
+.suggestionGroups { display: grid; gap: 10px; min-width: 0; }
+.suggestionGroup { display: grid; gap: 6px; min-width: 0; }
+.groupNote { color: var(--onboarding-muted); font-size: 12px; line-height: 1.6; }
+
+/* 卡片底部（个人菜单、雷达页、CEO 监测范围）：左边写保存与扫描两行状态，右边是按钮。 */
+.actions { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-top: 24px; }
+.statusStack { display: grid; gap: 4px; min-width: 0; }
+.statusStack p { margin: 0; }
+.hint { color: var(--onboarding-faint); font-size: 13px; line-height: 1.65; }
+.hint[data-tone="error"] { color: var(--onboarding-error); }
+.saved { display: inline-flex; align-items: center; gap: 6px; color: var(--onboarding-ink); font-size: 14px; line-height: 1.6; }
+.saved svg { flex: none; color: var(--onboarding-blue); }
+.scanNote { color: var(--onboarding-muted); font-size: 13px; line-height: 1.65; }
+.scanNote[data-tone="error"] { color: var(--onboarding-error); }
+.buttons { display: flex; flex: none; align-items: center; gap: 8px; }
+.submit { gap: 10px; min-width: 132px; }
+/* 引导底栏里的那一行提示（与引导其他步骤的 actionHint 同一个样子）。 */
+.footerHint { margin: 0; color: var(--onboarding-faint); font-size: 12px; line-height: 1.7; text-align: center; text-wrap: balance; }
+.footerHint[data-tone="error"] { color: var(--onboarding-error); font-size: 14px; }
+
+@media (max-width: 759px) {
+  .editor { padding: 20px; }
+  .switchRow { min-height: 60px; }
+  .switchLabel { font-size: 16px; }
+  .section { margin-top: 16px; padding-top: 16px; }
+  .suggestion { min-height: 44px; }
+  .actions { flex-direction: column; align-items: stretch; }
+  .buttons { flex-direction: column-reverse; align-items: stretch; }
+  .buttons > button { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .body { transition: none; }
+  .chips li[data-fresh] .chip { animation: none; }
+  .switchRow, .suggestion, .chipRemove { transition: none; }
+  .suggestion:active { transform: none; }
+}
+@media (prefers-contrast: more) {
+  .field, .suggestion { border-color: var(--ink-muted); }
+  .sectionHint, .sectionNote, .chipNote, .fieldNote, .hint, .groupNote, .suggestionsLabel { color: var(--onboarding-muted); }
+}
+@media (forced-colors: active) {
+  .chip { border: 1px solid CanvasText; }
+  .field { border-color: CanvasText; }
+}
