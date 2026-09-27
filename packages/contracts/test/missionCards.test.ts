@@ -5,6 +5,7 @@ import {
   CreateMissionRequest, MissionEditInput, MissionCardPayload,
   ConversationScope, CreateMissionCardFeedbackRequest, MissionCardGroupView, MarkMissionCardReadRequest,
   MissionRoundDecideInput, MissionRoundConfirmInput, MissionCardFeedbackView,
+  CreateMissionCardCorrectionRequest, DecideMissionCardCorrectionRequest, MissionCardCorrectionView, PersonalMissionCardPayload,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -13,8 +14,8 @@ const summary = {
   roundId: "round-1", period: "2026-10", battlefieldId: "growth", battlefieldName: "增长", version: 1,
   phase: "draft", round: 1, openedAt: null, closesAt: null, reviewAt: null, serverNow: now,
   approver: true, deciderName: "拍板人", todo: "可以统一开放讨论", placeholder: true, goals: null,
-  counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 1, late: 0 },
-  cards: [{ cardId: "card-1", ownerId: "owner", ownerName: "Owner", roleLabel: null, missionCount: 2, line: "未开放", pending: 0, firstPendingFeedbackId: null, mine: false }],
+  counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 1, late: 0, corrections: 0 },
+  cards: [{ cardId: "card-1", ownerId: "owner", ownerName: "Owner", roleLabel: null, missionCount: 2, line: "未开放", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: false }],
 };
 
 describe("Mission round contracts", () => {
@@ -60,6 +61,31 @@ describe("Mission round contracts", () => {
     expect(doc.components.schemas.MissionRoundDraftPayload).toBeDefined();
     for (const path of ["/api/mission-cards/{cardId}", "/api/mission-cards/{cardId}/feedback", "/api/mission-cards/{cardId}/group", "/api/mission-cards/{cardId}/group/read"]) expect(doc.paths[path]).toBeDefined();
     expect(doc.components.schemas.PersonalMissionCardPayload).toBeDefined();
+  });
+
+  it("bounds corrections to a confirmed card: one field, a reason, and the approver's decision (GAP-04)", () => {
+    const { format: _format, ...clientId } = CreateMissionCardCorrectionRequest.properties.clientId;
+    const schema = { ...CreateMissionCardCorrectionRequest, properties: { ...CreateMissionCardCorrectionRequest.properties, clientId } };
+    const request = { clientId: "00000000-0000-4000-8000-000000000000", missionId: "mission", field: "outcome", proposed: "新的预期结果", reason: "客户改了交付日期", sourceVersion: 3 };
+    expect(Value.Check(schema, request)).toBe(true);
+    for (const invalid of [{ field: "ownerId" }, { reason: "" }, { reason: "字".repeat(301) }, { proposed: "" }, { proposed: "字".repeat(4001) }, { sourceVersion: 0 }, { authorId: "forged" }, { status: "applied" }]) {
+      expect(Value.Check(schema, { ...request, ...invalid })).toBe(false);
+    }
+    expect(Value.Check(DecideMissionCardCorrectionRequest, { decision: "apply" })).toBe(true);
+    expect(Value.Check(DecideMissionCardCorrectionRequest, { decision: "reject", note: "这项本月照旧" })).toBe(true);
+    for (const invalid of [{ decision: "accept" }, { decision: "reject", note: "" }, { decision: "reject", note: "字".repeat(301) }, { decision: "apply", decidedBy: "forged" }]) {
+      expect(Value.Check(DecideMissionCardCorrectionRequest, invalid)).toBe(false);
+    }
+    const view = { id: "c-1", missionId: "mission", field: "outcome", original: "旧", proposed: "新", reason: "原因", authorId: "owner", authorName: "Owner",
+      direct: false, status: "pending", decidedBy: null, decidedByName: null, decidedAt: null, note: null, appliedVersion: null, stale: false, createdAt: now };
+    expect(Value.Check(MissionCardCorrectionView, view)).toBe(true);
+    expect(Value.Check(MissionCardCorrectionView, { ...view, status: "withdrawn" })).toBe(false);
+    expect(PersonalMissionCardPayload.required).toEqual(expect.arrayContaining(["corrections", "correctionAccess"]));
+    expect(Value.Check(MissionRoundSummary, { ...summary, counts: { ...summary.counts, corrections: -1 } })).toBe(false);
+    const doc = buildOpenApiDocument();
+    expect(doc.paths["/api/mission-cards/{cardId}/corrections"]?.post.responses?.["409"]).toBeDefined();
+    expect(doc.paths["/api/mission-cards/{cardId}/corrections/{correctionId}/decision"]?.post.responses?.["403"]).toBeDefined();
+    expect(doc.components.schemas.MissionCardCorrectionResponse).toBeDefined();
   });
 
   it("keeps stored Mission card status distinct from the round's projected closed phase", () => {

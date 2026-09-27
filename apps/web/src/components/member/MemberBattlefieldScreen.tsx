@@ -88,8 +88,13 @@ export function MemberBattlefieldScreen({ initialData }: { initialData: TMemberB
   const status = shownRound ? roundStatusText(shownRound, { cardId: mine?.cardId, feedbackCount: mine?.feedbackCount ?? 0, confirmation: view.confirmation })
     : view.monthTargetState === "confirmed" ? "个人卡草稿还没整理" : view.monthTargetText;
   const pendingCard = round?.approver && round.phase === "reviewing" ? round.cards.find((card) => card.pending > 0 && card.firstPendingFeedbackId) : undefined;
-  const nextCard = pendingCard ? view.missionCards.find((card) => card.cardId === pendingCard.cardId && card.canOpen) : view.missionCards.find((card) => card.canOpen);
-  const nextHref = nextCard?.href ? `${nextCard.href}${pendingCard?.firstPendingFeedbackId ? `?feedback=${encodeURIComponent(pendingCard.firstPendingFeedbackId)}` : ""}` : null;
+  // 已确定后拍板人的待办是更正申请（GAP-04）：同样直达第一条。
+  const correctionCard = round?.approver && round.phase === "confirmed" && round.todo ? round.cards.find((card) => card.pendingCorrections > 0 && card.firstPendingCorrectionId) : undefined;
+  const target = pendingCard ?? correctionCard;
+  const nextCard = target ? view.missionCards.find((card) => card.cardId === target.cardId && card.canOpen) : view.missionCards.find((card) => card.canOpen);
+  const query = pendingCard?.firstPendingFeedbackId ? `?feedback=${encodeURIComponent(pendingCard.firstPendingFeedbackId)}`
+    : correctionCard?.firstPendingCorrectionId ? `?correction=${encodeURIComponent(correctionCard.firstPendingCorrectionId)}` : "";
+  const nextHref = nextCard?.href ? `${nextCard.href}${query}` : null;
 
   return <div className={s.screen} data-member-battlefield={view.id}>
     <DetailFrame title={view.name} subtitle={`${month} 月 · 战场 ${view.code}`} onBack={workspace.close}

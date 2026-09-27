@@ -40,7 +40,10 @@ export function RoundLine({ payload, actions, viewerId, pending, onAction, onSel
   const reviewing = round.phase === "reviewing";
   const confirmed = round.phase === "confirmed";
   const count = round.counts.cards;
-  const line = roundStatusText(round, { cardId: card.cardId, feedbackCount: payload.feedback.length, confirmation });
+  const applied = payload.corrections.filter((item) => item.status === "applied").length;
+  const line = roundStatusText(round, { cardId: card.cardId, feedbackCount: payload.feedback.length, confirmation, corrected: applied });
+  // 集中 Review 处理意见；已确定后拍板人处理更正申请（canApply 已含月份未过）。
+  const startable = (reviewing && round.approver && round.counts.pending > 0) || (confirmed && payload.correctionAccess.canApply && round.counts.corrections > 0);
   const openAction = draft && round.approver ? actions.find((action) => action.actionType === "mission-round.open") : undefined;
   const reopenAction = reviewing && round.approver ? actions.find((action) => action.actionType === "mission-round.reopen") : undefined;
   const confirmAction = reviewing && round.approver && !round.counts.pending ? actions.find((action) => action.actionType === "mission-round.confirm") : undefined;
@@ -55,7 +58,7 @@ export function RoundLine({ payload, actions, viewerId, pending, onAction, onSel
   return <section className={s.line} data-open={open || undefined} aria-label="本轮">
     <div className={s.row}><span className={s.dot} aria-hidden /><p className={s.text}><span>本轮</span>{line}</p>
       {openAction ? <Button variant="primary" className={s.primary} isDisabled={pending} onPress={() => onAction(openAction)}>{pending ? "正在开放…" : "统一开放 48 小时讨论"}</Button> : null}
-      {reviewing && round.approver && round.counts.pending > 0 ? <Button variant="primary" className={s.primary} isDisabled={pending} onPress={onStartProcessing}>从第一条开始</Button> : null}
+      {startable ? <Button variant="primary" className={s.primary} isDisabled={pending} onPress={onStartProcessing}>从第一条开始</Button> : null}
       {confirmAction ? <Button variant="primary" className={s.primary} isDisabled={pending} onPress={showNote}>确认前核对</Button> : null}
       <Button variant="ghost" isIconOnly className={s.toggle} aria-expanded={open} aria-controls={`round-${round.roundId}`} aria-label={open ? "收起本轮详情" : "展开本轮详情"} onPress={() => setOpen(!open)}><ChevronDown size={18} aria-hidden /></Button>
     </div>

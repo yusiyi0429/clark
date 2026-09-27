@@ -1,0 +1,24 @@
+{
+  "previewRemoved": true,
+  "sourceNodeModulesPresent": true,
+  "sourceFilesCompared": 256,
+  "allHashesMatched": true,
+  "ports": [
+    {
+      "LocalPort": 3200,
+      "OwningProcess": 62912
+    },
+    {
+      "LocalPort": 4100,
+      "OwningProcess": 70508
+    },
+    {
+      "LocalPort": 4000,
+      "OwningProcess": 22856
+    },
+    {
+      "LocalPort": 3100,
+      "OwningProcess": 22856
+    }
+  ]
+}

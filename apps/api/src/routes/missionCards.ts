@@ -1,7 +1,8 @@
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import { CreateMissionCardFeedbackRequest, ExecuteMissionRoundActionRequest, MarkMissionCardReadRequest, MissionRoundConfirmInput, MissionRoundDecideInput, MyMissionRoundsResponse, type TMissionRoundConfirmInput, type TMissionRoundDecideInput, type TMissionRoundSummary } from "@warmap/contracts";
+import { CreateMissionCardCorrectionRequest, CreateMissionCardFeedbackRequest, DecideMissionCardCorrectionRequest, ExecuteMissionRoundActionRequest, MarkMissionCardReadRequest, MissionRoundConfirmInput, MissionRoundDecideInput, MyMissionRoundsResponse, type TMissionRoundConfirmInput, type TMissionRoundDecideInput, type TMissionRoundSummary } from "@warmap/contracts";
 import { actionFingerprint, verifyActionId } from "../actionToken.js";
+import { createMissionCardCorrection, decideMissionCardCorrection } from "../missionCardCorrections.js";
 import { executeConfirmMissionRound, executeDecideMissionRound, executeDraftMissionRound, executeOpenMissionRound, executeReopenMissionRound, getMissionRoundCard, listMissionRoundCards } from "../missionRounds.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 import { createPersonalMissionCardFeedback, getPersonalMissionCard, getPersonalMissionCardGroup, markPersonalMissionCardRead, visiblePersonalMissionCard } from "../personalMissionCards.js";
@@ -25,6 +26,16 @@ export function registerMissionCardRoutes(app: AppInstance, ctx: RouteContext): 
   });
   app.post("/api/mission-cards/:cardId/feedback", { preHandler: ctx.requirePerson, schema: { params: cardParams, body: CreateMissionCardFeedbackRequest } }, async (req, reply) => {
     const result = await createPersonalMissionCardFeedback(ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.cardId, req.body, ctx.now);
+    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
+  // 已确定个人卡的更正（GAP-04）：拍板权与卡可见性在事务内判断。
+  app.post("/api/mission-cards/:cardId/corrections", { preHandler: ctx.requirePerson, schema: { params: cardParams, body: CreateMissionCardCorrectionRequest } }, async (req, reply) => {
+    const result = await createMissionCardCorrection(ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.cardId, req.body, ctx.now);
+    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
+  const correctionParams = Type.Object({ cardId: Type.String({ minLength: 1 }), correctionId: Type.String({ minLength: 1 }) }, { additionalProperties: false });
+  app.post("/api/mission-cards/:cardId/corrections/:correctionId/decision", { preHandler: ctx.requirePerson, schema: { params: correctionParams, body: DecideMissionCardCorrectionRequest } }, async (req, reply) => {
+    const result = await decideMissionCardCorrection(ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.cardId, req.params.correctionId, req.body, ctx.now);
     return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
   });
   app.get("/api/mission-cards/:cardId/group", { preHandler: ctx.requirePerson, schema: { params: cardParams,

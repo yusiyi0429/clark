@@ -1,0 +1,76 @@
+[
+  {
+    "step": "member-card",
+    "status": "本轮已确定 · 验收 CEO 10/3 10:00",
+    "requestButtons": 24,
+    "directButtons": 0,
+    "shot": "claude-gap04-member-card-1440.png"
+  },
+  {
+    "step": "member-requested",
+    "waiting": 2,
+    "shot": "claude-gap04-member-requested-1440.png"
+  },
+  {
+    "step": "member-unchanged-refused",
+    "alert": "新文字和原文一样",
+    "textKept": true,
+    "reasonKept": "只是想试试"
+  },
+  {
+    "step": "member-editor-390",
+    "textarea": {
+      "left": 91,
+      "width": 262
+    },
+    "overflow": false,
+    "shot": "claude-gap04-member-editor-390.png"
+  },
+  {
+    "step": "member-errors",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+    ]
+  },
+  {
+    "step": "dri-home",
+    "todo": 1,
+    "shot": "claude-gap04-dri-home-1440.png"
+  },
+  {
+    "step": "dri-deeplink",
+    "url": "/me/mission-cards/3ec3d6f3-b510-4393-a846-c7a4638e836e?correction=489e7025-f061-4055-8504-bc2a07d6752b",
+    "active": "BUTTON",
+    "status": "本轮2 条更正申请待你处理",
+    "shot": "claude-gap04-dri-deeplink-1440.png"
+  },
+  {
+    "step": "dri-applied",
+    "status": "本轮1 条更正申请待你处理",
+    "version": "sun-202610-1 04 · Agents 占位 v2"
+  },
+  {
+    "step": "dri-stale",
+    "staleText": 1,
+    "applyDisabled": true,
+    "shot": "claude-gap04-dri-stale-1440.png"
+  },
+  {
+    "step": "dri-history",
+    "history": "孙铭泽 申请 · 林知行 已采纳 · 10/3 10:02 改前 到 9 月底，CEO 有清晰、连贯且可持续使用的 Agent 工作体验，知道进入场景、全局与异常、研究追问、判断与 Decision，以及语音、动态界面和工作台如何自然组合。月底不能仍然只有 Chat 可用。 改后 10 月底前在 CEO 的一次真实经营判断里完整用上天枢，形成可复用的验收记录。 原因：客户把验收会挪到 10 月 28 日",
+    "status": "本轮已确定 · 验收 CEO 10/3 10:00 · 更正 2 处",
+    "cardStatus": "孙铭泽 已确定 · 验收 CEO 10/3 10:00 · 更正 2 处",
+    "todoLeft": 0,
+    "shot": "claude-gap04-dri-history-1440.png"
+  },
+  {
+    "step": "dri-errors",
+    "errors": []
+  },
+  {
+    "step": "ceo-home",
+    "todo": 1,
+    "shot": "claude-gap04-ceo-home-1440.png",
+    "errors": []
+  }
+]

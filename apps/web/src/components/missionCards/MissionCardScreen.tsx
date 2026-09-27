@@ -13,6 +13,7 @@ import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useConfirm } from "@/components/ConfirmDialog";
 import type { MissionGroupReference } from "@/conversation/missionCardGroup";
 import { CardDocument, fieldNames, missionFieldText, selectedFieldQuote, type PersonalMission } from "./CardDocument";
+import type { Correction, CorrectionDraft } from "./CorrectionPanel";
 import { RoundLine } from "./RoundLine";
 import { RoundClock } from "./RoundClock";
 import { useRoundNow } from "./useRoundNow";
@@ -24,6 +25,11 @@ type RoundAction = Pick<CardAction, "actionId" | "actionType" | "label">;
 function requestError(cause: unknown, fallback: string): string {
   if (!(cause instanceof Error) || cause instanceof TypeError || /failed to fetch|fetch failed|networkerror|network request failed|load failed/i.test(cause.message)) return fallback;
   return cause.message;
+}
+/** 更正失败时服务端的 message 与 fieldErrors 原样显示。 */
+function failureText(failure: { message?: string; fieldErrors?: Record<string, string> } | undefined, fallback: string): string {
+  if (!failure?.message) return fallback;
+  return [failure.message, ...Object.entries(failure.fieldErrors ?? {}).map(([key, text]) => `${key}：${text}`)].join("；");
 }
 export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; entry: "member" | "ceo" }) {
   const workspace = useWorkspace();
@@ -41,6 +47,11 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState({ roundKey: "", text: "" });
   const [decisionError, setDecisionError] = useState<{ feedbackId: string; message: string } | null>(null);
+  const [correction, setCorrection] = useState<CorrectionDraft | null>(null);
+  const [correctionError, setCorrectionError] = useState("");
+  const [correctionHistory, setCorrectionHistory] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<{ id: string; note: string } | null>(null);
+  const [correctionDecisionError, setCorrectionDecisionError] = useState<{ correctionId: string; message: string } | null>(null);
   const { ask, dialog } = useConfirm();
   const refreshInFlight = useRef<Promise<void> | null>(null);
   const actionInFlight = useRef(false);
@@ -64,26 +75,31 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
     })();
     return refreshInFlight.current;
   }, [card.cardId, router, acceptView]);
-  const focusFeedback = (id: string) => {
-    const element = document.getElementById(`feedback-${id}`);
+  const focusTarget = (elementId: string) => {
+    const element = document.getElementById(elementId);
     element?.focus({ preventScroll: true });
     element?.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   };
   useEffect(() => {
-    const feedbackId = new URLSearchParams(window.location.search).get("feedback");
-    if (!feedbackId) return;
-    // 先让共同工作台完成入场与关闭按钮定位，再把焦点交给实际待处理意见。
-    let frame = window.requestAnimationFrame(() => { frame = window.requestAnimationFrame(() => focusFeedback(feedbackId)); });
+    const search = new URLSearchParams(window.location.search);
+    const feedbackId = search.get("feedback"), correctionId = search.get("correction");
+    const target = feedbackId ? `feedback-${feedbackId}` : correctionId ? `correction-${correctionId}` : null;
+    if (!target) return;
+    // 先让共同工作台完成入场与关闭按钮定位，再把焦点交给实际待处理的意见或更正申请。
+    let frame = window.requestAnimationFrame(() => { frame = window.requestAnimationFrame(() => focusTarget(target)); });
     return () => window.cancelAnimationFrame(frame);
   }, [card.cardId]);
   useEffect(() => {
     setNoteDraft({ roundKey, text: readRoundNote(noteViewer, round.roundId, round.round) });
   }, [roundKey, noteViewer, round.roundId, round.round]);
   const startProcessing = () => {
-    const target = round.cards.find((row) => row.pending > 0 && row.firstPendingFeedbackId);
-    if (!target?.firstPendingFeedbackId) return;
-    if (target.cardId === card.cardId) focusFeedback(target.firstPendingFeedbackId);
-    else workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${target.cardId}?feedback=${encodeURIComponent(target.firstPendingFeedbackId)}`);
+    // 已确定后「从第一条开始」处理更正申请；集中 Review 时处理意见。第一条都可能在另一张卡上。
+    const kind = round.phase === "confirmed" ? "correction" : "feedback";
+    const target = round.cards.find((row) => kind === "correction" ? row.pendingCorrections > 0 && row.firstPendingCorrectionId : row.pending > 0 && row.firstPendingFeedbackId);
+    const id = kind === "correction" ? target?.firstPendingCorrectionId : target?.firstPendingFeedbackId;
+    if (!target || !id) return;
+    if (target.cardId === card.cardId) focusTarget(`${kind}-${id}`);
+    else workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${target.cardId}?${kind}=${encodeURIComponent(id)}`);
   };
   useEffect(() => {
     if (effectivePhase !== "closed") return;
@@ -122,6 +138,37 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
     } catch (cause) { setProposalError(requestError(cause, "暂时无法连接服务器，请稍后重试；输入已保留。")); }
     finally { setPosting(false); }
   };
+  // 更正草稿打开时生成 clientId；原样重试复用，改了文字或原因就是新的一次提交（同修改建议）。
+  const openCorrection = (mission: PersonalMission, field: TMissionCardField) => {
+    setCorrection((current) => current?.missionId === mission.missionId && current.field === field ? current : { missionId: mission.missionId, field, sourceVersion: mission.version, text: missionFieldText(mission, field), reason: "", clientId: crypto.randomUUID() });
+    setCorrectionError(""); setNotice("");
+  };
+  const sendCorrection = async () => {
+    if (!correction || posting || !correction.text.trim() || !correction.reason.trim()) return;
+    setPosting(true); setCorrectionError(""); setNotice("");
+    try {
+      const { response, error: failure } = await browserApi.POST("/api/mission-cards/{cardId}/corrections", { params: { path: { cardId: card.cardId } }, body: { clientId: correction.clientId, missionId: correction.missionId, field: correction.field, proposed: correction.text, reason: correction.reason.trim(), sourceVersion: correction.sourceVersion } });
+      if (!response.ok) throw new Error(failureText(failure, "更正没有提交成功，请重试；输入已保留。"));
+      setCorrection(null); setNotice(payload.correctionAccess.canApply ? "已更正，改前改后都已留痕。" : `更正申请已提交，等${round.deciderName}处理；正文先不变。`);
+      void refresh();
+    } catch (cause) { setCorrectionError(requestError(cause, "暂时无法连接服务器，请稍后重试；输入已保留。")); }
+    finally { setPosting(false); }
+  };
+  const decideCorrection = async (item: Correction, decision: "apply" | "reject") => {
+    const note = rejecting?.id === item.id ? rejecting.note.trim() : "";
+    if (actionInFlight.current || (decision === "reject" && !note)) return;
+    actionInFlight.current = true;
+    setPending(true); setCorrectionDecisionError(null); setNotice("");
+    try {
+      const { response, error: failure } = await browserApi.POST("/api/mission-cards/{cardId}/corrections/{correctionId}/decision", { params: { path: { cardId: card.cardId, correctionId: item.id } }, body: decision === "reject" ? { decision, note } : { decision } });
+      if (!response.ok) throw new Error(failureText(failure, "这条更正没有处理成功，请重试"));
+      setRejecting(null); setNotice(decision === "apply" ? "已采纳，正文已更新。" : "已记录不采纳和原因。");
+      await refresh();
+      window.dispatchEvent(new Event("mission-round-changed"));
+      router.refresh();
+    } catch (cause) { setCorrectionDecisionError({ correctionId: item.id, message: requestError(cause, "暂时无法连接服务器，请稍后重试。") }); }
+    finally { actionInFlight.current = false; setPending(false); }
+  };
   const runAction = async (action: RoundAction, input?: { decision: "accept" | "decline" } | { note: string }, feedbackId?: string) => {
     if (actionInFlight.current) return;
     if (action.actionType === "mission-round.reopen" && !await ask(`${round.battlefieldName}的 ${round.counts.cards} 张 Mission Card 一起重新开放 48 小时（第 ${round.round + 1} 轮）。预计 ${monthDayTime(new Date(now + 48 * 3_600_000).toISOString())} 截止，实际从提交成功时起算。已有公开意见全部保留；已处理结论进入下一轮，协作核对结论需要重写；截止后留言将在下次截止时收取。不会另外通知同事。`, "重新开启 48 小时")) return;
@@ -150,7 +197,9 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
         <RoundLine payload={shownPayload} actions={view.actions} viewerId={workspace.viewerId} pending={pending} onAction={(action, input) => void runAction(action, input)} onSelectCard={(id) => workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${id}`)} onViewGoals={() => setGoalsOpen(true)} onStartProcessing={startProcessing} note={note} onNoteChange={(text) => { setNoteDraft({ roundKey, text }); saveRoundNote(noteViewer, round.roundId, round.round, text); }} error={error} />
         {error && !(effectivePhase === "reviewing" && round.approver && !round.counts.pending) ? <p className={s.error} role="alert">{error}</p> : null}
         {notice ? <p className={s.notice} role="status">{notice}</p> : null}
-        <CardDocument payload={shownPayload} controls={{ onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); }, proposalEditor: (mission, field) => proposal?.missionId === mission.missionId && proposal.field === field && effectivePhase !== "confirmed" ? <div className={s.proposal}>
+        <CardDocument payload={shownPayload} controls={{ onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); },
+          corrections: { draft: correction, draftError: correctionError, history: correctionHistory, rejecting, decisionError: correctionDecisionError, busy: posting || pending, onOpen: openCorrection, onEdit: (patch) => setCorrection((current) => current && { ...current, ...patch, clientId: crypto.randomUUID() }), onCancel: () => setCorrection(null), onSubmit: () => void sendCorrection(), onHistory: setCorrectionHistory, onRejecting: setRejecting, onDecide: (item, decision) => void decideCorrection(item, decision) },
+          proposalEditor: (mission, field) => proposal?.missionId === mission.missionId && proposal.field === field && effectivePhase !== "confirmed" ? <div className={s.proposal}>
           <label htmlFor={`proposal-${mission.missionId}-${field}`}>建议修改：{fieldNames[field]}</label>
           <textarea id={`proposal-${mission.missionId}-${field}`} value={proposal.text} maxLength={field === "title" ? 200 : 4000} rows={4} autoFocus aria-describedby={proposalError ? `proposal-error-${mission.missionId}-${field}` : undefined} onChange={(event) => setProposal({ ...proposal, text: event.target.value, clientId: undefined })} disabled={posting} />
           <p className={s.hint}>{effectivePhase === "open" ? "当前正文不变；截止后由拍板人集中处理。" : "讨论已截止，不能再提交修改建议；输入已保留，可在重新开放后继续。"}{field === "milestones" || field === "successEvidence" ? " 每行一项，最多 30 项，每项不超过 500 字。" : ""}</p>

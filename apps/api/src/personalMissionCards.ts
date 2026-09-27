@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
-import type { TCard, TCreateMissionCardFeedbackRequest, TMissionCardFeedbackView, TMissionCardField, TMissionCardGroupView, TMissionCardPayload, TMissionRoundSummary, TPersonalMissionCardMission, TPersonalMissionCardPayload, TThreadMember } from "@warmap/contracts";
+import type { TCard, TCreateMissionCardFeedbackRequest, TMissionCardCorrectionView, TMissionCardFeedbackView, TMissionCardField, TMissionCardGroupView, TMissionCardPayload, TMissionRoundSummary, TPersonalMissionCardMission, TPersonalMissionCardPayload, TThreadMember } from "@warmap/contracts";
 import type { MemoryPerson } from "./companyMemory.js";
 import type { Query } from "./meetingStore.js";
-import { canApprove, closeIfDue, getMissionRoundRow, projectMissionRoundCard, type MissionRoundPerson, type MissionRoundRow } from "./missionRounds.js";
+import { canApprove, closeIfDue, correctionPeriodClosed, getMissionRoundRow, projectMissionRoundCard, type MissionRoundPerson, type MissionRoundRow } from "./missionRounds.js";
 import { getMissionRow, projectMissionCard } from "./missions.js";
 import { signActionId } from "./actionToken.js";
 
@@ -16,10 +16,16 @@ type FeedbackRow = {
 };
 type Review = { id: string; feedback_ids: string[]; superseded_at: Date | null; note: string | null };
 type Discussion = { feedback: FeedbackRow[]; review: Review | null; decisions: Map<string, "accept" | "decline"> };
+export type CorrectionRow = {
+  id: string; round_id: string; card_id: string; mission_id: string; field: TMissionCardField;
+  original: string; proposed: string; reason: string; author_id: string; client_id: string; direct: boolean;
+  status: "pending" | "applied" | "rejected"; decided_by: string | null; decided_at: Date | null; note: string | null;
+  applied_version: number | null; created_at: Date;
+};
 type Failure = { error: { status: number; code: string; message: string } };
 const fail = (status: number, code: string, message: string): Failure => ({ error: { status, code, message } });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const fieldText = (mission: TPersonalMissionCardMission, field: TMissionCardField) => Array.isArray(mission[field]) ? mission[field].join("\n") : mission[field] as string;
+export const fieldText = (mission: TPersonalMissionCardMission, field: TMissionCardField) => Array.isArray(mission[field]) ? mission[field].join("\n") : mission[field] as string;
 const compact = (text: string) => text.replace(/\s+/g, " ").trim();
 
 /** Stored membership and current approval authority are both checked on every access. */
@@ -62,6 +68,16 @@ function projectFeedback(item: FeedbackRow, data: Discussion, round: MissionRoun
       actionType: "mission-round.decide", objectType: "mission-round", objectId: round.id, objectVersion: round.version, itemId: item.id,
     }) }] : [] };
 }
+/** stale 按当前正文判断：申请之后这个字段又改过，就不能直接采纳。 */
+export function projectCorrection(row: CorrectionRow, missions: TPersonalMissionCardMission[], people: MemoryPerson[]): TMissionCardCorrectionView {
+  const name = (personId: string) => people.find((p) => p.personId === personId)?.displayName ?? personId;
+  const mission = missions.find((item) => item.missionId === row.mission_id);
+  return { id: row.id, missionId: row.mission_id, field: row.field, original: row.original, proposed: row.proposed, reason: row.reason,
+    authorId: row.author_id, authorName: name(row.author_id), direct: row.direct, status: row.status,
+    decidedBy: row.decided_by, decidedByName: row.decided_by ? name(row.decided_by) : null, decidedAt: row.decided_at?.toISOString() ?? null,
+    note: row.note, appliedVersion: row.applied_version,
+    stale: row.status === "pending" && (!mission || fieldText(mission, row.field) !== row.original), createdAt: row.created_at.toISOString() };
+}
 async function documentMissions(q: Query, cardId: string, people: MemoryPerson[], secret: string, data: Discussion, candidate: boolean): Promise<TPersonalMissionCardMission[]> {
   const ids = (await q("SELECT id FROM missions WHERE personal_mission_card_id=$1 ORDER BY code,id", [cardId])).rows as { id: string }[];
   const names = new Map(people.map((p) => [p.personId, p.displayName]));
@@ -78,6 +94,10 @@ async function documentMissions(q: Query, cardId: string, people: MemoryPerson[]
     result.push(mission);
   }
   return result;
+}
+/** 已确定的卡没有候选叠加：正文就是当前 Mission，更正与页面取同一份原文。 */
+export function currentMissions(q: Query, cardId: string, people: MemoryPerson[], secret: string): Promise<TPersonalMissionCardMission[]> {
+  return documentMissions(q, cardId, people, secret, { feedback: [], review: null, decisions: new Map() }, false);
 }
 
 export async function getPersonalMissionCard(q: Query, people: MemoryPerson[], secret: string, person: MissionRoundPerson, cardId: string, now: Date): Promise<TCard | null> {
@@ -98,10 +118,14 @@ export async function getPersonalMissionCard(q: Query, people: MemoryPerson[], s
   const shown = summary.phase === "confirmed" ? "confirmed" : ["closed", "reviewing"].includes(summary.phase) ? "candidate" : "draft";
   const missions = await documentMissions(q, cardId, people, secret, data, shown === "candidate");
   const changed = missions.reduce((count, mission) => count + mission.changedFields.length, 0);
+  const corrections = (await q("SELECT * FROM mission_card_corrections WHERE card_id=$1 ORDER BY created_at DESC,id DESC", [cardId])).rows as CorrectionRow[];
+  const corrected = corrections.filter((item) => item.status === "applied").length;
   const byName = people.find((p) => p.personId === round.confirmed_by)?.displayName ?? round.confirmed_by;
-  const status = shown === "confirmed" ? `已确定 · ${byName} ${localTime(round.confirmed_at!)}`
+  const status = shown === "confirmed" ? `已确定 · ${byName} ${localTime(round.confirmed_at!)}${corrected ? ` · 更正 ${corrected} 处` : ""}`
     : shown === "candidate" ? `候选版本 · 相比草稿 ${changed} 处改动 · 等${summary.deciderName}拍板`
     : `草稿${summary.phase === "open" ? " · 讨论中" : ""}${card.role_label ? ` · ${card.role_label}` : ""}`;
+  const closedReason = round.status !== "confirmed" ? "还没确定：讨论中请用修改建议"
+    : correctionPeriodClosed(round, now) ? "月份已过，这张卡只读" : null;
   const payload: TPersonalMissionCardPayload = {
     round: summary,
     card: { cardId, ownerId: card.owner_id, ownerName: people.find((p) => p.personId === card.owner_id)?.displayName ?? card.owner_id,
@@ -110,15 +134,29 @@ export async function getPersonalMissionCard(q: Query, people: MemoryPerson[], s
     confirmation: round.confirmed_at && round.confirmed_by ? { by: round.confirmed_by,
       byName: people.find((p) => p.personId === round.confirmed_by)?.displayName ?? round.confirmed_by,
       at: round.confirmed_at.toISOString(), note: data.review?.note ?? "" } : null,
+    corrections: corrections.map((item) => projectCorrection(item, missions, people)),
+    correctionAccess: { canRequest: !closedReason && !summary.approver, canApply: !closedReason && summary.approver, closedReason },
   };
   return { schemaVersion: 1, id: `personal-mission-card:${cardId}`, kind: "personal-mission-card", version: round.version,
     objectRef: { type: "personal-mission-card", id: cardId, version: round.version }, title: `${payload.card.ownerName}的 ${Number(round.period.slice(5))} 月 Mission Card`,
     badge: "Mission Card", payload, conversation: { scope: `mission-card:${cardId}` }, actions: roundCard.actions };
 }
 
+/** 修改建议与确认后的更正共用：列表字段逐行 trim、去空行，其余字段整体 trim。 */
+export function normalizedProposal(field: TMissionCardField | undefined, proposed: string): string {
+  return ["successEvidence", "milestones"].includes(field ?? "") ? proposed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).join("\n") : proposed.trim();
+}
+/** 规范化之后的长度规则：名称最多 200 字；列表最多 30 行，每行不超过 500 字。 */
+export function proposalProblem(field: TMissionCardField, proposed: string): string | null {
+  if (field === "title" && proposed.length > 200) return "名称最多 200 字";
+  if (["successEvidence", "milestones"].includes(field)) {
+    const lines = proposed.split("\n");
+    if (lines.length > 30 || lines.some((line) => line.length > 500)) return "列表最多 30 行，每行不超过 500 字";
+  }
+  return null;
+}
 function normalizedInput(input: TCreateMissionCardFeedbackRequest): TCreateMissionCardFeedbackRequest {
-  return { ...input, body: input.body.trim(), ...(input.proposed !== undefined ? { proposed: ["successEvidence", "milestones"].includes(input.field ?? "")
-    ? input.proposed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).join("\n") : input.proposed.trim() } : {}) };
+  return { ...input, body: input.body.trim(), ...(input.proposed !== undefined ? { proposed: normalizedProposal(input.field, input.proposed) } : {}) };
 }
 function inputProblem(input: TCreateMissionCardFeedbackRequest): string | null {
   if (!input.body) return "请填写意见正文";
@@ -126,12 +164,7 @@ function inputProblem(input: TCreateMissionCardFeedbackRequest): string | null {
   if (!input.missionId || !input.field || input.sourceVersion === undefined) return "引用和建议必须指明个人任务、字段与源版本";
   if (input.kind === "quote") return !input.quote?.trim() || input.proposed !== undefined ? "引用必须包含原文，不能包含修改建议" : null;
   if (!input.proposed || input.quote !== undefined) return "请填写修改建议，不能同时提交引用";
-  if (input.field === "title" && input.proposed.length > 200) return "名称最多 200 字";
-  if (["successEvidence", "milestones"].includes(input.field)) {
-    const lines = input.proposed.split("\n");
-    if (lines.length > 30 || lines.some((line) => line.length > 500)) return "列表最多 30 行，每行不超过 500 字";
-  }
-  return null;
+  return proposalProblem(input.field, input.proposed);
 }
 function sameInput(row: FeedbackRow, cardId: string, input: TCreateMissionCardFeedbackRequest): boolean {
   return row.card_id === cardId && row.kind === input.kind && row.window_seq === input.round && row.body === input.body

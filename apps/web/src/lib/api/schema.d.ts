@@ -310,6 +310,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mission-cards/{cardId}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 已确定的本月个人卡：非拍板人申请更正，拍板人直接更正并写回；按 clientId 幂等 */
+        post: operations["createPersonalMissionCardCorrection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-cards/{cardId}/corrections/{correctionId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 拍板人采纳（写回、版本 +1）或不采纳（须写原因）一条更正申请 */
+        post: operations["decidePersonalMissionCardCorrection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/mission-cards/{cardId}/group": {
         parameters: {
             query?: never;
@@ -1828,6 +1862,8 @@ export interface components {
             line: string;
             pending: number;
             firstPendingFeedbackId: string | null;
+            pendingCorrections: number;
+            firstPendingCorrectionId: string | null;
             mine: boolean;
         };
         MissionRoundPhase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
@@ -1861,6 +1897,7 @@ export interface components {
                 conflicts: number;
                 dependencies: number;
                 late: number;
+                corrections: number;
             };
             cards: {
                 cardId: string;
@@ -1871,6 +1908,8 @@ export interface components {
                 line: string;
                 pending: number;
                 firstPendingFeedbackId: string | null;
+                pendingCorrections: number;
+                firstPendingCorrectionId: string | null;
                 mine: boolean;
             }[];
         };
@@ -1905,6 +1944,7 @@ export interface components {
                     conflicts: number;
                     dependencies: number;
                     late: number;
+                    corrections: number;
                 };
                 cards: {
                     cardId: string;
@@ -1915,6 +1955,8 @@ export interface components {
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
+                    pendingCorrections: number;
+                    firstPendingCorrectionId: string | null;
                     mine: boolean;
                 }[];
             }[];
@@ -2039,6 +2081,7 @@ export interface components {
                     conflicts: number;
                     dependencies: number;
                     late: number;
+                    corrections: number;
                 };
                 cards: {
                     cardId: string;
@@ -2049,6 +2092,8 @@ export interface components {
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
+                    pendingCorrections: number;
+                    firstPendingCorrectionId: string | null;
                     mine: boolean;
                 }[];
             };
@@ -2140,6 +2185,31 @@ export interface components {
                 at: string;
                 note: string;
             } | null;
+            corrections: {
+                id: string;
+                missionId: string;
+                field: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                original: string;
+                proposed: string;
+                reason: string;
+                authorId: string;
+                authorName: string;
+                direct: boolean;
+                status: "pending" | "applied" | "rejected";
+                decidedBy: string | null;
+                decidedByName: string | null;
+                decidedAt: string | null;
+                note: string | null;
+                appliedVersion: number | null;
+                stale: boolean;
+                /** @description 应用时钟生成的 ISO 8601 时间 */
+                createdAt: string;
+            }[];
+            correctionAccess: {
+                canRequest: boolean;
+                canApply: boolean;
+                closedReason: string | null;
+            };
         };
         CreateMissionCardFeedbackRequest: {
             /** Format: uuid */
@@ -2251,6 +2321,66 @@ export interface components {
         MarkMissionCardReadResponse: {
             lastReadSeq: number;
             unread: number;
+        };
+        MissionCardCorrectionView: {
+            id: string;
+            missionId: string;
+            field: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+            original: string;
+            proposed: string;
+            reason: string;
+            authorId: string;
+            authorName: string;
+            direct: boolean;
+            status: "pending" | "applied" | "rejected";
+            decidedBy: string | null;
+            decidedByName: string | null;
+            decidedAt: string | null;
+            note: string | null;
+            appliedVersion: number | null;
+            stale: boolean;
+            /** @description 应用时钟生成的 ISO 8601 时间 */
+            createdAt: string;
+        };
+        MissionCardCorrectionAccess: {
+            canRequest: boolean;
+            canApply: boolean;
+            closedReason: string | null;
+        };
+        CreateMissionCardCorrectionRequest: {
+            /** Format: uuid */
+            clientId: string;
+            missionId: string;
+            field: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+            proposed: string;
+            reason: string;
+            sourceVersion: number;
+        };
+        DecideMissionCardCorrectionRequest: {
+            decision: "apply" | "reject";
+            note?: string;
+        };
+        MissionCardCorrectionResponse: {
+            correction: {
+                id: string;
+                missionId: string;
+                field: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                original: string;
+                proposed: string;
+                reason: string;
+                authorId: string;
+                authorName: string;
+                direct: boolean;
+                status: "pending" | "applied" | "rejected";
+                decidedBy: string | null;
+                decidedByName: string | null;
+                decidedAt: string | null;
+                note: string | null;
+                appliedVersion: number | null;
+                stale: boolean;
+                /** @description 应用时钟生成的 ISO 8601 时间 */
+                createdAt: string;
+            };
         };
         CapabilitySupportRef: {
             /** @constant */
@@ -3130,6 +3260,7 @@ export interface components {
                     conflicts: number;
                     dependencies: number;
                     late: number;
+                    corrections: number;
                 };
                 cards: {
                     cardId: string;
@@ -3140,6 +3271,8 @@ export interface components {
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
+                    pendingCorrections: number;
+                    firstPendingCorrectionId: string | null;
                     mine: boolean;
                 }[];
             } | null;
@@ -4175,6 +4308,140 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createPersonalMissionCardCorrection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMissionCardCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description 更正记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissionCardCorrectionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decidePersonalMissionCardCorrection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+                correctionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideMissionCardCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description 处理后的更正记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissionCardCorrectionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

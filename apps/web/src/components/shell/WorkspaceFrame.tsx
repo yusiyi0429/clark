@@ -132,7 +132,10 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
 
   const focusCloseButton = useCallback(() => {
     const target = panel.current?.querySelector<HTMLElement>("[data-close-view]");
-    if (target && !document.activeElement?.closest('[data-testid="global-controls"]')) target.focus({ preventScroll: true });
+    const active = document.activeElement;
+    // 深链已把焦点交给详情里的具体对象（tabindex=-1 的待处理意见、更正申请）时，入场结束后不再抢回。
+    if (active instanceof HTMLElement && active.tabIndex === -1 && active !== document.body && panel.current?.contains(active)) return;
+    if (target && !active?.closest('[data-testid="global-controls"]')) target.focus({ preventScroll: true });
   }, []);
 
   // 新路由提交后：先让等待中的转场截新快照，再做焦点与兜底动画。

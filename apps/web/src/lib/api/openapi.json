@@ -755,6 +755,180 @@
         }
       }
     },
+    "/api/mission-cards/{cardId}/corrections": {
+      "post": {
+        "operationId": "createPersonalMissionCardCorrection",
+        "summary": "已确定的本月个人卡：非拍板人申请更正，拍板人直接更正并写回；按 clientId 幂等",
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMissionCardCorrectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更正记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionCardCorrectionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mission-cards/{cardId}/corrections/{correctionId}/decision": {
+      "post": {
+        "operationId": "decidePersonalMissionCardCorrection",
+        "summary": "拍板人采纳（写回、版本 +1）或不采纳（须写原因）一条更正申请",
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "correctionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideMissionCardCorrectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "处理后的更正记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionCardCorrectionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mission-cards/{cardId}/group": {
       "get": {
         "operationId": "getPersonalMissionCardGroup",
@@ -7418,6 +7592,8 @@
           "line",
           "pending",
           "firstPendingFeedbackId",
+          "pendingCorrections",
+          "firstPendingCorrectionId",
           "mine"
         ],
         "properties": {
@@ -7452,6 +7628,20 @@
             "type": "integer"
           },
           "firstPendingFeedbackId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pendingCorrections": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "firstPendingCorrectionId": {
             "anyOf": [
               {
                 "type": "string"
@@ -7652,7 +7842,8 @@
               "pending",
               "conflicts",
               "dependencies",
-              "late"
+              "late",
+              "corrections"
             ],
             "properties": {
               "cards": {
@@ -7678,6 +7869,10 @@
               "late": {
                 "minimum": 0,
                 "type": "integer"
+              },
+              "corrections": {
+                "minimum": 0,
+                "type": "integer"
               }
             }
           },
@@ -7695,6 +7890,8 @@
                 "line",
                 "pending",
                 "firstPendingFeedbackId",
+                "pendingCorrections",
+                "firstPendingCorrectionId",
                 "mine"
               ],
               "properties": {
@@ -7729,6 +7926,20 @@
                   "type": "integer"
                 },
                 "firstPendingFeedbackId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "pendingCorrections": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "firstPendingCorrectionId": {
                   "anyOf": [
                     {
                       "type": "string"
@@ -7917,7 +8128,8 @@
                     "pending",
                     "conflicts",
                     "dependencies",
-                    "late"
+                    "late",
+                    "corrections"
                   ],
                   "properties": {
                     "cards": {
@@ -7943,6 +8155,10 @@
                     "late": {
                       "minimum": 0,
                       "type": "integer"
+                    },
+                    "corrections": {
+                      "minimum": 0,
+                      "type": "integer"
                     }
                   }
                 },
@@ -7960,6 +8176,8 @@
                       "line",
                       "pending",
                       "firstPendingFeedbackId",
+                      "pendingCorrections",
+                      "firstPendingCorrectionId",
                       "mine"
                     ],
                     "properties": {
@@ -7994,6 +8212,20 @@
                         "type": "integer"
                       },
                       "firstPendingFeedbackId": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "pendingCorrections": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "firstPendingCorrectionId": {
                         "anyOf": [
                           {
                             "type": "string"
@@ -8630,7 +8862,9 @@
           "round",
           "card",
           "feedback",
-          "confirmation"
+          "confirmation",
+          "corrections",
+          "correctionAccess"
         ],
         "properties": {
           "round": {
@@ -8795,7 +9029,8 @@
                   "pending",
                   "conflicts",
                   "dependencies",
-                  "late"
+                  "late",
+                  "corrections"
                 ],
                 "properties": {
                   "cards": {
@@ -8821,6 +9056,10 @@
                   "late": {
                     "minimum": 0,
                     "type": "integer"
+                  },
+                  "corrections": {
+                    "minimum": 0,
+                    "type": "integer"
                   }
                 }
               },
@@ -8838,6 +9077,8 @@
                     "line",
                     "pending",
                     "firstPendingFeedbackId",
+                    "pendingCorrections",
+                    "firstPendingCorrectionId",
                     "mine"
                   ],
                   "properties": {
@@ -8872,6 +9113,20 @@
                       "type": "integer"
                     },
                     "firstPendingFeedbackId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "pendingCorrections": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "firstPendingCorrectionId": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -9535,6 +9790,212 @@
                 "type": "null"
               }
             ]
+          },
+          "corrections": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "missionId",
+                "field",
+                "original",
+                "proposed",
+                "reason",
+                "authorId",
+                "authorName",
+                "direct",
+                "status",
+                "decidedBy",
+                "decidedByName",
+                "decidedAt",
+                "note",
+                "appliedVersion",
+                "stale",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "missionId": {
+                  "type": "string"
+                },
+                "field": {
+                  "anyOf": [
+                    {
+                      "const": "title",
+                      "type": "string"
+                    },
+                    {
+                      "const": "why",
+                      "type": "string"
+                    },
+                    {
+                      "const": "outcome",
+                      "type": "string"
+                    },
+                    {
+                      "const": "successEvidence",
+                      "type": "string"
+                    },
+                    {
+                      "const": "boundaries",
+                      "type": "string"
+                    },
+                    {
+                      "const": "keyPath",
+                      "type": "string"
+                    },
+                    {
+                      "const": "milestones",
+                      "type": "string"
+                    },
+                    {
+                      "const": "resources",
+                      "type": "string"
+                    },
+                    {
+                      "const": "dependencies",
+                      "type": "string"
+                    },
+                    {
+                      "const": "humanAgentSplit",
+                      "type": "string"
+                    },
+                    {
+                      "const": "risk",
+                      "type": "string"
+                    },
+                    {
+                      "const": "retrospect",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "original": {
+                  "type": "string"
+                },
+                "proposed": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "authorId": {
+                  "type": "string"
+                },
+                "authorName": {
+                  "type": "string"
+                },
+                "direct": {
+                  "type": "boolean"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "applied",
+                      "type": "string"
+                    },
+                    {
+                      "const": "rejected",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "decidedBy": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "decidedByName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "decidedAt": {
+                  "anyOf": [
+                    {
+                      "description": "应用时钟生成的 ISO 8601 时间",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "appliedVersion": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "stale": {
+                  "type": "boolean"
+                },
+                "createdAt": {
+                  "description": "应用时钟生成的 ISO 8601 时间",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "correctionAccess": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "canRequest",
+              "canApply",
+              "closedReason"
+            ],
+            "properties": {
+              "canRequest": {
+                "type": "boolean"
+              },
+              "canApply": {
+                "type": "boolean"
+              },
+              "closedReason": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
           }
         }
       },
@@ -10373,6 +10834,508 @@
           "unread": {
             "minimum": 0,
             "type": "integer"
+          }
+        }
+      },
+      "MissionCardCorrectionView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "missionId",
+          "field",
+          "original",
+          "proposed",
+          "reason",
+          "authorId",
+          "authorName",
+          "direct",
+          "status",
+          "decidedBy",
+          "decidedByName",
+          "decidedAt",
+          "note",
+          "appliedVersion",
+          "stale",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "missionId": {
+            "type": "string"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "const": "title",
+                "type": "string"
+              },
+              {
+                "const": "why",
+                "type": "string"
+              },
+              {
+                "const": "outcome",
+                "type": "string"
+              },
+              {
+                "const": "successEvidence",
+                "type": "string"
+              },
+              {
+                "const": "boundaries",
+                "type": "string"
+              },
+              {
+                "const": "keyPath",
+                "type": "string"
+              },
+              {
+                "const": "milestones",
+                "type": "string"
+              },
+              {
+                "const": "resources",
+                "type": "string"
+              },
+              {
+                "const": "dependencies",
+                "type": "string"
+              },
+              {
+                "const": "humanAgentSplit",
+                "type": "string"
+              },
+              {
+                "const": "risk",
+                "type": "string"
+              },
+              {
+                "const": "retrospect",
+                "type": "string"
+              }
+            ]
+          },
+          "original": {
+            "type": "string"
+          },
+          "proposed": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "authorId": {
+            "type": "string"
+          },
+          "authorName": {
+            "type": "string"
+          },
+          "direct": {
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "pending",
+                "type": "string"
+              },
+              {
+                "const": "applied",
+                "type": "string"
+              },
+              {
+                "const": "rejected",
+                "type": "string"
+              }
+            ]
+          },
+          "decidedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decidedByName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "description": "应用时钟生成的 ISO 8601 时间",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "appliedVersion": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "description": "应用时钟生成的 ISO 8601 时间",
+            "type": "string"
+          }
+        }
+      },
+      "MissionCardCorrectionAccess": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "canRequest",
+          "canApply",
+          "closedReason"
+        ],
+        "properties": {
+          "canRequest": {
+            "type": "boolean"
+          },
+          "canApply": {
+            "type": "boolean"
+          },
+          "closedReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CreateMissionCardCorrectionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientId",
+          "missionId",
+          "field",
+          "proposed",
+          "reason",
+          "sourceVersion"
+        ],
+        "properties": {
+          "clientId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "missionId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "const": "title",
+                "type": "string"
+              },
+              {
+                "const": "why",
+                "type": "string"
+              },
+              {
+                "const": "outcome",
+                "type": "string"
+              },
+              {
+                "const": "successEvidence",
+                "type": "string"
+              },
+              {
+                "const": "boundaries",
+                "type": "string"
+              },
+              {
+                "const": "keyPath",
+                "type": "string"
+              },
+              {
+                "const": "milestones",
+                "type": "string"
+              },
+              {
+                "const": "resources",
+                "type": "string"
+              },
+              {
+                "const": "dependencies",
+                "type": "string"
+              },
+              {
+                "const": "humanAgentSplit",
+                "type": "string"
+              },
+              {
+                "const": "risk",
+                "type": "string"
+              },
+              {
+                "const": "retrospect",
+                "type": "string"
+              }
+            ]
+          },
+          "proposed": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "maxLength": 300,
+            "type": "string"
+          },
+          "sourceVersion": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        }
+      },
+      "DecideMissionCardCorrectionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "const": "apply",
+                "type": "string"
+              },
+              {
+                "const": "reject",
+                "type": "string"
+              }
+            ]
+          },
+          "note": {
+            "minLength": 1,
+            "maxLength": 300,
+            "type": "string"
+          }
+        }
+      },
+      "MissionCardCorrectionResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "correction"
+        ],
+        "properties": {
+          "correction": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "missionId",
+              "field",
+              "original",
+              "proposed",
+              "reason",
+              "authorId",
+              "authorName",
+              "direct",
+              "status",
+              "decidedBy",
+              "decidedByName",
+              "decidedAt",
+              "note",
+              "appliedVersion",
+              "stale",
+              "createdAt"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "missionId": {
+                "type": "string"
+              },
+              "field": {
+                "anyOf": [
+                  {
+                    "const": "title",
+                    "type": "string"
+                  },
+                  {
+                    "const": "why",
+                    "type": "string"
+                  },
+                  {
+                    "const": "outcome",
+                    "type": "string"
+                  },
+                  {
+                    "const": "successEvidence",
+                    "type": "string"
+                  },
+                  {
+                    "const": "boundaries",
+                    "type": "string"
+                  },
+                  {
+                    "const": "keyPath",
+                    "type": "string"
+                  },
+                  {
+                    "const": "milestones",
+                    "type": "string"
+                  },
+                  {
+                    "const": "resources",
+                    "type": "string"
+                  },
+                  {
+                    "const": "dependencies",
+                    "type": "string"
+                  },
+                  {
+                    "const": "humanAgentSplit",
+                    "type": "string"
+                  },
+                  {
+                    "const": "risk",
+                    "type": "string"
+                  },
+                  {
+                    "const": "retrospect",
+                    "type": "string"
+                  }
+                ]
+              },
+              "original": {
+                "type": "string"
+              },
+              "proposed": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "authorId": {
+                "type": "string"
+              },
+              "authorName": {
+                "type": "string"
+              },
+              "direct": {
+                "type": "boolean"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "pending",
+                    "type": "string"
+                  },
+                  {
+                    "const": "applied",
+                    "type": "string"
+                  },
+                  {
+                    "const": "rejected",
+                    "type": "string"
+                  }
+                ]
+              },
+              "decidedBy": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "decidedByName": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "decidedAt": {
+                "anyOf": [
+                  {
+                    "description": "应用时钟生成的 ISO 8601 时间",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "appliedVersion": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "stale": {
+                "type": "boolean"
+              },
+              "createdAt": {
+                "description": "应用时钟生成的 ISO 8601 时间",
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -15706,7 +16669,8 @@
                       "pending",
                       "conflicts",
                       "dependencies",
-                      "late"
+                      "late",
+                      "corrections"
                     ],
                     "properties": {
                       "cards": {
@@ -15732,6 +16696,10 @@
                       "late": {
                         "minimum": 0,
                         "type": "integer"
+                      },
+                      "corrections": {
+                        "minimum": 0,
+                        "type": "integer"
                       }
                     }
                   },
@@ -15749,6 +16717,8 @@
                         "line",
                         "pending",
                         "firstPendingFeedbackId",
+                        "pendingCorrections",
+                        "firstPendingCorrectionId",
                         "mine"
                       ],
                       "properties": {
@@ -15783,6 +16753,20 @@
                           "type": "integer"
                         },
                         "firstPendingFeedbackId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "pendingCorrections": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "firstPendingCorrectionId": {
                           "anyOf": [
                             {
                               "type": "string"

@@ -107,6 +107,23 @@ describe("成员战场阅读与个人卡入口", () => {
     expect(ui.navigate).toHaveBeenCalledWith("/me/mission-cards/card?feedback=feedback-1", null);
     expect(ui.buttons.has("打开孙铭泽的本月卡")).toBe(true);
   });
+  it("已确定后，拍板人从这里直达第一条待处理的更正申请；月份过了只写已确定（GAP-04）", () => {
+    const data = fixture();
+    data.isDri = true;
+    data.confirmation = { byName: "刘明华", at: "2026-10-04T10:00:00.000Z" };
+    const rows = [{ ...data.round!.cards[0], pendingCorrections: 1, firstPendingCorrectionId: "correction-1" }];
+    data.round = { ...data.round!, phase: "confirmed", approver: true, todo: "1 条更正申请待你处理", counts: { ...data.round!.counts, corrections: 1 }, cards: rows };
+    expect(render(data)).toContain("1 条更正申请待你处理");
+    ui.buttons.get("查看 10 月个人卡")!({ target: null });
+    expect(ui.navigate).toHaveBeenCalledWith("/me/mission-cards/card?correction=correction-1", null);
+    // 月份过后服务端不再给待办，只留计数：状态句不能再催。
+    data.round = { ...data.round, todo: null };
+    ui.buttons.clear();
+    const closed = render(data);
+    expect(closed).toContain("已确定 · 刘明华 10/4 18:00");
+    expect(closed).not.toContain("待你处理");
+    expect(ui.buttons.has("查看 10 月个人卡")).toBe(false);
+  });
   it("确认后仍保留个人卡，显示确认人、上海时间和已确定占位标记", () => {
     const data = fixture();
     data.round = { ...data.round!, phase: "confirmed" };

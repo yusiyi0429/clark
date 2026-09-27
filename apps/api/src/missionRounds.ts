@@ -9,6 +9,7 @@ import { CreateMissionRequest, type TCard, type TMissionCardField, type TMission
 import { signActionId, type ActionScope } from "./actionToken.js";
 import type { MemoryPerson } from "./companyMemory.js";
 import type { MeetingActionOutcome, Query } from "./meetingStore.js";
+import { companyPeriod } from "./monthlyPlans.js";
 
 export type MissionRoundPerson = { personId: string; role: "ceo" | "member" };
 type GoalSnapshot = {
@@ -63,11 +64,15 @@ async function canRead(q: Query, person: MissionRoundPerson, row: MissionRoundRo
 function roundPhase(row: MissionRoundRow, now: Date): TMissionRoundPhase {
   return row.status === "open" && row.closes_at! <= now ? "closed" : row.status;
 }
-export function missionCardLine(phase: TMissionRoundPhase, feedback: number, inReview: number, pending: number, approver: boolean): string {
+/** 已确定的卡只在轮次月份未过时可更正（GAP-04）；YYYY-MM 直接比较，月底提前确定的下月卡也算未过。 */
+export function correctionPeriodClosed(row: Pick<MissionRoundRow, "period">, now: Date): boolean {
+  return row.period < companyPeriod(now);
+}
+export function missionCardLine(phase: TMissionRoundPhase, feedback: number, inReview: number, pending: number, approver: boolean, corrections = 0): string {
   if (phase === "draft") return "未开放";
   if (phase === "open") return feedback ? `${feedback} 条意见` : "无意见";
   if (phase === "closed") return "汇总中";
-  if (phase === "confirmed") return "已确定";
+  if (phase === "confirmed") return approver && corrections ? `${corrections} 条更正申请` : "已确定";
   if (!inReview) return approver ? "无意见" : "等拍板";
   return approver ? (pending ? `待处理 ${pending}` : "已处理") : `已处理 ${inReview - pending}/${inReview}`;
 }
@@ -81,6 +86,8 @@ export async function projectMissionRoundCard(
   const missions = (await q(`SELECT m.id,m.personal_mission_card_id,m.dependencies FROM missions m
     JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id WHERE c.round_id=$1`, [row.id])).rows as { id: string; personal_mission_card_id: string; dependencies: string }[];
   const review = (await q("SELECT id,feedback_ids,taken_at FROM mission_round_reviews WHERE round_id=$1 AND window_seq=$2 AND superseded_at IS NULL", [row.id, row.window_seq])).rows[0] as ReviewRow | undefined;
+  // 确认后的更正申请（GAP-04）：最早的在前，行上的「第一条」据此定位。
+  const corrections = (await q("SELECT id,card_id FROM mission_card_corrections WHERE round_id=$1 AND status='pending' ORDER BY created_at,id", [row.id])).rows as { id: string; card_id: string }[];
   const decisions = review ? (await q("SELECT feedback_id,decision FROM mission_review_decisions WHERE review_id=$1", [review.id])).rows as { feedback_id: string; decision: string }[] : [];
   const decisionMap = new Map(decisions.map((item) => [item.feedback_id, item.decision]));
   const snapshotIds = new Set(review?.feedback_ids ?? []);
@@ -96,6 +103,8 @@ export async function projectMissionRoundCard(
   }
   const approver = canApprove(person, row);
   const phase = roundPhase(row, now);
+  // 月份过了没法再处理更正，行文案回到「已确定」；待处理数照实保留。
+  const correctable = !correctionPeriodClosed(row, now);
   const names = new Map(people.map((item) => [item.personId, item.displayName]));
   const deciderId = row.battlefield_owner_id || people.find((item) => item.roles.includes("ceo"))?.personId;
   const visible = cards.filter((item) => approver || item.member_ids.includes(person.personId));
@@ -105,7 +114,8 @@ export async function projectMissionRoundCard(
     closesAt: row.closes_at?.toISOString() ?? null, reviewAt: review?.taken_at.toISOString() ?? null,
     serverNow: now.toISOString(), approver, deciderName: (deciderId && names.get(deciderId)) || deciderId || "CEO",
     todo: !approver ? null : phase === "draft" ? "个人卡草稿已就绪，可以统一开放讨论"
-      : phase === "reviewing" ? pending > 0 ? `${pending} 条待你处理` : "意见已全部处理，待你确认" : null,
+      : phase === "reviewing" ? pending > 0 ? `${pending} 条待你处理` : "意见已全部处理，待你确认"
+      : phase === "confirmed" && corrections.length > 0 && correctable ? `${corrections.length} 条更正申请待你处理` : null,
     placeholder: row.draft_origin === "placeholder",
     goals: row.goal_snapshot ? { sixMonthOutcome: row.goal_snapshot.sixMonthOutcome, monthOutcome: row.goal_snapshot.monthOutcome, signedAt: row.goal_snapshot.signedAt } : null,
     counts: {
@@ -113,15 +123,18 @@ export async function projectMissionRoundCard(
       conflicts: [...suggestions.values()].filter((count) => count > 1).length,
       dependencies: missions.reduce((total, mission) => total + (acceptedDependencies.get(mission.id) ?? mission.dependencies).split(/\r?\n/).filter((line) => line.trim()).length, 0),
       late: feedback.filter((item) => item.late && row.closes_at && item.created_at >= row.closes_at).length,
+      corrections: corrections.length,
     },
     cards: visible.map((item) => {
       const all = feedback.filter((entry) => entry.card_id === item.id);
       const reviewed = all.filter((entry) => snapshotIds.has(entry.id));
       const outstanding = reviewed.filter((entry) => !decisionMap.has(entry.id)).length;
+      const waiting = corrections.filter((entry) => entry.card_id === item.id);
       return { cardId: item.id, ownerId: item.owner_id, ownerName: names.get(item.owner_id) ?? item.owner_id,
         roleLabel: item.role_label, missionCount: missions.filter((mission) => mission.personal_mission_card_id === item.id).length,
-        line: missionCardLine(phase, all.length, reviewed.length, outstanding, approver), pending: outstanding,
-        firstPendingFeedbackId: reviewed.find((entry) => !decisionMap.has(entry.id))?.id ?? null, mine: item.owner_id === person.personId };
+        line: missionCardLine(phase, all.length, reviewed.length, outstanding, approver, correctable ? waiting.length : 0), pending: outstanding,
+        firstPendingFeedbackId: reviewed.find((entry) => !decisionMap.has(entry.id))?.id ?? null,
+        pendingCorrections: waiting.length, firstPendingCorrectionId: waiting[0]?.id ?? null, mine: item.owner_id === person.personId };
     }),
   };
   const actions: TCard["actions"] = [];
@@ -146,10 +159,15 @@ export async function listMissionRoundCards(
   q: Query, people: MemoryPerson[], secret: string, person: MissionRoundPerson, period: string | undefined, now: Date,
 ): Promise<TCard[]> {
   // 通知只在确认后退出；引导可显式限定本月，跨月不能让尚未拍板的通知消失。
-  const rows = (await q(`${ROUND_SELECT} WHERE r.status<>'confirmed'${period ? " AND r.period=$1" : ""}
+  // 已确定、月份未过且仍有待处理更正申请的轮次，只对当前拍板人重新出现（GAP-04）。
+  const rows = (await q(`${ROUND_SELECT} WHERE (r.status<>'confirmed'
+    OR EXISTS (SELECT 1 FROM mission_card_corrections k WHERE k.round_id=r.id AND k.status='pending'))${period ? " AND r.period=$1" : ""}
     ORDER BY r.period DESC,b.sort_order,b.code,r.id`, period ? [period] : [])).rows as MissionRoundRow[];
   const cards: TCard[] = [];
-  for (const row of rows) if (await canRead(q, person, row)) cards.push(await projectMissionRoundCard(q, people, secret, person, row, now));
+  for (const row of rows) {
+    const notice = row.status === "confirmed" ? canApprove(person, row) && !correctionPeriodClosed(row, now) : await canRead(q, person, row);
+    if (notice) cards.push(await projectMissionRoundCard(q, people, secret, person, row, now));
+  }
   return cards;
 }
 
@@ -223,7 +241,7 @@ async function executeRoundAction(
     const project = () => projectMissionRoundCard(q, people, secret, person, row, at);
     if (row.action_fingerprints.includes(fingerprint)) return await finish({ card: await project(), replayed: true });
     if (row.version !== scope.objectVersion) return await finish({ conflict: true, latestCard: await project() });
-    if (row.status === "confirmed") return await finish(failure(409, "ROUND_CONFIRMED", "本月 Mission Card 已确定，修改规则待定（GAP-04）"));
+    if (row.status === "confirmed") return await finish(failure(409, "ROUND_CONFIRMED", "本月 Mission Card 已确定；要改字段，请在个人卡上更正"));
     if (operation === "open") {
       if (row.status !== "draft") return await finish(failure(409, "ROUND_ALREADY_OPEN", "本轮已经开放，倒计时不会重置"));
       const plan = (await client.query<{ id: string; version: number; status: string; confirmed_at: Date | null; battlefields: { battlefieldId: string; outcome: string }[] }>(
@@ -284,15 +302,7 @@ async function executeRoundAction(
         for (const mission of missions) {
           const changes = accepted.filter((item) => item.mission_id === mission.id);
           if (!changes.length) continue;
-          // Columns are selected only through the field allowlist, never through request text.
-          const values: unknown[] = [mission.id, at];
-          const sets = changes.map((item) => {
-            const list = item.field === "successEvidence" || item.field === "milestones";
-            values.push(list ? JSON.stringify(item.proposed!.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)) : item.proposed);
-            return `${MISSION_FIELD_COLUMNS[item.field!]}=$${values.length}${list ? "::jsonb" : ""}`;
-          });
-          const updated = await client.query<{ version: number }>(`UPDATE missions SET ${sets.join(",")},version=version+1,updated_at=$2 WHERE id=$1 RETURNING version`, values);
-          appliedVersions[mission.id] = updated.rows[0].version;
+          appliedVersions[mission.id] = await writeMissionFields(client, mission.id, changes.map((item) => ({ field: item.field!, proposed: item.proposed! })), at);
         }
         await client.query("UPDATE mission_round_reviews SET note=$2,applied_versions=$3::jsonb WHERE id=$1", [review.id, note, JSON.stringify(appliedVersions)]);
       }
@@ -324,6 +334,21 @@ const MISSION_FIELD_COLUMNS: Record<TMissionCardField, string> = {
   title: "title", why: "why", outcome: "outcome", successEvidence: "success_evidence", boundaries: "boundaries", keyPath: "key_path",
   milestones: "milestones", resources: "resources", dependencies: "dependencies", humanAgentSplit: "human_agent_split", risk: "risk", retrospect: "retrospect",
 };
+/**
+ * 整轮确认与确认后更正共用的写回：successEvidence／milestones 按行拆成 JSON 数组，一次调用只升一次版本。
+ * 调用者须在同一事务里已持该 Mission 行锁；返回写回后的版本。
+ */
+export async function writeMissionFields(client: PoolClient, missionId: string, changes: { field: TMissionCardField; proposed: string }[], at: Date): Promise<number> {
+  // Columns are selected only through the field allowlist, never through request text.
+  const values: unknown[] = [missionId, at];
+  const sets = changes.map(({ field, proposed }) => {
+    const list = field === "successEvidence" || field === "milestones";
+    values.push(list ? JSON.stringify(proposed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)) : proposed);
+    return `${MISSION_FIELD_COLUMNS[field]}=$${values.length}${list ? "::jsonb" : ""}`;
+  });
+  const updated = await client.query<{ version: number }>(`UPDATE missions SET ${sets.join(",")},version=version+1,updated_at=$2 WHERE id=$1 RETURNING version`, values);
+  return updated.rows[0].version;
+}
 
 const DraftText = Type.String({ maxLength: 4000 });
 const DraftLines = Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { maxItems: 30 });

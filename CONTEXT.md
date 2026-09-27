@@ -97,11 +97,11 @@ CEO 维护的长期公司能力注册表：稳定 id、显示编号 code、排�
 _Avoid_: 技能库、执行能力评估、当月能力结果
 
 **Mission**:
-WarMap 的第七个核心实体，对应个人卡中的一项“个人任务”：稳定 id、周期 period、唯一 DRI personId、一个主要能力域、战场引用和来源元数据，内容包括名称、Why、预期结果、成功证据、责任人、边界、关键路径、里程碑、资源与权限、依赖、人-Agent 分工、风险与升级、复盘沉淀 13 个字段。Mission 通过 period 承接 MonthlyPlan 的 PCO，不承载执行状态或完成率。未挂卡的 Mission 沿用 CEO 首次登记与 `mission.edit`；挂卡的 Mission 可以先以 v1 草稿入库，整轮确认前是候选，只有确认后才成为个人承诺的 Organization Fact。投影用 `personalCard.status` 表达制定状态，`placeholder` 表达来源性质；计划签发不等于个人卡确认。挂卡 Mission 全阶段禁止 `mission.edit`，确认后的纠错规则仍属 GAP-04。
+WarMap 的第七个核心实体，对应个人卡中的一项“个人任务”：稳定 id、周期 period、唯一 DRI personId、一个主要能力域、战场引用和来源元数据，内容包括名称、Why、预期结果、成功证据、责任人、边界、关键路径、里程碑、资源与权限、依赖、人-Agent 分工、风险与升级、复盘沉淀 13 个字段。Mission 通过 period 承接 MonthlyPlan 的 PCO，不承载执行状态或完成率。未挂卡的 Mission 沿用 CEO 首次登记与 `mission.edit`；挂卡的 Mission 可以先以 v1 草稿入库，整轮确认前是候选，只有确认后才成为个人承诺的 Organization Fact。投影用 `personalCard.status` 表达制定状态，`placeholder` 表达来源性质；计划签发不等于个人卡确认。挂卡 Mission 全阶段禁止 `mission.edit`；确认后只能在个人卡上逐字段更正（ADR-0023）。
 _Avoid_: 执行事项、Activity、项目、完成率、执行看板、Mission 进度条
 
 **本月 Mission Card（Personal Mission Card）**:
-同一战场、同一月份里一个人的稳定结果承诺容器，保存 Owner、身份与去重后的成员名单，挂接一到多项 Mission。沟通前、沟通中和确认后保留同一个卡 id；草稿与已确定内容必须明确区分。CEO 的 `/mission-cards/[cardId]` 与成员的 `/me/mission-cards/[cardId]` 共用阅读页，呈现 13 字段、来源、版本和可追溯意见；拍板人逐条处理后核对跨人员协作，再统一确认整个战场。确认后同一页保留只读承诺和确认记录。
+同一战场、同一月份里一个人的稳定结果承诺容器，保存 Owner、身份与去重后的成员名单，挂接一到多项 Mission。沟通前、沟通中和确认后保留同一个卡 id；草稿与已确定内容必须明确区分。CEO 的 `/mission-cards/[cardId]` 与成员的 `/me/mission-cards/[cardId]` 共用阅读页，呈现 13 字段、来源、版本和可追溯意见；拍板人逐条处理后核对跨人员协作，再统一确认整个战场。确认后同一页保留承诺和确认记录；月份未过时可以逐字段更正，见「确认后更正」。
 _Avoid_: 单条 Mission、执行事项、任务看板、飞书原件副本
 
 **Mission Card 轮次（Mission Round）**:
@@ -115,6 +115,10 @@ _Avoid_: 私聊、自动生效的修改、thread_messages 中的通用群聊
 **集中 Review**:
 截止时按 `created_at < closes_at` 快照全战场公开意见和 Mission 版本，按同字段冲突、依赖原文条数形成确定性规则汇总，私聊不收。重开保留旧 Review，下一次截止结转已处理结论并纳入新意见，协作核对结论不结转。逐条处理只改变候选版本；旧版本、未处理意见、空核对结论、同字段双采纳均阻止确认。整轮确认只写采纳字段，每个涉及采纳修改的 Mission 升一次版本，并记录 applied_versions；重放不重复写入。
 _Avoid_: AI 语义判断、逐人孤立确认、采纳即生效、私聊自动并入
+
+**确认后更正（Mission Card Correction）**:
+已确定、月份未过的个人卡上，对某项个人任务某个字段的修改。Owner 提更正申请（新文字加原因），当前拍板人逐条采纳或不采纳（不采纳写原因）；拍板人自己可以直接更正。生效时经与整轮确认相同的字段白名单写回，Mission 版本加 1。每条更正单独保存在 `mission_card_corrections`，原文、新文、原因、提出人、处理人与时间都可见。申请后字段又变过的申请不能直接采纳。拍板人有待处理的申请时，轮次重新进入其通知。
+_Avoid_: 重开整轮、撤回整张卡、删除个人任务、不留痕的直接编辑
 
 **讨论候选（占位草稿）**:
 为 2026 年 10 月首轮讨论，从 9 月五张个人卡整理的 12 项有来源候选，只挂战场 01。Agent 起草尚未接入，里程碑写“待定 · ”，保留原文档版本及占位说明。只读 `mission-card-drafts.v1` 经同一事务导入函数写入；相同文件重跑不变，文件变化拒绝覆盖。占位来源标记在确认后仍保留，不能冒充已形成的新月承诺。

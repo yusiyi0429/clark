@@ -13,8 +13,8 @@ vi.mock("@/components/HeroButton", () => ({ HeroButton: ({ children, onPress, is
 import { MissionCardNoticeGroup } from "./MissionCardNoticeGroup";
 
 const rows: TMissionRoundSummary["cards"] = [
-  { cardId: "first", ownerId: "bai", ownerName: "白田田", roleLabel: "01-1 战役 DRI", missionCount: 4, line: "已处理", pending: 0, firstPendingFeedbackId: null, mine: false },
-  { cardId: "mine", ownerId: "sun", ownerName: "孙铭泽", roleLabel: "01-3 战役 DRI", missionCount: 2, line: "待处理 2", pending: 2, firstPendingFeedbackId: "feedback-2", mine: true },
+  { cardId: "first", ownerId: "bai", ownerName: "白田田", roleLabel: "01-1 战役 DRI", missionCount: 4, line: "已处理", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: false },
+  { cardId: "mine", ownerId: "sun", ownerName: "孙铭泽", roleLabel: "01-3 战役 DRI", missionCount: 2, line: "待处理 2", pending: 2, firstPendingFeedbackId: "feedback-2", pendingCorrections: 0, firstPendingCorrectionId: null, mine: true },
 ];
 const summary = (overrides: Partial<TMissionRoundSummary> = {}): TMissionRoundSummary => ({ ...personalPayload.round, phase: "reviewing", approver: true, todo: "2 条意见待你处理", cards: rows, ...overrides });
 beforeEach(() => ui.presses.clear());
@@ -47,6 +47,24 @@ describe("本月 Mission Card 通知分组", () => {
     expect(onNavigate).toHaveBeenLastCalledWith("/mission-cards/mine?feedback=feedback-2", null);
     [...ui.presses.entries()].find(([label]) => label.startsWith("白田田 ·"))![1](event);
     expect(onNavigate).toHaveBeenLastCalledWith("/mission-cards/first", null);
+  });
+
+  it.each([["ceo", "/mission-cards/mine?correction=fix-1"], ["member", "/me/mission-cards/mine?correction=fix-1"]] as const)("已确定但有更正申请时拍板人重新看到这一轮，待办直达第一条：%s", (entry, href) => {
+    const round = summary({ phase: "confirmed", todo: "1 条更正申请待你处理", counts: { ...personalPayload.round.counts, corrections: 1 },
+      cards: [{ ...rows[0], line: "已确定" }, { ...rows[1], pending: 0, firstPendingFeedbackId: null, line: "1 条更正申请", pendingCorrections: 1, firstPendingCorrectionId: "fix-1" }] });
+    const onNavigate = vi.fn();
+    const html = renderToStaticMarkup(<MissionCardNoticeGroup round={round} entry={entry} onNavigate={onNavigate} onRefresh={vi.fn()} />);
+    expect(html).toContain("1 条更正申请待你处理"); expect(html).toContain(">1 条更正申请<");
+    expect(html.match(/data-waiting="true"/g)).toHaveLength(1);
+    expect(html).not.toContain(">草稿<");
+    ui.presses.get("1 条更正申请待你处理")!({ target: { closest: () => null } });
+    expect(onNavigate).toHaveBeenLastCalledWith(href, null);
+  });
+
+  it("不是拍板人或没有待处理的更正申请时，已确定的轮次整组退出", () => {
+    const render = (overrides: Partial<TMissionRoundSummary>) => renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ phase: "confirmed", ...overrides })} entry="member" onNavigate={vi.fn()} onRefresh={vi.fn()} />);
+    expect(render({ approver: false, todo: null, counts: { ...personalPayload.round.counts, corrections: 1 } })).toBe("");
+    expect(render({ todo: null })).toBe("");
   });
 
   it("草稿待办和全部处理后待确认提示都打开第一张卡；成员沿自己的路由", () => {

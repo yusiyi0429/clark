@@ -24,4 +24,12 @@ describe("个人卡与成员战场共用本轮状态句", () => {
   it("已确定展示同一确认人和公司时间", () => {
     expect(roundStatusText({ ...personalPayload.round, phase: "confirmed" }, { feedbackCount: 0, confirmation: { byName: "刘明华", at: "2026-10-04T10:00:00.000Z" } })).toBe("已确定 · 刘明华 10/4 18:00");
   });
+  it("已确定后接本卡已采纳的更正数；拍板人有待处理申请时写待办，月份已过不再催", () => {
+    const confirmation = { byName: "刘明华", at: "2026-10-04T10:00:00.000Z" };
+    const round = { ...personalPayload.round, phase: "confirmed" as const, counts: { ...personalPayload.round.counts, corrections: 2 } };
+    expect(roundStatusText({ ...round, approver: false }, { feedbackCount: 0, confirmation, corrected: 3 })).toBe("已确定 · 刘明华 10/4 18:00 · 更正 3 处");
+    expect(roundStatusText({ ...round, approver: true, todo: "2 条更正申请待你处理" }, { feedbackCount: 0, confirmation, corrected: 3 })).toBe("2 条更正申请待你处理");
+    // 月份过后服务端 todo 为空，但仍在等的申请照样计数；不能退回「待你处理」。
+    expect(roundStatusText({ ...round, approver: true, todo: null }, { feedbackCount: 0, confirmation, corrected: 1 })).toBe("已确定 · 刘明华 10/4 18:00 · 更正 1 处");
+  });
 });

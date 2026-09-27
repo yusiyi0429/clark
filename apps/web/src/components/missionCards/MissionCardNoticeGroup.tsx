@@ -27,20 +27,24 @@ export function MissionCardNoticeGroup({ round, entry, embedded = false, current
     return () => window.clearInterval(timer);
   }, [awaitingSnapshot, onRefresh]);
 
-  if (round.phase === "confirmed" || !round.cards.length) return null;
+  // 确认后整组退出；只有拍板人还有更正申请要处理时，这一轮重新出现（GAP-04）。
+  const confirmed = round.phase === "confirmed";
+  if ((confirmed && !(round.approver && round.counts.corrections > 0)) || !round.cards.length) return null;
   const live = awaitingSnapshot ? { ...round, phase: "closed" as const } : round;
   const month = Number(round.period.slice(5));
   const title = `${month} 月 Mission Card${embedded ? ` · ${round.battlefieldName}` : ""}`;
   const path = (cardId: string) => `${entry === "member" ? "/me" : ""}/mission-cards/${cardId}`;
   const pendingCard = round.phase === "reviewing" ? round.cards.find((card) => card.pending > 0 && card.firstPendingFeedbackId) : undefined;
-  const todoHref = pendingCard ? `${path(pendingCard.cardId)}?feedback=${encodeURIComponent(pendingCard.firstPendingFeedbackId!)}` : path(round.cards[0].cardId);
+  const correctionCard = confirmed ? round.cards.find((card) => card.pendingCorrections > 0 && card.firstPendingCorrectionId) : undefined;
+  const todoHref = pendingCard ? `${path(pendingCard.cardId)}?feedback=${encodeURIComponent(pendingCard.firstPendingFeedbackId!)}`
+    : correctionCard ? `${path(correctionCard.cardId)}?correction=${encodeURIComponent(correctionCard.firstPendingCorrectionId!)}` : path(round.cards[0].cardId);
   const current = round.cards.some((card) => path(card.cardId) === currentHref?.split("?")[0]);
 
   return <section className={embedded ? s.embedded : `${n.card} ${s.group}`} data-slot={embedded ? undefined : "card"} data-notice={`mission-round:${round.roundId}`} data-notice-group="mission-card" data-current={current || undefined} aria-label={title}>
     <header className={embedded ? s.embeddedHeader : `${n.glassHeader} ${s.header}`} data-subline="true">
       {!embedded ? <ContextMark kind="monthly" className={n.glyph} /> : null}
       <div className={embedded ? s.embeddedIdentity : n.identity}>
-        <strong className={s.heading}><span className={s.titleWords}><span className={s.monthTitle}>{month} 月 Mission Card</span>{embedded ? <span className={s.battlefieldTitle}> · {round.battlefieldName}</span> : null}</span><span className={s.badges}><b className={embedded ? s.count : n.count} aria-label={`${round.cards.length} 张个人卡`}>{round.cards.length}</b><em className={s.tag}>草稿</em></span></strong>
+        <strong className={s.heading}><span className={s.titleWords}><span className={s.monthTitle}>{month} 月 Mission Card</span>{embedded ? <span className={s.battlefieldTitle}> · {round.battlefieldName}</span> : null}</span><span className={s.badges}><b className={embedded ? s.count : n.count} aria-label={`${round.cards.length} 张个人卡`}>{round.cards.length}</b>{confirmed ? null : <em className={s.tag}>草稿</em>}</span></strong>
         <RoundClock round={live} now={now} tone="glass" />
       </div>
     </header>
@@ -50,7 +54,7 @@ export function MissionCardNoticeGroup({ round, entry, embedded = false, current
       </HeroButton> : null}
       <ul className={s.rows} aria-label={`${title} · ${round.cards.length} 张`}>
         {round.cards.map((card) => <li key={card.cardId}>
-          <HeroButton variant="ghost" className={s.row} data-origin={path(card.cardId)} aria-current={path(card.cardId) === currentHref?.split("?")[0] ? "true" : undefined} data-waiting={round.approver && card.pending > 0 || undefined}
+          <HeroButton variant="ghost" className={s.row} data-origin={path(card.cardId)} aria-current={path(card.cardId) === currentHref?.split("?")[0] ? "true" : undefined} data-waiting={round.approver && (card.pending > 0 || card.pendingCorrections > 0) || undefined}
             aria-label={`${card.ownerName}${card.mine ? "（你）" : ""} · ${card.roleLabel ?? "参与 DRI"} · ${card.missionCount} 项个人任务 · ${awaitingSnapshot ? "汇总中" : card.line}，查看详情：${card.ownerName}的 ${month} 月 Mission Card`}
             onPress={(event) => onNavigate(path(card.cardId), (event.target as Element).closest("[data-notice-group]"))}>
             <span className={s.initial} aria-hidden="true">{card.ownerName.slice(0, 1)}</span>

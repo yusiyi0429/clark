@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactElement, ReactNode } from "react";
 import type { Card } from "@/lib/api/client";
 import type { DocumentControls } from "./CardDocument";
+import type { Correction } from "./CorrectionPanel";
 import type { ComponentProps } from "react";
 import type { RoundLine } from "./RoundLine";
 import { personalPayload } from "./personalMissionFixture";
@@ -170,5 +171,116 @@ describe("拍板动作与跨卡处理", () => {
     render(); ui.roundProps!.onNoteChange!("旧轮结论"); render();
     ui.state[0] = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, round: 2 } } };
     render(); expect(ui.roundProps!.note).toBe("");
+  });
+});
+
+describe("已确定个人卡的更正", () => {
+  type Access = { canRequest: boolean; canApply: boolean; closedReason: string | null };
+  const requester: Access = { canRequest: true, canApply: false, closedReason: null };
+  const decider: Access = { canRequest: false, canApply: true, closedReason: null };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const fixes = () => ui.controls!.corrections!;
+  const item = { id: "fix-1", missionId: "mission", field: "outcome", status: "pending", stale: false } as Correction;
+  function confirmed(access: Access, round: Partial<typeof personalPayload.round> = {}) {
+    const view = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, phase: "confirmed", approver: access.canApply, ...round }, card: { ...personalPayload.card, shown: "confirmed" }, correctionAccess: access } } as unknown as Card;
+    ui.state[0] = view;
+    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [view] } });
+    return render();
+  }
+  it.each([
+    ["非拍板人申请", requester, "更正申请已提交，等刘明华处理；正文先不变。"],
+    ["拍板人直接更正", decider, "已更正，改前改后都已留痕。"],
+  ] as const)("%s：草稿预填当前文字，原因必填，body 带版本与字段，成功后关闭并重新加载个人卡", async (_who, access, notice) => {
+    ui.post.mockResolvedValue({ response: { ok: true, status: 200 }, data: { correction: item } });
+    confirmed(access); fixes().onOpen(mission, "outcome"); render();
+    expect(fixes().draft).toMatchObject({ missionId: "mission", field: "outcome", sourceVersion: 1, text: "形成可核验结果", reason: "" });
+    expect(fixes().draft!.clientId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    fixes().onSubmit(); await settle();
+    expect(ui.post).not.toHaveBeenCalled();
+    fixes().onEdit({ text: "与团队完成共同核验" }); fixes().onEdit({ reason: " 客户要求调整口径 " }); render();
+    const clientId = fixes().draft!.clientId;
+    fixes().onSubmit(); await settle();
+    const html = render();
+    expect(ui.post).toHaveBeenCalledExactlyOnceWith("/api/mission-cards/{cardId}/corrections", { params: { path: { cardId: "card" } }, body: { clientId, missionId: "mission", field: "outcome", proposed: "与团队完成共同核验", reason: "客户要求调整口径", sourceVersion: 1 } });
+    expect(fixes().draft).toBeNull();
+    expect(ui.get).toHaveBeenCalledWith("/api/mission-cards/{cardId}", { params: { path: { cardId: "card" } } });
+    expect(html).toContain(notice);
+  });
+  it("失败保留草稿并原样显示服务端原因与 fieldErrors；原样重试复用 clientId，改过再提交换新", async () => {
+    confirmed(requester); fixes().onOpen(mission, "outcome"); render(); fixes().onEdit({ reason: "客户要求调整口径" }); render();
+    ui.post.mockResolvedValueOnce({ response: { ok: false, status: 400 }, error: { code: "INVALID_INPUT", message: "输入校验失败", fieldErrors: { proposed: "must NOT have more than 4000 characters" } } });
+    fixes().onSubmit(); await settle(); render();
+    expect(fixes().draft).toMatchObject({ text: "形成可核验结果", reason: "客户要求调整口径" });
+    expect(fixes().draftError).toBe("输入校验失败；proposed：must NOT have more than 4000 characters");
+    const first = ui.post.mock.calls[0][1].body.clientId;
+    ui.post.mockResolvedValueOnce({ response: { ok: false, status: 409 }, error: { code: "SOURCE_VERSION_CONFLICT", message: "页面版本已变化，请刷新后重新提交" } });
+    fixes().onSubmit(); await settle(); render();
+    expect(ui.post.mock.calls[1][1].body.clientId).toBe(first);
+    expect(fixes().draftError).toBe("页面版本已变化，请刷新后重新提交");
+    fixes().onEdit({ text: "改过的新结果" }); render();
+    ui.post.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    fixes().onSubmit(); await settle(); render();
+    expect(ui.post.mock.calls[2][1].body.clientId).not.toBe(first);
+    expect(fixes().draft).toMatchObject({ text: "改过的新结果", reason: "客户要求调整口径" });
+    expect(fixes().draftError).toBe("暂时无法连接服务器，请稍后重试；输入已保留。");
+    expect(ui.get).not.toHaveBeenCalled();
+  });
+  it("采纳只带结论；不采纳必须写一句原因；成功后刷新个人卡并让通知同步", async () => {
+    ui.post.mockResolvedValue({ response: { ok: true, status: 200 }, data: { correction: item } });
+    confirmed(decider);
+    fixes().onDecide(item, "reject"); await settle();
+    fixes().onRejecting({ id: "fix-1", note: "  " }); render();
+    fixes().onDecide(item, "reject"); await settle();
+    expect(ui.post).not.toHaveBeenCalled();
+    fixes().onRejecting({ id: "fix-1", note: " 本月先不改 " }); render();
+    fixes().onDecide(item, "reject"); await settle(); render();
+    expect(ui.post).toHaveBeenLastCalledWith("/api/mission-cards/{cardId}/corrections/{correctionId}/decision", { params: { path: { cardId: "card", correctionId: "fix-1" } }, body: { decision: "reject", note: "本月先不改" } });
+    expect(fixes().rejecting).toBeNull();
+    expect(ui.get).toHaveBeenCalled();
+    expect(ui.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "mission-round-changed" }));
+    expect(ui.refresh).toHaveBeenCalled();
+    fixes().onDecide(item, "apply"); await settle();
+    expect(ui.post).toHaveBeenLastCalledWith("/api/mission-cards/{cardId}/corrections/{correctionId}/decision", { params: { path: { cardId: "card", correctionId: "fix-1" } }, body: { decision: "apply" } });
+  });
+  it("处理中重复点击只发一次；失败原因留在这条申请旁，不采纳的原因保留", async () => {
+    let finish!: (value: unknown) => void;
+    ui.post.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    confirmed(decider); fixes().onRejecting({ id: "fix-1", note: "本月先不改" }); render();
+    fixes().onDecide(item, "reject"); fixes().onDecide(item, "reject");
+    expect(ui.post).toHaveBeenCalledOnce();
+    finish({ response: { ok: false, status: 409 }, error: { code: "CORRECTION_DECIDED", message: "这条更正已经处理过" } });
+    await settle(); render();
+    expect(fixes().decisionError).toEqual({ correctionId: "fix-1", message: "这条更正已经处理过" });
+    expect(fixes().rejecting).toEqual({ id: "fix-1", note: "本月先不改" });
+    expect(fixes().busy).toBe(false);
+    expect(ui.dispatch).not.toHaveBeenCalled();
+  });
+  it("深链 ?correction= 在入场焦点之后落到那条更正申请", () => {
+    const frames: (() => void)[] = [], focused: string[] = [];
+    const target = { focus: () => focused.push("correction"), scrollIntoView: vi.fn() };
+    const getElementById = vi.fn().mockReturnValue(target);
+    vi.stubGlobal("document", { getElementById });
+    vi.stubGlobal("window", { location: { search: "?correction=fix-1" }, matchMedia: () => ({ matches: false }), requestAnimationFrame: (callback: () => void) => frames.push(callback), cancelAnimationFrame: vi.fn() });
+    confirmed(decider); ui.effects[0]();
+    frames.push(() => focused.push("close"));
+    frames.splice(0).forEach((callback) => callback());
+    frames.splice(0).forEach((callback) => callback());
+    expect(focused).toEqual(["close", "correction"]);
+    expect(getElementById).toHaveBeenCalledWith("correction-fix-1");
+    expect(target.scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
+  });
+  it("已确定后从第一条开始：第一条在别的卡就带 ?correction= 打开，在本卡就直接聚焦", () => {
+    const row = personalPayload.round.cards[0];
+    confirmed(decider, { cards: [{ ...row, pendingCorrections: 0 }, { ...row, cardId: "other-card", pendingCorrections: 2, firstPendingCorrectionId: "fix-9" }] });
+    ui.roundProps!.onStartProcessing!();
+    expect(ui.navigate).toHaveBeenCalledExactlyOnceWith("/me/mission-cards/other-card?correction=fix-9");
+    const target = { focus: vi.fn(), scrollIntoView: vi.fn() };
+    vi.stubGlobal("document", { getElementById: (id: string) => id === "correction-fix-1" ? target : null });
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: true }) });
+    confirmed(decider, { cards: [{ ...row, pendingCorrections: 1, firstPendingCorrectionId: "fix-1" }] });
+    ui.roundProps!.onStartProcessing!();
+    expect(target.focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(target.scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "instant" });
+    expect(ui.navigate).toHaveBeenCalledOnce();
   });
 });

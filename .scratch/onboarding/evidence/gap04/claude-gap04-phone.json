@@ -1,0 +1,50 @@
+[
+  {
+    "step": "phone-dri",
+    "order": {
+      "notices": 78,
+      "tasks": 532,
+      "myCards": 750,
+      "battlefield": 882,
+      "radar": null,
+      "account": 1144,
+      "menus": 2,
+      "headingBox": {
+        "w": 53,
+        "h": 25
+      }
+    },
+    "overflow": false,
+    "shot": "claude-gap04-phone-dri-390.png",
+    "errors": []
+  },
+  {
+    "step": "desktop-dri",
+    "overflow": false,
+    "shot": "claude-gap04-desktop-dri-1440.png"
+  },
+  {
+    "step": "phone-member",
+    "order": {
+      "notices": 78,
+      "tasks": 127,
+      "myCards": 689,
+      "battlefield": 863,
+      "radar": null,
+      "account": 1320,
+      "menus": 2,
+      "headingBox": {
+        "w": 53,
+        "h": 25
+      }
+    },
+    "overflow": false,
+    "shot": "claude-gap04-phone-member-390.png",
+    "errors": []
+  },
+  {
+    "step": "desktop-member",
+    "overflow": false,
+    "shot": "claude-gap04-desktop-member-1440.png"
+  }
+]

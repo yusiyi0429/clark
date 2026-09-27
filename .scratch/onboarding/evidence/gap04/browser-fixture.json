@@ -1,0 +1,19 @@
+{
+  "fixtureId": "2bdad72b-9bed-4c8d-b954-151dba4188d4",
+  "ready": false,
+  "port": 4500,
+  "webPort": 3500,
+  "pid": 65744,
+  "database": "warmap_test_b06eb044270d",
+  "fixtureDirectory": "C:\\Users\\10021\\AppData\\Local\\Temp\\warmap-gap04-browser-09BJaT",
+  "now": "2026-11-01T02:00:00.000Z",
+  "planStage": "issued",
+  "planSigned": true,
+  "rounds": 0,
+  "memberId": "sun-mingze",
+  "driId": "browser-dri",
+  "noCardId": "browser-no-card",
+  "emptyId": "browser-empty",
+  "planId": "d0ef6ece-88a6-431e-99f6-9cf5f4399e23",
+  "closed": true
+}

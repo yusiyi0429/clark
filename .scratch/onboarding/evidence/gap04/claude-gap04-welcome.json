@@ -1,0 +1,25 @@
+[
+  {
+    "step": "welcome-top",
+    "stage": {
+      "scrollHeight": 881,
+      "clientHeight": 324,
+      "mask": "linear-gradient(rgba(0, 0, 0, 0), rgb(0, 0, 0) 20px, rgb(0, 0, 0) calc(100% - 20px), rgba(0, 0, 0, 0))",
+      "paddingTop": "20px",
+      "marginTop": "4px",
+      "marginBottom": "-20px"
+    },
+    "heading": 168,
+    "primary": 512,
+    "shot": "claude-gap04-welcome-top-1280x640.png"
+  },
+  {
+    "step": "welcome-scrolled",
+    "shot": "claude-gap04-welcome-scrolled-1280x640.png"
+  },
+  {
+    "step": "welcome-bottom",
+    "shot": "claude-gap04-welcome-bottom-1280x640.png",
+    "errors": []
+  }
+]

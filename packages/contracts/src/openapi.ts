@@ -34,6 +34,7 @@ import {
   MissionCardFeedbackView, PersonalMissionCardMission, PersonalMissionCardPayload,
   CreateMissionCardFeedbackRequest, CreateMissionCardFeedbackResponse, MissionCardGroupView,
   MarkMissionCardReadRequest, MarkMissionCardReadResponse,
+  MissionCardCorrectionView, MissionCardCorrectionAccess, CreateMissionCardCorrectionRequest, DecideMissionCardCorrectionRequest, MissionCardCorrectionResponse,
   CapabilitySupportRef,
   CapabilityManagementResponse,
   CreateCeoIssueRequest,
@@ -360,6 +361,22 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/CreateMissionCardFeedbackRequest" }),
           responses: { "200": { description: "公开意见", content: { "application/json": { schema: { $ref: "#/components/schemas/CreateMissionCardFeedbackResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/mission-cards/{cardId}/corrections": {
+        post: {
+          operationId: "createPersonalMissionCardCorrection", summary: "已确定的本月个人卡：非拍板人申请更正，拍板人直接更正并写回；按 clientId 幂等",
+          parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreateMissionCardCorrectionRequest" }),
+          responses: { "200": { description: "更正记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MissionCardCorrectionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/mission-cards/{cardId}/corrections/{correctionId}/decision": {
+        post: {
+          operationId: "decidePersonalMissionCardCorrection", summary: "拍板人采纳（写回、版本 +1）或不采纳（须写原因）一条更正申请",
+          parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }, { name: "correctionId", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/DecideMissionCardCorrectionRequest" }),
+          responses: { "200": { description: "处理后的更正记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MissionCardCorrectionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/mission-cards/{cardId}/group": {
@@ -1437,6 +1454,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MissionCardGroupView: MissionCardGroupView as JsonSchema,
         MarkMissionCardReadRequest: MarkMissionCardReadRequest as JsonSchema,
         MarkMissionCardReadResponse: MarkMissionCardReadResponse as JsonSchema,
+        MissionCardCorrectionView: MissionCardCorrectionView as JsonSchema,
+        MissionCardCorrectionAccess: MissionCardCorrectionAccess as JsonSchema,
+        CreateMissionCardCorrectionRequest: CreateMissionCardCorrectionRequest as JsonSchema,
+        DecideMissionCardCorrectionRequest: DecideMissionCardCorrectionRequest as JsonSchema,
+        MissionCardCorrectionResponse: MissionCardCorrectionResponse as JsonSchema,
         CapabilitySupportRef: CapabilitySupportRef as JsonSchema,
         CapabilityManagementResponse: CapabilityManagementResponse as JsonSchema,
         CreateCeoIssueRequest: CreateCeoIssueRequest as JsonSchema,

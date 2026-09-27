@@ -14,7 +14,7 @@ import { RoundLine } from "./RoundLine";
 
 const action = { actionId: "decide-token", actionType: "mission-round.decide", label: "处理意见" };
 const feedback = { id: "feedback-1", seq: 1, missionId: "mission", field: "outcome", kind: "suggestion", authorId: "owner", authorName: "白田田", body: "让结果可核验", quote: null, proposed: "与团队完成共同核验", original: "形成可核验结果", sourceVersion: 1, basis: "draft", late: false, round: 1, createdAt: "2026-10-02T02:00:00.000Z", verdict: { text: "待拍板人处理", tone: "wait" }, decision: null, actions: [action], acceptBlockedReason: null } as unknown as TPersonalMissionCardPayload["feedback"][number];
-const payload = { ...personalPayload, round: { ...personalPayload.round, phase: "reviewing", counts: { cards: 5, feedback: 3, pending: 1, conflicts: 1, dependencies: 7, late: 1 }, cards: [{ ...personalPayload.round.cards[0], pending: 1, firstPendingFeedbackId: "feedback-1" }] }, feedback: [feedback] } as TPersonalMissionCardPayload;
+const payload = { ...personalPayload, round: { ...personalPayload.round, phase: "reviewing", counts: { cards: 5, feedback: 3, pending: 1, conflicts: 1, dependencies: 7, late: 1, corrections: 0 }, cards: [{ ...personalPayload.round.cards[0], pending: 1, firstPendingFeedbackId: "feedback-1" }] }, feedback: [feedback] } as TPersonalMissionCardPayload;
 const controls = { onQuote: vi.fn(), onPropose: vi.fn(), onSelect: vi.fn(), onDecide: vi.fn(), pending: false };
 const props = { payload, actions: [{ actionId: "reopen", actionType: "mission-round.reopen", label: "重新开启" }], viewerId: "ceo", pending: false, onAction: vi.fn(), onSelectCard: vi.fn(), onViewGoals: vi.fn(), onStartProcessing: vi.fn(), note: "", onNoteChange: vi.fn() };
 beforeEach(() => { ui.buttons.clear(); vi.clearAllMocks(); });

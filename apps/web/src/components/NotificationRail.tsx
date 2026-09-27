@@ -56,6 +56,7 @@ function missionRoundMeta(payload: TMissionRoundSummary | TMissionRoundDraftPayl
     return minutes ? `讨论中 · ${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分` : "已截止 · 汇总中";
   }
   if (payload.phase === "reviewing") return payload.counts.pending ? `${payload.counts.pending} 条待你处理` : "意见已全部处理，待你确认";
+  if (payload.phase === "confirmed") return payload.todo ?? "已确定";
   return "已截止 · 汇总中";
 }
 
@@ -86,7 +87,8 @@ export function railGroups(cards: Card[], now: Date = new Date()): RailGroup[] {
   const missionRounds = cards.flatMap<RailItem>((card) => {
     if (card.kind !== "mission-round") return [];
     const payload = payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(card);
-    if ("phase" in payload && payload.phase === "confirmed") return [];
+    // 确认后退出；拍板人还有更正申请待处理时服务端才会把它放回来，待办写在 todo（GAP-04）。
+    if ("phase" in payload && payload.phase === "confirmed" && !payload.todo) return [];
     const firstCard = "cards" in payload ? payload.cards[0] : null;
     return [{ id: card.id, title: card.title, meta: missionRoundMeta(payload), tone: "amber", href: firstCard ? `/mission-cards/${firstCard.cardId}` : "/", missionRound: card }];
   });
@@ -223,8 +225,8 @@ export function NotificationRail({
   // 同成员工作台同步其他拍板人的变更；倒计时本身由分组与卡页共享分钟时钟。
   const needsRoundRefresh = cards.some((card) => {
     if (card.kind !== "mission-round") return false;
-    const phase = payloadOf<TMissionRoundSummary>(card).phase;
-    return phase !== "confirmed";
+    const payload = payloadOf<TMissionRoundSummary>(card);
+    return payload.phase !== "confirmed" || Boolean(payload.todo);
   });
   useEffect(() => {
     if (!needsRoundRefresh) return;

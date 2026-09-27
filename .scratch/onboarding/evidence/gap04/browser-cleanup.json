@@ -1,0 +1,11 @@
+{
+  "id": "19f58c55-e045-448c-a0a6-4bedfb4bb1d7",
+  "fixtureId": "2bdad72b-9bed-4c8d-b954-151dba4188d4",
+  "command": "close",
+  "ok": true,
+  "result": {
+    "closed": true,
+    "database": "warmap_test_b06eb044270d",
+    "fixtureDirectory": "C:\\Users\\10021\\AppData\\Local\\Temp\\warmap-gap04-browser-09BJaT"
+  }
+}

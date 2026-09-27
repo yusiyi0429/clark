@@ -70,7 +70,7 @@ describe("本月 Mission Card 的 CEO 通知入口", () => {
     roundId: "round-01", period: "2026-10", battlefieldId: "01", battlefieldName: "灯塔项目", version: 1,
     phase: "draft", round: 1, openedAt: null, closesAt: null, reviewAt: null, serverNow: "2026-10-01T02:00:00.000Z",
     approver: true, deciderName: "刘明华", todo: null, placeholder: true, goals: null,
-    counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 0, late: 0 }, cards: [],
+    counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 0, late: 0, corrections: 0 }, cards: [],
   };
   const summaryCard = (overrides: Partial<TMissionRoundSummary> = {}) => card("mission-round", "round-01", "10 月 Mission Card · 灯塔项目", { ...round, ...overrides });
 
@@ -100,5 +100,15 @@ describe("本月 Mission Card 的 CEO 通知入口", () => {
   it("越过服务端截止时刻时不显示负数，确认后退出通知栏", () => {
     expect(railGroups([summaryCard({ phase: "open", closesAt: round.serverNow })])[0].items[0].meta).toBe("已截止 · 汇总中");
     expect(railGroups([summaryCard({ phase: "confirmed" })])).toEqual([]);
+  });
+
+  it("已确定后，拍板人有更正申请待处理时这一轮回到通知栏（GAP-04）", () => {
+    const row = { cardId: "card-01", ownerId: "sun", ownerName: "孙铭泽", roleLabel: null, missionCount: 2, line: "2 条更正申请", pending: 0,
+      firstPendingFeedbackId: null, pendingCorrections: 2, firstPendingCorrectionId: "correction-01", mine: false };
+    const corrections = summaryCard({ phase: "confirmed", todo: "2 条更正申请待你处理", counts: { ...round.counts, corrections: 2 }, cards: [row] });
+    expect(railGroups([corrections])[0].items[0]).toMatchObject({ meta: "2 条更正申请待你处理", missionRound: corrections });
+    const html = renderToStaticMarkup(<NotificationRail cards={[corrections]} onNavigate={() => undefined} onCard={() => undefined} />);
+    expect(html).toContain('aria-label="2 条更正申请待你处理"');
+    expect(html).toContain('data-origin="/mission-cards/card-01?correction=correction-01"');
   });
 });

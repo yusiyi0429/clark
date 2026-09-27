@@ -1,0 +1,23 @@
+[
+  {
+    "step": "closed-member",
+    "readonly": 1,
+    "requestButtons": 0,
+    "unhandled": 1,
+    "status": "本轮已确定 · 验收 CEO 10/3 10:00 · 更正 2 处",
+    "shot": "claude-gap04-closed-member-1440.png",
+    "errors": []
+  },
+  {
+    "step": "closed-dri-home",
+    "todo": 0,
+    "shot": "claude-gap04-closed-dri-390.png",
+    "errors": []
+  },
+  {
+    "step": "closed-dri-card",
+    "directButtons": 0,
+    "applyButtons": 0,
+    "status": "本轮已确定 · 验收 CEO 10/3 10:00 · 更正 2 处"
+  }
+]
