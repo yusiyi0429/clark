@@ -414,6 +414,8 @@
   white-space: nowrap;
 }
 
+/* 成员工作台外壳给所有 h2 设了标题字号（.shell h2），这里要比它更具体，页头保持 15px。 */
+.header .headerTitle { font-size: 15px; }
 .header[data-kind='group'] .headerTitle { color: #4f4334; }
 /* 群聊：左边群名（长了省略），右边成员头像；不居中，免得长群名把成员入口挤出去。 */
 .header[data-kind='group'] { justify-content: space-between; gap: 12px; }
