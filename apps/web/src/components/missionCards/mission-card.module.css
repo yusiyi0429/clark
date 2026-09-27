@@ -49,7 +49,7 @@
 .proposal textarea:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
 .hint { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.75; }
 .proposalError { margin: 0; color: var(--onboarding-error); font-size: 14px; line-height: 1.75; }
-.inlineActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.inlineActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .primary.primary { min-height: 44px; padding: 8px 20px; border-radius: var(--onboarding-pill-radius); background: var(--onboarding-blue); color: var(--solid-fg); font-size: 17px; font-weight: 600; }
 .secondary.secondary { min-height: 44px; padding: 8px 16px; border-radius: var(--onboarding-control-radius); font-size: 14px; color: var(--ink-muted); }
 .remarks { display: grid; gap: 12px; margin-top: 12px; }
