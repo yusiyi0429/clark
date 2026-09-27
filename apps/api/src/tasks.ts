@@ -206,7 +206,8 @@ export async function deleteMyTask(pool: Pool, ownerId: string, taskId: string, 
     await client.query("COMMIT"); return { deleted:true };
   } catch(e) { await client.query("ROLLBACK").catch(()=>undefined); throw e; } finally { client.release(); }
 }
-export async function getTaskDetail(q: Query, taskId: string, viewerId: string, names: Map<string,string>, now: Date): Promise<TTaskDetailResponse | null> {
+/** invitable：可以被邀请协作的人。CEO 工作台还打不开执行事项，先不在名单里（用户 2026-09-27）。 */
+export async function getTaskDetail(q: Query, taskId: string, viewerId: string, names: Map<string,string>, now: Date, invitable: Set<string>): Promise<TTaskDetailResponse | null> {
   if (!await canReadTask(q,taskId,viewerId)) return null;
   const row = (await getTaskRow(q,taskId))!;
   const owner = row.owner_id === viewerId;
@@ -216,7 +217,7 @@ export async function getTaskDetail(q: Query, taskId: string, viewerId: string, 
     JOIN battlefield_config b ON b.id=r.battlefield_id WHERE c.owner_id=$1 AND r.status='confirmed' AND r.period >= $2 ORDER BY r.period,m.code,m.id`,
   [viewerId,companyPeriod(now)])).rows : [];
   const excluded = new Set([row.owner_id,...row.collaborators]);
-  const collaboratorOptions = owner ? [...names].filter(([id])=>!excluded.has(id)).map(([id])=>person(id,names)) : [];
+  const collaboratorOptions = owner ? [...names].filter(([id])=>!excluded.has(id) && invitable.has(id)).map(([id])=>person(id,names)) : [];
   return { task:projectTask(row,names),judgment:row.judgment,judgmentAt:row.judgment_at?.toISOString() ?? null,
     myNote:note?.note ?? null,myNoteAt:note?.updated_at.toISOString() ?? null,role:owner?"owner":"collaborator",missionOptions,collaboratorOptions };
 }
@@ -229,14 +230,14 @@ export async function putMyTaskNote(pool: Pool, viewerId: string, taskId: string
     ON CONFLICT(task_id,person_id) DO UPDATE SET note=EXCLUDED.note,updated_at=now()`,[taskId,viewerId,note]);
   return { myNote:note };
 }
-export async function addTaskCollaborators(pool: Pool, ownerId: string, taskId: string, names: Map<string,string>, input: TAddTaskCollaboratorsRequest): Promise<TaskResult> {
+export async function addTaskCollaborators(pool: Pool, ownerId: string, taskId: string, names: Map<string,string>, input: TAddTaskCollaboratorsRequest, invitable: Set<string>): Promise<TaskResult> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const row = await lockedOwnerTask(client,ownerId,taskId);
     if (!row) { await client.query("ROLLBACK"); return { notFound:true }; }
     const ids = [...new Set(input.personIds)].filter((id)=>id !== ownerId && !row.collaborators.includes(id));
-    if (ids.some((id)=>!names.has(id))) { await client.query("ROLLBACK"); return error(400,"COLLABORATOR_NOT_AVAILABLE","协作者不在公司人员名单中"); }
+    if (ids.some((id)=>!names.has(id) || !invitable.has(id))) { await client.query("ROLLBACK"); return error(400,"COLLABORATOR_NOT_AVAILABLE","这位同事暂时不能邀请协作"); }
     if (row.collaborators.length+ids.length>10) { await client.query("ROLLBACK"); return error(400,"COLLABORATOR_LIMIT","一件事项最多 10 位协作者"); }
     for (const id of ids) {
       await client.query(`INSERT INTO task_members(task_id,person_id,role,added_by) VALUES($1,$2,'collaborator',$3)

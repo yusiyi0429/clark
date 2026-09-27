@@ -6,6 +6,7 @@ import { addTaskCollaborators, createMyTask, deleteMyTask, getTaskDetail, listMy
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
 import { companyPeriod } from "../monthlyPlans.js";
 import { personDisplayNames } from "../people.js";
+import { roleOf } from "../memberAccess.js";
 import { deleteVoiceprint, enrollVoiceprint, MAX_VOICEPRINT_UPLOAD_BYTES, voiceprintStatus } from "../voiceprints.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 import { readMemberWork } from "../memberWork.js";
@@ -17,6 +18,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   const { pool, q, fail, requirePerson, companyMemory, voiceprints, materialMultipartLimitError } = ctx;
 
   const names = () => personDisplayNames(companyMemory);
+  const invitable = () => new Set(companyMemory.searchPeople(undefined).filter((person) => roleOf(person) === "member").map((person) => person.personId));
   const respondTask = (reply: FastifyReply, result: TaskResult): TTaskView | FastifyReply => {
     if ("notFound" in result) return fail(reply, 404, "TASK_NOT_FOUND", "执行事项不存在");
     if ("conflict" in result) return fail(reply, 409, "VERSION_CONFLICT", "执行事项已被修改，请基于最新内容重试", { latestTask: result.conflict });
@@ -51,7 +53,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   );
 
   app.get("/api/me/tasks/:id", { preHandler: requirePerson, schema: { params: idParams, response: { 200: TaskDetailResponse } } }, async (req, reply) =>
-    await getTaskDetail(q, req.params.id, req.person!.personId, names(), ctx.now()) ?? fail(reply, 404, "TASK_NOT_FOUND", "执行事项不存在"));
+    await getTaskDetail(q, req.params.id, req.person!.personId, names(), ctx.now(), invitable()) ?? fail(reply, 404, "TASK_NOT_FOUND", "执行事项不存在"));
   app.post("/api/me/tasks", { preHandler: requirePerson, schema: { body: CreateMyTaskRequest } }, async (req, reply) =>
     respondTask(reply, await createMyTask(pool, req.person!.personId, names(), req.body, ctx.now())));
   app.delete("/api/me/tasks/:id", { preHandler: requirePerson, schema: { params: idParams,
@@ -65,7 +67,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   });
   app.post("/api/me/tasks/:id/collaborators", { preHandler: requirePerson,
     schema: { params: idParams, body: AddTaskCollaboratorsRequest } }, async (req, reply) =>
-    respondTask(reply, await addTaskCollaborators(pool, req.person!.personId, req.params.id, names(), req.body)));
+    respondTask(reply, await addTaskCollaborators(pool, req.person!.personId, req.params.id, names(), req.body, invitable())));
   const planQuery = Type.Object({ period: Type.Optional(Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" })) }, { additionalProperties: false });
   app.get("/api/me/plan", { preHandler: requirePerson, schema: { querystring: planQuery, response: { 200: MonthPlanResponse } } }, async (req) =>
     readMonthPlan(q, req.person!.personId, req.query.period ?? companyPeriod(ctx.now()), names(), ctx.now()));

@@ -37,27 +37,30 @@ describe("执行事项",()=>{
     } finally { await f.t.close(); }
   });
 
-  it("邀请同步群组、通知、私有批注与 task 对话权限",async()=>{
+  it("邀请同步群组、通知、私有批注与 task 对话权限；CEO 不在邀请名单里",async()=>{
     const f=await executionFixture();
     try {
       const task=(await call(f,f.member,"POST","/api/me/tasks",newTask(null))).json();
       const id=task.id as string;
-      expect((await call(f,f.ceo,"GET",`/api/me/tasks/${id}`)).statusCode).toBe(404);
-      expect((await call(f,f.ceo,"GET",`/api/conversations/task:${id}/messages`)).statusCode).toBe(404);
+      expect((await call(f,f.third,"GET",`/api/me/tasks/${id}`)).statusCode).toBe(404);
+      expect((await call(f,f.third,"GET",`/api/conversations/task:${id}/messages`)).statusCode).toBe(404);
       expect((await call(f,f.member,"GET",`/api/threads/task/${id}`)).json().unread).toBe(0);
-      const invited=await call(f,f.member,"POST",`/api/me/tasks/${id}/collaborators`,{personIds:["person-fixture-001"]});
+      // CEO 工作台还打不开执行事项：不在可邀请名单里，直接邀请也会被拒。
+      expect((await call(f,f.member,"GET",`/api/me/tasks/${id}`)).json().collaboratorOptions.map((person:{personId:string})=>person.personId)).toEqual(["person-fixture-003"]);
+      expect((await call(f,f.member,"POST",`/api/me/tasks/${id}/collaborators`,{personIds:["person-fixture-001"]})).json().code).toBe("COLLABORATOR_NOT_AVAILABLE");
+      const invited=await call(f,f.member,"POST",`/api/me/tasks/${id}/collaborators`,{personIds:["person-fixture-003"]});
       expect(invited.json().collaborators).toHaveLength(1);
-      expect((await call(f,f.ceo,"GET",`/api/threads/task/${id}`)).json().members).toHaveLength(2);
-      expect((await call(f,f.ceo,"GET","/api/me/notifications")).json().notifications[0].text).toContain("邀请你协作");
-      expect((await call(f,f.ceo,"GET",`/api/me/tasks/${id}`)).json().role).toBe("collaborator");
-      expect((await call(f,f.ceo,"PUT",`/api/me/tasks/${id}/note`,{note:"我的提醒"})).json().myNote).toBe("我的提醒");
+      expect((await call(f,f.third,"GET",`/api/threads/task/${id}`)).json().members).toHaveLength(2);
+      expect((await call(f,f.third,"GET","/api/me/notifications")).json().notifications[0].text).toContain("邀请你协作");
+      expect((await call(f,f.third,"GET",`/api/me/tasks/${id}`)).json().role).toBe("collaborator");
+      expect((await call(f,f.third,"PUT",`/api/me/tasks/${id}/note`,{note:"我的提醒"})).json().myNote).toBe("我的提醒");
       expect((await call(f,f.member,"GET",`/api/me/tasks/${id}`)).json().myNote).toBeNull();
-      expect((await call(f,f.ceo,"GET",`/api/me/tasks/${id}`)).json()).toMatchObject({myNote:"我的提醒",myNoteAt:expect.any(String)});
+      expect((await call(f,f.third,"GET",`/api/me/tasks/${id}`)).json()).toMatchObject({myNote:"我的提醒",myNoteAt:expect.any(String)});
       expect((await call(f,f.member,"PUT",`/api/me/tasks/${id}/note`,{note:"不应成功"})).statusCode).toBe(404);
-      expect((await call(f,f.ceo,"GET",`/api/conversations/task:${id}/messages`)).statusCode).toBe(200);
+      expect((await call(f,f.third,"GET",`/api/conversations/task:${id}/messages`)).statusCode).toBe(200);
       expect((await call(f,f.member,"GET",`/api/conversations/task:${id}/messages`)).statusCode).toBe(200);
       const outsider=randomUUID();
-      expect((await call(f,f.ceo,"GET",`/api/conversations/task:${outsider}/messages`)).statusCode).toBe(404);
+      expect((await call(f,f.third,"GET",`/api/conversations/task:${outsider}/messages`)).statusCode).toBe(404);
     } finally { await f.t.close(); }
   });
 

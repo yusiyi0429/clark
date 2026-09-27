@@ -118,6 +118,7 @@ ALTER TABLE notifications ADD CONSTRAINT notifications_kind_check
 - **退回** `POST /api/me/tasks/:id/return`：只适用于 source 为 `meeting` 的，其余返回 409。
 - **批注** `PUT /api/me/tasks/:id/note`：只有非推进的成员能写；传 null 表示删除。
 - **邀请协作** `POST /api/me/tasks/:id/collaborators`
+  - 可邀请的只有成员：CEO 工作台还打不开执行事项，先不在名单里，直接邀请也返回 400（用户 2026-09-27 定；CEO 和执行事项的关系放到「CEO 指派」一起做）。
   - 推进人把人员名单里的人加为协作者，写入 `task_members` 和 `thread_members`，并给每人发 `task_collaborator_added` 通知。
   - 已是成员的忽略；最多 10 人。
   - 协作不转移推进责任。

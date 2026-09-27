@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { hashSecret } from "../src/session.js";
 import { createTestApp, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
+
+/** 三人名单：测试甲是 CEO，乙是卡的主人，丙是可以被邀请协作的同事。 */
+const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
+const THIRD = { personId: "person-fixture-003", loginId: "ceshib", passcode: "3579" } as const;
 
 export async function executionFixture(status:"confirmed"|"open"="confirmed",period="2026-10") {
   let now=new Date("2026-10-10T02:00:00.000Z");
-  const t=await createTestApp({},undefined,{monthlyNow:()=>now});
+  const t=await createTestApp({companyPeopleSeed:PEOPLE_SEED},undefined,{monthlyNow:()=>now});
   const plan=randomUUID(),round=randomUUID(),card=randomUUID();
   await t.sql("UPDATE battlefield_config SET owner_id=$1,six_month_outcome='半年目标' WHERE id='growth'",[TEST_CEO.personId]);
   await t.sql(`INSERT INTO monthly_plans(id,version,period,status,company_outcome,battlefields,todos,negotiation,generation,confirmed_at)
@@ -21,7 +27,11 @@ export async function executionFixture(status:"confirmed"|"open"="confirmed",per
       VALUES($1,1,$2,$3,$4,$5,'method','["growth"]','目标','["10/12 交付","2026-10-20 复盘","待定"]',
       'fixture://execution','fixture',1,'fixture',$6)`,[id,code,period,title,TEST_MEMBER.personId,card]);
   const member=await t.memberCookie(),ceo=await t.loginCookie();
-  return {t,card,round,member,ceo,setNow:(value:Date)=>{now=value;}};
+  await t.sql("INSERT INTO member_access (person_id, login_id, passcode_hash, must_change) VALUES ($1, $2, $3, FALSE)",
+    [THIRD.personId,THIRD.loginId,hashSecret(THIRD.passcode)]);
+  const login=await t.app.inject({method:"POST",url:"/api/auth/login",headers:{origin:t.publicOrigin},payload:{loginId:THIRD.loginId,passcode:THIRD.passcode}});
+  const third=(login.headers["set-cookie"] as string).split(";")[0];
+  return {t,card,round,member,ceo,third,setNow:(value:Date)=>{now=value;}};
 }
 export type Fixture=Awaited<ReturnType<typeof executionFixture>>;
 export function call(f:Fixture,cookie:string,method:"GET"|"POST"|"PATCH"|"PUT"|"DELETE",url:string,payload?:unknown) {
