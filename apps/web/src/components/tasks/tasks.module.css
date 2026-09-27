@@ -1,0 +1,30 @@
+.tasks{display:grid;gap:12px;min-width:0}
+.taskToolbar{display:flex;align-items:center;justify-content:space-between;min-height:30px;gap:12px;color:var(--ts-text-muted,#6b7482);font-size:12px}
+.taskToolbar button{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.taskGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;min-width:0}
+.taskCard{display:flex;flex-direction:column;align-items:stretch;gap:12px;min-width:0;min-height:160px;box-sizing:border-box;padding:20px 22px;border:1px solid #fff9;border-radius:26px;background:linear-gradient(145deg,#ffffffdc,#f1f5fbd9);box-shadow:inset 0 1px #fff,0 12px 30px #2036540a;backdrop-filter:blur(24px);cursor:pointer}
+.taskCard[data-waiting=true]{opacity:.7}
+.taskCard h3{min-width:0;margin:0}
+.taskTop{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:28px;color:var(--ts-text-muted,#6b7482);font-size:12px}
+.taskTitle{display:flex;align-items:baseline;justify-content:flex-start;gap:4px;width:100%;height:auto;min-height:0;padding:0;white-space:normal;text-align:left;color:var(--ts-text,#1f2a3d);font-size:17px;font-weight:600;line-height:1.6}
+.taskTitle>span{flex:1;min-width:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.taskTitle svg,.taskMission svg{flex:none}
+.taskMission{display:flex;align-items:baseline;justify-content:flex-start;gap:5px;width:100%;height:auto;min-height:0;padding:0;white-space:normal;text-align:left;color:var(--ts-text-muted,#6b7482);font-size:12px}
+.taskMission>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.assignment,.dates,.connections,.waiting,.returned{margin:0;color:var(--ts-text-muted,#6b7482);font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.waiting{color:#547192}
+.returned{color:#8a5a1f}
+.taskActions{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto}
+.taskActions button{min-height:30px;height:auto;padding:5px 9px;border-radius:9px;background:#e9edf3a8;color:#334d70;font-size:12px}
+.taskActions button[aria-pressed=true]{background:#dbe7f8;color:#1c5fba;font-weight:600}
+.status{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--ts-text,#1f2a3d)}
+.statusDot{width:9px;height:9px;border-radius:50%;background:var(--ts-text-muted,#6b7482);flex:none}
+.status[data-status=done] .statusDot{background:var(--ts-confirmed,#2f7a44)}
+.status[data-status=in_progress] .statusDot{background:var(--ts-action,#3a83f7)}
+.status[data-status=returned] .statusDot{background:var(--ts-judgment,#c9822b)}
+.status[data-status=not_started] .statusDot{background:transparent;box-shadow:inset 0 0 0 1.5px var(--ts-text-muted,#6b7482)}
+.empty{margin:0;color:var(--ts-text-muted,#6b7482);font-size:13px;line-height:1.8}
+.error{margin:0;color:#a44d3e;font-size:12.5px}
+@media(max-width:1250px){.taskGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:690px){.tasks{order:0}.taskGrid{grid-template-columns:minmax(0,1fr);gap:12px}.taskCard{padding:18px 20px}.taskActions button{min-height:36px}}
+@media(prefers-reduced-motion:reduce){.taskCard{scroll-behavior:auto}}

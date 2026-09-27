@@ -383,7 +383,9 @@ export async function runOutcome(
       // 推送后的 todo 记为已确认（effect task:<id>），已有确认效果即阻止替换 Transcript
       for (const item of assessed.items) {
         if (item.kind !== "todo") continue;
-        const taskId = await dispatchMeetingTodo(client, { id: meetingId, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id }, item);
+        const ownerId = item.ownerPersonId ?? meeting.lead_dri_id;
+        const taskId = await dispatchMeetingTodo(client, { id: meetingId, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
+          ownerName: meeting.participants.find((person) => person.personId === ownerId)?.displayName, title: meeting.title }, item);
         if (taskId) item.review = { status: "confirmed", effectRef: `task:${taskId}` };
       }
       const nextStatus = deriveMeetingStatus(meeting.status, assessed.items);
@@ -649,7 +651,9 @@ export async function executeConfirmItem(
       item.review = { status: "confirmed", effectRef };
     } else if (item.kind === "todo") {
       // 撤回后再确认即重新推送；负责人是 CEO 时只记已确认，不建执行事项
-      const taskId = await dispatchMeetingTodo(client, { id: row.id, leadDriId: row.lead_dri_id, ceoId: row.ceo_participant_id }, item);
+      const ownerId = item.ownerPersonId ?? row.lead_dri_id;
+      const taskId = await dispatchMeetingTodo(client, { id: row.id, leadDriId: row.lead_dri_id, ceoId: row.ceo_participant_id,
+        ownerName: row.participants.find((person) => person.personId === ownerId)?.displayName, title: row.title }, item);
       item.review = { status: "confirmed", effectRef: taskId ? `task:${taskId}` : effectRef };
     } else if (item.kind === "ceoJudgment") {
       // CEO 判断只保留在 MeetingOutcome，不直接写 CompanyMemory

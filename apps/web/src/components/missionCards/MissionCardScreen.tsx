@@ -18,6 +18,7 @@ import { RoundLine } from "./RoundLine";
 import { RoundClock } from "./RoundClock";
 import { useRoundNow } from "./useRoundNow";
 import { clearRoundNote, readRoundNote, saveRoundNote } from "./roundNoteDraft";
+import { MonthPlan, useMonthPlan } from "@/components/plan/MonthPlan";
 import s from "./mission-card.module.css";
 
 type Proposal = { missionId: string; field: TMissionCardField; sourceVersion: number; text: string; clientId?: string };
@@ -45,6 +46,8 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const [proposalError, setProposalError] = useState("");
   const [notice, setNotice] = useState("");
   const [goalsOpen, setGoalsOpen] = useState(false);
+  const [planSelected, setPlanSelected] = useState(false);
+  const [planDirty, setPlanDirty] = useState(false);
   const [noteDraft, setNoteDraft] = useState({ roundKey: "", text: "" });
   const [decisionError, setDecisionError] = useState<{ feedbackId: string; message: string } | null>(null);
   const [correction, setCorrection] = useState<CorrectionDraft | null>(null);
@@ -56,6 +59,10 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const refreshInFlight = useRef<Promise<void> | null>(null);
   const actionInFlight = useRef(false);
   const noteViewer = workspace.viewerId ?? card.ownerId;
+  const isOwner = workspace.viewerId !== null && workspace.viewerId === card.ownerId;
+  const onPlanDirtyChange = useCallback((dirty: boolean) => setPlanDirty(dirty), []);
+  const selectPlan = (selected: boolean) => { void (async () => { if (!selected && planDirty && !(await ask("本月计划有未保存的改动，确定离开？", "离开计划"))) return; setPlanSelected(selected); })(); };
+  const leaveCard = () => { void (async () => { if (planDirty && !(await ask("本月计划有未保存的改动，确定离开？", "离开个人卡"))) return; workspace.close(); })(); };
   const roundKey = `${noteViewer}:${round.roundId}:${round.round}`;
   const note = noteDraft.roundKey === roundKey ? noteDraft.text : "";
   const acceptView = useCallback((next: Card) => setView((current) => next.id === current.id && next.version < current.version ? current : next), []);
@@ -107,6 +114,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
     const timer = setInterval(() => void refresh(), 3_000);
     return () => clearInterval(timer);
   }, [effectivePhase, refresh]);
+  const { plan, setPlan, error: planError, loading: planLoading } = useMonthPlan(round.period, isOwner);
   const removeReference = useCallback(() => setReference(null), []);
   const cards = useMemo(() => [view], [view]);
   const group = useMemo(() => ({ cardId: card.cardId, viewerId: workspace.viewerId ?? card.ownerId, members: card.members, phase: effectivePhase, round: round.round, reference, onRemoveReference: removeReference, onRefresh: refresh }), [card.cardId, card.ownerId, workspace.viewerId, card.members, effectivePhase, round.round, reference, removeReference, refresh]);
@@ -192,12 +200,12 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
     finally { actionInFlight.current = false; setPending(false); }
   };
   return <div className={s.screen}>
-    <DetailFrame title={title} subtitle={round.battlefieldName} onBack={workspace.close} actions={<RoundClock round={shownPayload.round} now={now} />}>
+    <DetailFrame title={title} subtitle={round.battlefieldName} onBack={leaveCard} actions={<RoundClock round={shownPayload.round} now={now} />}>
       <div className={s.content}>
         <RoundLine payload={shownPayload} actions={view.actions} viewerId={workspace.viewerId} pending={pending} onAction={(action, input) => void runAction(action, input)} onSelectCard={(id) => workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${id}`)} onViewGoals={() => setGoalsOpen(true)} onStartProcessing={startProcessing} note={note} onNoteChange={(text) => { setNoteDraft({ roundKey, text }); saveRoundNote(noteViewer, round.roundId, round.round, text); }} error={error} />
         {error && !(effectivePhase === "reviewing" && round.approver && !round.counts.pending) ? <p className={s.error} role="alert">{error}</p> : null}
         {notice ? <p className={s.notice} role="status">{notice}</p> : null}
-        <CardDocument payload={shownPayload} controls={{ onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); },
+        <CardDocument payload={shownPayload} ownerPlan={isOwner ? { selected: planSelected, onSelect: selectPlan, plan, error: planError, loading: planLoading, content: plan ? <MonthPlan key={plan.period} plan={plan} onSaved={setPlan} onDirtyChange={onPlanDirtyChange} /> : null } : undefined} controls={{ onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); },
           corrections: { draft: correction, draftError: correctionError, history: correctionHistory, rejecting, decisionError: correctionDecisionError, busy: posting || pending, onOpen: openCorrection, onEdit: (patch) => setCorrection((current) => current && { ...current, ...patch, clientId: crypto.randomUUID() }), onCancel: () => setCorrection(null), onSubmit: () => void sendCorrection(), onHistory: setCorrectionHistory, onRejecting: setRejecting, onDecide: (item, decision) => void decideCorrection(item, decision) },
           proposalEditor: (mission, field) => proposal?.missionId === mission.missionId && proposal.field === field && effectivePhase !== "confirmed" ? <div className={s.proposal}>
           <label htmlFor={`proposal-${mission.missionId}-${field}`}>建议修改：{fieldNames[field]}</label>

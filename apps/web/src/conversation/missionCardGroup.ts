@@ -12,6 +12,7 @@ export type MissionGroupReference = {
   nonce: number;
 };
 export type PersonalMissionGroup = {
+  kind?: "mission-card";
   cardId: string;
   viewerId: string;
   members: { personId: string; displayName: string }[];
@@ -21,6 +22,15 @@ export type PersonalMissionGroup = {
   reference?: MissionGroupReference | null;
   onRemoveReference: () => void;
 };
+
+export type TaskGroup = {
+  kind: "task";
+  taskId: string;
+  viewerId: string;
+  members: { personId: string; displayName: string }[];
+};
+
+export type DetailGroup = PersonalMissionGroup | TaskGroup;
 
 export function groupInputState(phase: MissionGroupPhase) {
   if (phase === "draft") return { writable: false, placeholder: "讨论还没开放" };

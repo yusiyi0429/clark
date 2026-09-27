@@ -10,6 +10,7 @@ import { personalPayload } from "./personalMissionFixture";
 
 const ui = vi.hoisted(() => ({
   state: [] as unknown[], cursor: 0, controls: null as DocumentControls | null,
+  ownerPlan: null as unknown, viewerId: "viewer",
   effects: [] as (() => void | (() => void))[],
   buttons: new Map<string, { onPress?: () => Promise<void> | void; isDisabled?: boolean }>(),
   post: vi.fn(), get: vi.fn(), register: vi.fn(), refresh: vi.fn(), ask: vi.fn(), navigate: vi.fn(), dispatch: vi.fn(),
@@ -25,7 +26,7 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: ui.refresh }) }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: ui.get, POST: ui.post } }));
-vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ close: vi.fn(), navigate: ui.navigate, viewerId: "viewer" }), useRegisterDetail: ui.register }));
+vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ close: vi.fn(), navigate: ui.navigate, viewerId: ui.viewerId }), useRegisterDetail: ui.register }));
 vi.mock("@/components/shell/DetailFrame", () => ({ DetailFrame: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: ui.ask, dialog: null }) }));
 vi.mock("./useRoundNow", () => ({ useRoundNow: (_at: string, now: string) => Date.parse(now) }));
@@ -34,7 +35,7 @@ vi.mock("ts-design/primitives", () => ({ Button: ({ children, onPress, isDisable
 vi.mock("./RoundLine", () => ({ RoundLine: (props: ComponentProps<typeof RoundLine>) => { ui.roundProps = props; return null; } }));
 vi.mock("./CardDocument", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./CardDocument")>();
-  return { ...actual, CardDocument: ({ controls }: { controls: DocumentControls }) => { ui.controls = controls; return <>{controls.proposalEditor?.(personalPayload.card.missions[0], "outcome")}</>; } };
+  return { ...actual, CardDocument: ({ controls, ownerPlan }: { controls: DocumentControls; ownerPlan?: unknown }) => { ui.controls = controls; ui.ownerPlan = ownerPlan; return <>{controls.proposalEditor?.(personalPayload.card.missions[0], "outcome")}</>; } };
 });
 import { MissionCardScreen } from "./MissionCardScreen";
 
@@ -48,10 +49,18 @@ function edit(text: string) {
   render();
 }
 async function submit() { ui.buttons.get("提交修改建议")!.onPress!(); await vi.waitFor(() => expect(ui.post).toHaveBeenCalled()); await new Promise((resolve) => setTimeout(resolve, 0)); return render(); }
-beforeEach(() => { ui.state = []; ui.cursor = 0; ui.controls = null; ui.effects = []; vi.clearAllMocks(); vi.stubGlobal("window", { dispatchEvent: ui.dispatch }); ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [card] } }); ui.ask.mockResolvedValue(true); });
+beforeEach(() => { ui.state = []; ui.cursor = 0; ui.controls = null; ui.ownerPlan = null; ui.viewerId = "viewer"; ui.effects = []; vi.clearAllMocks(); vi.stubGlobal("window", { dispatchEvent: ui.dispatch }); ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [card] } }); ui.ask.mockResolvedValue(true); });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("个人卡建议交互", () => {
+  it("只有卡主人接入个人任务与本月计划页签", () => {
+    render();
+    expect(ui.ownerPlan).toBeUndefined();
+    ui.viewerId = "owner";
+    ui.state = [];
+    render();
+    expect(ui.ownerPlan).toMatchObject({ selected: false, plan: null });
+  });
   it("建议提交带当时版本、字段与轮次，成功才清空；同时刷新左侧意见", async () => {
     ui.post.mockResolvedValue({ response: { ok: true } });
     render(); ui.controls!.onPropose(mission, "outcome"); render(); edit("与团队核验的新结果");

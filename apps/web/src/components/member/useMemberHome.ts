@@ -14,7 +14,7 @@ import type { MemberWork } from "./MemberHomeWidgets";
 
 export interface MemberNotification {
   id: string;
-  kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected";
+  kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added";
   text: string;
   objectType: "task" | "meeting";
   objectId: string;
@@ -71,9 +71,10 @@ export function useMemberHome() {
     const roundChanged = () => { if (loadInFlight.current) void loadInFlight.current.then(load); else void load(); };
     window.addEventListener("focus", resume);
     window.addEventListener("mission-round-changed", roundChanged);
+    window.addEventListener("member-tasks-changed", roundChanged);
     window.addEventListener(RADAR_SETTINGS_CHANGED, roundChanged);
     document.addEventListener("visibilitychange", resume);
-    return () => { window.clearInterval(timer); window.removeEventListener("focus", resume); window.removeEventListener("mission-round-changed", roundChanged); window.removeEventListener(RADAR_SETTINGS_CHANGED, roundChanged); document.removeEventListener("visibilitychange", resume); };
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", resume); window.removeEventListener("mission-round-changed", roundChanged); window.removeEventListener("member-tasks-changed", roundChanged); window.removeEventListener(RADAR_SETTINGS_CHANGED, roundChanged); document.removeEventListener("visibilitychange", resume); };
   }, [load]);
 
   const replaceTask = (task: MemberTask) => setTasks((current) => current.map((item) => (item.id === task.id ? task : item)));

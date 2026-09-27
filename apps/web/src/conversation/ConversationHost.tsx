@@ -12,13 +12,15 @@ import { useReferences } from "./references";
 import { useColumnMode } from "./useColumnMode";
 import { useConversation, type ConversationData } from "./useConversation";
 import { useMissionGroup } from "./useMissionGroup";
+import { useTaskGroup } from "./useTaskGroup";
+import { TaskGroupTranscript } from "./TaskGroupTranscript";
 import { MissionGroupTranscript } from "./MissionGroupTranscript";
 import { MissionGroupComposer } from "./MissionGroupComposer";
-import type { PersonalMissionGroup } from "./missionCardGroup";
+import type { DetailGroup } from "./missionCardGroup";
 import groupStyles from "@/styles/mission-group.module.css";
 import w from "@/styles/app-shell.module.css";
 
-export type ConversationTarget = { scope: string; label: string; group?: PersonalMissionGroup };
+export type ConversationTarget = { scope: string; label: string; group?: DetailGroup };
 const GLOBAL: ConversationTarget = { scope: "global", label: "我的 Agent" };
 
 export type ConversationUiState = {
@@ -129,24 +131,28 @@ function RailConversation({
   const [composerHeight, setComposerHeight] = useState(90);
   const [channel, setChannel] = useState(target.group ? "group" : "agent");
   const end = useRef<HTMLDivElement>(null);
-  const group = useMissionGroup(target.group, channel === "group" && (column.narrow ? ui.railMobileOpen : column.mode === "expanded"));
-  const members = group.view?.members ?? target.group?.members ?? [];
+  const taskGroup = target.group?.kind === "task" ? target.group : undefined;
+  const missionGroup = target.group?.kind !== "task" ? target.group : undefined;
+  const groupVisible = channel === "group" && (column.narrow ? ui.railMobileOpen : column.mode === "expanded");
+  const group = useMissionGroup(missionGroup, groupVisible);
+  const thread = useTaskGroup(taskGroup?.taskId, groupVisible);
+  const members = taskGroup ? (thread.view?.members ?? taskGroup.members) : (group.view?.members ?? missionGroup?.members ?? []);
   const channels: ConversationChannel[] = [
     { id: "agent", kind: "agent", label: "我的 Agent", title: agentTitle, unread: 0 },
-    ...(target.group ? [{ id: "group", kind: "group" as const, label: `事项群组 · ${members.length + 1}`, title: `事项群组 · ${members.length + 1}`, unread: group.view?.unread ?? 0 }] : []),
+    ...(target.group ? [{ id: "group", kind: "group" as const, label: `事项群组 · ${members.length + 1}`, title: `事项群组 · ${members.length + 1}`, unread: taskGroup ? (thread.view?.unread ?? 0) : (group.view?.unread ?? 0) }] : []),
   ];
   useEffect(() => {
-    if (!target.group?.reference) return;
+    if (!missionGroup?.reference) return;
     setChannel("group");
     if (column.narrow) ui.setRailMobileOpen(true);
     else column.setMode("expanded");
     // 只响应用户新选出的引用，刷新不主动展开。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.group?.reference?.nonce]);
+  }, [missionGroup?.reference?.nonce]);
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
-  }, [data.messages, data.streaming, group.view?.entries.length, channel]);
+  }, [data.messages, data.streaming, group.view?.entries.length, thread.view?.messages.length, channel]);
 
   return (
     <>
@@ -164,16 +170,16 @@ function RailConversation({
       >
         {channel === "agent" ? <AttachmentStatus data={data} className={cs.error} /> : null}
         <div className={cs.log} role="log" aria-label={channel === "group" ? "事项群组公开讨论" : `与${agentTitle}的对话`} aria-live="polite" aria-relevant="additions text">
-          {channel === "group" ? <MissionGroupTranscript entries={group.view?.entries ?? []} /> : <>
+          {channel === "group" ? taskGroup ? <TaskGroupTranscript messages={thread.view?.messages ?? []} /> : <MissionGroupTranscript entries={group.view?.entries ?? []} /> : <>
             {data.messages.length ? <ConversationTurns messages={data.messages} /> : !data.streaming ? <p className={cs.empty}>暂无消息</p> : null}
             {data.error && !data.streaming ? <ConversationNotice text={data.error} /> : null}
             {data.streaming ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} /> : null}
           </>}
           <div ref={end} />
         </div>
-        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : target.group ? "仅你可见 · 只读：不改这张卡、不进集中 Review" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
+        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? taskGroup && thread.left ? "你已不在这个群" : `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : missionGroup ? "仅你可见 · 只读：不改这张卡、不进集中 Review" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
       </ConversationColumn>
-      {channel === "group" && target.group ? <MissionGroupComposer cardId={target.group.cardId} viewerId={target.group.viewerId} phase={target.group.phase} channels={channels} channel={channel} onChannel={setChannel} narrow={column.narrow} mobileOpen={ui.railMobileOpen} onMobileOpen={ui.setRailMobileOpen} onHeightChange={setComposerHeight} reference={target.group.reference ?? null} onRemoveReference={target.group.onRemoveReference} busy={group.sending} error={group.error} onSend={group.send} /> : <ColumnComposer
+      {channel === "group" && target.group ? <MissionGroupComposer cardId={taskGroup?.taskId ?? missionGroup!.cardId} taskId={taskGroup?.taskId} viewerId={target.group.viewerId} phase={taskGroup ? "open" : missionGroup!.phase} channels={channels} channel={channel} onChannel={setChannel} narrow={column.narrow} mobileOpen={ui.railMobileOpen} onMobileOpen={ui.setRailMobileOpen} onHeightChange={setComposerHeight} reference={missionGroup?.reference ?? null} onRemoveReference={missionGroup?.onRemoveReference ?? (() => {})} busy={taskGroup ? thread.sending : group.sending} readOnly={thread.left} error={taskGroup ? thread.error : group.error} onSend={taskGroup ? (body) => thread.send(body) : group.send} /> : <ColumnComposer
         data={data}
         label={target.label}
         channels={channels}

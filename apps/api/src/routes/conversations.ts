@@ -29,7 +29,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
   // 我的 Agent 按「人 × 页面」私有；个人卡 scope 始终复查对象成员及当前拍板权。
   const scopeObjectFor = async (person: SessionPerson, scope: TConversationScope) =>
-    person.role === "ceo" || scope === "global" || scope.startsWith("mission-card:")
+    person.role === "ceo" || scope === "global" || scope.startsWith("mission-card:") || scope.startsWith("task:")
       ? getScopeObject(q, scope, env.sessionSecret, { person, people: companyMemory.searchPeople(undefined), now: ctx.now() })
       : { snapshot: null, visible: false };
   const conversationScopeVisible = async (person: SessionPerson, scope: TConversationScope) =>

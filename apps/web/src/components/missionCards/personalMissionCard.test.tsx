@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
-import type { TPersonalMissionCardPayload } from "@warmap/contracts";
+import type { TMonthPlanResponse, TPersonalMissionCardPayload } from "@warmap/contracts";
 const roundUi = vi.hoisted(() => ({ effects: [] as (() => void)[], expanded: vi.fn() }));
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
@@ -18,6 +18,18 @@ beforeEach(() => { roundUi.effects = []; roundUi.expanded.mockClear(); });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("个人卡正文的阶段与追溯", () => {
+  it("卡主人有个人任务和本月计划页签，个人任务下能打开关联执行事项", () => {
+    const linked = { id: "task-1", title: "完成核对", status: "in_progress", dueDate: "2026-10-12", owner: { personId: "owner", name: "白田田" }, collaborators: [{ personId: "peer", name: "同事" }], mission: { missionId: "mission", title: "完善方法闭环", step: 1, steps: 1 } };
+    const plan = { groups: [{ missionId: "mission", items: [linked] }] } as TMonthPlanResponse;
+    const ownerPlan = { selected: false, onSelect: vi.fn(), plan, content: <p>计划网格</p>, loading: false, error: "" };
+    const html = renderToStaticMarkup(<CardDocument payload={personalPayload} controls={controls} ownerPlan={ownerPlan} />);
+    expect(html).toContain("本月计划");
+    expect(html).toContain("/me/tasks/task-1");
+    expect(html).toContain("完成核对");
+    expect(html).toContain("10/12 前");
+    expect(html).toContain("白田田、同事");
+    expect(renderToStaticMarkup(<CardDocument payload={personalPayload} controls={controls} />)).not.toContain("本月计划");
+  });
   it.each(["draft", "open", "closed", "reviewing", "confirmed"] as const)("%s 阶段只显示允许的字段动作，责任人始终不可建议", (phase) => {
     const html = renderToStaticMarkup(<CardDocument payload={{ ...personalPayload, round: { ...personalPayload.round, phase } }} controls={controls} />);
     expect((html.match(/>建议修改</g) ?? []).length).toBe(phase === "open" ? 12 : 0);

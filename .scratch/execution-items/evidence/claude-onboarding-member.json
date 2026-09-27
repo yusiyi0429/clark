@@ -1,0 +1,164 @@
+[
+  {
+    "step": "walk-1440",
+    "steps": [
+      {
+        "i": 0,
+        "title": "你好，孙铭泽",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-1440-0.png"
+      },
+      {
+        "i": 1,
+        "title": "左边是通知栏",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-1440-1.png"
+      },
+      {
+        "i": 2,
+        "title": "右边是你的工作",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-1440-2.png"
+      },
+      {
+        "i": 3,
+        "title": "每个月的 Mission，这样定下来",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-1440-3.png"
+      },
+      {
+        "i": 4,
+        "title": "你这个月的工作",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-1440-4.png"
+      },
+      {
+        "i": 5,
+        "title": "你想关注哪些变化？",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-1440-5.png"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "step": "walk-1280",
+    "steps": [
+      {
+        "i": 0,
+        "title": "你好，孙铭泽",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-1280-0.png"
+      },
+      {
+        "i": 1,
+        "title": "左边是通知栏",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-1280-1.png"
+      },
+      {
+        "i": 2,
+        "title": "右边是你的工作",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-1280-2.png"
+      },
+      {
+        "i": 3,
+        "title": "每个月的 Mission，这样定下来",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-1280-3.png"
+      },
+      {
+        "i": 4,
+        "title": "你这个月的工作",
+        "pageScroll": false,
+        "stageScroll": true,
+        "overflowX": false,
+        "shot": "onb-member-1280-4.png"
+      },
+      {
+        "i": 5,
+        "title": "你想关注哪些变化？",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-1280-5.png"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "step": "walk-390",
+    "steps": [
+      {
+        "i": 0,
+        "title": "你好，孙铭泽",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-390-0.png"
+      },
+      {
+        "i": 1,
+        "title": "最上面是通知",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-390-1.png"
+      },
+      {
+        "i": 2,
+        "title": "往下是你的工作",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-390-2.png"
+      },
+      {
+        "i": 3,
+        "title": "每个月的 Mission，这样定下来",
+        "pageScroll": true,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-390-3.png"
+      },
+      {
+        "i": 4,
+        "title": "你这个月的工作",
+        "pageScroll": true,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-390-4.png"
+      },
+      {
+        "i": 5,
+        "title": "你想关注哪些变化？",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-member-390-5.png"
+      }
+    ],
+    "errors": []
+  }
+]

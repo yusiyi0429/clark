@@ -266,10 +266,15 @@ describe("成员的执行事项", () => {
         version: 1,
         title: "周五前提交资源排期",
         status: "not_started",
+        source: "meeting",
+        mission: null,
         dueDate: null,
         returnReason: null,
         origin: { type: "meeting", meetingId, meetingTitle: "渠道投入决策会", quote: "我周五前提交资源排期" },
       });
+      const thread = await me(t, lead, "GET", `/api/threads/task/${taskIdOf(items[1])}`);
+      expect(thread.statusCode).toBe(200);
+      expect(thread.json()).toMatchObject({ unread: 0, members: [{ personId: LEAD }] });
 
       // 别人的执行事项一律 404
       const others = await me(t, lead, "PATCH", `/api/me/tasks/${taskIdOf(items[0])}`, { version: 1, status: "done" });
@@ -470,4 +475,3 @@ describe("战略项与截止日期的确定性校验", () => {
     expect(assess([{ ...strategic, title: "长".repeat(40), brief: "长".repeat(120) }])).toMatchObject({ ok: true });
   });
 });
-

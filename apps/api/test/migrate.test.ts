@@ -8,6 +8,23 @@ import { createTestDb, type TestDb } from "./helpers.js";
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 
 describe("migration", () => {
+  it("adds task thread membership for existing 026 execution items", async () => {
+    await createTestDb(async ({ db }) => {
+      const files = (await readdir(MIGRATIONS_DIR)).filter((file) => file.endsWith(".sql") && Number(file.split("_")[0]) <= 35).sort();
+      await db.query("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+      for (const file of files) {
+        await db.query(await readFile(join(MIGRATIONS_DIR, file), "utf8"));
+        await db.query("INSERT INTO schema_migrations (id,filename) VALUES($1,$2)",[Number(file.split("_")[0]),file]);
+      }
+      const id="00000000-0000-4000-8000-000000000036";
+      await db.query("INSERT INTO tasks(id,title,status,owner_id,created_by) VALUES($1,'旧事项','not_started','old-owner','meeting')",[id]);
+      await db.query("INSERT INTO task_members(task_id,person_id,role,added_by) VALUES($1,'old-owner','owner','meeting')",[id]);
+      await migrate(db);
+      const members=await db.query("SELECT person_id FROM thread_members WHERE object_type='task' AND object_id=$1",[id]);
+      expect(members.rows).toEqual([{person_id:"old-owner"}]);
+      expect((await db.query("SELECT mission_id,start_date,step_order FROM tasks WHERE id=$1",[id])).rows[0]).toEqual({mission_id:null,start_date:null,step_order:null});
+    });
+  });
   it("migrates an empty database in order and is idempotent", async () => {
     await createTestDb(async ({ db, admin }: TestDb) => {
       await migrate(db);
@@ -30,6 +47,7 @@ describe("migration", () => {
       expect(names).toContain("meeting_recordings");
       expect(names).toContain("tasks");
       expect(names).toContain("task_members");
+      expect(names).toContain("task_notes");
       expect(names).toContain("notifications");
       expect(names).toContain("ontology_update_requests");
       expect(names).toContain("person_voiceprints");
@@ -83,6 +101,7 @@ describe("migration", () => {
         "033_mission_rounds.sql",
         "034_mission_card_discussion.sql",
         "035_mission_card_corrections.sql",
+        "036_execution_items.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -90,7 +109,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(35);
+      expect(Number(again.rows[0].count)).toBe(36);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(

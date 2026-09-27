@@ -10,7 +10,33 @@ export const TaskStatus = Type.Union([
   Type.Literal("returned"),
 ]);
 
-/** 执行事项来源：会后推送的带会议与原话；以后成员自建的为 null。 */
+/** 执行事项从哪来：会后分派、自己点「+」新建、从本月计划拆出。以后加 CEO 指派。 */
+export const TaskSource = Type.Union([Type.Literal("meeting"), Type.Literal("self"), Type.Literal("plan")]);
+
+const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
+const NullableDate = Type.Union([DateOnly, Type.Null()]);
+const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
+
+export const TaskPerson = Type.Object(
+  { personId: Type.String({ minLength: 1 }), name: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+
+/** 所属个人任务：本人已确定个人卡上的一项；同一项个人任务下的执行事项按先后排成第 1..steps 步。 */
+export const TaskMissionRef = Type.Object(
+  {
+    missionId: Type.String({ minLength: 1 }),
+    title: Type.String({ minLength: 1 }),
+    cardId: Type.String({ minLength: 1 }),
+    period: Period,
+    battlefieldName: Type.String(),
+    step: Type.Integer({ minimum: 1 }),
+    steps: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+/** 执行事项来源：会后推送的带会议与原话；自建、计划拆出的为 null。 */
 export const TaskOrigin = Type.Object(
   {
     type: Type.Literal("meeting"),
@@ -28,8 +54,19 @@ export const TaskView = Type.Object(
     version: Type.Integer({ minimum: 1 }),
     title: Type.String({ minLength: 1, maxLength: 120 }),
     status: TaskStatus,
+    source: TaskSource,
+    /** YYYY-MM-DD；计划开始。 */
+    startDate: NullableDate,
     /** YYYY-MM-DD */
-    dueDate: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    dueDate: NullableDate,
+    doneDefinition: Type.Union([Type.String({ minLength: 1, maxLength: 500 }), Type.Null()]),
+    /** 独立事项为 null。 */
+    mission: Type.Union([TaskMissionRef, Type.Null()]),
+    /** 同一项个人任务里上一步还没完成时指向它。 */
+    waitingOn: Type.Union([Type.Object({ taskId: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }) }, { additionalProperties: false }), Type.Null()]),
+    /** 推进人；协作者不转移推进责任。 */
+    owner: TaskPerson,
+    collaborators: Type.Array(TaskPerson),
     returnReason: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     origin: Type.Union([TaskOrigin, Type.Null()]),
     /** ISO 8601 */
@@ -45,11 +82,131 @@ export const MeHomeResponse = Type.Object(
   { additionalProperties: false },
 );
 
-/** 只有负责人能改状态；version 不一致返回 409 并带 latestTask。 */
+/**
+ * 只有推进人能改；version 不一致返回 409 并带 latestTask。除 version 外至少带一个字段。
+ * missionId 改归属：从原个人任务移出、排到新个人任务的最后一步；null 表示改为独立事项。
+ */
 export const PatchMyTaskRequest = Type.Object(
   {
     version: Type.Integer({ minimum: 1 }),
-    status: Type.Union([Type.Literal("not_started"), Type.Literal("in_progress"), Type.Literal("done")]),
+    status: Type.Optional(Type.Union([Type.Literal("not_started"), Type.Literal("in_progress"), Type.Literal("done")])),
+    title: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+    startDate: Type.Optional(NullableDate),
+    dueDate: Type.Optional(NullableDate),
+    doneDefinition: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 500 }), Type.Null()])),
+    judgment: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()])),
+    missionId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
+  },
+  { additionalProperties: false },
+);
+
+/** 点「+」新建：推进人是本人；missionId 为 null 是独立事项。按 (本人, clientId) 幂等。返回 TaskView。 */
+export const CreateMyTaskRequest = Type.Object(
+  {
+    clientId: Type.String({ format: "uuid" }),
+    title: Type.String({ minLength: 1, maxLength: 120 }),
+    missionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    startDate: Type.Optional(DateOnly),
+    dueDate: Type.Optional(DateOnly),
+    doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+  },
+  { additionalProperties: false },
+);
+
+/** 详情：推进人和在职协作者可读；选项只给推进人。 */
+export const TaskDetailResponse = Type.Object(
+  {
+    task: TaskView,
+    /** 推进人写的「这件事的判断」，成员都看得到。 */
+    judgment: Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()]),
+    /** 判断最后一次写入的时间；没写过为 null。 */
+    judgmentAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    /** 非推进人自己的批注，只有自己看得到；推进人为 null。 */
+    myNote: Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()]),
+    myNoteAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    role: Type.Union([Type.Literal("owner"), Type.Literal("collaborator")]),
+    /** 可挂的个人任务：本人已确定、月份未过的个人卡上的条目。 */
+    missionOptions: Type.Array(Type.Object(
+      { missionId: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }), battlefieldName: Type.String(), period: Period },
+      { additionalProperties: false },
+    )),
+    /** 可邀请的同事：人员名单里除本人和现有成员以外的人。 */
+    collaboratorOptions: Type.Array(TaskPerson),
+  },
+  { additionalProperties: false },
+);
+
+/** 非推进人的私人批注；null 删除。 */
+export const PutMyTaskNoteRequest = Type.Object(
+  { note: Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()]) },
+  { additionalProperties: false },
+);
+export const PutMyTaskNoteResponse = Type.Object(
+  { myNote: Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()]) },
+  { additionalProperties: false },
+);
+
+/** 推进人邀请协作者：已是成员的忽略；返回 TaskView。 */
+export const AddTaskCollaboratorsRequest = Type.Object(
+  { personIds: Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { minItems: 1, maxItems: 10 }) },
+  { additionalProperties: false },
+);
+
+/** 本月计划的一组：一项个人任务（按步骤排），或 missionId 为 null 的「独立事项」。 */
+export const MonthPlanGroup = Type.Object(
+  {
+    missionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    title: Type.String({ minLength: 1 }),
+    battlefieldName: Type.Union([Type.String(), Type.Null()]),
+    cardId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    /** 个人任务的里程碑原文；date 只从原文开头解析，解析不出为 null。 */
+    milestones: Type.Array(Type.Object({ date: NullableDate, text: Type.String({ minLength: 1 }) }, { additionalProperties: false })),
+    items: Type.Array(TaskView),
+  },
+  { additionalProperties: false },
+);
+
+/** 整月一张计划图：个人卡确定之后、月份未过时可编辑，否则 closedReason 写明原因。 */
+export const MonthPlanResponse = Type.Object(
+  {
+    period: Period,
+    firstDay: DateOnly,
+    lastDay: DateOnly,
+    /** 公司时区的今天。 */
+    today: DateOnly,
+    editable: Type.Boolean(),
+    closedReason: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    groups: Type.Array(MonthPlanGroup),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * 保存计划（用户 2026-09-27：好用优先，越灵活越好）：只传改过的组，没传的组不动。
+ * - 组内数组顺序即先后；组里已有、这次没列出的事项（别处刚建的）保留，排在列出的后面，不报错。
+ * - 已有事项（带 taskId）只带改过的字段，没带的字段保持原样；新步骤带 clientId 和标题。
+ * - 日期都可以不定；给了就要是有效日期，开始不晚于截止。
+ * - 列出的 taskId 已不在这一组（别处移走或删了）才返回 409 PLAN_STALE。删除只走 DELETE /api/me/tasks/:id。
+ */
+export const SaveMonthPlanRequest = Type.Object(
+  {
+    period: Period,
+    groups: Type.Array(Type.Object(
+      {
+        missionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+        items: Type.Array(Type.Object(
+          {
+            taskId: Type.Optional(Type.String({ minLength: 1 })),
+            clientId: Type.Optional(Type.String({ format: "uuid" })),
+            title: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+            startDate: Type.Optional(NullableDate),
+            dueDate: Type.Optional(NullableDate),
+          },
+          { additionalProperties: false },
+        ), { maxItems: 100 }),
+      },
+      { additionalProperties: false },
+    ), { maxItems: 20 }),
   },
   { additionalProperties: false },
 );
@@ -67,6 +224,7 @@ export const NotificationKind = Type.Union([
   Type.Literal("meeting_action_assigned"),
   Type.Literal("task_returned"),
   Type.Literal("strategic_rejected"),
+  Type.Literal("task_collaborator_added"),
 ]);
 
 /** 通知只指向对象；text 在读取时按对象当前状态组合。 */
@@ -97,6 +255,16 @@ export const MarkNotificationsSeenRequest = Type.Object(
 );
 
 export type TTaskStatus = Static<typeof TaskStatus>;
+export type TTaskSource = Static<typeof TaskSource>;
+export type TTaskPerson = Static<typeof TaskPerson>;
+export type TTaskMissionRef = Static<typeof TaskMissionRef>;
+export type TCreateMyTaskRequest = Static<typeof CreateMyTaskRequest>;
+export type TTaskDetailResponse = Static<typeof TaskDetailResponse>;
+export type TPutMyTaskNoteRequest = Static<typeof PutMyTaskNoteRequest>;
+export type TAddTaskCollaboratorsRequest = Static<typeof AddTaskCollaboratorsRequest>;
+export type TMonthPlanGroup = Static<typeof MonthPlanGroup>;
+export type TMonthPlanResponse = Static<typeof MonthPlanResponse>;
+export type TSaveMonthPlanRequest = Static<typeof SaveMonthPlanRequest>;
 export type TTaskOrigin = Static<typeof TaskOrigin>;
 export type TTaskView = Static<typeof TaskView>;
 export type TMeHomeResponse = Static<typeof MeHomeResponse>;

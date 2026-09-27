@@ -8,6 +8,8 @@ import { Button } from "ts-design/primitives";
 import type { TMissionCardField, TPersonalMissionCardPayload } from "@warmap/contracts";
 import { monthDayTime } from "@/lib/companyTime";
 import { CorrectionPanel, type CorrectionControls } from "./CorrectionPanel";
+import { LinkedTaskRows } from "@/components/plan/MonthPlan";
+import type { TMonthPlanResponse } from "@warmap/contracts";
 import s from "./mission-card.module.css";
 
 export type PersonalMission = TPersonalMissionCardPayload["card"]["missions"][number];
@@ -58,10 +60,11 @@ export function FeedbackNote({ item, location, controls }: { item: TPersonalMiss
 }
 
 /** 原件分支仅保留可接入的阅读方式。10 月 API 不提供原件，也不出页签或下载入口。 */
-export function CardDocument({ payload, controls, artifact }: {
+export function CardDocument({ payload, controls, artifact, ownerPlan }: {
   payload: TPersonalMissionCardPayload;
   controls: DocumentControls;
   artifact?: { content: string; note: string; showOriginal: boolean; onSelect: (original: boolean) => void };
+  ownerPlan?: { selected: boolean; onSelect: (selected: boolean) => void; plan: TMonthPlanResponse | null; content: ReactNode; loading: boolean; error: string };
 }) {
   const { card, round, feedback, corrections, correctionAccess: access } = payload;
   const canDiscuss = round.phase === "open";
@@ -79,7 +82,9 @@ export function CardDocument({ payload, controls, artifact }: {
       <div className={s.source}>{round.placeholder ? <span>占位 · 沿用 9 月个人卡</span> : null}{sources.map((source) => <span key={`${source.sourceRef}:${source.sourceRevision}`}>飞书 r{source.sourceRevision} · <a href={source.sourceRef} target="_blank" rel="noreferrer">打开来源</a></span>)}</div>
     </div>
     {artifact ? <div className={s.tabs} role="tablist" aria-label="这张 Mission Card 的两种读法"><button role="tab" aria-selected={artifact.showOriginal} onClick={() => artifact.onSelect(true)}>原件</button><button role="tab" aria-selected={!artifact.showOriginal} onClick={() => artifact.onSelect(false)}>个人任务 · {card.missions.length}</button></div> : null}
-    {artifact?.showOriginal ? <div className={s.artifact}><p>{artifact.note}</p><Markdown remarkPlugins={[remarkGfm]}>{artifact.content}</Markdown></div> : <div className={s.tasks}>
+    {ownerPlan ? <div className={s.tabs} role="tablist" aria-label="个人任务与本月计划"><button role="tab" aria-selected={!ownerPlan.selected} onClick={() => ownerPlan.onSelect(false)}>个人任务</button><button role="tab" aria-selected={ownerPlan.selected} onClick={() => ownerPlan.onSelect(true)}>本月计划</button></div> : null}
+    {ownerPlan?.selected ? ownerPlan.loading ? <p>正在读取本月计划…</p> : ownerPlan.error ? <p role="alert">{ownerPlan.error}</p> : ownerPlan.content : artifact?.showOriginal ? <div className={s.artifact}><p>{artifact.note}</p><Markdown remarkPlugins={[remarkGfm]}>{artifact.content}</Markdown></div> : <div className={s.tasks}>
+      {ownerPlan?.error ? <p role="alert">{ownerPlan.error}</p> : null}
       {card.missions.map((mission) => <section key={mission.missionId} className={s.task} aria-label={`个人任务：${mission.title}`}>
         <h2>{mission.title}</h2>
         <p className={s.taskMeta}><span>{mission.code}</span><span>{mission.capabilityCode} · {mission.capabilityName}</span>{mission.placeholder ? <span className={s.placeholder}>占位</span> : null}<span>v{mission.version}</span></p>
@@ -102,8 +107,9 @@ export function CardDocument({ payload, controls, artifact }: {
             </dd>
           </div>;
         })}<div className={s.field}><dt>唯一责任人</dt><dd><p className={s.owner}>{card.ownerName}</p></dd></div></dl>
+        {ownerPlan && ownerPlan.plan ? <LinkedTaskRows tasks={ownerPlan.plan.groups.find(group => group.missionId === mission.missionId)?.items ?? []} /> : null}
       </section>)}
     </div>}
-    {loose.length ? <section className={s.loose} aria-label="没有指向具体字段的意见"><h2>整张卡上的意见</h2><div className={s.remarks}>{loose.map((item) => <FeedbackNote key={item.id} item={item} location={`${card.ownerName}的卡 · 整张卡`} controls={decisionControls} />)}</div></section> : null}
+    {!ownerPlan?.selected && loose.length ? <section className={s.loose} aria-label="没有指向具体字段的意见"><h2>整张卡上的意见</h2><div className={s.remarks}>{loose.map((item) => <FeedbackNote key={item.id} item={item} location={`${card.ownerName}的卡 · 整张卡`} controls={decisionControls} />)}</div></section> : null}
   </article>;
 }

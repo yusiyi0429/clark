@@ -44,6 +44,8 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
     }
     case "strategic_rejected":
       return `CEO 不同意「${row.item_title ?? ""}」`;
+    case "task_collaborator_added":
+      return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}邀请你协作「${row.task_title ?? ""}」`;
   }
 }
 

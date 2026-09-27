@@ -96,7 +96,14 @@ describe("成员首页的执行事项", () => {
     version: 1,
     title: `事项 ${id}`,
     status: "not_started",
+    source: "meeting",
+    startDate: null,
     dueDate,
+    doneDefinition: null,
+    mission: null,
+    waitingOn: null,
+    owner: { personId: "p1", name: "孙铭泽" },
+    collaborators: [],
     returnReason: null,
     origin: { type: "meeting", meetingId: "m1", meetingTitle: "灯塔项目：产品交互对齐会议", quote: "下周三前给我" },
     createdAt: "2026-09-26T08:00:00.000Z",
@@ -108,17 +115,16 @@ describe("成员首页的执行事项", () => {
     expect(tasksByDue([task("a", null), task("b", "2026-10-02"), task("c", "2026-09-30"), task("d", null)]).map((item) => item.id)).toEqual(["c", "b", "a", "d"]);
   });
 
-  it("卡上写状态、来处、会上原话；退回的写原因、不给推进钮", () => {
+  it("卡上写状态、会后来源；退回的写原因、不给状态切换", () => {
     const html = renderToStaticMarkup(
       <MemberTasks tasks={[task("a", "2026-09-30"), task("b", null, { status: "returned", returnReason: "不归我，归白田田" })]} onStatus={noop} />,
     );
-    expect(html).toContain("未开始");
+    expect(html).toContain("未启动");
     expect(html).toContain("9 月 30 日前");
-    expect(html).toContain("来自会议「灯塔项目：产品交互对齐会议」");
-    expect(html).toContain("下周三前给我");
-    expect(html).toContain("开始推进");
+    expect(html).toContain("会后分派 · 灯塔项目：产品交互对齐会议");
+    expect(html).toContain("进行中");
     expect(html).toContain("已退回：不归我，归白田田");
-    expect(html.split("标记完成")).toHaveLength(2);
+    expect(html.split("完成")).toHaveLength(2);
   });
 
   it("通知栏分两组：新的执行事项能接下或退回，回复与结果只要知道了；看过的不再列", () => {

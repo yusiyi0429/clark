@@ -58,6 +58,16 @@ describe("常驻成员首页的网络恢复", () => {
     expect(render().rounds).toEqual([]);
     cleanup?.();
   });
+  it("新建、编辑或删除事项后立即重读首页", async () => {
+    const events = new EventTarget();
+    vi.stubGlobal("window", { addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events), setInterval: vi.fn(), clearInterval: vi.fn() });
+    vi.stubGlobal("document", { addEventListener: vi.fn(), removeEventListener: vi.fn(), visibilityState: "visible" });
+    online(); render(); const cleanup = hooks.effects[0]();
+    await vi.waitFor(() => expect(api.GET).toHaveBeenCalledTimes(3));
+    events.dispatchEvent(new Event("member-tasks-changed"));
+    await vi.waitFor(() => expect(api.GET).toHaveBeenCalledTimes(6));
+    cleanup?.();
+  });
   it("倒计时、轮询同时请求时共用一次读取，避免旧结果覆盖确认后的退组", async () => {
     let release!: (value: unknown) => void;
     api.GET.mockReturnValue(new Promise((resolve) => { release = resolve; }));

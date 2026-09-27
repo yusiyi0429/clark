@@ -1,0 +1,25 @@
+[
+  {
+    "step": "phone-home",
+    "overflow": false,
+    "shot": "05-phone-home-390.png"
+  },
+  {
+    "step": "phone-home-tasks",
+    "shot": "05-phone-tasks-390.png"
+  },
+  {
+    "step": "phone-create",
+    "overflow": false,
+    "shot": "05-phone-create-390.png"
+  },
+  {
+    "step": "phone-plan",
+    "overflow": false,
+    "shot": "05-phone-plan-390.png"
+  },
+  {
+    "step": "errors",
+    "errors": []
+  }
+]

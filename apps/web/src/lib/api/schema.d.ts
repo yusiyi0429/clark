@@ -773,7 +773,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/tasks/{id}": {
+    "/api/me/tasks": {
         parameters: {
             query?: never;
             header?: never;
@@ -782,11 +782,82 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** 点「+」新建执行事项：推进人是本人，missionId 为 null 是独立事项；按 (本人, clientId) 幂等 */
+        post: operations["createMyTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 整月一张计划图：本人个人卡上的每项个人任务一组、最后一组独立事项；period 默认公司当前月 */
+        get: operations["getMyMonthPlan"];
+        /** 保存计划：只传改过的组和字段，日期可不定；组内顺序即先后，没列出的已有事项保留在后面；列出的事项已不在该组时 409 PLAN_STALE */
+        put: operations["saveMyMonthPlan"];
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** 负责人改执行事项状态；不是负责人 404 TASK_NOT_FOUND，version 不一致 409 带 latestTask */
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 非推进的成员写自己的私人批注；null 删除；推进人写判断而不是批注 */
+        put: operations["putMyTaskNote"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/collaborators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 推进人邀请协作者：写成员与事项群组、给每人发通知；已是成员的忽略；不转移推进责任 */
+        post: operations["addTaskCollaborators"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 执行事项详情：推进人和在职协作者可读，其他人 404；选项只给推进人 */
+        get: operations["getMyTask"];
+        put?: never;
+        post?: never;
+        /** 推进人删除未启动的自建或计划事项，连同事项群组；会后分派的不能删，只能退回 */
+        delete: operations["deleteMyTask"];
+        options?: never;
+        head?: never;
+        /** 推进人改状态、标题、日期、完成定义、判断或所属个人任务；不是推进人 404 TASK_NOT_FOUND，version 不一致 409 带 latestTask */
         patch: operations["patchMyTask"];
         trace?: never;
     };
@@ -1514,7 +1585,31 @@ export interface components {
                 version: number;
                 title: string;
                 status: "not_started" | "in_progress" | "done" | "returned";
+                source: "meeting" | "self" | "plan";
+                startDate: string | null;
                 dueDate: string | null;
+                doneDefinition: string | null;
+                mission: {
+                    missionId: string;
+                    title: string;
+                    cardId: string;
+                    period: string;
+                    battlefieldName: string;
+                    step: number;
+                    steps: number;
+                } | null;
+                waitingOn: {
+                    taskId: string;
+                    title: string;
+                } | null;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                collaborators: {
+                    personId: string;
+                    name: string;
+                }[];
                 returnReason: string | null;
                 origin: {
                     /** @constant */
@@ -3031,7 +3126,31 @@ export interface components {
             version: number;
             title: string;
             status: "not_started" | "in_progress" | "done" | "returned";
+            source: "meeting" | "self" | "plan";
+            startDate: string | null;
             dueDate: string | null;
+            doneDefinition: string | null;
+            mission: {
+                missionId: string;
+                title: string;
+                cardId: string;
+                period: string;
+                battlefieldName: string;
+                step: number;
+                steps: number;
+            } | null;
+            waitingOn: {
+                taskId: string;
+                title: string;
+            } | null;
+            owner: {
+                personId: string;
+                name: string;
+            };
+            collaborators: {
+                personId: string;
+                name: string;
+            }[];
             returnReason: string | null;
             origin: {
                 /** @constant */
@@ -3043,13 +3162,250 @@ export interface components {
             createdAt: string;
             updatedAt: string;
         };
+        TaskPerson: {
+            personId: string;
+            name: string;
+        };
+        TaskMissionRef: {
+            missionId: string;
+            title: string;
+            cardId: string;
+            period: string;
+            battlefieldName: string;
+            step: number;
+            steps: number;
+        };
+        CreateMyTaskRequest: {
+            /** Format: uuid */
+            clientId: string;
+            title: string;
+            missionId: string | null;
+            startDate?: string;
+            dueDate?: string;
+            doneDefinition?: string;
+        };
+        TaskDetailResponse: {
+            task: {
+                id: string;
+                version: number;
+                title: string;
+                status: "not_started" | "in_progress" | "done" | "returned";
+                source: "meeting" | "self" | "plan";
+                startDate: string | null;
+                dueDate: string | null;
+                doneDefinition: string | null;
+                mission: {
+                    missionId: string;
+                    title: string;
+                    cardId: string;
+                    period: string;
+                    battlefieldName: string;
+                    step: number;
+                    steps: number;
+                } | null;
+                waitingOn: {
+                    taskId: string;
+                    title: string;
+                } | null;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                collaborators: {
+                    personId: string;
+                    name: string;
+                }[];
+                returnReason: string | null;
+                origin: {
+                    /** @constant */
+                    type: "meeting";
+                    meetingId: string;
+                    meetingTitle: string;
+                    quote: string | null;
+                } | null;
+                createdAt: string;
+                updatedAt: string;
+            };
+            judgment: string | null;
+            judgmentAt: string | null;
+            myNote: string | null;
+            myNoteAt: string | null;
+            role: "owner" | "collaborator";
+            missionOptions: {
+                missionId: string;
+                title: string;
+                battlefieldName: string;
+                period: string;
+            }[];
+            collaboratorOptions: {
+                personId: string;
+                name: string;
+            }[];
+        };
+        PutMyTaskNoteRequest: {
+            note: string | null;
+        };
+        PutMyTaskNoteResponse: {
+            myNote: string | null;
+        };
+        AddTaskCollaboratorsRequest: {
+            personIds: string[];
+        };
+        MonthPlanGroup: {
+            missionId: string | null;
+            title: string;
+            battlefieldName: string | null;
+            cardId: string | null;
+            milestones: {
+                date: string | null;
+                text: string;
+            }[];
+            items: {
+                id: string;
+                version: number;
+                title: string;
+                status: "not_started" | "in_progress" | "done" | "returned";
+                source: "meeting" | "self" | "plan";
+                startDate: string | null;
+                dueDate: string | null;
+                doneDefinition: string | null;
+                mission: {
+                    missionId: string;
+                    title: string;
+                    cardId: string;
+                    period: string;
+                    battlefieldName: string;
+                    step: number;
+                    steps: number;
+                } | null;
+                waitingOn: {
+                    taskId: string;
+                    title: string;
+                } | null;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                collaborators: {
+                    personId: string;
+                    name: string;
+                }[];
+                returnReason: string | null;
+                origin: {
+                    /** @constant */
+                    type: "meeting";
+                    meetingId: string;
+                    meetingTitle: string;
+                    quote: string | null;
+                } | null;
+                createdAt: string;
+                updatedAt: string;
+            }[];
+        };
+        MonthPlanResponse: {
+            period: string;
+            firstDay: string;
+            lastDay: string;
+            today: string;
+            editable: boolean;
+            closedReason: string | null;
+            groups: {
+                missionId: string | null;
+                title: string;
+                battlefieldName: string | null;
+                cardId: string | null;
+                milestones: {
+                    date: string | null;
+                    text: string;
+                }[];
+                items: {
+                    id: string;
+                    version: number;
+                    title: string;
+                    status: "not_started" | "in_progress" | "done" | "returned";
+                    source: "meeting" | "self" | "plan";
+                    startDate: string | null;
+                    dueDate: string | null;
+                    doneDefinition: string | null;
+                    mission: {
+                        missionId: string;
+                        title: string;
+                        cardId: string;
+                        period: string;
+                        battlefieldName: string;
+                        step: number;
+                        steps: number;
+                    } | null;
+                    waitingOn: {
+                        taskId: string;
+                        title: string;
+                    } | null;
+                    owner: {
+                        personId: string;
+                        name: string;
+                    };
+                    collaborators: {
+                        personId: string;
+                        name: string;
+                    }[];
+                    returnReason: string | null;
+                    origin: {
+                        /** @constant */
+                        type: "meeting";
+                        meetingId: string;
+                        meetingTitle: string;
+                        quote: string | null;
+                    } | null;
+                    createdAt: string;
+                    updatedAt: string;
+                }[];
+            }[];
+        };
+        SaveMonthPlanRequest: {
+            period: string;
+            groups: {
+                missionId: string | null;
+                items: {
+                    taskId?: string;
+                    /** Format: uuid */
+                    clientId?: string;
+                    title?: string;
+                    startDate?: string | null;
+                    dueDate?: string | null;
+                }[];
+            }[];
+        };
         MeHomeResponse: {
             myTasks: {
                 id: string;
                 version: number;
                 title: string;
                 status: "not_started" | "in_progress" | "done" | "returned";
+                source: "meeting" | "self" | "plan";
+                startDate: string | null;
                 dueDate: string | null;
+                doneDefinition: string | null;
+                mission: {
+                    missionId: string;
+                    title: string;
+                    cardId: string;
+                    period: string;
+                    battlefieldName: string;
+                    step: number;
+                    steps: number;
+                } | null;
+                waitingOn: {
+                    taskId: string;
+                    title: string;
+                } | null;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                collaborators: {
+                    personId: string;
+                    name: string;
+                }[];
                 returnReason: string | null;
                 origin: {
                     /** @constant */
@@ -3524,7 +3880,13 @@ export interface components {
         };
         PatchMyTaskRequest: {
             version: number;
-            status: "not_started" | "in_progress" | "done";
+            status?: "not_started" | "in_progress" | "done";
+            title?: string;
+            startDate?: string | null;
+            dueDate?: string | null;
+            doneDefinition?: string | null;
+            judgment?: string | null;
+            missionId?: string | null;
         };
         ReturnMyTaskRequest: {
             version: number;
@@ -3533,7 +3895,7 @@ export interface components {
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added";
                 text: string;
                 objectType: "task" | "meeting";
                 objectId: string;
@@ -5779,6 +6141,379 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMyTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 新建的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyMonthPlan: {
+        parameters: {
+            query?: {
+                period?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本月计划 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthPlanResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    saveMyMonthPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveMonthPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description 保存后的本月计划 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthPlanResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    putMyTaskNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutMyTaskNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description 我的批注 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PutMyTaskNoteResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    addTaskCollaborators: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddTaskCollaboratorsRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 执行事项详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deleteMyTask: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

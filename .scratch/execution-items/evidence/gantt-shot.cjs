@@ -1,0 +1,23 @@
+const { chromium } = require('C:/Users/10021/AppData/Local/ms-playwright-go/1.50.1/package');
+const fs = require('node:fs'); const path = require('node:path');
+const readme = fs.readFileSync(path.join(__dirname, '../../manual-test/README.md'), 'utf8');
+const passcode = /口令都是 `(\d{4})`/.exec(readme)[1];
+(async () => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
+  const page = await context.newPage(); page.setDefaultNavigationTimeout(120000);
+  await page.goto('http://localhost:3500/access');
+  await page.evaluate(async (p) => fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ loginId: 'browsermember', passcode: p }) }), passcode);
+  await page.goto('http://localhost:3500/me/mission-cards/8f2534bc-621a-4cf6-9660-3e384576cfc4');
+  await page.waitForLoadState('networkidle'); await page.waitForTimeout(1200);
+  await page.getByRole('tab', { name: '本月计划' }).click(); await page.waitForTimeout(1500);
+  const gantt = page.locator('[aria-label="本月计划甘特图"] [role="region"]');
+  await gantt.scrollIntoViewIfNeeded(); await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(__dirname, '05-plan-gantt-1440.png') });
+  await gantt.screenshot({ path: path.join(__dirname, '05-plan-gantt-el.png') });
+  await page.getByRole('tab', { name: '个人任务' }).click(); await page.waitForTimeout(1000);
+  const rows = page.locator('[aria-label="关联的执行事项"]').first();
+  await rows.scrollIntoViewIfNeeded(); await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(__dirname, '05-linked-rows-1440.png') });
+  await browser.close();
+})().catch((e) => { console.error(e.message); process.exit(1); });

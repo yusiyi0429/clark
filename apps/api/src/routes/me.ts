@@ -1,7 +1,11 @@
 import type { FastifyReply } from "fastify";
-import { MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, PatchMyTaskRequest, ReturnMyTaskRequest, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { Type } from "@sinclair/typebox";
+import { AddTaskCollaboratorsRequest, CreateMyTaskRequest, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskDetailResponse, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
-import { listMyTasks, returnMyTask, updateMyTaskStatus, type TaskMutation } from "../tasks.js";
+import { addTaskCollaborators, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
+import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
+import { companyPeriod } from "../monthlyPlans.js";
+import { personDisplayNames } from "../people.js";
 import { deleteVoiceprint, enrollVoiceprint, MAX_VOICEPRINT_UPLOAD_BYTES, voiceprintStatus } from "../voiceprints.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 import { readMemberWork } from "../memberWork.js";
@@ -12,15 +16,17 @@ import { readMemberRadarBrief } from "../personalSignals.js";
 export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   const { pool, q, fail, requirePerson, companyMemory, voiceprints, materialMultipartLimitError } = ctx;
 
-  const respondTask = (reply: FastifyReply, result: TaskMutation): TTaskView | FastifyReply => {
+  const names = () => personDisplayNames(companyMemory);
+  const respondTask = (reply: FastifyReply, result: TaskResult): TTaskView | FastifyReply => {
     if ("notFound" in result) return fail(reply, 404, "TASK_NOT_FOUND", "执行事项不存在");
     if ("conflict" in result) return fail(reply, 409, "VERSION_CONFLICT", "执行事项已被修改，请基于最新内容重试", { latestTask: result.conflict });
+    if ("error" in result) return fail(reply, result.error.status, result.error.code, result.error.message);
     return result.task;
   };
 
   app.get("/api/me/home", { preHandler: requirePerson, schema: { response: { 200: MeHomeResponse } } }, async (req) => {
     const [myTasks, { work }, radar] = await Promise.all([
-      listMyTasks(q, req.person!.personId),
+      listMyTasks(q, req.person!.personId, names()),
       readMemberWork(q, companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, ctx.now()),
       readMemberRadarBrief(q, req.person!, ctx.now()),
     ]);
@@ -35,14 +41,39 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   app.patch(
     "/api/me/tasks/:id",
     { preHandler: requirePerson, schema: { params: idParams, body: PatchMyTaskRequest } },
-    async (req, reply) => respondTask(reply, await updateMyTaskStatus(pool, req.person!.personId, req.params.id, req.body)),
+    async (req, reply) => respondTask(reply, await updateMyTaskStatus(pool, req.person!.personId, req.params.id, req.body, names(), ctx.now())),
   );
 
   app.post(
     "/api/me/tasks/:id/return",
     { preHandler: requirePerson, schema: { params: idParams, body: ReturnMyTaskRequest } },
-    async (req, reply) => respondTask(reply, await returnMyTask(pool, req.person!.personId, req.params.id, req.body)),
+    async (req, reply) => respondTask(reply, await returnMyTask(pool, req.person!.personId, req.params.id, req.body, names())),
   );
+
+  app.get("/api/me/tasks/:id", { preHandler: requirePerson, schema: { params: idParams, response: { 200: TaskDetailResponse } } }, async (req, reply) =>
+    await getTaskDetail(q, req.params.id, req.person!.personId, names(), ctx.now()) ?? fail(reply, 404, "TASK_NOT_FOUND", "执行事项不存在"));
+  app.post("/api/me/tasks", { preHandler: requirePerson, schema: { body: CreateMyTaskRequest } }, async (req, reply) =>
+    respondTask(reply, await createMyTask(pool, req.person!.personId, names(), req.body, ctx.now())));
+  app.delete("/api/me/tasks/:id", { preHandler: requirePerson, schema: { params: idParams,
+    querystring: Type.Object({ version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false }) } }, async (req, reply) => {
+    const result = await deleteMyTask(pool, req.person!.personId, req.params.id, req.query.version, names());
+    return "deleted" in result ? reply.code(204).send() : respondTask(reply, result);
+  });
+  app.put("/api/me/tasks/:id/note", { preHandler: requirePerson, schema: { params: idParams, body: PutMyTaskNoteRequest } }, async (req, reply) => {
+    const result = await putMyTaskNote(pool, req.person!.personId, req.params.id, req.body.note);
+    return "notFound" in result ? fail(reply, 404, "TASK_NOT_FOUND", "执行事项不存在") : result;
+  });
+  app.post("/api/me/tasks/:id/collaborators", { preHandler: requirePerson,
+    schema: { params: idParams, body: AddTaskCollaboratorsRequest } }, async (req, reply) =>
+    respondTask(reply, await addTaskCollaborators(pool, req.person!.personId, req.params.id, names(), req.body)));
+  const planQuery = Type.Object({ period: Type.Optional(Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" })) }, { additionalProperties: false });
+  app.get("/api/me/plan", { preHandler: requirePerson, schema: { querystring: planQuery, response: { 200: MonthPlanResponse } } }, async (req) =>
+    readMonthPlan(q, req.person!.personId, req.query.period ?? companyPeriod(ctx.now()), names(), ctx.now()));
+  app.put("/api/me/plan", { preHandler: requirePerson, schema: { body: SaveMonthPlanRequest } }, async (req, reply) => {
+    const result = await saveMonthPlan(pool, req.person!.personId, names(), req.body, ctx.now());
+    return "error" in result ? fail(reply, result.error.status, result.error.code, result.error.message,
+      result.error.latestTask ? { latestTask: result.error.latestTask } : undefined) : result.plan;
+  });
 
   app.get("/api/me/notifications", { preHandler: requirePerson }, async (req) => ({
     notifications: await listMyNotifications(q, companyMemory, req.person!.personId),

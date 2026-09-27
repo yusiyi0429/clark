@@ -14,7 +14,7 @@ type Result = { ok: true } | { ok: false; error: string };
 
 export function memberNoticeGroups(
   notifications: MemberNotification[],
-  handlers: { markSeen: (ids: string[]) => Promise<Result>; returnTask: (taskId: string, reason: string) => Promise<Result> },
+  handlers: { markSeen: (ids: string[]) => Promise<Result>; returnTask: (taskId: string, reason: string) => Promise<Result>; openTask?: (id: string, from: Element | null) => void },
 ): { assigned: ActionNotice[]; results: ActionNotice[] } {
   const unread = notifications.filter((item) => !item.readAt);
   const seen = async (id: string, settled?: string): Promise<NoticeOutcome> => {
@@ -22,8 +22,15 @@ export function memberNoticeGroups(
     return result.ok ? { ok: true, settled } : result;
   };
   const assigned = unread
-    .filter((item) => item.kind === "meeting_action_assigned")
-    .map<ActionNotice>((item) => ({
+    .filter((item) => item.kind === "meeting_action_assigned" || item.kind === "task_collaborator_added")
+    .map<ActionNotice>((item) => item.kind === "task_collaborator_added" ? ({
+      id: item.id,
+      title: item.text,
+      detail: `邀请你协作 · ${monthDayTime(item.createdAt)}`,
+      tone: "neutral",
+      onOpen: (from) => handlers.openTask?.(item.objectId, from),
+      buttons: [{ label: "知道了", emphasis: true, run: () => seen(item.id) }],
+    }) : ({
       id: item.id,
       title: item.text,
       detail: `会后分给你 · ${monthDayTime(item.createdAt)}`,
@@ -42,7 +49,7 @@ export function memberNoticeGroups(
       },
     }));
   const results = unread
-    .filter((item) => item.kind !== "meeting_action_assigned")
+    .filter((item) => item.kind === "task_returned" || item.kind === "strategic_rejected")
     .map<ActionNotice>((item) => ({
       id: item.id,
       title: item.text,

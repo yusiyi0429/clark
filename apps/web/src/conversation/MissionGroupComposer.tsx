@@ -11,20 +11,23 @@ import { groupInputState, type MissionGroupPhase, type MissionGroupReference } f
 import d from "@/styles/conversation-dock.module.css";
 import s from "@/styles/mission-group.module.css";
 
-export function MissionGroupComposer({ cardId, viewerId, phase, channels, channel, onChannel, narrow, mobileOpen, onMobileOpen, onHeightChange, reference, onRemoveReference, busy, onSend, error }: {
+export function MissionGroupComposer({ cardId, viewerId, phase, channels, channel, onChannel, narrow, mobileOpen, onMobileOpen, onHeightChange, reference, onRemoveReference, busy, onSend, error, taskId, readOnly = false }: {
   cardId: string; viewerId?: string; phase: MissionGroupPhase; channels: ConversationChannel[]; channel: string; onChannel: (id: string) => void;
   narrow: boolean; mobileOpen: boolean; onMobileOpen: (open: boolean) => void; onHeightChange: (height: number) => void;
   reference: MissionGroupReference | null; onRemoveReference: () => void; busy: boolean;
   onSend: (body: string, reference: MissionGroupReference | null) => Promise<boolean>; error?: string | null;
+  taskId?: string; readOnly?: boolean;
 }) {
-  const draftKey = `tianshu-mission-group-draft-v1:${viewerId}:${cardId}`;
+  const draftKey = taskId ? `tianshu-task-group-draft-v1:${viewerId}:${taskId}` : `tianshu-mission-group-draft-v1:${viewerId}:${cardId}`;
   const [input, setInput] = useState("");
   const pill = useRef<HTMLFormElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
   const submitting = useRef(false);
   const rows = usePillRows(input, pill, field);
-  const { writable, placeholder } = groupInputState(phase);
+  const inputState = groupInputState(phase);
+  const writable = !readOnly && inputState.writable;
+  const placeholder = readOnly ? "你已不在这个群" : inputState.placeholder;
   useEffect(() => { try { setInput(localStorage.getItem(draftKey) ?? ""); } catch {} }, [draftKey]);
   const update = (text: string) => { setInput(text); try { if (text) localStorage.setItem(draftKey, text); else localStorage.removeItem(draftKey); } catch {} };
   useEffect(() => {
@@ -40,7 +43,7 @@ export function MissionGroupComposer({ cardId, viewerId, phase, channels, channe
       if (await onSend(input.trim(), reference)) { update(""); onRemoveReference(); }
     } finally { submitting.current = false; }
   }
-  return <div className={clsx(d.layer, columnComposerClass, s.composer)} data-testid="global-controls" data-conversation-context={`mission-card:${cardId}`} data-detail-context="true" data-composer="pill" data-channel="group">
+  return <div className={clsx(d.layer, columnComposerClass, s.composer)} data-testid="global-controls" data-conversation-context={taskId ? `task:${taskId}` : `mission-card:${cardId}`} data-detail-context="true" data-composer="pill" data-channel="group">
     <ComposerPill ref={pill} tone="group" onHeight={onHeightChange} onSubmit={() => { if (!composing.current) void submit(); }}
       references={error || reference ? <>
         {error ? <p role="alert" className={s.error}>{error}</p> : null}

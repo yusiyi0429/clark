@@ -3,7 +3,7 @@
 import { createContext, useContext, useLayoutEffect } from "react";
 import type { Card } from "@/lib/api/client";
 import type { ContextMarkKind } from "@/components/ContextMark";
-import type { PersonalMissionGroup } from "@/conversation/missionCardGroup";
+import type { DetailGroup } from "@/conversation/missionCardGroup";
 
 /** 当前详情对象向外壳登记的信息：对话范围、窄条上的工作区标记。 */
 export type DetailInfo = {
@@ -12,7 +12,7 @@ export type DetailInfo = {
   /** 窄条「当前工作区」标记；只有会议与月度材料显示（clark 同）。 */
   mark: ContextMarkKind | null;
   cards: Card[];
-  group?: PersonalMissionGroup;
+  group?: DetailGroup;
 };
 
 export type WorkspaceApi = {

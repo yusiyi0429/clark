@@ -1,0 +1,116 @@
+[
+  {
+    "step": "walk-1440",
+    "steps": [
+      {
+        "i": 0,
+        "title": "你好，验收 CEO",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-ceo-1440-0.png"
+      },
+      {
+        "i": 1,
+        "title": "左边是通知栏",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-ceo-1440-1.png"
+      },
+      {
+        "i": 2,
+        "title": "右边是公司全局",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-ceo-1440-2.png"
+      },
+      {
+        "i": 3,
+        "title": "公司雷达，还要看什么？",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-ceo-1440-3.png"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "step": "walk-1280",
+    "steps": [
+      {
+        "i": 0,
+        "title": "你好，验收 CEO",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-ceo-1280-0.png"
+      },
+      {
+        "i": 1,
+        "title": "左边是通知栏",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-ceo-1280-1.png"
+      },
+      {
+        "i": 2,
+        "title": "右边是公司全局",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-ceo-1280-2.png"
+      },
+      {
+        "i": 3,
+        "title": "公司雷达，还要看什么？",
+        "pageScroll": false,
+        "stageScroll": true,
+        "overflowX": false,
+        "shot": "onb-ceo-1280-3.png"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "step": "walk-390",
+    "steps": [
+      {
+        "i": 0,
+        "title": "你好，验收 CEO",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-ceo-390-0.png"
+      },
+      {
+        "i": 1,
+        "title": "首页就是通知栏",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-ceo-390-1.png"
+      },
+      {
+        "i": 2,
+        "title": "点开一条，看详情",
+        "pageScroll": false,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-ceo-390-2.png"
+      },
+      {
+        "i": 3,
+        "title": "公司雷达，还要看什么？",
+        "pageScroll": true,
+        "stageScroll": false,
+        "overflowX": false,
+        "shot": "onb-ceo-390-3.png"
+      }
+    ],
+    "errors": []
+  }
+]

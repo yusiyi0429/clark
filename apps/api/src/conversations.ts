@@ -20,6 +20,7 @@ import { getMonthlyPlanRow, projectMonthlyPlanCard } from "./monthlyPlans.js";
 import { getMissionRow, projectMissionCard } from "./missions.js";
 import { getSignalCard } from "./signals.js";
 import { getPersonalMissionCard } from "./personalMissionCards.js";
+import { canReadTask, getTaskView } from "./tasks.js";
 import type { MemoryPerson } from "./companyMemory.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
 
@@ -76,6 +77,23 @@ export async function getScopeObject(
 ): Promise<{ snapshot: TReferenceSnapshot | null; visible: boolean }> {
   if (scope === "global") return { snapshot: null, visible: true };
   const [objectType, id] = scope.split(":", 2);
+  if (objectType === "task") {
+    if (!context || !await canReadTask(q, id, context.person.personId)) return { visible: false, snapshot: null };
+    const task = await getTaskView(q, id, new Map(context.people.map((person) => [person.personId, person.displayName])));
+    if (!task) return { visible: false, snapshot: null };
+    const mission = task.mission ? (await q(`SELECT m.id,m.title,m.outcome,m.milestones,b.name AS battlefield_name,
+      b.six_month_outcome,r.goal_snapshot,
+      COALESCE(r.goal_snapshot->>'monthOutcome',
+        (SELECT goal->>'outcome' FROM jsonb_array_elements(p.battlefields) AS goal
+          WHERE goal->>'battlefieldId'=r.battlefield_id LIMIT 1)) AS month_outcome FROM missions m
+      JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id
+      JOIN mission_rounds r ON r.id=c.round_id JOIN monthly_plans p ON p.id=r.monthly_plan_id
+      JOIN battlefield_config b ON b.id=r.battlefield_id WHERE m.id=$1`,
+    [task.mission.missionId])).rows[0] ?? null : null;
+    return { visible: true, snapshot: { cardId: `task:${id}`, version: task.version, kind: "task", title: task.title,
+      objectRef: { type: "task", id, version: task.version }, payload: { task, mission,
+        monthOutcome: mission?.month_outcome ?? null } } };
+  }
   if (objectType === "mission-card") {
     const card = context ? await getPersonalMissionCard(q, context.people, secret, context.person, id, context.now) : null;
     return card ? { visible: true, snapshot: { cardId: card.id, version: card.version, kind: card.kind, title: card.title, objectRef: card.objectRef, payload: card.payload } } : { visible: false, snapshot: null };
