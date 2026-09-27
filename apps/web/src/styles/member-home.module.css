@@ -26,6 +26,9 @@
 .heading > span { color: var(--ink-faint); font-size: 13px; }
 .error { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--counter); font-size: 13px; line-height: 1.6; }
 
+/* 个人菜单在桌面上随通知栏；手机上放到首页最后（见下方 690px）。 */
+.phoneAccount { display: none; }
+
 /* 通知栏没有条目时的一句说明：放在与通知卡片同一位置（时钟下方）。 */
 .quiet {
   margin: 0;
@@ -36,12 +39,20 @@
   text-shadow: none;
 }
 
+/*
+ * 手机首页（DRI 主要用单屏手机）：事情在天枢之外做，来这里是同步和看进展。
+ * 顺序：通知（新分来的事、要表态的本月卡）→ 执行事项（改状态）→ 我的本月卡 → 战场 → 雷达 → 个人菜单。
+ * 标题只留给读屏，顶部已有时钟胶囊。
+ */
 @media (max-width: 690px) {
   .board { height: auto; overflow: visible; padding-bottom: 0; gap: 16px; }
+  .heading { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .widgetsSlot { order: 1; }
+  .phoneAccount { display: block; order: 2; margin-top: 4px; }
   :global([data-detail-open="false"]) .memberRail { height: auto; overflow: visible; border: 0; border-radius: 0; background: none; box-shadow: none; isolation: auto; }
   :global([data-detail-open="false"]) .memberRail > :first-child { position: fixed; top: 12px; left: 16px; right: 16px; padding: 4px; border-radius: var(--onboarding-card-radius); background: var(--onboarding-glass); box-shadow: var(--onboarding-highlight); }
   :global([data-detail-open="false"]) .memberNotices { position: static; overflow: visible; padding: 0; }
-  :global([data-detail-open="false"]) .memberAccount { position: static; margin-top: 16px; }
+  :global([data-detail-open="false"]) .memberAccount { display: none; }
   .quiet { color: var(--ink-muted); text-shadow: none; }
 }
 

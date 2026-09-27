@@ -49,14 +49,14 @@
 .automatic summary { display: inline-flex; align-items: center; min-height: 44px; margin-block: -6px; color: var(--onboarding-muted); font-size: 13px; cursor: pointer; }
 .automatic summary:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; border-radius: 6px; }
 
-/* 已加的胶囊：一行一条，按内容宽；长方向自动折行成圆角矩形。 */
+/* 已加的胶囊：一行一条，按内容宽；长方向自动折行成圆角矩形。蓝色和主按钮同一种（#3A83F7，用户定：不要太深），白字用 600 字重补可读性。 */
 .chips { display: grid; justify-items: start; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .chips li { display: grid; justify-items: start; gap: 4px; max-width: 100%; min-width: 0; }
 .chips li:has(.editField) { justify-items: stretch; width: 100%; }
 .chip { display: inline-flex; align-items: center; max-width: 100%; min-height: 36px; border-radius: 18px; background: var(--onboarding-blue); color: #fff; box-shadow: 0 1px 2px rgb(20 58 128 / 16%); }
 .chips li[data-fresh] .chip { animation: chipIn var(--onboarding-feedback) var(--onboarding-ease) both; }
 /* 字和 × 各自是一个键；上下各向外借 4px，点按区域到 44px，胶囊本身仍是 36px。 */
-.chipText { min-width: 0; min-height: 44px; margin-block: -4px; padding: 0 2px 0 16px; border: 0; border-radius: 18px 0 0 18px; background: none; color: inherit; font-size: 15px; font-weight: 500; line-height: 1.45; text-align: left; overflow-wrap: anywhere; cursor: text; }
+.chipText { min-width: 0; min-height: 44px; margin-block: -4px; padding: 0 2px 0 16px; border: 0; border-radius: 18px 0 0 18px; background: none; color: inherit; font-size: 15px; font-weight: 600; line-height: 1.45; text-align: left; overflow-wrap: anywhere; cursor: text; }
 .chipRemove { display: grid; flex: none; place-items: center; width: 40px; min-height: 44px; margin-block: -4px; padding: 0; border: 0; border-radius: 0 18px 18px 0; background: none; color: rgb(255 255 255 / 78%); cursor: pointer; transition: color var(--dur-snap), background var(--dur-snap); }
 .chipRemove:hover { color: #fff; background: rgb(255 255 255 / 14%); }
 .chip[data-invalid="true"] { background: var(--counter-wash); color: var(--onboarding-error); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--onboarding-error) 36%, transparent); }

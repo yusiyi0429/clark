@@ -58,6 +58,8 @@
 .signalReason { color: var(--ink-muted); font-size: 13px; line-height: 1.65; }
 .allLink:focus-visible, .signal:focus-visible, .retry:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
 @media (max-width: 1000px) { .widget { min-height: 0; } }
+/* 手机首页从自己的本月卡往外看：我的本月卡在战场前面。 */
+@media (max-width: 690px) { .widget[data-widget="mission-cards"] { order: -1; } }
 @media (max-width: 759px) { .widgets { grid-template-columns: minmax(0, 1fr); gap: 12px; } .widget { padding: 20px; gap: 14px; } .expand { min-height: 36px; } .retry.retry { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) { .titleLink svg, .expand svg, .signal.signal { transition: none; } }
 @media (prefers-contrast: more) { .widget { border-color: var(--ink-muted); } .goal, .cardStatus, .cardMeta, .deadline, .empty, .radarStatus, .signalMeta, .signalReason { color: var(--ink); } .signal.signal { box-shadow: inset 0 0 0 1px var(--ink-muted); } }

@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Lock } from "lucide-react";
-import { AccountMenu } from "@/components/AccountMenu";
+import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { ActionNoticeCard } from "@/components/ActionNoticeCard";
 import { HeroButton } from "@/components/HeroButton";
 import { RailClock } from "@/components/NotificationRail";
@@ -26,7 +26,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   const account = { displayName, loginId, role: "member" as const };
   return (
     <WorkspaceFrame homeHref="/me" viewerId={viewerId} account={account} agentTitle="DRI Agent"
-      home={<MemberHomeBody displayName={displayName} home={home} />}
+      home={<MemberHomeBody displayName={displayName} home={home} account={account} />}
       notifications={(api, currentHref) => (
         <aside className={`${n.rail} ${m.memberRail}`} aria-label="通知">
           <RailClock
@@ -57,13 +57,15 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   );
 }
 
-function MemberHomeBody({ displayName, home }: { displayName: string; home: ReturnType<typeof useMemberHome> }) {
+/** 手机上按「先看新的、再推手上的、最后看全局」排（member-home.module.css）；桌面上个人菜单在通知栏底部，这里的一份只在手机上显示。 */
+function MemberHomeBody({ displayName, home, account }: { displayName: string; home: ReturnType<typeof useMemberHome>; account: Account }) {
   const { navigate } = useWorkspace();
   return <div className={m.board}>
     <header className={m.heading}><h1>{displayName}</h1><span>我的工作台</span></header>
     {home.homeError ? <div className={m.error} role="alert"><span>{home.homeError}</span><HeroButton variant="ghost" size="sm" onPress={() => void home.refresh()}>重试</HeroButton></div> : null}
-    {home.work || !home.homeError ? <MemberHomeWidgets work={home.work} onNavigate={navigate} onRefresh={home.refresh}
-      radar={home.radar ? <MemberRadarWidget radar={home.radar} onNavigate={navigate} onRefresh={() => void home.refresh()} /> : undefined} /> : null}
+    {home.work || !home.homeError ? <div className={m.widgetsSlot}><MemberHomeWidgets work={home.work} onNavigate={navigate} onRefresh={home.refresh}
+      radar={home.radar ? <MemberRadarWidget radar={home.radar} onNavigate={navigate} onRefresh={() => void home.refresh()} /> : undefined} /></div> : null}
     <MemberTasks tasks={home.tasks} busyId={home.busyId} error={home.taskError === home.homeError ? null : home.taskError} onStatus={(task, status) => void home.setStatus(task, status)} />
+    <div className={m.phoneAccount}><AccountMenu account={account} onNavigate={navigate} /></div>
   </div>;
 }
