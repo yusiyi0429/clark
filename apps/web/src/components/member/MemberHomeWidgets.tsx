@@ -13,11 +13,11 @@ import s from "./member-home-widgets.module.css";
 export type MemberWork = components["schemas"]["MemberWork"];
 type Navigate = (href: string, origin?: Element | null) => void;
 
-/** clark ProjectSection / BattlefieldGoals：按 DRI-01 的新规则只保留本月目标。
- * 雷达由 02 提供内容；未提供时没有空格或占位。 */
+/** clark ProjectSection / BattlefieldGoals：按 DRI-01 的新规则只保留本月目标。 */
 export function MemberHomeWidgets({ work, onNavigate, onRefresh, radar }: { work: MemberWork | null; onNavigate: Navigate; onRefresh: () => void; radar?: ReactNode }) {
   if (!work) return <p className={s.loading} role="status">正在读取本月工作…</p>;
-  return <section className={s.widgets} aria-label="本月工作">
+  // 雷达和 CEO 首页一样放在右上角：单独一栏，不和战场、本月卡挤在同一个网格里。
+  return <div className={s.workRow}><section className={s.widgets} aria-label="本月工作">
     {work.battlefields.length ? work.battlefields.map((battlefield) => <BattlefieldWidget key={battlefield.id} battlefield={battlefield} onNavigate={onNavigate} />) :
       <Card className={s.widget}><div className={s.heading}><h2>参与的战场</h2></div><p className={s.empty}>还没有登记你参与的战场</p></Card>}
     <Card className={s.widget} data-widget="mission-cards">
@@ -25,8 +25,7 @@ export function MemberHomeWidgets({ work, onNavigate, onRefresh, radar }: { work
       {work.missionCards.length ? <div className={s.cardList}>{work.missionCards.map((card) => <PersonalCardEntry key={card.cardId} card={card} onNavigate={onNavigate} onRefresh={onRefresh} />)}</div> :
         <p className={s.empty}>这个月还没有你的卡</p>}
     </Card>
-    {radar ? <Card className={s.widget} data-widget="radar">{radar}</Card> : null}
-  </section>;
+  </section>{radar ? <div className={s.radarSlot} data-widget="radar">{radar}</div> : null}</div>;
 }
 
 function BattlefieldWidget({ battlefield, onNavigate }: { battlefield: MemberWork["battlefields"][number]; onNavigate: Navigate }) {

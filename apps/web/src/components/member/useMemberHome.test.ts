@@ -11,7 +11,7 @@ const hooks = vi.hoisted(() => ({
   useRef(initial: unknown) { const [ref] = hooks.useState({ current: initial }); return ref; },
   useEffect(effect: () => void | (() => void)) { hooks.effects.push(effect); },
 }));
-const api = vi.hoisted(() => ({ GET: vi.fn() }));
+const api = vi.hoisted(() => ({ GET: vi.fn(), PATCH: vi.fn() }));
 vi.mock("react", () => hooks);
 vi.mock("@/lib/api/client", () => ({ browserApi: api }));
 
@@ -110,5 +110,17 @@ describe("常驻成员首页的网络恢复", () => {
     events.dispatchEvent(new Event("radar-settings-changed"));
     await vi.waitFor(() => expect(render().radar).toBeNull());
     cleanup?.();
+  });
+
+  it("从值得注意通知打开个人信号时标记已读并从首页摘要移除", async () => {
+    const id = "0f0f0f0f-0000-4000-8000-000000000001";
+    const radar = { lastRun: null, unreadCount: 1, highlights: [{ id, state: { read: false, saved: false, dismissed: false }, relevance: 5 }] };
+    api.GET.mockImplementation(async (path: string) => ({ response: { status: 200, ok: true }, data: path === "/api/me/home" ? { myTasks: [], work, radar } : path === "/api/me/mission-cards" ? { rounds: [] } : { notifications: [] } }));
+    render(); await refresh();
+    api.PATCH.mockResolvedValue({ response: { status: 200, ok: true } });
+    expect(await render().readRadarNotice(id)).toBe(true);
+    expect(api.PATCH).toHaveBeenCalledWith("/api/me/radar/signals/{id}/state", { params: { path: { id } }, body: { read: true } });
+    expect(render().radar?.highlights[0].state.read).toBe(true);
+    expect(render().radar?.unreadCount).toBe(0);
   });
 });

@@ -1,8 +1,13 @@
 /* clark dri/home：同形阅读卡、清晰卡头与目标内嵌区；尺寸映射到共同晨光 token。 */
 .widgets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; min-width: 0; align-items: stretch; }
 .widget { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 16px; min-width: 0; min-height: 216px; padding: 22px; border: 1px solid var(--hairline); border-radius: var(--onboarding-card-radius); background: var(--ts-surface, var(--surface)); box-shadow: var(--onboarding-highlight); }
-/* 雷达是第二块：同一卡片外形的整行宽组件，战场与本月卡的数量变化时不留孤卡。 */
-.widget[data-widget="radar"] { grid-column: 1 / -1; min-height: 0; }
+/* 有雷达时照 CEO 首页顶部的比例：左边战场与本月卡，右边雷达一栏，高度跟左边对齐。
+ * 左边固定两列；张数为奇数时最后一张铺满一行，不留孤卡。 */
+.workRow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
+.workRow:has(> .radarSlot) { grid-template-columns: minmax(0, 3fr) minmax(148px, .8fr); }
+.workRow:has(> .radarSlot) > .widgets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.workRow:has(> .radarSlot) > .widgets > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+.radarSlot { display: flex; min-width: 0; }
 .heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 32px; }
 .widget h2 { min-width: 0; margin: 0; color: var(--ink); font-size: 20px; font-weight: 600; line-height: 1.4; letter-spacing: -.025em; }
 .titleLink.titleLink { position: static; width: 100%; justify-content: flex-start; gap: 8px; min-height: 32px; height: auto; padding: 0; border-radius: 0; background: none; color: inherit; font: inherit; text-align: left; white-space: normal; }
@@ -35,31 +40,15 @@
 .empty, .loading { margin: 0; color: var(--ink-faint); font-size: 14px; line-height: 1.7; }
 .empty { padding-top: 8px; }
 .loading { padding: 20px 4px; }
-/* 雷达小组件（02）：标题一行右边是「全部」，下面一行写最近一次扫描；三条信号在小组件够宽时并排，窄了上下叠。 */
-.widget[data-widget="radar"] { gap: 12px; container-type: inline-size; }
-.allLink.allLink { flex: none; gap: 2px; min-height: 44px; height: auto; margin-right: -8px; padding: 0 6px 0 10px; border-radius: var(--onboarding-inset-radius); color: var(--ink-muted); font-size: 14px; font-weight: 500; }
-.allLink:hover { color: var(--ink); }
-.radarStatus { margin: -10px 0 0; color: var(--ink-faint); font-size: 13px; line-height: 1.6; font-variant-numeric: tabular-nums; }
-.radarStatus[data-tone="error"] { color: var(--onboarding-error); }
-.radarFailure { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 8px 8px 8px 14px; border-radius: var(--onboarding-inset-radius); background: var(--counter-wash); }
-.radarFailure p { margin: 0; color: var(--onboarding-error); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
-.retry.retry { min-height: 36px; height: auto; padding: 4px 12px; border-radius: var(--onboarding-pill-radius); color: var(--onboarding-error); font-size: 14px; }
-.radarNote { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.7; }
-.highlights { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 0; padding: 0; list-style: none; }
-@container (min-width: 620px) { .highlights { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.highlights li { display: flex; min-width: 0; }
-.signal.signal { display: grid; flex: 1; justify-content: stretch; justify-items: start; align-content: start; gap: 6px; min-width: 0; width: 100%; height: auto; padding: 14px 16px; border-radius: var(--onboarding-inset-radius); background: var(--morning-start); color: var(--ink); text-align: left; white-space: normal; font-weight: 400; transition: background var(--dur-base) var(--ease-swift); }
-.signal.signal:hover { background: color-mix(in srgb, var(--onboarding-blue) 6%, var(--morning-start)); }
-.signalMeta { display: flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; color: var(--ink-faint); font-size: 12px; line-height: 1.6; }
-.signalMeta > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.unread { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--onboarding-blue); }
-.signalTitle, .signalReason { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-.signalTitle { color: var(--ink); font-size: 15px; font-weight: 600; line-height: 1.55; }
-.signalReason { color: var(--ink-muted); font-size: 13px; line-height: 1.65; }
-.allLink:focus-visible, .signal:focus-visible, .retry:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
+.radarCard.radarCard { grid-column: auto; grid-row: auto; box-sizing: border-box; width: 100%; height: 100%; min-height: 190px; padding: 18px 20px 12px; justify-content: flex-start; border-color: #dfe4e9; background: linear-gradient(145deg, #f1f7ff, #f8fafd 75%); box-shadow: 0 2px 8px #29334c08; text-align: left; }
+.radarCard h2 { margin: 0; font-size: var(--type-title, 20px); font-weight: 600; letter-spacing: -.03em; }
+.radarStatus { position: absolute; left: 20px; bottom: 17px; z-index: 2; color: #617894; font-size: 11px; line-height: 1.4; }
+.scanStage { min-height: 104px; max-height: 132px; margin-block: auto; }
+.scanStage > div { height: 116px; }
+.radarCard:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
 @media (max-width: 1000px) { .widget { min-height: 0; } }
 /* 手机首页从自己的本月卡往外看：我的本月卡在战场前面。 */
-@media (max-width: 690px) { .widget[data-widget="mission-cards"] { order: -1; } }
-@media (max-width: 759px) { .widgets { grid-template-columns: minmax(0, 1fr); gap: 12px; } .widget { padding: 20px; gap: 14px; } .expand { min-height: 36px; } .retry.retry { min-height: 44px; } }
-@media (prefers-reduced-motion: reduce) { .titleLink svg, .expand svg, .signal.signal { transition: none; } }
-@media (prefers-contrast: more) { .widget { border-color: var(--ink-muted); } .goal, .cardStatus, .cardMeta, .deadline, .empty, .radarStatus, .signalMeta, .signalReason { color: var(--ink); } .signal.signal { box-shadow: inset 0 0 0 1px var(--ink-muted); } }
+@media (max-width: 690px) { .widget[data-widget="mission-cards"] { order: -1; } .radarSlot { width: min(100%, 220px); justify-self: end; } }
+@media (max-width: 759px) { .workRow, .workRow:has(> .radarSlot), .workRow:has(> .radarSlot) > .widgets, .widgets { grid-template-columns: minmax(0, 1fr); gap: 12px; } .widget { padding: 20px; gap: 14px; } .expand { min-height: 36px; } }
+@media (prefers-reduced-motion: reduce) { .titleLink svg, .expand svg { transition: none; } }
+@media (prefers-contrast: more) { .widget, .radarCard.radarCard { border-color: var(--ink-muted); } .goal, .cardStatus, .cardMeta, .deadline, .empty, .radarStatus { color: var(--ink); } }

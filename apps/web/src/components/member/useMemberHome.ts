@@ -117,6 +117,25 @@ export function useMemberHome() {
     return response.ok ? { ok: true } : failed(error, "没记上，请重试。");
   }, []);
 
+  /** 从值得注意的通知打开信号时，沿用个人雷达的已读接口。 */
+  const readRadarNotice = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      const { response } = await browserApi.PATCH("/api/me/radar/signals/{id}/state", { params: { path: { id } }, body: { read: true } });
+      if (response.status === 401) {
+        window.location.assign("/access?next=%2Fme");
+        return false;
+      }
+      if (response.ok) setRadar((current) => current ? {
+        ...current,
+        unreadCount: Math.max(0, current.unreadCount - 1),
+        highlights: current.highlights.map((signal) => signal.id === id ? { ...signal, state: { ...signal.state, read: true } } : signal),
+      } : current);
+    } catch {
+      // 阅读页仍可打开；未标记成功时，用户可以在阅读页手动重试。
+    }
+    return true;
+  }, []);
+
   /** 卡上办完、回执也淡出了：本地先拿掉，再拉一次最新的。 */
   const settle = useCallback(
     (id: string) => {
@@ -126,5 +145,5 @@ export function useMemberHome() {
     [load],
   );
 
-  return { tasks, notifications, rounds, work, radar, homeError, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, settle };
+  return { tasks, notifications, rounds, work, radar, homeError, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, readRadarNotice, settle };
 }

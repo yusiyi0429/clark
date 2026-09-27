@@ -57,7 +57,7 @@ describe("DRI 首页小组件", () => {
     ui.presses.get("打开我的本月卡：灯塔客户")!({ target });
     expect(navigate).toHaveBeenLastCalledWith("/me/mission-cards/mine", target);
   });
-  it("雷达插槽只在提供组件时出现，与战场和本人卡同一网格", () => {
+  it("雷达小卡插槽只在提供组件时出现", () => {
     expect(render()).not.toContain('data-widget="radar"');
     const html = render(homeWork, <p>测试雷达内容</p>);
     expect(html).toContain('data-widget="radar"'); expect(html).toContain("测试雷达内容");
