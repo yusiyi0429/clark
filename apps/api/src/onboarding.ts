@@ -131,7 +131,7 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
     ...common, role: "member",
     next: memberCardNext(work.missionCards, deciders) ?? (taskCount > 0
       ? { text: `你有 ${taskCount} 件执行事项在推进`, action: "看看我的执行事项", href: "/me" }
-      : { text: "会后分给你的事，会出现在首页和通知栏", action: "进入工作台", href: "/me" }),
+      : { text: "需要你留意的事情，会出现在通知栏", action: "进入工作台", href: "/me" }),
     work: {
       ...work,
       battlefields: work.battlefields.map(({ id, name, monthTarget }) => ({ id, name, monthTarget })),

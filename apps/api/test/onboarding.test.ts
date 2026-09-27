@@ -154,7 +154,7 @@ describe("首次登录引导", () => {
       const member = await read(t, await t.memberCookie());
       expect(member).toMatchObject({
         work: { period: "2026-10", planStatus: "none", battlefields: [], missions: [] },
-        next: { text: "会后分给你的事，会出现在首页和通知栏", action: "进入工作台", href: "/me" },
+        next: { text: "需要你留意的事情，会出现在通知栏", action: "进入工作台", href: "/me" },
       });
       expect(member).not.toHaveProperty("company");
     } finally { await t.close(); }
@@ -226,7 +226,7 @@ describe("首次登录引导", () => {
       const cookie = await t.memberCookie();
       expect((await read(t, cookie)).next).toEqual({ text: "你有 2 件执行事项在推进", action: "看看我的执行事项", href: "/me" });
       await t.sql("UPDATE tasks SET status = 'done' WHERE owner_id = $1", [TEST_MEMBER.personId]);
-      expect((await read(t, cookie)).next).toEqual({ text: "会后分给你的事，会出现在首页和通知栏", action: "进入工作台", href: "/me" });
+      expect((await read(t, cookie)).next).toEqual({ text: "需要你留意的事情，会出现在通知栏", action: "进入工作台", href: "/me" });
     } finally { await t.close(); }
   });
 });
