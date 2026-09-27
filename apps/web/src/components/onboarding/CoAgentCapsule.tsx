@@ -13,7 +13,7 @@ export function CoAgentCapsule({ state = "idle", level = 0, acknowledge = 0 }: {
     <div className={s.capsuleGlass} data-state={state}>
       <div key={acknowledge} className={acknowledge ? s.acknowledge : s.capsuleBody}>
         <span className={s.sheen} />
-        {state === "listening" ? <SiriWave energy={level} className={s.wave} /> : <span className={s.idleLight} />}
+        {state === "listening" ? <SiriWave energy={level} className={s.wave} /> : <><span className={s.idleLight} /><span className={s.ambientLight} /></>}
       </div>
     </div>
   </div>;

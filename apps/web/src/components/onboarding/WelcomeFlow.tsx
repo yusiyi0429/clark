@@ -220,7 +220,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
         <div className={s.content} key={step} ref={content} data-step={step}>
           <div className={s.intro}>
             <h1 ref={title} tabIndex={-1}>{heading}</h1>
-            {step === "hello" ? <><p className={s.subtitle}>我是你的 Co-Agent</p><p className={s.description}>我先带你看看这个月和你有关的工作。<br />{data.voiceprint.configured ? "雷达和声纹" : "雷达"}，可以现在设，也可以以后再说。</p></> : null}
+            {step === "hello" ? <><p className={s.subtitle}>欢迎使用天枢。</p><p className={s.description}>我先带你看看这个月和你有关的工作。<br />{data.voiceprint.configured ? "雷达和声纹" : "雷达"}，可以现在设，也可以以后再说。</p></> : null}
             {/* 「这里改的是公司雷达。」由编辑器顶部那一行说，同一屏不重复。 */}
             {step === "radar" && data.role === "ceo" ? <p className={s.description}>我会按你签发的本月目标自动关注；你还可以补充方向和来源。</p> : null}
             {step === "voiceprint" ? <p className={s.description}>录一段 15–30 秒的朗读，帮我在会后建议哪些发言可能来自你——最后仍由人核对。</p> : null}

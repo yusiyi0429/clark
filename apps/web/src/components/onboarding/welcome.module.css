@@ -106,6 +106,7 @@
   .stage { --stage-fade: 20px; min-height: 0; flex: 0 1 auto; overflow-y: auto; margin-block: calc(32px - var(--stage-fade)) calc(0px - var(--stage-fade)); padding-block: var(--stage-fade); scroll-padding-block: var(--stage-fade); scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent;
     -webkit-mask-image: linear-gradient(180deg, transparent, #000 var(--stage-fade), #000 calc(100% - var(--stage-fade)), transparent);
     mask-image: linear-gradient(180deg, transparent, #000 var(--stage-fade), #000 calc(100% - var(--stage-fade)), transparent); }
+  .stage:not(:hover):not(:focus-within) { scrollbar-color: transparent transparent; }
   .content[data-step="hello"], .content[data-step="start"] { padding-top: 0; }
   .subtitle { margin-top: 16px; }
   .description, .content[data-step="hello"] .description { margin-top: 24px; }
@@ -114,6 +115,20 @@
   .summary span { margin-top: 8px; }
   .footer { flex-shrink: 0; margin-top: 24px; padding-top: 0; gap: 16px; }
   .secondary:empty { display: none; }
+}
+@media (min-width: 1000px) {
+  .flow { width: min(960px, 100%); }
+  .flow[data-step="radar"] .description { max-width: 760px; }
+  .snapshot:not(.workSnapshot) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 28px; }
+  .snapshot:not(.workSnapshot) .snapshotSection { min-width: 0; margin: 0; padding: 0; border: 0; }
+  .snapshot:not(.workSnapshot) .people { align-self: end; }
+  .workSnapshot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 28px; }
+  .workSnapshot .period { grid-column: 1 / -1; margin: 0; }
+  .workSnapshot .workSection { min-width: 0; margin: 0; padding: 0; border: 0; }
+  .workSnapshot .personalCards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .content[data-step="voiceprint"] .details { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: center; gap: 16px 28px; }
+  .content[data-step="voiceprint"] .consent, .content[data-step="voiceprint"] .enrolled, .content[data-step="voiceprint"] .error { grid-column: 1 / -1; }
+  .content[data-step="voiceprint"] .script, .content[data-step="voiceprint"] .recordControl { margin: 0; }
 }
 @media (min-width: 760px) and (max-height: 950px) {
   .flow:is([data-step="voiceprint"], [data-step="company"], [data-step="work"], [data-step="radar"]) { padding-top: 80px; padding-bottom: 24px; }

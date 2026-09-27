@@ -64,13 +64,19 @@
 }
 .sheen { position: absolute; z-index: 2; inset: 1px; border-radius: inherit; background: radial-gradient(ellipse 80% 68% at 50% -18%, rgb(225 244 255 / 42%), transparent 78%); animation: breathe 4s ease-in-out infinite; }
 .sheen::before { content: ""; position: absolute; inset: 0 8px 20%; border-radius: 50%; border-top: 1px solid rgb(255 255 255 / 85%); mask-image: linear-gradient(90deg, transparent, #000 28%, #000 72%, transparent); }
-.idleLight { position: absolute; inset: 13% 15% 24%; opacity: .48; background: radial-gradient(ellipse at 36% 38%, rgb(238 251 255 / 65%), transparent 50%), radial-gradient(ellipse at 63% 55%, rgb(91 216 246 / 62%), transparent 62%); filter: blur(9px); transform: rotate(-8deg); animation: idleFlow 8s ease-in-out infinite alternate; }
+.idleLight { position: absolute; inset: 13% 15% 24%; opacity: .48; background: radial-gradient(ellipse at 36% 38%, rgb(238 251 255 / 65%), transparent 50%), radial-gradient(ellipse at 63% 55%, rgb(91 216 246 / 62%), transparent 62%); filter: blur(9px); transform: rotate(-8deg); animation: idleFlow 11s ease-in-out infinite alternate; }
+.ambientLight { position: absolute; inset: 20% 22% 18% 30%; opacity: .24; border-radius: 48% 52% 61% 39%; background: radial-gradient(ellipse at 70% 40%, rgb(116 227 239 / 68%), transparent 62%), radial-gradient(ellipse at 24% 70%, rgb(166 156 244 / 45%), transparent 57%); filter: blur(12px); animation: ambientFlow 13s -4s ease-in-out infinite alternate; }
 .wave { position: absolute; inset: 8% 0; width: 100%; height: 84%; mix-blend-mode: screen; filter: blur(1px); opacity: .88; }
 .acknowledge { animation: acknowledge var(--onboarding-morph) var(--onboarding-ease); }
 .acknowledge::after { content: ""; position: absolute; inset: 0 0 60%; border-radius: inherit; z-index: 3; background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 22%) 50%, transparent 70%); filter: blur(2px); animation: sweep var(--onboarding-morph) var(--onboarding-ease) both; }
+.acknowledge .idleLight { animation: awakeFlow 1.3s ease-in-out, idleFlow 11s 1.3s ease-in-out infinite alternate; }
+.acknowledge .ambientLight { animation: awakeAmbient 1.3s ease-in-out, ambientFlow 13s 1.3s ease-in-out infinite alternate; }
 @keyframes condense { from { opacity: 0; transform: scale(.94); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
 @keyframes breathe { 50% { opacity: .7; } }
-@keyframes idleFlow { to { transform: translateX(8%) rotate(6deg); opacity: .38; } }
+@keyframes idleFlow { to { transform: translate3d(8%, -5%, 0) rotate(6deg) scale(1.08, .94); opacity: .38; } }
+@keyframes ambientFlow { to { transform: translate3d(-12%, 7%, 0) rotate(-8deg) scale(.91, 1.12); opacity: .32; } }
+@keyframes awakeFlow { 45% { transform: translate3d(21%, -12%, 0) rotate(12deg) scale(1.2, .88); opacity: .7; } }
+@keyframes awakeAmbient { 45% { transform: translate3d(-24%, 15%, 0) rotate(-16deg) scale(1.16, .9); opacity: .52; } }
 @keyframes acknowledge { 50% { left: -3%; right: -3%; } }
 @keyframes sweep { from { transform: translateX(-100%); opacity: 0; } 30% { opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
 .progress { display: flex; height: 36px; align-items: center; justify-content: center; }
@@ -82,11 +88,12 @@
 @media (max-width: 759px) { .capsule, .capsuleGlass { height: 52px; } .capsuleGlass { width: 184px; } }
 @media (prefers-reduced-motion: reduce) {
   .lightPosition { transform: none; transition: none; }
-  .blueLight, .cyanLight, .capsule, .sheen, .idleLight, .acknowledge { animation: none; }
+  .blueLight, .cyanLight, .capsule, .sheen, .idleLight, .ambientLight, .acknowledge, .acknowledge .idleLight, .acknowledge .ambientLight { animation: none; }
   .acknowledge::after { display: none; }
   .primary:active { transform: none; }
   .switch, .switch > span { transition: none; }
 }
 @media (prefers-reduced-transparency: reduce) { .glass { background: var(--morning-start); --onboarding-blur: 0px; --onboarding-sat: 100%; } }
+@media (prefers-reduced-transparency: reduce) { .sheen, .idleLight, .ambientLight { display: none; } }
 @media (prefers-contrast: more) { .glass { border: 1px solid var(--ink-muted); } }
 @media (forced-colors: active) { .glass { border: 1px solid CanvasText; } .primary { background: Highlight; color: HighlightText; } .dots span { background: Highlight; } .switch { border: 1px solid CanvasText; } .switch[data-on="true"] { background: Highlight; } }

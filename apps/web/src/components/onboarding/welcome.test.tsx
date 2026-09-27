@@ -198,6 +198,8 @@ describe("真实数据的首次引导", () => {
   it("服务端首屏包含问候与晨光，胶囊不可操作；读屏进度有文本", () => {
     const html = renderToStaticMarkup(<WelcomeFlow data={member} />);
     expect(html).toContain("你好，测试");
+    expect(html).toContain("欢迎使用天枢。");
+    expect(html).not.toContain("我是你的 Co-Agent");
     expect(html).toContain("先进入工作台");
     expect(html).toContain("data-morning-canvas");
     expect(html).not.toContain("声纹，可以现在录");

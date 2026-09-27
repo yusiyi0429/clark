@@ -114,6 +114,17 @@
 .footerHint { margin: 0; color: var(--onboarding-faint); font-size: 12px; line-height: 1.7; text-align: center; text-wrap: balance; }
 .footerHint[data-tone="error"] { color: var(--onboarding-error); font-size: 14px; }
 
+@media (min-width: 1000px) {
+  .editor[data-onboarding="true"] .bodyInner { display: grid; grid-template-columns: 1.1fr .9fr; gap: 28px; }
+  .editor[data-onboarding="true"] .section { align-content: start; margin-top: 16px; padding-top: 0; border-top: 0; }
+  .editor[data-onboarding="true"] .section:first-child { margin-top: 16px; }
+}
+@media (min-width: 1000px) and (max-height: 850px) {
+  .editor[data-onboarding="true"] { padding-block: 18px; }
+  .editor[data-onboarding="true"] .section, .editor[data-onboarding="true"] .section:first-child { gap: 8px; margin-top: 8px; }
+  .editor[data-onboarding="true"] .automatic { padding-block: 8px; }
+  .editor[data-onboarding="true"] .automatic ul { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+}
 @media (max-width: 759px) {
   .editor { padding: 20px; }
   .switchRow { min-height: 60px; }

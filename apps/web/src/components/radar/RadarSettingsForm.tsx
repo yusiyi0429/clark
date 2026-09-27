@@ -221,7 +221,7 @@ export function RadarSettingsForm({
   ) : null;
 
   return (
-    <section className={`${f.glass} ${s.editor}`} data-mode={mode} aria-label={person ? "我的雷达设置" : "公司雷达设置"}>
+    <section className={`${f.glass} ${s.editor}`} data-mode={mode} data-onboarding={actionsTarget ? true : undefined} aria-label={person ? "我的雷达设置" : "公司雷达设置"}>
       {!person ? (
         <p className={s.company}>
           <Building2 size={17} aria-hidden="true" />
