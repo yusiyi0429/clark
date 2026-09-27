@@ -34,6 +34,9 @@ import { makeMemoryTools } from "./memoryTools.js";
 import { createCompanyMemoryMcpServer } from "./mcpCompanyMemory.js";
 import { HUMAN_WRITING_STYLE } from "./promptStyle.js";
 import { unavailableWebSearchAdapter, type WebSearchAdapter } from "./webSearch.js";
+import type { Pool } from "pg";
+import { createObjectMaterial, editObjectMaterial, listObjectMaterials, readObjectMaterial, ObjectMaterialError } from "./objectMaterials.js";
+import { personDisplayNames } from "./people.js";
 
 const SYSTEM_PROMPT = `# 角色
 
@@ -58,6 +61,8 @@ const SYSTEM_PROMPT = `# 角色
 内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实用企业知识章节与段落标注。面向 CEO 的表述中，公司知识库一律称“企业知识”，不要出现 CompanyMemory 这个词。
 
 你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
+
+唯一例外是对方明确要求修改或新写当前议题、执行事项的材料时，可以用 edit_material、create_material；只能改 Markdown，改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
 
 需要 CEO 做决定时，直接说明该决定什么、代价是什么，由 CEO 自己执行。CEO 的要求超出只读权限时，说明边界并给出可执行的下一步。
 
@@ -112,6 +117,8 @@ function driSystemPrompt(displayName: string, personalCard = false): string {
 内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实用企业知识章节与段落标注。公司知识库一律称“企业知识”，不要出现 CompanyMemory 这个词。
 
 你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，不形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
+
+唯一例外是对方明确要求修改或新写当前议题、执行事项的材料时，可以用 edit_material、create_material；只能改 Markdown，改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
 
 你看不到 CEO 的决策面，包括战场总览和待 CEO 决策的议题。被问到这些时直接说明看不到，不要推测。要求超出只读权限时，说明边界并给出可执行的下一步。
 
@@ -175,6 +182,7 @@ export type PendingIssueSummary = {
 
 export type PiConversationRuntimeOptions = {
   companyMemory: CompanyMemoryRepository;
+  materialPool?: Pool;
   /** 只读查询当前 pending Issue；未提供时不暴露 list_pending_issues 工具。 */
   listPendingIssues?: () => Promise<PendingIssueSummary[]>;
   baseUrl: string;
@@ -399,6 +407,53 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const personalCard = input.scope.startsWith("mission-card:");
       // The current card has already passed object authorization. The unscoped Mission query must not bypass that boundary.
       const viewerBoardTools = isCeo ? boardTools : boardTools.filter((tool) => !CEO_ONLY_TOOLS.has(tool.name) && !(personalCard && tool.name === "list_missions"));
+      const materialScope = /^(issue|task):(.+)$/.exec(input.scope);
+      const materialTools = materialScope && options.materialPool ? (() => {
+        const ref = { objectType: materialScope[1] as "issue" | "task", objectId: materialScope[2] };
+        const pool = options.materialPool!;
+        const q = pool.query.bind(pool);
+        const names = personDisplayNames(options.companyMemory);
+        const viewer = input.viewer;
+        const result = async (work: () => Promise<unknown>) => {
+          try {
+            const value = await work();
+            return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
+          } catch (cause) {
+            if (!(cause instanceof ObjectMaterialError)) throw cause;
+            const value = { error: cause.code, reason: cause.message, currentVersion: cause.version ?? null };
+            return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
+          }
+        };
+        return [
+          defineTool({ name: "list_materials", label: "列出材料", description: "列出当前议题或执行事项的材料",
+            parameters: Type.Object({}, { additionalProperties: false }),
+            execute: async () => result(async () => {
+              const list = await listObjectMaterials(q, ref, viewer, names);
+              return { materials: list.materials.map((m) => ({ id: m.id, fileName: m.fileName, format: m.format,
+                editable: m.editable, version: m.version, owner: m.owner })) };
+            }) }),
+          defineTool({ name: "read_material", label: "阅读材料", description: "读取当前对象一份材料的全文与版本；修改前必须调用",
+            parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), version: Type.Optional(Type.Integer({ minimum: 1 })) }, { additionalProperties: false }),
+            execute: async (_id, args) => result(async () => {
+              const material = await readObjectMaterial(q, ref, args.materialId, viewer, args.version);
+              return { id: args.materialId, body: material.body, version: material.version,
+                currentVersion: material.currentVersion, editable: material.format === "markdown" };
+            }) }),
+          defineTool({ name: "edit_material", label: "修改材料", description: "按当前版本修改 Markdown 材料；只在用户明确要求时使用",
+            parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), baseVersion: Type.Integer({ minimum: 1 }),
+              edits: Type.Array(Type.Union([
+                Type.Object({ find: Type.String({ minLength: 1 }), replace: Type.String() }, { additionalProperties: false }),
+                Type.Object({ append: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+              ]), { minItems: 1, maxItems: 20 }), summary: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
+            execute: async (_id, args) => result(() => editObjectMaterial(pool, ref, args.materialId, viewer,
+              args.baseVersion, args.edits, args.summary, input.runId ?? null)) }),
+          defineTool({ name: "create_material", label: "新写材料", description: "在当前对象中新写 Markdown 材料；只在用户明确要求时使用",
+            parameters: Type.Object({ title: Type.String({ minLength: 1, maxLength: 237 }), body: Type.String({ minLength: 1, maxLength: 100000 }),
+              summary: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
+            execute: async (_id, args) => result(() => createObjectMaterial(pool, ref, viewer,
+              args.title, args.body, args.summary, input.runId ?? null)) }),
+        ];
+      })() : [];
       const recreated = !validRuntimeEntries(input.runtimeEntries, input.piSessionId);
       const piSessionId = recreated ? randomUUID() : input.piSessionId;
       const warning = recreated ? "Pi runtime entries were corrupted; rebuilt from current object and recent raw messages" : undefined;
@@ -417,8 +472,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         model,
         modelRuntime,
         resourceLoader: isCeo ? ceoResourceLoader : resourceLoaderFor(driSystemPrompt(input.viewer.displayName, personalCard)),
-        customTools: [...mcpTools, ...viewerBoardTools, ...outletFeedTools, searchTool],
-        tools: [...COMPANY_MEMORY_TOOLS, ...viewerBoardTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
+        customTools: [...mcpTools, ...viewerBoardTools, ...materialTools, ...outletFeedTools, searchTool],
+        tools: [...COMPANY_MEMORY_TOOLS, ...viewerBoardTools.map((tool) => tool.name), ...materialTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
         sessionManager: manager,
         settingsManager: settings,
         thinkingLevel: "off",

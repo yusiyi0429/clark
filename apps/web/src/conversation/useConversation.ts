@@ -52,7 +52,7 @@ class TurnError extends Error {
   }
 }
 
-export function useConversation(scope: string) {
+export function useConversation(scope: string, viewingMaterial: { id: string; editable: boolean } | null = null) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<ConversationStatus>("idle");
   const [partial, setPartial] = useState("");
@@ -142,7 +142,8 @@ export function useConversation(scope: string) {
       const response = await fetch(historyUrl, {
         method: "POST",
         headers: { accept: "text/event-stream", "content-type": "application/json" },
-        body: JSON.stringify({ message: text, references, attachments: attachmentRefs }),
+        body: JSON.stringify({ message: text, references, attachments: attachmentRefs,
+          ...(viewingMaterial ? { viewingMaterialId: viewingMaterial.id } : {}) }),
         signal: controller.signal,
       });
       if (response.status === 401) {
@@ -172,6 +173,9 @@ export function useConversation(scope: string) {
             setStage("answering");
           }
           if (event.type === "tool" && event.phase === "started") setStage((current) => (current === "answering" ? current : "researching"));
+          if (event.type === "tool" && event.phase === "completed" && !event.isError
+            && (event.name === "edit_material" || event.name === "create_material"))
+            window.dispatchEvent(new CustomEvent("materials-changed", { detail: { scope } }));
           if (event.type === "error") throw new TurnError(event.code, event.message ?? "Pi Runtime 失败");
           if (event.type === "done" && event.status === "completed") completed = true;
           if (event.type === "done" && event.status === "aborted") setStatus("aborted");
@@ -205,6 +209,7 @@ export function useConversation(scope: string) {
 
   return {
     scope,
+    viewingMaterialEditable: viewingMaterial?.editable ?? false,
     messages,
     status,
     streaming: status === "streaming",

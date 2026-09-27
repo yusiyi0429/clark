@@ -129,7 +129,10 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
       return fail(reply, 404, "CARD_NOT_FOUND", "议题不存在");
     const row = await getIssueRow(q, req.params.id);
     if (!row) return fail(reply, 404, "CARD_NOT_FOUND", "议题不存在");
-    return projectMemberIssueCard(row, ctx.env.sessionSecret);
+    const location = row.location as { level: string; battlefieldId?: string; capabilityId?: string };
+    const name = location.level === "battlefield" ? (await q("SELECT name FROM battlefield_config WHERE id=$1", [location.battlefieldId])).rows[0]?.name
+      : location.level === "capability" ? (await q("SELECT name FROM capability_config WHERE id=$1", [location.capabilityId])).rows[0]?.name : null;
+    return projectMemberIssueCard(row, ctx.env.sessionSecret, typeof name === "string" ? name : null);
   });
 
   app.get("/api/me/cards/meetings/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: Card } } }, async (req, reply) => {

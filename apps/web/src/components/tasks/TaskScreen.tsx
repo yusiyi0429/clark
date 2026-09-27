@@ -12,6 +12,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { monthDayTime } from "@/lib/companyTime";
 import { TASK_STATUS } from "@/components/member/MemberTasks";
 import { CollaboratorsDialog } from "./CollaboratorsDialog";
+import { ObjectMaterialArea } from "@/components/materials/ObjectMaterialArea";
 import s from "./task-detail.module.css";
 
 type Detail = components["schemas"]["TaskDetailResponse"];
@@ -37,6 +38,7 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
   const [notice, setNotice] = useState("");
   const [progressText, setProgressText] = useState("");
   const [progressEventId, setProgressEventId] = useState<string | null>(null);
+  const [materialTab, setMaterialTab] = useState("task");
   const task = detail.task;
   const owner = detail.role === "owner";
   const missionOptions = task.mission && !detail.missionOptions.some((option) => option.missionId === task.mission?.missionId)
@@ -123,6 +125,8 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
   };
   return <>
     <DetailFrame title={task.title} subtitle="执行事项" onBack={workspace.close} actions={owner ? <Button variant="ghost" onPress={() => { setEditing((value) => !value); setError(""); }}>编辑</Button> : undefined}>
+      <ObjectMaterialArea objectType="task" objectId={task.id} baseTabs={[{ id: "task", label: "事项", title: "事项" }]}
+        selected={materialTab} onSelect={setMaterialTab}>
       <div className={s.taskPane}><div className={s.pane}>
         <section className={s.paneBlock}>
           <div className={s.paneRow}>{task.mission ? <Button variant="ghost" className={s.longLink} onPress={() => workspace.navigate(`/me/mission-cards/${encodeURIComponent(task.mission!.cardId)}`)}>{task.mission.title}<ArrowUpRight size={15} aria-hidden /></Button> : <StatusBadge tone="info"><span className={s.sourceBadge}>{task.source === "meeting" ? `会后分派 · ${task.origin?.meetingTitle ?? "独立事项"}` : "独立事项"}</span></StatusBadge>}<StatusBadge tone={task.status === "done" ? "success" : "info"}>{TASK_STATUS[task.status]}</StatusBadge></div>
@@ -158,6 +162,7 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
         {owner && task.status === "not_started" && (task.source === "self" || task.source === "plan") ? <div className={s.paneRow}><Button variant="ghost" isDisabled={busy} onPress={() => void remove()}>删除执行事项</Button></div> : null}
         {error ? <p className={s.error} role="alert">{error}</p> : null}{notice ? <p className={s.notice} role="status">{notice}</p> : null}
       </div></div>
+      </ObjectMaterialArea>
     </DetailFrame>
     <CollaboratorsDialog taskId={task.id} options={detail.collaboratorOptions} isOpen={inviteOpen} onClose={() => setInviteOpen(false)} onAdded={() => void refresh()} />
     {dialog}

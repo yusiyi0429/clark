@@ -105,6 +105,7 @@ describe("migration", () => {
         "037_personal_tokens_and_progress.sql",
         "038_mission_round_drafting.sql",
         "039_thread_groups.sql",
+        "040_object_materials.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -112,7 +113,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(39);
+      expect(Number(again.rows[0].count)).toBe(40);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(

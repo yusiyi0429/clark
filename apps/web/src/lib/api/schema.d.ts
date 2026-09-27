@@ -927,6 +927,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/{objectType}/{objectId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 对象的材料（工单 09）；群成员能读（议题未建群时为 CEO），其他人 404 */
+        get: operations["listMaterials"];
+        put?: never;
+        /** 上传一份材料（PDF、Word、Markdown，单个 20 MB，每个对象最多 30 份） */
+        post: operations["uploadMaterial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{objectType}/{objectId}/{materialId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 一份材料的某一版（默认最新）和它相对上一版的标注、改动记录 */
+        get: operations["getMaterial"];
+        put?: never;
+        post?: never;
+        /** 主人删自己的材料（软删）；不是主人 403 */
+        delete: operations["deleteMaterial"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{objectType}/{objectId}/{materialId}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下载原件；Agent 写的材料下载当前版 .md */
+        get: operations["downloadMaterial"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{objectType}/{objectId}/{materialId}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** PDF inline、Word 清理后的 HTML（不持久化） */
+        get: operations["previewMaterial"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/tokens": {
         parameters: {
             query?: never;
@@ -1912,6 +1982,8 @@ export interface components {
             attachments?: {
                 id: string;
             }[];
+            /** Format: uuid */
+            viewingMaterialId?: string;
         };
         ConversationSseEvent: {
             runId: string;
@@ -3551,6 +3623,162 @@ export interface components {
             createdAt: string;
             expiresAt: string | null;
             lastUsedAt: string | null;
+        };
+        MaterialView: {
+            id: string;
+            objectType: "issue" | "task";
+            objectId: string;
+            fileName: string;
+            format: "markdown" | "pdf" | "docx";
+            sizeBytes: number;
+            pageCount?: number;
+            origin: "upload" | "agent";
+            owner: {
+                personId: string;
+                displayName: string;
+            };
+            createdAt: string;
+            updatedAt: string;
+            version: number;
+            editable: boolean;
+            canDelete: boolean;
+            lastRevision: {
+                version: number;
+                requestedBy: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                summary: string | null;
+                at: string;
+            } | null;
+        };
+        MaterialListResponse: {
+            materials: {
+                id: string;
+                objectType: "issue" | "task";
+                objectId: string;
+                fileName: string;
+                format: "markdown" | "pdf" | "docx";
+                sizeBytes: number;
+                pageCount?: number;
+                origin: "upload" | "agent";
+                owner: {
+                    personId: string;
+                    displayName: string;
+                };
+                createdAt: string;
+                updatedAt: string;
+                version: number;
+                editable: boolean;
+                canDelete: boolean;
+                lastRevision: {
+                    version: number;
+                    requestedBy: {
+                        personId: string;
+                        displayName: string;
+                    } | null;
+                    summary: string | null;
+                    at: string;
+                } | null;
+            }[];
+            canUpload: boolean;
+        };
+        MaterialRevisionView: {
+            version: number;
+            requestedBy: {
+                personId: string;
+                displayName: string;
+            } | null;
+            summary: string | null;
+            at: string;
+        };
+        MaterialBlock: {
+            text: string;
+            change: null | {
+                /** @constant */
+                kind: "modified";
+                before: string;
+                spans: {
+                    text: string;
+                    changed: boolean;
+                }[];
+            } | {
+                /** @constant */
+                kind: "added";
+            } | {
+                /** @constant */
+                kind: "removed";
+                before: string;
+            };
+        };
+        MaterialDetailResponse: {
+            material: {
+                id: string;
+                objectType: "issue" | "task";
+                objectId: string;
+                fileName: string;
+                format: "markdown" | "pdf" | "docx";
+                sizeBytes: number;
+                pageCount?: number;
+                origin: "upload" | "agent";
+                owner: {
+                    personId: string;
+                    displayName: string;
+                };
+                createdAt: string;
+                updatedAt: string;
+                version: number;
+                editable: boolean;
+                canDelete: boolean;
+                lastRevision: {
+                    version: number;
+                    requestedBy: {
+                        personId: string;
+                        displayName: string;
+                    } | null;
+                    summary: string | null;
+                    at: string;
+                } | null;
+            };
+            version: number;
+            latest: boolean;
+            revision: {
+                version: number;
+                requestedBy: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                summary: string | null;
+                at: string;
+            };
+            blocks: {
+                text: string;
+                change: null | {
+                    /** @constant */
+                    kind: "modified";
+                    before: string;
+                    spans: {
+                        text: string;
+                        changed: boolean;
+                    }[];
+                } | {
+                    /** @constant */
+                    kind: "added";
+                } | {
+                    /** @constant */
+                    kind: "removed";
+                    before: string;
+                };
+            }[] | null;
+            revisions: {
+                version: number;
+                requestedBy: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                summary: string | null;
+                at: string;
+            }[];
         };
         ListPersonalTokensResponse: {
             tokens: {
@@ -7053,6 +7281,300 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMaterials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task";
+                objectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 材料列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    uploadMaterial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task";
+                objectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 新材料 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMaterial: {
+        parameters: {
+            query?: {
+                version?: number;
+            };
+            header?: never;
+            path: {
+                objectType: "issue" | "task";
+                objectId: string;
+                materialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 材料详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deleteMaterial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task";
+                objectId: string;
+                materialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已删 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    downloadMaterial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task";
+                objectId: string;
+                materialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 文件字节 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    previewMaterial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task";
+                objectId: string;
+                materialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 预览体 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                    "text/html": string;
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

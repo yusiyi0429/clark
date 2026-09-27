@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrate } from "../src/migrate.js";
 import { postThreadIntro, type ThreadIntroAgent } from "../src/threadIntro.js";
+import { emptyDraft, emptyPreflight, type MeetingRow } from "../src/meetingStore.js";
+import { projectMemberMeetingCard } from "../src/memberCards.js";
 import { call, executionFixture, newTask } from "./executionFixture.js";
 import { createTestApp, TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
@@ -81,13 +83,11 @@ describe("议题与会议群", () => {
       expect((await get(url, ceo)).json()).toMatchObject({ unread: 0 });
       const card = (await get(`/api/me/cards/issues/${id}`, member)).json();
       expect(card.actions).toEqual([]);
-      expect(card.payload.whyNow).toBe("渠道窗口将在六月关闭");
-      expect(card.payload).not.toHaveProperty("originRef");
+      expect(card.payload.originRef).toEqual({ whyNow: "渠道窗口将在六月关闭" });
       const agentTurn = await t.app.inject({ method: "POST", url: `/api/conversations/issue:${id}/messages`,
         headers: { cookie: member, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "说说这个议题" } });
       expect(agentTurn.statusCode).toBe(200);
-      expect(agentObject?.payload).toMatchObject({ whyNow: "渠道窗口将在六月关闭" });
-      expect(agentObject?.payload).not.toHaveProperty("originRef");
+      expect(agentObject?.payload).toMatchObject({ originRef: { whyNow: "渠道窗口将在六月关闭" } });
       const notice = (await get("/api/me/notifications", member)).json().notifications;
       expect(notice[0]).toMatchObject({ kind: "thread_member_added", objectType: "issue", objectId: id });
       expect(notice[0].text).toContain("拉你进议题");
@@ -122,14 +122,20 @@ describe("议题与会议群", () => {
       expect((await t.app.inject({ method: "GET", url: `/api/threads/meeting/${id}`, headers: { cookie: ceo } })).json().unread).toBe(1);
       const card = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${id}`, headers: { cookie: member } })).json();
       expect(card.actions).toEqual([]);
+      expect(card.payload.purpose).toBeNull();
+      expect(card.payload).not.toHaveProperty("draft");
+      expect(card.payload).not.toHaveProperty("transcript");
       expect(card.payload).not.toHaveProperty("transcriptCandidate");
       expect(card.payload).not.toHaveProperty("recording");
       const agentTurn = await t.app.inject({ method: "POST", url: `/api/conversations/meeting:${id}/messages`,
         headers: { cookie: member, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "说说会议安排" } });
       expect(agentTurn.statusCode).toBe(200);
-      expect(agentObject?.payload).toMatchObject({ purpose: "渠道会议" });
+      expect(agentObject?.payload).toMatchObject({ purpose: null });
       expect(agentObject?.payload).not.toHaveProperty("draft");
       expect(agentObject?.payload).not.toHaveProperty("recording");
+      expect(agentObject?.payload).not.toHaveProperty("transcript");
+      expect(agentObject?.payload).not.toHaveProperty("transcriptCandidate");
+      expect((agentObject?.payload as { preflight?: unknown } | undefined)?.preflight).not.toHaveProperty("entries");
       expect((await t.app.inject({ method: "GET", url: "/api/me/meetings", headers: { cookie: member } })).json().meetings[0]).toMatchObject({ meetingId: id, href: `/me/meetings/${id}` });
       expect((await t.app.inject({ method: "POST", url: `/api/threads/meeting/${id}/leave`, headers: { cookie: member, origin: t.publicOrigin } })).statusCode).toBe(409);
       expect((await t.app.inject({ method: "POST", url: `/api/threads/meeting/${id}/leave`, headers: { cookie: ceo, origin: t.publicOrigin } })).statusCode).toBe(204);
@@ -139,6 +145,41 @@ describe("议题与会议群", () => {
       expect((await t.app.inject({ method: "GET", url: `/api/threads/meeting/${id}`, headers: { cookie: ceo } })).statusCode).toBe(200);
     } finally { await t.close(); }
   }, 15_000);
+
+  it("成员会议投影只保留预审摘要、材料元数据和已确认的决定与待办", () => {
+    const row: MeetingRow = {
+      id: "11111111-1111-4111-8111-111111111111", version: 2, title: "预算会", status: "held",
+      scheduled_at: new Date("2026-10-02T02:00:00Z"), ends_at: new Date("2026-10-02T03:00:00Z"), ended_at: new Date("2026-10-02T03:05:00Z"),
+      lead_dri_id: TEST_MEMBER.personId, ceo_participant_id: TEST_CEO.personId,
+      participants: [{ personId: TEST_MEMBER.personId, displayName: "测试乙", roles: ["dri"], sourceRef: "person:test", updatedAt: "2026-09-28" }],
+      issue_ids: ["secret-issue"],
+      preflight: { ...emptyPreflight(), status: "ready", brief: "公开预审摘要", entries: [{ id: "private-entry", kind: "leader_lens", title: "CEO 专用", body: "不公开", sourceRefs: [] }],
+        taskDefinition: { materialPurpose: "", reviewPurpose: "确认预算边界", primaryRole: "project_plan", secondaryRole: null, maturity: "internal_alignment", readerAction: "", nonGoal: "" } },
+      draft: { ...emptyDraft(), checkedEntryIds: ["private-entry"], editsByEntryId: { "private-entry": "私有编辑" }, note: "CEO 备注",
+        supplementRequests: [{ id: "request-1", entryId: null, targetDriId: TEST_MEMBER.personId, text: "私有请求", exportStatus: "recorded", exportRef: null, error: null, createdAt: "2026-09-28" }] },
+      materials: [{ id: "material-1", fileName: "预算.pdf", mimeType: "application/pdf", sizeBytes: 1024, receivedBy: "CEO", providedBy: null, uploadedAt: "2026-09-28",
+        storageKey: "private-key", sha256: "private-hash", extractedText: "材料解析全文" }],
+      transcript: { privateText: "逐字稿" } as unknown as MeetingRow["transcript"],
+      transcript_candidate: { turns: [] } as unknown as MeetingRow["transcript_candidate"],
+      outcome: { items: [
+        { id: "decision", kind: "decision", text: "批准预算", ownerPersonId: null, review: { status: "confirmed" } },
+        { id: "todo", kind: "todo", text: "提交排期", ownerPersonId: TEST_MEMBER.personId, review: { status: "confirmed" } },
+        { id: "pending", kind: "todo", text: "未确认", ownerPersonId: TEST_MEMBER.personId, review: { status: "pending" } },
+        { id: "strategic", kind: "strategic", text: "CEO 战略项", ownerPersonId: null, review: { status: "confirmed" } },
+      ] } as unknown as MeetingRow["outcome"],
+      origin_ref: { secret: "CEO 来源" }, external_id: null, request_fingerprint: null, action_fingerprints: [],
+      created_at: new Date("2026-09-28"), updated_at: new Date("2026-09-28"), latest_recording: { id: "recording", status: "done", error: null },
+    };
+    const card = projectMemberMeetingCard(row, "test-secret");
+    const payload = card.payload as Record<string, unknown>;
+    expect(card.actions).toEqual([]);
+    expect(payload).toMatchObject({ purpose: "确认预算边界", preflight: { brief: "公开预审摘要" },
+      materials: [{ id: "material-1", fileName: "预算.pdf" }],
+      outcome: { items: [{ id: "decision", kind: "decision", text: "批准预算" }, { id: "todo", kind: "todo", text: "提交排期", ownerPersonId: TEST_MEMBER.personId }] } });
+    for (const key of ["draft", "recording", "transcript", "transcriptCandidate", "originRef", "issueIds"]) expect(payload).not.toHaveProperty(key);
+    expect(payload.preflight).not.toHaveProperty("entries");
+    expect(JSON.stringify(payload)).not.toMatch(/private-key|private-hash|材料解析全文|私有编辑|私有请求|CEO 备注|逐字稿|未确认|CEO 战略项|CEO 来源/);
+  });
 
   it("会议更换主持人时把新主持人同步进群", async () => {
     const dir = await mkdtemp(join(tmpdir(), "ticket08-people-"));
@@ -183,7 +224,7 @@ describe("议题与会议群", () => {
       await postThreadIntro(t.pool, { generate() { return new Promise(() => undefined); } }, input, [TEST_CEO.personId], 30);
       const messages = await t.sql("SELECT content FROM thread_messages WHERE object_type='issue' AND object_id=$1 ORDER BY id", [id]);
       expect(messages).toHaveLength(2);
-      expect(messages[0].content).toBe("测试甲 把 测试乙 拉进了这个群：「渠道议题」。窗口即将关闭。测试甲说：「一起看」");
+      expect(messages[0].content).toBe("测试甲 把 测试乙 拉进了这个群：「渠道议题」。窗口即将关闭。测试甲 说：「一起看」");
       expect(messages[1].content).toContain("窗口即将关闭");
       const member = await t.memberCookie(), ceo = await t.loginCookie();
       expect((await t.app.inject({ method: "GET", url: `/api/threads/issue/${id}`, headers: { cookie: member } })).json().unread).toBe(2);

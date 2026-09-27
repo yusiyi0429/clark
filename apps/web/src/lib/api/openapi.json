@@ -3043,6 +3043,462 @@
         }
       }
     },
+    "/api/materials/{objectType}/{objectId}": {
+      "get": {
+        "operationId": "listMaterials",
+        "summary": "对象的材料（工单 09）；群成员能读（议题未建群时为 CEO），其他人 404",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "task"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "材料列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "uploadMaterial",
+        "summary": "上传一份材料（PDF、Word、Markdown，单个 20 MB，每个对象最多 30 份）",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "task"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "新材料",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/materials/{objectType}/{objectId}/{materialId}": {
+      "get": {
+        "operationId": "getMaterial",
+        "summary": "一份材料的某一版（默认最新）和它相对上一版的标注、改动记录",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "task"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "材料详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMaterial",
+        "summary": "主人删自己的材料（软删）；不是主人 403",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "task"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已删"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/materials/{objectType}/{objectId}/{materialId}/file": {
+      "get": {
+        "operationId": "downloadMaterial",
+        "summary": "下载原件；Agent 写的材料下载当前版 .md",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "task"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "文件字节",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/materials/{objectType}/{objectId}/{materialId}/preview": {
+      "get": {
+        "operationId": "previewMaterial",
+        "summary": "PDF inline、Word 清理后的 HTML（不持久化）",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "task"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "预览体",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/tokens": {
       "get": {
         "operationId": "listPersonalTokens",
@@ -7679,6 +8135,10 @@
                 }
               }
             }
+          },
+          "viewingMaterialId": {
+            "format": "uuid",
+            "type": "string"
           }
         }
       },
@@ -18014,6 +18474,951 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "MaterialView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "objectType",
+          "objectId",
+          "fileName",
+          "format",
+          "sizeBytes",
+          "origin",
+          "owner",
+          "createdAt",
+          "updatedAt",
+          "version",
+          "editable",
+          "canDelete",
+          "lastRevision"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "objectType": {
+            "anyOf": [
+              {
+                "const": "issue",
+                "type": "string"
+              },
+              {
+                "const": "task",
+                "type": "string"
+              }
+            ]
+          },
+          "objectId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "fileName": {
+            "minLength": 1,
+            "maxLength": 240,
+            "type": "string"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "const": "markdown",
+                "type": "string"
+              },
+              {
+                "const": "pdf",
+                "type": "string"
+              },
+              {
+                "const": "docx",
+                "type": "string"
+              }
+            ]
+          },
+          "sizeBytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pageCount": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "const": "upload",
+                "type": "string"
+              },
+              {
+                "const": "agent",
+                "type": "string"
+              }
+            ]
+          },
+          "owner": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "displayName"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "displayName": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "updatedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "canDelete": {
+            "type": "boolean"
+          },
+          "lastRevision": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "version",
+                  "requestedBy",
+                  "summary",
+                  "at"
+                ],
+                "properties": {
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "requestedBy": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "personId",
+                          "displayName"
+                        ],
+                        "properties": {
+                          "personId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "summary": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "MaterialListResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "materials",
+          "canUpload"
+        ],
+        "properties": {
+          "materials": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "objectType",
+                "objectId",
+                "fileName",
+                "format",
+                "sizeBytes",
+                "origin",
+                "owner",
+                "createdAt",
+                "updatedAt",
+                "version",
+                "editable",
+                "canDelete",
+                "lastRevision"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "objectType": {
+                  "anyOf": [
+                    {
+                      "const": "issue",
+                      "type": "string"
+                    },
+                    {
+                      "const": "task",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "objectId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "fileName": {
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "type": "string"
+                },
+                "format": {
+                  "anyOf": [
+                    {
+                      "const": "markdown",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pdf",
+                      "type": "string"
+                    },
+                    {
+                      "const": "docx",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "sizeBytes": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "pageCount": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "origin": {
+                  "anyOf": [
+                    {
+                      "const": "upload",
+                      "type": "string"
+                    },
+                    {
+                      "const": "agent",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "owner": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "editable": {
+                  "type": "boolean"
+                },
+                "canDelete": {
+                  "type": "boolean"
+                },
+                "lastRevision": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "version",
+                        "requestedBy",
+                        "summary",
+                        "at"
+                      ],
+                      "properties": {
+                        "version": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "requestedBy": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "personId",
+                                "displayName"
+                              ],
+                              "properties": {
+                                "personId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "displayName": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "summary": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "at": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "canUpload": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MaterialRevisionView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "requestedBy",
+          "summary",
+          "at"
+        ],
+        "properties": {
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "requestedBy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "displayName"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "at": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "MaterialBlock": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text",
+          "change"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "change": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "before",
+                  "spans"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "modified",
+                    "type": "string"
+                  },
+                  "before": {
+                    "type": "string"
+                  },
+                  "spans": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "text",
+                        "changed"
+                      ],
+                      "properties": {
+                        "text": {
+                          "type": "string"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "added",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "before"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "removed",
+                    "type": "string"
+                  },
+                  "before": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "MaterialDetailResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "material",
+          "version",
+          "latest",
+          "revision",
+          "blocks",
+          "revisions"
+        ],
+        "properties": {
+          "material": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "objectType",
+              "objectId",
+              "fileName",
+              "format",
+              "sizeBytes",
+              "origin",
+              "owner",
+              "createdAt",
+              "updatedAt",
+              "version",
+              "editable",
+              "canDelete",
+              "lastRevision"
+            ],
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "objectType": {
+                "anyOf": [
+                  {
+                    "const": "issue",
+                    "type": "string"
+                  },
+                  {
+                    "const": "task",
+                    "type": "string"
+                  }
+                ]
+              },
+              "objectId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "fileName": {
+                "minLength": 1,
+                "maxLength": 240,
+                "type": "string"
+              },
+              "format": {
+                "anyOf": [
+                  {
+                    "const": "markdown",
+                    "type": "string"
+                  },
+                  {
+                    "const": "pdf",
+                    "type": "string"
+                  },
+                  {
+                    "const": "docx",
+                    "type": "string"
+                  }
+                ]
+              },
+              "sizeBytes": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "pageCount": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "origin": {
+                "anyOf": [
+                  {
+                    "const": "upload",
+                    "type": "string"
+                  },
+                  {
+                    "const": "agent",
+                    "type": "string"
+                  }
+                ]
+              },
+              "owner": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "displayName"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              "createdAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "updatedAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "editable": {
+                "type": "boolean"
+              },
+              "canDelete": {
+                "type": "boolean"
+              },
+              "lastRevision": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "version",
+                      "requestedBy",
+                      "summary",
+                      "at"
+                    ],
+                    "properties": {
+                      "version": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "requestedBy": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "displayName"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "summary": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "at": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "latest": {
+            "type": "boolean"
+          },
+          "revision": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "version",
+              "requestedBy",
+              "summary",
+              "at"
+            ],
+            "properties": {
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "requestedBy": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "displayName"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "at": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "blocks": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "text",
+                    "change"
+                  ],
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "kind",
+                            "before",
+                            "spans"
+                          ],
+                          "properties": {
+                            "kind": {
+                              "const": "modified",
+                              "type": "string"
+                            },
+                            "before": {
+                              "type": "string"
+                            },
+                            "spans": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "text",
+                                  "changed"
+                                ],
+                                "properties": {
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "changed": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "kind"
+                          ],
+                          "properties": {
+                            "kind": {
+                              "const": "added",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "kind",
+                            "before"
+                          ],
+                          "properties": {
+                            "kind": {
+                              "const": "removed",
+                              "type": "string"
+                            },
+                            "before": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "version",
+                "requestedBy",
+                "summary",
+                "at"
+              ],
+              "properties": {
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "requestedBy": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "displayName"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "summary": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "at": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },

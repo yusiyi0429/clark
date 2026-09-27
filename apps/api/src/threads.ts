@@ -104,6 +104,17 @@ export async function postMessage(
   return projectMessage(result.rows[0] as MessageRow, personDisplayNames(companyMemory));
 }
 
+/** Co-Agent 的群消息；指定已知情的人读到这条，其余在群成员保留未读。 */
+export async function postCoAgentMessage(q: Query, ref: ThreadRef, content: string, readBy: string[] = []): Promise<number> {
+  const result = await q(
+    "INSERT INTO thread_messages (object_type, object_id, kind, content) VALUES ($1, $2, 'co-agent', $3) RETURNING id",
+    [ref.objectType, ref.objectId, content],
+  );
+  const id = Number(result.rows[0].id);
+  for (const personId of readBy) await markRead(q, ref, personId, id);
+  return id;
+}
+
 /** 读到哪条：只增不减，也不超过群里已有的最后一条（否则之后的新消息会被当成已读）。 */
 export async function markRead(q: Query, ref: ThreadRef, personId: string, lastReadId: number): Promise<void> {
   await q(

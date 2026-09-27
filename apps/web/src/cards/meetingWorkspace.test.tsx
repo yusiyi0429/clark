@@ -89,9 +89,9 @@ export function meetingCard(payloadOverrides: Record<string, unknown>, actions: 
   } as unknown as Card;
 }
 
-function render(card: Card): string {
+function render(card: Card, readOnly = false): string {
   return renderToStaticMarkup(
-    <MeetingCard card={card} collection={[card]} onCard={() => undefined} onNavigate={() => undefined} />,
+    <MeetingCard card={card} collection={[card]} onCard={() => undefined} onNavigate={() => undefined} readOnly={readOnly} />,
   );
 }
 
@@ -129,6 +129,39 @@ const candidateBase: TTranscriptCandidateProjection = {
 };
 
 describe("Meeting 页头（clark 会议页，C-08）", () => {
+  it("成员只读模式沿用计划时段和材料页签，不出现 CEO 的会议操作", () => {
+    const card = meetingCard({ purpose: "对齐预算", preflight: { status: "ready", brief: "预审摘要", readiness: "ready" },
+      materials: [{ id: "m1", fileName: "预算.pdf", mimeType: "application/pdf", sizeBytes: 1024, receivedBy: "CEO", providedBy: null, uploadedAt: "2026-09-28" }] },
+    [{ actionId: "edit", actionType: "meeting.edit_details", label: "编辑会议" },
+      { actionId: "request", actionType: "meeting.request_supplement", label: "请求补充材料" }]);
+    const payload = card.payload as Record<string, unknown>;
+    for (const key of ["draft", "transcript", "transcriptCandidate", "recording"]) delete payload[key];
+    const html = render(card, true);
+    expect(html).toContain("data-header-lead");
+    expect(html).toContain("会议记录");
+    expect(html).toContain("预算.pdf");
+    expect(html).toContain("预审摘要");
+    expect(html).toContain("对齐预算");
+    for (const label of ["开始会议", "编辑会议", "导入会议记录", "请求补充材料", "会前备注", "替换材料集", "标记已核对", "保存准备状态"]) {
+      expect(html).not.toContain(label);
+    }
+  });
+
+  it("成员会议记录只列已确认结论和待办负责人，不显示逐字稿与确认操作", () => {
+    const card = meetingCard({ status: "held", outcome: { items: [
+      { id: "d1", kind: "decision", text: "批准预算", ownerPersonId: null },
+      { id: "t1", kind: "todo", text: "提交排期", ownerPersonId: "p1" },
+    ] } });
+    const html = render(card, true);
+    expect(html).toContain("会议共识");
+    expect(html).toContain("会后结论已确认");
+    expect(html).toContain("批准预算");
+    expect(html).toContain("提交排期");
+    expect(html).toContain("林晓");
+    for (const label of ["Transcript", "逐字稿", "替换", "忽略", "录音", "导入会议记录"]) expect(html).not.toContain(label);
+    expect(html).not.toMatch(/<button[^>]*>确认/);
+  });
+
   it("页头胶囊：返回、计划时段、会名、会议记录入口，右边一颗开始会议；没有四段进度条", () => {
     const html = render(meetingCard({}));
     expect(html).toContain("返回总览");

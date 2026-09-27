@@ -12,6 +12,7 @@ import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { COMPANY_TIMEZONE, calendarDate } from "@/lib/companyTime";
 import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
 import { ThreadMembersMenu } from "@/conversation/ThreadMembersMenu";
+import { ObjectMaterialArea } from "@/components/materials/ObjectMaterialArea";
 import s from "@/styles/issue-workspace.module.css";
 
 const RESEARCH_LABEL: Record<string, string> = {
@@ -20,6 +21,7 @@ const RESEARCH_LABEL: Record<string, string> = {
   ready: "预研已完成",
   failed: "预研失败",
 };
+const URGENCY_LABEL = { red: "紧急", yellow: "需关注", gray: "常规" } as const;
 
 const ORIGIN_LABEL: Record<IssuePayload["origin"], string> = { radar: "雷达升级", dri: "负责人提请", ceo: "你发起的议题" };
 
@@ -49,11 +51,11 @@ const meetingClock = (iso: string) =>
  * 对话在外壳右侧的对话列。决策路径、移出/恢复、会议结论撤回与重试预研是天枢独有，都只通过 Action 提交；
  * 决定只走 Meeting Outcome 链路，页面不提供直接决定。
  */
-export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
+export function IssueCard({ card, onCard, onNavigate, readOnly = false }: CardRenderProps & { readOnly?: boolean }) {
   const payload = payloadOf<IssuePayload>(card);
   const { homeCards, quote, viewerId } = useWorkspace();
   const { state, run, retry, pending } = useCardAction(onCard);
-  const [tab, setTab] = useState<"summary" | "research">("summary");
+  const [tab, setTab] = useState<string>("summary");
   const [dismissReason, setDismissReason] = useState("");
   const [joinMeetingId, setJoinMeetingId] = useState("");
   const [people, setPeople] = useState<PersonOption[]>([]);
@@ -69,6 +71,7 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
   const actions = card.actions;
   const actionOf = (type: string) => actions.find((action) => action.actionType === type);
   const doc = payload.research.doc;
+  const whyNow = (payload.originRef as { whyNow?: string | null } | null)?.whyNow;
   // 可加入的会议：议题页自己的集合里只有议题本身，所以读外壳已载入的首页集合；已含本议题的会议不再列出。
   const scheduledMeetings = useMemo(
     () =>
@@ -94,7 +97,7 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
   const ceoPerson = people.find((person) => person.roles.includes("ceo"));
   const driPeople = people.filter((person) => person.roles.includes("dri"));
   const deadline = payload.status === "pending" ? calendarDate(payload.urgency.decisionBy) : "";
-  const eyebrow = [lifecycleLabel(payload, Boolean(meeting)), issueScopeLabel(payload.location, homeCards), deadline ? `决定期限 ${deadline}` : ""]
+  const eyebrow = [lifecycleLabel(payload, Boolean(meeting)), payload.locationName ?? issueScopeLabel(payload.location, homeCards), deadline ? `决定期限 ${deadline}` : ""]
     .filter(Boolean)
     .join(" · ");
 
@@ -142,8 +145,8 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
               <div>
                 <p>{receipt.decisionText}</p>
                 <small>
-                  决定时预研：{RESEARCH_LABEL[receipt.researchStatusAtDecision] ?? receipt.researchStatusAtDecision}
-                  {receipt.override ? " · Research Override" : ""} · {calendarDate(receipt.createdAt)}
+                  {receipt.researchStatusAtDecision ? `决定时预研：${RESEARCH_LABEL[receipt.researchStatusAtDecision] ?? receipt.researchStatusAtDecision} · ` : ""}
+                  {receipt.override ? "预研未完成时决定 · " : ""}{calendarDate(receipt.createdAt)}
                 </small>
               </div>
               {revoke ? (
@@ -167,7 +170,7 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
         <p className={s.empty}>{RESEARCH_LABEL[payload.research.status] ?? "预研尚未产出"}，备选路径稍后出现。</p>
       )}
       <small>
-        {meeting ? "由主责 DRI 开启会议。材料和讨论继续留在这个议题里。" : "可以先与天枢讨论，也可以在下方安排一场会议。"}
+        {meeting ? "由主责 DRI 开启会议。材料和讨论继续留在这个议题里。" : readOnly ? "可以和你的 Agent 或群成员继续讨论。" : "可以先与天枢讨论，也可以在下方安排一场会议。"}
       </small>
     </section>
   );
@@ -182,7 +185,7 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
             <h1 id="issue-title">{card.title}</h1>
           </div>
         </div>
-        <ThreadMembersMenu objectType="issue" objectId={card.objectRef.id} viewerId={viewerId ?? ""} members={[]} inviteOnly onChanged={() => undefined} />
+        {!readOnly ? <ThreadMembersMenu objectType="issue" objectId={card.objectRef.id} viewerId={viewerId ?? ""} members={[]} inviteOnly onChanged={() => undefined} /> : null}
         <Button isIconOnly variant="tertiary" data-close-view onPress={() => onNavigate("/")} aria-label="关闭议题，返回原位置">
           <X size={19} aria-hidden="true" />
         </Button>
@@ -203,8 +206,8 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
             <button
               type="button"
               className={s.meetingOpen}
-              data-origin={`/meetings/${meeting.card.objectRef.id}`}
-              onClick={(event) => onNavigate(`/meetings/${meeting.card.objectRef.id}`, event.currentTarget)}
+              data-origin={`${readOnly ? "/me" : ""}/meetings/${meeting.card.objectRef.id}`}
+              onClick={(event) => onNavigate(`${readOnly ? "/me" : ""}/meetings/${meeting.card.objectRef.id}`, event.currentTarget)}
             >
               {meeting.card.title} · 打开会议空间
             </button>
@@ -213,13 +216,16 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
       ) : null}
 
       <div className={s.columns}>
+        <ObjectMaterialArea objectType="issue" objectId={card.objectRef.id}
+          baseTabs={[{ id: "summary", label: "总结与判断", title: "总结与判断" }, { id: "research", label: "研究与依据", title: "研究与依据" }]}
+          selected={tab} onSelect={(next) => { clear(); setTab(next); }}>
         <Tabs
           className={s.materials}
           variant="secondary"
-          selectedKey={tab}
+          selectedKey={tab === "research" ? "research" : "summary"}
           onSelectionChange={(key) => {
             clear();
-            setTab(key as "summary" | "research");
+            setTab(String(key));
           }}
         >
           <Tabs.ListContainer className={s.tabs}>
@@ -234,9 +240,10 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
               </Tabs.Tab>
             </Tabs.List>
           </Tabs.ListContainer>
-          <div className={s.reading} ref={reading} onMouseUp={onMouseUp}>
+          <div className={s.reading} data-material-scroll ref={reading} onMouseUp={onMouseUp}>
             <p className={s.note}>
-              {ORIGIN_LABEL[payload.origin]} · {RESEARCH_LABEL[payload.research.status] ?? payload.research.status}
+              {readOnly && payload.origin === "ceo" ? "CEO 发起的议题" : ORIGIN_LABEL[payload.origin]} · {RESEARCH_LABEL[payload.research.status] ?? "预研中"}
+              {readOnly ? ` · 紧急程度：${URGENCY_LABEL[payload.urgency.level]}` : ""}
             </p>
             {payload.research.error ? (
               <div className={s.error} role="alert" title={payload.research.error.code}>
@@ -257,7 +264,7 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
                 <section className={s.dismissed} aria-label="已移出决策面">
                   <Trash2 size={16} aria-hidden="true" />
                   <div>
-                    <p>已移出决策面：{payload.dismissReason ?? "未填写原因"}</p>
+                    <p>已移出决策面{payload.dismissReason ? `：${payload.dismissReason}` : ""}</p>
                     {payload.dismissedAt ? <small>移出于 {calendarDate(payload.dismissedAt)}</small> : null}
                   </div>
                   {actionOf("issue.restore") ? (
@@ -268,6 +275,7 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
                   ) : null}
                 </section>
               ) : null}
+              {readOnly && whyNow ? <section className={s.judgment}><h2>为什么现在</h2><p>{whyNow}</p></section> : null}
               <section className={s.judgment}>
                 <h2>当前判断</h2>
                 <p>{doc?.summary ?? "预研尚未产出判断。"}</p>
@@ -311,7 +319,7 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
                 </section>
               ) : null}
 
-              {payload.status === "pending" ? (
+              {payload.status === "pending" && !readOnly ? (
                 <>
                   <section className={s.preflightActions} data-issue-side="path" aria-label="决策路径">
                     <div>
@@ -495,6 +503,7 @@ export function IssueCard({ card, onCard, onNavigate }: CardRenderProps) {
             />
           </div>
         </Tabs>
+        </ObjectMaterialArea>
       </div>
     </section>
   );

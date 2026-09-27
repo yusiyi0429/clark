@@ -8,6 +8,7 @@ import {
 import { loadCompanyMemory } from "../src/companyMemory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import type { ConversationRuntime } from "../src/conversations.js";
+import type { Pool } from "pg";
 import { createFakeWebSearchAdapter, testEnv } from "./helpers.js";
 
 const CEO_VIEWER = { personId: "person-fixture-001", displayName: "测试甲", role: "ceo" as const };
@@ -59,6 +60,26 @@ function stream(final: AssistantMessage) {
 }
 
 describe("controlled Pi conversation adapter public behavior", () => {
+  it("only offers material tools in issue and task scopes", async () => {
+    const toolsByScope: string[][] = [];
+    const runtime = await createPiConversationRuntime({
+      companyMemory: loadCompanyMemory(testEnv), materialPool: { query: async () => ({ rows: [] }) } as unknown as Pool,
+      baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+      streamSimple: (_model, context) => {
+        toolsByScope.push(context.tools?.map((tool) => tool.name) ?? []);
+        return stream(message([{ type: "text", text: "已读" }], "stop"));
+      },
+    });
+    try {
+      for (const scope of ["global", "issue:fixture-001", "task:fixture-001", "meeting:fixture-001"] as const)
+        await runtime.run({ scope, viewer: CEO_VIEWER, message: "看看材料", currentObject: null, referencesSnapshot: [],
+          runtimeEntries: [], piSessionId: "11111111-1111-4111-8111-111111111111", signal: new AbortController().signal,
+          emit: () => undefined });
+      for (const names of [toolsByScope[0], toolsByScope[3]]) expect(names).not.toContain("edit_material");
+      for (const names of [toolsByScope[1], toolsByScope[2]])
+        expect(names).toEqual(expect.arrayContaining(["list_materials", "read_material", "edit_material", "create_material"]));
+    } finally { await runtime.close?.(); }
+  });
   it("does not call the model when the public abort signal is already aborted", async () => {
     let modelCalls = 0;
     const runtime = await createPiConversationRuntime({

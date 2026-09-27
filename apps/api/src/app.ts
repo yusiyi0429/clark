@@ -42,6 +42,7 @@ import { registerConfigRoutes } from "./routes/config.js";
 import { registerRadarRoutes } from "./routes/radar.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerMeetingRoutes } from "./routes/meetings.js";
+import { registerMaterialRoutes } from "./routes/materials.js";
 import { registerActionRoutes } from "./routes/actions.js";
 import { registerDriRoutes } from "./routes/dri.js";
 import { registerSystemRoutes } from "./routes/system.js";
@@ -163,6 +164,7 @@ export async function buildApp({
   } : undefined;
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     companyMemory,
+    materialPool: pool,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.lightModel,
@@ -321,6 +323,7 @@ export async function buildApp({
   registerRadarRoutes(app, ctx);
   registerConversationRoutes(app, ctx);
   registerMeetingRoutes(app, ctx);
+  registerMaterialRoutes(app, ctx);
   registerActionRoutes(app, ctx);
   registerDriRoutes(app, ctx);
   registerSystemRoutes(app, ctx);

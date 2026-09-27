@@ -19,11 +19,13 @@ export function useThreadGroup(objectType: "task" | "issue" | "meeting", objectI
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   const reload = useRef<() => Promise<void>>(async () => {});
+  const latestCoAgent = useRef<number | null>(null);
 
   useEffect(() => {
     if (!objectId) return;
     let active = true;
     let loading = false;
+    latestCoAgent.current = null;
     setView(null); setLeft(false);
     const load = async () => {
       if (loading || document.visibilityState === "hidden") return;
@@ -37,6 +39,10 @@ export function useThreadGroup(objectType: "task" | "issue" | "meeting", objectI
           return;
         }
         setView(data); setLeft(false); setError(null);
+        const coAgentId = Math.max(0, ...data.messages.filter((message) => message.kind === "co-agent").map((message) => message.id));
+        if (latestCoAgent.current !== null && coAgentId > latestCoAgent.current)
+          window.dispatchEvent(new CustomEvent("thread-materials-changed", { detail: { scope: `${objectType}:${objectId}` } }));
+        latestCoAgent.current = coAgentId;
         const highest = Math.max(0, ...data.messages.map((message) => message.id));
         if (visibleRef.current && highest > data.lastReadId) {
           const read = await browserApi.POST("/api/threads/{objectType}/{objectId}/read", { params: { path: { objectType, objectId } }, body: { lastReadId: highest } });

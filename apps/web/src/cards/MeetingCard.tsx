@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, FileUp, Pencil, RefreshCw, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import type { TTranscriptCandidateProjection } from "@warmap/contracts";
@@ -12,7 +12,7 @@ import { MeetingClock, MeetingHeaderActions, MeetingStatus, meetingDayWord, meet
 import { useMeetingRecorder, type RecorderState } from "@/components/meeting/useMeetingRecorder";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { HeaderMaterialToggle, MaterialTabs, pressMaterial, toggleWhole, useRememberedScroll, type MaterialTab, type MaterialView } from "@/components/shell/MaterialTabs";
-import { useWorkspace } from "@/components/shell/WorkspaceContext";
+import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 import { ActionFeedback, useCardAction, type ActionState } from "@/lib/useCardAction";
 import { groupPreflight, pickActiveSection } from "./preflightOutline";
@@ -435,8 +435,19 @@ export function meetingNow(payload: MeetingPayload, ended: boolean): string {
  * 材料页签（AI 预审 + 每一份会前材料）和一行状态，再下面是正在看的那一份。会前预审、妙记导入、会后逐项复核这些真实功能
  * 都在：AI 预审页签（编辑会议、返回编辑材料、重新预审在它顶部）、材料页签（只读预览）、会议记录（导入与复核）。
  */
-export function MeetingCard({ card, collection, onCard, onNavigate }: CardRenderProps) {
-  const payload = payloadOf<MeetingPayload>(card);
+export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: memberReadOnly = false }: CardRenderProps & { readOnly?: boolean }) {
+  const source = payloadOf<MeetingPayload & { purpose?: string | null }>(card);
+  // 成员响应只带可见事实；组件内部补空值以复用 CEO 的页头、材料和预审排版。
+  const payload: MeetingPayload & { purpose?: string | null } = memberReadOnly ? {
+    ...source,
+    issueIds: [], ceoParticipantId: "", originRef: null,
+    preflight: { status: source.preflight.status, pendingSince: null, runId: null, entries: [], basis: "",
+      brief: source.preflight.brief, error: null, generatedAt: null,
+      ...(source.preflight.readiness ? { readiness: source.preflight.readiness } : {}),
+      ...(source.preflight.summary ? { summary: source.preflight.summary } : {}) },
+    draft: { readIssueIds: [], carriedIssueIds: [], checkedEntryIds: [], editsByEntryId: {}, supplementRequests: [], note: "" },
+    transcript: null, transcriptCandidate: null, recording: null,
+  } : source;
   const { homeCards } = useWorkspace();
   const { ask, dialog: confirmDialog } = useConfirm();
   const { state, run, retry, pending } = useCardAction(onCard);
@@ -481,7 +492,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   const materialRef = useRef<HTMLInputElement>(null);
   const candidateDialog = useRef<HTMLDialogElement>(null);
 
-  const actions = card.actions;
+  const actions = memberReadOnly ? [] : card.actions;
   const actionOf = (type: string) => actions.find((action) => action.actionType === type);
   const itemAction = (type: string, itemId: string) =>
     actions.find((action) => action.actionType === type && action.itemId === itemId);
@@ -490,7 +501,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   const issueById = new Map(issues.map((item) => [item.objectRef.id, item]));
   const people = new Map(payload.participants.map((person) => [person.personId, person.displayName]));
   const dri = payload.participants.filter((person) => person.roles.includes("dri"));
-  const readOnly = payload.status !== "scheduled";
+  const readOnly = memberReadOnly || payload.status !== "scheduled";
   const viewedMaterial = payload.materials.find((material) => material.id === view.current) ?? null;
 
   useRememberedScroll(`${card.objectRef.id}|${view.current}`);
@@ -541,7 +552,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   // 录音转写中、会后抽取中：每 5 秒取一次会议卡片，状态、候选、纪要跟着更新；候选一到，下面那段就自动打开说话人对应。
   const transcribing = recordingInFlight(payload.recording);
   const extracting = payload.status === "held" && (payload.outcome?.status === "pending" || payload.outcome?.status === "running");
-  const refreshing = transcribing || extracting;
+  const refreshing = !memberReadOnly && (transcribing || extracting);
   useEffect(() => {
     if (!refreshing) return;
     const timer = window.setInterval(async () => {
@@ -832,7 +843,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   const phase = meetingPhase(startedAt, ended);
   const endAction = actionOf("meeting.end");
   const clock =
-    payload.status === "cancelled" ? undefined : (
+    memberReadOnly || payload.status === "cancelled" ? undefined : (
       <MeetingClock
         phase={phase}
         startedAt={startedAt}
@@ -1193,6 +1204,9 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
 
   /* 会后纪要：共识（决定）、按负责人分组的 Action Item（待办）、提给 CEO 的战略议题，其余照原样列在后面。 */
   const outcomeItems = payload.outcome?.items ?? [];
+  const statusNow = memberReadOnly && ended
+    ? outcomeItems.length ? "会后结论已确认" : "会议已结束"
+    : phase === "live" ? recorderLine(recorder.state) : meetingNow(payload, ended);
   const minutes = {
     decisions: outcomeItems.filter((item) => item.kind === "decision"),
     actions: [...outcomeItems.filter((item) => item.kind === "todo").reduce((groups, item) => {
@@ -1246,7 +1260,28 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
   };
 
   const recordView =
-    payload.status === "cancelled" ? (
+    memberReadOnly ? (
+      <section className={s.review}>
+        <section className={s.reviewSection}>
+          <header><h3>会后结论</h3></header>
+          {outcomeItems.length ? (
+            <>
+              {minutes.decisions.length ? <section className={s.reviewSection}>
+                <h3>会议共识</h3>
+                {minutes.decisions.map((item) => <p key={item.id} className={s.entryBody}>{item.text}</p>)}
+              </section> : null}
+              {minutes.actions.length ? <section className={s.reviewSection}>
+                <h3>Action Item</h3>
+                {minutes.actions.map((group) => <div key={group.ownerId} className={s.ownerGroup}>
+                  <h4>{people.get(group.ownerId) ?? group.ownerId}</h4>
+                  {group.items.map((item) => <p key={item.id} className={s.entryBody}>{item.text}</p>)}
+                </div>)}
+              </section> : null}
+            </>
+          ) : <p className={s.empty}>暂无已确认的会后结论。</p>}
+        </section>
+      </section>
+    ) : payload.status === "cancelled" ? (
       <p className={s.empty}>这场会已取消，没有会议记录。</p>
     ) : payload.status === "scheduled" ? (
       <>
@@ -1394,7 +1429,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
       </section>
     );
 
-  const showing = view.current === RECORD_TAB.id ? RECORD_TAB : viewedMaterial ? materialTab(viewedMaterial) : PREFLIGHT_TAB;
+  const recordTab = memberReadOnly ? { ...RECORD_TAB, title: "会议记录：已确认的决定与待办" } : RECORD_TAB;
+  const showing = view.current === RECORD_TAB.id ? recordTab : viewedMaterial ? materialTab(viewedMaterial) : PREFLIGHT_TAB;
 
   return (
     <section className={s.workspace} data-testid="meeting-workspace" data-status={payload.status}>
@@ -1405,7 +1441,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
         onBack={() => onNavigate("/")}
         actions={
           <MeetingHeaderActions day={meetingDayWord(payload.scheduledAt)} slot={meetingSlot(payload.scheduledAt, payload.endsAt)} clock={clock}>
-            <HeaderMaterialToggle tab={RECORD_TAB} selected={view.current === RECORD_TAB.id} onToggle={() => setView((current) => toggleWhole(current, RECORD_TAB.id))} />
+            <HeaderMaterialToggle tab={recordTab} selected={view.current === RECORD_TAB.id} onToggle={() => setView((current) => toggleWhole(current, RECORD_TAB.id))} />
           </MeetingHeaderActions>
         }
       >
@@ -1417,8 +1453,9 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
               selected={view.current === RECORD_TAB.id ? null : view.current}
               onSelect={(id) => setView((current) => pressMaterial(current, id))}
             />
-            <MeetingStatus phase={phase} facts={facts} now={phase === "live" ? recorderLine(recorder.state) : meetingNow(payload, ended)} endedAt={payload.endedAt} />
-            {payload.preflight.taskDefinition?.reviewPurpose ? <p className={s.agenda}>{payload.preflight.taskDefinition.reviewPurpose}</p> : null}
+            <MeetingStatus phase={phase} facts={facts} now={statusNow} endedAt={payload.endedAt} />
+            {(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose) ?
+              <p className={s.agenda}>{memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose}</p> : null}
             <section className={s.material} aria-label={showing.title}>
               {view.current === RECORD_TAB.id ? (
                 recordView
@@ -1435,7 +1472,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
           </div>
         </div>
       </DetailFrame>
-      {payload.transcriptCandidate && candidateOpen ? (
+      {!memberReadOnly && payload.transcriptCandidate && candidateOpen ? (
         <TranscriptCandidateDialog
           key={payload.transcriptCandidate.createdAt}
           dialogRef={candidateDialog}
@@ -1456,4 +1493,15 @@ export function MeetingCard({ card, collection, onCard, onNavigate }: CardRender
       ) : null}
     </section>
   );
+}
+
+/** 成员工作区登记同一张只读 Card，右列 Agent 与会议群使用相同的可见投影。 */
+export function MemberMeetingDetail({ card }: { card: CardRenderProps["card"] }) {
+  const workspace = useWorkspace();
+  const cards = useMemo(() => [card], [card]);
+  const group = useMemo(() => ({ kind: "thread" as const, objectType: "meeting" as const,
+    objectId: card.objectRef.id, viewerId: workspace.viewerId ?? "", members: [] }), [card.objectRef.id, workspace.viewerId]);
+  useRegisterDetail({ scope: `meeting:${card.objectRef.id}`, label: card.title, mark: "meeting", cards, group });
+  return <MeetingCard card={card} collection={cards} onCard={() => undefined}
+    onNavigate={(href, origin) => href === "/" ? workspace.close() : workspace.navigate(href, origin)} readOnly />;
 }

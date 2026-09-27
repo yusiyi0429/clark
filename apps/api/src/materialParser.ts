@@ -117,6 +117,6 @@ export async function cleanupMaterialTemp(directory: string): Promise<void> {
 }
 
 export async function readStoredMaterial(storageDir: string, storageKey: string): Promise<Buffer> {
-  if (!/^[0-9a-f-]+\/[0-9a-f-]+$/.test(storageKey)) throw new MaterialParseError("材料存储键无效", "MATERIAL_NOT_FOUND");
+  if (!/^(?:[0-9a-f-]+\/[0-9a-f-]+|objects\/(?:issue|task)\/[a-zA-Z0-9_-]+\/[0-9a-f-]+)$/.test(storageKey)) throw new MaterialParseError("材料存储键无效", "MATERIAL_NOT_FOUND");
   return readFile(join(storageDir, storageKey));
 }

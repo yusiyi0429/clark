@@ -6,7 +6,7 @@ import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { insertNotification } from "./notifications.js";
 import { listTaskProgress } from "./taskProgress.js";
 import { postThreadIntro, type ThreadIntroAgent } from "./threadIntro.js";
-import { threadIntroInput } from "./threads.js";
+import { postCoAgentMessage, threadIntroInput } from "./threads.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 
 type TaskRow = {
@@ -108,9 +108,7 @@ async function appendStep(client: PoolClient, missionId: string | null): Promise
   return result.rows[0].n;
 }
 async function threadMessage(client: PoolClient, taskId: string, content: string): Promise<number> {
-  const result = await client.query<{ id: string }>(`INSERT INTO thread_messages(object_type,object_id,kind,content)
-    VALUES ('task',$1,'co-agent',$2) RETURNING id::text`, [taskId, content]);
-  return Number(result.rows[0].id);
+  return postCoAgentMessage(client.query.bind(client), { objectType: "task", objectId: taskId }, content);
 }
 async function readThrough(client: PoolClient, taskId: string, personId: string, messageId: number): Promise<void> {
   await client.query(`INSERT INTO thread_reads(object_type,object_id,person_id,last_read_id) VALUES('task',$1,$2,$3)

@@ -75,6 +75,8 @@ export const ConversationMessageRequest = Type.Object(
     message: Type.String({ minLength: 1, maxLength: 20_000 }),
     references: Type.Optional(Type.Array(CardReference, { maxItems: 20 })),
     attachments: Type.Optional(Type.Array(ConversationAttachmentRef, { maxItems: 10 })),
+    /** 工单 09：页面左侧正在看的那份材料；必须属于这个 scope 的对象。 */
+    viewingMaterialId: Type.Optional(Type.String({ format: "uuid" })),
   },
   { additionalProperties: false },
 );

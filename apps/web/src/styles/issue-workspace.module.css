@@ -5,14 +5,15 @@
 .identity{display:flex;align-items:center;gap:13px;min-width:0;flex:1}.identity>div{min-width:0}
 .header span{font-size:12px;color:#6e6e73}.header h1{font-size:22px;font-weight:600;line-height:1.5;margin:7px 0 0;letter-spacing:-.025em}
 .header>button{flex:none}
-.columns{display:block;min-height:0;flex:1;overflow:hidden}
+.columns{display:flex;flex-direction:column;min-height:0;flex:1;overflow:hidden}
 .materials{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0;background:#fff}
 .tabs{padding:0 20px;border-bottom:1px solid #1d1d1f0a;flex:none}
+.tabs{display:none}
 /* HeroUI 的页签默认铺满整行（.tabs__tab{width:100%}）；这里要靠左按内容宽。 */
 .tabs :global(.tabs__tab){width:auto}
 .reading{position:relative;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:24px 28px 48px;min-height:0;line-height:1.8;font-size:16px}
 .reading .note{font-size:11px;color:#797980;margin:0 0 23px}.reading h2{font-size:14px;font-weight:600;color:#63636a;margin:0 0 12px}
-.judgment>p{margin:0;font-size:19px;line-height:1.8;letter-spacing:-.02em}.judgment>button{margin-top:14px}
+.judgment>p{margin:0;font-size:19px;line-height:1.8;letter-spacing:-.02em}.judgment+.judgment{margin-top:28px}.judgment>button{margin-top:14px}
 .section{margin-top:30px;padding-top:24px;border-top:1px solid #1d1d1f0d}.section ol{padding:0;list-style:none;margin:0}.section li{display:flex;gap:14px;margin-top:15px}.section li>span{font-size:11px;color:#8e8e93;padding-top:4px;font-variant-numeric:tabular-nums}.section p{margin:0}.section p+p{margin-top:12px}
 .section li small{display:block;margin-top:4px;font-size:12px;line-height:1.6;color:#8e8e93}.section li small a{color:inherit;text-decoration:underline;text-decoration-color:#8e8e9366;text-underline-offset:3px}.section li small a:hover{color:#2f6bb4}
 .section>p>a{color:#2f6bb4;text-decoration:none}.section>p>a:hover{text-decoration:underline}

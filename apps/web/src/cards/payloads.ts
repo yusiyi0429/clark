@@ -17,6 +17,8 @@ export type ResearchDoc = {
 };
 
 export type IssuePayload = {
+  /** 只在成员的只读议题里有：位置的显示名（成员没有登记表）。 */
+  locationName?: string | null;
   origin: "radar" | "dri" | "ceo";
   originRef: unknown;
   status: "pending" | "decided" | "dismissed";

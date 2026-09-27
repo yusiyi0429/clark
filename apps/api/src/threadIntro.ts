@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import type { TThreadObjectType } from "@warmap/contracts";
 import { runCandidateAgent } from "./candidateAgentRuntime.js";
 import type { AppEnv } from "./app.js";
+import { postCoAgentMessage } from "./threads.js";
 
 export type IntroInput = {
   objectType: TThreadObjectType; objectId: string; title: string; description: string;
@@ -39,16 +40,7 @@ export async function postThreadIntro(pool: Pool, agent: ThreadIntroAgent, input
     const sentence = (text: string) => text.trim().replace(/[。.！!；;，,\s]+$/u, "") + "。";
     message = `${input.inviter} 把 ${input.newcomers.join("、")} 拉进了这个群：「${input.title}」。`
       + (input.description ? sentence(input.description) : "")
-      + (input.note ? `${input.inviter}说：「${input.note.trim()}」` : "");
+      + (input.note ? `${input.inviter} 说：「${input.note.trim()}」` : "");
   } finally { clearTimeout(timeout); }
-  const saved = await pool.query<{ id: string }>(
-    "INSERT INTO thread_messages (object_type, object_id, kind, content) VALUES ($1, $2, 'co-agent', $3) RETURNING id",
-    [input.objectType, input.objectId, message],
-  );
-  for (const personId of existingIds) {
-    await pool.query(`INSERT INTO thread_reads (object_type, object_id, person_id, last_read_id)
-      VALUES ($1,$2,$3,$4) ON CONFLICT (object_type,object_id,person_id) DO UPDATE
-      SET last_read_id=GREATEST(thread_reads.last_read_id,EXCLUDED.last_read_id),updated_at=now()`,
-    [input.objectType, input.objectId, personId, saved.rows[0].id]);
-  }
+  await postCoAgentMessage(pool.query.bind(pool), { objectType: input.objectType, objectId: input.objectId }, message, existingIds);
 }

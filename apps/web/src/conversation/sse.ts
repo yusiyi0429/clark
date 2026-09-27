@@ -5,6 +5,7 @@ export type ConversationEvent = {
   code?: string;
   name?: string;
   phase?: string;
+  isError?: boolean;
   status?: string;
 };
 

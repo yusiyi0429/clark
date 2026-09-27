@@ -181,7 +181,7 @@ export function ColumnComposer({
               event.preventDefault();
               event.currentTarget.form?.requestSubmit();
             }}
-            placeholder="问你的 Agent…"
+            placeholder={data.viewingMaterialEditable ? "让 Agent 改这份材料…" : "问你的 Agent…"}
             aria-label={`${label}对话输入`}
           />
         }

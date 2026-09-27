@@ -24,6 +24,11 @@ const render = (card: Card, homeCards: Card[] = [battlefield]) =>
       <IssueCard card={card} collection={[]} onCard={() => undefined} onNavigate={() => undefined} />
     </WorkspaceTestProvider>,
   );
+const renderReadOnly = (card: Card) => renderToStaticMarkup(
+  <WorkspaceTestProvider api={{ homeCards: [battlefield] }}>
+    <IssueCard card={card} collection={[]} readOnly onCard={() => undefined} onNavigate={() => undefined} />
+  </WorkspaceTestProvider>,
+);
 
 /** 议题工作区（clark issue-workspace）：玻璃页头 + 「总结与判断 / 研究与依据」页签；对话在外壳右侧的对话列。 */
 const pendingIssue = {
@@ -185,5 +190,18 @@ describe("议题工作区", () => {
     const html = render({ ...pendingIssue, payload: { ...(pendingIssue.payload as object), origin: "ceo" } } as unknown as Card);
     expect(html).toContain("你发起的议题 · 预研已完成");
     expect(html).not.toContain("DRI 提交");
+  });
+  it("成员沿用议题框架和中文标签，只保留追问入口", () => {
+    const member = { ...pendingIssue, payload: { ...(pendingIssue.payload as object),
+      originRef: { whyNow: "渠道窗口将关闭" } }, actions: [] } as unknown as Card;
+    const html = renderReadOnly(member);
+    expect(html).toContain("材料页签");
+    expect(html).toContain("为什么现在");
+    expect(html).toContain("渠道窗口将关闭");
+    expect(html).toContain("紧急程度：紧急");
+    expect(html).toContain("预研已完成");
+    expect(html).toContain("追问这条判断");
+    expect(html).not.toContain("拉人进群");
+    expect(html).not.toContain("安排一场会议");
   });
 });

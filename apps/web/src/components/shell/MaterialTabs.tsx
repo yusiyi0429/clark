@@ -48,7 +48,8 @@ export function useRememberedScroll(key: string | undefined) {
   const positions = useRef(new Map<string, number>());
   useLayoutEffect(() => {
     if (!key) return;
-    const scroller = document.querySelector("[data-material-tabs]")?.closest<HTMLElement>(".ts-detail");
+    const scroller = document.querySelector("[data-material-tabs]")?.closest<HTMLElement>(".ts-detail")
+      ?? document.querySelector<HTMLElement>("[data-material-scroll]");
     if (!scroller) return;
     scroller.scrollTop = positions.current.get(key) ?? 0;
     const remember = () => positions.current.set(key, scroller.scrollTop);

@@ -16,6 +16,7 @@ export * from "./missionCards.js";
 export * from "./config.js";
 export * from "./transcript.js";
 export * from "./threads.js";
+export * from "./materials.js";
 export * from "./tasks.js";
 export * from "./personalTokens.js";
 export * from "./voiceprint.js";

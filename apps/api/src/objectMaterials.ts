@@ -1,0 +1,197 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import type { Pool } from "pg";
+import type { TMaterialDetailResponse, TMaterialObjectType, TMaterialView } from "@warmap/contracts";
+import type { Query } from "./meetingStore.js";
+import type { ParsedMaterial } from "./materialParser.js";
+import { MAX_MATERIAL_TEXT_CHARS } from "./materialParser.js";
+import { moveStagedFile } from "./meetingMaterials.js";
+import { diffMaterialBlocks, splitMaterialBlocks } from "./materialDiff.js";
+import { isActiveMember, postCoAgentMessage, type ThreadRef } from "./threads.js";
+
+export class ObjectMaterialError extends Error {
+  constructor(public status: number, public code: string, message: string, public version?: number) { super(message); }
+}
+
+export type MaterialViewer = { personId: string; role: "ceo" | "member"; displayName: string };
+type MaterialRow = { id: string; object_type: TMaterialObjectType; object_id: string; file_name: string;
+  format: "markdown" | "pdf" | "docx"; size_bytes: number; page_count: number | null; storage_key: string | null;
+  origin: "upload" | "agent"; owner_id: string; current_version: number; created_at: Date; updated_at: Date;
+  revision_version: number | null; revision_by: string | null; revision_summary: string | null; revision_at: Date | null };
+type RevisionRow = { version: number; body: string; requested_by: string | null; summary: string | null; created_at: Date };
+const COLUMNS = `m.*, r.version AS revision_version, r.requested_by AS revision_by,
+  r.summary AS revision_summary, r.created_at AS revision_at`;
+const JOIN = `LEFT JOIN material_revisions r ON r.material_id=m.id AND r.version=m.current_version`;
+
+export async function canAccessObjectMaterials(q: Query, ref: ThreadRef, viewer: MaterialViewer): Promise<boolean> {
+  if (await isActiveMember(q, ref, viewer.personId)) return true;
+  if (ref.objectType !== "issue" || viewer.role !== "ceo") return false;
+  const issue = await q("SELECT 1 FROM issues WHERE id::text=$1", [ref.objectId]);
+  if (!issue.rowCount) return false;
+  const group = await q("SELECT 1 FROM thread_members WHERE object_type='issue' AND object_id=$1 LIMIT 1", [ref.objectId]);
+  return !group.rowCount;
+}
+
+export async function requireMaterialAccess(q: Query, ref: ThreadRef, viewer: MaterialViewer): Promise<void> {
+  if (!await canAccessObjectMaterials(q, ref, viewer)) throw new ObjectMaterialError(404, "MATERIAL_NOT_FOUND", "材料不存在");
+}
+
+function person(id: string, names: Map<string, string>) { return { personId: id, displayName: names.get(id) ?? id }; }
+function revision(row: RevisionRow, names: Map<string, string>) {
+  return { version: row.version, requestedBy: row.requested_by ? person(row.requested_by, names) : null,
+    summary: row.summary, at: row.created_at.toISOString() };
+}
+function view(row: MaterialRow, viewer: MaterialViewer, names: Map<string, string>): TMaterialView {
+  return { id: row.id, objectType: row.object_type, objectId: row.object_id, fileName: row.file_name,
+    format: row.format, sizeBytes: row.size_bytes, ...(row.page_count ? { pageCount: row.page_count } : {}),
+    origin: row.origin, owner: person(row.owner_id, names), createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(), version: row.current_version,
+    editable: row.format === "markdown", canDelete: row.owner_id === viewer.personId,
+    lastRevision: (row.current_version > 1 || row.origin === "agent") && row.revision_at ? {
+      version: row.revision_version!, requestedBy: person(row.revision_by!, names),
+      summary: row.revision_summary!, at: row.revision_at.toISOString(),
+    } : null };
+}
+async function rowFor(q: Query, ref: ThreadRef, id: string): Promise<MaterialRow> {
+  const result = await q(`SELECT ${COLUMNS} FROM object_materials m ${JOIN}
+    WHERE m.id=$1 AND m.object_type=$2 AND m.object_id=$3 AND m.deleted_at IS NULL`, [id, ref.objectType, ref.objectId]);
+  if (!result.rows[0]) throw new ObjectMaterialError(404, "MATERIAL_NOT_FOUND", "材料不存在");
+  return result.rows[0] as MaterialRow;
+}
+export async function listObjectMaterials(q: Query, ref: ThreadRef, viewer: MaterialViewer, names: Map<string, string>) {
+  await requireMaterialAccess(q, ref, viewer);
+  const rows = await q(`SELECT ${COLUMNS} FROM object_materials m ${JOIN}
+    WHERE m.object_type=$1 AND m.object_id=$2 AND m.deleted_at IS NULL ORDER BY m.created_at,m.id`, [ref.objectType, ref.objectId]);
+  return { materials: (rows.rows as MaterialRow[]).map((row) => view(row, viewer, names)), canUpload: rows.rows.length < 30 };
+}
+export async function getObjectMaterial(q: Query, ref: ThreadRef, id: string, viewer: MaterialViewer, names: Map<string, string>) {
+  await requireMaterialAccess(q, ref, viewer);
+  return view(await rowFor(q, ref, id), viewer, names);
+}
+export async function readObjectMaterial(q: Query, ref: ThreadRef, id: string, viewer: MaterialViewer, version?: number) {
+  await requireMaterialAccess(q, ref, viewer);
+  const row = await rowFor(q, ref, id);
+  const selectedVersion = version ?? row.current_version;
+  const result = await q("SELECT body FROM material_revisions WHERE material_id=$1 AND version=$2", [id, selectedVersion]);
+  if (!result.rows[0]) throw new ObjectMaterialError(404, "MATERIAL_REVISION_NOT_FOUND", "材料版本不存在");
+  return { body: result.rows[0].body as string, version: selectedVersion, currentVersion: row.current_version,
+    fileName: row.file_name, format: row.format, storageKey: row.storage_key };
+}
+export async function getObjectMaterialDetail(q: Query, ref: ThreadRef, id: string, viewer: MaterialViewer,
+  names: Map<string, string>, version?: number): Promise<TMaterialDetailResponse> {
+  await requireMaterialAccess(q, ref, viewer);
+  const row = await rowFor(q, ref, id);
+  const revisions = await q("SELECT version,body,requested_by,summary,created_at FROM material_revisions WHERE material_id=$1 ORDER BY version DESC", [id]);
+  const selected = (revisions.rows as RevisionRow[]).find((item) => item.version === (version ?? row.current_version));
+  if (!selected) throw new ObjectMaterialError(404, "MATERIAL_REVISION_NOT_FOUND", "材料版本不存在");
+  const previous = (revisions.rows as RevisionRow[]).find((item) => item.version === selected.version - 1);
+  return { material: view(row, viewer, names), version: selected.version, latest: selected.version === row.current_version,
+    revision: revision(selected, names), revisions: (revisions.rows as RevisionRow[]).map((item) => revision(item, names)),
+    blocks: row.format !== "markdown" ? null : previous
+      ? diffMaterialBlocks(previous.body, selected.body)
+      : splitMaterialBlocks(selected.body).map((text) => ({ text, change: null })) };
+}
+
+export async function uploadObjectMaterial(pool: Pool, ref: ThreadRef, viewer: MaterialViewer,
+  parsed: ParsedMaterial, storageDir: string, names: Map<string, string>): Promise<TMaterialView> {
+  const client = await pool.connect();
+  const q = client.query.bind(client) as Query;
+  const id = randomUUID();
+  const storageKey = `objects/${ref.objectType}/${ref.objectId}/${id}`;
+  const destination = join(storageDir, storageKey);
+  let moved = false;
+  try {
+    await client.query("BEGIN");
+    await requireMaterialAccess(q, ref, viewer);
+    await q("SELECT pg_advisory_xact_lock(hashtext($1))", [`material:${ref.objectType}:${ref.objectId}`]);
+    const count = await q("SELECT count(*)::int AS n FROM object_materials WHERE object_type=$1 AND object_id=$2 AND deleted_at IS NULL", [ref.objectType, ref.objectId]);
+    if (count.rows[0].n >= 30) throw new ObjectMaterialError(409, "MATERIAL_LIMIT", "这件事最多保存 30 份材料");
+    await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
+    await moveStagedFile(parsed.tempPath, destination);
+    moved = true;
+    const format = parsed.mimeType === "text/markdown" ? "markdown" : parsed.mimeType === "application/pdf" ? "pdf" : "docx";
+    const now = new Date();
+    await q(`INSERT INTO object_materials(id,object_type,object_id,file_name,format,size_bytes,page_count,storage_key,sha256,origin,owner_id,created_at,updated_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'upload',$10,$11,$11)`,
+      [id, ref.objectType, ref.objectId, parsed.fileName, format, parsed.sizeBytes, parsed.pageCount ?? null, storageKey, parsed.sha256, viewer.personId, now]);
+    await q("INSERT INTO material_revisions(material_id,version,body,created_at) VALUES($1,1,$2,$3)", [id, parsed.extractedText, now]);
+    const row = await rowFor(q, ref, id);
+    await client.query("COMMIT");
+    return view(row, viewer, names);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    if (moved) await rm(destination, { force: true });
+    throw error;
+  } finally { client.release(); }
+}
+export async function deleteObjectMaterial(q: Query, ref: ThreadRef, id: string, viewer: MaterialViewer): Promise<void> {
+  await requireMaterialAccess(q, ref, viewer);
+  const row = await rowFor(q, ref, id);
+  if (row.owner_id !== viewer.personId) throw new ObjectMaterialError(403, "MATERIAL_FORBIDDEN", "只能删除自己上传的材料");
+  await q("UPDATE object_materials SET deleted_at=now() WHERE id=$1 AND deleted_at IS NULL", [id]);
+}
+
+export type MaterialEdit = { find: string; replace: string } | { append: string };
+export async function editObjectMaterial(pool: Pool, ref: ThreadRef, id: string, viewer: MaterialViewer,
+  baseVersion: number, edits: MaterialEdit[], summary: string, runId: string | null): Promise<{ version: number; changed: number }> {
+  const client = await pool.connect();
+  const q = client.query.bind(client) as Query;
+  try {
+    await client.query("BEGIN");
+    await requireMaterialAccess(q, ref, viewer);
+    const row = await rowFor(q, ref, id);
+    await q("SELECT id FROM object_materials WHERE id=$1 FOR UPDATE", [id]);
+    const current = await rowFor(q, ref, id);
+    const fail = (code: string, message: string) => { throw new ObjectMaterialError(409, code, message, current.current_version); };
+    if (baseVersion !== current.current_version) fail("MATERIAL_VERSION_CONFLICT", "版本已变化，请重新读取材料");
+    if (current.format !== "markdown") fail("MATERIAL_READ_ONLY", "只有 Markdown 材料能修改");
+    if (!summary.trim() || summary.length > 200 || edits.length < 1 || edits.length > 20) fail("INVALID_MATERIAL_EDIT", "修改说明或修改条数不合法");
+    const result = await q("SELECT body FROM material_revisions WHERE material_id=$1 AND version=$2", [id, current.current_version]);
+    let body = result.rows[0].body as string;
+    for (const edit of edits) {
+      // 追加的内容另起一段，不粘在原文最后一行上。
+      if ("append" in edit) body = `${body.replace(/\s+$/u, "")}\n\n${edit.append.replace(/^\s+/u, "")}`;
+      else {
+        if (!edit.find || body.indexOf(edit.find) < 0 || body.indexOf(edit.find) !== body.lastIndexOf(edit.find))
+          fail("MATERIAL_FIND_NOT_UNIQUE", "要替换的文字必须恰好出现一次，请重新读取材料");
+        body = body.replace(edit.find, edit.replace);
+      }
+      if (body.length > MAX_MATERIAL_TEXT_CHARS) fail("MATERIAL_TEXT_TOO_LARGE", "修改后超过 100,000 字");
+    }
+    const version = current.current_version + 1;
+    const now = new Date();
+    await q("INSERT INTO material_revisions(material_id,version,body,requested_by,summary,agent_run_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)",
+      [id, version, body, viewer.personId, summary.trim(), runId, now]);
+    await q("UPDATE object_materials SET current_version=$2,updated_at=$3 WHERE id=$1", [id, version, now]);
+    await postCoAgentMessage(q, ref, `按${viewer.displayName}的要求改了《${row.file_name}》：${summary.trim()}`, [viewer.personId]);
+    await client.query("COMMIT");
+    return { version, changed: edits.length };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+  finally { client.release(); }
+}
+export async function createObjectMaterial(pool: Pool, ref: ThreadRef, viewer: MaterialViewer,
+  title: string, body: string, summary: string, runId: string | null): Promise<{ id: string; version: number }> {
+  const client = await pool.connect();
+  const q = client.query.bind(client) as Query;
+  try {
+    await client.query("BEGIN");
+    await requireMaterialAccess(q, ref, viewer);
+    await q("SELECT pg_advisory_xact_lock(hashtext($1))", [`material:${ref.objectType}:${ref.objectId}`]);
+    const count = await q("SELECT count(*)::int AS n FROM object_materials WHERE object_type=$1 AND object_id=$2 AND deleted_at IS NULL", [ref.objectType, ref.objectId]);
+    if (count.rows[0].n >= 30) throw new ObjectMaterialError(409, "MATERIAL_LIMIT", "这件事最多保存 30 份材料");
+    const fileName = `${title.trim().replace(/\.md$/i, "")}.md`;
+    if (fileName.length < 4 || fileName.length > 240 || /[\\/\u0000-\u001f]/.test(fileName) || !body.trim()
+      || body.length > MAX_MATERIAL_TEXT_CHARS || !summary.trim() || summary.length > 200)
+      throw new ObjectMaterialError(400, "INVALID_MATERIAL", "材料标题、正文或说明不合法");
+    const id = randomUUID(), now = new Date();
+    await q(`INSERT INTO object_materials(id,object_type,object_id,file_name,format,size_bytes,origin,owner_id,created_at,updated_at)
+      VALUES($1,$2,$3,$4,'markdown',$5,'agent',$6,$7,$7)`, [id, ref.objectType, ref.objectId, fileName, Buffer.byteLength(body), viewer.personId, now]);
+    await q("INSERT INTO material_revisions(material_id,version,body,requested_by,summary,agent_run_id,created_at) VALUES($1,1,$2,$3,$4,$5,$6)",
+      [id, body, viewer.personId, summary.trim(), runId, now]);
+    await postCoAgentMessage(q, ref, `按${viewer.displayName}的要求新写了《${fileName}》：${summary.trim()}`, [viewer.personId]);
+    await client.query("COMMIT");
+    return { id, version: 1 };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+  finally { client.release(); }
+}

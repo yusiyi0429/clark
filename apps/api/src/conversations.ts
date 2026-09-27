@@ -42,6 +42,7 @@ export type ConversationRuntime = {
     viewer: { personId: string; displayName: string; role: SessionRole };
     message: string;
     currentObject: TReferenceSnapshot | null;
+    runId?: string;
     referencesSnapshot: TReferenceSnapshot[];
     recentMessages?: { role: "user" | "assistant"; content: string; createdAt: string }[];
     runtimeEntries: unknown[];

@@ -25,6 +25,7 @@ import { getIssueRow } from "../issues.js";
 import { getMeetingRow } from "../meetingStore.js";
 import { projectMemberIssueCard, projectMemberMeetingCard } from "../memberCards.js";
 import { isActiveMember } from "../threads.js";
+import { getObjectMaterial } from "../objectMaterials.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -69,6 +70,17 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
       const owner = person.personId;
       const object = await scopeObjectFor(person, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      if (req.body.viewingMaterialId) {
+        const [objectType, objectId] = req.params.scope.split(":", 2);
+        if (objectType !== "issue" && objectType !== "task") return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在");
+        try {
+          const names = personDisplayNames(companyMemory);
+          const material = await getObjectMaterial(q, { objectType, objectId }, req.body.viewingMaterialId,
+            { personId: owner, role: person.role, displayName: names.get(owner) ?? owner }, names);
+          if (object.snapshot) Object.assign(object.snapshot, { viewingMaterial: {
+            id: material.id, fileName: material.fileName, version: material.version, editable: material.editable } });
+        } catch { return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在"); }
+      }
       // 成员在 2a 看不到任何 Card，也不能借显式引用把 Card 带进自己的 Agent。
       if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
       const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret);
@@ -201,6 +213,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         try {
           const result = await runtime.run({
             scope: req.params.scope,
+            runId,
             viewer: { personId: owner, displayName: personDisplayNames(companyMemory).get(owner) ?? owner, role: person.role },
             message: runtimeMessage,
             currentObject: object.snapshot,

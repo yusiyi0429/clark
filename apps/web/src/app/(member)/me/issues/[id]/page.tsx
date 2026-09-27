@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { MemberGroupCard } from "@/components/member/MemberGroupCard";
+import { MemberIssueScreen } from "@/components/member/MemberIssueScreen";
 import { serverApi } from "@/lib/api/client";
 import { requireMember } from "@/lib/api/server";
 
@@ -10,5 +10,5 @@ export default async function MemberIssuePage({ params }: { params: Promise<{ id
   if (response.status === 401) redirect("/access");
   if (response.status === 404) notFound();
   if (!data) throw new Error(`Issue query failed with ${response.status}`);
-  return <MemberGroupCard card={data} />;
+  return <MemberIssueScreen card={data} />;
 }

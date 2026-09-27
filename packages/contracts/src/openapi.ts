@@ -143,6 +143,11 @@ import {
   RadarDirection,
   RadarSourceSetting,
   PersonalRadarRun,
+  MaterialView,
+  MaterialListResponse,
+  MaterialRevisionView,
+  MaterialBlock,
+  MaterialDetailResponse,
 } from "./index.js";
 
 const errorResponse = {
@@ -867,6 +872,115 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "401": errorResponse,
             "404": errorResponse,
             "409": errorResponse,
+          },
+        },
+      },
+      "/api/materials/{objectType}/{objectId}": {
+        get: {
+          operationId: "listMaterials",
+          summary: "对象的材料（工单 09）；群成员能读（议题未建群时为 CEO），其他人 404",
+          parameters: [
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            "200": { description: "材料列表", content: { "application/json": { schema: { $ref: "#/components/schemas/MaterialListResponse" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+        post: {
+          operationId: "uploadMaterial",
+          summary: "上传一份材料（PDF、Word、Markdown，单个 20 MB，每个对象最多 30 份）",
+          parameters: [
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "multipart/form-data": {
+                schema: { type: "object", required: ["file"], properties: { file: { type: "string", format: "binary" } } },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "新材料", content: { "application/json": { schema: { $ref: "#/components/schemas/MaterialView" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+            "413": errorResponse,
+          },
+        },
+      },
+      "/api/materials/{objectType}/{objectId}/{materialId}": {
+        get: {
+          operationId: "getMaterial",
+          summary: "一份材料的某一版（默认最新）和它相对上一版的标注、改动记录",
+          parameters: [
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectId", in: "path", required: true, schema: { type: "string" } },
+            { name: "materialId", in: "path", required: true, schema: { type: "string" } },
+            { name: "version", in: "query", required: false, schema: { type: "integer", minimum: 1 } },
+          ],
+          responses: {
+            "200": { description: "材料详情", content: { "application/json": { schema: { $ref: "#/components/schemas/MaterialDetailResponse" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+        delete: {
+          operationId: "deleteMaterial",
+          summary: "主人删自己的材料（软删）；不是主人 403",
+          parameters: [
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectId", in: "path", required: true, schema: { type: "string" } },
+            { name: "materialId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            "204": { description: "已删" },
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/materials/{objectType}/{objectId}/{materialId}/file": {
+        get: {
+          operationId: "downloadMaterial",
+          summary: "下载原件；Agent 写的材料下载当前版 .md",
+          parameters: [
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectId", in: "path", required: true, schema: { type: "string" } },
+            { name: "materialId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            "200": { description: "文件字节", content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/materials/{objectType}/{objectId}/{materialId}/preview": {
+        get: {
+          operationId: "previewMaterial",
+          summary: "PDF inline、Word 清理后的 HTML（不持久化）",
+          parameters: [
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectId", in: "path", required: true, schema: { type: "string" } },
+            { name: "materialId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            "200": {
+              description: "预览体",
+              content: {
+                "application/pdf": { schema: { type: "string", format: "binary" } },
+                "text/html": { schema: { type: "string" } },
+              },
+            },
+            "401": errorResponse,
+            "404": errorResponse,
           },
         },
       },
@@ -1785,6 +1899,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MissionCardItemsResponse: MissionCardItemsResponse as JsonSchema,
         PersonalTokenClient: PersonalTokenClient as JsonSchema,
         PersonalTokenView: PersonalTokenView as JsonSchema,
+        MaterialView: MaterialView as JsonSchema,
+        MaterialListResponse: MaterialListResponse as JsonSchema,
+        MaterialRevisionView: MaterialRevisionView as JsonSchema,
+        MaterialBlock: MaterialBlock as JsonSchema,
+        MaterialDetailResponse: MaterialDetailResponse as JsonSchema,
         ListPersonalTokensResponse: ListPersonalTokensResponse as JsonSchema,
         CreatePersonalTokenRequest: CreatePersonalTokenRequest as JsonSchema,
         CreatePersonalTokenResponse: CreatePersonalTokenResponse as JsonSchema,
