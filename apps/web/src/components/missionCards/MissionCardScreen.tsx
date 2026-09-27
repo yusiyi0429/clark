@@ -58,6 +58,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const [correctionDecisionError, setCorrectionDecisionError] = useState<{ correctionId: string; message: string } | null>(null);
   const { ask, dialog } = useConfirm();
   const refreshInFlight = useRef<Promise<void> | null>(null);
+  const peopleTabs = useRef<HTMLElement>(null);
   const actionInFlight = useRef(false);
   const noteViewer = workspace.viewerId ?? card.ownerId;
   const isOwner = workspace.viewerId !== null && workspace.viewerId === card.ownerId;
@@ -205,13 +206,15 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
     } catch (cause) { const message = requestError(cause, "暂时无法连接服务器，请稍后重试；本轮输入已保留。"); if (feedbackId) setDecisionError({ feedbackId, message }); else setError(message); }
     finally { actionInFlight.current = false; setPending(false); }
   };
+  // 窄屏时人员页签横向滚动：打开谁的卡，就把谁的页签滚进视野。
+  useEffect(() => { peopleTabs.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" }); }, [card.cardId]);
   return <div className={s.screen}>
     <DetailFrame title={title} subtitle={round.battlefieldName} onBack={leaveCard} actions={<RoundClock round={shownPayload.round} now={now} />}>
       <div className={s.content}>
+        {round.approver && round.cards.length ? <nav ref={peopleTabs} className={s.peopleTabs} aria-label="切换个人卡">{round.cards.map((row) => <Button key={row.cardId} variant="ghost" className={s.peopleTab} aria-current={row.cardId === card.cardId ? "page" : undefined} aria-label={`打开${row.ownerName}的 Mission Card · ${row.line}`} onPress={() => workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${row.cardId}`)}><span className={s.peopleInitial} aria-hidden>{row.ownerName.slice(0, 1)}</span><span className={s.peopleText}><strong>{row.ownerName}{row.placeholder ? " · 占位" : ""}</strong><small>{row.line}</small></span></Button>)}</nav> : null}
         <RoundLine payload={shownPayload} actions={view.actions} viewerId={workspace.viewerId} pending={pending} onAction={(action, input) => void runAction(action, input)} onViewGoals={() => setGoalsOpen(true)} onStartProcessing={startProcessing} note={note} onNoteChange={(text) => { setNoteDraft({ roundKey, text }); saveRoundNote(noteViewer, round.roundId, round.round, text); }} error={error} />
         {error && !(effectivePhase === "reviewing" && round.approver && !round.counts.pending) ? <p className={s.error} role="alert">{error}</p> : null}
         {notice ? <p className={s.notice} role="status">{notice}</p> : null}
-        {round.approver && round.cards.length ? <nav className={s.peopleTabs} aria-label="切换个人卡">{round.cards.map((row) => <Button key={row.cardId} variant="ghost" className={s.peopleTab} aria-current={row.cardId === card.cardId ? "page" : undefined} aria-label={`打开${row.ownerName}的 Mission Card · ${row.line}`} onPress={() => workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${row.cardId}`)}><span className={s.peopleInitial} aria-hidden>{row.ownerName.slice(0, 1)}</span><span className={s.peopleText}><strong>{row.ownerName}{row.placeholder ? " · 占位" : ""}</strong><small>{row.line}</small></span></Button>)}</nav> : null}
         <CardDocument payload={shownPayload} linkedItems={linkedItems} viewerId={workspace.viewerId} ownerPlan={isOwner ? { selected: planSelected, onSelect: selectPlan, plan, error: planError, loading: planLoading, content: plan ? <MonthPlan key={plan.period} plan={plan} onSaved={(next) => { setPlan(next); void loadLinkedItems(); }} onDirtyChange={onPlanDirtyChange} /> : null } : undefined} controls={{ onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); },
           corrections: { draft: correction, draftError: correctionError, history: correctionHistory, rejecting, decisionError: correctionDecisionError, busy: posting || pending, onOpen: openCorrection, onEdit: (patch) => setCorrection((current) => current && { ...current, ...patch, clientId: crypto.randomUUID() }), onCancel: () => setCorrection(null), onSubmit: () => void sendCorrection(), onHistory: setCorrectionHistory, onRejecting: setRejecting, onDecide: (item, decision) => void decideCorrection(item, decision) },
           proposalEditor: (mission, field) => proposal?.missionId === mission.missionId && proposal.field === field && effectivePhase !== "confirmed" ? <div className={s.proposal}>

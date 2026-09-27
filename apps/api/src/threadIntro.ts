@@ -36,7 +36,10 @@ export async function postThreadIntro(pool: Pool, agent: ThreadIntroAgent, input
     if (typeof generated.message !== "string" || !generated.message.trim() || generated.message.length > 4000) throw new Error("invalid thread intro");
     message = generated.message.trim();
   } catch {
-    message = `${input.inviter} 把 ${input.newcomers.join("、")} 拉进了这个群：${input.title}。${input.description || "请看对象页面了解当前情况"}。${input.note ? `${input.inviter}说：「${input.note}」` : ""}`;
+    const sentence = (text: string) => text.trim().replace(/[。.！!；;，,\s]+$/u, "") + "。";
+    message = `${input.inviter} 把 ${input.newcomers.join("、")} 拉进了这个群：「${input.title}」。`
+      + (input.description ? sentence(input.description) : "")
+      + (input.note ? `${input.inviter}说：「${input.note.trim()}」` : "");
   } finally { clearTimeout(timeout); }
   const saved = await pool.query<{ id: string }>(
     "INSERT INTO thread_messages (object_type, object_id, kind, content) VALUES ($1, $2, 'co-agent', $3) RETURNING id",

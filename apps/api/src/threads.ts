@@ -130,6 +130,14 @@ export async function readState(q: Query, ref: ThreadRef, personId: string): Pro
   return { lastReadId, unread: unread.rows[0].n as number };
 }
 
+/** 公司时间（上海）的会议时段，例如「10/2 周五 10:00–11:00」。 */
+function meetingSlot(start: Date, end: Date): string {
+  const part = (date: Date, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", ...options }).format(date);
+  const day = `${part(start, { month: "numeric" }).replace("月", "")}/${part(start, { day: "numeric" }).replace("日", "")}`;
+  const time = (date: Date) => part(date, { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${day} ${part(start, { weekday: "short" })} ${time(start)}–${time(end)}`;
+}
+
 export async function threadIntroInput(q: Query, companyMemory: CompanyMemoryRepository, ref: ThreadRef, inviterId: string, newcomers: string[], note?: string): Promise<IntroInput> {
   const names = personDisplayNames(companyMemory);
   let title = "";
@@ -137,15 +145,17 @@ export async function threadIntroInput(q: Query, companyMemory: CompanyMemoryRep
   if (ref.objectType === "issue") {
     const row = (await q("SELECT title, origin_ref FROM issues WHERE id::text=$1", [ref.objectId])).rows[0];
     title = row?.title ?? "议题";
-    description = typeof row?.origin_ref?.whyNow === "string" ? row.origin_ref.whyNow : "请查看议题的研究与进展";
+    description = typeof row?.origin_ref?.whyNow === "string" ? row.origin_ref.whyNow : "议题的研究与判断在页面左边";
   } else if (ref.objectType === "meeting") {
-    const row = (await q("SELECT title, scheduled_at, preflight FROM meetings WHERE id::text=$1", [ref.objectId])).rows[0];
+    const row = (await q("SELECT title, scheduled_at, ends_at, preflight FROM meetings WHERE id::text=$1", [ref.objectId])).rows[0];
     title = row?.title ?? "会议";
-    description = row ? `时间 ${new Date(row.scheduled_at).toISOString()}，目的：${row.preflight?.taskDefinition?.reviewPurpose || title}` : "请查看会议安排";
+    const purpose = row?.preflight?.taskDefinition?.reviewPurpose;
+    description = row ? `会议时间 ${meetingSlot(new Date(row.scheduled_at), new Date(row.ends_at))}${purpose ? `，目的是${purpose}` : ""}` : "会议安排在页面左边";
   } else if (ref.objectType === "task") {
-    const row = (await q("SELECT t.title,t.due_date,m.title AS mission_title FROM tasks t LEFT JOIN missions m ON m.id=t.mission_id WHERE t.id::text=$1", [ref.objectId])).rows[0];
+    const row = (await q("SELECT t.title,t.due_date::text AS due_date,m.title AS mission_title FROM tasks t LEFT JOIN missions m ON m.id=t.mission_id WHERE t.id::text=$1", [ref.objectId])).rows[0];
     title = row?.title ?? "执行事项";
-    description = `所属个人任务：${row?.mission_title ?? "独立事项"}；截止：${row?.due_date ?? "待定"}`;
+    const due = typeof row?.due_date === "string" ? `${Number(row.due_date.slice(5, 7))}/${Number(row.due_date.slice(8, 10))}` : "待定";
+    description = `${row?.mission_title ? `属于个人任务「${row.mission_title}」` : "这是一件独立事项"}，截止 ${due}`;
   }
   const history = (await q("SELECT content FROM thread_messages WHERE object_type=$1 AND object_id=$2 ORDER BY id DESC LIMIT 20", [ref.objectType, ref.objectId])).rows
     .reverse().map((row) => String(row.content));

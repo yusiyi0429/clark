@@ -3,7 +3,7 @@
 .screen :global(.ts-detail) { background: var(--surface); overflow-y: auto; overscroll-behavior: contain; }
 .content { box-sizing: border-box; width: 100%; min-width: 0; padding: 24px calc(32px + var(--conversation-lane, 0px)) 128px 32px; color: var(--ink-muted); transition: padding-right var(--dur-slow) var(--ease-brand); }
 .content > * { max-width: 840px; margin-inline: auto; }
-.peopleTabs { display: flex; gap: 8px; min-width: 0; max-width: 840px; overflow-x: auto; overscroll-behavior-inline: contain; padding: 2px 2px 10px; margin-bottom: 16px; scrollbar-width: thin; }
+.peopleTabs { display: flex; gap: 8px; min-width: 0; max-width: 840px; overflow-x: auto; overscroll-behavior-inline: contain; padding: 2px 2px 10px; margin: 0 0 12px; scrollbar-width: thin; }
 .peopleTab.peopleTab { flex: none; display: inline-flex; align-items: center; gap: 9px; min-height: 52px; height: auto; padding: 7px 12px; border: 1px solid var(--hairline); border-radius: var(--onboarding-control-radius); background: var(--onboarding-glass); color: var(--ink); box-shadow: var(--onboarding-shadow); text-align: left; }
 .peopleTab[aria-current='page'] { border-color: var(--onboarding-blue); background: color-mix(in oklab, var(--onboarding-blue) 9%, var(--surface)); }
 .peopleInitial { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%; background: color-mix(in oklab, var(--onboarding-blue) 12%, var(--surface)); color: var(--brand-deep); font-size: 13px; }

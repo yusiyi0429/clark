@@ -19,6 +19,13 @@ export async function clearWangLuyao(app: TestApp, taskIds: Record<string,string
     await sql(`DELETE FROM ${table} WHERE object_type='task' AND object_id=ANY($1::text[])`,[ids]);
   await sql("DELETE FROM tasks WHERE id::text=ANY($1::text[])",[ids]);
   await sql("DELETE FROM meetings WHERE title='团队协作交接对齐会' AND lead_dri_id='sun-mingze'");
+  const demoMeetings = (await sql("SELECT id::text FROM meetings WHERE title='产品战场双视角走查会'")).map((row)=>row.id as string);
+  const demoIssues = (await sql("SELECT id::text FROM issues WHERE title='十月验收口径要不要按 CEO 与 DRI 两种角色拆开'")).map((row)=>row.id as string);
+  await sql("DELETE FROM notifications WHERE object_id=ANY($1::text[])",[[...demoMeetings,...demoIssues]]);
+  for (const table of ["thread_reads","thread_messages","thread_members"])
+    await sql(`DELETE FROM ${table} WHERE object_type IN ('meeting','issue') AND object_id=ANY($1::text[])`,[[...demoMeetings,...demoIssues]]);
+  await sql("DELETE FROM meetings WHERE id::text=ANY($1::text[])",[demoMeetings]);
+  await sql("DELETE FROM issues WHERE id::text=ANY($1::text[])",[demoIssues]);
   await sql(`DELETE FROM mission_review_decisions WHERE review_id IN
     (SELECT id FROM mission_round_reviews WHERE round_id IN
       (SELECT id FROM mission_rounds WHERE battlefield_id IN ('supporting','product') AND period='2026-10'))`);
@@ -106,7 +113,7 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
   const productMonth = (battlefields as { battlefieldId: string; outcome: string }[]).find((item) => item.battlefieldId === "product")?.outcome;
   await sql(`INSERT INTO mission_rounds (id,version,battlefield_id,period,monthly_plan_id,status,draft_origin,draft_source,
     goal_snapshot,window_seq,first_opened_at,opened_at,closes_at,created_at,updated_at)
-    VALUES ($1,1,'product','2026-10',$2,'open','placeholder','{}',$3::jsonb,1,$4,$4,$5,$4,$4)`,
+    VALUES ($1,1,'product','2026-10',$2,'open','agent','{"runIds":[],"placeholderOwners":[]}',$3::jsonb,1,$4,$4,$5,$4,$4)`,
     [productRoundId,planId,JSON.stringify({sixMonthOutcome:productSixMonth,monthOutcome:productMonth,signedAt:at}),productOpenedAt,productClosesAt]);
   const productCards: { ownerId: string; cardId: string; missions: { id: string; outcome: string; why: string; dependencies: string; risk: string }[] }[] = [];
   const topics = [
@@ -179,8 +186,10 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
       extra.judgmentAt ?? null,extra.meetingId ?? null,extra.itemId ?? null,extra.quote ?? null]);
     await sql("INSERT INTO task_members (task_id,person_id,role,added_by) VALUES ($1,$2,'owner',$3)", [id,owner,source]);
     await sql("INSERT INTO thread_members (object_type,object_id,person_id,added_by) VALUES ('task',$1,$2,$3)", [id,owner,source]);
-    await sql("INSERT INTO thread_messages (object_type,object_id,kind,content) VALUES ('task',$1,'co-agent',$2)",
+    const [opening] = await sql("INSERT INTO thread_messages (object_type,object_id,kind,content) VALUES ('task',$1,'co-agent',$2) RETURNING id",
       [id,`这个群讨论${owner === LUYAO.personId ? "王路遥" : "孙铭泽"}推进的执行事项「${title}」，截止 ${due ?? "待定"}。`]);
+    // 和真实建事项一样：推进人读过自己事项的开场，不算未读。
+    await sql("INSERT INTO thread_reads (object_type,object_id,person_id,last_read_id) VALUES ('task',$1,$2,$3)", [id,owner,opening.id]);
     return id;
   };
   await addTask("a1","访谈交接双方并写出三种场景", "in_progress","plan",missions[0].id,1,"2026-10-05","2026-10-12",LUYAO.personId,
@@ -240,5 +249,32 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
         directionId(direction,"person"),direction,title,reason,title,relevance,read ? "2026-10-01T01:30:00Z" : null,
         `2026-10-01T01:0${index}:00Z`]);
   }
-  return { roundId, cardId, productRoundId, productCards, tasks: ids };
+  // 群聊演示（工单 08）：产品战场的一个议题（还没建群，CEO 在议题页拉人时才建）；明天王路遥主持的走查会（会议群自动成员，DRI 视角看「会议安排」）。
+  const issueId = randomUUID();
+  await sql(`INSERT INTO issues (id,version,origin,origin_ref,title,location,urgency,status,research)
+    VALUES ($1,1,'dri',$2::jsonb,'十月验收口径要不要按 CEO 与 DRI 两种角色拆开','{"level":"battlefield","battlefieldId":"product"}'::jsonb,
+      '{"level":"yellow","reason":"讨论截止前要定口径"}'::jsonb,'pending',$3::jsonb)`,
+  [issueId,JSON.stringify({whyNow:"产品战场十月一轮正在讨论，四张个人卡里的验收写法不一致，截止前要定一个口径。"}),JSON.stringify({
+    status:"ready",runId:"demo-luyao-research",startedAt:at,previousRunIds:[],error:null,doc:{
+      summary:"四张卡都把「走查完成」当作验收，但 CEO 视角要看拍板条件，DRI 视角要看下一步是否清楚；只用一条口径会让一半的证据落空。",
+      options:[
+        {id:"split",label:"按角色拆成两条验收",consequences:["CEO 与 DRI 各有一条可核对的证据","卡片字段要多写一行，四人需要改卡"]},
+        {id:"single",label:"保持一条综合验收",consequences:["改动最少，讨论期内能定下来","月底复盘时难以说明哪个视角没有达成"]},
+      ],
+      evidence:[{quote:"拍板人需要按人查看草稿，不能靠轮次总数猜谁有意见。",sourceTitle:"孙铭泽的 10 月个人卡"}],
+      unknowns:["许知微的移动端走查能否在截止前完成"],
+      sources:[],
+    }})]);
+  const meetingDay = new Date(now.getTime() + 24 * 60 * 60_000);
+  const startsAt = new Date(Date.UTC(meetingDay.getUTCFullYear(), meetingDay.getUTCMonth(), meetingDay.getUTCDate(), 2, 0));
+  const walkthroughId = randomUUID();
+  const participant = (personId: string, displayName: string) => ({ personId, displayName, roles:["dri"], sourceRef:"fixture://demo-luyao", updatedAt:at });
+  await sql(`INSERT INTO meetings (id,version,title,status,scheduled_at,ends_at,lead_dri_id,ceo_participant_id,participants,
+    issue_ids,preflight,draft,origin_ref) VALUES ($1,1,'产品战场双视角走查会','scheduled',$2,$3,$4,$5,$6::jsonb,$7::jsonb,'{}','{}','{}')`,
+  [walkthroughId,startsAt.toISOString(),new Date(startsAt.getTime() + 60 * 60_000).toISOString(),LUYAO.personId,ceoId,
+    JSON.stringify([participant(LUYAO.personId,"王路遥"),participant("sun-mingze","孙铭泽"),participant("demo-zhou-tinglan","周听澜")]),
+    JSON.stringify([issueId])]);
+  for (const personId of [LUYAO.personId, ceoId, "sun-mingze", "demo-zhou-tinglan"])
+    await sql("INSERT INTO thread_members (object_type,object_id,person_id,added_by) VALUES ('meeting',$1,$2,'meeting') ON CONFLICT DO NOTHING",[walkthroughId,personId]);
+  return { roundId, cardId, productRoundId, productCards, tasks: ids, issueId, walkthroughId };
 }

@@ -143,10 +143,15 @@ try {
   assert.equal(invited.role,"collaborator");
   assert.ok(invited.myNoteAt);
   const plan = await get("/api/me/plan?period=2026-10");
-  assert.equal(plan.editable,false);
-  assert.equal(plan.closedReason,"个人卡确定之后才能拆成执行事项");
-  assert.equal(plan.groups.length,5);
-  assert.deepEqual(plan.groups.map((g:{items:unknown[]})=>g.items.length),[3,2,0,0,3]);
+  // 产品战场的卡还在讨论：已确定的团队协作卡照常能拆，讨论中的卡不进计划。
+  assert.equal(plan.editable,true);
+  assert.equal(plan.closedReason,null);
+  assert.equal(plan.groups.length,3);
+  assert.deepEqual(plan.groups.map((g:{items:unknown[]})=>g.items.length),[3,2,3]);
+  const schedule = await get("/api/me/meetings");
+  assert.deepEqual(schedule.meetings.map((m:{title:string})=>m.title),["产品战场双视角走查会"]);
+  const unread = await get("/api/me/threads/unread");
+  assert.deepEqual(unread.threads.map((t:{objectId:string})=>t.objectId).sort(),[seeded.tasks.a1,seeded.tasks.invited].sort());
   assert.ok(plan.groups.slice(0,2).every((g:{milestones:{date:string|null}[]})=>g.milestones.some(m=>m.date)));
   const thread = await get(`/api/threads/task/${seeded.tasks.a1}`);
   assert.ok(thread.messages.length>=4);
@@ -158,7 +163,7 @@ try {
     assert.ok(mission.successEvidence.length>0 && mission.milestones.length>0);
     assert.ok(mission.capabilityName && mission.battlefieldNames.length>0);
   }
-  console.log("PASS notices, owner/collaborator details, 5 plan groups, dated milestones, task thread, personal card");
+  console.log("PASS notices, owner/collaborator details, 3 plan groups (discussed card stays out), meeting schedule, owner-read openings, dated milestones, task thread, personal card");
   const afterDeadline = new Date(new Date(product.payload.closesAt).getTime() + 1);
   await closeDueRounds(app.pool, () => afterDeadline);
   const reviewing = await getMissionRoundCard(

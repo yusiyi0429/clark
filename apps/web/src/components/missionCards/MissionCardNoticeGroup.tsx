@@ -44,7 +44,7 @@ export function MissionCardNoticeGroup({ round, entry, embedded = false, current
     <header className={embedded ? s.embeddedHeader : `${n.glassHeader} ${s.header}`} data-subline="true">
       {!embedded ? <ContextMark kind="monthly" className={n.glyph} /> : null}
       <div className={embedded ? s.embeddedIdentity : n.identity}>
-        <strong className={s.heading}><span className={s.titleWords}><span className={s.monthTitle}>{month} 月 Mission Card</span>{embedded ? <span className={s.battlefieldTitle}> · {round.battlefieldName}</span> : null}</span><span className={s.badges}><b className={embedded ? s.count : n.count} aria-label={`${round.cards.length} 张个人卡`}>{round.cards.length}</b>{confirmed ? null : <em className={s.tag}>{round.phase === "drafting" ? "工作中" : round.draftOrigin === "agent" ? "Co-Agent 起草" : round.draftOrigin === "placeholder" ? "占位" : "草稿"}</em>}</span></strong>
+        <strong className={s.heading}><span className={s.titleWords}><span className={s.monthTitle}>{month} 月 Mission Card</span>{embedded ? <span className={s.battlefieldTitle}>{" · "}{round.battlefieldName}</span> : null}</span><span className={s.badges}><b className={embedded ? s.count : n.count} aria-label={`${round.cards.length} 张个人卡`}>{round.cards.length}</b>{confirmed ? null : <em className={s.tag}>{round.phase === "drafting" ? "工作中" : round.draftOrigin === "agent" ? "Co-Agent 起草" : round.draftOrigin === "placeholder" ? "占位" : "草稿"}</em>}</span></strong>
         <RoundClock round={live} now={now} tone="glass" />
       </div>
     </header>

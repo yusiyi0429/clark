@@ -129,6 +129,8 @@ async function main() {
     },
   }, {
     monthlyNow: appNow,
+    // 时间机器不连模型：进群介绍走线上同样的兜底说明，不用测试里的假话术。
+    threadIntroAgent: { async generate() { throw new Error("时间机器没有连接模型"); } },
     voiceprintDeps: { configured: () => false, requireConfig: unavailable, toPcm: async () => unavailable(), enroll: async () => unavailable(), update: async () => unavailable(), remove: async () => unavailable(), groupVerify: async () => unavailable() },
   });
   await app.sql("UPDATE battlefield_config SET code='01',name='灯塔项目',owner_id=$1,six_month_outcome='以真实战略工作验证可复用的交付方式，形成持续运行的 CEO 与 DRI 工作闭环。' WHERE id='growth'", ["browser-dri"]);

@@ -183,7 +183,7 @@ describe("议题与会议群", () => {
       await postThreadIntro(t.pool, { generate() { return new Promise(() => undefined); } }, input, [TEST_CEO.personId], 30);
       const messages = await t.sql("SELECT content FROM thread_messages WHERE object_type='issue' AND object_id=$1 ORDER BY id", [id]);
       expect(messages).toHaveLength(2);
-      expect(messages[0].content).toContain("测试甲说：「一起看」");
+      expect(messages[0].content).toBe("测试甲 把 测试乙 拉进了这个群：「渠道议题」。窗口即将关闭。测试甲说：「一起看」");
       expect(messages[1].content).toContain("窗口即将关闭");
       const member = await t.memberCookie(), ceo = await t.loginCookie();
       expect((await t.app.inject({ method: "GET", url: `/api/threads/issue/${id}`, headers: { cookie: member } })).json().unread).toBe(2);

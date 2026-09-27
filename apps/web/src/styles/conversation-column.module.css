@@ -415,6 +415,11 @@
 }
 
 .header[data-kind='group'] .headerTitle { color: #4f4334; }
+/* 群聊：左边群名（长了省略），右边成员头像；不居中，免得长群名把成员入口挤出去。 */
+.header[data-kind='group'] { justify-content: space-between; gap: 12px; }
+.header[data-kind='group'] .headerTitle { flex: 1 1 auto; min-width: 0; }
+.header[data-kind='group'] .headerTitle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.header[data-kind='group'] .headerTitle > svg { flex: none; }
 
 /* Agent：标志用品牌的两色渐变，字用字标那一款字（登录页那一枚同一套）。 */
 .headerMark { flex: none; width: 20px; height: 20px; }
