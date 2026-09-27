@@ -10,7 +10,7 @@ vi.mock("@/lib/api/client", async (original) => ({ ...(await original<typeof imp
 import { MemberRadarScreen } from "./MemberRadarScreen";
 import { MemberSignalScreen } from "./MemberSignalScreen";
 import { loadMyRadar, loadMyRadarSignal, loadMyRadarSignals } from "./loadMyRadar";
-import type { MyRadar, PersonalSignal, PersonalSignalBrief } from "./personalRadar";
+import { personalStory, type MyRadar, type PersonalSignal, type PersonalSignalBrief } from "./personalRadar";
 
 const radar: MyRadar = {
   enabled: true,
@@ -22,10 +22,22 @@ const radar: MyRadar = {
   webSearch: true,
   suggestions: { directions: [], sources: [] },
 };
+function listed(id: string): PersonalSignalBrief {
+  return {
+    id,
+    source: { type: "list" as const, label: "GitHub Trending", title: "owner/agent", url: "https://github.com/owner/agent", publishedAt: null, listedOn: "2026-10-08", listing: { language: "Rust", starsInPeriod: 321, since: "weekly" as const } },
+    direction: { id: "d_2", text: "Agent 的工程实践" },
+    summary: "一个 Agent 框架进入本周榜单",
+    reason: "和你关注的 Agent 工程实践直接相关",
+    relevance: 4,
+    state: { read: false, saved: false, dismissed: false },
+    collectedAt: "2026-10-08T02:00:00.000Z",
+  };
+}
 function brief(id: string, title: string, publishedAt: string, state: Partial<PersonalSignalBrief["state"]> = {}): PersonalSignalBrief {
   return {
     id,
-    source: { type: "outlet", label: "金融时报", title, url: `https://www.ft.com/${id}`, publishedAt, listedOn: null },
+    source: { type: "outlet", label: "金融时报", title, url: `https://www.ft.com/${id}`, publishedAt, listedOn: null, listing: null },
     direction: { id: "d_1", text: "Agent 的定价方式" },
     summary: `${title}的一句总结`,
     reason: `${title}和定价方式直接相关`,
@@ -148,5 +160,11 @@ describe("我的雷达服务端读取", () => {
     api.get.mockResolvedValue({ response: { ok: false, status: 503 } });
     await expect(loadMyRadarSignals("session=test")).rejects.toThrow("503");
     expect(nav.notFound).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("榜单条目（02b）", () => {
+  it("出处行写上榜日，不写发布日期", () => {
+    expect(personalStory(listed("a1b2c3d4-0000-4000-8000-000000000009")).meta).toBe("GitHub Trending · 上榜于 2026/10/8 · Agent 的工程实践");
   });
 });

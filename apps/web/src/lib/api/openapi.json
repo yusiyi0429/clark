@@ -14816,7 +14816,8 @@
                             "title",
                             "url",
                             "publishedAt",
-                            "listedOn"
+                            "listedOn",
+                            "listing"
                           ],
                           "properties": {
                             "type": {
@@ -14866,6 +14867,63 @@
                                 {
                                   "format": "date",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "listing": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "language",
+                                    "starsInPeriod",
+                                    "since"
+                                  ],
+                                  "properties": {
+                                    "language": {
+                                      "anyOf": [
+                                        {
+                                          "minLength": 1,
+                                          "maxLength": 100,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "starsInPeriod": {
+                                      "anyOf": [
+                                        {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "since": {
+                                      "anyOf": [
+                                        {
+                                          "const": "daily",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "weekly",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "monthly",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -16104,7 +16162,8 @@
               "title",
               "url",
               "publishedAt",
-              "listedOn"
+              "listedOn",
+              "listing"
             ],
             "properties": {
               "type": {
@@ -16154,6 +16213,63 @@
                   {
                     "format": "date",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "listing": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "language",
+                      "starsInPeriod",
+                      "since"
+                    ],
+                    "properties": {
+                      "language": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "starsInPeriod": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "since": {
+                        "anyOf": [
+                          {
+                            "const": "daily",
+                            "type": "string"
+                          },
+                          {
+                            "const": "weekly",
+                            "type": "string"
+                          },
+                          {
+                            "const": "monthly",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
                   },
                   {
                     "type": "null"
@@ -16263,7 +16379,8 @@
               "title",
               "url",
               "publishedAt",
-              "listedOn"
+              "listedOn",
+              "listing"
             ],
             "properties": {
               "type": {
@@ -16313,6 +16430,63 @@
                   {
                     "format": "date",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "listing": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "language",
+                      "starsInPeriod",
+                      "since"
+                    ],
+                    "properties": {
+                      "language": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "starsInPeriod": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "since": {
+                        "anyOf": [
+                          {
+                            "const": "daily",
+                            "type": "string"
+                          },
+                          {
+                            "const": "weekly",
+                            "type": "string"
+                          },
+                          {
+                            "const": "monthly",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
                   },
                   {
                     "type": "null"
@@ -16419,7 +16593,8 @@
                     "title",
                     "url",
                     "publishedAt",
-                    "listedOn"
+                    "listedOn",
+                    "listing"
                   ],
                   "properties": {
                     "type": {
@@ -16469,6 +16644,63 @@
                         {
                           "format": "date",
                           "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "listing": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "language",
+                            "starsInPeriod",
+                            "since"
+                          ],
+                          "properties": {
+                            "language": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 100,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "starsInPeriod": {
+                              "anyOf": [
+                                {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "since": {
+                              "anyOf": [
+                                {
+                                  "const": "daily",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "weekly",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "monthly",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          }
                         },
                         {
                           "type": "null"
@@ -16672,7 +16904,8 @@
                     "title",
                     "url",
                     "publishedAt",
-                    "listedOn"
+                    "listedOn",
+                    "listing"
                   ],
                   "properties": {
                     "type": {
@@ -16722,6 +16955,63 @@
                         {
                           "format": "date",
                           "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "listing": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "language",
+                            "starsInPeriod",
+                            "since"
+                          ],
+                          "properties": {
+                            "language": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 100,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "starsInPeriod": {
+                              "anyOf": [
+                                {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "since": {
+                              "anyOf": [
+                                {
+                                  "const": "daily",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "weekly",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "monthly",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          }
                         },
                         {
                           "type": "null"

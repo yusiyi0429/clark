@@ -76,6 +76,7 @@ async function main() {
   const { createBochaWebSearchAdapter } = await import("../../../../apps/api/src/webSearch.js");
   const { createBochaRadarWebAdapter } = await import("../../../../apps/api/src/radarSources.js");
   const { createOutletFeedAdapter } = await import("../../../../apps/api/src/outletSources.js");
+  const { createGithubTrendingReader } = await import("../../../../apps/api/src/githubTrending.js");
   testEnv.publicOrigin = "http://localhost:3500";
   fixtureDir = await mkdtemp(join(tmpdir(), "warmap-02-radar-"));
   const people = JSON.parse(await readFile(join(root, "apps/api/test/fixtures/company-people.json"), "utf8"));
@@ -103,6 +104,7 @@ async function main() {
     companyMemory: { searchPeople: () => people.people },
     web: createBochaRadarWebAdapter(createBochaWebSearchAdapter({ apiKey: scanKeys ? process.env.BOCHA_API_KEY : undefined })),
     outlets: createOutletFeedAdapter({}),
+    trending: createGithubTrendingReader(),
     judge: createPersonalRadarJudge({
       query: pool.query.bind(pool),
       baseUrl: process.env.PI_BASE_URL ?? "http://127.0.0.1:9/unconfigured",

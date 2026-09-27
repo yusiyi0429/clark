@@ -21,7 +21,7 @@ const NOW = new Date("2026-09-27T04:00:00.000Z");
 function signal(index: number, patch: Partial<PersonalSignalBrief> = {}): PersonalSignalBrief {
   return {
     id: `0f0f0f0f-0000-4000-8000-00000000000${index}`,
-    source: { type: "web", label: index === 1 ? "36kr.com" : "金融时报", title: `第 ${index} 条标题`, url: `https://example.com/${index}`, publishedAt: new Date(NOW.getTime() - index * 3_600_000).toISOString(), listedOn: null },
+    source: { type: "web", label: index === 1 ? "36kr.com" : "金融时报", title: `第 ${index} 条标题`, url: `https://example.com/${index}`, publishedAt: new Date(NOW.getTime() - index * 3_600_000).toISOString(), listedOn: null, listing: null },
     direction: { id: "d_1", text: "Agent 的定价方式" },
     summary: `第 ${index} 条总结`,
     reason: `第 ${index} 条的理由`,
@@ -93,5 +93,13 @@ describe("首页的雷达小组件", () => {
     expect(html).toContain('data-widget="radar"');
     expect(html).toContain("第 1 条标题");
     home.radar = null;
+  });
+});
+
+describe("榜单条目（02b）", () => {
+  it("时间写「上榜于 月/日」，不按收集时间写几分钟前", () => {
+    const listedSignal = signal(4, { source: { type: "list" as const, label: "GitHub Trending", title: "owner/agent", url: "https://github.com/owner/agent", publishedAt: null, listedOn: "2026-10-08", listing: { language: "Rust", starsInPeriod: 321, since: "weekly" as const } } });
+    const html = render(brief({ highlights: [listedSignal] }));
+    expect(html).toContain("GitHub Trending · 上榜于 10/8");
   });
 });

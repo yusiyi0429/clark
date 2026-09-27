@@ -83,6 +83,12 @@ export const PersonalSignalSource = Type.Object({
   publishedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
   /** 榜单条目的上榜日（02b）；其他来源为 null。 */
   listedOn: Type.Union([Type.String({ format: "date" }), Type.Null()]),
+  /** 榜单条目的语言与时段内 star（02b）；时段跟着榜单版本（日／周／月）。其他来源为 null。 */
+  listing: Type.Union([Type.Object({
+    language: Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()]),
+    starsInPeriod: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+    since: Type.Union([Type.Literal("daily"), Type.Literal("weekly"), Type.Literal("monthly")]),
+  }, { additionalProperties: false }), Type.Null()]),
 }, { additionalProperties: false });
 
 export const PersonalSignalState = Type.Object({

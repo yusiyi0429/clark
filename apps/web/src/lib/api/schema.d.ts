@@ -2987,6 +2987,11 @@ export interface components {
                         url: string;
                         publishedAt: string | null;
                         listedOn: string | null;
+                        listing: {
+                            language: string | null;
+                            starsInPeriod: number | null;
+                            since: "daily" | "weekly" | "monthly";
+                        } | null;
                     };
                     direction: {
                         id: string;
@@ -3198,6 +3203,11 @@ export interface components {
                 url: string;
                 publishedAt: string | null;
                 listedOn: string | null;
+                listing: {
+                    language: string | null;
+                    starsInPeriod: number | null;
+                    since: "daily" | "weekly" | "monthly";
+                } | null;
             };
             direction: {
                 id: string;
@@ -3227,6 +3237,11 @@ export interface components {
                 url: string;
                 publishedAt: string | null;
                 listedOn: string | null;
+                listing: {
+                    language: string | null;
+                    starsInPeriod: number | null;
+                    since: "daily" | "weekly" | "monthly";
+                } | null;
             };
             direction: {
                 id: string;
@@ -3254,6 +3269,11 @@ export interface components {
                     url: string;
                     publishedAt: string | null;
                     listedOn: string | null;
+                    listing: {
+                        language: string | null;
+                        starsInPeriod: number | null;
+                        since: "daily" | "weekly" | "monthly";
+                    } | null;
                 };
                 direction: {
                     id: string;
@@ -3299,6 +3319,11 @@ export interface components {
                     url: string;
                     publishedAt: string | null;
                     listedOn: string | null;
+                    listing: {
+                        language: string | null;
+                        starsInPeriod: number | null;
+                        since: "daily" | "weekly" | "monthly";
+                    } | null;
                 };
                 direction: {
                     id: string;

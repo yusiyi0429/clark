@@ -14,6 +14,8 @@ export type SignalReading = {
   title: string;
   sourceLabel: string;
   publishedAt?: string | null;
+  /** 取代「来源 · 发布日期」里的日期（榜单条目写「上榜于…」，没有发布日期）。 */
+  dateText?: string;
   summary: string;
   /** 尚未确定的事；个人信号没有。 */
   unknowns: string[];
@@ -24,6 +26,8 @@ export type SignalReading = {
   images: { src: string; after: number }[];
   evidenceQuote: string;
   fullText: boolean;
+  /** 原文出处的说明；不传时按 fullText 写「发布方原文」或「检索服务返回的摘录」。 */
+  excerptNote?: string;
   collectedAt: string;
   url: string;
 };
@@ -78,7 +82,7 @@ export function SignalArticle({
         <article className={s.article} data-testid="signal-reader" aria-labelledby="signal-title">
           <div className={s.meta}>
             <span>
-              {reading.sourceLabel} · {publishedDate(reading.publishedAt)}
+              {reading.sourceLabel} · {reading.dateText ?? publishedDate(reading.publishedAt)}
             </span>
             <ToggleButton
               isIconOnly
@@ -135,7 +139,7 @@ export function SignalArticle({
                   </blockquote>
                   {/* 点进来就是为了读：摘录直接全文显示。原文链接只作查证用，放在出处行末、做成低调的文字链接，不引导跳走。 */}
                   <small className={s.provenance}>
-                    {reading.fullText ? "发布方原文（自动抓取）" : "检索服务返回的摘录，未宣称阅读全文"} · 共 {reading.excerpt.length.toLocaleString()} 字 · 采集于{" "}
+                    {reading.excerptNote ?? (reading.fullText ? "发布方原文（自动抓取）" : "检索服务返回的摘录，未宣称阅读全文")} · 共 {reading.excerpt.length.toLocaleString()} 字 · 采集于{" "}
                     {new Date(reading.collectedAt).toLocaleString("zh-CN", { timeZone: COMPANY_TIMEZONE })} ·{" "}
                     <a className={s.sourceLink} href={reading.url} target="_blank" rel="noopener noreferrer" aria-label={`原文链接：${reading.title}`}>
                       原文链接

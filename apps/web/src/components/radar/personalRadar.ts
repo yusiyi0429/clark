@@ -72,13 +72,34 @@ export const PERSONAL_ORDER: SignalOrder<PersonalSignalBrief> = {
 
 export const personalSignalHref = (id: string) => `/me/radar/signals/${encodeURIComponent(id)}`;
 
+const PERIOD = { daily: "今日", weekly: "本周", monthly: "本月" } as const;
+
+/** 榜单条目只有上榜日（02b），不写发布日期：「上榜于 2026/9/27」。 */
+const signalDate = (signal: PersonalSignalBrief) =>
+  signal.source.listedOn ? `上榜于 ${publishedDate(signal.source.listedOn)}` : publishedDate(signal.source.publishedAt);
+
+/** 首页小组件的时间：榜单写上榜日（「上榜于 9/27」），其余写相对的发布时间。 */
+export function signalWhen(signal: PersonalSignalBrief, now = Date.now()): string {
+  const listed = signal.source.listedOn;
+  if (listed) return `上榜于 ${Number(listed.slice(5, 7))}/${Number(listed.slice(8, 10))}`;
+  return relativeTime(signal.source.publishedAt ?? signal.collectedAt, now);
+}
+
+/** 阅读页头部给榜单条目的说明：「上榜于 2026/9/27 · Rust · 本周 321 star」；其他来源没有。 */
+export function listingDateText(signal: PersonalSignalBrief): string | undefined {
+  const { listedOn, listing } = signal.source;
+  if (!listedOn) return undefined;
+  const stars = listing?.starsInPeriod == null ? null : `${PERIOD[listing.since]} ${listing.starsInPeriod.toLocaleString()} star`;
+  return [`上榜于 ${publishedDate(listedOn)}`, listing?.language, stars].filter(Boolean).join(" · ");
+}
+
 /** 个人信号卡片：没有配图；来源一行写来源 · 日期 · 命中的方向。 */
 export function personalStory(signal: PersonalSignalBrief) {
   return {
     href: personalSignalHref(signal.id),
     title: signal.source.title,
     summary: signal.summary,
-    meta: `${signal.source.label} · ${publishedDate(signal.source.publishedAt ?? signal.source.listedOn)} · ${signal.direction.text}`,
+    meta: `${signal.source.label} · ${signalDate(signal)} · ${signal.direction.text}`,
     status: signal.state.saved ? "已收藏" : signal.state.read ? "已读" : "新信号",
   };
 }

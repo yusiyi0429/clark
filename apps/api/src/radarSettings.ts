@@ -19,6 +19,7 @@ import {
   type TSessionRole,
 } from "@warmap/contracts";
 import type { MemoryPerson } from "./companyMemory.js";
+import type { TrendingSince } from "./githubTrending.js";
 import type { Query } from "./meetingStore.js";
 import { readMemberWork } from "./memberWork.js";
 import { companyPeriod } from "./monthlyPlans.js";
@@ -30,8 +31,8 @@ import { countUnreadPersonalSignals } from "./personalSignals.js";
  */
 export type RadarSettingsMode = "person" | "company";
 
-/** 一个来源现算出的读法；订阅源带目录里的发布方 id，扫描据此调用发布方 adapter。 */
-export type ReadableSource = { setting: TRadarSourceSetting; outletId?: string };
+/** 一个来源现算出的读法；订阅源带目录里的发布方 id，榜单带要读的那一版，扫描据此调用对应的读取器。 */
+export type ReadableSource = { setting: TRadarSourceSetting; outletId?: string; list?: { language: string | null; since: TrendingSince } };
 
 const FEED_NOTE = "订阅源";
 const SITE_NOTE = "全网检索后按域名筛，结果可能很少";
@@ -39,9 +40,9 @@ const SITE_OFFLINE_NOTE = "全网检索未开通，暂时读不到";
 const COMPANY_SITE_ERROR = "公司雷达已经在全网按方向检索；单独的网站只有在有订阅源时才能加入";
 const MAX_SOURCE_CHARS = 300;
 
-/** 暂不支持：保存时接受并写明原因，扫描时跳过。GitHub Trending 等 02b 的榜单读取器做完再改成 list。 */
+/** 暂不支持：保存时接受并写明原因，扫描时跳过。 */
 const UNSUPPORTED_SOURCES = [
-  { value: "github.com/trending", name: "GitHub Trending", note: "榜单读取器还在开发，暂不支持" },
+  { value: "github.com/trending/developers", name: "GitHub Trending 开发者榜", note: "只读仓库榜，开发者榜暂不支持" },
   { value: "news.ycombinator.com", name: "Hacker News", note: "订阅源只有评论链接，暂不支持" },
   { value: "wsj.com", name: "华尔街日报", note: "订阅源已停更，暂不支持" },
 ];
@@ -55,8 +56,39 @@ const NAMED_SITES = [
 /** 建议行只放能如实读的来源（设计 §3.2）；华尔街日报、Hacker News、GitHub Trending 不放。 */
 const SUGGESTED_SOURCES = [
   "ft.com", "qbitai.com", "theinformation.com", "bbc.com", "bloomberg.com", "reuters.com", "cnbc.com", "economist.com",
+  "github.com/trending",
   "36kr.com", "jiqizhixin.com",
 ];
+
+/** GitHub Trending（02b）：直接读仓库榜单；语言路径与 since 决定读哪一版，规范值里保留它们。 */
+const TRENDING_NOTE = "读取榜单（每天一次）";
+const TRENDING_VERSION = { daily: "", weekly: " · 周榜", monthly: " · 月榜" } as const;
+
+function trendingSource(target: Target, sinceParam: string | null): { source: ReadableSource } | { error: string } | null {
+  if (target.host !== "github.com" || !covers(target, { host: "github.com", path: "/trending" })) return null;
+  const segments = target.path.split("/").filter(Boolean).slice(1);
+  if (segments.length > 1) {
+    const value = `github.com${target.path}`;
+    return value.length > MAX_SOURCE_CHARS ? { error: "网址太长了" } : { source: { setting: { value, name: "GitHub Trending", kind: "unsupported", note: "只能读仓库榜，可以带一个语言" } } };
+  }
+  const language = segments[0]?.toLowerCase() ?? null;
+  let decoded: string | null;
+  try {
+    decoded = language ? decodeURIComponent(language) : null;
+  } catch {
+    return { error: "不是有效的网址" };
+  }
+  const since: TrendingSince = sinceParam === "weekly" || sinceParam === "monthly" ? sinceParam : "daily";
+  return { source: {
+    setting: {
+      value: `github.com/trending${language ? `/${language}` : ""}${since === "daily" ? "" : `?since=${since}`}`,
+      name: `GitHub Trending${decoded ? ` · ${decoded}` : ""}${TRENDING_VERSION[since]}`,
+      kind: "list",
+      note: TRENDING_NOTE,
+    },
+    list: { language: decoded, since },
+  } };
+}
 
 const RESERVED_SUFFIXES = new Set(["localhost", "local", "internal", "lan", "home", "test", "invalid", "example", "arpa"]);
 
@@ -107,6 +139,8 @@ export function readSource(input: string, webSearch: boolean): { source: Readabl
 
   const unsupported = UNSUPPORTED_SOURCES.find((entry) => covers(target, splitValue(entry.value)));
   if (unsupported) return { source: { setting: { value: unsupported.value, name: unsupported.name, kind: "unsupported", note: unsupported.note } } };
+  const trending = trendingSource(target, url.searchParams.get("since"));
+  if (trending) return trending;
   const outlet = RADAR_OUTLETS.find((entry) => entry.articleDomains.some((domain) => covers(target, { host: domain, path: "" })));
   if (outlet) return { source: { setting: { value: outlet.articleDomains[0], name: outlet.name, kind: "feed", note: FEED_NOTE }, outletId: outlet.outletId } };
   const named = NAMED_SITES.find((entry) => covers(target, splitValue(entry.value)));
@@ -181,7 +215,7 @@ export function normalizeRadarSettings(
     const { setting } = result.source;
     // 公司雷达只收订阅源：网站已由公司的全网检索覆盖，暂不支持的写明原因
     if (mode === "company" && setting.kind !== "feed") {
-      fieldErrors[`sources/${index}`] = setting.kind === "site" ? COMPANY_SITE_ERROR : setting.note;
+      fieldErrors[`sources/${index}`] = setting.kind === "site" ? COMPANY_SITE_ERROR : setting.kind === "list" ? "榜单只能加进个人雷达" : setting.note;
       return;
     }
     if (!sources.some((source) => source.setting.value === setting.value)) sources.push(result.source);
@@ -196,7 +230,8 @@ export function normalizeRadarSettings(
 export function sourceSuggestions(mode: RadarSettingsMode, webSearch: boolean): TRadarSourceSetting[] {
   return SUGGESTED_SOURCES.flatMap((value) => {
     const { setting } = readStoredSource(value, webSearch);
-    return setting.kind === "feed" || (mode === "person" && webSearch && setting.kind === "site") ? [setting] : [];
+    // 榜单直接读页面，不依赖全网检索；网站要靠全网检索后按域名筛
+    return setting.kind === "feed" || (mode === "person" && (setting.kind === "list" || (webSearch && setting.kind === "site"))) ? [setting] : [];
   });
 }
 

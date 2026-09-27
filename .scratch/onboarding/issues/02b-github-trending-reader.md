@@ -1,7 +1,7 @@
 # 02b GitHub Trending 读取器
 
 Type: feature
-Status: ready-for-agent
+Status: resolved（报告见 ../evidence/02b/report.md）
 Blocked by: 02
 Design: `../design-02-personal-radar.md` §10（以及 §1.1 的 `list` 类型、§3.4 的规范化）
 
@@ -35,13 +35,15 @@ Design: `../design-02-personal-radar.md` §10（以及 §1.1 的 `list` 类型�
 
 ## 验证与验收
 
-- [ ] HTML fixture 覆盖三种情况：正常榜单、结构变了、空榜。
-- [ ] 语言路径和 `since` 都能正确解析。
-- [ ] 复核与去重的测试通过。
-- [ ] 本机能联网时，真实读一次榜单，记下结果；不能联网就写明原因。
-- [ ] 编辑器建议行出现 GitHub Trending，附读取说明；阅读页的写法正确。
-- [ ] 类型检查、测试通过。
+- [x] HTML fixture 覆盖三种情况：正常榜单、结构变了、空榜。
+- [x] 语言路径和 `since` 都能正确解析。
+- [x] 复核与去重的测试通过。
+- [x] 本机能联网时，真实读一次榜单，记下结果；不能联网就写明原因。
+- [x] 编辑器建议行出现 GitHub Trending，附读取说明；阅读页的写法正确。
+- [x] 类型检查、测试通过。
 
 ## 完成后
 
 更新 `Status`，在 `../map.md` 追加结果摘要。
+
+已完成：Claude 直接实现（Codex 额度留作他用）。读真实榜单页解析出 15 个；经正式接口真实扫描 9 秒入库 5 条（相关度 5／5／5／4／4），公司侧为 0。详见 [02b 报告](../evidence/02b/report.md)。

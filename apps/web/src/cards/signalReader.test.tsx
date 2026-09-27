@@ -137,7 +137,7 @@ describe("Signal 阅读", () => {
   it("成员版正文与公司版同一份排版：关系写「和你的方向」、正文用命中理由、标签写你的方向；没有尚未确定与配图", () => {
     const personal = {
       id: "7f1c0e0a-2b1d-4c55-9a55-0a0b0c0d0e0f",
-      source: { type: "outlet" as const, label: "金融时报", title: "欧洲的企业 Agent 采购开始按结果付费", url: "https://www.ft.com/a", publishedAt: "2026-09-26T02:00:00.000Z", listedOn: null },
+      source: { type: "outlet" as const, label: "金融时报", title: "欧洲的企业 Agent 采购开始按结果付费", url: "https://www.ft.com/a", publishedAt: "2026-09-26T02:00:00.000Z", listedOn: null, listing: null },
       direction: { id: "d_1", text: "Agent 的定价方式" },
       summary: "采购方开始按结果付费",
       reason: "直接回答了按结果收费能否被大客户接受",
@@ -160,5 +160,28 @@ describe("Signal 阅读", () => {
     expect(html).not.toContain("尚未确定");
     expect(html).not.toContain("<img");
     expect(html).toContain("不再出现在阅读列表");
+  });
+
+  it("成员版的榜单条目（02b）：写上榜日、语言与时段 star，不写发布日期；原文说明是榜单条目、未读仓库内容", () => {
+    const listed = {
+      id: "7f1c0e0a-2b1d-4c55-9a55-0a0b0c0d0e10",
+      source: { type: "list" as const, label: "GitHub Trending", title: "owner/agent", url: "https://github.com/owner/agent", publishedAt: null, listedOn: "2026-10-08", listing: { language: "Rust", starsInPeriod: 321, since: "weekly" as const } },
+      direction: { id: "d_1", text: "Agent 的工程实践" },
+      summary: "一个 Agent 框架进入本周榜单",
+      reason: "和你关注的 Agent 工程实践直接相关",
+      relevance: 4,
+      state: { read: false, saved: false, dismissed: false },
+      collectedAt: "2026-10-08T02:00:00.000Z",
+      excerpt: "owner/agent：没有描述（语言 Rust，本周 321 star）",
+      fullText: false,
+      evidenceQuote: "没有描述",
+    };
+    const html = renderToStaticMarkup(
+      <SignalArticle reading={personalReading(listed)} state={listed.state} pending={false} error={null} onUpdate={async () => true} onRetry={() => undefined} upNext={[]} />,
+    );
+    expect(html).toContain("GitHub Trending · 上榜于 2026/10/8 · Rust · 本周 321 star");
+    expect(html).toContain("GitHub Trending 的榜单条目，未读取仓库内容");
+    expect(html).not.toContain("检索服务返回的摘录");
+    expect(html).not.toContain("日期未提供");
   });
 });

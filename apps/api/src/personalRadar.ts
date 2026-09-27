@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TPersonalRadarJudgeSubmission, TPersonalRadarRun, TRadarDirection, TRadarSourceItem } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { GithubTrendingReader, TrendingRepo, TrendingSince } from "./githubTrending.js";
 import { roleOf } from "./memberAccess.js";
 import type { Query } from "./meetingStore.js";
 import { sourceLabel } from "./personalSignals.js";
@@ -17,6 +18,8 @@ import { directionId, readStoredSource, urlWithinSite } from "./radarSettings.js
 const LOOKBACK_HOURS = 48;
 const MAX_WEB_ITEMS_PER_DIRECTION = 3;
 const MAX_FEED_ITEMS = 20;
+/** 一版榜单最多判几个（按时段内 star 多的先）：榜单每天约 25 个，全判会挤掉其他来源。 */
+const MAX_LIST_ITEMS = 10;
 const MAX_CANDIDATES = 30;
 const JUDGE_BATCH_SIZE = 10;
 const JUDGE_EXCERPT_CHARS = 2_000;
@@ -31,7 +34,8 @@ export type PersonalRadarTrigger = "scheduled" | "manual";
 export type PersonalRadarJudgeInput = {
   personId: string;
   directions: TRadarDirection[];
-  sources: { sourceFingerprint: string; title: string; excerpt: string; publishedAt: string; from: string }[];
+  /** 榜单条目没有发布时间（publishedAt 为 null），只有上榜日 listedOn。 */
+  sources: { sourceFingerprint: string; title: string; excerpt: string; publishedAt: string | null; listedOn?: string; from: string }[];
 };
 
 /** 判定器：给一批来源按本人方向打分；schema 里没有升级字段（contracts PersonalRadarJudgeSubmission）。 */
@@ -53,14 +57,38 @@ export type PersonalRadarService = {
   idle(): Promise<void>;
 };
 
-type Candidate = TRadarSourceItem & { sourceFingerprint: string; /** 网页结果归属的方向；订阅源条目没有 */ directionId?: string };
+/** 一条候选来源：网页与订阅源有发布时间；榜单条目没有，只有上榜日（02b），不伪造发布时间。 */
+type SourceItem = Omit<TRadarSourceItem, "sourceType" | "publishedAt" | "sourceRef"> & {
+  sourceType: TRadarSourceItem["sourceType"] | "list";
+  publishedAt: string | null;
+  listedOn?: string;
+  sourceRef: unknown;
+};
+type Candidate = SourceItem & { sourceFingerprint: string; /** 网页结果归属的方向；订阅源与榜单条目没有 */ directionId?: string };
 type Judged = TPersonalRadarJudgeSubmission["candidates"][number];
 type Outcome = { status: "completed" | "failed"; createdSignals: number };
 
 const message = (cause: unknown) => (cause as Error | undefined)?.message || String(cause);
 const stringList = (value: unknown): string[] | null =>
   Array.isArray(value) && value.every((item) => typeof item === "string" && item.length > 0) ? value : null;
-const newestFirst = (left: { publishedAt: string }, right: { publishedAt: string }) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt);
+const companyDay = (at: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+
+const PERIOD = { daily: "今日", weekly: "本周", monthly: "本月" } as const;
+
+/** 榜单条目进管线：只记上榜日；原文如实拼成一句，仓库没写描述就写「没有描述」，不编。 */
+function listItem(repo: TrendingRepo, since: TrendingSince, listedOn: string): SourceItem {
+  const facts = [repo.language ? `语言 ${repo.language}` : null, repo.starsInPeriod === null ? null : `${PERIOD[since]} ${repo.starsInPeriod} star`]
+    .filter(Boolean).join("，");
+  return {
+    sourceType: "list",
+    title: repo.fullName,
+    url: repo.url,
+    publishedAt: null,
+    listedOn,
+    excerpt: `${repo.fullName}：${repo.description ?? "没有描述"}${facts ? `（${facts}）` : ""}`,
+    sourceRef: { type: "list", provider: "github-trending", listName: "GitHub Trending", language: repo.language, starsInPeriod: repo.starsInPeriod, since },
+  };
+}
 
 /** 本人在这个 Company Day（Asia/Shanghai）已经收了几条。 */
 export async function countCollectedToday(q: Query, personId: string, at: Date): Promise<number> {
@@ -108,6 +136,7 @@ export function createPersonalRadarService({
   web,
   outlets,
   judge,
+  trending,
   now = () => new Date(),
   scanTimeoutMs = SCAN_TIMEOUT_MS,
 }: {
@@ -118,6 +147,8 @@ export function createPersonalRadarService({
   /** 与公司雷达共用的发布方 feed adapter，直接用目录 id 调用。 */
   outlets: RadarOutletAdapter;
   judge: PersonalRadarJudge;
+  /** GitHub Trending 读取器（02b）；没接上时榜单来源只写 warning。 */
+  trending?: GithubTrendingReader;
   now?: () => Date;
   scanTimeoutMs?: number;
 }): PersonalRadarService {
@@ -132,16 +163,31 @@ export function createPersonalRadarService({
   const q: Query = (sql, params) => pool.query(sql, params);
 
   /** 采集：来源为空时每个方向全网检索一次；来源不为空时只看这些来源，不回落全网。 */
-  async function collect(directions: TRadarDirection[], values: string[], signal: AbortSignal, warnings: string[]) {
-    const found: { item: TRadarSourceItem; directionId?: string }[] = [];
+  async function collect(directions: TRadarDirection[], values: string[], signal: AbortSignal, warnings: string[], listedOn: string) {
+    const found: { item: SourceItem; directionId?: string }[] = [];
     let attempted = 0;
     let succeeded = 0;
     const plans = values.map((value) => readStoredSource(value, web.configured));
     const outletNames = new Map(plans.flatMap((plan) => (plan.outletId ? [[plan.outletId, plan.setting.name ?? plan.setting.value] as const] : [])));
     const sites = plans.filter((plan) => plan.setting.kind === "site" && web.configured).map((plan) => plan.setting.value);
     for (const { setting } of plans) {
-      // 暂不支持、榜单（02b）和没开通检索的网站：扫描时跳过，如实写原因
-      if (setting.kind !== "feed" && !(setting.kind === "site" && web.configured)) warnings.push(`${setting.name ?? setting.value}：${setting.note}`);
+      // 暂不支持、没开通检索的网站、没接上读取器的榜单：扫描时跳过，如实写原因
+      if (setting.kind === "unsupported" || (setting.kind === "site" && !web.configured)) warnings.push(`${setting.name ?? setting.value}：${setting.note}`);
+      if (setting.kind === "list" && !trending) warnings.push(`${setting.name ?? setting.value}：榜单读取器没有接上，这次没读`);
+    }
+    // 榜单（02b）：每一版读一次页面，按时段内 star 多的先取前 10；页面结构变了、空榜都写 warning
+    for (const { setting, list } of plans) {
+      if (!list || !trending || signal.aborted) continue;
+      attempted += 1;
+      try {
+        const { repos, warnings: notes } = await trending.read(list, signal);
+        warnings.push(...notes);
+        const top = [...repos].sort((left, right) => (right.starsInPeriod ?? -1) - (left.starsInPeriod ?? -1)).slice(0, MAX_LIST_ITEMS);
+        for (const repo of top) found.push({ item: listItem(repo, list.since, listedOn) });
+        succeeded += 1;
+      } catch (cause) {
+        if (!signal.aborted) warnings.push(`${setting.name ?? setting.value}读取失败：${message(cause)}`);
+      }
     }
     const searchAll = values.length === 0;
     if (searchAll && !web.configured) warnings.push("全网检索未开通，只写方向暂时读不到");
@@ -195,15 +241,17 @@ export function createPersonalRadarService({
     const timer = setTimeout(() => abort.abort(new Error(`扫描${limitText}`)), scanTimeoutMs);
     timer.unref();
     try {
-      const { found, attempted, succeeded } = await collect(directions, values, abort.signal, warnings);
+      const { found, attempted, succeeded } = await collect(directions, values, abort.signal, warnings, companyDay(startedAt));
       if (abort.signal.aborted) throw new Error(`扫描${limitText}，已中断`);
       if (attempted > 0 && succeeded === 0) return { status: "failed", createdSignals: 0 };
 
-      // 时间窗 [开始 − 48 小时, 开始]；按规范化网址在批内去重，再去掉本人已有的
+      // 时间窗 [开始 − 48 小时, 开始]；榜单条目没有发布时间，按今天的上榜日收。按规范化网址在批内去重，再去掉本人已有的
       const earliest = startedAt.getTime() - LOOKBACK_HOURS * 3_600_000;
+      const timeOf = (item: SourceItem) => (item.publishedAt === null ? startedAt.getTime() : Date.parse(item.publishedAt));
+      const newestFirst = (left: SourceItem, right: SourceItem) => timeOf(right) - timeOf(left);
       const unique = new Map<string, Candidate>();
       for (const { item, directionId: from } of found) {
-        const at = Date.parse(item.publishedAt);
+        const at = timeOf(item);
         if (!Number.isFinite(at) || at < earliest || at > startedAt.getTime()) continue;
         let url: string;
         try {
@@ -222,12 +270,13 @@ export function createPersonalRadarService({
         for (const { source_fingerprint } of known.rows as { source_fingerprint: string }[]) unique.delete(source_fingerprint);
       }
 
-      // 截断：每个方向的网页结果留最新 3 条，订阅源最多 20 条，合计最多 30 条，新的优先
+      // 截断：每个方向的网页结果留最新 3 条，订阅源最多 20 条（榜单读取时已按版限量），合计最多 30 条，新的优先
       const all = [...unique.values()];
       const webKept = directions.flatMap((direction) =>
         all.filter((item) => item.directionId === direction.id).sort(newestFirst).slice(0, MAX_WEB_ITEMS_PER_DIRECTION));
-      const feedKept = all.filter((item) => item.directionId === undefined).sort(newestFirst).slice(0, MAX_FEED_ITEMS);
-      const candidates = [...webKept, ...feedKept].sort(newestFirst).slice(0, MAX_CANDIDATES);
+      const feedKept = all.filter((item) => item.directionId === undefined && item.sourceType !== "list").sort(newestFirst).slice(0, MAX_FEED_ITEMS);
+      const listKept = all.filter((item) => item.sourceType === "list");
+      const candidates = [...webKept, ...feedKept, ...listKept].sort(newestFirst).slice(0, MAX_CANDIDATES);
       if (candidates.length < all.length) warnings.push(`条目超过上限，只研判最新的 ${candidates.length} 条，略过 ${all.length - candidates.length} 条`);
       if (candidates.length === 0) {
         if (succeeded > 0) warnings.push(`${LOOKBACK_HOURS} 小时内没有新条目`);
@@ -254,7 +303,7 @@ export function createPersonalRadarService({
             directions,
             sources: [...seen.values()].map(({ source, excerpt }) => ({
               sourceFingerprint: source.sourceFingerprint, title: source.title, excerpt, publishedAt: source.publishedAt,
-              from: sourceLabel(source.sourceRef, source.url),
+              ...(source.listedOn ? { listedOn: source.listedOn } : {}), from: sourceLabel(source.sourceRef, source.url),
             })),
           }, abort.signal);
           completedBatches += 1;
@@ -289,13 +338,13 @@ export function createPersonalRadarService({
         try {
           const inserted = await q(
             `INSERT INTO person_radar_signals
-               (id, person_id, source_type, source_fingerprint, source_title, source_url, published_at, excerpt, source_ref,
+               (id, person_id, source_type, source_fingerprint, source_title, source_url, published_at, listed_on, excerpt, source_ref,
                 direction_id, direction_text, summary, reason, evidence_quote, relevance, collected_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $17)
              ON CONFLICT (person_id, source_fingerprint) DO NOTHING`,
             [
               randomUUID(), personId, source.sourceType, source.sourceFingerprint, source.title.slice(0, 500), source.url, source.publishedAt,
-              source.excerpt.slice(0, 10_000), JSON.stringify(source.sourceRef), candidate.directionId, directionText.get(candidate.directionId),
+              source.listedOn ?? null, source.excerpt.slice(0, 10_000), JSON.stringify(source.sourceRef), candidate.directionId, directionText.get(candidate.directionId),
               candidate.summary, candidate.reason, candidate.evidenceQuote, candidate.relevance, now(),
             ],
           );

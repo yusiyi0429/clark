@@ -7,7 +7,7 @@ import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceCon
 import { SignalArticle, type SignalReading, type SignalState } from "@/cards/SignalArticle";
 import { SignalStoryView } from "@/cards/SignalStory";
 import { upNextSignals } from "@/cards/SignalCard";
-import { PERSONAL_ORDER, goToAccess, personalStory, type PersonalSignal, type PersonalSignalBrief } from "./personalRadar";
+import { PERSONAL_ORDER, goToAccess, listingDateText, personalStory, type PersonalSignal, type PersonalSignalBrief } from "./personalRadar";
 
 const EMPTY_CARDS: Card[] = [];
 
@@ -17,6 +17,10 @@ export function personalReading(signal: PersonalSignal): SignalReading {
     title: signal.source.title,
     sourceLabel: signal.source.label,
     publishedAt: signal.source.publishedAt ?? signal.source.listedOn,
+    // 榜单条目（02b）：写上榜日、语言与时段 star，不写「发布于」；原文是榜单上那一行，如实说明没读仓库内容
+    ...(signal.source.listedOn
+      ? { dateText: listingDateText(signal), excerptNote: `${signal.source.label} 的榜单条目，未读取仓库内容` }
+      : {}),
     summary: signal.summary,
     unknowns: [],
     relation: { heading: "和你的方向", text: signal.reason, tag: { label: `你的方向 · ${signal.direction.text}` } },

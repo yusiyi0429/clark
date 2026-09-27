@@ -7,6 +7,7 @@ import { createRadarAgentAssessor } from "./radarAgent.js";
 import { createRadarScheduler } from "./radarScheduler.js";
 import { createPersonalRadarService } from "./personalRadar.js";
 import { createPersonalRadarJudge } from "./personalRadarAgent.js";
+import { createGithubTrendingReader } from "./githubTrending.js";
 import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "./radarSources.js";
 import { createOutletFeedAdapter } from "./outletSources.js";
 import { createBochaWebSearchAdapter } from "./webSearch.js";
@@ -116,6 +117,8 @@ const personalRadarService = createPersonalRadarService({
     apiKey: env.piApiKey,
     modelId: env.lightModel,
   }),
+  // 02b：GitHub Trending 没有订阅源、检索也限定不了站点，直接读榜单页面
+  trending: createGithubTrendingReader(),
 });
 // 公司每日扫描结束（busy 除外）之后才排个人扫描
 const scheduler = createRadarScheduler(radarService, 60_000, () => personalRadarService.runScheduled());

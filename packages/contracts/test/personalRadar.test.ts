@@ -49,7 +49,8 @@ describe("personal radar contract", () => {
   it("lets a list item carry its listing day instead of a publish time", () => {
     const signal = {
       id: "00000000-0000-4000-8000-000000000001",
-      source: { type: "list", label: "GitHub Trending", title: "owner/repo", url: "https://github.com/owner/repo", publishedAt: null, listedOn: "2026-10-01" },
+      source: { type: "list", label: "GitHub Trending", title: "owner/repo", url: "https://github.com/owner/repo", publishedAt: null, listedOn: "2026-10-01",
+        listing: { language: "TypeScript", starsInPeriod: 2608, since: "daily" } },
       direction: { id: "d_0123456789ab", text: "1 号位产品的设计" },
       summary: "一句结论", reason: "和方向的关系", relevance: 3,
       state: { read: false, saved: false, dismissed: false }, collectedAt: "2026-10-01T02:00:00.000Z",
@@ -57,6 +58,9 @@ describe("personal radar contract", () => {
     expect(Value.Check(contracts.PersonalSignalBrief, signal)).toBe(true);
     expect(Value.Check(contracts.PersonalSignal, { ...signal, excerpt: "原文", fullText: false, evidenceQuote: "原文" })).toBe(true);
     expect(Value.Check(contracts.PersonalSignalBrief, { ...signal, excerpt: "列表不带原文" })).toBe(false);
+    // 榜单的时段只有日／周／月三种；非榜单来源的 listing 为 null
+    expect(Value.Check(contracts.PersonalSignalBrief, { ...signal, source: { ...signal.source, listing: { ...signal.source.listing, since: "yearly" } } })).toBe(false);
+    expect(Value.Check(contracts.PersonalSignalBrief, { ...signal, source: { ...signal.source, type: "web", publishedAt: "2026-10-01T01:00:00.000Z", listedOn: null, listing: null } })).toBe(true);
   });
 
   it("adds The Information as an Atom outlet in the shared catalog", () => {

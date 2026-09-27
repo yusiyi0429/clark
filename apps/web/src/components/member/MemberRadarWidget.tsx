@@ -10,8 +10,8 @@ import {
   goToAccess,
   personalSignalHref,
   radarBriefStatus,
-  relativeTime,
   scanActive,
+  signalWhen,
   type MemberRadarBrief,
 } from "@/components/radar/personalRadar";
 import s from "./member-home-widgets.module.css";
@@ -83,7 +83,7 @@ export function MemberRadarWidget({ radar, onNavigate, onRefresh }: { radar: Mem
                   <span className={s.signalMeta}>
                     {signal.state.read ? null : <i className={s.unread} aria-hidden />}
                     <span>
-                      {signal.source.label} · {relativeTime(signal.source.publishedAt ?? signal.collectedAt, now)}
+                      {signal.source.label} · {signalWhen(signal, now)}
                     </span>
                   </span>
                   <span className={s.signalTitle}>{signal.source.title}</span>

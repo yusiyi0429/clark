@@ -33,10 +33,25 @@ const columns = (prefix = "") => COLUMNS.map((column) => (column === "listed_on"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** 来源标签：发布方写中文名，其余写网址主机。 */
+/** 来源标签：发布方写中文名，榜单写榜单名，其余写网址主机。 */
 export function sourceLabel(sourceRef: unknown, url: string): string {
-  const ref = sourceRef as { type?: string; outletName?: string } | null;
-  return ref?.type === "outlet" && ref.outletName ? ref.outletName : new URL(url).hostname.replace(/^www\./, "");
+  const ref = sourceRef as { type?: string; outletName?: string; listName?: string } | null;
+  if (ref?.type === "outlet" && ref.outletName) return ref.outletName;
+  if (ref?.type === "list" && ref.listName) return ref.listName;
+  return new URL(url).hostname.replace(/^www\./, "");
+}
+
+type Listing = NonNullable<TPersonalSignalBrief["source"]["listing"]>;
+const SINCE = new Set(["daily", "weekly", "monthly"]);
+
+/** 榜单条目的语言与时段内 star（02b），从采集时写下的 source_ref 里读。 */
+function listingOf(sourceRef: unknown): Listing {
+  const ref = sourceRef as { language?: unknown; starsInPeriod?: unknown; since?: unknown } | null;
+  return {
+    language: typeof ref?.language === "string" && ref.language ? ref.language : null,
+    starsInPeriod: Number.isInteger(ref?.starsInPeriod) && (ref!.starsInPeriod as number) >= 0 ? ref!.starsInPeriod as number : null,
+    since: typeof ref?.since === "string" && SINCE.has(ref.since) ? ref.since as Listing["since"] : "daily",
+  };
 }
 
 function projectBrief(row: PersonalSignalRow): TPersonalSignalBrief {
@@ -49,6 +64,7 @@ function projectBrief(row: PersonalSignalRow): TPersonalSignalBrief {
       url: row.source_url,
       publishedAt: row.published_at?.toISOString() ?? null,
       listedOn: row.listed_on,
+      listing: row.source_type === "list" ? listingOf(row.source_ref) : null,
     },
     direction: { id: row.direction_id, text: row.direction_text },
     summary: row.summary,

@@ -127,7 +127,8 @@ describe("GET/PUT /api/me/radar", () => {
       expect(Value.Check(MyRadar, body)).toBe(true);
       expect(body).toMatchObject({ enabled: false, directions: [], sources: [], updatedAt: null, lastRun: null, unreadCount: 0, webSearch: true });
       expect(body.suggestions.sources.map((item: { value: string }) => item.value)).toEqual([
-        "ft.com", "qbitai.com", "theinformation.com", "bbc.com", "bloomberg.com", "reuters.com", "cnbc.com", "economist.com", "36kr.com", "jiqizhixin.com",
+        "ft.com", "qbitai.com", "theinformation.com", "bbc.com", "bloomberg.com", "reuters.com", "cnbc.com", "economist.com",
+        "github.com/trending", "36kr.com", "jiqizhixin.com",
       ]);
     } finally { await t.close(); }
 
@@ -135,7 +136,8 @@ describe("GET/PUT /api/me/radar", () => {
     try {
       const body = (await call(closed.t, "GET", "/api/me/radar", closed.member)).json();
       expect(body.webSearch).toBe(false);
-      expect(body.suggestions.sources.every((item: { kind: string }) => item.kind === "feed")).toBe(true);
+      // 榜单直接读页面、不靠全网检索，照常建议；读不到的网站不建议
+      expect(body.suggestions.sources.map((item: { kind: string }) => item.kind)).toEqual([...Array(8).fill("feed"), "list"]);
     } finally { await closed.t.close(); }
   });
 
@@ -145,7 +147,7 @@ describe("GET/PUT /api/me/radar", () => {
       const put = await call(t, "PUT", "/api/me/radar", member, {
         enabled: true,
         directions: [" 1 号位产品的设计 ", "ＡＩ　Agent", "ai agent"],
-        sources: ["HTTPS://WWW.FT.COM/world?x=1#y", "36kr.com/p/1", "github.com/trending?since=daily", "ft.com"],
+        sources: ["HTTPS://WWW.FT.COM/world?x=1#y", "36kr.com/p/1", "github.com/trending?since=daily", "github.com/trending/Rust?since=weekly", "ft.com"],
       });
       expect(put.statusCode).toBe(200);
       expect(Value.Check(MyRadar, put.json())).toBe(true);
@@ -155,13 +157,14 @@ describe("GET/PUT /api/me/radar", () => {
         sources: [
           { value: "ft.com", name: "金融时报", kind: "feed", note: "订阅源" },
           { value: "36kr.com", name: "36氪", kind: "site", note: SITE_NOTE },
-          { value: "github.com/trending", name: "GitHub Trending", kind: "unsupported", note: "榜单读取器还在开发，暂不支持" },
+          { value: "github.com/trending", name: "GitHub Trending", kind: "list", note: "读取榜单（每天一次）" },
+          { value: "github.com/trending/rust?since=weekly", name: "GitHub Trending · rust · 周榜", kind: "list", note: "读取榜单（每天一次）" },
         ],
         updatedAt: NOW.toISOString(), lastRun: null, unreadCount: 0,
       });
       expect((await call(t, "GET", "/api/me/radar", member)).json()).toEqual(put.json());
       expect(await t.sql("SELECT person_id, enabled, directions, sources, updated_at FROM person_radar")).toEqual([{
-        person_id: TEST_MEMBER.personId, enabled: true, directions: ["1 号位产品的设计", "AI Agent"], sources: ["ft.com", "36kr.com", "github.com/trending"], updated_at: NOW,
+        person_id: TEST_MEMBER.personId, enabled: true, directions: ["1 号位产品的设计", "AI Agent"], sources: ["ft.com", "36kr.com", "github.com/trending", "github.com/trending/rust?since=weekly"], updated_at: NOW,
       }]);
       expect(spy.enqueued).toEqual([]);
 
@@ -273,6 +276,35 @@ describe("个人信号", () => {
       expect((await call(t, "GET", `/api/me/radar/signals/${hidden}`, member)).json().state.dismissed).toBe(true);
       // 未读数：本人、未读、未隐藏
       expect((await call(t, "GET", "/api/me/radar", member)).json().unreadCount).toBe(1);
+    } finally { await t.close(); }
+  });
+
+  it("榜单条目（02b）：标签写榜单名，没有发布时间只有上榜日，带语言与时段 star；其他来源的 listing 为 null", async () => {
+    const { t, member } = await open();
+    try {
+      const id = randomUUID();
+      const url = "https://github.com/owner/agent";
+      await t.sql(
+        `INSERT INTO person_radar_signals (id, person_id, source_type, source_fingerprint, source_title, source_url, published_at, listed_on, excerpt,
+           source_ref, direction_id, direction_text, summary, reason, evidence_quote, relevance, collected_at)
+         VALUES ($1, $2, 'list', $3, 'owner/agent', $4, NULL, '2026-10-08', 'owner/agent：没有描述（语言 Rust，本周 321 star）', $5::jsonb,
+           $6, '大模型定价', '一句结论', '和方向直接相关', '没有描述', 3, $7)`,
+        [id, TEST_MEMBER.personId, createHash("sha256").update(`v1\n${url}`).digest("hex"), url,
+          JSON.stringify({ type: "list", provider: "github-trending", listName: "GitHub Trending", language: "Rust", starsInPeriod: 321, since: "weekly" }),
+          `d_${hashId("大模型定价")}`, NOW],
+      );
+      const web = await insertSignal(t, TEST_MEMBER.personId, { collectedAt: new Date(NOW.getTime() - 60_000) });
+      const list = (await call(t, "GET", "/api/me/radar/signals", member)).json();
+      expect(Value.Check(PersonalSignalList, list)).toBe(true);
+      expect(list.signals.map((signal: { id: string }) => signal.id)).toEqual([id, web]);
+      expect(list.signals[0].source).toEqual({
+        type: "list", label: "GitHub Trending", title: "owner/agent", url, publishedAt: null, listedOn: "2026-10-08",
+        listing: { language: "Rust", starsInPeriod: 321, since: "weekly" },
+      });
+      expect(list.signals[1].source.listing).toBeNull();
+      const one = await call(t, "GET", `/api/me/radar/signals/${id}`, member);
+      expect(Value.Check(PersonalSignal, one.json())).toBe(true);
+      expect(one.json()).toMatchObject({ excerpt: "owner/agent：没有描述（语言 Rust，本周 321 star）", fullText: false, source: { listedOn: "2026-10-08" } });
     } finally { await t.close(); }
   });
 

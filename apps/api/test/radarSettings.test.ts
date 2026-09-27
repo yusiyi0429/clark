@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 import { normalizeRadarSettings, readSource, sourceSuggestions } from "../src/radarSettings.js";
 
 const SITE_NOTE = "全网检索后按域名筛，结果可能很少";
+const LIST_NOTE = "读取榜单（每天一次）";
 const PUBLIC_DOMAIN = "请填公开网站的域名";
 
 /** 设计 §3.4 的来源样例：输入 → 规范值、读法与如实的说明。 */
-const READABLE: [string, Record<string, unknown>, string?][] = [
+const READABLE: [string, Record<string, unknown>, (string | { language: string | null; since: string })?][] = [
   ["HTTPS://WWW.FT.COM/world?x=1#y", { value: "ft.com", name: "金融时报", kind: "feed", note: "订阅源" }, "ft"],
   ["ft.com/world", { value: "ft.com", name: "金融时报", kind: "feed", note: "订阅源" }, "ft"],
   ["  www.ft.com./  ", { value: "ft.com", name: "金融时报", kind: "feed", note: "订阅源" }, "ft"],
@@ -19,8 +20,15 @@ const READABLE: [string, Record<string, unknown>, string?][] = [
   ["ftchinese.com", { value: "ftchinese.com", kind: "site", note: SITE_NOTE }],
   ["https://36kr.com/p/123?f=rss", { value: "36kr.com", name: "36氪", kind: "site", note: SITE_NOTE }],
   ["www.jiqizhixin.com/articles", { value: "jiqizhixin.com", name: "机器之心", kind: "site", note: SITE_NOTE }],
-  ["github.com/trending?since=daily", { value: "github.com/trending", name: "GitHub Trending", kind: "unsupported", note: "榜单读取器还在开发，暂不支持" }],
-  ["https://github.com/trending/python", { value: "github.com/trending", name: "GitHub Trending", kind: "unsupported", note: "榜单读取器还在开发，暂不支持" }],
+  // GitHub Trending（02b）：读取榜单；语言路径与 since 决定读哪一版，规范值里保留它们（daily 是默认，省掉）
+  ["github.com/trending?since=daily", { value: "github.com/trending", name: "GitHub Trending", kind: "list", note: LIST_NOTE }, { language: null, since: "daily" }],
+  ["https://github.com/trending/python", { value: "github.com/trending/python", name: "GitHub Trending · python", kind: "list", note: LIST_NOTE }, { language: "python", since: "daily" }],
+  ["https://github.com/trending/TypeScript?since=weekly", { value: "github.com/trending/typescript?since=weekly", name: "GitHub Trending · typescript · 周榜", kind: "list", note: LIST_NOTE }, { language: "typescript", since: "weekly" }],
+  ["github.com/trending/c%2B%2B?since=monthly&spoken_language_code=zh", { value: "github.com/trending/c%2b%2b?since=monthly", name: "GitHub Trending · c++ · 月榜", kind: "list", note: LIST_NOTE }, { language: "c++", since: "monthly" }],
+  ["github.com/trending?since=yearly", { value: "github.com/trending", name: "GitHub Trending", kind: "list", note: LIST_NOTE }, { language: null, since: "daily" }],
+  // 开发者榜与更深的路径不是仓库榜：如实写暂不支持
+  ["github.com/trending/developers?since=weekly", { value: "github.com/trending/developers", name: "GitHub Trending 开发者榜", kind: "unsupported", note: "只读仓库榜，开发者榜暂不支持" }],
+  ["github.com/trending/python/extra", { value: "github.com/trending/python/extra", name: "GitHub Trending", kind: "unsupported", note: "只能读仓库榜，可以带一个语言" }],
   // 路径前缀按段匹配：/trendingx 不算 trending
   ["github.com/trendingx", { value: "github.com/trendingx", kind: "site", note: SITE_NOTE }],
   ["github.com/openai/", { value: "github.com/openai", kind: "site", note: SITE_NOTE }],
@@ -70,9 +78,10 @@ const REJECTED: [string, string][] = [
 const hashId = (text: string) => createHash("sha256").update(`v1\n${text}`).digest("hex").slice(0, 12);
 
 describe("来源规范化与读法（§3.4 来源 1–10）", () => {
-  it.each(READABLE)("%s → 规范值与读法", (input, setting, outletId) => {
+  it.each(READABLE)("%s → 规范值与读法", (input, setting, extra) => {
     const result = readSource(input, true);
-    expect(result).toEqual({ source: { setting, ...(outletId ? { outletId } : {}) } });
+    // 第三列：订阅源是目录里的发布方 id，榜单是要读的那一版
+    expect(result).toEqual({ source: { setting, ...(typeof extra === "string" ? { outletId: extra } : extra ? { list: extra } : {}) } });
   });
 
   it.each(REJECTED)("拒绝 %j：%s", (input, message) => {
@@ -109,7 +118,7 @@ describe("设置整体规范化（§3.4 来源 11–12 与方向 1–5）", () =
       sources: [
         { setting: { value: "ft.com", name: "金融时报", kind: "feed", note: "订阅源" }, outletId: "ft" },
         { setting: { value: "36kr.com", name: "36氪", kind: "site", note: SITE_NOTE } },
-        { setting: { value: "github.com/trending", name: "GitHub Trending", kind: "unsupported", note: "榜单读取器还在开发，暂不支持" } },
+        { setting: { value: "github.com/trending", name: "GitHub Trending", kind: "list", note: LIST_NOTE }, list: { language: null, since: "daily" } },
       ],
     });
   });
@@ -155,7 +164,7 @@ describe("设置整体规范化（§3.4 来源 11–12 与方向 1–5）", () =
         { setting: { value: "ft.com", name: "金融时报", kind: "feed", note: "订阅源" }, outletId: "ft" },
       ],
     });
-    const bad = normalizeRadarSettings({ directions: [], sources: ["36kr.com", "wsj.com", "ft.com"] }, "company", true);
+    const bad = normalizeRadarSettings({ directions: [], sources: ["36kr.com", "wsj.com", "ft.com", "github.com/trending"] }, "company", true);
     expect(bad).toEqual({
       ok: false,
       code: "RADAR_SOURCE_INVALID",
@@ -163,24 +172,27 @@ describe("设置整体规范化（§3.4 来源 11–12 与方向 1–5）", () =
       fieldErrors: {
         "sources/0": "公司雷达已经在全网按方向检索；单独的网站只有在有订阅源时才能加入",
         "sources/1": "订阅源已停更，暂不支持",
+        "sources/3": "榜单只能加进个人雷达",
       },
     });
   });
 });
 
 describe("建议来源只放能如实读的", () => {
-  it("成员：8 家订阅源加 36氪、机器之心（写明结果可能少）；不含华尔街日报、Hacker News、GitHub Trending", () => {
+  it("成员：8 家订阅源、GitHub Trending（读取榜单）加 36氪、机器之心（写明结果可能少）；不含华尔街日报、Hacker News", () => {
     const suggestions = sourceSuggestions("person", true);
     expect(suggestions.map((item) => item.value)).toEqual([
-      "ft.com", "qbitai.com", "theinformation.com", "bbc.com", "bloomberg.com", "reuters.com", "cnbc.com", "economist.com", "36kr.com", "jiqizhixin.com",
+      "ft.com", "qbitai.com", "theinformation.com", "bbc.com", "bloomberg.com", "reuters.com", "cnbc.com", "economist.com",
+      "github.com/trending", "36kr.com", "jiqizhixin.com",
     ]);
     expect(suggestions.length).toBeLessThanOrEqual(12);
     expect(suggestions.filter((item) => item.kind === "site").every((item) => item.note === SITE_NOTE)).toBe(true);
-    expect(suggestions.every((item) => item.kind === "feed" || item.kind === "site")).toBe(true);
+    expect(suggestions.find((item) => item.kind === "list")).toEqual({ value: "github.com/trending", name: "GitHub Trending", kind: "list", note: LIST_NOTE });
+    expect(suggestions.every((item) => item.kind !== "unsupported")).toBe(true);
   });
 
-  it("全网检索没开通时，读不到的网站不进建议；公司只建议订阅源", () => {
-    expect(sourceSuggestions("person", false).every((item) => item.kind === "feed")).toBe(true);
+  it("全网检索没开通时，读不到的网站不进建议（榜单直接读页面，照常建议）；公司只建议订阅源", () => {
+    expect(sourceSuggestions("person", false).map((item) => item.kind)).toEqual([...Array(8).fill("feed"), "list"]);
     expect(sourceSuggestions("company", true).map((item) => item.kind)).toEqual(Array(8).fill("feed"));
   });
 });

@@ -10,6 +10,7 @@ import { loadCompanyMemory, type MemoryPerson } from "../src/companyMemory.js";
 import { migrate } from "../src/migrate.js";
 import { createPersonalRadarJudge } from "../src/personalRadarAgent.js";
 import { createPersonalRadarService, type PersonalRadarJudge, type PersonalRadarJudgeInput } from "../src/personalRadar.js";
+import type { GithubTrendingReader, TrendingRepo, TrendingSince } from "../src/githubTrending.js";
 import type { RadarOutletAdapter, RadarService, RadarWebAdapter } from "../src/radar.js";
 import { createRadarScheduler } from "../src/radarScheduler.js";
 import { createTestDb, seedTestAccess, testEnv, TEST_MEMBER } from "./helpers.js";
@@ -110,13 +111,31 @@ const lastRun = async (pool: Pool, personId: string) =>
 const count = async (pool: Pool, table: string, where = "TRUE", params: unknown[] = []) =>
   Number((await pool.query(`SELECT count(*) FROM ${table} WHERE ${where}`, params)).rows[0].count);
 
-function service(pool: Pool, deps: { web?: RadarWebAdapter; outlets?: RadarOutletAdapter; judge?: PersonalRadarJudge; scanTimeoutMs?: number; now?: () => Date }) {
+type TrendingCall = { language: string | null; since: TrendingSince };
+/** 榜单替身：按「语言|版本」给出上榜仓库；可以附带读取器的 warning，或直接失败。 */
+function fakeTrending(pages: Record<string, TrendingRepo[]>, options: { warnings?: string[]; fail?: Error } = {}) {
+  const calls: TrendingCall[] = [];
+  const trending: GithubTrendingReader & { calls: TrendingCall[] } = {
+    calls,
+    async read(source) {
+      calls.push(structuredClone(source));
+      if (options.fail) throw options.fail;
+      return { repos: structuredClone(pages[`${source.language ?? ""}|${source.since}`] ?? []), warnings: options.warnings ?? [] };
+    },
+  };
+  return trending;
+}
+const repo = (name: string, starsInPeriod: number | null, description: string | null = `${name} 的描述`, language: string | null = "TypeScript"): TrendingRepo =>
+  ({ fullName: `owner/${name}`, url: `https://github.com/owner/${name}`, description, language, starsInPeriod });
+
+function service(pool: Pool, deps: { web?: RadarWebAdapter; outlets?: RadarOutletAdapter; judge?: PersonalRadarJudge; trending?: GithubTrendingReader; scanTimeoutMs?: number; now?: () => Date }) {
   return createPersonalRadarService({
     pool,
     companyMemory: memory,
     web: deps.web ?? fakeWeb(() => []),
     outlets: deps.outlets ?? fakeOutlets(),
     judge: deps.judge ?? acceptAll(),
+    ...(deps.trending ? { trending: deps.trending } : {}),
     now: deps.now ?? (() => NOW),
     ...(deps.scanTimeoutMs ? { scanTimeoutMs: deps.scanTimeoutMs } : {}),
   });
@@ -338,7 +357,7 @@ describe("来源模式", () => {
   it("全是暂不支持的来源：不采集、如实写 warning，照常完成", async () => {
     await createTestDb(async ({ db, pool }) => {
       await migrate(db);
-      await setRadar(pool, "person-a", { sources: ["github.com/trending", "news.ycombinator.com"] });
+      await setRadar(pool, "person-a", { sources: ["github.com/trending/developers", "news.ycombinator.com"] });
       const web = fakeWeb(() => [webItem("https://example.com/never")]);
       const outlets = fakeOutlets([outletItem("https://www.ft.com/content/never")]);
       const judge = acceptAll();
@@ -346,7 +365,7 @@ describe("来源模式", () => {
       expect([web.calls.length, outlets.calls.length, judge.calls.length]).toEqual([0, 0, 0]);
       expect((await lastRun(pool, "person-a")).last_run).toMatchObject({
         status: "completed", createdSignals: 0,
-        warnings: ["GitHub Trending：榜单读取器还在开发，暂不支持", "Hacker News：订阅源只有评论链接，暂不支持"],
+        warnings: ["GitHub Trending 开发者榜：只读仓库榜，开发者榜暂不支持", "Hacker News：订阅源只有评论链接，暂不支持"],
       });
     });
   });
@@ -399,6 +418,82 @@ describe("来源模式", () => {
       expect(judged).toContain("订阅源 https://www.ft.com/content/14");
       for (const index of [15, 19, 20, 24]) expect(judged).not.toContain(`订阅源 https://www.ft.com/content/${index}`);
       expect((await lastRun(pool, "person-b")).last_run).toMatchObject({ status: "completed", warnings: ["条目超过上限，只研判最新的 30 条，略过 15 条"] });
+    });
+  });
+});
+
+describe("榜单（02b）", () => {
+  it("按版读一次：取时段 star 最多的 10 个；只记上榜日、不伪造发布时间；没有描述就写「没有描述」", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await setRadar(pool, "person-a", { sources: ["github.com/trending/typescript?since=weekly"] });
+      const repos = Array.from({ length: 12 }, (_, index) => repo(`repo-${index + 1}`, index + 1, index === 11 ? null : undefined));
+      const trending = fakeTrending({ "typescript|weekly": repos });
+      const web = fakeWeb(() => [webItem("https://example.com/never")]);
+      const outlets = fakeOutlets([outletItem("https://www.ft.com/content/never")]);
+      const judge = acceptAll(4);
+      await scan(service(pool, { web, outlets, judge, trending }), "person-a");
+      expect(trending.calls).toEqual([{ language: "typescript", since: "weekly" }]);
+      expect([web.calls.length, outlets.calls.length]).toEqual([0, 0]);
+      const judged = judge.calls[0].sources;
+      expect(judged).toHaveLength(10);
+      expect(judged.map((source) => source.title)).not.toContain("owner/repo-1");
+      expect(judged.every((source) => source.publishedAt === null && source.listedOn === "2026-10-08" && source.from === "GitHub Trending")).toBe(true);
+      expect(judged.find((source) => source.title === "owner/repo-12")?.excerpt).toBe("owner/repo-12：没有描述（语言 TypeScript，本周 12 star）");
+      const rows = await pool.query(`SELECT source_type, source_title, published_at, listed_on::text AS listed_on, source_ref
+        FROM person_radar_signals WHERE person_id = 'person-a' ORDER BY source_title`);
+      expect(rows.rows).toHaveLength(10);
+      expect(rows.rows.every((row) => row.source_type === "list" && row.published_at === null && row.listed_on === "2026-10-08")).toBe(true);
+      expect(rows.rows.find((row) => row.source_title === "owner/repo-12")!.source_ref).toEqual({
+        type: "list", provider: "github-trending", listName: "GitHub Trending", language: "TypeScript", starsInPeriod: 12, since: "weekly",
+      });
+      expect(await count(pool, "signals")).toBe(0);
+    });
+  });
+
+  it("同一个仓库第二天还在榜上：同一人不重复收，也不再拿去判", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await setRadar(pool, "person-a", { sources: ["github.com/trending"] });
+      const trending = fakeTrending({ "|daily": [repo("agent", 900)] });
+      const judge = acceptAll();
+      await scan(service(pool, { judge, trending }), "person-a");
+      const tomorrow = new Date(NOW.getTime() + 24 * 3_600_000);
+      await scan(service(pool, { judge, trending, now: () => tomorrow }), "person-a");
+      expect(trending.calls).toHaveLength(2);
+      expect(judge.calls).toHaveLength(1);
+      expect(await count(pool, "person_radar_signals")).toBe(1);
+      expect((await lastRun(pool, "person-a")).last_run).toMatchObject({ status: "completed", createdSignals: 0 });
+    });
+  });
+
+  it("榜单读取失败或页面结构变了：只写 warning，同一个人的订阅源照读，照常完成", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await setRadar(pool, "person-a", { sources: ["github.com/trending", "ft.com"] });
+      const outlets = fakeOutlets([outletItem("https://www.ft.com/content/a")]);
+      const failing = fakeTrending({}, { fail: new Error("GitHub Trending 返回 HTTP 429") });
+      await scan(service(pool, { outlets, trending: failing }), "person-a");
+      expect((await lastRun(pool, "person-a")).last_run).toMatchObject({
+        status: "completed", createdSignals: 1, warnings: ["GitHub Trending读取失败：GitHub Trending 返回 HTTP 429"],
+      });
+      await setRadar(pool, "person-b", { sources: ["github.com/trending"] });
+      const changed = fakeTrending({}, { warnings: ["GitHub Trending 页面结构可能变了，没有解析出上榜仓库"] });
+      await scan(service(pool, { trending: changed }), "person-b");
+      expect((await lastRun(pool, "person-b")).last_run).toMatchObject({
+        status: "completed", createdSignals: 0, warnings: ["GitHub Trending 页面结构可能变了，没有解析出上榜仓库", "48 小时内没有新条目"],
+      });
+    });
+  });
+
+  it("没接上读取器：榜单来源只写 warning，不算失败", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await setRadar(pool, "person-a", { sources: ["github.com/trending"] });
+      await scan(service(pool, {}), "person-a");
+      expect((await lastRun(pool, "person-a")).last_run).toMatchObject({
+        status: "completed", createdSignals: 0, warnings: ["GitHub Trending：榜单读取器没有接上，这次没读"],
+      });
     });
   });
 });
