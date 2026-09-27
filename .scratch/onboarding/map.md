@@ -14,7 +14,7 @@
 | 2 | 04a 数据、状态机与讨论候选 `issues/04a-mission-rounds-data-and-drafts.md` | resolved（待 Claude 验收、提交；[报告](evidence/04a/report.md)） |
 | 3 | 04b 个人卡页与讨论 `issues/04b-mission-card-page-and-discussion.md` | resolved（待 Claude 验收、提交；[报告](evidence/04b/report.md)；预览副本删除被自动审批拦截） |
 | 4 | 04c 集中 Review 与确认 `issues/04c-mission-round-review-and-confirm.md` | resolved（待 Claude 验收、提交；[报告](evidence/04c/report.md)） |
-| 5 | 04d 通知、入口与引导中的状态 `issues/04d-mission-card-notices-and-entries.md` | ready-for-agent |
+| 5 | 04d 通知、入口与引导中的状态 `issues/04d-mission-card-notices-and-entries.md` | resolved（待 Claude 验收、提交；[报告](evidence/04d/report.md)） |
 | 6 | 03 DRI 首页小组件 `issues/03-dri-home-widgets.md` | ready-for-agent |
 | 7 | 02 个人雷达 `issues/02-personal-radar.md` | ready-for-agent |
 | 8 | 02b GitHub Trending 读取器 `issues/02b-github-trending-reader.md` | ready-for-agent |
@@ -66,3 +66,12 @@
 - 双轮真实演练：5 卡／12 项 v1 Mission → 4 条意见含同字段冲突 → 应用时钟与截止快照同步推进 → 处理 → 重开 48 小时 → 5 条快照结转 → 跨卡核对／断网重试 → 确认与重放。数据库逐项对照仅 1 个 Mission 的 outcome／milestones 写回 v2，其他 11 项及其他字段不变；旧核对为空，截止后留言不挡确认，确认后新留言和重开均 409。两角色与 1440／834／390 三宽度、手机真实输入、减少动效／透明度均已看，48 张截图和详细边界见 [报告](evidence/04c/report.md)。
 - 未移植本机业务 store／模拟 Agent、演示拨钟与假处理动画、独立 WorkspaceShell、原件全文页签、执行进度、名单／会议扩展、04d 通知及确认后修订，逐项依据列于报告。ADR-0021 在仓库中缺失，未补造。美学自评 8.6/10，真实 Safari 键盘与长卡阅读节奏仍需人验收。
 - 3500／4500、专用浏览器、两套隔离库与人员目录、同层 Web 副本均已清理，218 个复制 src 文件最终 hash 一致；原依赖完整，受保护端口 PID 不变。红阶段残留测试库仅按本次时间与夹具指纹清理。无新增依赖、迁移、Git 写操作或 API 声纹修改；CONTEXT、ADR-0019/0020/0022 与本工单同步，待 Claude 验收提交。
+
+### 04d · 2026-09-27
+
+- 整体移植概念版 Mission Card 通知分组，成员顶部只列本人 Owner 行、拍板人看全部；CEO「战略决策更新」内复用同一分组与待办定位。新增只读 `/api/me/mission-cards`，未确认跨月保留、截止不退、确认退出，不写第二套通知。引导接入本月卡和本轮优先的下一件事，已确定工作卡保留，Owner 无 Mission 也纳入参与战场。
+- 通知与个人卡共用分钟时钟，晚挂载／旧响应不倒退，同 tick 越过截止并刷新。状态句与待办直接使用服务端投影，成功动作立即刷新；外部变化 20 秒／焦点同步。引导刷新保留步骤、录音与输入。共享 store 沿用 `useRoundNow.ts`，避免 Windows 与 `RoundClock.tsx` 大小写冲突。
+- 测试先红后绿。Web **390 → 425 全通过（51 文件）**，Contracts **49/49**；指定 API 串行全量完成 **54 文件／548 项：540 通过／同样 8 项 Windows 部署失败**（04c 为 536／8），无 IPC 中断或超时重跑。API/Web 类型检查、客户端生成和差异空白检查通过，日志见 [报告](evidence/04d/report.md)。
+- 双身份在 **1440／834／390** 演练草稿、开放、自然最后一分钟／截止、2 条意见待处理、确认退组与工作卡保留，再用最终样式复核重开第 2 轮。逐帧记录通知与页头同时从「1 分」→「不到 1 分」→「已截止」；全部采集无横向溢出。75 张截图和 [截图索引](evidence/04d/screenshot-index.html) 留证，减少动效／透明度也已检查。
+- 成员战场详情尚未实现，状态块与其 Mission 小标按要求留给 03；现有 Mission 总览与详情复用既有徽标。未搬的本机业务 store、演示拨钟、模拟 Agent、原件全文与外围扩展逐项列在报告。美学自评 **8.7/10**，真实 Safari 与 Claude 视觉验收待确认；ADR-0021 仍缺失。
+- 3500／4500、两个专用浏览器、四套临时库／人员目录及同层 Web 副本已清理；清理前 src/public 共 226 文件 hash 一致，junction 先解除，原依赖保留，受保护服务 PID 不变。无新增依赖、迁移、API 声纹修改或 Git 写命令；CONTEXT、ADR-0022、工单与 map 已同步，待 Claude 验收提交。

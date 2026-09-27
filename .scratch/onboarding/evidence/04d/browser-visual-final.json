@@ -1,0 +1,484 @@
+{
+  "id": "2336ec2d-ef5e-4be6-9ae2-2038335eb5f4",
+  "fixtureId": "f3ebc2c2-04d1-4dd6-88a4-ed4cac1cfc30",
+  "command": "inspect",
+  "ok": true,
+  "result": {
+    "inspect": true,
+    "fixtureId": "f3ebc2c2-04d1-4dd6-88a4-ed4cac1cfc30",
+    "database": "warmap_test_d477193105ec",
+    "now": "2026-10-03T02:00:28.476Z",
+    "counts": {
+      "rounds": 1,
+      "cards": 5,
+      "missions": 12,
+      "feedback": 2,
+      "reviews": 1,
+      "all_placeholder": true
+    },
+    "rounds": [
+      {
+        "id": "8b521f9b-772c-47b6-8b0d-f9bfc289aa75",
+        "version": 4,
+        "status": "open",
+        "window_seq": 2,
+        "opened_at": "2026-10-03T02:00:34.209Z",
+        "closes_at": "2026-10-05T02:00:34.209Z",
+        "confirmed_by": null,
+        "confirmed_at": null,
+        "reopens": [
+          {
+            "at": "2026-10-03T02:00:34.209Z",
+            "by": "person-fixture-001",
+            "closedAt": "2026-10-03T02:00:28.476Z"
+          }
+        ]
+      }
+    ],
+    "cards": [
+      {
+        "card_id": "127031c2-7ca5-4685-85dc-adfb99161bfb",
+        "owner_id": "bai-tiantian"
+      },
+      {
+        "card_id": "bba808ac-2b16-4ea0-ac62-02c01be72770",
+        "owner_id": "liu-renhao"
+      },
+      {
+        "card_id": "19aca6dd-e074-45c5-9de1-1c7ed03d5b57",
+        "owner_id": "sun-mingze"
+      },
+      {
+        "card_id": "8ca53f9f-2e83-4bc2-8b11-d77809ebca14",
+        "owner_id": "chen-xinan"
+      },
+      {
+        "card_id": "61215bce-e22c-4805-96d5-d99344d11e83",
+        "owner_id": "yu-siyi"
+      }
+    ],
+    "feedback": [
+      {
+        "id": "7c306262-7e1c-45cd-9e0c-cd0bfbee5a26",
+        "seq": "1",
+        "kind": "comment",
+        "author_id": "sun-mingze",
+        "mission_id": null,
+        "field": null,
+        "basis": "draft",
+        "source_version": null,
+        "late": false,
+        "created_at": "2026-10-01T02:00:36.267Z",
+        "body_preview": "请共同核对本月交接时间。",
+        "has_quote": false,
+        "has_original": false,
+        "has_proposed": false
+      },
+      {
+        "id": "e692cf02-64f8-46ed-ab2e-84922c17841c",
+        "seq": "2",
+        "kind": "comment",
+        "author_id": "person-fixture-001",
+        "mission_id": null,
+        "field": null,
+        "basis": "draft",
+        "source_version": null,
+        "late": false,
+        "created_at": "2026-10-01T02:00:36.295Z",
+        "body_preview": "需要明确跨人员的验收安排。",
+        "has_quote": false,
+        "has_original": false,
+        "has_proposed": false
+      }
+    ],
+    "missions": [
+      {
+        "id": "bai-202610-1",
+        "code": "bai-202610-1",
+        "version": 1,
+        "personal_mission_card_id": "127031c2-7ca5-4685-85dc-adfb99161bfb",
+        "title": "M1-A｜真实战略工作持续运行，Agent 专业质量达到 01 部署标准",
+        "why": "以内部真实战略工作验证 Agent 专业质量，让方法、输入和质量标准进入产品。",
+        "outcome": "M1-A 在真实战略工作中持续使用，建立专业 QC、失败归因与复测，月底形成是否达到 01 部署标准的明确判断。",
+        "success_evidence": [
+          "内部真实战略事项持续使用 M1-A，Agent 结果被采纳、修改或拒绝，并进入真实 Decision 或后续工作。",
+          "CEO / DRI 测试及 9/23 端到端验收具备代表性案例、Business QC、Failure Attribution 和 Retest；Research / Judgment 的 Skill、Input 与 Quality Bar 可执行。",
+          "月底没有已知阻断部署的 Method / Agent 专业质量缺口，并形成明确的部署就绪判断。"
+        ],
+        "boundaries": "包含：真实战略工作持续运行；专业质量标准、失败归因与复测\n不包含：以 Demo 替代真实使用；把部署就绪判断等同于实际部署交付",
+        "key_path": "真实案例 → Skill / Input / Quality Bar → Business QC → 失败归因与复测 → 部署就绪判断。",
+        "milestones": [
+          "待定 · 当前阶段专业 QC（9 月计划 9/8）",
+          "待定 · 后端专业评测（9 月计划 9/18）",
+          "待定 · 端到端专业验收（9 月计划 9/23）",
+          "待定 · 部署就绪判断（9 月计划 9/30）"
+        ],
+        "resources": "按本月核心路径组织投入。",
+        "dependencies": "刘人豪：架构与质量\n孙铭泽：CEO / DRI 体验与端到端验收\nCEO / DRI：真实工作与业务确认",
+        "human_agent_split": "Agent 辅助整理、分析和提出建议；业务判断与正式确认由责任人完成。",
+        "risk": "产品接入进度与专业质量验证脱节，或以一次 Demo 替代持续使用。",
+        "retrospect": "基于真实使用、完成证据、依赖和风险开展月度 Review。",
+        "placeholder": true
+      },
+      {
+        "id": "bai-202610-2",
+        "code": "bai-202610-2",
+        "version": 1,
+        "personal_mission_card_id": "127031c2-7ca5-4685-85dc-adfb99161bfb",
+        "title": "M1-B｜真实经营 Formation / Review 持续运行，Agent 专业质量被正确承载",
+        "why": "把经营 Formation / Review 的专业要求落实到产品和真实经营协作。",
+        "outcome": "真实经营 Formation / Review 持续运行，L5 能力与数据要求被 Product / E&O 消费，运行中持续进行专业 QC、修正和复测。",
+        "success_evidence": [
+          "9/9–9/14 完成 Formation 的 Keep / Adjust / Open，仅对实质性缺口做校准。",
+          "L5 能力与数据要求被 Product / E&O 消费；9/12–9/16 Demo 使用真实 Formation 案例，形成初步 QC 与阻断问题判断。",
+          "9/17–9/28 V1 窗口开展真实运行 QC、修正与复测，延续到月底承诺、Review、反馈与调整；每周 DRI 输入可支持 CEO 月度 Review。"
+        ],
+        "boundaries": "包含：Formation / Review 专业方法与质量；L5 要求与真实运行反馈\n不包含：无实质缺口的全面重写；以 Demo 代替经营运行结果",
+        "key_path": "Formation 校准 → L5 被消费 → 真实案例 Demo → V1 运行 QC → 月度 Review。",
+        "milestones": [
+          "待定 · L5 能力与数据要求（9 月计划 9/11）",
+          "待定 · Formation 校准（9 月计划 9/14）",
+          "待定 · 真实案例 Demo 与 QC（9 月计划 9/16）",
+          "待定 · V1 真实运行（9 月计划 9/28）",
+          "待定 · 月度 Review 判断（9 月计划 9/30）"
+        ],
+        "resources": "按本月核心路径组织投入。",
+        "dependencies": "陈溪南：经营协同产品\nE&O：数据与能力承载\n各 DRI：周度输入与真实 Review",
+        "human_agent_split": "Agent 辅助整理、分析和提出建议；业务判断与正式确认由责任人完成。",
+        "risk": "专业要求没有进入产品，或 Review 输入无法持续沉淀。",
+        "retrospect": "基于真实使用、完成证据、依赖和风险开展月度 Review。",
+        "placeholder": true
+      },
+      {
+        "id": "bai-202610-3",
+        "code": "bai-202610-3",
+        "version": 1,
+        "personal_mission_card_id": "127031c2-7ca5-4685-85dc-adfb99161bfb",
+        "title": "M2｜M2.1 在 DRI Agent 中真实运行并通过专业 QC，M2.2 / M2.3 补必要 L4",
+        "why": "用真实 DRI 工作验证 Formation 和组合 Review 的专业有效性。",
+        "outcome": "M2.1 进入真实 DRI Agent 工作并通过专业 QC；补齐 M2.2 / M2.3 本月必要的 L4。",
+        "success_evidence": [
+          "9/13–9/23 DRI 真实测试、方法 QC 与复测持续进行；Formation / Portfolio Review 的 Skill、Input、Quality Bar 进入 Agent 评测。",
+          "9/23 端到端验收后持续记录真实 DRI 使用中的 Review、Challenge、承诺及失败复测。",
+          "9/14–9/18 补齐 M2.2 / M2.3 必要 L4；03-3.3 仅在真实工作自然触发时校准，不以未触发作为失败。"
+        ],
+        "boundaries": "包含：M2.1 真实运行与专业 QC；M2.2 / M2.3 必要 L4\n不包含：人为制造未自然触发的校准场景",
+        "key_path": "必要方法定义 → DRI 真实测试 → 专业 QC 与复测 → 端到端后持续运行。",
+        "milestones": [
+          "待定 · DRI 交互验收（9 月计划 9/17）",
+          "待定 · 必要 L4（9 月计划 9/18）",
+          "待定 · DRI 集成（9 月计划 9/19）",
+          "待定 · 端到端专业验收（9 月计划 9/23）",
+          "待定 · 真实运行 QC（9 月计划 9/30）"
+        ],
+        "resources": "按本月核心路径组织投入。",
+        "dependencies": "孙铭泽：DRI Agent 体验\n真实 DRI：工作输入与使用反馈\n产品与工程：方法承载",
+        "human_agent_split": "Agent 辅助整理、分析和提出建议；业务判断与正式确认由责任人完成。",
+        "risk": "方法只留在文档中，未进入真实 DRI 的判断和承诺。",
+        "retrospect": "基于真实使用、完成证据、依赖和风险开展月度 Review。",
+        "placeholder": true
+      },
+      {
+        "id": "bai-202610-4",
+        "code": "bai-202610-4",
+        "version": 1,
+        "personal_mission_card_id": "127031c2-7ca5-4685-85dc-adfb99161bfb",
+        "title": "MF｜建立并验证最小经营反馈机制",
+        "why": "让经营观察、问题路由和周度输入支持真实经营反馈。",
+        "outcome": "建立最小经营反馈机制，持续形成经营观察与 DRI 输入，将自然出现的 Gap / Risk 路由给正确责任人，并以真实运行校准 MF L4。",
+        "success_evidence": [
+          "9/2–9/30 持续经营观察与每周 DRI 输入，形成可被 CEO 月度 Review 复用的信息。",
+          "自然出现的 Gap / Risk 被识别、分层并路由到正确责任人，不人为制造 Attention。",
+          "9/21–9/25 的 MF L4 反映真实角色、输入输出、决策权和交接；P2 共享视图不作为本月通关门槛。"
+        ],
+        "boundaries": "包含：持续经营观察与问题路由；最小反馈机制与 MF L4\n不包含：将 P2 共享视图设为通关门槛；人为制造经营 Attention",
+        "key_path": "经营观察 → 周度输入 → Gap / Risk 分层路由 → MF L4 校准 → 月度 Review。",
+        "milestones": [
+          "待定 · MF L4 校准（9 月计划 9/25）",
+          "待定 · 月度经营观察与判断（9 月计划 9/30）"
+        ],
+        "resources": "按本月核心路径组织投入。",
+        "dependencies": "各 DRI：周度输入\nCEO：月度 Review\n问题责任人：接收与反馈",
+        "human_agent_split": "Agent 辅助整理、分析和提出建议；业务判断与正式确认由责任人完成。",
+        "risk": "反馈成为重复汇报，问题没有被正确路由与承接。",
+        "retrospect": "基于真实使用、完成证据、依赖和风险开展月度 Review。",
+        "placeholder": true
+      },
+      {
+        "id": "renhao-202610-a",
+        "code": "renhao-202610-a",
+        "version": 1,
+        "personal_mission_card_id": "bba808ac-2b16-4ea0-ac62-02c01be72770",
+        "title": "CEO Agent Architecture & Quality",
+        "why": "优先级最高。明确 CEO Agent 内部模块、关键时序和本月必须实现的子集，推动必要重构与底层能力贯通。",
+        "outcome": "推动 CEO Agent 从以 Chat 为主的能力，形成模块边界清楚、关键模块可独立观察和调试、质量可持续验证的 M1A 业务链，并在词元云集内部发生真实使用。",
+        "success_evidence": [
+          "经产品和业务确认的模块清单、输入输出、实施顺序和不做范围。",
+          "本月必要模块可单独测试、回放和定位问题。",
+          "真实材料的端到端测试、人工质量评审、失败案例及修复回归记录。",
+          "内部用户实际使用及反馈证据；首次集成、Demo 或上线不能替代质量验收。"
+        ],
+        "boundaries": "包含：内部架构与质量推进；模块测试、端到端质量与内部真实使用\n不包含：独自承担全部后端开发；以完整微服务改造作为通关前提",
+        "key_path": "开发期间投入测试材料和预期，记录样本、模型、Prompt、数据和运行版本；9/28 质量、租户隔离和客户准备均达标才放行。",
+        "milestones": [
+          "待定 · CEO 模块、实现分工确认（9 月计划 9/14）",
+          "待定 · 测试基线确认（9 月计划 9/15）",
+          "待定 · 首次集成与内部使用准备（9 月计划 9/17–9/18）",
+          "待定 · 内部真实使用与端到端测试（9 月计划 9/21–9/23）",
+          "待定 · 内部使用复测与客户试用放行（9 月计划 9/28）",
+          "待定 · 月度结果 Review（9 月计划 9/30）"
+        ],
+        "resources": "原文未单独列明资源额度。",
+        "dependencies": "孙铭泽：交互、体验、集成上线\n白田田：测试材料、业务确认\n于斯一：必要数据服务",
+        "human_agent_split": "原文未单独列明人-Agent 分工。",
+        "risk": "数据正确性、权限或关键流程阻断问题未关闭不能通关；跨角色阻塞连续两个工作日未解决提交 Pod Review。",
+        "retrospect": "按真实工作路径、完成证据、依赖变化和风险进行月度 Review。",
+        "placeholder": true
+      },
+      {
+        "id": "renhao-202610-b",
+        "code": "renhao-202610-b",
+        "version": 1,
+        "personal_mission_card_id": "bba808ac-2b16-4ea0-ac62-02c01be72770",
+        "title": "Ontology & Data Grounding",
+        "why": "直接支撑 Mission A，前期并行。从完整本体收敛到 TKOS 当月所需的记忆系统。",
+        "outcome": "用 M1A / CEO Agent 跑通真实数据读取、必要蒸馏、候选写入、人工确认、正式写回及更新后再次调用；数据有来源、业务确认人、维护责任和实际使用证据。",
+        "success_evidence": [
+          "M1A 必需数据有来源、状态、更新方式和消费模块记录。",
+          "读取与蒸馏服务接入真实产品，未经确认的候选不得进入正式事实。",
+          "至少一条完整确认写回及数据更新后再次调用记录。",
+          "检查缺失、过期、写入失败等情况，并明确处理人；仅有 Schema、接口或方案不算达成。"
+        ],
+        "boundaries": "包含：M1A 最小记忆与数据服务；蒸馏、确认写回、更新消费\n不包含：完整本体建设；于斯一承担完整 CEO / DRI 后端或全部 Agent Infra",
+        "key_path": "人豪主导设计并提出正式需求，于斯一负责必要服务实现，田田组织资料整理、事实确认与维护责任。",
+        "milestones": [
+          "待定 · Reference / Anchor 确认（9 月计划 9/14）",
+          "待定 · 最小真实数据集（9 月计划 9/16）",
+          "待定 · 记忆读取蒸馏滚动交付（9 月计划 9/16–9/18）",
+          "待定 · 确认写回服务（9 月计划 9/21–9/22）",
+          "待定 · 数据更新监控与再次调用验证（9 月计划 9/24）",
+          "待定 · 月度结果 Review（9 月计划 9/30）"
+        ],
+        "resources": "原文未单独列明资源额度。",
+        "dependencies": "于斯一：服务方案、实现与模块测试\n白田田：业务语义、事实确认与维护责任\nM1B 共用需求经陈溪南、田田和于斯一确认后纳入排期",
+        "human_agent_split": "原文未单独列明人-Agent 分工。",
+        "risk": "未经验证的写回保留人工确认；不因完整微服务化后移而搁置必要服务。",
+        "retrospect": "按真实工作路径、完成证据、依赖变化和风险进行月度 Review。",
+        "placeholder": true
+      },
+      {
+        "id": "renhao-202610-c",
+        "code": "renhao-202610-c",
+        "version": 1,
+        "personal_mission_card_id": "bba808ac-2b16-4ea0-ac62-02c01be72770",
+        "title": "ENO / Engine Blueprint",
+        "why": "本月必交，投入服从前两条主线。将真实问题和已验证能力抽象到统一蓝图，指导产品模块化与后续投入取舍。",
+        "outcome": "形成 ENO / Engine Blueprint，说明 ENO 在 TKOS 中的角色，以及 Ontology、Context、Memory、Runtime、Harness、Eval 的边界与关系。",
+        "success_evidence": [
+          "解释本月模块与记忆服务的位置、共用能力和产品专属能力。",
+          "给出做与不做的决定及理由，经产品、于斯一及 CEO 评审边界与取舍。",
+          "与运行实际一致，区分已实现、已验证、本月必做和后续演进，不能将规划能力标成已实现。"
+        ],
+        "boundaries": "包含：当前 M1A 路径、目标架构、接口与关键时序；迁移拆分成本与未来 3–6 个月方向\n不包含：把未来演进路线当成本月工程承诺；用微服务工程替代真实质量验证",
+        "key_path": "先明确必要边界，再吸收前两条主线的实践结果；复用现有材料。",
+        "milestones": [
+          "待定 · ENO 边界初稿（9 月计划 9/15）",
+          "待定 · 结合产品全景架构讨论评审（9 月计划 9/24）",
+          "待定 · ENO Blueprint 定稿（9 月计划 9/30）"
+        ],
+        "resources": "初稿、评审和定稿合计投入约 1.5 个工作日。",
+        "dependencies": "CEO、产品和于斯一评审\n陈溪南产品架构图作为输入\nMission A / B 的真实实践",
+        "human_agent_split": "原文未单独列明人-Agent 分工。",
+        "risk": "Blueprint 完成不能抵消 CEO 未通关；完整微服务化为 Best-have。",
+        "retrospect": "按真实工作路径、完成证据、依赖变化和风险进行月度 Review。",
+        "placeholder": true
+      },
+      {
+        "id": "siyi-202610-1",
+        "code": "siyi-202610-1",
+        "version": 1,
+        "personal_mission_card_id": "61215bce-e22c-4805-96d5-d99344d11e83",
+        "title": "可信 Context / Memory 与真实 Agent 读写闭环",
+        "why": "为真实战略与经营工作提供有来源、权限、版本和审计的统一 Context / Memory。",
+        "outcome": "月底形成战略层与经营层 Ontology v0.1，将 8–9 月真实数据纳入统一 Context / Memory，跑通至少一条授权可追溯的真实 Agent 读写闭环，并完成最小部署与缺口报告。",
+        "success_evidence": [
+          "两层 Ontology 承载真实业务：战略层 Strategy / Outcome / Domain / Mission / Decision / Evidence，经营层 MissionRuntime / Review / Risk / Feedback / Meeting / Artifact；与人豪对齐语义，完成 Design Pack、Action Catalog、Evidence Policy 评审。",
+          "约定范围内的 8–9 月真实数据进入统一 Context / Memory，数量、覆盖与缺口可核对，来源、责任人、时间、版本、权限可追溯，并具备增量入口。",
+          "冻结两条 Golden Chain 与权限，至少一条真实输入 → 授权 Context → Agent 提案 → 人工确认 → 版本写回 → Receipt / Audit 的消费闭环有完整证据。",
+          "治理边界验证：未授权确认成功数为零、跨组织泄露为零；未授权请求被拒绝，版本冲突避免错误覆盖且可审计。",
+          "x86 Docker Compose 部署与持久化验证可复核，形成部署、验收与缺口报告；不将其表述为生产完成。"
+        ],
+        "boundaries": "包含：最小 Context / Memory 栈与真实消费闭环；约定范围内协助 DRI 后端\n不包含：全量本体与历史数据迁移；扩大到 Jena / Kafka 等完整技术栈",
+        "key_path": "业务语义与权限冻结 → 真实数据进入 → Agent 消费与确认写回 → 治理验证 → 最小部署与缺口报告。",
+        "milestones": [
+          "待定 · 链路与权限计划（9 月计划 9/8）",
+          "待定 · 真实数据范围决策（9 月计划 9/10）",
+          "待定 · 设计评审与数据接入（9 月计划 9/15）",
+          "待定 · 真实链路、权限与冲突验证（9 月计划 9/22）",
+          "待定 · 部署、持久化与缺口报告（9 月计划 9/29）"
+        ],
+        "resources": "按本月核心路径组织投入。",
+        "dependencies": "业务方：真实数据\n刘人豪：业务语义与正式需求\n负责人：权限决策\n安全与运维：隔离、Postgres 与对象存储",
+        "human_agent_split": "Agent 辅助整理、分析和提出建议；业务判断与正式确认由责任人完成。",
+        "risk": "真实数据或权限不明确导致停留在设计；必要时收敛到一条核心链路，不扩大技术栈。",
+        "retrospect": "基于真实使用、完成证据、依赖和风险开展月度 Review。",
+        "placeholder": true
+      },
+      {
+        "id": "sun-202610-1",
+        "code": "sun-202610-1",
+        "version": 1,
+        "personal_mission_card_id": "19aca6dd-e074-45c5-9de1-1c7ed03d5b57",
+        "title": "CEO Agent 核心体验产品化与真实使用（P0）",
+        "why": "CEO 的真实工作不是持续使用聊天框。产品应帮助 CEO 理解全局、定位异常、追问、形成判断，并将成熟议题带入 Decision 与会议。",
+        "outcome": "到 9 月底，CEO 有清晰、连贯且可持续使用的 Agent 工作体验，知道进入场景、全局与异常、研究追问、判断与 Decision，以及语音、动态界面和工作台如何自然组合。月底不能仍然只有 Chat 可用。",
+        "success_evidence": [
+          "新交互和前端完成验收，前后端连接后进入可持续使用状态。",
+          "从全局界面看见公司战场、关键变化和需要注意的议题，无须先向聊天框提问获得全部上下文。",
+          "跑通真实路径：进入 → 理解全局或异常 → 追问/研究 → 形成判断 → Decision 或正式讨论。",
+          "语音、动态界面和文字位置清晰、切换自然；语音不可用不阻塞核心工作。",
+          "真实使用记录、失败点和产品调整有留档；增加功能不作为完成证据。",
+          "与人豪共同完成质量和端到端验收，体验与底层质量问题可分层定位。"
+        ],
+        "boundaries": "包含：CEO 场景、交互、前端产品化；真实持续使用与体验修正\n不包含：另建解耦工作台、Eval 或底层质量体系；单独另画 TKOS 产品全景蓝图；替 CEO 自动确认正式 Decision",
+        "key_path": "优先保证 P0 核心体验过线，向人豪提供真实场景、体验要求和验收反馈，持续以真实使用校正。",
+        "milestones": [
+          "待定 · 核心交互验收与前端构建（9 月计划 9/10–9/14）",
+          "待定 · 后端构建测试；9/17–9/18 前后端连接、上线与验收（9 月计划 9/9–9/18）",
+          "待定 · 客户端＋手机端 Demo（9 月计划 9/16–9/17）",
+          "待定 · 端到端材料准备与 CEO / DRI 联合验收（9 月计划 9/23）",
+          "待定 · 基于真实使用修正核心体验（9 月计划 9/24–9/30）"
+        ],
+        "resources": "原文未单独列明资源额度。",
+        "dependencies": "刘人豪：稳定后端与质量体系\n白田田：工作方法\n陈溪南：North Star 与 M1B\n明华 / CEO：真实场景、持续使用与过线判断",
+        "human_agent_split": "原文未单独列明人-Agent 分工。",
+        "risk": "CEO 核心体验未冻结则只保留 P0 核心路径；与 DRI P1 资源冲突时优先 CEO。",
+        "retrospect": "按真实工作路径、完成证据、依赖变化和风险进行月度 Review。",
+        "placeholder": true
+      },
+      {
+        "id": "sun-202610-2",
+        "code": "sun-202610-2",
+        "version": 1,
+        "personal_mission_card_id": "19aca6dd-e074-45c5-9de1-1c7ed03d5b57",
+        "title": "DRI Agent V1 核心体验与真实验证（P1）",
+        "why": "回答管理者如何通过 Agent 更高效工作：承接 Outcome、管理 Mission、获得提醒和辅助判断，并明确对话、协同与 Review 的边界。",
+        "outcome": "复用 CEO Agent 产品语言与共性能力，完成 DRI Agent V1 核心体验并在真实 DRI 中验证；围绕 Outcome / Mission 推进问题、带回材料、调整判断、提请并承接回应，与 M1B 和 ENO 支持 CEO→DRI 闭环。",
+        "success_evidence": [
+          "单一连贯的 DRI V1 工作路径完成交互与前端验收。",
+          "至少一位真实 DRI 用真实 Mission 完成承接 Outcome → 明确问题 → 行动/带回材料 → 更新判断 → 提请或 Review。",
+          "清楚何时与 Agent 对话、何时进入协同、会议或 Review；提醒可见但不变成任务噪音。",
+          "CEO / DRI Agent 完成端到端验收，角色、通知和状态正确往返。",
+          "保留与 M1B 的共同 Outcome，区分铭泽的人机体验责任和陈溪南的多人协同与持续承接责任。"
+        ],
+        "boundaries": "包含：单个 DRI 与 Agent 的核心工作体验；真实管理者工作路径验证\n不包含：另建产品语言、研究流水线或整体经营协同架构；要求第一版完成所有外部工具自动连接",
+        "key_path": "复用 CEO Agent 共性能力，连接行动、证据和当前判断；涉及他人承诺或正式确认时进入协同、会议或 Review。",
+        "milestones": [
+          "待定 · 交互设计验收与前端构建（9 月计划 9/13–9/17）",
+          "待定 · 前后端连接、上线与验收（9 月计划 9/18–9/19）",
+          "待定 · 后端构建测试；端到端材料与 CEO / DRI 验收（9 月计划 9/18–9/23）",
+          "待定 · 真实 DRI 使用验证，接入 M1B V1 运行条件（9 月计划 9/24–9/30）"
+        ],
+        "resources": "原文未单独列明资源额度。",
+        "dependencies": "白田田：M2 L4 与工作方法\n于斯一：记忆、蒸馏、写入与读回\n陈溪南：M1B 真实运行\n刘人豪：质量与联合验收",
+        "human_agent_split": "原文未单独列明人-Agent 分工。",
+        "risk": "P0 与 P1 冲突优先 CEO；依赖延误可用明确 fixture 验交互和接口，但不得将模拟闭环写成真实运行。",
+        "retrospect": "按真实工作路径、完成证据、依赖变化和风险进行月度 Review。",
+        "placeholder": true
+      },
+      {
+        "id": "xinan-202610-1",
+        "code": "xinan-202610-1",
+        "version": 1,
+        "personal_mission_card_id": "8ca53f9f-2e83-4bc2-8b11-d77809ebca14",
+        "title": "M1-B 经营协同 MVP 与真实实践",
+        "why": "减少多轮人工搬运，让团队在同一份经营内容上协同，AI 持续承接变化。",
+        "outcome": "团队在同一份经营内容上反馈、补充、讨论和确认，AI 持续更新结构与上下文，支撑一次真实经营协同或 Review。",
+        "success_evidence": [
+          "团队在同一份经营内容上完成反馈、补充、讨论和确认，不再依赖多轮人工搬运汇总。",
+          "AI 能持续理解内容变化、更新结构并保留上下文，而不只是一次性生成。",
+          "MVP 使用 TKOS 真实信息支撑一次真实经营协同或 Review。",
+          "CEO / DRI 确认新的方式已经减少人工整理，并具备继续使用价值。"
+        ],
+        "boundaries": "包含：一个真实经营协同场景；产品内完成真实协同，允许必要人工兜底\n不包含：仅以 Demo 或数据连通作为最终验收",
+        "key_path": "L4 / L5 → Demo 与数据 → 持续协同 → 真实 Review。",
+        "milestones": [
+          "待定 · L4（9 月计划 9/10）",
+          "待定 · L5（9 月计划 9/11）",
+          "待定 · MVP Demo（9 月计划 9/16）",
+          "待定 · 协同能力（9 月计划 9/20）",
+          "待定 · 接入真实信息（9 月计划 9/21）",
+          "待定 · 真实实践（9 月计划 9/23–9/24）",
+          "待定 · 结果验收（9 月计划 9/28）"
+        ],
+        "resources": "按本月核心路径组织投入。",
+        "dependencies": "白田田：Method\nE&O：数据更新与读写\n工程：Agent、Workflow、模型与界面\nCEO / DRI：真实实践与验收",
+        "human_agent_split": "Agent 辅助整理、分析和提出建议；业务判断与正式确认由责任人完成。",
+        "risk": "数据能接入但协作仍靠人工搬运，AI 无法持续保留上下文。",
+        "retrospect": "基于真实使用、完成证据、依赖和风险开展月度 Review。",
+        "placeholder": true
+      },
+      {
+        "id": "xinan-202610-2",
+        "code": "xinan-202610-2",
+        "version": 1,
+        "personal_mission_card_id": "8ca53f9f-2e83-4bc2-8b11-d77809ebca14",
+        "title": "TKOS 产品全景蓝图与概念性交互",
+        "why": "建立经 CEO 验证的 North Star，对齐未来 3–6 个月建设方向。",
+        "outcome": "以可走查的核心经营场景、Workspace 和交互，呈现 CEO / DRI、角色 Agent 与 Co-Agent 的协同方式，形成 TKOS 产品全景蓝图。",
+        "success_evidence": [
+          "直观呈现 CEO、DRI 如何使用 TKOS，以及角色 Agent 与 Co-Agent 如何协同。",
+          "核心经营场景、Workspace、关键界面和主要交互足够具体，可以走查体验。",
+          "CEO / 一号位用户验证其符合主要直觉、习惯和真实工作方式。",
+          "能够据此对齐未来 3–6 个月 Product、Agent、E&O 的建设方向。"
+        ],
+        "boundaries": "包含：核心场景、Workspace 与概念性交互；CEO / 一号位用户走查验证\n不包含：所有能力本月工程化；全量高保真页面；仅有架构图或技术计划",
+        "key_path": "CEO 对齐 → 蓝图初稿 → 反馈 → V0.5 → 核心场景走查 → V1。",
+        "milestones": [
+          "待定 · CEO 对齐（9 月计划 9/10）",
+          "待定 · 蓝图初稿（9 月计划 9/15）",
+          "待定 · 反馈（9 月计划 9/16）",
+          "待定 · V0.5（9 月计划 9/21）",
+          "待定 · 走查（9 月计划 9/23–9/24）",
+          "待定 · V1（9 月计划 9/28）"
+        ],
+        "resources": "按本月核心路径组织投入。",
+        "dependencies": "CEO / 一号位用户：验证\n孙铭泽：CEO / DRI 体验\n刘人豪：ENO 边界\nMethod / E&O：能力与数据方向",
+        "human_agent_split": "Agent 辅助整理、分析和提出建议；业务判断与正式确认由责任人完成。",
+        "risk": "蓝图没有可体验的核心场景，无法验证真实工作习惯。",
+        "retrospect": "基于真实使用、完成证据、依赖和风险开展月度 Review。",
+        "placeholder": true
+      }
+    ],
+    "reviews": [
+      {
+        "id": "f58917a5-152f-46da-9e94-707f5b383a4a",
+        "window_seq": 1,
+        "snapshot_at": "2026-10-03T02:00:28.476Z",
+        "taken_at": "2026-10-03T02:00:28.488Z",
+        "superseded_at": "2026-10-03T02:00:34.209Z",
+        "feedback_ids": [
+          "7c306262-7e1c-45cd-9e0c-cd0bfbee5a26",
+          "e692cf02-64f8-46ed-ab2e-84922c17841c"
+        ],
+        "mission_versions": {
+          "bai-202610-1": 1,
+          "bai-202610-2": 1,
+          "bai-202610-3": 1,
+          "bai-202610-4": 1,
+          "sun-202610-1": 1,
+          "sun-202610-2": 1,
+          "siyi-202610-1": 1,
+          "xinan-202610-1": 1,
+          "xinan-202610-2": 1,
+          "renhao-202610-a": 1,
+          "renhao-202610-b": 1,
+          "renhao-202610-c": 1
+        },
+        "note": null,
+        "applied_versions": null
+      }
+    ],
+    "decisions": []
+  }
+}

@@ -6,6 +6,7 @@ import { AccountMenu } from "@/components/AccountMenu";
 import { ActionNoticeCard } from "@/components/ActionNoticeCard";
 import { HeroButton } from "@/components/HeroButton";
 import { RailClock } from "@/components/NotificationRail";
+import { MissionCardNoticeGroup } from "@/components/missionCards/MissionCardNoticeGroup";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { logout } from "@/lib/logout";
 import { MemberTasks } from "./MemberTasks";
@@ -31,7 +32,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
           <MemberTasks tasks={home.tasks} busyId={home.busyId} error={home.taskError} onStatus={(task, status) => void home.setStatus(task, status)} />
         </div>
       }
-      notifications={(api) => (
+      notifications={(api, currentHref) => (
         <aside className={n.rail} aria-label="通知">
           <RailClock
             homeActive={!api.detailOpen}
@@ -47,9 +48,10 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
             }
           />
           <div className={n.noticeList}>
+            {home.rounds.map((round) => <MissionCardNoticeGroup key={round.roundId} round={round} entry="member" currentHref={currentHref} onNavigate={api.navigate} onRefresh={home.refresh} />)}
             <ActionNoticeCard id="assigned" title="新的执行事项" subtitle="会后分给你的事" mark="meeting" notices={notices.assigned} onSettled={home.settle} />
             <ActionNoticeCard id="results" title="回复与结果" mark="issue" notices={notices.results} onSettled={home.settle} />
-            {notices.assigned.length + notices.results.length === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
+            {home.rounds.length + notices.assigned.length + notices.results.length === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
           </div>
           <div className={n.railFoot}>
             <AccountMenu account={account} onNavigate={api.navigate} />

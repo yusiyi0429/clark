@@ -44,7 +44,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
       // 首页只读当前公司周期的 Mission：战场卡 Mission 数、能力面板数量与入口都从这份 collection 派生，不保存汇总；历史周期留在 /api/cards/missions
       listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), period),
       getMonthlyPlanNotice(q, env.sessionSecret, at),
-      listMissionRoundCards(q, people, env.sessionSecret, req.person!, period, at),
+      listMissionRoundCards(q, people, env.sessionSecret, req.person!, undefined, at),
       listMissionRoundDraftCards(q, people, env.sessionSecret, req.person!, period, at, env.missionCardDraftsDir),
     ]);
     // 会前通知看 scheduled；会后有待 CEO 确认的战略议题的会议也进首页（通知栏「需要你确认」）

@@ -39,11 +39,10 @@ export function RoundLine({ payload, actions, viewerId, pending, onAction, onSel
   const reviewing = round.phase === "reviewing";
   const confirmed = round.phase === "confirmed";
   const count = round.counts.cards;
-  const decider = round.approver ? "你" : round.deciderName;
-  const line = draft ? (round.approver ? `${count} 张草稿已整理 · 可以统一开放讨论` : `草稿已整理 · 等${round.deciderName}统一开放讨论`)
+  const line = draft ? (round.approver ? round.todo ?? "个人卡草稿已就绪，可以统一开放讨论" : `草稿已整理 · 等${round.deciderName}统一开放讨论`)
     : discussing ? `讨论中 · ${round.approver ? `全战场 ${round.counts.feedback}` : `这张卡 ${payload.feedback.length}`} 条意见`
-    : closed ? "讨论已截止 · 正在汇总公开意见"
-    : reviewing ? round.approver ? `候选版本就绪 · ${round.counts.pending ? `${round.counts.pending} 条等${decider}处理` : "意见都处理完了 · 写下协作结论后确认"}` : `等${round.deciderName}拍板 · ${round.cards.find((row) => row.cardId === card.cardId)?.line ?? "候选版本就绪"}`
+    : closed ? "已截止 · 汇总中"
+    : reviewing ? round.approver ? round.todo ?? (round.counts.pending ? `${round.counts.pending} 条待你处理` : "意见已全部处理，待你确认") : `等${round.deciderName}拍板 · ${round.cards.find((row) => row.cardId === card.cardId)?.line ?? "候选版本就绪"}`
     : `已确定${confirmation ? ` · ${confirmation.byName} ${monthDayTime(confirmation.at)}` : ""}`;
   const openAction = draft && round.approver ? actions.find((action) => action.actionType === "mission-round.open") : undefined;
   const reopenAction = reviewing && round.approver ? actions.find((action) => action.actionType === "mission-round.reopen") : undefined;

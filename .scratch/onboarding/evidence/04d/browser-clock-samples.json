@@ -1,0 +1,41 @@
+[
+  {
+    "at": 818.5,
+    "values": [
+      {
+        "tone": "paper",
+        "value": "1 分"
+      },
+      {
+        "tone": "glass",
+        "value": "1 分"
+      }
+    ]
+  },
+  {
+    "at": 5010.9000000059605,
+    "values": [
+      {
+        "tone": "paper",
+        "value": "不到 1 分"
+      },
+      {
+        "tone": "glass",
+        "value": "不到 1 分"
+      }
+    ]
+  },
+  {
+    "at": 64976,
+    "values": [
+      {
+        "tone": "paper",
+        "value": "已截止"
+      },
+      {
+        "tone": "glass",
+        "value": "已截止"
+      }
+    ]
+  }
+]

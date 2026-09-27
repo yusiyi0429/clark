@@ -1,0 +1,25 @@
+{
+  "command": "pnpm --filter @warmap/api exec vitest run --maxWorkers=1",
+  "exitCode": 1,
+  "files": 54,
+  "passedFiles": 53,
+  "failedFiles": 1,
+  "tests": 548,
+  "passed": 540,
+  "failed": 8,
+  "durationSeconds": 420.66,
+  "previousPassed": 536,
+  "previousFailed": 8,
+  "failureNamesUnchanged": true,
+  "failedTests": [
+    "FAIL  test/deployment.test.ts > backup.sh source modes > defaults to compose mode: dumps inside the postgres container without DATABASE_URL or password",
+    "FAIL  test/deployment.test.ts > backup.sh source modes > compose mode freezes only a running api before pg_dump and restarts it last (trap)",
+    "FAIL  test/deployment.test.ts > restore.sh destructive boundaries > defaults to dry-run and refuses to touch a non-empty target database",
+    "FAIL  test/deployment.test.ts > restore.sh destructive boundaries > passes only when the target is empty, and --execute is required to write",
+    "FAIL  test/deployment.test.ts > restore.sh volume-backed recovery > refuses a non-empty target volume before any write (even in dry-run)",
+    "FAIL  test/deployment.test.ts > restore.sh volume-backed recovery > fails closed when a restored volume file SHA does not match the restored DB rows",
+    "FAIL  test/deployment.test.ts > restore.sh volume-backed recovery > passes with explicit empty volumes and verifies every DB storageKey/SHA against the volumes",
+    "FAIL  test/deployment.test.ts > restore.sh volume-backed recovery > database-only restore is allowed but explicitly declares volumes unsupported"
+  ],
+  "interrupted": false
+}

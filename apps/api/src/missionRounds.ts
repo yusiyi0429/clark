@@ -105,7 +105,7 @@ export async function projectMissionRoundCard(
     closesAt: row.closes_at?.toISOString() ?? null, reviewAt: review?.taken_at.toISOString() ?? null,
     serverNow: now.toISOString(), approver, deciderName: (deciderId && names.get(deciderId)) || deciderId || "CEO",
     todo: !approver ? null : phase === "draft" ? "个人卡草稿已就绪，可以统一开放讨论"
-      : phase === "reviewing" && pending === 0 ? "意见已全部处理，待你确认" : null,
+      : phase === "reviewing" ? pending > 0 ? `${pending} 条待你处理` : "意见已全部处理，待你确认" : null,
     placeholder: row.draft_origin === "placeholder",
     goals: row.goal_snapshot ? { sixMonthOutcome: row.goal_snapshot.sixMonthOutcome, monthOutcome: row.goal_snapshot.monthOutcome, signedAt: row.goal_snapshot.signedAt } : null,
     counts: {
@@ -143,9 +143,11 @@ export async function getMissionRoundCard(
   return row && await canRead(q, person, row) ? projectMissionRoundCard(q, people, secret, person, row, now) : null;
 }
 export async function listMissionRoundCards(
-  q: Query, people: MemoryPerson[], secret: string, person: MissionRoundPerson, period: string, now: Date,
+  q: Query, people: MemoryPerson[], secret: string, person: MissionRoundPerson, period: string | undefined, now: Date,
 ): Promise<TCard[]> {
-  const rows = (await q(`${ROUND_SELECT} WHERE r.period=$1 AND r.status<>'confirmed' ORDER BY b.sort_order,b.code,r.id`, [period])).rows as MissionRoundRow[];
+  // 通知只在确认后退出；引导可显式限定本月，跨月不能让尚未拍板的通知消失。
+  const rows = (await q(`${ROUND_SELECT} WHERE r.status<>'confirmed'${period ? " AND r.period=$1" : ""}
+    ORDER BY r.period DESC,b.sort_order,b.code,r.id`, period ? [period] : [])).rows as MissionRoundRow[];
   const cards: TCard[] = [];
   for (const row of rows) if (await canRead(q, person, row)) cards.push(await projectMissionRoundCard(q, people, secret, person, row, now));
   return cards;

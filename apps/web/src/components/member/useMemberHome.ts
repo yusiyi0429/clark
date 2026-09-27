@@ -4,7 +4,8 @@
  * 成员首页的数据：我的执行事项、我的通知，以及卡上那几件事（改状态、退回、看过）。通知每 20 秒刷新一次（页面在前台时）。
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { TMissionRoundSummary } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import type { MemberTask, TaskStatus } from "./MemberTasks";
 
@@ -27,23 +28,28 @@ const failed = (error: unknown, fallback: string): Result => ({ ok: false, error
 export function useMemberHome() {
   const [tasks, setTasks] = useState<MemberTask[]>([]);
   const [notifications, setNotifications] = useState<MemberNotification[]>([]);
+  const [rounds, setRounds] = useState<TMissionRoundSummary[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
+  const loadInFlight = useRef<Promise<void> | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const [home, list] = await Promise.all([browserApi.GET("/api/me/home"), browserApi.GET("/api/me/notifications")]);
-      if (home.response.status === 401 || list.response.status === 401) {
+  const load = useCallback(() => {
+    if (loadInFlight.current) return loadInFlight.current;
+    loadInFlight.current = (async () => { try {
+      const [home, list, missionCards] = await Promise.all([browserApi.GET("/api/me/home"), browserApi.GET("/api/me/notifications"), browserApi.GET("/api/me/mission-cards")]);
+      if (home.response.status === 401 || list.response.status === 401 || missionCards.response.status === 401) {
         window.location.assign("/access?next=%2Fme");
         return;
       }
       if (home.data) setTasks(home.data.myTasks as MemberTask[]);
       if (list.data) setNotifications(list.data.notifications as MemberNotification[]);
-      if (home.data && list.data) setTaskError((current) => current === REFRESH_ERROR ? null : current);
+      if (missionCards.data) setRounds(missionCards.data.rounds);
+      if (home.data && list.data && missionCards.data) setTaskError((current) => current === REFRESH_ERROR ? null : current);
     } catch {
       // 首页在详情背后仍保持挂载；后台轮询断网不能打断当前阅读与讨论。
       setTaskError(REFRESH_ERROR);
-    }
+    } finally { loadInFlight.current = null; } })();
+    return loadInFlight.current;
   }, []);
 
   useEffect(() => {
@@ -51,7 +57,13 @@ export function useMemberHome() {
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
     }, REFRESH_MS);
-    return () => window.clearInterval(timer);
+    const resume = () => { if (document.visibilityState === "visible") void load(); };
+    // 拍板可能发生在轮询途中，等旧读取落定后再取一次，不能用旧结果吞掉本次变更。
+    const roundChanged = () => { if (loadInFlight.current) void loadInFlight.current.then(load); else void load(); };
+    window.addEventListener("focus", resume);
+    window.addEventListener("mission-round-changed", roundChanged);
+    document.addEventListener("visibilitychange", resume);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", resume); window.removeEventListener("mission-round-changed", roundChanged); document.removeEventListener("visibilitychange", resume); };
   }, [load]);
 
   const replaceTask = (task: MemberTask) => setTasks((current) => current.map((item) => (item.id === task.id ? task : item)));
@@ -104,5 +116,5 @@ export function useMemberHome() {
     [load],
   );
 
-  return { tasks, notifications, busyId, taskError, setStatus, returnTask, markSeen, settle };
+  return { tasks, notifications, rounds, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, settle };
 }

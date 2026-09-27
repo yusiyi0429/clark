@@ -1,6 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { MonthlyPlanPeriod, MonthlyPlanStatus } from "./monthlyPlans.js";
 import { VoiceprintStatus } from "./voiceprint.js";
+import { MissionRoundPhase } from "./missionCards.js";
 
 const Next = Type.Object(
   { text: Type.String(), action: Type.String(), href: Type.String() },
@@ -43,6 +44,12 @@ export const OnboardingResponse = Type.Union([
       }, { additionalProperties: false })),
       missions: Type.Array(Type.Object({
         id: Type.String(), code: Type.String(), title: Type.String(), battlefieldIds: Type.Array(Type.String()),
+      }, { additionalProperties: false })),
+      missionCards: Type.Array(Type.Object({
+        cardId: Type.String(), roundId: Type.String(), period: MonthlyPlanPeriod,
+        battlefieldId: Type.String(), battlefieldName: Type.String(), phase: MissionRoundPhase,
+        status: Type.String(), closesAt: Type.Union([Type.String(), Type.Null()]), serverNow: Type.String(),
+        missionCount: Type.Integer({ minimum: 0 }), placeholder: Type.Boolean(), href: Type.String(),
       }, { additionalProperties: false })),
     }, { additionalProperties: false }),
   }, { additionalProperties: false }),

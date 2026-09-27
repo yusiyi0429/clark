@@ -49,6 +49,9 @@ describe("Mission round contracts", () => {
   });
   it("publishes round and personal card endpoints with authenticated reads and versioned actions", () => {
     const doc = buildOpenApiDocument();
+    expect(doc.paths["/api/me/mission-cards"]?.get.responses?.["200"]).toBeDefined();
+    expect(doc.paths["/api/me/mission-cards"]?.get.responses?.["401"]).toBeDefined();
+    expect(doc.components.schemas.MyMissionRoundsResponse).toBeDefined();
     expect(doc.paths["/api/mission-rounds/{roundId}"]?.get.responses?.["200"]).toBeDefined();
     expect(doc.paths["/api/mission-rounds/{roundId}"]?.get.responses?.["404"]).toBeDefined();
     expect(doc.paths["/api/mission-rounds/actions/execute"]?.post.responses?.["403"]).toBeDefined();

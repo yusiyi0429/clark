@@ -1,0 +1,11 @@
+{
+  "id": "d5b85bdc-d7fd-4a28-94ed-c69a18bd4ef6",
+  "fixtureId": "c338b3f3-6c66-42ee-b27f-f5f2f5a32633",
+  "command": "close",
+  "ok": true,
+  "result": {
+    "closed": true,
+    "database": "warmap_test_55295a643841",
+    "fixtureDirectory": "C:\\Users\\10021\\AppData\\Local\\Temp\\warmap-04d-browser-Ut2k3H"
+  }
+}

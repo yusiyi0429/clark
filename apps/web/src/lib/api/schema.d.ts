@@ -344,6 +344,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/mission-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取尚未确认的 Mission Card 通知，跨月保留；Owner 只见本人，当前拍板人见全部卡 */
+        get: operations["getMyMissionRounds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/mission-rounds/{roundId}": {
         parameters: {
             query?: never;
@@ -1736,6 +1753,51 @@ export interface components {
                 mine: boolean;
             }[];
         };
+        MyMissionRoundsResponse: {
+            rounds: {
+                roundId: string;
+                period: string;
+                battlefieldId: string;
+                battlefieldName: string;
+                version: number;
+                phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                round: number;
+                openedAt: string | null;
+                closesAt: string | null;
+                reviewAt: string | null;
+                /** @description 应用时钟生成的 ISO 8601 时间 */
+                serverNow: string;
+                approver: boolean;
+                deciderName: string;
+                todo: string | null;
+                placeholder: boolean;
+                goals: {
+                    sixMonthOutcome: string;
+                    monthOutcome: string;
+                    /** @description 应用时钟生成的 ISO 8601 时间 */
+                    signedAt: string;
+                } | null;
+                counts: {
+                    cards: number;
+                    feedback: number;
+                    pending: number;
+                    conflicts: number;
+                    dependencies: number;
+                    late: number;
+                };
+                cards: {
+                    cardId: string;
+                    ownerId: string;
+                    ownerName: string;
+                    roleLabel: string | null;
+                    missionCount: number;
+                    line: string;
+                    pending: number;
+                    firstPendingFeedbackId: string | null;
+                    mine: boolean;
+                }[];
+            }[];
+        };
         MissionRoundDraftPayload: {
             period: string;
             battlefieldId: string;
@@ -2849,6 +2911,20 @@ export interface components {
                     title: string;
                     battlefieldIds: string[];
                 }[];
+                missionCards: {
+                    cardId: string;
+                    roundId: string;
+                    period: string;
+                    battlefieldId: string;
+                    battlefieldName: string;
+                    phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                    status: string;
+                    closesAt: string | null;
+                    serverNow: string;
+                    missionCount: number;
+                    placeholder: boolean;
+                    href: string;
+                }[];
             };
         };
         CompleteOnboardingResponse: {
@@ -3624,6 +3700,35 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyMissionRounds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本月 Mission Card 通知分组 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyMissionRoundsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

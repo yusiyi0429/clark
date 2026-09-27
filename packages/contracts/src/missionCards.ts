@@ -61,6 +61,9 @@ export const MissionRoundSummary = Type.Object({
   cards: Type.Array(MissionCardRow),
 }, { additionalProperties: false });
 
+/** 尚未确认的轮次跨月保留；通知按 Owner 或当前拍板权限筛选，不写通知表。 */
+export const MyMissionRoundsResponse = Type.Object({ rounds: Type.Array(MissionRoundSummary) }, { additionalProperties: false });
+
 /** 尚未建轮次的入口只引用 slot，不伪造 round/card 身份。 */
 export const MissionRoundDraftPayload = Type.Object({
   period: MonthlyPlanPeriod,
@@ -137,6 +140,7 @@ export type TMissionCardField = Static<typeof MissionCardField>;
 export type TMissionRoundPhase = Static<typeof MissionRoundPhase>;
 export type TMissionCardRow = Static<typeof MissionCardRow>;
 export type TMissionRoundSummary = Static<typeof MissionRoundSummary>;
+export type TMyMissionRoundsResponse = Static<typeof MyMissionRoundsResponse>;
 export type TMissionRoundDraftPayload = Static<typeof MissionRoundDraftPayload>;
 export type TExecuteMissionRoundActionRequest = Static<typeof ExecuteMissionRoundActionRequest>;
 export type TMissionRoundDecideInput = Static<typeof MissionRoundDecideInput>;

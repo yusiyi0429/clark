@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { TMissionRoundDraftPayload, TMissionRoundSummary } from "@warmap/contracts";
 import { Card as HeroCard } from "@heroui/react";
@@ -17,6 +17,7 @@ import { TianshuMark } from "./TianshuMark";
 import { useConfirm } from "./ConfirmDialog";
 import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
 import { COMPANY_TIMEZONE, monthDayTime } from "@/lib/companyTime";
+import { MissionCardNoticeGroup } from "./missionCards/MissionCardNoticeGroup";
 import n from "@/styles/notifications.module.css";
 
 type RailKind = "decisions" | "meetings" | "research";
@@ -219,17 +220,22 @@ export function NotificationRail({
   const strategic = pendingStrategicItems(cards).length;
   const layoutKey = [`strategic:${strategic}`, ...groups.map((group) => `${group.kind}:${group.items.length}`)].join("|");
 
-  // 04a 按分钟重取服务端摘要；04d 再与个人卡页接同一个分钟时钟。
+  // 同成员工作台同步其他拍板人的变更；倒计时本身由分组与卡页共享分钟时钟。
   const needsRoundRefresh = cards.some((card) => {
     if (card.kind !== "mission-round") return false;
     const phase = payloadOf<TMissionRoundSummary>(card).phase;
-    return phase === "open" || phase === "closed";
+    return phase !== "confirmed";
   });
   useEffect(() => {
     if (!needsRoundRefresh) return;
-    const timer = window.setInterval(() => router.refresh(), 60_000);
-    return () => window.clearInterval(timer);
+    const refresh = () => { if (document.visibilityState === "visible") router.refresh(); };
+    const timer = window.setInterval(refresh, 20_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [needsRoundRefresh, router]);
+  const refreshRound = useCallback(() => router.refresh(), [router]);
+  const requestedDraft = useRef<string | null>(null);
 
   async function openItem(item: RailItem, origin: Element | null) {
     if (!item.missionRound) {
@@ -252,6 +258,16 @@ export function NotificationRail({
       else setNotice("草稿已整理，这一轮暂无可打开的个人卡。");
     }
   }
+
+  // 引导的下一件事定位真实 slot，只打开原有确认框；整理仍由用户明确按下。
+  useEffect(() => {
+    const slot = new URLSearchParams(window.location.search).get("missionRoundDraft");
+    if (!slot || requestedDraft.current === slot) return;
+    const item = groups.flatMap((group) => group.items).find((item) => item.missionRound?.objectRef.type === "mission-round-slot" && item.missionRound.objectRef.id === slot);
+    if (!item) return;
+    requestedDraft.current = slot;
+    void openItem(item, null);
+  });
 
   // 分组出现 / 消失时，其余卡片从旧位置滑到新位置（FLIP，clark 同）。
   useLayoutEffect(() => {
@@ -282,7 +298,7 @@ export function NotificationRail({
       <div className={n.noticeList}>
         {onCard ? <StrategicConfirmCard cards={cards} onCard={onCard} onNavigate={onNavigate} /> : null}
         {groups.map((group) => {
-          const current = group.items.some((item) => item.href === currentHref);
+          const current = group.items.some((item) => item.href === currentHref || (item.missionRound && "cards" in payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(item.missionRound) && payloadOf<TMissionRoundSummary>(item.missionRound).cards.some((row) => `/mission-cards/${row.cardId}` === currentHref?.split("?")[0])));
           return (
             <HeroCard<"section">
               render={(props) => <section {...props} />}
@@ -306,7 +322,9 @@ export function NotificationRail({
                 </span>
               </HeroCard.Header>
               <div className={n.tray}>
-                {group.items.map((item) => (
+                {group.items.map((item) => item.missionRound && "phase" in payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(item.missionRound) ? (
+                  <MissionCardNoticeGroup key={item.id} round={payloadOf<TMissionRoundSummary>(item.missionRound)} entry="ceo" embedded currentHref={currentHref} onNavigate={onNavigate} onRefresh={refreshRound} />
+                ) : (
                   <HeroButton
                     key={item.id}
                     variant="ghost"

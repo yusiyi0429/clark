@@ -1,8 +1,8 @@
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import { CreateMissionCardFeedbackRequest, ExecuteMissionRoundActionRequest, MarkMissionCardReadRequest, MissionRoundConfirmInput, MissionRoundDecideInput, type TMissionRoundConfirmInput, type TMissionRoundDecideInput } from "@warmap/contracts";
+import { CreateMissionCardFeedbackRequest, ExecuteMissionRoundActionRequest, MarkMissionCardReadRequest, MissionRoundConfirmInput, MissionRoundDecideInput, MyMissionRoundsResponse, type TMissionRoundConfirmInput, type TMissionRoundDecideInput, type TMissionRoundSummary } from "@warmap/contracts";
 import { actionFingerprint, verifyActionId } from "../actionToken.js";
-import { executeConfirmMissionRound, executeDecideMissionRound, executeDraftMissionRound, executeOpenMissionRound, executeReopenMissionRound, getMissionRoundCard } from "../missionRounds.js";
+import { executeConfirmMissionRound, executeDecideMissionRound, executeDraftMissionRound, executeOpenMissionRound, executeReopenMissionRound, getMissionRoundCard, listMissionRoundCards } from "../missionRounds.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 import { createPersonalMissionCardFeedback, getPersonalMissionCard, getPersonalMissionCardGroup, markPersonalMissionCardRead, visiblePersonalMissionCard } from "../personalMissionCards.js";
 
@@ -10,6 +10,14 @@ const NoInput = Type.Object({}, { additionalProperties: false });
 
 /** 个人卡拍板动作使用登录人边界；具体对象权限由锁内的仓储再次判断。 */
 export function registerMissionCardRoutes(app: AppInstance, ctx: RouteContext): void {
+  app.get("/api/me/mission-cards", { preHandler: ctx.requirePerson, schema: { response: { 200: MyMissionRoundsResponse } } }, async (req) => {
+    const at = ctx.now();
+    const cards = await listMissionRoundCards(ctx.q, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, undefined, at);
+    const rounds = cards.map((card) => card.payload as TMissionRoundSummary)
+      .map((round) => ({ ...round, cards: round.cards.filter((card) => round.approver || card.mine) }))
+      .filter((round) => round.cards.length > 0);
+    return { rounds };
+  });
   const cardParams = Type.Object({ cardId: Type.String({ minLength: 1 }) }, { additionalProperties: false });
   app.get("/api/mission-cards/:cardId", { preHandler: ctx.requirePerson, schema: { params: cardParams } }, async (req, reply) => {
     const card = await getPersonalMissionCard(ctx.q, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.cardId, ctx.now());

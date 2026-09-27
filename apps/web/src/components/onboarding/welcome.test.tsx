@@ -41,8 +41,13 @@ import { OnboardingProgress } from "./OnboardingProgress";
 import { browserApi } from "@/lib/api/client";
 
 const base = { displayName: "测试", companyName: null, voiceprint: { configured: false, enrolled: false, updatedAt: null }, next: { text: "可以开始工作", action: "进入工作台", href: "/me" } };
-const member: Extract<OnboardingData, { role: "member" }> = { ...base, role: "member", work: { period: "2026-10", planStatus: "none", battlefields: [], missions: [] } };
+const member: Extract<OnboardingData, { role: "member" }> = { ...base, role: "member", work: { period: "2026-10", planStatus: "none", battlefields: [], missions: [], missionCards: [] } };
 const ceo: Extract<OnboardingData, { role: "ceo" }> = { ...base, role: "ceo", company: { sixMonthGoal: "", battlefields: [], capabilities: [], people: [] } };
+const missionCard = {
+  cardId: "my-card", roundId: "my-round", period: "2026-10", battlefieldId: "bf", battlefieldName: "灯塔项目",
+  phase: "open" as const, status: "草稿 · 讨论中", closesAt: "2026-10-03T10:00:00.000Z", serverNow: "2026-10-01T10:00:00.000Z",
+  missionCount: 2, placeholder: true, href: "/me/mission-cards/my-card",
+};
 
 type Element = ReactElement<Record<string, unknown>>;
 function elements(node: ReactNode): Element[] {
@@ -80,6 +85,8 @@ afterEach(() => {
 describe("收尾按钮文案与实际落点一致", () => {
   const ceoNext = { ...ceo, next: { text: "9 月的目标等你核对和签发", action: "核对 9 月目标", href: "/plans/2026-09" } };
   const memberNext = { ...member, next: { text: "先处理你的执行事项", action: "查看我的执行事项", href: "/me/tasks/task-1" } };
+  const memberMission = { ...member, next: { text: "10 月 Mission Card 讨论开放到 10/3 18:00", action: "查看我的 10 月卡", href: "/me/mission-cards/my-card" } };
+  const ceoMission = { ...ceo, next: { text: "10 月个人卡草稿已就绪，可以统一开放讨论", action: "查看 10 月个人卡", href: "/mission-cards/first-card" } };
   it.each([
     { name: "CEO 默认首页", data: ceoNext, nextPath: "/", label: "核对 9 月目标", destination: "/plans/2026-09" },
     { name: "成员默认首页", data: memberNext, nextPath: "/me", label: "查看我的执行事项", destination: "/me/tasks/task-1" },
@@ -89,6 +96,9 @@ describe("收尾按钮文案与实际落点一致", () => {
     { name: "无效外链", data: ceoNext, nextPath: "https://example.com/", label: "核对 9 月目标", destination: "/plans/2026-09" },
     { name: "无效跨角色链接", data: memberNext, nextPath: "/plans/2026-09", label: "查看我的执行事项", destination: "/me/tasks/task-1" },
     { name: "无效引导循环", data: ceoNext, nextPath: "/welcome", label: "核对 9 月目标", destination: "/plans/2026-09" },
+    { name: "成员本轮个人卡", data: memberMission, nextPath: "/me", label: "查看我的 10 月卡", destination: "/me/mission-cards/my-card" },
+    { name: "CEO 本轮个人卡", data: ceoMission, nextPath: "/", label: "查看 10 月个人卡", destination: "/mission-cards/first-card" },
+    { name: "CEO 整理入口", data: { ...ceoMission, next: { text: "10 月目标已签发，可以整理个人卡草稿", action: "整理 10 月个人卡", href: "/?missionRoundDraft=01%3A2026-10" } }, nextPath: "/", label: "整理 10 月个人卡", destination: "/?missionRoundDraft=01%3A2026-10&_entry=unlock" },
   ])("$name：点击写完完成记录，再去按钮承诺的页面", async ({ data, nextPath, label, destination }) => {
     const replace = vi.fn();
     vi.stubGlobal("window", { location: { replace } });
@@ -128,6 +138,47 @@ describe("真实数据的首次引导", () => {
     expect(html).toContain("另 1 条");
     expect(html).not.toContain("结果3");
     expect(html).toContain("结果4");
+  });
+  it("先读目标和本月卡状态，再展开具体 Mission；多个战场的归属仍可辨认", () => {
+    const data = { ...member, work: { ...member.work, planStatus: "confirmed" as const,
+      battlefields: [{ id: "bf", name: "灯塔项目", monthTarget: "完成客户验证" }, { id: "bf2", name: "另一战场", monthTarget: "第二项月度目标" }],
+      missionCards: [missionCard],
+      missions: [{ id: "m1", code: "m1", title: "首项具体工作", battlefieldIds: ["bf"] }, { id: "m2", code: "m2", title: "另一项具体工作", battlefieldIds: ["bf2"] }, { id: "m3", code: "m3", title: "未关联具体工作", battlefieldIds: [] }],
+    } };
+    const html = renderToStaticMarkup(<WorkSnapshot data={data} />);
+    expect(html.indexOf("第二项月度目标")).toBeLessThan(html.indexOf("我的本月卡"));
+    expect(html.indexOf("10/3 18:00 截止")).toBeLessThan(html.indexOf("首项具体工作"));
+    expect(html).toContain("另一项具体工作");
+    expect(html).toContain("未关联具体工作");
+    const details = html.slice(html.indexOf("我的 Mission"));
+    expect(details).toContain("灯塔项目");
+    expect(details).toContain("另一战场");
+  });
+  it.each([
+    { phase: "draft", status: "草稿", closesAt: null, deadline: "本轮未开放" },
+    { phase: "open", status: "草稿 · 讨论中", closesAt: missionCard.closesAt, deadline: "10/3 18:00 截止" },
+    { phase: "closed", status: "草稿 · 已截止，待汇总", closesAt: missionCard.closesAt, deadline: "讨论截止于 10/3 18:00" },
+    { phase: "reviewing", status: "候选版本 · 等刘明华拍板", closesAt: missionCard.closesAt, deadline: "讨论截止于 10/3 18:00" },
+    { phase: "confirmed", status: "已确定 · 刘明华 10/4 18:00", closesAt: missionCard.closesAt, deadline: "讨论截止于 10/3 18:00" },
+  ] as const)("我的本月卡在 $phase 阶段保留服务端状态与公司时区的截止", ({ phase, status, closesAt, deadline }) => {
+    const data = { ...member, work: { ...member.work, missionCards: [{ ...missionCard, phase, status, closesAt }] } };
+    const html = renderToStaticMarkup(<WorkSnapshot data={data} />);
+    expect(html).toContain("我的本月卡");
+    expect(html).toContain("10 月 Mission Card");
+    expect(html).toContain(status);
+    expect(html).toContain(deadline);
+    expect(html).toContain("灯塔项目 · 2 项个人任务");
+    expect(html).toContain("占位");
+    expect(html).not.toContain("这个月还没有你的卡");
+  });
+  it("没有本月卡时清楚说明入口稍后出现；有多战场卡时逐张展示", () => {
+    const empty = renderToStaticMarkup(<WorkSnapshot data={{ ...member, work: { ...member.work, missionCards: [] } }} />);
+    expect(empty).toContain("这个月还没有你的卡；定下来之后，会出现在首页。");
+    const data = { ...member, work: { ...member.work, missionCards: [missionCard, { ...missionCard, cardId: "other-card", battlefieldName: "另一战场", placeholder: false }] } };
+    const html = renderToStaticMarkup(<WorkSnapshot data={data} />);
+    expect(html).toContain("灯塔项目 · 2 项个人任务");
+    expect(html).toContain("另一战场 · 2 项个人任务");
+    expect(html.match(/>占位</g)).toHaveLength(1);
   });
   it("服务端首屏包含问候与晨光，胶囊不可操作；读屏进度有文本", () => {
     const html = renderToStaticMarkup(<WelcomeFlow data={member} />);

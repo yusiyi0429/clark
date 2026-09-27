@@ -51,6 +51,16 @@ describe("个人卡正文的阶段与追溯", () => {
 });
 
 describe("本轮状态与倒计时", () => {
+  it.each([
+    ["draft", "个人卡草稿已就绪，可以统一开放讨论", 0],
+    ["reviewing", "3 条待你处理", 3],
+    ["reviewing", "意见已全部处理，待你确认", 0],
+    ["closed", "已截止 · 汇总中", 0],
+  ] as const)("%s 的本轮状态与通知使用同一句", (phase, text, pending) => {
+    const round = { ...personalPayload.round, phase, todo: phase === "closed" ? null : text, counts: { ...personalPayload.round.counts, pending } };
+    const html = renderToStaticMarkup(<RoundLine payload={{ ...personalPayload, round }} actions={[]} viewerId="ceo" pending={false} onAction={vi.fn()} onSelectCard={vi.fn()} onViewGoals={vi.fn()} />);
+    expect(html).toContain(text);
+  });
   it("首次打开自动展开五步，同一个人的同一轮只自动展开一次", () => {
     const stored = new Map<string, string>();
     vi.stubGlobal("localStorage", { getItem: (key: string) => stored.get(key), setItem: (key: string, value: string) => stored.set(key, value) });
@@ -66,7 +76,7 @@ describe("本轮状态与倒计时", () => {
     expect(roundClockText(personalPayload.round, now)).toBe(text);
   });
   it("未开放不显示数字，已确定不再显示倒计时；重开标明轮次", () => {
-    expect(roundClockText({ ...personalPayload.round, phase: "draft" }, 0)).toBe("未开放");
+    expect(roundClockText({ ...personalPayload.round, phase: "draft" }, 0)).toBe("本轮未开放");
     expect(roundClockText({ ...personalPayload.round, phase: "confirmed" }, 0)).toBe("已确定");
     const html = renderToStaticMarkup(<RoundClock round={{ ...personalPayload.round, round: 2 }} now={Date.parse(personalPayload.round.serverNow)} />);
     expect(html).toContain("第 2 轮");

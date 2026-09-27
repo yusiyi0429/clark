@@ -7,9 +7,12 @@ import { useVoiceprintEnrollment, VOICEPRINT_SCRIPT, VOICEPRINT_CONSENT } from "
 import { browserApi } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { onboardingDestination, onboardingReturnPath } from "@/lib/access-paths";
+import { monthDayTime } from "@/lib/companyTime";
+import { useRoundNow } from "@/components/missionCards/useRoundNow";
 import { MorningCanvas } from "./MorningCanvas";
 import { CoAgentCapsule } from "./CoAgentCapsule";
 import { OnboardingProgress } from "./OnboardingProgress";
+import { useOnboardingData } from "./useOnboardingData";
 import f from "./foundation.module.css";
 import s from "./welcome.module.css";
 
@@ -53,27 +56,47 @@ export function CompanySnapshot({ data }: { data: Extract<OnboardingData, { role
   </>;
 }
 
-export function WorkSnapshot({ data }: { data: Extract<OnboardingData, { role: "member" }> }) {
+type WorkMissionCard = Extract<OnboardingData, { role: "member" }>["work"]["missionCards"][number];
+
+function WorkMissionCard({ card, onRefresh }: { card: WorkMissionCard; onRefresh?: () => void }) {
+  useRoundNow(card.closesAt, card.serverNow, card.phase === "open" ? onRefresh : undefined);
+  return <li className={s.personalCard}>
+    <div className={s.personalCardHeading}><strong>{Number(card.period.slice(5))} 月 Mission Card</strong>{card.placeholder ? <span className={s.placeholder}>占位</span> : null}</div>
+    <p>{card.battlefieldName} · {card.missionCount} 项个人任务</p>
+    <p className={s.cardStatus}>{card.status}</p>
+    {card.closesAt ? <p className={s.cardDeadline}><time dateTime={card.closesAt}>{card.phase === "open" ? `${monthDayTime(card.closesAt)} 截止` : `讨论截止于 ${monthDayTime(card.closesAt)}`}</time></p> : <p className={s.cardDeadline}>本轮未开放</p>}
+  </li>;
+}
+
+export function WorkSnapshot({ data, onRefresh }: { data: Extract<OnboardingData, { role: "member" }>; onRefresh?: () => void }) {
   const { work } = data;
   const unassigned = work.missions.filter((mission) => !mission.battlefieldIds.some((id) => work.battlefields.some((battlefield) => battlefield.id === id)));
+  const groupedMissions = work.battlefields.map((battlefield) => ({ ...battlefield, missions: work.missions.filter((mission) => mission.battlefieldIds.includes(battlefield.id)) })).filter((group) => group.missions.length);
   const missionList = (missions: typeof work.missions) => <><ul className={s.missions}>{missions.slice(0, 3).map((mission) => <li key={mission.id}>{mission.title}</li>)}</ul>{missions.length > 3 ? <p className={s.more}>另 {missions.length - 3} 条</p> : null}</>;
-  return <div className={`${f.glass} ${s.snapshot}`}>
+  return <div className={`${f.glass} ${s.snapshot} ${s.workSnapshot}`}>
     <p className={s.period}>{Number(work.period.slice(5))} 月 · 与你有关的工作</p>
-    {work.battlefields.length ? work.battlefields.map((battlefield) => {
-      const missions = work.missions.filter((mission) => mission.battlefieldIds.includes(battlefield.id));
-      return <section className={s.workSection} key={battlefield.id}>
+    {work.battlefields.length ? work.battlefields.map((battlefield) => <section className={s.workSection} key={battlefield.id}>
         <h2>{battlefield.name}</h2>
         <p className={s.targetLabel}>本月目标</p>
         <p className={s.clampThree}>{monthTargetCopy(work.planStatus, battlefield.monthTarget)}</p>
-        {missions.length ? <><p className={s.targetLabel}>我的 Mission</p>{missionList(missions)}</> : null}
-      </section>;
-    }) : <p className={s.empty}>这个月还没有登记你参与的战场。</p>}
-    {unassigned.length ? <section className={s.workSection}><h2>我的 Mission</h2>{missionList(unassigned)}</section> : null}
-    {!work.missions.length ? <p className={s.emptyMission}>这个月还没有登记你的 Mission</p> : null}
+      </section>) : <p className={s.empty}>这个月还没有登记你参与的战场。</p>}
+    <section className={`${s.workSection} ${s.myCards}`} aria-label="我的本月卡">
+      <h2>我的本月卡</h2>
+      {work.missionCards.length ? <ul className={s.personalCards}>{work.missionCards.map((card) => <WorkMissionCard key={card.cardId} card={card} onRefresh={onRefresh} />)}</ul> : <p>这个月还没有你的卡；定下来之后，会出现在首页。</p>}
+    </section>
+    {work.missions.length ? <section className={`${s.workSection} ${s.workMissions}`}>
+      <h2>我的 Mission</h2>
+      {groupedMissions.map((group) => <div key={group.id} className={s.missionGroup}>
+        {groupedMissions.length > 1 || unassigned.length ? <p className={s.targetLabel}>{group.name}</p> : null}
+        {missionList(group.missions)}
+      </div>)}
+      {unassigned.length ? <div className={s.missionGroup}>{groupedMissions.length ? <p className={s.targetLabel}>未关联战场</p> : null}{missionList(unassigned)}</div> : null}
+    </section> : <p className={s.emptyMission}>这个月还没有登记你的 Mission</p>}
   </div>;
 }
 
-export function WelcomeFlow({ data, nextPath }: { data: OnboardingData; nextPath?: string }) {
+export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData; nextPath?: string }) {
+  const { data, refresh, refreshError } = useOnboardingData(initial);
   const steps = onboardingSteps(data);
   const returnPath = onboardingReturnPath(data.role, nextPath);
   const [index, setIndex] = useState(0);
@@ -191,7 +214,7 @@ export function WelcomeFlow({ data, nextPath }: { data: OnboardingData; nextPath
           </div>
           <div className={s.details}>
             {step === "company" && data.role === "ceo" ? <CompanySnapshot data={data} /> : null}
-            {step === "work" && data.role === "member" ? <WorkSnapshot data={data} /> : null}
+            {step === "work" && data.role === "member" ? <WorkSnapshot data={data} onRefresh={refresh} /> : null}
             {step === "voiceprint" ? <>
               {voiceReady ? <div className={`${f.glass} ${s.enrolled}`}>
                 <span className={s.successIcon}><Check size={24} /></span>
@@ -221,6 +244,7 @@ export function WelcomeFlow({ data, nextPath }: { data: OnboardingData; nextPath
       <footer className={s.footer}>
         <OnboardingProgress current={index + 1} total={steps.length} />
         {error ? <p className={s.error} role="alert">{error}</p> : null}
+        {refreshError ? <p className={s.footnote} role="status">{refreshError}</p> : null}
         {step === "start" && returnPath ? <p className={s.footnote}>{data.next.text}</p> : null}
         {disabledHint ? <p id="welcome-action-hint" className={s.actionHint}>{disabledHint}</p> : null}
         <button key={step} ref={primary} className={f.primary} type="button" onClick={() => void forward()} disabled={primaryDisabled} aria-describedby={disabledHint ? "welcome-action-hint" : undefined}>{error ? "重试" : primaryLabel}{!busy ? <ArrowRight size={18} aria-hidden="true" /> : null}</button>

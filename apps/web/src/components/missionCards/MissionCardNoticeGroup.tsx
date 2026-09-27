@@ -1,0 +1,64 @@
+"use client";
+
+import { useEffect } from "react";
+import type { TMissionRoundSummary } from "@warmap/contracts";
+import { ChevronRight } from "lucide-react";
+import { HeroButton } from "@/components/HeroButton";
+import { ContextMark } from "@/components/ContextMark";
+import { RoundClock } from "./RoundClock";
+import { useRoundNow } from "./useRoundNow";
+import n from "@/styles/notifications.module.css";
+import s from "./mission-card-notice.module.css";
+
+/** 概念版 mission-card-group：一轮一组、每人一行。权限、顺序与状态句都取服务端投影。 */
+export function MissionCardNoticeGroup({ round, entry, embedded = false, currentHref, onNavigate, onRefresh }: {
+  round: TMissionRoundSummary;
+  entry: "member" | "ceo";
+  embedded?: boolean;
+  currentHref?: string;
+  onNavigate: (href: string, origin?: Element | null) => void;
+  onRefresh: () => void;
+}) {
+  const now = useRoundNow(round.closesAt, round.serverNow, round.phase === "open" ? onRefresh : undefined);
+  const awaitingSnapshot = round.phase === "closed" || (round.phase === "open" && !!round.closesAt && now >= Date.parse(round.closesAt));
+  useEffect(() => {
+    if (!awaitingSnapshot) return;
+    const timer = window.setInterval(onRefresh, 3_000);
+    return () => window.clearInterval(timer);
+  }, [awaitingSnapshot, onRefresh]);
+
+  if (round.phase === "confirmed" || !round.cards.length) return null;
+  const live = awaitingSnapshot ? { ...round, phase: "closed" as const } : round;
+  const month = Number(round.period.slice(5));
+  const title = `${month} 月 Mission Card${embedded ? ` · ${round.battlefieldName}` : ""}`;
+  const path = (cardId: string) => `${entry === "member" ? "/me" : ""}/mission-cards/${cardId}`;
+  const pendingCard = round.phase === "reviewing" ? round.cards.find((card) => card.pending > 0 && card.firstPendingFeedbackId) : undefined;
+  const todoHref = pendingCard ? `${path(pendingCard.cardId)}?feedback=${encodeURIComponent(pendingCard.firstPendingFeedbackId!)}` : path(round.cards[0].cardId);
+  const current = round.cards.some((card) => path(card.cardId) === currentHref?.split("?")[0]);
+
+  return <section className={embedded ? s.embedded : `${n.card} ${s.group}`} data-slot={embedded ? undefined : "card"} data-notice={`mission-round:${round.roundId}`} data-notice-group="mission-card" data-current={current || undefined} aria-label={title}>
+    <header className={embedded ? s.embeddedHeader : `${n.glassHeader} ${s.header}`} data-subline="true">
+      {!embedded ? <ContextMark kind="monthly" className={n.glyph} /> : null}
+      <div className={embedded ? s.embeddedIdentity : n.identity}>
+        <strong className={s.heading}><span className={s.titleWords}><span className={s.monthTitle}>{month} 月 Mission Card</span>{embedded ? <span className={s.battlefieldTitle}> · {round.battlefieldName}</span> : null}</span><span className={s.badges}><b className={embedded ? s.count : n.count} aria-label={`${round.cards.length} 张个人卡`}>{round.cards.length}</b><em className={s.tag}>草稿</em></span></strong>
+        <RoundClock round={live} now={now} tone="glass" />
+      </div>
+    </header>
+    <div className={`${embedded ? "" : n.tray} ${s.tray}`}>
+      {round.approver && round.todo ? <HeroButton variant="ghost" className={s.todo} data-origin={todoHref} aria-label={round.todo} onPress={(event) => onNavigate(todoHref, (event.target as Element).closest("[data-notice-group]"))}>
+        <span className={s.todoDot} aria-hidden="true" /><span className={s.todoText}>{round.todo}</span><ChevronRight size={15} aria-hidden="true" />
+      </HeroButton> : null}
+      <ul className={s.rows} aria-label={`${title} · ${round.cards.length} 张`}>
+        {round.cards.map((card) => <li key={card.cardId}>
+          <HeroButton variant="ghost" className={s.row} data-origin={path(card.cardId)} aria-current={path(card.cardId) === currentHref?.split("?")[0] ? "true" : undefined} data-waiting={round.approver && card.pending > 0 || undefined}
+            aria-label={`${card.ownerName}${card.mine ? "（你）" : ""} · ${card.roleLabel ?? "参与 DRI"} · ${card.missionCount} 项个人任务 · ${awaitingSnapshot ? "汇总中" : card.line}，查看详情：${card.ownerName}的 ${month} 月 Mission Card`}
+            onPress={(event) => onNavigate(path(card.cardId), (event.target as Element).closest("[data-notice-group]"))}>
+            <span className={s.initial} aria-hidden="true">{card.ownerName.slice(0, 1)}</span>
+            <span className={s.who}><span className={s.name}>{card.ownerName}{card.mine ? <em className={s.mine}>你</em> : null}</span><span className={s.role}>{(card.roleLabel ?? "参与 DRI").replace(/ 战役 DRI$/, " 战役")} · <span className={s.missionCount}>{card.missionCount} 项</span></span></span>
+            <span className={s.line}>{awaitingSnapshot ? "汇总中" : card.line}</span><ChevronRight size={15} aria-hidden="true" />
+          </HeroButton>
+        </li>)}
+      </ul>
+    </div>
+  </section>;
+}

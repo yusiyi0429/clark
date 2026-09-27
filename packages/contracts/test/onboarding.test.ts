@@ -9,7 +9,7 @@ const common = {
   voiceprint: { configured: false, enrolled: false, updatedAt: null },
 };
 const company = { sixMonthGoal: "", battlefields: [], capabilities: [], people: [] };
-const work = { period: "2026-10", planStatus: "none", battlefields: [], missions: [] };
+const work = { period: "2026-10", planStatus: "none", battlefields: [], missions: [], missionCards: [] };
 
 describe("onboarding contract", () => {
   it("keeps session and login compatible with older responses", () => {

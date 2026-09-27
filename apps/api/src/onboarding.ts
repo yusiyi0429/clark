@@ -1,4 +1,4 @@
-import type { TOnboardingResponse, TSessionRole } from "@warmap/contracts";
+import type { TOnboardingResponse, TPersonalMissionCardPayload, TMissionRoundSummary, TSessionRole } from "@warmap/contracts";
 import { listBattlefieldRows } from "./battlefields.js";
 import { listCapabilityRows } from "./capabilities.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
@@ -6,6 +6,8 @@ import type { Query } from "./meetingStore.js";
 import { companyPeriod, type MonthlyPlanRow } from "./monthlyPlans.js";
 import { getStrategyConfig } from "./strategy.js";
 import { voiceprintStatus, type VoiceprintDeps } from "./voiceprints.js";
+import { listMissionRoundCards, listMissionRoundDraftCards } from "./missionRounds.js";
+import { getPersonalMissionCard } from "./personalMissionCards.js";
 
 export async function hasCompletedOnboarding(q: Query, personId: string): Promise<boolean> {
   const result = await q("SELECT 1 FROM person_onboarding WHERE person_id = $1", [personId]);
@@ -21,6 +23,34 @@ export async function completeOnboarding(q: Query, personId: string, now: Date):
 
 type Plan = Pick<MonthlyPlanRow, "status" | "battlefields">;
 type Next = TOnboardingResponse["next"];
+type WorkCard = Extract<TOnboardingResponse, { role: "member" }>["work"]["missionCards"][number];
+
+function memberCardNext(cards: WorkCard[], deciders: Map<string, string>): Next | null {
+  const card = cards.find((item) => item.phase === "open") ?? cards.find((item) => ["closed", "reviewing"].includes(item.phase));
+  if (!card) return null;
+  const month = Number(card.period.slice(5));
+  const deadline = card.closesAt && new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(card.closesAt));
+  return {
+    text: card.phase === "open" ? `${month} 月 Mission Card 讨论开放到 ${deadline}` : `${month} 月 Mission Card 已截止，等${deciders.get(card.roundId)}拍板`,
+    action: `查看我的 ${month} 月卡`, href: card.href,
+  };
+}
+
+function ceoRoundNext(rounds: TMissionRoundSummary[]): Next | null {
+  const round = rounds.find((item) => item.phase === "draft")
+    ?? rounds.find((item) => item.phase === "reviewing" && item.counts.pending > 0)
+    ?? rounds.find((item) => item.phase === "reviewing");
+  if (!round) return null;
+  const card = round.cards.find((item) => round.phase === "reviewing" && item.pending > 0) ?? round.cards[0];
+  if (!card) return null;
+  const month = Number(round.period.slice(5));
+  return {
+    text: round.phase === "draft" ? `${month} 月个人卡草稿已就绪，可以统一开放讨论`
+      : round.counts.pending ? `${month} 月 Mission Card 有 ${round.counts.pending} 条意见待你处理` : "意见已全部处理，待你确认",
+    action: `查看 ${month} 月个人卡`,
+    href: `/mission-cards/${card.cardId}${round.phase === "reviewing" && card.firstPendingFeedbackId ? `?feedback=${encodeURIComponent(card.firstPendingFeedbackId)}` : ""}`,
+  };
+}
 
 async function ceoNext(q: Query, plan: Plan | undefined, period: string, now: Date): Promise<Next> {
   // 尚未生成的计划没有可打开的对象；不能把第一次进入的人带到空链接。
@@ -43,13 +73,15 @@ async function ceoNext(q: Query, plan: Plan | undefined, period: string, now: Da
 }
 
 /** 引导只读取持久事实；角色边界、月份、目标状态与下一步都由服务端决定。 */
-export async function readOnboarding({ q, companyMemory, voiceprints, person, companyName, now }: {
+export async function readOnboarding({ q, companyMemory, voiceprints, person, companyName, now, secret, draftsDirectory }: {
   q: Query;
   companyMemory: CompanyMemoryRepository;
   voiceprints: VoiceprintDeps;
   person: { personId: string; role: TSessionRole };
   companyName?: string;
   now: Date;
+  secret: string;
+  draftsDirectory?: string;
 }): Promise<TOnboardingResponse> {
   const period = companyPeriod(now);
   const people = companyMemory.searchPeople(undefined);
@@ -65,9 +97,14 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
     voiceprint,
   };
   if (person.role === "ceo") {
-    const [strategy, capabilities, next] = await Promise.all([
-      getStrategyConfig(q), listCapabilityRows(q), ceoNext(q, plan, period, now),
+    const [strategy, capabilities, rounds, slots] = await Promise.all([
+      getStrategyConfig(q), listCapabilityRows(q),
+      listMissionRoundCards(q, people, secret, person, period, now),
+      listMissionRoundDraftCards(q, people, secret, person, period, now, draftsDirectory),
     ]);
+    const month = Number(period.slice(5));
+    const next = slots[0] ? { text: `${month} 月目标已签发，可以整理个人卡草稿`, action: `整理 ${month} 月个人卡`, href: `/?missionRoundDraft=${encodeURIComponent(slots[0].objectRef.id)}` }
+      : ceoRoundNext(rounds.map((card) => card.payload as TMissionRoundSummary)) ?? await ceoNext(q, plan, period, now);
     const names = new Map(people.map((entry) => [entry.personId, entry.displayName]));
     return {
       ...common, role: "ceo", next,
@@ -82,19 +119,34 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
     };
   }
 
-  const [missionRows, tasks] = await Promise.all([
+  const [missionRows, tasks, ownedCards] = await Promise.all([
     q("SELECT id, code, title, battlefield_ids FROM missions WHERE period = $1 AND owner_id = $2 ORDER BY code, id", [period, person.personId]),
     q("SELECT count(*)::int AS count FROM tasks WHERE owner_id = $1 AND status IN ('not_started', 'in_progress')", [person.personId]),
+    q(`SELECT c.id FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id
+      JOIN battlefield_config b ON b.id=r.battlefield_id WHERE r.period=$1 AND c.owner_id=$2 ORDER BY b.sort_order,b.code,c.sort_order,c.id`, [period, person.personId]),
   ]);
+  const missionCards: WorkCard[] = [];
+  const deciders = new Map<string, string>();
+  for (const entry of ownedCards.rows as { id: string }[]) {
+    const card = await getPersonalMissionCard(q, people, secret, person, entry.id, now);
+    if (!card) continue;
+    const { round, card: personal } = card.payload as TPersonalMissionCardPayload;
+    deciders.set(round.roundId, round.deciderName);
+    missionCards.push({ cardId: personal.cardId, roundId: round.roundId, period: round.period,
+      battlefieldId: round.battlefieldId, battlefieldName: round.battlefieldName, phase: round.phase,
+      status: personal.status, closesAt: round.closesAt, serverNow: round.serverNow,
+      missionCount: personal.missions.length, placeholder: round.placeholder, href: `/me/mission-cards/${personal.cardId}` });
+  }
   const missions = (missionRows.rows as { id: string; code: string; title: string; battlefield_ids: string[] }[])
     .map(({ id, code, title, battlefield_ids }) => ({ id, code, title, battlefieldIds: battlefield_ids }));
   const participating = new Set(missions.flatMap((mission) => mission.battlefieldIds));
+  for (const card of missionCards) participating.add(card.battlefieldId);
   const taskCount = tasks.rows[0].count as number;
   return {
     ...common, role: "member",
-    next: taskCount > 0
+    next: memberCardNext(missionCards, deciders) ?? (taskCount > 0
       ? { text: `你有 ${taskCount} 件执行事项在推进`, action: "看看我的执行事项", href: "/me" }
-      : { text: "会后分给你的事，会出现在首页和通知栏", action: "进入工作台", href: "/me" },
+      : { text: "会后分给你的事，会出现在首页和通知栏", action: "进入工作台", href: "/me" }),
     work: {
       period,
       planStatus: plan?.status ?? "none",
@@ -104,6 +156,7 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
           monthTarget: plan?.status === "confirmed" ? plan.battlefields.find((field) => field.battlefieldId === id)?.outcome ?? null : null,
         })),
       missions,
+      missionCards,
     },
   };
 }

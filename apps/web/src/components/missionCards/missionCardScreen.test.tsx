@@ -11,7 +11,7 @@ const ui = vi.hoisted(() => ({
   state: [] as unknown[], cursor: 0, controls: null as DocumentControls | null,
   effects: [] as (() => void | (() => void))[],
   buttons: new Map<string, { onPress?: () => Promise<void> | void; isDisabled?: boolean }>(),
-  post: vi.fn(), get: vi.fn(), register: vi.fn(), refresh: vi.fn(), ask: vi.fn(), navigate: vi.fn(),
+  post: vi.fn(), get: vi.fn(), register: vi.fn(), refresh: vi.fn(), ask: vi.fn(), navigate: vi.fn(), dispatch: vi.fn(),
   roundProps: null as ComponentProps<typeof RoundLine> | null,
 }));
 vi.mock("react", async (importOriginal) => {
@@ -47,7 +47,7 @@ function edit(text: string) {
   render();
 }
 async function submit() { ui.buttons.get("提交修改建议")!.onPress!(); await vi.waitFor(() => expect(ui.post).toHaveBeenCalled()); await new Promise((resolve) => setTimeout(resolve, 0)); return render(); }
-beforeEach(() => { ui.state = []; ui.cursor = 0; ui.controls = null; ui.effects = []; vi.clearAllMocks(); ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [card] } }); ui.ask.mockResolvedValue(true); });
+beforeEach(() => { ui.state = []; ui.cursor = 0; ui.controls = null; ui.effects = []; vi.clearAllMocks(); vi.stubGlobal("window", { dispatchEvent: ui.dispatch }); ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [card] } }); ui.ask.mockResolvedValue(true); });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("个人卡建议交互", () => {
@@ -97,6 +97,18 @@ describe("个人卡建议交互", () => {
 });
 
 describe("拍板动作与跨卡处理", () => {
+  it("确认成功立即通知常驻成员工作台同步退组，失败不广播", async () => {
+    const confirm = { actionId: "confirm", actionType: "mission-round.confirm", label: "确认" };
+    render();
+    ui.post.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    ui.roundProps!.onAction(confirm, { note: "已完成核对" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ui.dispatch).not.toHaveBeenCalled();
+    ui.post.mockResolvedValueOnce({ response: { ok: true }, data: { cards: [{ ...card, payload: { ...personalPayload, round: { ...personalPayload.round, phase: "confirmed" } } }] } });
+    render(); ui.roundProps!.onAction(confirm, { note: "已完成核对" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ui.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "mission-round-changed" }));
+  });
   const deciding = { actionId: "signed-decide", actionType: "mission-round.decide", label: "处理意见" };
   const feedback = { id: "feedback-1", actions: [deciding] } as Parameters<NonNullable<DocumentControls["onDecide"]>>[0];
   it("跨卡定位在工作区入场焦点之后落到意见，不被关闭按钮抢走", () => {

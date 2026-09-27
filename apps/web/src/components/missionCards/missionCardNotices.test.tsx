@@ -1,0 +1,58 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
+import type { TMissionRoundSummary } from "@warmap/contracts";
+import { personalPayload } from "./personalMissionFixture";
+
+const ui = vi.hoisted(() => ({ presses: new Map<string, (event: unknown) => void>() }));
+vi.mock("@/components/HeroButton", () => ({ HeroButton: ({ children, onPress, isDisabled, ...props }: { children?: ReactNode; onPress?: (event: unknown) => void; isDisabled?: boolean; "aria-label"?: string }) => {
+  if (onPress && props["aria-label"]) ui.presses.set(props["aria-label"], onPress);
+  return <button disabled={isDisabled} {...props}>{children}</button>;
+} }));
+
+import { MissionCardNoticeGroup } from "./MissionCardNoticeGroup";
+
+const rows: TMissionRoundSummary["cards"] = [
+  { cardId: "first", ownerId: "bai", ownerName: "白田田", roleLabel: "01-1 战役 DRI", missionCount: 4, line: "已处理", pending: 0, firstPendingFeedbackId: null, mine: false },
+  { cardId: "mine", ownerId: "sun", ownerName: "孙铭泽", roleLabel: "01-3 战役 DRI", missionCount: 2, line: "待处理 2", pending: 2, firstPendingFeedbackId: "feedback-2", mine: true },
+];
+const summary = (overrides: Partial<TMissionRoundSummary> = {}): TMissionRoundSummary => ({ ...personalPayload.round, phase: "reviewing", approver: true, todo: "2 条意见待你处理", cards: rows, ...overrides });
+beforeEach(() => ui.presses.clear());
+
+describe("本月 Mission Card 通知分组", () => {
+  it("拍板人看到服务端顺序的全部行、一次草稿与一个共享倒计时，并突出待处理", () => {
+    const html = renderToStaticMarkup(<MissionCardNoticeGroup round={summary()} entry="ceo" onNavigate={vi.fn()} onRefresh={vi.fn()} />);
+    expect(html.indexOf("白田田")).toBeLessThan(html.indexOf("孙铭泽"));
+    expect(html).toContain("01-3 战役"); expect(html).toContain("待处理 2");
+    expect(html).toContain('data-waiting="true"'); expect(html).toContain("2 条意见待你处理");
+    expect(html.match(/>草稿</g)).toHaveLength(1); expect(html.match(/<time /g)).toHaveLength(1);
+  });
+
+  it("成员只有自己的行，没有拍板人的待办", () => {
+    const html = renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ approver: false, cards: [rows[1]], todo: null })} entry="member" onNavigate={vi.fn()} onRefresh={vi.fn()} />);
+    expect(html).toContain("孙铭泽"); expect(html).toContain(">你<"); expect(html).not.toContain("白田田");
+    expect(html).not.toContain('data-waiting="true"'); expect(html).not.toContain("2 条意见待你处理");
+  });
+
+  it.each(["draft", "open", "closed", "reviewing"] as const)("%s 阶段保留通知，确认后退掉整组", (phase) => {
+    const render = (phase: TMissionRoundSummary["phase"]) => renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ phase })} entry="member" onNavigate={vi.fn()} onRefresh={vi.fn()} />);
+    expect(render(phase)).toContain("Mission Card"); expect(render("confirmed")).toBe("");
+  });
+
+  it("行进入对应个人卡，待处理提示直接定位第一条未处理意见", () => {
+    const onNavigate = vi.fn();
+    renderToStaticMarkup(<MissionCardNoticeGroup round={summary()} entry="ceo" onNavigate={onNavigate} onRefresh={vi.fn()} />);
+    const event = { target: { closest: () => null } };
+    ui.presses.get("2 条意见待你处理")!(event);
+    expect(onNavigate).toHaveBeenLastCalledWith("/mission-cards/mine?feedback=feedback-2", null);
+    [...ui.presses.entries()].find(([label]) => label.startsWith("白田田 ·"))![1](event);
+    expect(onNavigate).toHaveBeenLastCalledWith("/mission-cards/first", null);
+  });
+
+  it("草稿待办和全部处理后待确认提示都打开第一张卡；成员沿自己的路由", () => {
+    const onNavigate = vi.fn();
+    renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ phase: "draft", todo: "个人卡草稿已就绪，可以统一开放讨论" })} entry="member" onNavigate={onNavigate} onRefresh={vi.fn()} />);
+    ui.presses.get("个人卡草稿已就绪，可以统一开放讨论")!({ target: { closest: () => null } });
+    expect(onNavigate).toHaveBeenLastCalledWith("/me/mission-cards/first", null);
+  });
+});

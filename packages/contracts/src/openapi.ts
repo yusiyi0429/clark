@@ -26,6 +26,7 @@ import {
   MissionCardRow,
   MissionRoundPhase,
   MissionRoundSummary,
+  MyMissionRoundsResponse,
   MissionRoundDraftPayload,
   ExecuteMissionRoundActionRequest,
   MissionRoundDecideInput,
@@ -360,6 +361,15 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/MarkMissionCardReadRequest" }),
           responses: { "200": { description: "已读状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MarkMissionCardReadResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/me/mission-cards": {
+        get: {
+          operationId: "getMyMissionRounds", summary: "读取尚未确认的 Mission Card 通知，跨月保留；Owner 只见本人，当前拍板人见全部卡",
+          responses: {
+            "200": { description: "本月 Mission Card 通知分组", content: { "application/json": { schema: { $ref: "#/components/schemas/MyMissionRoundsResponse" } } } },
+            "401": errorResponse,
+          },
         },
       },
       "/api/mission-rounds/{roundId}": {
@@ -1290,6 +1300,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MissionCardRow: MissionCardRow as JsonSchema,
         MissionRoundPhase: MissionRoundPhase as JsonSchema,
         MissionRoundSummary: MissionRoundSummary as JsonSchema,
+        MyMissionRoundsResponse: MyMissionRoundsResponse as JsonSchema,
         MissionRoundDraftPayload: MissionRoundDraftPayload as JsonSchema,
         ExecuteMissionRoundActionRequest: ExecuteMissionRoundActionRequest as JsonSchema,
         MissionRoundDecideInput: MissionRoundDecideInput as JsonSchema,

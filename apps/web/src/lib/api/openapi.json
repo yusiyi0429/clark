@@ -880,6 +880,34 @@
         }
       }
     },
+    "/api/me/mission-cards": {
+      "get": {
+        "operationId": "getMyMissionRounds",
+        "summary": "读取尚未确认的 Mission Card 通知，跨月保留；Owner 只见本人，当前拍板人见全部卡",
+        "responses": {
+          "200": {
+            "description": "本月 Mission Card 通知分组",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyMissionRoundsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mission-rounds/{roundId}": {
       "get": {
         "operationId": "getMissionRound",
@@ -7222,6 +7250,274 @@
                 },
                 "mine": {
                   "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MyMissionRoundsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rounds"
+        ],
+        "properties": {
+          "rounds": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "roundId",
+                "period",
+                "battlefieldId",
+                "battlefieldName",
+                "version",
+                "phase",
+                "round",
+                "openedAt",
+                "closesAt",
+                "reviewAt",
+                "serverNow",
+                "approver",
+                "deciderName",
+                "todo",
+                "placeholder",
+                "goals",
+                "counts",
+                "cards"
+              ],
+              "properties": {
+                "roundId": {
+                  "type": "string"
+                },
+                "period": {
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                  "type": "string"
+                },
+                "battlefieldId": {
+                  "type": "string"
+                },
+                "battlefieldName": {
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "phase": {
+                  "anyOf": [
+                    {
+                      "const": "draft",
+                      "type": "string"
+                    },
+                    {
+                      "const": "open",
+                      "type": "string"
+                    },
+                    {
+                      "const": "closed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "reviewing",
+                      "type": "string"
+                    },
+                    {
+                      "const": "confirmed",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "round": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "openedAt": {
+                  "anyOf": [
+                    {
+                      "description": "应用时钟生成的 ISO 8601 时间",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "closesAt": {
+                  "anyOf": [
+                    {
+                      "description": "应用时钟生成的 ISO 8601 时间",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reviewAt": {
+                  "anyOf": [
+                    {
+                      "description": "应用时钟生成的 ISO 8601 时间",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "serverNow": {
+                  "description": "应用时钟生成的 ISO 8601 时间",
+                  "type": "string"
+                },
+                "approver": {
+                  "type": "boolean"
+                },
+                "deciderName": {
+                  "type": "string"
+                },
+                "todo": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "placeholder": {
+                  "type": "boolean"
+                },
+                "goals": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "sixMonthOutcome",
+                        "monthOutcome",
+                        "signedAt"
+                      ],
+                      "properties": {
+                        "sixMonthOutcome": {
+                          "type": "string"
+                        },
+                        "monthOutcome": {
+                          "type": "string"
+                        },
+                        "signedAt": {
+                          "description": "应用时钟生成的 ISO 8601 时间",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "counts": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "cards",
+                    "feedback",
+                    "pending",
+                    "conflicts",
+                    "dependencies",
+                    "late"
+                  ],
+                  "properties": {
+                    "cards": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "feedback": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "pending": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "conflicts": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "dependencies": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "late": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  }
+                },
+                "cards": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "cardId",
+                      "ownerId",
+                      "ownerName",
+                      "roleLabel",
+                      "missionCount",
+                      "line",
+                      "pending",
+                      "firstPendingFeedbackId",
+                      "mine"
+                    ],
+                    "properties": {
+                      "cardId": {
+                        "type": "string"
+                      },
+                      "ownerId": {
+                        "type": "string"
+                      },
+                      "ownerName": {
+                        "type": "string"
+                      },
+                      "roleLabel": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "missionCount": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "line": {
+                        "type": "string"
+                      },
+                      "pending": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "firstPendingFeedbackId": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mine": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -14207,7 +14503,8 @@
                   "period",
                   "planStatus",
                   "battlefields",
-                  "missions"
+                  "missions",
+                  "missionCards"
                 ],
                 "properties": {
                   "period": {
@@ -14294,6 +14591,95 @@
                           "items": {
                             "type": "string"
                           }
+                        }
+                      }
+                    }
+                  },
+                  "missionCards": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "cardId",
+                        "roundId",
+                        "period",
+                        "battlefieldId",
+                        "battlefieldName",
+                        "phase",
+                        "status",
+                        "closesAt",
+                        "serverNow",
+                        "missionCount",
+                        "placeholder",
+                        "href"
+                      ],
+                      "properties": {
+                        "cardId": {
+                          "type": "string"
+                        },
+                        "roundId": {
+                          "type": "string"
+                        },
+                        "period": {
+                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                          "type": "string"
+                        },
+                        "battlefieldId": {
+                          "type": "string"
+                        },
+                        "battlefieldName": {
+                          "type": "string"
+                        },
+                        "phase": {
+                          "anyOf": [
+                            {
+                              "const": "draft",
+                              "type": "string"
+                            },
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "closed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "reviewing",
+                              "type": "string"
+                            },
+                            {
+                              "const": "confirmed",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "closesAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "serverNow": {
+                          "type": "string"
+                        },
+                        "missionCount": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "placeholder": {
+                          "type": "boolean"
+                        },
+                        "href": {
+                          "type": "string"
                         }
                       }
                     }

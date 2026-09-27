@@ -51,6 +51,20 @@
 .missions li::before { content: ""; position: absolute; top: 11px; left: 0; width: 4px; height: 4px; border-radius: 50%; background: var(--onboarding-blue); }
 .snapshot .more { margin-top: 4px; font-size: 13px; color: var(--onboarding-faint); }
 .snapshot .emptyMission { margin-top: 20px; font-size: 14px; }
+.snapshot.workSnapshot { padding-block: 20px; }
+.workSnapshot .period { margin-bottom: 16px; }
+.workSection.myCards { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--rule); }
+.workSection.workMissions { margin-top: 16px; padding-top: 0; border-top: 0; }
+.workMissions h2 { font-size: 13px; font-weight: 500; color: var(--onboarding-faint); }
+.missionGroup + .missionGroup { margin-top: 12px; }
+.personalCards { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.personalCard { padding: 12px 16px; border-radius: var(--onboarding-inset-radius); background: var(--morning-start); }
+.personalCard p { line-height: 1.6; }
+.personalCardHeading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+.personalCardHeading strong { font-size: 15px; font-weight: 600; }
+.placeholder { color: var(--onboarding-muted); font-size: 12px; line-height: 1.5; padding: 2px 7px; border: 1px solid var(--rule); border-radius: 6px; }
+.snapshot .cardStatus { margin-top: 4px; color: var(--onboarding-ink); font-weight: 500; }
+.snapshot .cardDeadline { margin-top: 4px; font-size: 14px; font-variant-numeric: tabular-nums; }
 .consent { display: flex; align-items: flex-start; gap: 12px; font-size: 13px; line-height: 1.7; color: var(--onboarding-muted); cursor: pointer; padding: 4px 0; min-height: 44px; }
 .consent input { width: 18px; height: 18px; margin-top: 3px; flex: none; accent-color: var(--onboarding-blue); }
 .consent input:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 4px; }

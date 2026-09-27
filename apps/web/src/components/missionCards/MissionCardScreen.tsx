@@ -48,7 +48,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const roundKey = `${noteViewer}:${round.roundId}:${round.round}`;
   const note = noteDraft.roundKey === roundKey ? noteDraft.text : "";
   const acceptView = useCallback((next: Card) => setView((current) => next.id === current.id && next.version < current.version ? current : next), []);
-  const now = useRoundNow(round.closesAt, round.serverNow);
+  const now = useRoundNow(round.closesAt, round.serverNow, round.phase === "open" ? () => void refresh() : undefined);
   const effectivePhase = round.phase === "open" && round.closesAt && now >= Date.parse(round.closesAt) ? "closed" : round.phase;
   const shownPayload = useMemo(() => effectivePhase === round.phase ? payload : { ...payload, round: { ...round, phase: effectivePhase } }, [payload, round, effectivePhase]);
   const refresh = useCallback(() => {
@@ -139,6 +139,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
       if (next?.kind === "personal-mission-card") acceptView(next); else await refresh();
       if (action.actionType === "mission-round.reopen" || action.actionType === "mission-round.confirm") { clearRoundNote(noteViewer, round.roundId, round.round); setNoteDraft({ roundKey: "", text: "" }); setReference(null); setProposal(null); }
       setNotice(action.actionType === "mission-round.open" ? "全战场已统一开放 48 小时讨论。" : action.actionType === "mission-round.reopen" ? "已重新开启 48 小时讨论，已有公开意见保留。" : action.actionType === "mission-round.confirm" ? "本月 Mission Card 已确定，确认记录与公开意见保留可查。" : "");
+      window.dispatchEvent(new Event("mission-round-changed"));
       router.refresh();
     } catch (cause) { const message = requestError(cause, "暂时无法连接服务器，请稍后重试；本轮输入已保留。"); if (feedbackId) setDecisionError({ feedbackId, message }); else setError(message); }
     finally { actionInFlight.current = false; setPending(false); }

@@ -7,7 +7,7 @@ export function registerOnboardingRoutes(app: AppInstance, ctx: RouteContext): v
   app.get(
     "/api/me/onboarding",
     { preHandler: requirePerson, schema: { response: { 200: OnboardingResponse } } },
-    async (req) => readOnboarding({ q, companyMemory, voiceprints, person: req.person!, companyName: env.companyName, now: now() }),
+    async (req) => readOnboarding({ q, companyMemory, voiceprints, person: req.person!, companyName: env.companyName, now: now(), secret: env.sessionSecret, draftsDirectory: env.missionCardDraftsDir }),
   );
   app.post(
     "/api/me/onboarding/complete",
