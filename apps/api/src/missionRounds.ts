@@ -63,7 +63,7 @@ async function canRead(q: Query, person: MissionRoundPerson, row: MissionRoundRo
 function roundPhase(row: MissionRoundRow, now: Date): TMissionRoundPhase {
   return row.status === "open" && row.closes_at! <= now ? "closed" : row.status;
 }
-function cardLine(phase: TMissionRoundPhase, feedback: number, inReview: number, pending: number, approver: boolean): string {
+export function missionCardLine(phase: TMissionRoundPhase, feedback: number, inReview: number, pending: number, approver: boolean): string {
   if (phase === "draft") return "未开放";
   if (phase === "open") return feedback ? `${feedback} 条意见` : "无意见";
   if (phase === "closed") return "汇总中";
@@ -120,7 +120,7 @@ export async function projectMissionRoundCard(
       const outstanding = reviewed.filter((entry) => !decisionMap.has(entry.id)).length;
       return { cardId: item.id, ownerId: item.owner_id, ownerName: names.get(item.owner_id) ?? item.owner_id,
         roleLabel: item.role_label, missionCount: missions.filter((mission) => mission.personal_mission_card_id === item.id).length,
-        line: cardLine(phase, all.length, reviewed.length, outstanding, approver), pending: outstanding,
+        line: missionCardLine(phase, all.length, reviewed.length, outstanding, approver), pending: outstanding,
         firstPendingFeedbackId: reviewed.find((entry) => !decisionMap.has(entry.id))?.id ?? null, mine: item.owner_id === person.personId };
     }),
   };

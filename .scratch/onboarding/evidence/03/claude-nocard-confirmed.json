@@ -1,0 +1,135 @@
+{
+  "mode": "shots",
+  "who": "nocard",
+  "result": [
+    {
+      "screenshot": "claude-nocard-confirmed-home-1440.png",
+      "url": "/me",
+      "width": 1440,
+      "height": 900,
+      "overflow": false,
+      "overlay": false,
+      "tasksTop": 310,
+      "tasksInFirstScreen": true,
+      "widgets": [
+        {
+          "kind": "battlefield",
+          "text": "团队协作 本月目标 把跨人员交接与成功证据整理成可共同核对的清单。",
+          "top": 74,
+          "left": 412,
+          "width": 499,
+          "height": 216,
+          "bottom": 290
+        },
+        {
+          "kind": "mission-cards",
+          "text": "我的本月卡 10 月 这个月还没有你的卡",
+          "top": 74,
+          "left": 927,
+          "width": 499,
+          "height": 216,
+          "bottom": 290
+        }
+      ],
+      "active": "BODY",
+      "main": "何望舒 我的工作台 团队协作 本月目标 把跨人员交接与成功证据整理成可共同核对的清单。 我的本月卡 10 月 这个月还没有你的卡 1 项执行事项在推进 未开始 10 月 7 日前 整理本周交接中的待确认点 开始推进 标记完成 9月27日 星期日 09:03 暂时没有新通知 望 何望舒 语音未接入"
+    },
+    {
+      "screenshot": "claude-nocard-confirmed-home-1280.png",
+      "url": "/me",
+      "width": 1280,
+      "height": 800,
+      "overflow": false,
+      "overlay": false,
+      "tasksTop": 310,
+      "tasksInFirstScreen": true,
+      "widgets": [
+        {
+          "kind": "battlefield",
+          "text": "团队协作 本月目标 把跨人员交接与成功证据整理成可共同核对的清单。",
+          "top": 74,
+          "left": 367,
+          "width": 442,
+          "height": 216,
+          "bottom": 290
+        },
+        {
+          "kind": "mission-cards",
+          "text": "我的本月卡 10 月 这个月还没有你的卡",
+          "top": 74,
+          "left": 824,
+          "width": 442,
+          "height": 216,
+          "bottom": 290
+        }
+      ],
+      "active": "BODY",
+      "main": "何望舒 我的工作台 团队协作 本月目标 把跨人员交接与成功证据整理成可共同核对的清单。 我的本月卡 10 月 这个月还没有你的卡 1 项执行事项在推进 未开始 10 月 7 日前 整理本周交接中的待确认点 开始推进 标记完成 9月27日 星期日 09:03 暂时没有新通知 望 何望舒 语音未接入"
+    },
+    {
+      "screenshot": "claude-nocard-confirmed-home-834.png",
+      "url": "/me",
+      "width": 834,
+      "height": 1194,
+      "overflow": false,
+      "overlay": false,
+      "tasksTop": 394,
+      "tasksInFirstScreen": true,
+      "widgets": [
+        {
+          "kind": "battlefield",
+          "text": "团队协作 本月目标 把跨人员交接与成功证据整理成可共同核对的清单。",
+          "top": 67,
+          "left": 290,
+          "width": 534,
+          "height": 165,
+          "bottom": 232
+        },
+        {
+          "kind": "mission-cards",
+          "text": "我的本月卡 10 月 这个月还没有你的卡",
+          "top": 248,
+          "left": 290,
+          "width": 534,
+          "height": 126,
+          "bottom": 374
+        }
+      ],
+      "active": "BODY",
+      "main": "何望舒 我的工作台 团队协作 本月目标 把跨人员交接与成功证据整理成可共同核对的清单。 我的本月卡 10 月 这个月还没有你的卡 1 项执行事项在推进 未开始 10 月 7 日前 整理本周交接中的待确认点 开始推进 标记完成 9月27日 星期日 09:03 暂时没有新通知 望 何望舒 语音未接入"
+    },
+    {
+      "screenshot": "claude-nocard-confirmed-home-390.png",
+      "url": "/me",
+      "width": 390,
+      "height": 844,
+      "overflow": false,
+      "overlay": false,
+      "tasksTop": 462,
+      "tasksInFirstScreen": true,
+      "widgets": [
+        {
+          "kind": "battlefield",
+          "text": "团队协作 本月目标 把跨人员交接与成功证据整理成可共同核对的清单。",
+          "top": 131,
+          "left": 12,
+          "width": 366,
+          "height": 183,
+          "bottom": 314
+        },
+        {
+          "kind": "mission-cards",
+          "text": "我的本月卡 10 月 这个月还没有你的卡",
+          "top": 326,
+          "left": 12,
+          "width": 366,
+          "height": 120,
+          "bottom": 446
+        }
+      ],
+      "active": "BODY",
+      "main": "何望舒 我的工作台 团队协作 本月目标 把跨人员交接与成功证据整理成可共同核对的清单。 我的本月卡 10 月 这个月还没有你的卡 1 项执行事项在推进 未开始 10 月 7 日前 整理本周交接中的待确认点 开始推进 标记完成 9月27日 星期日 09:03 暂时没有新通知 望 何望舒 语音未接入"
+    }
+  ],
+  "errors": []
+}

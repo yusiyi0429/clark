@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { MemberWork } from "./memberHome.js";
 
 /** 执行事项状态：returned 只能通过退回接口进入。 */
 export const TaskStatus = Type.Union([
@@ -37,9 +38,9 @@ export const TaskView = Type.Object(
   { additionalProperties: false },
 );
 
-/** 成员工作台：我负责的执行事项（全部状态，新到旧）。 */
+/** 成员工作台：参与的本月工作，以及我负责的执行事项（全部状态，新到旧）。 */
 export const MeHomeResponse = Type.Object(
-  { myTasks: Type.Array(TaskView) },
+  { myTasks: Type.Array(TaskView), work: MemberWork },
   { additionalProperties: false },
 );
 

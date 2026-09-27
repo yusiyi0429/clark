@@ -1,0 +1,11 @@
+{
+  "id": "12c0d2b8-67ec-4788-9e0b-1f7b6ef9bca2",
+  "fixtureId": "8831e8d6-a0e3-49f3-8ec8-e18494c6943b",
+  "command": "close",
+  "ok": true,
+  "result": {
+    "closed": true,
+    "database": "warmap_test_9dcda57d2511",
+    "fixtureDirectory": "C:\\Users\\10021\\AppData\\Local\\Temp\\warmap-03-browser-JNKF20"
+  }
+}

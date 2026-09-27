@@ -1,0 +1,950 @@
+[
+  {
+    "file": "src\\app\\globals.css",
+    "match": true
+  },
+  {
+    "file": "src\\app\\heroui-tianshu.css",
+    "match": true
+  },
+  {
+    "file": "src\\app\\icon.svg",
+    "match": true
+  },
+  {
+    "file": "src\\app\\layout.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\not-found.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\layout.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\battlefields\\[id]\\battlefieldDetail.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\battlefields\\[id]\\BattlefieldDetailScreen.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\battlefields\\[id]\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\capabilities\\capabilityDetail.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\capabilities\\CapabilityDetailScreen.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\capabilities\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\issues\\[id]\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\meetings\\[id]\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\mission-cards\\[cardId]\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\missions\\missionOverview.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\missions\\MissionOverviewScreen.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\missions\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\missions\\[id]\\missionDetail.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\missions\\[id]\\MissionDetailScreen.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\missions\\[id]\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\plans\\[period]\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\radar\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(ceo)\\radar\\signals\\[id]\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(member)\\me\\layout.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(member)\\me\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(member)\\me\\battlefields\\[id]\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\(member)\\me\\mission-cards\\[cardId]\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\access\\access.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\access\\AccessScreen.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\access\\lockscreenTime.ts",
+    "match": true
+  },
+  {
+    "file": "src\\app\\access\\LockscreenVisual.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\access\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\access\\PinField.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\access\\PinField.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\configScreen.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\ConfigScreen.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\battlefields\\battlefieldScreen.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\battlefields\\BattlefieldScreen.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\battlefields\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\capabilities\\capabilityScreen.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\capabilities\\CapabilityScreen.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\capabilities\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\missions\\missionManagement.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\missions\\MissionManagementScreen.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\config\\missions\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\app\\fonts\\douyin-brand.woff2",
+    "match": true
+  },
+  {
+    "file": "src\\app\\healthz\\route.ts",
+    "match": true
+  },
+  {
+    "file": "src\\app\\welcome\\page.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\battlefieldCard.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\BattlefieldCard.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\battlefieldDisplay.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\IssueCard.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\issueWorkspace.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\MeetingCard.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\meetingMaterial.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\meetingWorkspace.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\MonthlyPlanCard.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\monthlyWorkspace.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\payloads.ts",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\preflightOutline.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\preflightOutline.ts",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\RadarCard.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\radarSources.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\radarStatusHint.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\registry.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\registry.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\scopeNames.ts",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\SignalCard.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\signalReader.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\cards\\SignalStory.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\accountMenu.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\AccountMenu.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\ActionNoticeCard.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\capabilityPanel.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\ConfirmDialog.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\ContextMark.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\DetailPanel.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\HeroButton.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\HomeBoard.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\HomeBoard.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\IssueRow.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\meetingFollowThrough.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionRoundEntry.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\MissionStatus.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\NoticeActions.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\notificationClock.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\NotificationRail.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\notificationSummary.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\ReduceMotionSync.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\SelectionQuote.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\StrategicConfirmCard.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\TianshuMark.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\meeting\\MeetingHeader.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\meeting\\useMeetingRecorder.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\loadMemberBattlefield.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\loadMemberBattlefield.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\member-home-widgets.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\MemberBattlefieldScreen.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\MemberBattlefieldScreen.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\MemberBattlefieldScreen.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\memberHomeWidgets.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\MemberHomeWidgets.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\memberNotices.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\MemberTasks.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\memberWorkspace.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\MemberWorkspace.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\useMemberHome.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\useMemberHome.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\useVoiceprintEnrollment.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\useVoiceprintEnrollment.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\voiceprintCard.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\member\\VoiceprintCard.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\CardDocument.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\loadPersonalMissionCard.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\mission-card-notice.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\mission-card.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\MissionCardNoticeGroup.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\missionCardNotices.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\missionCardScreen.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\MissionCardScreen.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\personalMissionCard.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\personalMissionFixture.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\round-clock.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\round-line.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\RoundClock.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\RoundLine.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\roundNoteDraft.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\roundNoteDraft.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\roundReview.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\roundStatusText.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\roundStatusText.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\useRoundNow.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\missionCards\\useRoundNow.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\onboarding\\CoAgentCapsule.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\onboarding\\foundation.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\components\\onboarding\\MorningCanvas.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\onboarding\\OnboardingProgress.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\onboarding\\SiriWave.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\onboarding\\useHomeArrival.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\onboarding\\useOnboardingData.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\onboarding\\useOnboardingData.ts",
+    "match": true
+  },
+  {
+    "file": "src\\components\\onboarding\\welcome.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\components\\onboarding\\welcome.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\onboarding\\WelcomeFlow.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\shell\\CeoWorkspace.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\shell\\DetailFrame.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\shell\\DetailHeader.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\shell\\MaterialTabs.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\shell\\NoticeStrip.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\shell\\testing.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\shell\\WorkspaceContext.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\shell\\workspaceFrame.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\components\\shell\\WorkspaceFrame.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\ColumnComposer.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\ComposerPill.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\ConversationAttachments.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\conversationColumn.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\ConversationColumn.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\ConversationDock.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\ConversationDock.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\ConversationHistorySheet.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\ConversationHost.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\missionCardGroup.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\missionCardGroup.ts",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\missionGroupComposer.behavior.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\MissionGroupComposer.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\MissionGroupTranscript.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\references.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\seen.ts",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\sse.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\sse.ts",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\Transcript.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\useColumnMode.ts",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\useConversation.ts",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\useMissionGroup.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\conversation\\useMissionGroup.ts",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\access-paths.ts",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\actionResponse.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\actionResponse.ts",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\companyTime.ts",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\logout.ts",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\useCardAction.test.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\useCardAction.tsx",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\viewTransition.ts",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\api\\client.ts",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\api\\openapi.json",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\api\\schema.d.ts",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\api\\server.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\lib\\api\\server.ts",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\access.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\account-menu.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\anchor-editor.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\app-shell.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\battlefield-card.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\battlefield-detail.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\battlefield-management.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\capability-detail.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\capability-management.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\card-references.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\composer-pill.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\config.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\confirm-dialog.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\context-mark.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\conversation-attachments.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\conversation-column.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\conversation-dock.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\conversation-transcript.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\detail-frame.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\header-capsule.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\home-board.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\issue-workspace.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\material-tabs.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\meeting-header.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\meeting-workspace.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\member-home.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\member-tasks.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\mission-detail.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\mission-group.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\mission-management.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\mission-overview.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\mission-status.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\monthly-workspace.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\notice-actions.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\notice-strip.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\notifications.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\radar-feed.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\radar.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\reduced-transparency.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\responsive-layout.test.ts",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\selection-quote.module.css",
+    "match": true
+  },
+  {
+    "file": "src\\styles\\voiceprint.module.css",
+    "match": true
+  },
+  {
+    "file": "public\\brand\\tianshu-flow-lock-v2.webp",
+    "match": true
+  },
+  {
+    "file": "public\\brand\\tianshu-notification-wallpaper-v1.webp",
+    "match": true
+  },
+  {
+    "file": "public\\brand\\tianshu-notification-wallpaper-v2.webp",
+    "match": true
+  }
+]

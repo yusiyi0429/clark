@@ -1,4 +1,4 @@
-import type { TOnboardingResponse, TPersonalMissionCardPayload, TMissionRoundSummary, TSessionRole } from "@warmap/contracts";
+import type { TOnboardingResponse, TMissionRoundSummary, TSessionRole } from "@warmap/contracts";
 import { listBattlefieldRows } from "./battlefields.js";
 import { listCapabilityRows } from "./capabilities.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
@@ -7,7 +7,7 @@ import { companyPeriod, type MonthlyPlanRow } from "./monthlyPlans.js";
 import { getStrategyConfig } from "./strategy.js";
 import { voiceprintStatus, type VoiceprintDeps } from "./voiceprints.js";
 import { listMissionRoundCards, listMissionRoundDraftCards } from "./missionRounds.js";
-import { getPersonalMissionCard } from "./personalMissionCards.js";
+import { readMemberWork } from "./memberWork.js";
 
 export async function hasCompletedOnboarding(q: Query, personId: string): Promise<boolean> {
   const result = await q("SELECT 1 FROM person_onboarding WHERE person_id = $1", [personId]);
@@ -119,44 +119,19 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
     };
   }
 
-  const [missionRows, tasks, ownedCards] = await Promise.all([
-    q("SELECT id, code, title, battlefield_ids FROM missions WHERE period = $1 AND owner_id = $2 ORDER BY code, id", [period, person.personId]),
+  const [{ work, deciders }, tasks] = await Promise.all([
+    readMemberWork(q, people, secret, person, now),
     q("SELECT count(*)::int AS count FROM tasks WHERE owner_id = $1 AND status IN ('not_started', 'in_progress')", [person.personId]),
-    q(`SELECT c.id FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id
-      JOIN battlefield_config b ON b.id=r.battlefield_id WHERE r.period=$1 AND c.owner_id=$2 ORDER BY b.sort_order,b.code,c.sort_order,c.id`, [period, person.personId]),
   ]);
-  const missionCards: WorkCard[] = [];
-  const deciders = new Map<string, string>();
-  for (const entry of ownedCards.rows as { id: string }[]) {
-    const card = await getPersonalMissionCard(q, people, secret, person, entry.id, now);
-    if (!card) continue;
-    const { round, card: personal } = card.payload as TPersonalMissionCardPayload;
-    deciders.set(round.roundId, round.deciderName);
-    missionCards.push({ cardId: personal.cardId, roundId: round.roundId, period: round.period,
-      battlefieldId: round.battlefieldId, battlefieldName: round.battlefieldName, phase: round.phase,
-      status: personal.status, closesAt: round.closesAt, serverNow: round.serverNow,
-      missionCount: personal.missions.length, placeholder: round.placeholder, href: `/me/mission-cards/${personal.cardId}` });
-  }
-  const missions = (missionRows.rows as { id: string; code: string; title: string; battlefield_ids: string[] }[])
-    .map(({ id, code, title, battlefield_ids }) => ({ id, code, title, battlefieldIds: battlefield_ids }));
-  const participating = new Set(missions.flatMap((mission) => mission.battlefieldIds));
-  for (const card of missionCards) participating.add(card.battlefieldId);
   const taskCount = tasks.rows[0].count as number;
   return {
     ...common, role: "member",
-    next: memberCardNext(missionCards, deciders) ?? (taskCount > 0
+    next: memberCardNext(work.missionCards, deciders) ?? (taskCount > 0
       ? { text: `你有 ${taskCount} 件执行事项在推进`, action: "看看我的执行事项", href: "/me" }
       : { text: "会后分给你的事，会出现在首页和通知栏", action: "进入工作台", href: "/me" }),
     work: {
-      period,
-      planStatus: plan?.status ?? "none",
-      battlefields: battlefields.filter((field) => field.owner_id === person.personId || participating.has(field.id))
-        .map(({ id, name }) => ({
-          id, name,
-          monthTarget: plan?.status === "confirmed" ? plan.battlefields.find((field) => field.battlefieldId === id)?.outcome ?? null : null,
-        })),
-      missions,
-      missionCards,
+      ...work,
+      battlefields: work.battlefields.map(({ id, name, monthTarget }) => ({ id, name, monthTarget })),
     },
   };
 }

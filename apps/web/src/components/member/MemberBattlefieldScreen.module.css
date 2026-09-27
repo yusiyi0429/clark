@@ -1,0 +1,60 @@
+/* clark BattlefieldGoals 的清楚目标块，沿用个人卡阅读宽度与共同页头材质。 */
+.screen { display: flex; flex: 1; min-width: 0; min-height: 0; --glass-light-fill: var(--onboarding-glass); --glass-blur: blur(var(--onboarding-blur)) saturate(var(--onboarding-sat)); --glass-light-shadow: var(--onboarding-shadow); }
+.screen :global(.ts-detail) { background: var(--surface); overflow-y: auto; overscroll-behavior: contain; }
+.content { width: 100%; min-width: 0; padding: 20px 32px 128px; color: var(--ink-muted); }
+.content > * { max-width: 840px; margin-inline: auto; }
+.owner { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; font-size: 14px; line-height: 1.6; }
+.owner strong { color: var(--ink); font-weight: 600; }
+.dri { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-muted); font-size: 13px; line-height: 1.5; }
+.goals { display: grid; gap: 12px; }
+.goal { display: grid; gap: 8px; min-width: 0; padding: 20px 24px; border-radius: var(--onboarding-inset-radius); background: var(--morning-start); }
+.goal h2, .round h2, .section h2 { margin: 0; color: var(--ink); font-size: 16px; line-height: 1.5; font-weight: 600; }
+.goal h2 span { margin-left: 8px; font-size: 13px; font-weight: 400; color: var(--ink-faint); }
+.goal p { margin: 0; color: var(--ink-muted); font-size: 15px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
+.round { margin-top: 24px; padding: 20px 24px; border: 1px solid var(--hairline); border-radius: var(--onboarding-card-radius); background: var(--onboarding-glass); box-shadow: var(--onboarding-highlight); }
+.roundHeading, .sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.roundStatus { margin: 12px 0 0; color: var(--ink); font-size: 16px; line-height: 1.75; font-weight: 500; }
+.deadline { margin: 8px 0 0; color: var(--ink-muted); font-size: 14px; line-height: 1.75; font-variant-numeric: tabular-nums; }
+.roundFoot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.roundFoot p { margin: 0; font-size: 14px; line-height: 1.7; }
+.primary.primary { min-height: 44px; height: auto; padding: 8px 16px; border-radius: var(--onboarding-pill-radius); background: var(--onboarding-blue); color: var(--solid-fg); font-size: 17px; line-height: 1.5; font-weight: 600; white-space: normal; }
+.open.open { min-height: 44px; padding: 8px 12px; border-radius: var(--onboarding-control-radius); color: var(--brand-deep); font-size: 14px; }
+.section { margin-top: 32px; }
+.sectionHeading { margin-bottom: 12px; }
+.sectionHeading > span { color: var(--ink-faint); font-size: 13px; }
+.cards, .missions { margin: 0; padding: 0; list-style: none; }
+.cards { border-top: 1px solid var(--hairline); }
+.cards li { border-bottom: 1px solid var(--hairline); }
+.cardRow.cardRow { display: flex; align-items: center; justify-content: flex-start; gap: 12px; width: 100%; min-width: 0; min-height: 76px; height: auto; padding: 12px 8px; border-radius: var(--onboarding-inset-radius); color: var(--ink); text-align: left; white-space: normal; }
+.initial { display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; background: var(--neutral-wash); color: var(--ink-muted); font-size: 14px; font-weight: 500; }
+.identity { display: grid; flex: 1; min-width: 0; gap: 4px; }
+.identity strong { display: flex; flex-wrap: wrap; gap: 8px; font-size: 15px; line-height: 1.5; font-weight: 600; }
+.identity em { color: var(--ink-faint); font-size: 12px; font-style: normal; font-weight: 400; }
+.identity > span { color: var(--ink-faint); font-size: 13px; font-weight: 400; line-height: 1.6; }
+.cardStatus { max-width: 40%; color: var(--ink-muted); font-size: 13px; line-height: 1.6; font-weight: 400; text-align: right; }
+.cardRow > svg { flex-shrink: 0; color: var(--ink-faint); }
+.mission { padding: 16px 0; border-top: 1px solid var(--hairline); }
+.missionHeading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 12px; }
+.mission h3 { margin: 0; color: var(--ink); font-size: 16px; line-height: 1.6; font-weight: 600; }
+.missionLink.missionLink { min-width: 0; min-height: 44px; height: auto; justify-content: flex-start; padding: 4px 0; color: var(--ink); font-size: 16px; line-height: 1.6; font-weight: 600; text-align: left; white-space: normal; }
+.missionLink svg { flex-shrink: 0; color: var(--ink-faint); }
+.mission > p { margin: 6px 0; font-size: 15px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.missionMeta { font-size: 13px; line-height: 1.7; color: var(--ink-faint); }
+.empty { margin-top: 12px; color: var(--ink-faint); font-size: 14px; line-height: 1.8; }
+.error { margin-block: 0 16px; padding: 12px 16px; border-radius: var(--onboarding-inset-radius); color: var(--onboarding-error); background: var(--counter-wash); font-size: 14px; line-height: 1.7; }
+.screen button:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
+@media (max-width: 1000px) { .content { padding-inline: 24px; } }
+@media (max-width: 759px) {
+  .content { padding: 16px 16px 144px; }
+  .goal, .round { padding: 16px; }
+  .round { margin-top: 16px; }
+  .section { margin-top: 24px; }
+  .dri { font-size: 12px; }
+  .dri svg { width: 16px; }
+  .cardRow.cardRow { gap: 8px; padding-inline: 0; }
+  .cardStatus { max-width: 30%; }
+  .primary.primary { width: 100%; }
+  .screen :global(.ts-detail-header > h1) { padding-inline-start: 10px; }
+}
+@media (prefers-reduced-transparency: reduce) { .round { background: var(--morning-start); } }
+@media (prefers-contrast: more) { .round, .cards, .cards li, .mission { border-color: var(--ink-muted); } }

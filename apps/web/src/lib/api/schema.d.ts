@@ -608,8 +608,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 成员工作台：我负责的执行事项（全部状态，新到旧） */
+        /** 成员工作台：参与的战场、本月个人卡与执行事项 */
         get: operations["getMyHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/battlefields/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 成员可参与的战场：目标、本月个人卡与制定轮次 */
+        get: operations["getMyBattlefield"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2810,6 +2827,176 @@ export interface components {
                 createdAt: string;
                 updatedAt: string;
             }[];
+            work: {
+                period: string;
+                planStatus: "none" | ("draft" | "negotiating" | "confirmed");
+                battlefields: {
+                    id: string;
+                    name: string;
+                    isDri: boolean;
+                    monthTarget: string | null;
+                    monthTargetState: "none" | "negotiating" | "confirmed";
+                    monthTargetText: string;
+                }[];
+                missions: {
+                    id: string;
+                    code: string;
+                    title: string;
+                    battlefieldIds: string[];
+                }[];
+                missionCards: {
+                    cardId: string;
+                    roundId: string;
+                    period: string;
+                    battlefieldId: string;
+                    battlefieldName: string;
+                    phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                    status: string;
+                    closesAt: string | null;
+                    serverNow: string;
+                    missionCount: number;
+                    placeholder: boolean;
+                    href: string;
+                }[];
+            };
+        };
+        MemberWork: {
+            period: string;
+            planStatus: "none" | ("draft" | "negotiating" | "confirmed");
+            battlefields: {
+                id: string;
+                name: string;
+                isDri: boolean;
+                monthTarget: string | null;
+                monthTargetState: "none" | "negotiating" | "confirmed";
+                monthTargetText: string;
+            }[];
+            missions: {
+                id: string;
+                code: string;
+                title: string;
+                battlefieldIds: string[];
+            }[];
+            missionCards: {
+                cardId: string;
+                roundId: string;
+                period: string;
+                battlefieldId: string;
+                battlefieldName: string;
+                phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                status: string;
+                closesAt: string | null;
+                serverNow: string;
+                missionCount: number;
+                placeholder: boolean;
+                href: string;
+            }[];
+        };
+        MemberBattlefieldResponse: {
+            id: string;
+            code: string;
+            name: string;
+            ownerId: string;
+            ownerName: string;
+            isDri: boolean;
+            period: string;
+            serverNow: string;
+            sixMonthOutcome: string;
+            monthTarget: string | null;
+            monthTargetState: "none" | "negotiating" | "confirmed";
+            monthTargetText: string;
+            missionCards: {
+                cardId: string;
+                ownerId: string;
+                ownerName: string;
+                roleLabel: string | null;
+                missionCount: number;
+                feedbackCount: number;
+                status: string;
+                canOpen: boolean;
+                href: string | null;
+            }[];
+            myMissions: {
+                missionId: string;
+                code: string;
+                period: string;
+                title: string;
+                ownerId: string;
+                ownerDisplayName: string;
+                capabilityId: string;
+                capabilityCode: string;
+                capabilityName: string;
+                battlefieldIds: string[];
+                battlefieldNames: string[];
+                outcome: string;
+                why: string;
+                successEvidence: string[];
+                milestones: string[];
+                dependencies: string;
+                risk: string;
+                boundaries: string;
+                keyPath: string;
+                resources: string;
+                humanAgentSplit: string;
+                retrospect: string;
+                placeholder: boolean;
+                personalCard: {
+                    cardId: string;
+                    roundId: string;
+                    status: "draft" | "open" | "reviewing" | "confirmed";
+                } | null;
+                sourceRef: string;
+                sourceDocumentId: string;
+                sourceRevision: number;
+                sourceTitle: string;
+            }[];
+            round: {
+                roundId: string;
+                period: string;
+                battlefieldId: string;
+                battlefieldName: string;
+                version: number;
+                phase: "draft" | "open" | "closed" | "reviewing" | "confirmed";
+                round: number;
+                openedAt: string | null;
+                closesAt: string | null;
+                reviewAt: string | null;
+                /** @description 应用时钟生成的 ISO 8601 时间 */
+                serverNow: string;
+                approver: boolean;
+                deciderName: string;
+                todo: string | null;
+                placeholder: boolean;
+                goals: {
+                    sixMonthOutcome: string;
+                    monthOutcome: string;
+                    /** @description 应用时钟生成的 ISO 8601 时间 */
+                    signedAt: string;
+                } | null;
+                counts: {
+                    cards: number;
+                    feedback: number;
+                    pending: number;
+                    conflicts: number;
+                    dependencies: number;
+                    late: number;
+                };
+                cards: {
+                    cardId: string;
+                    ownerId: string;
+                    ownerName: string;
+                    roleLabel: string | null;
+                    missionCount: number;
+                    line: string;
+                    pending: number;
+                    firstPendingFeedbackId: string | null;
+                    mine: boolean;
+                }[];
+            } | null;
+            confirmation: {
+                byName: string;
+                at: string;
+            } | null;
         };
         PatchMyTaskRequest: {
             version: number;
@@ -4490,6 +4677,46 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyBattlefield: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成员战场详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberBattlefieldResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

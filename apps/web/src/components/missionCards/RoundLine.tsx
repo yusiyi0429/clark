@@ -7,6 +7,7 @@ import { Button } from "ts-design/primitives";
 import type { TPersonalMissionCardPayload } from "@warmap/contracts";
 import type { CardAction } from "@/lib/api/client";
 import { monthDayTime } from "@/lib/companyTime";
+import { roundStatusText } from "./roundStatusText";
 import s from "./round-line.module.css";
 
 export function RoundLine({ payload, actions, viewerId, pending, onAction, onSelectCard, onViewGoals, onStartProcessing, note = "", onNoteChange, error }: {
@@ -39,11 +40,7 @@ export function RoundLine({ payload, actions, viewerId, pending, onAction, onSel
   const reviewing = round.phase === "reviewing";
   const confirmed = round.phase === "confirmed";
   const count = round.counts.cards;
-  const line = draft ? (round.approver ? round.todo ?? "个人卡草稿已就绪，可以统一开放讨论" : `草稿已整理 · 等${round.deciderName}统一开放讨论`)
-    : discussing ? `讨论中 · ${round.approver ? `全战场 ${round.counts.feedback}` : `这张卡 ${payload.feedback.length}`} 条意见`
-    : closed ? "已截止 · 汇总中"
-    : reviewing ? round.approver ? round.todo ?? (round.counts.pending ? `${round.counts.pending} 条待你处理` : "意见已全部处理，待你确认") : `等${round.deciderName}拍板 · ${round.cards.find((row) => row.cardId === card.cardId)?.line ?? "候选版本就绪"}`
-    : `已确定${confirmation ? ` · ${confirmation.byName} ${monthDayTime(confirmation.at)}` : ""}`;
+  const line = roundStatusText(round, { cardId: card.cardId, feedbackCount: payload.feedback.length, confirmation });
   const openAction = draft && round.approver ? actions.find((action) => action.actionType === "mission-round.open") : undefined;
   const reopenAction = reviewing && round.approver ? actions.find((action) => action.actionType === "mission-round.reopen") : undefined;
   const confirmAction = reviewing && round.approver && !round.counts.pending ? actions.find((action) => action.actionType === "mission-round.confirm") : undefined;

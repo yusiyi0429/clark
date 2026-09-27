@@ -287,7 +287,7 @@ describe("成员的执行事项", () => {
 
       // 退回只能走退回接口
       expect((await me(t, lead, "PATCH", `/api/me/tasks/${taskIdOf(items[1])}`, { version: 2, status: "returned" })).statusCode).toBe(400);
-      expect((await me(t, await t.loginCookie(), "GET", "/api/me/home")).json()).toEqual({ myTasks: [] });
+      expect((await me(t, await t.loginCookie(), "GET", "/api/me/home")).json().myTasks).toEqual([]);
       expect((await t.app.inject({ method: "GET", url: "/api/me/home" })).statusCode).toBe(401);
     } finally {
       await t.close();

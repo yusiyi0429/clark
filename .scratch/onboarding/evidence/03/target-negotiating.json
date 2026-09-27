@@ -1,0 +1,10 @@
+{
+  "id": "8bf54fe7-9843-49eb-bf6e-8a54b92df879",
+  "fixtureId": "72fa4705-a507-4584-a110-eaa98d278240",
+  "command": "target-negotiating",
+  "ok": true,
+  "result": {
+    "planStage": "negotiating",
+    "planId": "bb73c0bb-d06a-4087-a2a2-587ed80720b8"
+  }
+}

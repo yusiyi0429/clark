@@ -92,6 +92,8 @@ import {
   ThreadView,
   TaskView,
   MeHomeResponse,
+  MemberWork,
+  MemberBattlefieldResponse,
   PatchMyTaskRequest,
   ReturnMyTaskRequest,
   NotificationList,
@@ -573,10 +575,22 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/me/home": {
         get: {
           operationId: "getMyHome",
-          summary: "成员工作台：我负责的执行事项（全部状态，新到旧）",
+          summary: "成员工作台：参与的战场、本月个人卡与执行事项",
           responses: {
             "200": { description: "我的执行事项", content: { "application/json": { schema: { $ref: "#/components/schemas/MeHomeResponse" } } } },
             "401": errorResponse,
+          },
+        },
+      },
+      "/api/me/battlefields/{id}": {
+        get: {
+          operationId: "getMyBattlefield",
+          summary: "成员可参与的战场：目标、本月个人卡与制定轮次",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "成员战场详情", content: { "application/json": { schema: { $ref: "#/components/schemas/MemberBattlefieldResponse" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
           },
         },
       },
@@ -1367,6 +1381,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MarkThreadReadResponse: MarkThreadReadResponse as JsonSchema,
         TaskView: TaskView as JsonSchema,
         MeHomeResponse: MeHomeResponse as JsonSchema,
+        MemberWork: MemberWork as JsonSchema,
+        MemberBattlefieldResponse: MemberBattlefieldResponse as JsonSchema,
         PatchMyTaskRequest: PatchMyTaskRequest as JsonSchema,
         ReturnMyTaskRequest: ReturnMyTaskRequest as JsonSchema,
         NotificationList: NotificationList as JsonSchema,

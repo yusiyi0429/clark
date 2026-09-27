@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { TMissionRoundSummary } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import type { MemberTask, TaskStatus } from "./MemberTasks";
+import type { MemberWork } from "./MemberHomeWidgets";
 
 export interface MemberNotification {
   id: string;
@@ -29,6 +30,8 @@ export function useMemberHome() {
   const [tasks, setTasks] = useState<MemberTask[]>([]);
   const [notifications, setNotifications] = useState<MemberNotification[]>([]);
   const [rounds, setRounds] = useState<TMissionRoundSummary[]>([]);
+  const [work, setWork] = useState<MemberWork | null>(null);
+  const [homeError, setHomeError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
   const loadInFlight = useRef<Promise<void> | null>(null);
@@ -41,13 +44,15 @@ export function useMemberHome() {
         window.location.assign("/access?next=%2Fme");
         return;
       }
-      if (home.data) setTasks(home.data.myTasks as MemberTask[]);
+      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setWork(home.data.work); }
+      setHomeError(home.data ? null : REFRESH_ERROR);
       if (list.data) setNotifications(list.data.notifications as MemberNotification[]);
       if (missionCards.data) setRounds(missionCards.data.rounds);
       if (home.data && list.data && missionCards.data) setTaskError((current) => current === REFRESH_ERROR ? null : current);
     } catch {
       // 首页在详情背后仍保持挂载；后台轮询断网不能打断当前阅读与讨论。
       setTaskError(REFRESH_ERROR);
+      setHomeError(REFRESH_ERROR);
     } finally { loadInFlight.current = null; } })();
     return loadInFlight.current;
   }, []);
@@ -116,5 +121,5 @@ export function useMemberHome() {
     [load],
   );
 
-  return { tasks, notifications, rounds, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, settle };
+  return { tasks, notifications, rounds, work, homeError, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, settle };
 }

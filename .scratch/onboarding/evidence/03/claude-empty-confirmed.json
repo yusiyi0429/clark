@@ -1,0 +1,99 @@
+{
+  "mode": "shots",
+  "who": "empty",
+  "result": [
+    {
+      "screenshot": "claude-empty-confirmed-home-1440.png",
+      "url": "/me",
+      "width": 1440,
+      "height": 900,
+      "overflow": false,
+      "overlay": false,
+      "tasksTop": 310,
+      "tasksInFirstScreen": true,
+      "widgets": [
+        {
+          "kind": "mission-cards",
+          "text": "我的本月卡 10 月 这个月还没有你的卡",
+          "top": 74,
+          "left": 927,
+          "width": 499,
+          "height": 216,
+          "bottom": 290
+        }
+      ],
+      "active": "BODY",
+      "main": "顾清和 我的工作台 参与的战场 还没有登记你参与的战场 我的本月卡 10 月 这个月还没有你的卡 0 项执行事项在推进 暂无执行事项。会后分给你的事会出现在这里，通知栏同时提醒。 9月27日 星期日 09:03 暂时没有新通知 清 顾清和 语音未接入"
+    },
+    {
+      "screenshot": "claude-empty-confirmed-home-1280.png",
+      "url": "/me",
+      "width": 1280,
+      "height": 800,
+      "overflow": false,
+      "overlay": false,
+      "tasksTop": 310,
+      "tasksInFirstScreen": true,
+      "widgets": [
+        {
+          "kind": "mission-cards",
+          "text": "我的本月卡 10 月 这个月还没有你的卡",
+          "top": 74,
+          "left": 824,
+          "width": 442,
+          "height": 216,
+          "bottom": 290
+        }
+      ],
+      "active": "BODY",
+      "main": "顾清和 我的工作台 参与的战场 还没有登记你参与的战场 我的本月卡 10 月 这个月还没有你的卡 0 项执行事项在推进 暂无执行事项。会后分给你的事会出现在这里，通知栏同时提醒。 9月27日 星期日 09:03 暂时没有新通知 清 顾清和 语音未接入"
+    },
+    {
+      "screenshot": "claude-empty-confirmed-home-834.png",
+      "url": "/me",
+      "width": 834,
+      "height": 1194,
+      "overflow": false,
+      "overlay": false,
+      "tasksTop": 351,
+      "tasksInFirstScreen": true,
+      "widgets": [
+        {
+          "kind": "mission-cards",
+          "text": "我的本月卡 10 月 这个月还没有你的卡",
+          "top": 205,
+          "left": 290,
+          "width": 534,
+          "height": 126,
+          "bottom": 331
+        }
+      ],
+      "active": "BODY",
+      "main": "顾清和 我的工作台 参与的战场 还没有登记你参与的战场 我的本月卡 10 月 这个月还没有你的卡 0 项执行事项在推进 暂无执行事项。会后分给你的事会出现在这里，通知栏同时提醒。 9月27日 星期日 09:03 暂时没有新通知 清 顾清和 语音未接入"
+    },
+    {
+      "screenshot": "claude-empty-confirmed-home-390.png",
+      "url": "/me",
+      "width": 390,
+      "height": 844,
+      "overflow": false,
+      "overlay": false,
+      "tasksTop": 395,
+      "tasksInFirstScreen": true,
+      "widgets": [
+        {
+          "kind": "mission-cards",
+          "text": "我的本月卡 10 月 这个月还没有你的卡",
+          "top": 259,
+          "left": 12,
+          "width": 366,
+          "height": 120,
+          "bottom": 379
+        }
+      ],
+      "active": "BODY",
+      "main": "顾清和 我的工作台 参与的战场 还没有登记你参与的战场 我的本月卡 10 月 这个月还没有你的卡 0 项执行事项在推进 暂无执行事项。会后分给你的事会出现在这里，通知栏同时提醒。 9月27日 星期日 09:03 暂时没有新通知 清 顾清和 语音未接入"
+    }
+  ],
+  "errors": []
+}

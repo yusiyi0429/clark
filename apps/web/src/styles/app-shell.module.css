@@ -139,6 +139,14 @@
 }
 
 /* 从同一块晨光中进入首页，控件立即可操作。 */
+/* 成员手机首页需要看得到正在推的工作；通知在同一滚动面后续可达。CEO 沿用通知首页。 */
+@media(max-width:690px){
+ .shell[data-testid="member-workspace"][data-detail-open=false]{display:flex;flex-direction:column;gap:20px;overflow-y:auto;padding:78px 12px calc(120px + env(safe-area-inset-bottom));scrollbar-width:none}
+ .shell[data-testid="member-workspace"][data-detail-open=false] .mainArea{display:block;flex:none;min-height:0;overflow:visible;border-radius:0}
+ .shell[data-testid="member-workspace"][data-detail-open=false] .homeSurface{height:auto}
+ .shell[data-testid="member-workspace"][data-detail-open=false] .notificationArea{height:auto;flex:none;position:static}
+}
+
 .entryCarry{position:fixed;z-index:4000;inset:0;isolation:isolate;pointer-events:none;animation:entryCarryOut 600ms both var(--onboarding-ease)}
 .shell[data-arriving=true]>.mainArea,.shell[data-arriving=true]>.notificationArea,.shell[data-arriving=true]>:global([data-testid="global-controls"]){animation:entryContentIn 480ms 80ms both var(--onboarding-ease)}
 @keyframes entryCarryOut{from{opacity:1}to{opacity:0}}

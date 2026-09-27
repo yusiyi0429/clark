@@ -7,23 +7,14 @@
   padding: 0 0 88px;
   display: flex;
   flex-direction: column;
-  gap: 13px;
+  gap: 20px;
   scrollbar-width: none;
   color: #1d1d1f;
 }
 .board::-webkit-scrollbar { display: none; }
 
-.panel {
-  display: grid;
-  gap: 8px;
-  padding: 20px;
-  border: 1px solid #1d1d1f0d;
-  border-radius: 22px;
-  background: #fff;
-  box-shadow: 0 1px 2px #1d1d1f04;
-}
-
-.panel h1 {
+.heading { display: flex; align-items: baseline; gap: 12px; padding: 12px 4px 0; }
+.heading h1 {
   margin: 0;
   font-size: var(--type-title, 20px);
   font-weight: 600;
@@ -32,28 +23,28 @@
   color: var(--apple-label, #1d1d1f);
 }
 
-.panel p {
-  margin: 0;
-  font-size: var(--type-body, 14px);
-  line-height: 1.55;
-  color: #6e6e73;
-}
+.heading > span { color: var(--ink-faint); font-size: 13px; }
+.error { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--counter); font-size: 13px; line-height: 1.6; }
 
 /* 通知栏没有条目时的一句说明：放在与通知卡片同一位置（时钟下方）。 */
 .quiet {
   margin: 0;
   padding: 4px 6px;
-  color: var(--ink-muted);
+  color: rgb(255 255 255 / 76%);
   font-size: var(--type-meta, 12px);
   line-height: 1.6;
   text-shadow: none;
 }
 
 @media (max-width: 690px) {
+  .board { height: auto; overflow: visible; padding-bottom: 0; gap: 16px; }
+  :global([data-detail-open="false"]) .memberRail { height: auto; overflow: visible; border: 0; border-radius: 0; background: none; box-shadow: none; isolation: auto; }
+  :global([data-detail-open="false"]) .memberRail > :first-child { position: fixed; top: 12px; left: 16px; right: 16px; padding: 4px; border-radius: var(--onboarding-card-radius); background: var(--onboarding-glass); box-shadow: var(--onboarding-highlight); }
+  :global([data-detail-open="false"]) .memberNotices { position: static; overflow: visible; padding: 0; }
+  :global([data-detail-open="false"]) .memberAccount { position: static; margin-top: 16px; }
   .quiet { color: var(--ink-muted); text-shadow: none; }
 }
 
 @media (prefers-contrast: more) {
-  .panel { border-color: #777; }
-  .panel p { color: #444; }
+  .heading > span { color: var(--ink-muted); }
 }

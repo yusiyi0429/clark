@@ -1,0 +1,19 @@
+{
+  "fixtureId": "8831e8d6-a0e3-49f3-8ec8-e18494c6943b",
+  "ready": false,
+  "port": 4500,
+  "webPort": 3500,
+  "pid": 32720,
+  "database": "warmap_test_9dcda57d2511",
+  "fixtureDirectory": "C:\\Users\\10021\\AppData\\Local\\Temp\\warmap-03-browser-JNKF20",
+  "now": "2026-10-03T02:00:15.435Z",
+  "planStage": "issued",
+  "planSigned": true,
+  "rounds": 0,
+  "memberId": "sun-mingze",
+  "driId": "browser-dri",
+  "noCardId": "browser-no-card",
+  "emptyId": "browser-empty",
+  "planId": "c4f909d6-c740-4963-9891-2933d10bb776",
+  "closed": true
+}

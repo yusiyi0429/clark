@@ -1,0 +1,10 @@
+{
+  "id": "c733034f-7e13-475b-a9c5-dbe64094edbc",
+  "fixtureId": "72fa4705-a507-4584-a110-eaa98d278240",
+  "command": "target-issued",
+  "ok": true,
+  "result": {
+    "planStage": "issued",
+    "planId": "bb73c0bb-d06a-4087-a2a2-587ed80720b8"
+  }
+}

@@ -4,6 +4,12 @@ import { describe, expect, it } from "vitest";
 const css = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
 
 describe("responsive workspace CSS", () => {
+  it("keeps the member home widgets and tasks visible on phones, with notifications in the same scroll", () => {
+    const source = css("./app-shell.module.css");
+    expect(source).toContain('.shell[data-testid="member-workspace"][data-detail-open=false]');
+    expect(source).toMatch(/member-workspace[^}]+\.mainArea\s*\{[^}]*display:\s*block/);
+    expect(css("./member-home.module.css")).toContain('height: auto; overflow: visible;');
+  });
   it("follows the ts-design responsive contract: phone notices-home, fold keeps the normal overview", () => {
     const source = css("./app-shell.module.css");
     // 全局输入条在各宽度都可达（clark / ts-design v0.4：手机首页、平板总览与桌面均显示 ConversationDock）。

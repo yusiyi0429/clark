@@ -8,8 +8,10 @@ import { HeroButton } from "@/components/HeroButton";
 import { RailClock } from "@/components/NotificationRail";
 import { MissionCardNoticeGroup } from "@/components/missionCards/MissionCardNoticeGroup";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
+import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
 import { MemberTasks } from "./MemberTasks";
+import { MemberHomeWidgets } from "./MemberHomeWidgets";
 import { memberNoticeGroups } from "./memberNotices";
 import { useMemberHome } from "./useMemberHome";
 import n from "@/styles/notifications.module.css";
@@ -23,17 +25,9 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   const account = { displayName, loginId, role: "member" as const };
   return (
     <WorkspaceFrame homeHref="/me" viewerId={viewerId} account={account} agentTitle="DRI Agent"
-      home={
-        <div className={m.board}>
-          <section className={m.panel} aria-labelledby="member-title">
-            <h1 id="member-title">{displayName}</h1>
-            <p>发给你的信号、你推进和参与的执行事项，都会出现在这里。</p>
-          </section>
-          <MemberTasks tasks={home.tasks} busyId={home.busyId} error={home.taskError} onStatus={(task, status) => void home.setStatus(task, status)} />
-        </div>
-      }
+      home={<MemberHomeBody displayName={displayName} home={home} />}
       notifications={(api, currentHref) => (
-        <aside className={n.rail} aria-label="通知">
+        <aside className={`${n.rail} ${m.memberRail}`} aria-label="通知">
           <RailClock
             homeActive={!api.detailOpen}
             onHome={() => api.navigate("/me")}
@@ -47,17 +41,27 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
               </HeroButton>
             }
           />
-          <div className={n.noticeList}>
+          <div className={`${n.noticeList} ${m.memberNotices}`}>
             {home.rounds.map((round) => <MissionCardNoticeGroup key={round.roundId} round={round} entry="member" currentHref={currentHref} onNavigate={api.navigate} onRefresh={home.refresh} />)}
             <ActionNoticeCard id="assigned" title="新的执行事项" subtitle="会后分给你的事" mark="meeting" notices={notices.assigned} onSettled={home.settle} />
             <ActionNoticeCard id="results" title="回复与结果" mark="issue" notices={notices.results} onSettled={home.settle} />
             {home.rounds.length + notices.assigned.length + notices.results.length === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
           </div>
-          <div className={n.railFoot}>
+          <div className={`${n.railFoot} ${m.memberAccount}`}>
             <AccountMenu account={account} onNavigate={api.navigate} />
           </div>
         </aside>
       )}
     >{children}</WorkspaceFrame>
   );
+}
+
+function MemberHomeBody({ displayName, home }: { displayName: string; home: ReturnType<typeof useMemberHome> }) {
+  const { navigate } = useWorkspace();
+  return <div className={m.board}>
+    <header className={m.heading}><h1>{displayName}</h1><span>我的工作台</span></header>
+    {home.homeError ? <div className={m.error} role="alert"><span>{home.homeError}</span><HeroButton variant="ghost" size="sm" onPress={() => void home.refresh()}>重试</HeroButton></div> : null}
+    {home.work || !home.homeError ? <MemberHomeWidgets work={home.work} onNavigate={navigate} onRefresh={home.refresh} /> : null}
+    <MemberTasks tasks={home.tasks} busyId={home.busyId} error={home.taskError === home.homeError ? null : home.taskError} onStatus={(task, status) => void home.setStatus(task, status)} />
+  </div>;
 }

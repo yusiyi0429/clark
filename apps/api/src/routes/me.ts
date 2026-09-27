@@ -1,9 +1,11 @@
 import type { FastifyReply } from "fastify";
-import { MarkNotificationsSeenRequest, PatchMyTaskRequest, ReturnMyTaskRequest, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, PatchMyTaskRequest, ReturnMyTaskRequest, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
 import { listMyTasks, returnMyTask, updateMyTaskStatus, type TaskMutation } from "../tasks.js";
 import { deleteVoiceprint, enrollVoiceprint, MAX_VOICEPRINT_UPLOAD_BYTES, voiceprintStatus } from "../voiceprints.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
+import { readMemberWork } from "../memberWork.js";
+import { readMemberBattlefield } from "../memberBattlefields.js";
 
 // 成员侧（CEO 也可调用，只看到自己的）：普通视图对象，不走 Card/Action 签名（spec §3.5）。
 export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -15,9 +17,18 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     return result.task;
   };
 
-  app.get("/api/me/home", { preHandler: requirePerson }, async (req) => ({
-    myTasks: await listMyTasks(q, req.person!.personId),
-  }));
+  app.get("/api/me/home", { preHandler: requirePerson, schema: { response: { 200: MeHomeResponse } } }, async (req) => {
+    const [myTasks, { work }] = await Promise.all([
+      listMyTasks(q, req.person!.personId),
+      readMemberWork(q, companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, ctx.now()),
+    ]);
+    return { myTasks, work };
+  });
+
+  app.get("/api/me/battlefields/:id", { preHandler: requirePerson, schema: { params: idParams, response: { 200: MemberBattlefieldResponse } } }, async (req, reply) => {
+    const detail = await readMemberBattlefield(q, companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.id, ctx.now());
+    return detail ?? fail(reply, 404, "BATTLEFIELD_NOT_FOUND", "战场不存在");
+  });
 
   app.patch(
     "/api/me/tasks/:id",

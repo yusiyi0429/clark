@@ -16,6 +16,7 @@ describe("成员工作台外壳", () => {
     expect(html).toContain('aria-label="孙铭泽，打开个人菜单"');
     // 声纹收进个人菜单，首页不再直接放声纹卡片
     expect(html).not.toContain("我的声纹");
+    expect(html).not.toContain("发给你的信号");
   });
 
   it("首页底部是自己的 Agent（全局对话输入条）", () => {
@@ -35,6 +36,14 @@ describe("成员工作台外壳", () => {
     expect(html).toContain("个人卡正文");
     expect(html).toContain('aria-label="执行事项"');
     expect(html).not.toContain('aria-label="配置"');
+    navigation.pathname = "/me";
+  });
+
+  it("成员战场沿用展开区，不出现尚未开放的战场 Agent 右列", () => {
+    navigation.pathname = "/me/battlefields/growth";
+    const html = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽"><h1>战场目标</h1></MemberWorkspace>);
+    expect(html).toContain('data-testid="expanded-panel"');
+    expect(html).toContain('data-topic-rail="false"');
     navigation.pathname = "/me";
   });
 });

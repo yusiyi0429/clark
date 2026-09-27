@@ -1,0 +1,36 @@
+{
+  "mode": "interact",
+  "who": "member",
+  "result": [
+    {
+      "step": "expand",
+      "expanded": "true",
+      "clamp": "none"
+    },
+    {
+      "step": "open-battlefield",
+      "url": "/me/battlefields/growth",
+      "detail": "返回总览 10 月 · 战场 01 灯塔项目 战场 DRI 林知行 六个月目标 以真实战略工作验证可复用的交付方式，形成持续运行的 CEO 与 DRI 工作闭环。 本月目标 10 月 让灯塔项目在真实 CEO 与 DRI 的日常战略工作中持续运行，完成从每月目标、个人承诺、执行事项到复盘的完整闭环；形成可复用的验收标准、跨人员交接清单和问题归因记录，确保关键界面的信息层级与反馈一致，并以不少于三组真实场景核对用户能否找到正在推进的事、理解自己的贡献和继续下一步。保留需要人工判断的边界，月底形成可核对的部署就绪结论。 本轮 已确定 已确定 · 验收 CEO 10/3 10:13 讨论截止 10/3 10:12 · 拍板人 林知行 我的卡：2 项 · 0 条意见 打开我的卡 本月个人卡 5 张 白 白田田 01-1 战役 DRI · 4 项 已确定 刘 刘人豪 01-2 战役 DRI · 3 项 已确定 孙 孙铭泽 你 01-3 战役 DRI · 2 项 已确定 陈 陈溪南 01-4 战役 DRI · 2 项 已确定 于 于斯一 参与 DRI · 1 项 已确定 我在这里的 Mission 3 项 把 DRI 的交接场景落到一致的界面反馈 形成可核对的协作清单 孙铭泽 · CEO Agent 核心体验产品化与真实使用（P0） 已确定 · 占位 到 9 月底，CEO 有清晰、连贯且可持续"
+    },
+    {
+      "step": "back-from-battlefield",
+      "url": "/me",
+      "focus": "查看战场：灯塔项目",
+      "expected": "查看战场：灯塔项目"
+    },
+    {
+      "step": "back-from-card",
+      "focus": "打开我的本月卡：灯塔项目",
+      "expected": "打开我的本月卡：灯塔项目"
+    },
+    {
+      "step": "404",
+      "api": 404,
+      "page": "找不到这个对象 链接可能已失效，或者该对象尚未进入 WarMap。 返回首页"
+    }
+  ],
+  "errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

@@ -1,0 +1,41 @@
+/* clark dri/home：同形阅读卡、清晰卡头与目标内嵌区；尺寸映射到共同晨光 token。 */
+.widgets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; min-width: 0; align-items: stretch; }
+.widget { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 16px; min-width: 0; min-height: 216px; padding: 22px; border: 1px solid var(--hairline); border-radius: var(--onboarding-card-radius); background: var(--ts-surface, var(--surface)); box-shadow: var(--onboarding-highlight); }
+/* 雷达是第二块：同一卡片外形的整行宽组件，战场与本月卡的数量变化时不留孤卡。 */
+.widget[data-widget="radar"] { grid-column: 1 / -1; min-height: 0; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 32px; }
+.widget h2 { min-width: 0; margin: 0; color: var(--ink); font-size: 20px; font-weight: 600; line-height: 1.4; letter-spacing: -.025em; }
+.titleLink.titleLink { position: static; width: 100%; justify-content: flex-start; gap: 8px; min-height: 32px; height: auto; padding: 0; border-radius: 0; background: none; color: inherit; font: inherit; text-align: left; white-space: normal; }
+.titleLink::after { content: ""; position: absolute; inset: 0; border-radius: var(--onboarding-card-radius); }
+.titleLink svg { flex: none; color: var(--ink-faint); transition: transform var(--dur-base) var(--ease-swift); }
+.battlefield:has(.titleLink:hover) { border-color: var(--hairline-strong); }
+.titleLink:hover svg { transform: translateX(2px); }
+.titleLink:focus-visible { outline: none; }
+.titleLink:focus-visible::after { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
+.crown { display: grid; place-items: center; flex: none; color: var(--ink-faint); }
+.month { color: var(--ink-faint); font-size: 13px; white-space: nowrap; }
+.goal { min-width: 0; padding: 12px 14px; border-radius: var(--onboarding-inset-radius); background: var(--morning-start); }
+.label { display: block; margin-bottom: 5px; color: var(--ink-faint); font-size: 12px; }
+.goalText { margin: 0; overflow-wrap: anywhere; color: var(--ink-muted); font-size: 14px; line-height: 1.7; white-space: pre-line; }
+.goalText[data-expanded="false"] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.goalText[data-empty="true"] { color: var(--ink-faint); }
+.expand { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px 0 0; border: 0; background: none; color: var(--ink-muted); font-size: 12px; cursor: pointer; }
+.expand svg { transition: transform var(--dur-base) var(--ease-swift); }
+.expand[aria-expanded="true"] svg { transform: rotate(180deg); }
+.expand:focus-visible, .personalLink:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
+.cardList { display: grid; gap: 12px; }
+.personalLink.personalLink { display: grid; justify-content: stretch; justify-items: stretch; align-content: start; gap: 5px; min-width: 0; width: 100%; height: auto; padding: 0; border-radius: var(--onboarding-inset-radius); background: none; text-align: left; white-space: normal; font-weight: 400; }
+.personalLink + .personalLink { border-top: 1px solid var(--rule); padding-top: 12px; }
+.cardName { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.5; }
+.cardName svg { flex: none; color: var(--ink-faint); }
+.cardStatus { color: var(--ink-muted); font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.cardMeta, .deadline { color: var(--ink-faint); font-size: 12px; line-height: 1.6; }
+.deadline { display: flex; flex-wrap: wrap; gap: 3px 12px; font-variant-numeric: tabular-nums; }
+.personalLink:hover .cardName { color: var(--onboarding-pressed); }
+.empty, .loading { margin: 0; color: var(--ink-faint); font-size: 14px; line-height: 1.7; }
+.empty { padding-top: 8px; }
+.loading { padding: 20px 4px; }
+@media (max-width: 1000px) { .widget { min-height: 0; } }
+@media (max-width: 759px) { .widgets { grid-template-columns: minmax(0, 1fr); gap: 12px; } .widget { padding: 20px; gap: 14px; } .expand { min-height: 36px; } }
+@media (prefers-reduced-motion: reduce) { .titleLink svg, .expand svg { transition: none; } }
+@media (prefers-contrast: more) { .widget { border-color: var(--ink-muted); } .goal, .cardStatus, .cardMeta, .deadline, .empty { color: var(--ink); } }
