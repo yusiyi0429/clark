@@ -39,3 +39,5 @@ seed/company-people.json
 .scratch/onboarding/evidence/verify/
 .scratch/verify-web/
 .scratch/preview-web*/
+.scratch/manual-test/run/
+apps/web-manual-preview/
