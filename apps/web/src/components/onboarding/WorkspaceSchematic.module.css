@@ -63,12 +63,48 @@
 .phoneAgent { width: 100%; height: 33px; margin-top: auto; }
 .root[data-focus="board"] .phoneDetail { transform: translateX(0); box-shadow: -10px 0 26px #213f7033; }
 
+/* 成员工作台沿用相同的玻璃外框与左右高亮，只换内部的缩影。 */
+.root[data-role="member"] .desktop { height: 282px; }
+.memberHeading { color: #657b98; font-size: 10px; font-weight: 650; line-height: 1; }
+.memberTop { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, .85fr); gap: 8px; height: 78px; }
+.memberTile { display: flex; flex-direction: column; min-width: 0; padding: 11px; border: 1px solid #dce4ef; border-radius: 15px; background: #ffffffed; box-shadow: 0 2px 7px #29334c0a; }
+.memberTile strong { font-size: 11px; font-weight: 650; white-space: nowrap; }
+.memberTile .rule { margin-top: 10px; }
+.memberTaskHeading { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; color: #60748e; font-size: 10px; line-height: 15px; }
+.memberTaskHeading strong { font-weight: 650; }
+.addButton { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 6px; background: #3a83f7; color: #fff; font-size: 15px; font-style: normal; line-height: 1; box-shadow: 0 2px 5px #3a83f73b; }
+.root[data-focus="board"] .memberTaskHeading .addButton { animation: addGlow 560ms 300ms var(--onboarding-ease-brand) both; }
+.memberTasks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; flex: 1; min-height: 0; }
+.memberTask { min-width: 0; padding: 10px; border: 1px solid #dce4ef; border-radius: 13px; background: #fff; color: #4e607a; box-shadow: 0 2px 7px #29334c0a; font-size: 10px; font-weight: 600; white-space: nowrap; }
+.waitingTask { opacity: .55; }
+.activeTaskDot { display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: #3a83f7; }
+.taskRule { display: block; width: 70%; height: 3px; margin-top: 10px; border-radius: 9px; background: #e0e9f5; }
+.root[data-role="member"] .agent { flex: none; }
+.memberPhone { background: #f0f6ff; }
+.memberPhoneScroll { height: 100%; padding: 11px 9px; transition: transform 350ms var(--onboarding-ease-brand); }
+.memberPhoneNotice { padding: 4px 6px 13px; border-radius: 18px; background: linear-gradient(160deg, #60728e, #35445f); box-shadow: 0 3px 12px #1b3e7120; transition: opacity 350ms var(--onboarding-ease-brand), box-shadow 350ms var(--onboarding-ease-brand); }
+.memberPhoneNotice .phoneNotices { gap: 6px; margin-top: 9px; }
+.memberPhoneNotice .noticeCard { height: 35px; font-size: 10px; }
+.memberPhoneWork { display: grid; gap: 7px; margin-top: 10px; transition: box-shadow 350ms var(--onboarding-ease-brand); }
+.phoneWorkCard { position: relative; height: 49px; padding: 9px 11px; border: 1px solid #dce4ef; border-radius: 12px; background: #fff; color: #465a75; box-shadow: 0 2px 7px #29334c0a; font-size: 10px; }
+.phoneWorkCard strong { font-weight: 650; }
+.phoneWorkCard .addButton { position: absolute; top: 7px; right: 9px; }
+.phoneWorkRule { display: block; width: 52%; height: 3px; margin-top: 7px; border-radius: 9px; background: #e0e9f5; }
+.root[data-focus="notifications"] .memberPhoneNotice { box-shadow: 0 0 0 2px #3a83f7a8, 0 0 19px #3a83f74d; }
+.root[data-focus="board"] .memberPhoneScroll { transform: translateY(-102px); }
+.root[data-focus="board"] .memberPhoneNotice { opacity: .45; }
+.root[data-focus="board"] .memberPhoneWork { box-shadow: 0 0 0 2px #3a83f7a8, 0 0 18px #3a83f748; }
+.root[data-focus="board"] .phoneWorkCard .addButton { animation: addGlow 560ms 300ms var(--onboarding-ease-brand) both; }
+@keyframes addGlow { 50% { box-shadow: 0 0 0 4px #3a83f747, 0 0 15px #3a83f796; transform: scale(1.09); } }
+
 @media (prefers-reduced-motion: reduce) {
-  .rail, .board, .agent, .phoneHome, .phoneDetail, .focusMarker { transition: none; }
+  .rail, .board, .agent, .phoneHome, .phoneDetail, .focusMarker, .memberPhoneScroll, .memberPhoneNotice, .memberPhoneWork { transition: none; }
   .urgentDot { animation: none; }
+  .root[data-focus="board"] .addButton { animation: none; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .root { background: #f0f6ff; -webkit-backdrop-filter: none; backdrop-filter: none; }
   .rail, .phone { background: #4b5a73; }
   .noticeCard { background: #f0f5fc; }
+  .memberPhoneNotice { background: #4b5a73; }
 }

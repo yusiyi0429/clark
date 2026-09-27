@@ -38,6 +38,7 @@ vi.mock("react", async (original) => {
 
 import { WorkSnapshot, WelcomeFlow, monthTargetCopy, onboardingSteps, radarSummaryLine, type OnboardingData } from "./WelcomeFlow";
 import { WorkspaceSchematic } from "./WorkspaceSchematic";
+import { MissionFlow } from "./MissionFlow";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { RadarSettingsEditor, type RadarSavedSummary } from "@/components/radar/RadarSettingsEditor";
 import { browserApi } from "@/lib/api/client";
@@ -80,9 +81,9 @@ function radarEditor(tree: ReactNode) {
   return match!.props as unknown as RadarEditorProps;
 }
 function reachRadar(data: OnboardingData, nextPath?: string) {
-  (button(renderFlow(data, nextPath), "开始").props.onClick as () => void)();
-  (button(renderFlow(data, nextPath), "下一步").props.onClick as () => void)();
-  if (data.role === "ceo") (button(renderFlow(data, nextPath), "下一步").props.onClick as () => void)();
+  for (let index = 0; index < onboardingSteps(data).indexOf("radar"); index++) {
+    (button(renderFlow(data, nextPath), index === 0 ? "开始" : "下一步").props.onClick as () => void)();
+  }
   return renderFlow(data, nextPath);
 }
 /** 雷达这一步由编辑器负责前进：默认按「稍后」跳过；传 summary 时当作保存成功。 */
@@ -130,10 +131,51 @@ describe("收尾按钮文案与实际落点一致", () => {
 });
 
 describe("真实数据的首次引导", () => {
-  it("CEO 两页导览后才到雷达；成员仍先看工作，声纹未配置时不占步骤", () => {
-    expect(onboardingSteps(member)).toEqual(["hello", "work", "radar", "start"]);
+  it("成员先导览、再看 Mission 和本月工作；CEO 步骤保持原样", () => {
+    expect(onboardingSteps(member)).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "start"]);
+    expect(onboardingSteps({ ...member, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "voiceprint", "start"]);
     expect(onboardingSteps(ceo)).toEqual(["hello", "tour-notifications", "tour-board", "radar", "start"]);
     expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "radar", "voiceprint", "start"]);
+  });
+  it("成员导览复用同一示意图，高亮通知后转向工作", () => {
+    let tree = renderFlow(member);
+    expect(text(tree)).toContain("先花一分钟看看工作台，再看看每个月的 Mission 怎么定下来。");
+    (button(tree, "开始").props.onClick as () => void)();
+    tree = renderFlow(member);
+    expect(text(tree)).toContain("左边是通知栏");
+    expect(text(tree)).toContain("最上面是通知");
+    expect(elements(tree).find((element) => element.type === WorkspaceSchematic)?.props).toMatchObject({ role: "member", focus: "notifications" });
+    (button(tree, "下一步").props.onClick as () => void)();
+    tree = renderFlow(member);
+    expect(text(tree)).toContain("右边是你的工作");
+    expect(text(tree)).toContain("往下是你的工作");
+    expect(elements(tree).find((element) => element.type === WorkspaceSchematic)?.props).toMatchObject({ role: "member", focus: "board" });
+    const diagram = renderToStaticMarkup(<WorkspaceSchematic role="member" focus="board" />);
+    for (const label of ["新的执行事项", "执行事项", "+", "等上一步", "我的 Agent"]) expect(diagram).toContain(label);
+  });
+  it("Mission 六步按顺序呈现，之后才能看本月工作，也能返回", () => {
+    let tree = renderFlow(member);
+    for (let index = 0; index < 3; index++) {
+      (button(tree, index === 0 ? "开始" : "下一步").props.onClick as () => void)();
+      tree = renderFlow(member);
+    }
+    expect(text(tree)).toContain("每个月的 Mission，这样定下来");
+    expect(elements(tree).find((element) => element.type === MissionFlow)).toBeDefined();
+    const diagram = renderToStaticMarkup(<MissionFlow />);
+    expect(diagram.match(/<li\b/g)).toHaveLength(6);
+    const titles = ["本月目标", "个人卡草稿", "48 小时讨论", "集中处理", "确定", "拆成执行事项"];
+    let position = -1;
+    for (const title of titles) {
+      const next = diagram.indexOf(`<strong>${title}</strong>`);
+      expect(next).toBeGreaterThan(position);
+      position = next;
+    }
+    expect(diagram.slice(diagram.indexOf("之后 · 你来推进"))).toContain("拆成执行事项");
+    (button(tree, "下一步").props.onClick as () => void)();
+    tree = renderFlow(member);
+    expect(text(tree)).toContain("你这个月的工作");
+    (button(tree, "上一步").props.onClick as () => void)();
+    expect(text(renderFlow(member))).toContain("每个月的 Mission，这样定下来");
   });
   it("空态只说没有登记，不推断没有工作", () => {
     const html = renderToStaticMarkup(<WorkSnapshot data={member} />);
@@ -232,7 +274,7 @@ describe("真实数据的首次引导", () => {
     expect(renderToStaticMarkup(<OnboardingProgress current={2} total={3} />)).toContain("第 2 步，共 3 步");
   });
   it("第 1 步照 spec 说雷达和声纹都可以稍后；声纹没开通时只说雷达", () => {
-    expect(renderToStaticMarkup(<WelcomeFlow data={member} />)).toContain("我先带你看看这个月和你有关的工作。<br/>雷达，可以现在设，也可以以后再说。");
+    expect(renderToStaticMarkup(<WelcomeFlow data={member} />)).toContain("先花一分钟看看工作台，再看看每个月的 Mission 怎么定下来。<br/>雷达，可以现在设，也可以以后再说。");
     const withVoice = renderToStaticMarkup(<WelcomeFlow data={{ ...member, voiceprint: { ...base.voiceprint, configured: true } }} />);
     expect(withVoice).toContain("雷达和声纹，可以现在设，也可以以后再说。");
   });

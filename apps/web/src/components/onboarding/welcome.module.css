@@ -121,6 +121,13 @@
   .flow:is([data-step="tour-notifications"], [data-step="tour-board"]) .description { max-width: 790px; margin-top: 8px; font-size: 16px; }
   .flow:is([data-step="tour-notifications"], [data-step="tour-board"]) .details { margin-top: 16px; }
   .flow:is([data-step="tour-notifications"], [data-step="tour-board"]) .footer { margin-top: 16px; gap: 8px; }
+  .flow[data-step="tour-board"][data-role="member"] .stage { margin-top: calc(16px - var(--stage-fade)); }
+  .flow[data-step="tour-board"][data-role="member"] .description { line-height: 1.55; }
+  .flow[data-step="mission-flow"] { width: min(1060px, 100%); padding-top: 80px; padding-bottom: 24px; }
+  .flow[data-step="mission-flow"] .stage { margin-top: calc(20px - var(--stage-fade)); }
+  .flow[data-step="mission-flow"] .description { max-width: 780px; margin-top: 8px; font-size: 16px; }
+  .flow[data-step="mission-flow"] .details { margin-top: 16px; }
+  .flow[data-step="mission-flow"] .footer { margin-top: 16px; gap: 8px; }
 }
 @media (min-width: 1000px) {
   .flow { width: min(960px, 100%); }
@@ -164,6 +171,10 @@
   .mobileTourCopy { display: block; }
   .content[data-step^="tour-"] .description { margin-top: 10px; font-size: 14px; line-height: 1.55; }
   .content[data-step^="tour-"] .details { margin-top: 14px; }
+  .content[data-step="mission-flow"] .description { margin-top: 10px; font-size: 14px; line-height: 1.55; }
+  .flow[data-step="mission-flow"] { padding-top: 82px; }
+  .flow[data-step="mission-flow"] .stage { margin-top: 19px; }
+  .content[data-step="mission-flow"] .details { margin-top: 9px; }
   .details { margin-top: 24px; }
   .snapshot { padding: 20px; }
   .battlefields li > span:last-child { max-width: 90px; }

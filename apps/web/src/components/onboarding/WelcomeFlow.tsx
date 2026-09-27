@@ -14,16 +14,17 @@ import { MorningCanvas } from "./MorningCanvas";
 import { CoAgentCapsule } from "./CoAgentCapsule";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { WorkspaceSchematic } from "./WorkspaceSchematic";
+import { MissionFlow } from "./MissionFlow";
 import { useOnboardingData } from "./useOnboardingData";
 import f from "./foundation.module.css";
 import s from "./welcome.module.css";
 
 export type OnboardingData = components["schemas"]["OnboardingResponse"];
-type Step = "hello" | "tour-notifications" | "tour-board" | "work" | "radar" | "voiceprint" | "start";
+type Step = "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "work" | "radar" | "voiceprint" | "start";
 
-/** CEO 先看工作台两侧；成员仍先看自己的工作。雷达与声纹保持原有顺序。 */
+/** 两种角色都先看工作台；成员接着看每月 Mission 的形成与执行。 */
 export function onboardingSteps(data: OnboardingData): Step[] {
-  return ["hello", ...(data.role === "ceo" ? ["tour-notifications" as const, "tour-board" as const] : ["work" as const]), "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "start"];
+  return ["hello", "tour-notifications", "tour-board", ...(data.role === "member" ? ["mission-flow" as const, "work" as const] : []), "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "start"];
 }
 
 /** 结束页设置摘要里的雷达一行：成员写开没开；CEO 的公司雷达不能关，写补充了几个方向。 */
@@ -174,9 +175,9 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
     (step === "radar" ? radarPrimary?.querySelector<HTMLButtonElement>("[data-radar-submit]") : primary.current)?.click();
   }
 
-  const heading = step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? "右边是公司全局" : step === "work" ? "你这个月的工作" : step === "radar" ? data.role === "ceo" ? "公司雷达，还要看什么？" : "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : "可以开始了";
-  // 手机没有左右两栏：通知即首页，点开一条全屏看详情。
-  const phoneHeading = step === "tour-notifications" ? "首页就是通知栏" : step === "tour-board" ? "点开一条，看详情" : null;
+  const heading = step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "work" ? "你这个月的工作" : step === "radar" ? data.role === "ceo" ? "公司雷达，还要看什么？" : "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : "可以开始了";
+  // 手机上 CEO 从通知进入详情；成员从通知向下看工作。
+  const phoneHeading = step === "tour-notifications" ? data.role === "ceo" ? "首页就是通知栏" : "最上面是通知" : step === "tour-board" ? data.role === "ceo" ? "点开一条，看详情" : "往下是你的工作" : null;
   const busy = finishing || voice.phase === "saving";
   const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
   const primaryDisabled = busy || (!error && step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort));
@@ -191,22 +192,24 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
       <div className={s.brand} aria-label="天枢"><TianshuMark /><span>天枢</span></div>
       {step !== "start" ? <button type="button" className={f.textButton} onClick={() => void finish()} disabled={busy}>先进入工作台</button> : null}
     </header>
-    <div className={s.flow} data-step={step}>
+    <div className={s.flow} data-step={step} data-role={data.role}>
       <CoAgentCapsule acknowledge={acknowledge} state={voice.recording ? "listening" : "idle"} level={voice.level} />
       <div className={s.stage}>
         <div className={s.content} key={step.startsWith("tour-") ? "tour" : step} ref={content} data-step={step}>
           <div className={s.intro}>
             <h1 ref={title} tabIndex={-1}>{phoneHeading ? <><span className={s.desktopTourCopy}>{heading}</span><span className={s.mobileTourCopy}>{phoneHeading}</span></> : heading}</h1>
-            {step === "hello" ? <><p className={s.subtitle}>欢迎使用天枢。</p><p className={s.description}>{data.role === "ceo" ? "先花一分钟看看工作台。" : <>我先带你看看这个月和你有关的工作。<br /></>}{data.voiceprint.configured ? "雷达和声纹" : "雷达"}，可以现在设，也可以以后再说。</p></> : null}
-            {step === "tour-notifications" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>要你拍板的事、会议安排和需要研究的问题，按轻重排在这里。点开一条，右边展开详情；看完关掉，回到原处。</p><p className={`${s.description} ${s.mobileTourCopy}`}>要你拍板的事、会议安排和需要研究的问题，按轻重排在这里。</p></> : null}
-            {step === "tour-board" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>战略议题、雷达和各个战场都在这里。<br />底部是你的 Agent：问公司的事，它查了再答。</p><p className={`${s.description} ${s.mobileTourCopy}`}>点开一条，详情全屏展开，左上角返回；底部是你的 Agent。</p></> : null}
+            {step === "hello" ? <><p className={s.subtitle}>欢迎使用天枢。</p><p className={s.description}>{data.role === "ceo" ? "先花一分钟看看工作台。" : <>先花一分钟看看工作台，再看看每个月的 Mission 怎么定下来。<br /></>}{data.voiceprint.configured ? "雷达和声纹" : "雷达"}，可以现在设，也可以以后再说。</p></> : null}
+            {step === "tour-notifications" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>{data.role === "ceo" ? "要你拍板的事、会议安排和需要研究的问题" : "个人卡的讨论、分给你的事和别人的回复"}，按轻重排在这里。点开一条，右边展开详情；看完关掉，回到原处。</p><p className={`${s.description} ${s.mobileTourCopy}`}>{data.role === "ceo" ? "要你拍板的事、会议安排和需要研究的问题" : "个人卡的讨论、分给你的事和别人的回复"}，按轻重排在这里。</p></> : null}
+            {step === "tour-board" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>{data.role === "ceo" ? <>战略议题、雷达和各个战场都在这里。<br />底部是你的 Agent：问公司的事，它查了再答。</> : <>参与的战场、本月个人卡和执行事项都在这里。执行事项点「+」自己加，也能从个人卡拆出来；推进时在这里同步进展。<br />底部是你的 Agent：问这个月的事，它查了再答。</>}</p><p className={`${s.description} ${s.mobileTourCopy}`}>{data.role === "ceo" ? "点开一条，详情全屏展开，左上角返回；底部是你的 Agent。" : "执行事项、本月个人卡和战场都在下面；执行事项点「+」自己加，进展也在这里同步。"}</p></> : null}
+            {step === "mission-flow" ? <p className={s.description}>月初大家一起定方向；定下来之后，由你拆成每天能推进的事。</p> : null}
             {/* 「这里改的是公司雷达。」由编辑器顶部那一行说，同一屏不重复。 */}
             {step === "radar" && data.role === "ceo" ? <p className={s.description}>我会按你签发的本月目标自动关注；你还可以补充方向和来源。</p> : null}
             {step === "voiceprint" ? <p className={s.description}>录一段 15–30 秒的朗读，帮我在会后建议哪些发言可能来自你——最后仍由人核对。</p> : null}
             {step === "start" && !returnPath ? <p className={s.description}>{data.next.text}</p> : null}
           </div>
           <div className={s.details}>
-            {(step === "tour-notifications" || step === "tour-board") && data.role === "ceo" ? <WorkspaceSchematic role="ceo" focus={step === "tour-notifications" ? "notifications" : "board"} /> : null}
+            {(step === "tour-notifications" || step === "tour-board") ? <WorkspaceSchematic role={data.role} focus={step === "tour-notifications" ? "notifications" : "board"} /> : null}
+            {step === "mission-flow" && data.role === "member" ? <MissionFlow /> : null}
             {step === "work" && data.role === "member" ? <WorkSnapshot data={data} onRefresh={refresh} /> : null}
             {step === "radar" ? <RadarSettingsEditor
               mode={data.role === "ceo" ? "company" : "person"}
