@@ -46,16 +46,24 @@ export function MissionGroupComposer({ cardId, viewerId, phase, channels, channe
     update(next);
     requestAnimationFrame(() => { field.current?.focus({ preventScroll: true }); field.current?.setSelectionRange(next.length, next.length); });
   }
-  async function submit() {
-    if (!input.trim() || !writable || busy || dictation.active || submitting.current) return;
+  // ↑：转好的文字接上已有输入直接发出；发不出去时留在输入框里。
+  async function sendDictation() {
+    const text = await dictation.confirm();
+    if (!text) return;
+    const next = withDictation(input, text);
+    update(next);
+    await submit(next);
+  }
+  async function submit(value = input) {
+    if (!value.trim() || !writable || busy || submitting.current) return;
     submitting.current = true;
     try {
       // 留在输入框直到服务端接收；失败与断网保留原文及引用。
-      if (await onSend(input.trim(), reference)) { update(""); onRemoveReference(); }
+      if (await onSend(value.trim(), reference)) { update(""); onRemoveReference(); }
     } finally { submitting.current = false; }
   }
   return <div className={clsx(d.layer, columnComposerClass, s.composer)} data-testid="global-controls" data-conversation-context={taskId ? `task:${taskId}` : `mission-card:${cardId}`} data-detail-context="true" data-composer="pill" data-channel="group">
-    <ComposerPill ref={pill} tone="group" onHeight={onHeightChange} onSubmit={() => { if (!composing.current) void submit(); }}
+    <ComposerPill ref={pill} tone="group" onHeight={onHeightChange} dictating={dictation.active} onSubmit={() => { if (!composing.current && !dictation.active) void submit(); }}
       references={error || dictation.error || reference ? <>
         {error ? <p role="alert" className={s.error}>{error}</p> : null}
         {dictation.error ? <p role="alert" className={ds.error}>{dictation.error}</p> : null}
@@ -70,7 +78,7 @@ export function MissionGroupComposer({ cardId, viewerId, phase, channels, channe
           if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
         }} />}
       action={dictation.active
-        ? <DictationControls dictation={dictation} onConfirm={() => void confirmDictation()} />
+        ? <DictationControls dictation={dictation} onToInput={confirmDictation} onSend={sendDictation} canSend={!busy} />
         : <ComposerAction state={input.trim() ? "send" : "mic"} isDisabled={!writable || busy} onMic={() => void dictation.start()} sendLabel={busy ? "正在发送" : "发送公开意见"} />} />
   </div>;
 }

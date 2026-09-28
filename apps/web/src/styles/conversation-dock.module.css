@@ -66,6 +66,10 @@
 .microphoneIcon { opacity:0; transform:scale(.65) rotate(-12deg); }
 .typing .keyboardIcon { opacity:0; transform:scale(.65) rotate(12deg); }
 .typing .microphoneIcon { opacity:1; transform:scale(1); }
+/* 听写中左边这颗是 ✕ 取消（麦克风淡出、✕ 淡入）。 */
+.cancelIcon { opacity:0; transform:scale(.65) rotate(12deg); }
+.modeButton[data-dictating=true] .microphoneIcon { opacity:0; transform:scale(.65) rotate(-12deg); }
+.modeButton[data-dictating=true] .cancelIcon { opacity:1; transform:scale(1); }
 
 /* Both modes occupy the exact same plane; neither adds a row or mounts late. */
 .content { position:relative; height:36px; min-width:0; flex:1; transition:height 220ms cubic-bezier(.22,1,.36,1); }
@@ -106,8 +110,9 @@
 .dock .sendButton:disabled { background:#e0e4e9; border-color:#d8dde4; color:#939ba6; box-shadow:none; opacity:1; cursor:default; }
 .dock .sendButton:not(:disabled):hover { background:#006de5; }
 .dock .sendButton:not(:disabled):active { transform:scale(.91); }
-/* 听写时发送钮的位置换成点阵 + ✕ + ✓（DictationControls），颜色跟这条输入条的发送钮一套。 */
-.dictation { display:flex; flex:none; --dictation-soft:#e8ebf0; --dictation-strong:#007aff; --dictation-muted:#5f6572; }
+/* 听写时文字框让给点阵：点阵撑满、右边 ■ ↑（DictationControls），钮和颜色跟这条输入条的发送钮一套。 */
+.inputForm[data-dictating=true] textarea { display:none; }
+.dictation { display:flex; flex:1 1 auto; min-width:0; --dictation-size:44px; --dictation-soft:#e8ebf0; --dictation-strong:#007aff; --dictation-muted:#5f6572; }
 .layer[data-history-open=true] .dictation { --dictation-soft:#48484c; --dictation-strong:#0a84ff; --dictation-muted:#c7c7cc; }
 
 .layer .caption { position:absolute; bottom:calc(100% + 9px); right:0; left:auto; width:max-content; max-width:100%; padding:6px 12px; border:1px solid #ffffff25; border-radius:20px; background:#242831e8; color:#f4f5f7; font-size:12px; font-weight:400; line-height:18px; box-sizing:border-box; -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); box-shadow:0 2px 10px #00000004; pointer-events:auto; animation:captionIn 220ms ease; }
@@ -174,7 +179,6 @@
 .dock.composerExpanded .leadingButton { position:absolute; left:6px; bottom:6px; z-index:3; }
 .dock.composerExpanded .modeButton { position:absolute; left:48px; bottom:6px; z-index:3; }
 .dock.composerExpanded .sendButton { position:absolute; right:6px; bottom:2px; z-index:3; width:34px; height:34px; }
-.dock.composerExpanded .dictation { position:absolute; right:6px; bottom:3px; z-index:3; }
 .dock.composerExpanded .inputForm::after {
   content:'';
   position:absolute;

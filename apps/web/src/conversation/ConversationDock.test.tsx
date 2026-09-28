@@ -97,6 +97,9 @@ describe("全局输入条（clark workspace 614–640）", () => {
   it("键盘面：首页占位「输入你的想法…」，二级页「继续聊聊…」，引用后改为围绕引用", () => {
     expect(dock({ keyboard: true })).toContain('placeholder="输入你的想法…"');
     expect(dock({ keyboard: true })).toContain('aria-label="全局对话输入"');
+    // 展开后左边那颗是麦克风：原地开始听写，不缩回胶囊。
+    expect(dock({ keyboard: true })).toContain('aria-label="语音输入"');
+    expect(dock({ keyboard: true })).not.toContain("切换到语音输入");
     const detail = dock({ keyboard: true, detail: true, global: false, label: "交付力量先支持灯塔" });
     expect(detail).toContain('placeholder="继续聊聊…"');
     expect(detail).toContain('aria-label="交付力量先支持灯塔对话输入"');

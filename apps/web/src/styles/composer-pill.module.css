@@ -57,6 +57,10 @@
 }
 
 .pill[data-references] { grid-template-areas: 'references references references' 'field field field' 'leading . action'; }
+/* 听写中频道开关先收起，底行整行给听写控件。 */
+.pill[data-dictating] { grid-template-areas: 'field field field' 'action action action'; }
+.pill[data-dictating][data-references] { grid-template-areas: 'references references references' 'field field field' 'action action action'; }
+.pill[data-dictating] .leading { display: none; }
 
 .references { grid-area: references; display: flex; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .references::-webkit-scrollbar { display: none; }

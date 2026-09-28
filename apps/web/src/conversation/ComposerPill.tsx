@@ -35,8 +35,10 @@ export const ComposerPill = forwardRef<
     onSubmit: () => void;
     /** 输入条此刻多高：宿主据此给右列正文让位。 */
     onHeight?: (height: number) => void;
+    /** 听写中：频道开关先收起，底行整行给听写控件（✕ · 点阵 · ■ · ↑）。 */
+    dictating?: boolean;
   }
->(function ComposerPill({ tone, references, leading, field, action, onSubmit, onHeight }, ref) {
+>(function ComposerPill({ tone, references, leading, field, action, onSubmit, onHeight, dictating }, ref) {
   const form = useRef<HTMLFormElement | null>(null);
   // 每次渲染后量一次（附件条出现、行数变化都在渲染里发生），再加一个 ResizeObserver 接住宽度变化。
   useLayoutEffect(() => {
@@ -59,6 +61,7 @@ export const ComposerPill = forwardRef<
       className={p.pill}
       data-tone={tone}
       data-references={references ? true : undefined}
+      data-dictating={dictating || undefined}
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit();

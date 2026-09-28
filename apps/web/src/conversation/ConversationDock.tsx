@@ -157,8 +157,10 @@ export function ConversationDock({
     const style = getComputedStyle(element);
     // 带 font-feature-settings 时计算样式的 font 简写是空串，canvas 会退回 10px 默认字体；逐项拼出来才量得准。
     if (context2d) context2d.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    // 听写时文字框让给点阵、一律单行高，不按草稿展开成多行。
     const shouldExpand =
-      input.includes("\n") || (!!input && (context2d?.measureText(input).width || 0) > Math.max(80, lineWidth.current ? lineWidth.current - 24 : dockWidth - 132));
+      !dictation.active &&
+      (input.includes("\n") || (!!input && (context2d?.measureText(input).width || 0) > Math.max(80, lineWidth.current ? lineWidth.current - 24 : dockWidth - 132)));
     setComposerExpanded((previous) => (previous === shouldExpand ? previous : shouldExpand));
     if (!shouldExpand) {
       setComposerHeight(36);
@@ -168,7 +170,7 @@ export function ConversationDock({
     const next = Math.min(196, Math.max(76, element.scrollHeight));
     element.style.height = "";
     setComposerHeight((previous) => (previous === next ? previous : next));
-  }, [input, keyboard, composerExpanded, hasTray]);
+  }, [input, keyboard, composerExpanded, hasTray, dictation.active]);
 
   function startDictation() {
     fromVoice.current = !keyboard;
@@ -189,11 +191,23 @@ export function ConversationDock({
     });
   }
 
-  async function submit() {
-    const text = input.trim();
-    if (!text || busy || dictation.active) return;
+  /** ↑：转好的文字接上已有输入直接发出；从胶囊开始说的，发出去后缩回胶囊。发不出去时文字留在输入框里。 */
+  async function sendDictation() {
+    const text = await dictation.confirm();
+    if (!text) return collapseIfEmpty();
+    const wasVoice = fromVoice.current;
+    fromVoice.current = false;
+    const next = withDictation(input, text);
+    updateInput(next);
+    if ((await submit(next)) && wasVoice) onKeyboardChange(false);
+  }
+
+  /** 发送；返回服务端是否接下了。 */
+  async function submit(value = input): Promise<boolean> {
+    const text = value.trim();
+    if (!text || busy) return false;
     const sentReferences = activeReferences.map((card) => ({ cardId: card.id, version: card.version }));
-    const keptInput = input;
+    const keptInput = value;
     const keptReferences = activeReferences;
     setCaption(text);
     setCaptionDismissed(false);
@@ -205,6 +219,7 @@ export function ConversationDock({
       updateInput(keptInput);
       if (keptReferences.length) onRestoreReferences(keptReferences);
     }
+    return accepted;
   }
 
   useEffect(() => {
@@ -287,20 +302,25 @@ export function ConversationDock({
           isIconOnly
           className={clsx(d.iconButton, d.modeButton)}
           onPress={() => {
-            // 听写中切回语音面：这段不要了。
+            // 收起时这颗是键盘：展开成打字。展开后它是麦克风：原地开始听写（不缩回胶囊）；听写中它是 ✕ 取消。
+            if (!keyboard) return onKeyboardChange(true);
             if (dictation.active) dictation.cancel();
-            onKeyboardChange(!keyboard);
+            else startDictation();
           }}
           ref={modeButton}
-          aria-label={keyboard ? "切换到语音输入" : "切换键盘输入"}
-          aria-expanded={keyboard}
-          title={keyboard ? "切换到语音输入" : "切换键盘输入"}
+          aria-label={keyboard ? (dictation.active ? "取消听写" : "语音输入") : "切换键盘输入"}
+          aria-expanded={keyboard ? undefined : false}
+          data-dictating={dictation.active}
+          title={keyboard ? (dictation.active ? "取消听写" : "语音输入") : "切换键盘输入"}
         >
           <span className={clsx(d.modeIcon, d.keyboardIcon)} aria-hidden>
             <Keyboard size={20} strokeWidth={1.7} />
           </span>
           <span className={clsx(d.modeIcon, d.microphoneIcon)} aria-hidden>
             <Mic size={20} strokeWidth={1.7} />
+          </span>
+          <span className={clsx(d.modeIcon, d.cancelIcon)} aria-hidden>
+            <X size={20} strokeWidth={1.9} />
           </span>
         </HeroButton>
         <div className={d.content} style={{ height: keyboard && composerExpanded ? composerHeight : 36 }}>
@@ -319,9 +339,10 @@ export function ConversationDock({
           <div className={d.textLayer} aria-hidden={!keyboard} inert={!keyboard}>
             <form
               className={d.inputForm}
+              data-dictating={dictation.active}
               onSubmit={(event) => {
                 event.preventDefault();
-                void submit();
+                if (!dictation.active) void submit();
               }}
             >
               <HeroTextArea
@@ -357,7 +378,7 @@ export function ConversationDock({
               />
               {dictation.active ? (
                 <span className={d.dictation}>
-                  <DictationControls dictation={dictation} onConfirm={() => void confirmDictation()} />
+                  <DictationControls dictation={dictation} onToInput={confirmDictation} onSend={sendDictation} canSend={!busy} showCancel={false} />
                 </span>
               ) : busy ? (
                 <HeroButton variant="ghost" size="sm" isIconOnly className={d.sendButton} type="button" onPress={data.stop} aria-label="停止本次回答" data-ready="true">

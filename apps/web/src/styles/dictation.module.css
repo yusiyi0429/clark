@@ -1,29 +1,40 @@
 /*
- * 听写控件（conversation/DictationControls.tsx）：点阵 + ✕ + ✓，照 Claude 的听写。
+ * 听写控件（conversation/DictationControls.tsx），照 ChatGPT 的听写：✕ · 撑满中间的一排点 · ■ · ↑，钮都是圆的。
  * 放在二级页输入条里时读 --tone-*（跟着频道换色）；放在首页输入条里时读那边给的 --dictation-*。
+ * 钮的大小跟所在输入条的钮一样：--dictation-size（二级页 36，首页 44）。
  */
 
 .controls {
   --ink: var(--dictation-muted, var(--tone-muted, #7b8290));
   --soft: var(--dictation-soft, var(--tone-mic, #f1f4f8));
   --strong: var(--dictation-strong, var(--tone-send, #3a83f7));
+  --size: var(--dictation-size, 36px);
   display: flex;
-  flex: none;
+  flex: 1 1 auto;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
-/* 一排点：安静时是一条平的虚线，说话时按音量拉高成小竖条（从右往左推）。 */
+/*
+ * 一排点撑满中间：安静时是一条平的虚线，说话时按音量拉高成小竖条。最新的在最右边，
+ * 地方不够时从左边截掉旧的（靠右排、左边溢出隐藏）。
+ */
 .dots {
   display: flex;
+  flex: 1 1 auto;
+  justify-content: flex-end;
   align-items: center;
   gap: 3px;
+  min-width: 0;
   height: 24px;
-  margin-right: 4px;
+  padding: 0 6px;
+  overflow: hidden;
   color: var(--ink);
 }
 
 .dots i {
+  flex: none;
   width: 3px;
   min-height: 3px;
   border-radius: 2px;
@@ -38,25 +49,26 @@
 
 .button.button {
   display: grid;
+  flex: none;
   place-items: center;
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  min-height: 32px;
+  width: var(--size);
+  min-width: var(--size);
+  height: var(--size);
+  min-height: var(--size);
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 50%;
   background: var(--soft);
   color: var(--ink);
   cursor: pointer;
   transition: background-color 150ms ease, color 150ms ease, transform 120ms ease, opacity 150ms ease;
 }
 
-.button.button[data-kind='confirm'] { background: var(--strong); color: #ffffff; }
+/* ↑ 是发送：和输入条的发送钮同色；■ ✕ 是浅底。 */
+.button.button[data-kind='send'] { background: var(--strong); color: #ffffff; }
 .button.button:not(:disabled):active { transform: scale(0.94); }
 .button.button:disabled,
-.button.button[data-disabled='true'] { cursor: default; opacity: 0.6; }
-.button.button[data-kind='confirm'][data-disabled='true'] { opacity: 1; }
+.button.button[data-disabled='true'] { cursor: default; opacity: 0.55; }
 .button.button:focus-visible { outline: 2px solid var(--strong); outline-offset: 2px; }
 
 /* 没听清、没授权这类一句话：挂在输入条最上面那一行（附件条那里），下次开口或打字就消失。 */
@@ -73,18 +85,6 @@
 .spin { animation: spin 900ms linear infinite; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
-
-/*
- * 二级页输入条不宽时只留最近的几颗点，频道开关的名字不被挤掉：两个频道的开关约 225 宽，
- * 374 宽的右列里扣掉两道列间距，点阵 + 两颗钮最多 120（7 颗点）。平板竖屏（274）只留 4 颗，名字实在放不下时由开关自己截尾。
- */
-@container (max-width: 459px) {
-  .dots i:nth-child(-n + 11) { display: none; }
-}
-
-@container (max-width: 299px) {
-  .dots i:nth-child(-n + 14) { display: none; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .dots i { transition: none; }

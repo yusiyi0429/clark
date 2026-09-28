@@ -15,8 +15,8 @@ type DictationResult = components["schemas"]["DictationResult"];
 
 export type DictationPhase = "idle" | "starting" | "listening" | "transcribing";
 
-/** 点阵有几颗：最近这么多个音量采样，从右往左推。 */
-export const DICTATION_DOTS = 18;
+/** 最近这么多个音量采样（约 5 秒），点阵撑满中间、从右往左推；放不下的旧点从左边截掉。 */
+export const DICTATION_DOTS = 72;
 /** 多久采一次音量（毫秒）：再快点阵会抖，再慢跟不上说话。 */
 const SAMPLE_MS = 70;
 

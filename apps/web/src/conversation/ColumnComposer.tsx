@@ -107,10 +107,19 @@ export function ColumnComposer({
     });
   }
 
-  async function submit() {
-    const text = input.trim();
-    if (!text || busy || dictation.active) return;
-    const kept = input;
+  /** ↑：转好的文字接上已有输入直接发出；发不出去（回答中）时留在输入框里。 */
+  async function sendDictation() {
+    const text = await dictation.confirm();
+    if (!text) return;
+    const next = withDictation(input, text);
+    updateInput(next);
+    await submit(next);
+  }
+
+  async function submit(value = input) {
+    const text = value.trim();
+    if (!text || busy) return;
+    const kept = value;
     updateInput("");
     // C-04：服务端还没接收就失败时，把输入放回去，不先清空后提示失败。
     if (!(await data.send(text, []))) updateInput(kept);
@@ -160,10 +169,11 @@ export function ColumnComposer({
       <ComposerPill
         ref={pill}
         tone="agent"
+        dictating={dictation.active}
         references={attachments}
         onHeight={onHeightChange}
         onSubmit={() => {
-          if (!composing.current) void submit();
+          if (!composing.current && !dictation.active) void submit();
         }}
         leading={
           showSwitch ? (
@@ -206,7 +216,7 @@ export function ColumnComposer({
         }
         action={
           dictation.active ? (
-            <DictationControls dictation={dictation} onConfirm={() => void confirmDictation()} />
+            <DictationControls dictation={dictation} onToInput={confirmDictation} onSend={sendDictation} canSend={!busy} />
           ) : (
             <>
               {allowAttachments ? <AttachButton data={data} className={pillStyles.tool} /> : null}
