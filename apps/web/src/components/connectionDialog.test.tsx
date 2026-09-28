@@ -21,11 +21,40 @@ function nodes(value: ReactNode): Node[] {
   const node = value as Node;
   return [node, ...nodes(node.props.children as ReactNode)];
 }
-const render = () => { ui.cursor = 0; return nodes(ConnectionDialog()); };
+const render = (role: "ceo" | "member" = "member") => { ui.cursor = 0; return nodes(ConnectionDialog({ role })); };
 const named = (all: Node[], label: string) => all.find((node) => node.props.children === label && typeof node.props.onPress === "function");
 beforeEach(() => { ui.values = []; ui.cursor = 0; vi.clearAllMocks(); vi.stubGlobal("window", { location: { origin: "https://tianshu.example" } }); });
 
 describe("个人连接对话框", () => {
+  it("CEO 版只介绍只读查询，不显示自动同步或每周同步", () => {
+    const tree = render("ceo");
+    const content = JSON.stringify(tree);
+    expect(content).toContain("今天有什么要我拍板");
+    expect(content).toContain("它只能看，拍板、签发、确认仍在天枢里做");
+    expect(content).not.toContain("每周同步进展");
+    expect(content).not.toContain("每周五 18:00 自动同步进展");
+    expect(tree.some((node) => node.props.role === "switch")).toBe(false);
+  });
+
+  it("CEO 下载的说明文件使用只读工具验证连接", async () => {
+    ui.post.mockResolvedValue({ data: { token: "tsm_ceo_once", view: { id: "ceo-token", name: "CEO 设备", client: "codex",
+      createdAt: "2026-09-28T00:00:00Z", expiresAt: null, lastUsedAt: null } } });
+    let tree = render("ceo");
+    (tree.find((node) => node.type === "input")!.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: "CEO 设备" } });
+    tree = render("ceo");
+    (named(tree, "生成连接说明")!.props.onPress as () => void)();
+    await vi.waitFor(() => expect(render("ceo").some((node) => JSON.stringify(node).includes("tsm_ceo_once"))).toBe(true));
+    const blobs: Blob[] = [];
+    const link = { click: vi.fn(), remove: vi.fn(), href: "", download: "" };
+    vi.stubGlobal("URL", { createObjectURL: (blob: Blob) => { blobs.push(blob); return "blob:ceo-guide"; }, revokeObjectURL: vi.fn() });
+    vi.stubGlobal("document", { createElement: () => link, body: { append: vi.fn() } });
+    tree = render("ceo");
+    (tree.find((node) => typeof node.props.onPress === "function" && JSON.stringify(node.props.children).includes("下载连接说明"))!.props.onPress as () => void)();
+    const guide = await blobs[0].text();
+    expect(guide).toContain("`list_pending`");
+    expect(guide).toContain("本说明使用的 CEO 工具只读");
+    expect(guide).not.toContain("每周五自动同步");
+  });
   it("没有令牌也显示每周同步，指令和定时命令收在折叠里，可复制", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { clipboard: { writeText } });

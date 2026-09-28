@@ -32,7 +32,7 @@ export function connectCommands(client: AgentClient, endpoint: string, token: st
 export const GUIDE_FILE_NAME = "天枢连接说明.md";
 
 /** weeklySync：用户在生成前打开了「每周五自动同步」，设定时任务就是必做的一步。 */
-export function connectionGuide({ client, endpoint, token, expires, weeklySync }: { client: AgentClient; endpoint: string; token: string; expires: string; weeklySync: boolean }): string {
+export function connectionGuide({ role, client, endpoint, token, expires, weeklySync }: { role: "ceo" | "member"; client: AgentClient; endpoint: string; token: string; expires: string; weeklySync: boolean }): string {
   const name = clientName(client);
   const steps = client === "other" ? [
     "天枢是一个远程 MCP 服务（Streamable HTTP，Bearer 令牌）。请按你所在工具自己的方式添加它，名称用 `tianshu`：",
@@ -57,7 +57,9 @@ export function connectionGuide({ client, endpoint, token, expires, weeklySync }
     "",
     "这份文件由天枢生成。拿到它的 Agent：请按下面的步骤帮用户完成连接，每做完一步告诉用户结果；需要用户自己操作的地方（比如重新打开），停下来说清楚。",
     "",
-    "> 文件里有用户的个人令牌，等同于用户的身份，只能读写用户自己的执行事项。只在下面的设置里使用它：不要写进任何项目文件，不要提交到 git，不要贴到别处。设置完成后提醒用户删掉这个文件。",
+    role === "ceo"
+      ? "> 文件里有用户的个人令牌，等同于用户的身份；本说明使用的 CEO 工具只读。只在下面的设置里使用它：不要写进任何项目文件，不要提交到 git，不要贴到别处。设置完成后提醒用户删掉这个文件。"
+      : "> 文件里有用户的个人令牌，等同于用户的身份，只能读写用户自己的执行事项。只在下面的设置里使用它：不要写进任何项目文件，不要提交到 git，不要贴到别处。设置完成后提醒用户删掉这个文件。",
     "",
     "## 连接信息",
     "",
@@ -72,15 +74,24 @@ export function connectionGuide({ client, endpoint, token, expires, weeklySync }
     "",
     "## 第二步：确认连上了",
     "",
-    "重新打开后，调用 `tianshu` 的 `list_my_items`，把用户正在推进的执行事项列给用户看，能列出来就算连好了。失败时把报错原文告诉用户；常见原因是令牌已撤销或过期、还没重新打开、地址打不开。",
+    role === "ceo"
+      ? "重新打开后，调用 `tianshu` 的 `list_pending`，把待用户处理的事列给用户看，能列出来就算连好了。失败时把报错原文告诉用户；常见原因是令牌已撤销或过期、还没重新打开、地址打不开。"
+      : "重新打开后，调用 `tianshu` 的 `list_my_items`，把用户正在推进的执行事项列给用户看，能列出来就算连好了。失败时把报错原文告诉用户；常见原因是令牌已撤销或过期、还没重新打开、地址打不开。",
     "",
     "## 以后怎么用",
     "",
-    "- 推进天枢里的执行事项时：开始前用 `list_my_items` 找到对应事项；收尾时用 `append_progress` 写一条进展（做了什么、证据链接、下一步或阻塞）；做完用 `update_status` 标完成。只写真实做过的事。",
-    `- 用户说「同步本周进展」时，照这段做：${SYNC_INSTRUCTION}`,
-    "- 可以问用户要不要把上面两条写进常用项目的 AGENTS.md 或 CLAUDE.md（不要写令牌）。",
+    ...(role === "ceo" ? [
+      "- 用户问「今天有什么要我拍板？」时，调用 `list_pending`，按紧急程度排好列给用户。",
+      "- 用户问某个议题、某场会或某张任务卡「现在什么情况」时，先用 `list_pending` 找到它的 id，再调用 `get_issue`、`get_meeting` 或 `get_mission_card`。",
+      "- 用户问「这周各战场进展怎样？」时，调用 `company_progress`；可以按周、战场或人筛选。",
+      `- 这些工具只读。要拍板、签发、确认，把结果里的 \`href\` 拼成完整链接给用户（天枢网址是 \`${endpoint.replace(/\/mcp\/me$/, "")}\`，例如 \`${endpoint.replace(/\/mcp\/me$/, "")}/issues/<id>\`），让用户回天枢网页处理。`,
+    ] : [
+      "- 推进天枢里的执行事项时：开始前用 `list_my_items` 找到对应事项；收尾时用 `append_progress` 写一条进展（做了什么、证据链接、下一步或阻塞）；做完用 `update_status` 标完成。只写真实做过的事。",
+      `- 用户说「同步本周进展」时，照这段做：${SYNC_INSTRUCTION}`,
+      "- 可以问用户要不要把上面两条写进常用项目的 AGENTS.md 或 CLAUDE.md（不要写令牌）。",
+    ]),
     "",
-    ...(weeklySync ? [
+    ...(role === "member" && weeklySync ? [
       "## 第三步：设好每周五自动同步（用户已选择开启）",
       "",
       ...(client === "other" ? [

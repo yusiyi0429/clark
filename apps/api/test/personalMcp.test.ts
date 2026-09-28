@@ -18,13 +18,13 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(stored).not.toContain(token);
       expect((await call(f, f.member, "GET", "/api/me/tokens")).json()).toMatchObject({ mcpPath: "/mcp/me", tokens: [{ id: view.id, name: "测试设备" }] });
       expect(JSON.stringify((await call(f, f.member, "GET", "/api/me/tokens")).json())).not.toContain(token);
-      expect((await call(f, f.ceo, "POST", "/api/me/tokens", { name: "CEO", client: "codex", expiresInDays: null })).statusCode).toBe(403);
+      expect((await call(f, f.ceo, "POST", "/api/me/tokens", { name: "CEO", client: "codex", expiresInDays: null })).statusCode).toBe(200);
       const send = (id: number, method: string, params?: Record<string, unknown>, bearer = token) => f.t.app.inject({
         method: "POST", url: "/mcp/me", headers: { authorization: `Bearer ${bearer}`, accept: "application/json, text/event-stream" }, payload: rpc(id, method, params),
       });
       const initialized = await send(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } });
       expect(initialized.statusCode).toBe(200);
-      expect(initialized.json().result.serverInfo.name).toBe("tianshu-execution-items");
+      expect(initialized.json().result.serverInfo.name).toBe("tianshu");
       const tools = await send(2, "tools/list");
       expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "get_item", "append_progress", "update_status"]);
       const invoke = async (id: number, name: string, args: Record<string, unknown>) => (await send(id, "tools/call", { name, arguments: args })).json().result;

@@ -17,7 +17,7 @@ type Created = components["schemas"]["CreatePersonalTokenResponse"];
 const when = (date: string | null) => date ? monthDayTime(date) : "不过期";
 
 /** 连接到外部工具：主路径是下载一份说明文件发给自己的 Codex、Claude Code 或其他 AI 工具，由它完成设置；命令行步骤收在「手动设置」里。 */
-export function ConnectionDialog() {
+export function ConnectionDialog({ role }: { role: "ceo" | "member" }) {
   const [tokens, setTokens] = useState<TokenView[]>([]);
   const [created, setCreated] = useState<Created | null>(null);
   const [name, setName] = useState("");
@@ -69,7 +69,7 @@ export function ConnectionDialog() {
   const activeCount = tokens.filter((token) => !token.expiresAt || Date.parse(token.expiresAt) > Date.now()).length;
   const download = () => {
     if (!created) return;
-    const text = connectionGuide({ client: created.view.client, endpoint, token: created.token, expires: when(created.view.expiresAt), weeklySync: createdWeekly });
+    const text = connectionGuide({ role, client: created.view.client, endpoint, token: created.token, expires: when(created.view.expiresAt), weeklySync: createdWeekly });
     const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url; link.download = GUIDE_FILE_NAME;
@@ -78,7 +78,9 @@ export function ConnectionDialog() {
   };
   const commandBlock = (label: string, value: string) => <div key={label} className={s.commandBlock}><strong>{label}</strong><div className={s.command}><code>{value}</code><button type="button" onClick={() => void copy(label, value)}>复制</button></div></div>;
   return <div className={s.root}>
-    <p className={s.lead}>让你自己用的 AI 工具（Codex、Claude Code、OpenCode 等）连上天枢：它能读你的执行事项、帮你写进展。</p>
+    <p className={s.lead}>{role === "ceo"
+      ? "让你自己用的 AI 工具（Codex、Claude Code 等）连上天枢，随时问它：今天有什么要我拍板、某个议题进展如何、这周各战场怎么样。它只能看，拍板、签发、确认仍在天枢里做。"
+      : "让你自己用的 AI 工具（Codex、Claude Code、OpenCode 等）连上天枢：它能读你的执行事项、帮你写进展。"}</p>
     <section className={s.section} aria-label="连接一个 Agent"><h3>连接一个 Agent</h3>
       <label className={s.nameField}>给这次连接起个名字<input value={name} maxLength={40} placeholder="比如：我的笔记本" onChange={(event) => setName(event.target.value)} /></label>
       <div className={s.choice}><span id="connection-client">你用的是</span>
@@ -94,10 +96,10 @@ export function ConnectionDialog() {
           <ToggleButton id="30">30 天</ToggleButton><ToggleButton id="90">90 天</ToggleButton><ToggleButton id="never">不过期</ToggleButton>
         </ToggleButtonGroup>
       </div>
-      <button type="button" role="switch" aria-checked={weeklySync} className={s.switchRow} onClick={() => setWeeklySync((value) => !value)}>
+      {role === "member" ? <button type="button" role="switch" aria-checked={weeklySync} className={s.switchRow} onClick={() => setWeeklySync((value) => !value)}>
         <span className={s.switchText}><strong>每周五 18:00 自动同步进展</strong><span>连接时让 Agent 一并设好定时任务，每周把你的进展写进天枢。</span></span>
         <span className={f.switch} data-on={weeklySync} aria-hidden="true"><span /></span>
-      </button>
+      </button> : null}
       <Button variant="primary" isDisabled={busy || !name.trim() || activeCount >= 5} onPress={() => void create()}>生成连接说明</Button>
       {activeCount >= 5 ? <p className={s.muted}>最多保留 5 个连接。可以在下面撤销不用的再生成。</p> : null}
       {created ? <div className={s.ready} aria-label="连接说明已生成">
@@ -116,7 +118,7 @@ export function ConnectionDialog() {
         </details>
       </div> : null}
     </section>
-    <section className={s.section} aria-label="每周同步进展"><h3>每周同步进展</h3>
+    {role === "member" ? <section className={s.section} aria-label="每周同步进展"><h3>每周同步进展</h3>
       <p className={s.muted}>连上以后，随时对你的 Agent 说「同步本周进展」就行；生成连接说明时打开「每周五自动同步」，它会一并设好定时任务。天枢每周汇总后同步给本体。</p>
       <details className={s.manual}><summary>同步指令和定时命令</summary>
         <div className={s.manualBody}>
@@ -126,7 +128,7 @@ export function ConnectionDialog() {
           <p className={s.muted}>放进系统定时任务（Windows 任务计划程序，macOS / Linux 的 crontab），工作目录设成你常用的项目。</p>
         </div>
       </details>
-    </section>
+    </section> : null}
     <section className={s.section}><h3>已连接</h3>
       {tokens.length ? <ul className={s.list}>{tokens.map((token) => <li key={token.id}>
         <div><strong>{token.name}</strong><span>{clientName(token.client)} · 创建 {monthDayTime(token.createdAt)}</span><span>到期 {when(token.expiresAt)} · 最后使用 {token.lastUsedAt ? monthDayTime(token.lastUsedAt) : "尚未使用"}</span></div>

@@ -46,16 +46,16 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     return { myTasks, work, radar };
   });
 
-  app.get("/api/me/tokens", { preHandler: requireMember, schema: { response: { 200: ListPersonalTokensResponse } } }, async (req) => ({
+  app.get("/api/me/tokens", { preHandler: requirePerson, schema: { response: { 200: ListPersonalTokensResponse } } }, async (req) => ({
     tokens: await listPersonalTokens(q, req.person!.personId), mcpPath: "/mcp/me" as const,
   }));
-  app.post("/api/me/tokens", { preHandler: requireMember, schema: { body: CreatePersonalTokenRequest, response: { 200: CreatePersonalTokenResponse } } }, async (req, reply) => {
+  app.post("/api/me/tokens", { preHandler: requirePerson, schema: { body: CreatePersonalTokenRequest, response: { 200: CreatePersonalTokenResponse } } }, async (req, reply) => {
     if (!req.body.name.trim()) return fail(reply, 400, "INVALID_INPUT", "请填写令牌名称");
     const created = await createPersonalToken(pool, req.person!.personId, req.body, ctx.env.sessionSecret, ctx.now());
     reply.header("Cache-Control", "no-store");
     return created ?? fail(reply, 409, "TOKEN_LIMIT", "最多保留 5 个有效令牌");
   });
-  app.delete("/api/me/tokens/:id", { preHandler: requireMember, schema: { params: idParams } }, async (req, reply) =>
+  app.delete("/api/me/tokens/:id", { preHandler: requirePerson, schema: { params: idParams } }, async (req, reply) =>
     await revokePersonalToken(q, req.person!.personId, req.params.id) ? reply.code(204).send() : fail(reply, 404, "TOKEN_NOT_FOUND", "令牌不存在"));
 
   app.get("/api/me/battlefields/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: MemberBattlefieldResponse } } }, async (req, reply) => {

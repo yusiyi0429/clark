@@ -49,9 +49,9 @@ const item = (tree: ReactNode, label: string) => elements(tree).find((element) =
 afterEach(() => hooks.reset());
 
 describe("个人菜单里的雷达", () => {
-  it("只给成员显示连接入口", () => {
+  it("CEO 和成员都显示连接入口", () => {
     expect(item(render("member"), "连接到外部工具")).toBeDefined();
-    expect(item(render("ceo"), "连接到外部工具")).toBeUndefined();
+    expect(item(render("ceo"), "连接到外部工具")).toBeDefined();
   });
   it("成员叫「我的雷达」；声纹状态未确认时不显示声纹入口；打开后能去看我的雷达信号", () => {
     const navigate = vi.fn();

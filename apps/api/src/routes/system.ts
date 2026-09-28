@@ -5,7 +5,6 @@ import { createCompanyMemoryMcpSession } from "../mcpCompanyMemory.js";
 import { createMeMcpSession } from "../mcpMe.js";
 import { authenticatePersonalToken } from "../personalTokens.js";
 import { personDisplayNames } from "../people.js";
-import { roleOf } from "../memberAccess.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -54,12 +53,13 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
   );
 
   const meMcp = async (req: FastifyRequest, reply: FastifyReply) => {
-    const isMember = (personId: string) => companyMemory.searchPeople(undefined).some((person) => person.personId === personId && roleOf(person) === "member");
-    const identity = await authenticatePersonalToken(q, req.headers.authorization, env.sessionSecret, ctx.now(), isMember);
+    const findPerson = (personId: string) => companyMemory.searchPeople(undefined).find((person) => person.personId === personId);
+    const identity = await authenticatePersonalToken(q, req.headers.authorization, env.sessionSecret, ctx.now(), (personId) => !!findPerson(personId));
     if (!identity) return ctx.fail(reply, 401, "UNAUTHORIZED", "个人令牌无效");
     reply.hijack();
     const { server, transport } = await createMeMcpSession({ pool: ctx.pool, q, pepper: env.sessionSecret, now: ctx.now,
-      names: () => personDisplayNames(companyMemory), isMember, authorization: req.headers.authorization });
+      names: () => personDisplayNames(companyMemory), findPerson, initialPerson: findPerson(identity.personId)!, authorization: req.headers.authorization,
+      people: () => companyMemory.searchPeople(undefined), draftDir: env.missionCardDraftsDir });
     reply.raw.on("close", () => { void server.close(); });
     await transport.handleRequest(req.raw, reply.raw, req.body);
   };
