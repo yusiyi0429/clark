@@ -339,3 +339,17 @@ html[data-notice-transition="close"]::view-transition-new(*) { animation-duratio
     animation-duration: 120ms !important;
   }
 }
+
+/* 滚动条：细、圆头、无箭头、透明轨道，轨道上下（横向为左右）各让出 18px，
+   圆角弹窗和卡片里的滚动条不顶进圆角（Chromium / Safari）。
+   Chromium 121+ 只要元素设了 scrollbar-width / scrollbar-color，就不认 ::-webkit-scrollbar，所以这里统一改回 auto；
+   要隐藏滚动条的地方都另写了 ::-webkit-scrollbar { display: none }。Firefox 不支持这个选择器，保留各处的 thin。 */
+@supports selector(::-webkit-scrollbar) {
+  * { scrollbar-width: auto !important; scrollbar-color: auto !important; }
+  ::-webkit-scrollbar { width: 12px; height: 12px; background: transparent; }
+  ::-webkit-scrollbar-track { background: transparent; margin: 18px; }
+  ::-webkit-scrollbar-thumb { border: 4px solid transparent; border-radius: 999px; background: rgb(120 132 150 / 32%) padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background-color: rgb(120 132 150 / 55%); }
+  ::-webkit-scrollbar-button, ::-webkit-scrollbar-corner { display: none; background: transparent; }
+}
+

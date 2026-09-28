@@ -108,6 +108,7 @@
     -webkit-mask-image: linear-gradient(180deg, transparent, #000 var(--stage-fade), #000 calc(100% - var(--stage-fade)), transparent);
     mask-image: linear-gradient(180deg, transparent, #000 var(--stage-fade), #000 calc(100% - var(--stage-fade)), transparent); }
   .stage:not(:hover):not(:focus-within) { scrollbar-color: transparent transparent; }
+  .stage:not(:hover):not(:focus-within)::-webkit-scrollbar-thumb { background-color: transparent; }
   .content[data-step="hello"], .content[data-step="start"] { padding-top: 0; }
   .subtitle { margin-top: 16px; }
   .description, .content[data-step="hello"] .description { margin-top: 24px; }
