@@ -49,3 +49,5 @@
 .latestProgress{margin:0;color:#8190a4;font-size:11px;line-height:1.5;overflow-wrap:anywhere}
 /* 手持首页是深色画布：执行事项上面那一行说明和「开启执行事项」直接写在画布上，换成浅字。 */
 @media(max-width:959px){:global([data-detail-open="false"]) .taskToolbar{color:rgb(255 255 255/.72);font-size:14px}:global([data-detail-open="false"]) .taskToolbar button{color:#cfe0ff}}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.taskActions.taskActions>button,.status.status,.assignment.assignment{font-size:13px}.taskTop.taskTop>span,.dates.dates,.connections.connections,.doneToggle.doneToggle{font-size:14px}}

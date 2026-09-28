@@ -29,3 +29,5 @@
 .people{display:flex;flex-wrap:wrap;gap:8px}
 .people label{display:flex;align-items:center;gap:6px;padding:8px 11px;border:1px solid #dce6f4;border-radius:12px;background:#fff;font-size:13px}
 @media (max-width: 959px){.createForm{padding:24px 18px 140px}.taskPane{padding:24px 18px 140px}.twoFields{grid-template-columns:minmax(0,1fr)}}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.paneNote.paneNote{font-size:14px}.sourceBadge.sourceBadge,.paneRow.paneRow>span{font-size:13px}}

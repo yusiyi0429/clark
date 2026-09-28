@@ -106,3 +106,5 @@
 @media (prefers-reduced-motion: reduce) { .fieldActions, .content { transition: none; } }
 @media (prefers-reduced-transparency: reduce) { .dialog { background: var(--morning-start); backdrop-filter: none; } }
 @media (prefers-contrast: more) { .field, .version, .remark, .readonly, .corrected > span { border-color: var(--ink-muted); } }
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.peopleText.peopleText>small,.diff.diff>p>span{font-size:13px}.basis.basis,.location.location{font-size:14px}}

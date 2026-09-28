@@ -6,3 +6,5 @@
 .clock[data-tone='glass'] .figure { font-size: 20px; }
 @media (max-width: 959px) { .figure { font-size: 13px; } .note { font-size: 12px; } .track { width: 20px; } }
 @media (prefers-reduced-motion: reduce) { .track::before { transition: none; } }
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.note.note{font-size:14px}}

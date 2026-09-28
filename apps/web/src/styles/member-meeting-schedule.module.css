@@ -1,11 +1,11 @@
 .card{padding:15px 16px;border-radius:18px;background:#30343d;color:#fff;box-shadow:0 12px 32px #1c253333}.card header{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;font-size:12px;color:#d5d9e0}.card header strong{font-size:13px}.card button{display:flex;align-items:stretch;gap:12px;width:100%;padding:11px 2px;border:0;border-top:1px solid #ffffff1c;background:transparent;color:inherit;text-align:left;cursor:pointer}.card button i{width:3px;border-radius:3px;background:#f2aa59;flex:none}.card button span{display:grid;gap:3px;min-width:0}.card button strong{font-size:14px;font-weight:600;overflow-wrap:anywhere}.card button small{font-size:12px;color:#c5cbd5}.card button:hover{background:#ffffff0c}.card button:focus-visible{outline:2px solid #96beff;outline-offset:2px}
 /* 手持首页：和其他通知一样是磨砂浅色卡（iOS 式），字大一号。 */
 @media(max-width:959px){
- :global([data-detail-open="false"]) .card{padding:14px 16px 8px;border-radius:22px;background:rgb(244 246 250/.92);color:#1c2230;box-shadow:0 10px 30px rgb(4 10 24/.22);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%)}
- :global([data-detail-open="false"]) .card header{font-size:14px;color:#566072}
- :global([data-detail-open="false"]) .card header strong{font-size:14px;font-weight:500}
- :global([data-detail-open="false"]) .card button{padding:12px 2px;border-top-color:rgb(28 34 48/.08)}
- :global([data-detail-open="false"]) .card button strong{font-size:17px;line-height:1.45}
- :global([data-detail-open="false"]) .card button small{font-size:15px;color:#566072}
- :global([data-detail-open="false"]) .card button:hover{background:rgb(28 34 48/.04)}
+ .card{padding:14px 16px 8px;border-radius:22px;background:rgb(244 246 250/.92);color:#1c2230;box-shadow:0 10px 30px rgb(4 10 24/.22);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%)}
+ .card header{font-size:14px;color:#566072}
+ .card header strong{font-size:14px;font-weight:500}
+ .card button{padding:12px 2px;border-top-color:rgb(28 34 48/.08)}
+ .card button strong{font-size:17px;line-height:1.45}
+ .card button small{font-size:15px;color:#566072}
+ .card button:hover{background:rgb(28 34 48/.04)}
 }

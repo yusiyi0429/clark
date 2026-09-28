@@ -25,7 +25,7 @@ describe("responsive workspace CSS", () => {
     expect(css("./home-board.module.css")).toContain("@media(max-width:959px){.board{display:none}.phoneAccount{display:block");
     expect(css("./ceo-glance.module.css")).toContain("@media(max-width:959px){.glance{display:flex");
     // 顶上是锁屏式的日期 + 大号时间，跟着页面滚走：不能 fixed —— 通知区入场有滤镜、返回有转场名，fixed 的子元素会跟着错位（真机反馈的头部跳动）。
-    expect(css("./notifications.module.css")).toContain(':global([data-detail-open="false"]) .rail>.railClock{position:relative');
+    expect(css("./notifications.module.css")).toContain(" .rail>.railClock{position:relative");
     // 手持是深色沉稳的画布，浅色通知卡才显得出来。
     expect(source).toContain("@media(max-width:959px){.shell{background-color:#141c30");
   });
@@ -41,6 +41,10 @@ describe("responsive workspace CSS", () => {
     expect(source).toContain(".shell[data-detail-open=true]{--main-start:8px;--shell-edge:8px;--strip-width:0px;--notice-width:0px}");
     expect(css("./notice-strip.module.css")).toContain("@media(max-width:959px){.strip{display:none}}");
     expect(source).not.toContain("max-width:690px");
+    // 三折叠双屏（600–959）：左边选、右边看 —— 两列网格，打开详情时通知仍在左页，详情只占右页（--main-start 是右页左缘）。
+    expect(source).toContain("@media(min-width:600px) and (max-width:959px){");
+    expect(source).toContain("--main-start:calc(16px + var(--dual-left))");
+    expect(source).toMatch(/\.shell\[data-detail-open=true\] \.notificationArea\{display:block;grid-column:1/);
     // 对话在 ≤959 是底部输入条 + 浮层（手机、三折叠双屏），≥960 才是右列。
     expect(css("./conversation-column.module.css")).toContain("@media (max-width: 959px)");
     expect(css("./conversation-column.module.css")).not.toContain("759px");

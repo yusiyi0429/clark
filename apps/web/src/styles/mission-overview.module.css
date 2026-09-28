@@ -60,3 +60,5 @@
 /* 放在展开页滚动区里（clark 展开页的页头 + 正文层次）。 */
 .content{display:flex;flex-direction:column;gap:24px;min-width:0}
 .intro{margin:0;max-width:760px;font-size:14px;line-height:1.75;color:#6e6e73}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.code.code,.statLabel.statLabel,.filterLabel.filterLabel,.scope.scope{font-size:13px}.filterRow.filterRow,.rowMeta.rowMeta,.listMeta.listMeta,.footerHint.footerHint,.primary.primary{font-size:14px}}

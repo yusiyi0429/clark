@@ -47,3 +47,5 @@
 @media(max-width:1250px){.domain{grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:22px}.domainHead{grid-column:1/-1}.supports{flex-direction:row;align-items:baseline;gap:10px}.supports ul{flex-direction:row;flex-wrap:wrap;gap:3px 18px}}
 @media(max-width:599px){.domain{grid-template-columns:minmax(0,1fr);padding:16px}.detail{gap:24px}.issueList{padding:4px 12px}}
 @media(prefers-contrast:more){.issueList,.domains{border-color:#777}.section>h3,.owner,.goal>span,.missions>span,.supports>span,.empty,.missing{color:#333}.supports li,.missions button{color:#1d1d1f}.supports b,.missions button b{color:#1f3f8a}}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.goal.goal>span,.missions.missions>span{font-size:13px}.missing.missing,.empty.empty,.missions.missions li button small,.detail.detail li>button>small{font-size:14px}}

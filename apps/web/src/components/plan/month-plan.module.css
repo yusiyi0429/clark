@@ -103,3 +103,5 @@
 .doneToggle[aria-expanded=true] svg{transform:rotate(90deg)}
 @media(prefers-reduced-motion:reduce){.doneToggle svg{transition:none}}
 @media(max-width:760px){.gantt{width:100%}.inlineEdit{align-items:stretch}.inlineEdit label{flex:1 1 100%}.inlineEdit input{width:100%}.taskRow{flex-wrap:wrap}.taskMain{flex-basis:100%}}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.muted.muted{font-size:14px}}

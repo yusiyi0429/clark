@@ -58,3 +58,5 @@
 }
 @media (prefers-reduced-transparency: reduce) { .round { background: var(--morning-start); } }
 @media (prefers-contrast: more) { .round, .cards, .cards li, .mission { border-color: var(--ink-muted); } }
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.identity.identity>strong>em{font-size:13px}}

@@ -82,36 +82,48 @@
  * 手持首页（≤959，CEO 与成员同一套），像 iOS 锁屏：深色沉稳的画布上（app-shell），顶上一行日期、一个大号时间，
  * 跟着页面一起滚走（不 fixed：通知区入场时有滤镜、返回时有转场名，fixed 的子元素会跟着错位）；下面每组通知一张磨砂浅色卡，
  * 小字写类别，正文比桌面大一号、行距更松（老花眼也看得清）。个人菜单挪到首页最后（各自首页里的 phoneAccount）。
+ * 手持宽度下通知栏只出现在首页、双屏左页和单屏的 peek 里，这套样式在这三处都一样（双屏打开详情时左页不换样式）。
  */
 @media(max-width:959px){
- :global([data-detail-open="false"]) .rail{--type-title:17px;--type-body:17px;--type-meta:15px;--type-note:14px;height:auto;overflow:visible;border:0;border-radius:0;background:none;box-shadow:none;isolation:auto}
- :global([data-detail-open="false"]) .rail>.railClock{position:relative;inset:auto;display:flex;flex-direction:column;align-items:center;min-height:0;margin:0 0 22px;padding:6px 0 0;color:#fff;text-shadow:none;white-space:normal}
- :global([data-detail-open="false"]) .railClock>.railLock{position:absolute;top:0;left:2px;margin:0}
- :global([data-detail-open="false"]) .railLock button{width:38px;height:38px;color:rgb(255 255 255/.86);border:0;background:rgb(255 255 255/.12);box-shadow:none}
- :global([data-detail-open="false"]) .railClock .homeCapsule{flex-direction:column;gap:2px;min-height:0;padding:0;border:0;border-radius:18px;background:none;box-shadow:none;color:#fff;overflow:visible}
- :global([data-detail-open="false"]) .railClock .homeCapsule::after,:global([data-detail-open="false"]) .homeCapsule .clockLogo{display:none}
- :global([data-detail-open="false"]) .railDate{gap:8px;font-size:16px;line-height:1.4;color:rgb(255 255 255/.8)}
- :global([data-detail-open="false"]) .railWeekday{font-size:16px;color:rgb(255 255 255/.8)}
- :global([data-detail-open="false"]) .railClock time{margin:0;font-size:68px;font-weight:300;line-height:1.05;letter-spacing:-.02em;color:#fff}
- :global([data-detail-open="false"]) .noticeList{position:static;overflow:visible;padding:0;gap:12px}
- :global([data-detail-open="false"]) .railFoot{display:none}
- :global([data-detail-open="false"]) .noticeList>.card>[data-reference-id]{display:none!important}
- :global([data-detail-open="false"]) .card{--notice-radius:22px;--notice-ink:#1c2230;--notice-muted:#566072;border:0;border-radius:22px;background:rgb(244 246 250/.92);box-shadow:0 10px 30px rgb(4 10 24/.22);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%)}
- :global([data-detail-open="false"]) .glassHeader{grid-template-columns:24px minmax(0,1fr);gap:9px;min-height:0;padding:14px 16px 4px;border:0;border-radius:0;background:none;box-shadow:none;color:var(--notice-muted);text-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
- :global([data-detail-open="false"]) .glassHeader .glyph{width:24px;height:24px;border-radius:7px;box-shadow:none}
- :global([data-detail-open="false"]) .card .identity strong{gap:6px;color:var(--notice-muted);font-size:14px;line-height:20px;font-weight:500}
- :global([data-detail-open="false"]) .card .identity .count{min-width:20px;height:20px;background:#e1e6ee;color:#465064;box-shadow:none}
- :global([data-detail-open="false"]) .identity small{display:none}
- :global([data-detail-open="false"]) .tray{padding:2px 8px 8px;background:none}
- :global([data-detail-open="false"]) .card .tray .item{min-height:64px;padding:12px 8px;gap:12px}
- :global([data-detail-open="false"]) .card .tray .item+.item{margin-top:0;border-top:1px solid rgb(28 34 48/.08);border-radius:0}
- :global([data-detail-open="false"]) .card .itemText{gap:4px}
- :global([data-detail-open="false"]) .card .itemText>span{font-weight:600;line-height:1.45}
- :global([data-detail-open="false"]) .card .itemText small{line-height:1.5}
+ .rail{--type-title:17px;--type-body:17px;--type-meta:15px;--type-note:14px;height:auto;overflow:visible;border:0;border-radius:0;background:none;box-shadow:none;isolation:auto}
+ .rail>.railClock{position:relative;inset:auto;display:flex;flex-direction:column;align-items:center;min-height:0;margin:0 0 22px;padding:6px 0 0;color:#fff;text-shadow:none;white-space:normal}
+ .railClock>.railLock{position:absolute;top:0;left:2px;margin:0}
+ .railLock button{width:38px;height:38px;color:rgb(255 255 255/.86);border:0;background:rgb(255 255 255/.12);box-shadow:none}
+ .railClock .homeCapsule{flex-direction:column;gap:2px;min-height:0;padding:0;border:0;border-radius:18px;background:none;box-shadow:none;color:#fff;overflow:visible}
+ .railClock .homeCapsule::after,.homeCapsule .clockLogo{display:none}
+ .railDate{gap:8px;font-size:16px;line-height:1.4;color:rgb(255 255 255/.8)}
+ .railWeekday{font-size:16px;color:rgb(255 255 255/.8)}
+ .railClock time{margin:0;font-size:68px;font-weight:300;line-height:1.05;letter-spacing:-.02em;color:#fff}
+ .noticeList{position:static;overflow:visible;padding:0;gap:12px}
+ .railFoot{display:none}
+ .noticeList>.card>[data-reference-id]{display:none!important}
+ .card{--notice-radius:22px;--notice-ink:#1c2230;--notice-muted:#566072;border:0;border-radius:22px;background:rgb(244 246 250/.92);box-shadow:0 10px 30px rgb(4 10 24/.22);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%)}
+ .glassHeader{grid-template-columns:24px minmax(0,1fr);gap:9px;min-height:0;padding:14px 16px 4px;border:0;border-radius:0;background:none;box-shadow:none;color:var(--notice-muted);text-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+ .glassHeader .glyph{width:24px;height:24px;border-radius:7px;box-shadow:none}
+ .card .identity strong{gap:6px;color:var(--notice-muted);font-size:14px;line-height:20px;font-weight:500}
+ .card .identity .count{min-width:20px;height:20px;background:#e1e6ee;color:#465064;box-shadow:none}
+ .identity small{display:none}
+ .tray{padding:2px 8px 8px;background:none}
+ .card .tray .item{min-height:64px;padding:12px 8px;gap:12px}
+ .card .tray .item+.item{margin-top:0;border-top:1px solid rgb(28 34 48/.08);border-radius:0}
+ .card .itemText{gap:4px}
+ .card .itemText>span{font-weight:600;line-height:1.45}
+ .card .itemText small{line-height:1.5}
 }
-@media(max-width:959px) and (prefers-reduced-transparency:reduce){:global([data-detail-open="false"]) .card{background:#f4f6fa;-webkit-backdrop-filter:none;backdrop-filter:none}}
-@media(max-width:959px) and (prefers-contrast:more){:global([data-detail-open="false"]) .card{--notice-muted:#333a47;background:#fff;box-shadow:0 0 0 1px #777}}
+@media(max-width:959px) and (prefers-reduced-transparency:reduce){.card{background:#f4f6fa;-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media(max-width:959px) and (prefers-contrast:more){.card{--notice-muted:#333a47;background:#fff;box-shadow:0 0 0 1px #777}}
+/* 单屏 peek（打开详情后从左缘滑出来）：通知栏浮在详情上，垫一块同样的深色画布。 */
+@media(max-width:599px){:global([data-notices-peek="true"]) .rail{height:100%;overflow-y:auto;padding:12px;box-sizing:border-box;background:#141c30}}
+/* 双屏左页：通知栏占满左页高度，时间在上，通知列表自己滚。 */
+@media(min-width:600px) and (max-width:959px){
+ .rail{display:flex;flex-direction:column;height:100%;overflow:hidden}
+ .rail>.railClock{flex:none;margin-bottom:16px}
+ .railClock time{font-size:56px}
+ .noticeList{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 0 24px}
+}
 /* 副标题那一行换成一块（本月 Mission Card 的倒计时）：右边不再给引用键留位，底下多留一点呼吸。 */
 .glassHeader[data-subline]{padding-right:16px;padding-bottom:12px}
 @media(max-width:1200px){.glassHeader[data-subline]{padding-right:13px}}
 .card .identity .tag{font-style:normal;font-size:12px;font-weight:400;color:rgb(255 255 255/78%)}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.card .identity .count.count{font-size:13px}}

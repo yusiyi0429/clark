@@ -218,3 +218,5 @@
 .candidateReopen:hover{background:#f7f8fa}
 .candidateHeader button:focus-visible,.candidateFooter button:focus-visible,.candidateReopen:focus-visible,.mappingTable select:focus-visible{outline:2px solid #007aff88;outline-offset:2px}
 @media(max-width:900px){.candidateDialog{width:calc(100vw - 24px);max-height:calc(100dvh - 40px)}}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.briefActions.briefActions>button,.summaryEdit.summaryEdit>span,.reviewSection.reviewSection>header>span,.readinessBlock.readinessBlock>small,.sidebarIssues.sidebarIssues>small,.linkedIssue.linkedIssue>small,.judgmentHero.judgmentHero>small{font-size:13px}.publishReceipt.publishReceipt,.summaryEdit.summaryEdit,.empty.empty,.warnings.warnings,.readiness.readiness{font-size:14px}}

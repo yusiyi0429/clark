@@ -140,3 +140,5 @@
 /* 手机：和其他详情页一样，返回在页头左上角，对象标记让出宽度给标题。 */
 .close .backIcon{display:none}
 @media(max-width:959px){.header{justify-content:flex-start;gap:8px;padding:12px 14px 12px 10px}.header>.close{order:-1}.close .closeIcon{display:none}.close .backIcon{display:block}.identity>[data-context-mark]{display:none}}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.eyebrow.eyebrow,.workspace .commitInfo.commitInfo>small,.workspace .receipt.receipt>small{font-size:13px}.check.check>span,.workspace .commitInfo.commitInfo>span{font-size:14px}}

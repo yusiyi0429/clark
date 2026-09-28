@@ -25,15 +25,15 @@
   transition: opacity 200ms ease 80ms, visibility 0s;
 }
 
-/* 流光：石板灰底字，一道品牌蓝光从左扫到右。 */
+/* 流光：深蓝灰底字（浅色磨砂上看得清，老花眼也看得清），一道品牌蓝光从左扫到右。 */
 .text {
   padding-left: 0.28em;
-  font-size: 17px;
-  font-weight: 500;
+  font-size: 19px;
+  font-weight: 600;
   letter-spacing: 0.28em;
   line-height: 1;
   color: transparent;
-  background: linear-gradient(100deg, #74839a 0%, #74839a 32%, #3a83f7 44%, #62b4ff 50%, #3a83f7 56%, #74839a 68%, #74839a 100%);
+  background: linear-gradient(100deg, #3f4c61 0%, #3f4c61 32%, #2f6fd6 44%, #4f9dff 50%, #2f6fd6 56%, #3f4c61 68%, #3f4c61 100%);
   background-size: 280% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -54,12 +54,13 @@
   white-space: nowrap;
 }
 
+/* 手持的画布是深色：半透明白底会变成一层灰，字就看不清了；这里把蒙版调实，仍是浅底深字。 */
 @media (max-width: 959px) {
-  .mask { border-radius: 21px; }
+  .mask { border-radius: 21px; background: linear-gradient(160deg, rgb(248 250 253 / 88%), rgb(236 242 251 / 84%)); }
 }
 @media (prefers-reduced-motion: reduce) {
   .mask, .mask[data-active="true"] { transition: none; }
-  .text { animation: none; background: none; color: #3c66bf; }
+  .text { animation: none; background: none; color: #2f5fb3; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .mask { background: #f5f5f7; -webkit-backdrop-filter: none; backdrop-filter: none; }

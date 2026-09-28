@@ -69,6 +69,7 @@ export function CeoGlance({ cards, onNavigate }: Props) {
                 <span className={g.text}>
                   <span className={g.name}>{card.title}</span>
                   <small>负责人 · {payload.ownerDisplayName || "待指派"}</small>
+                  {payload.target ? <small className={g.target}>本月 · {payload.target}</small> : null}
                 </span>
                 {pending ? <span className={g.pending} data-urgency={topUrgency(payload.pendingIssues.map((issue) => issue.urgency))}>{pending} 待决策</span> : null}
                 <ChevronRight size={16} className={g.arrow} aria-hidden="true" />

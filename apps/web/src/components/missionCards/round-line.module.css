@@ -35,3 +35,5 @@
 @media (max-width: 1100px) { .row { flex-wrap: wrap; } .text { flex-basis: calc(100% - 100px); } .primary.primary { order: 4; width: 100%; } }
 @media (max-width: 759px) { .detail { padding: 8px 16px 20px; } .row { gap: 8px; } .text { font-size: 14px; } .deadline { padding: 12px 16px; } }
 @media (prefers-reduced-motion: reduce) { .toggle svg { transition: none; } }
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.mark.mark{font-size:13px}}

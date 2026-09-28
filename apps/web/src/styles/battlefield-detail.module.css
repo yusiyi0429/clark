@@ -61,3 +61,5 @@
 @media(max-width:1250px){.goals,.campaigns{grid-template-columns:1fr}}
 @media(max-width:599px){.detail{gap:24px}.lead{padding:14px 15px}.lead>p{font-size:16px}.box{padding:4px 12px}.feedback li{grid-template-columns:1fr}.feedback li>span{grid-row:auto}}
 @media(prefers-contrast:more){.lead,.box,.goals>div,.campaigns li,.group,.summary{border-color:#777}.section>h3,.sectionHead>h3,.note,.owner,.goals span,.mission small{color:#333}.lead{background:#fff}}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.milestones.milestones>li,.mission.mission>small,.note.note{font-size:14px}.goals.goals>div>span,.group.group>h4>b,.lead.lead>span{font-size:13px}}

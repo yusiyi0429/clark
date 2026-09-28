@@ -188,8 +188,8 @@
   .footer > button, .radarActions > button { width: 100%; }
   .secondary { min-height: 44px; }
 }
-/* 讲的是工作台长什么样：和外壳一起在 599 切到手机版（三折叠双屏已是两栏）。 */
-@media (max-width: 959px) {
+/* 讲的是工作台长什么样：单屏（≤599）是「最上面是通知、往下是…」；双屏和三屏都是左右两栏，用桌面那套「左边 / 右边」的说法。 */
+@media (max-width: 599px) {
   .desktopTourCopy { display: none; }
   .mobileTourCopy { display: block; }
 }

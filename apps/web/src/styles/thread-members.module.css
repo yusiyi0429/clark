@@ -19,3 +19,5 @@
 .error{margin:0;color:#a44d3e;font-size:13px;line-height:1.7}
 /* 触屏：「拉人进群」高度放到 40。 */
 @media(pointer:coarse){.trigger.trigger{min-height:40px;padding-inline:14px 12px}}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.trigger.trigger{font-size:14px}}

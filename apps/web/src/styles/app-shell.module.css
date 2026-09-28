@@ -218,3 +218,20 @@
 /* 手持（≤959）的画布：深藏青、两块极淡的柔光，沉稳不抢眼，浅色通知卡在上面才显得出来（详情仍是浅色面板，四周留 8px 深色边）。 */
 @media(max-width:959px){.shell{background-color:#141c30;background-image:radial-gradient(60% 42% at 90% 4%,rgb(58 80 136/.5) 0%,transparent 72%),radial-gradient(58% 40% at 4% 96%,rgb(48 66 118/.42) 0%,transparent 72%),linear-gradient(180deg,#1b2543 0%,#121a2d 100%);background-position:center;background-size:auto}}
 @media(max-width:959px) and (prefers-reduced-transparency:reduce){.shell{background:#151d31}}
+
+/*
+ * 三折叠双屏（600–959，近正方形）：左边选、右边看。左页是「待你处理」（通知，常驻、自己滚），右页平时是精简的公司全局，
+ * 点开任何一条，详情就在右页打开、左页不动；右页左上角返回回到公司全局。单屏（≤599）仍是一条滚动 + 详情铺满。
+ * --main-start 是右页左缘：加载蒙版、对话浮层、对话记录和输入条都跟着它，只盖右页。
+ */
+@media(min-width:600px) and (max-width:959px){
+ .shell,.shell[data-detail-open=true]{--dual-left:calc((100vw - 24px) * .44);--main-start:calc(16px + var(--dual-left));--notice-bottom-inset:24px}
+ .shell,.shell[data-detail-open=false],.shell[data-detail-open=true]{display:grid;grid-template-columns:var(--dual-left) minmax(0,1fr);gap:8px;padding:max(8px,env(safe-area-inset-top)) 8px max(8px,env(safe-area-inset-bottom));overflow:hidden}
+ .shell .notificationArea,.shell[data-detail-open=false] .notificationArea,.shell[data-detail-open=true] .notificationArea{display:block;grid-column:1;grid-row:1;order:0;height:100%;min-height:0;position:relative}
+ .shell .mainArea,.shell[data-detail-open=false] .mainArea,.shell[data-detail-open=true] .mainArea{display:block;grid-column:2;grid-row:1;position:relative;inset:auto;z-index:auto;height:100%;min-height:0;overflow:hidden;border-radius:22px}
+ .shell[data-detail-open=false] .homeSurface{height:100%;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;padding:6px 4px calc(96px + env(safe-area-inset-bottom));box-sizing:border-box}
+ .shell[data-detail-open=false] .homeSurface::-webkit-scrollbar{display:none}
+ .historySheet,.shell:not([data-detail-open=true]) .historySheet{left:var(--main-start);right:8px}
+}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.expandedIdentity.expandedIdentity>div>span{font-size:13px}}

@@ -22,3 +22,6 @@
 .arrow{flex:none;color:#a2a6ad}
 @media(prefers-contrast:more){.list{background:#fff;box-shadow:0 0 0 1px #777}.text small{color:#444}}
 @media(prefers-reduced-transparency:reduce){.list{background:#f4f6fa;-webkit-backdrop-filter:none;backdrop-filter:none}}
+/* 本月目标只在双屏右页出现（单屏只留名称和负责人）：两行截断，点进战场看全文。 */
+.text .target{display:none}
+@media(min-width:600px) and (max-width:959px){.text .target{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin-top:2px;color:#3d4452}}

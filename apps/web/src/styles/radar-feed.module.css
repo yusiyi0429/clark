@@ -151,3 +151,5 @@
 .feed .notice{margin:-8px 0 20px;color:var(--ink-muted);font-size:13px;line-height:1.7}
 .empty .emptyAction{margin-top:20px;min-height:44px;padding-inline:24px}
 .article .hiddenNote{margin:14px 0 0!important;color:#6b6b70;font-size:13px!important;line-height:1.7!important}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.status.status{font-size:14px}}

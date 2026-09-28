@@ -41,7 +41,7 @@
 .phone { display: none; }
 @keyframes dotBreathe { 50% { opacity: .45; } }
 
-@media (max-width: 959px) {
+@media (max-width: 599px) {
   .root[data-mobile="auto"] { padding: 9px; border-radius: 26px; }
   .root[data-mobile="auto"] .desktop { display: none; }
   .root[data-mobile="auto"] .phone { display: block; }

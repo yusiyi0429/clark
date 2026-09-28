@@ -88,3 +88,5 @@
 @media(prefers-reduced-motion:reduce){.workspace *{transition:none!important;scroll-behavior:auto!important}}
 /* 触屏：「打开会议空间」是一行小字，点击区域上下外扩到 40。 */
 @media(pointer:coarse){.workspace .meetingMeta .meetingOpen{padding-block:11px;margin-block:-11px}}
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.options.options li>span,.field.field>span,.identity.identity>div>span,.note.note,.discussion.discussion>header>span,.section.section ol>li>span{font-size:13px}.preflightActions.preflightActions>div>p,.workspace .meetingMeta.meetingMeta>span,.workspace .meetingMeta .meetingOpen.meetingOpen,.discussion.discussion>small,.discussion.discussion>header p,.section.section li>div>small,.section.section li small{font-size:14px}}

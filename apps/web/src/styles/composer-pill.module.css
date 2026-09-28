@@ -281,3 +281,5 @@
   .pill { border-color: #8e8e93; }
   .pill[data-tone='group'] { border-color: #8b7351; }
 }
+/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
+@media(max-width:959px){.badge.badge{min-width:19px;height:19px;padding:0 5px;font-size:13px;top:-7px;right:-7px}}
