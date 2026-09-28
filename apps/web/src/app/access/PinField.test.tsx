@@ -20,6 +20,8 @@ const hooks = vi.hoisted(() => {
       if (!(index in local)) local[index] = initial;
       return [local[index] as T, (value: T) => { local[index] = value; }] as const;
     },
+    // 挂载后的副作用（读上次登录）在这里同步执行；下一次渲染读到结果。
+    useEffect(effect: () => void) { effect(); },
     useImperativeHandle<T>(ref: Ref<T> | undefined, create: () => T) {
       if (typeof ref === "function") ref(create());
       else if (ref) ref.current = create();
@@ -45,6 +47,8 @@ function elements(node: ReactNode): Element[] {
 }
 
 function renderAccess() {
+  hooks.begin("access");
+  AccessScreen({});
   hooks.begin("access");
   return AccessScreen({});
 }

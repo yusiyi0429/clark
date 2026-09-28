@@ -10,11 +10,19 @@
 .lockGlyph { display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: var(--ink-muted); }
 .clock { display: block; color: var(--ink); font-family: "Segoe UI Variable Display", Bahnschrift, "Microsoft YaHei UI", sans-serif; font-size: clamp(72px, 7.8vw, 108px); font-stretch: semi-expanded; font-weight: 620; font-variant-numeric: tabular-nums lining-nums; line-height: .92; letter-spacing: .04em; transform: scaleX(1.08) scaleY(.84); transform-origin: 50% 50%; }
 .date { margin: 7px 0 0; color: var(--ink-muted); font-size: 14px; font-weight: 470; letter-spacing: .12em; }
-.accessForm { display: flex; flex-direction: column; align-items: center; width: min(430px, calc(100vw - 32px)); margin-top: clamp(28px, 4.2vh, 48px); pointer-events: auto; animation: interfaceWake 460ms 60ms var(--onboarding-ease) both; }
+.accessForm { display: flex; flex-direction: column; align-items: center; width: min(430px, calc(100vw - 32px)); min-height: 245px; margin-top: clamp(28px, 4.2vh, 48px); pointer-events: auto; animation: interfaceWake 460ms 60ms var(--onboarding-ease) both; }
 .accessForm[data-error="true"] { animation: errorShake 260ms ease-in-out; }
 .codeGroup { width: 100%; margin-top: 20px; }
 .narrowGroup { width: min(260px, 100%); }
 .codeLabel { display: block; margin: 0 0 8px; color: var(--ink-muted); font: 600 12px/1.4 var(--font-sans); letter-spacing: .04em; }
+.returningAccount { width: 100%; text-align: center; }
+.welcome { margin: 0; color: var(--ink); font: 600 clamp(20px, 5vw, 25px)/1.4 var(--font-sans); overflow-wrap: anywhere; }
+.accountLine { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 14px; margin: 8px 0 0; color: var(--ink-muted); font: 400 12px/1.5 var(--font-sans); }
+.accountId { overflow-wrap: anywhere; }
+.switchAccount { border: 0; padding: 0; background: none; color: var(--onboarding-blue); font: inherit; cursor: pointer; }
+.switchAccount:hover { text-decoration: underline; }
+.switchAccount:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; border-radius: 2px; }
+.switchAccount:disabled { opacity: .5; cursor: default; }
 .codeField { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .codeCell, .passwordField {
   box-sizing: border-box;

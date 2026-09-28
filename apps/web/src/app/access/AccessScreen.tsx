@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TianshuMark } from "@/components/TianshuMark";
 import { LockscreenClock } from "./LockscreenVisual";
 import { MorningCanvas } from "@/components/onboarding/MorningCanvas";
 import { loginDestination } from "@/lib/access-paths";
 export { landingPath } from "@/lib/access-paths";
 import { PinField, type PinFieldHandle } from "./PinField";
+import { clearLastLogin, readLastLogin, rememberLastLogin, type LastLogin } from "./lastLogin";
 import a from "@/styles/access.module.css";
 
 type Role = "ceo" | "member";
@@ -42,6 +43,7 @@ async function post(url: string, body: Record<string, string>): Promise<Result> 
 export function AccessScreen({ nextPath }: { nextPath?: string }) {
   const [stage, setStage] = useState<Stage>({ kind: "login" });
   const [loginId, setLoginId] = useState("");
+  const [lastLogin, setLastLogin] = useState<LastLogin | null | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +53,10 @@ export function AccessScreen({ nextPath }: { nextPath?: string }) {
   const confirmPin = useRef<PinFieldHandle>(null);
   const inFlight = useRef(false);
   const busy = submitting || unlocking;
+
+  useEffect(() => {
+    setLastLogin(readLastLogin());
+  }, []);
 
   async function run(task: () => Promise<void>) {
     if (inFlight.current) return;
@@ -76,7 +82,7 @@ export function AccessScreen({ nextPath }: { nextPath?: string }) {
 
   const login = (passcode: string) =>
     run(async () => {
-      const id = loginId.trim();
+      const id = (lastLogin?.loginId ?? loginId).trim();
       if (!id) {
         setError("先输入你的 ID");
         pin.current?.clear(false);
@@ -93,6 +99,7 @@ export function AccessScreen({ nextPath }: { nextPath?: string }) {
         setStage({ kind: "set", loginId: id, passcode });
         return;
       }
+      await rememberLastLogin(id);
       await enter(result.role ?? "member", result.onboarded);
     });
 
@@ -117,8 +124,16 @@ export function AccessScreen({ nextPath }: { nextPath?: string }) {
         newPin.current?.clear();
         return;
       }
+      await rememberLastLogin(stage.loginId);
       await enter(result.role ?? "member", result.onboarded);
     });
+
+  function switchAccount() {
+    clearLastLogin();
+    setLastLogin(null);
+    setLoginId("");
+    setError("");
+  }
 
   return (
     <main className={a.shell} data-unlocking={unlocking}>
@@ -137,39 +152,49 @@ export function AccessScreen({ nextPath }: { nextPath?: string }) {
         <LockscreenClock />
 
         <form className={a.accessForm} data-error={Boolean(error)} onSubmit={(event) => event.preventDefault()} aria-busy={submitting}>
-          {stage.kind === "login" ? (
+          {stage.kind === "login" && lastLogin === undefined ? null : stage.kind === "login" ? (
             <>
-              <div className={`${a.codeGroup} ${a.narrowGroup}`}>
-                <label className={a.codeLabel} htmlFor="access-id">
-                  你的 ID
-                </label>
-                <div className={a.passwordField}>
-                  <input
-                    ref={idInput}
-                    id="access-id"
-                    className={a.passwordInput}
-                    type="text"
-                    value={loginId}
-                    autoComplete="username"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    autoFocus
-                    disabled={busy}
-                    onChange={(event) => {
-                      setLoginId(event.target.value);
-                      if (error) setError("");
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") return;
-                      event.preventDefault();
-                      const code = pin.current?.value() ?? "";
-                      if (code.length === 4) void login(code);
-                      else pin.current?.focus();
-                    }}
-                  />
+              {lastLogin ? (
+                <div className={a.returningAccount}>
+                  <h2 className={a.welcome}>欢迎回来，{lastLogin.displayName}</h2>
+                  <p className={a.accountLine}>
+                    <span className={a.accountId}>{lastLogin.loginId}</span>
+                    <button type="button" className={a.switchAccount} disabled={busy} onClick={switchAccount}>切换账号</button>
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className={`${a.codeGroup} ${a.narrowGroup}`}>
+                  <label className={a.codeLabel} htmlFor="access-id">
+                    你的 ID
+                  </label>
+                  <div className={a.passwordField}>
+                    <input
+                      ref={idInput}
+                      id="access-id"
+                      className={a.passwordInput}
+                      type="text"
+                      value={loginId}
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      autoFocus
+                      disabled={busy}
+                      onChange={(event) => {
+                        setLoginId(event.target.value);
+                        if (error) setError("");
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        const code = pin.current?.value() ?? "";
+                        if (code.length === 4) void login(code);
+                        else pin.current?.focus();
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
               <div className={`${a.codeGroup} ${a.narrowGroup}`}>
                 <p className={a.codeLabel}>4 位口令</p>
                 <PinField
@@ -177,6 +202,7 @@ export function AccessScreen({ nextPath }: { nextPath?: string }) {
                   ref={pin}
                   label="口令"
                   autoComplete="current-password"
+                  autoFocus={Boolean(lastLogin)}
                   disabled={busy}
                   invalid={Boolean(error)}
                   describedBy={error ? "access-error" : undefined}

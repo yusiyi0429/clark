@@ -35,11 +35,11 @@ describe("锁屏表单", () => {
     expect(landingPath("ceo", "/radar")).toBe("/radar");
   });
 
-  it("一个 ID 输入框 + 4 格口令，没有身份滑块；时钟未挂载前占位不跳动", () => {
+  it("存储读取前只保留表单占位，不先闪出完整表单；时钟也有占位", () => {
     const html = renderToStaticMarkup(<AccessScreen nextPath="/" />);
-    expect(html).toContain('id="access-id"');
-    expect(html).toContain("你的 ID");
-    expect(html.match(/aria-label="口令第 \d 位"/g)).toHaveLength(4);
+    expect(html).not.toContain('id="access-id"');
+    expect(html).not.toContain("你的 ID");
+    expect(html).not.toContain('aria-label="口令第 1 位"');
     expect(html).not.toContain('role="radiogroup"');
     expect(html).toContain("--:--");
     expect(html).toContain("data-morning-canvas");
