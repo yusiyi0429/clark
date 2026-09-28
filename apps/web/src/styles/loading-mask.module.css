@@ -1,0 +1,66 @@
+/* 二级页加载蒙版（components/shell/LoadingMask）：从主区左缘铺到右缘（含右列和输入条），不盖通知窄条。
+   --main-start / --shell-edge 取自外壳（app-shell.module.css），打开详情时就是窄条右侧。
+   层级高过输入条（1000）和右列浮层（1030–1050），低过通知 peek（1100+）、提示条和窄条。 */
+.mask {
+  position: fixed;
+  z-index: 1090;
+  top: var(--shell-edge);
+  right: var(--shell-edge);
+  bottom: var(--shell-edge);
+  left: var(--main-start);
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  background: linear-gradient(160deg, rgb(255 255 255 / 50%), rgb(236 242 251 / 42%));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 55%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 220ms ease, visibility 0s linear 220ms;
+}
+.mask[data-active="true"] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 200ms ease 80ms, visibility 0s;
+}
+
+/* 流光：石板灰底字，一道品牌蓝光从左扫到右。 */
+.text {
+  padding-left: 0.28em;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.28em;
+  line-height: 1;
+  color: transparent;
+  background: linear-gradient(100deg, #74839a 0%, #74839a 32%, #3a83f7 44%, #62b4ff 50%, #3a83f7 56%, #74839a 68%, #74839a 100%);
+  background-size: 280% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: flow 2.2s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+  user-select: none;
+}
+@keyframes flow {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+
+.status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 690px) {
+  .mask { border-radius: 21px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mask, .mask[data-active="true"] { transition: none; }
+  .text { animation: none; background: none; color: #3c66bf; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .mask { background: #f5f5f7; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

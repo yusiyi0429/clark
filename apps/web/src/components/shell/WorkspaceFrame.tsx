@@ -13,6 +13,7 @@ import { ConversationHost, type ConversationUiState } from "@/conversation/Conve
 import { ReferenceProvider } from "@/conversation/references";
 import { saveColumnMode } from "@/conversation/useColumnMode";
 import { prefersReducedMotion, runRouteTransition, supportsViewTransition, type TransitionDirection } from "@/lib/viewTransition";
+import { LoadingMask } from "./LoadingMask";
 import { NoticeStrip } from "./NoticeStrip";
 import { WorkspaceContext, type DetailInfo, type WorkspaceApi } from "./WorkspaceContext";
 // clark 的 CEO 工作面经 MissionCardWorkspace 引入 ts-design 样式表，它的主题层排在 globals 之后生效
@@ -39,6 +40,8 @@ const isEditable = (el: Element | null) =>
 const pathOf = (href: string) => href.split("?")[0];
 /** 能接回焦点的键。 */
 const FOCUSABLE = 'button:not(:disabled), a[href], [role="button"], [tabindex]:not([tabindex="-1"])';
+/** 打开转场最多等服务端这么久；再慢就先打开二级页并盖上加载蒙版，转场不再冻住首页。 */
+const OPEN_WAIT_MS = 100;
 const rectOf = (el: Element): Rect => {
   const box = el.getBoundingClientRect();
   return { left: box.left, top: box.top, width: box.width, height: box.height };
@@ -57,9 +60,14 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const detailOpen = pathname !== homeHref;
+  /** 已发起、新路由还没提交的目标：二级页先打开，右侧盖加载蒙版。路由提交（包括被重定向到别处）就清掉。 */
+  const [pending, setPending] = useState<string | null>(null);
+  const routeOpen = pathname !== homeHref;
+  const detailOpen = routeOpen || pending !== null;
+  /** 从首页打开、页面还没到：面板是空的，透明着让蒙版磨砂后面的首页。 */
+  const openingEmpty = !routeOpen && pending !== null;
   // 雷达列表与成员战场是浏览面；成员战场尚未开放独立 Agent scope，个人信号不挂对话（成员只有全局对话）。
-  const railAllowed = detailOpen && pathname !== `${homeHref === "/" ? "" : homeHref}/radar` && !(homeHref === "/me" && (pathname.startsWith("/me/battlefields/") || pathname.startsWith("/me/radar/")));
+  const railAllowed = routeOpen && pathname !== `${homeHref === "/" ? "" : homeHref}/radar` && !(homeHref === "/me" && (pathname.startsWith("/me/battlefields/") || pathname.startsWith("/me/radar/")));
 
   const [detail, setDetail] = useState<DetailInfo | null>(null);
   const registerDetail = useCallback((info: DetailInfo | null) => setDetail(info), []);
@@ -138,6 +146,8 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
     if (target && !active?.closest('[data-testid="global-controls"]')) target.focus({ preventScroll: true });
   }, []);
 
+  useLayoutEffect(() => setPending(null), [pathname]);
+
   // 新路由提交后：先让等待中的转场截新快照，再做焦点与兜底动画。
   useLayoutEffect(() => {
     if (settle.current) {
@@ -186,6 +196,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
       setPeek(false);
       if (!source || !supportsViewTransition()) {
         fallbackEnter.current = origin.current.rect;
+        setPending(href);
         startTransition(() => router.push(href));
         return;
       }
@@ -193,10 +204,21 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
       card.style.viewTransitionName = "notice-card";
       flushSync(() => setNoticeTransition("open"));
       void runRouteTransition("open", (done) => {
-        settle.current = () => {
+        let early = 0;
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(early);
           card.style.removeProperty("view-transition-name");
           done();
         };
+        settle.current = finish;
+        early = window.setTimeout(() => {
+          settle.current = null;
+          flushSync(() => setPending(href));
+          finish();
+        }, OPEN_WAIT_MS);
         startTransition(() => router.push(href));
       }).then(() => {
         card.style.removeProperty("view-transition-name");
@@ -208,7 +230,14 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   );
 
   const goHome = useCallback(() => {
+    // 二级页还没真正打开：撤掉这次打开（新导航会顶替还在路上的那次）。
+    if (!routeOpen && pending) {
+      setPending(null);
+      startTransition(() => router.push(homeHref));
+      return;
+    }
     if (!detailOpen || closing) return;
+    setPending(null);
     const leaving = pathname;
     const target = findOrigin(leaving) as HTMLElement | null;
     const trigger = findTrigger(leaving, target);
@@ -261,11 +290,12 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
     }
     startTransition(() => router.push(homeHref));
     finish();
-  }, [closing, detailOpen, findOrigin, findTrigger, pathname, peek, router, homeHref]);
+  }, [closing, detailOpen, findOrigin, findTrigger, pathname, peek, pending, routeOpen, router, homeHref]);
 
   const close = useCallback(() => {
     const back = returns.current.pop();
     if (back) {
+      setPending(back);
       startTransition(() => router.push(back));
       return;
     }
@@ -283,11 +313,12 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
       if (!detailOpen) return open(href, from);
       if (href === pathname) return;
       // 在对象之间切换：同一视图内替换，跨视图记下返回点（C-01：关闭详情回到原工作面）。
-      if (family(href, homeHref) !== family(pathname, homeHref)) returns.current.push(pathname);
+      if (routeOpen && family(href, homeHref) !== family(pathname, homeHref)) returns.current.push(pathname);
       setPeek(false);
+      if (pathOf(href) !== pathname) setPending(href);
       startTransition(() => router.push(href));
     },
-    [detailOpen, goHome, open, pathname, router, homeHref],
+    [detailOpen, goHome, open, pathname, routeOpen, router, homeHref],
   );
 
   const showToast = useCallback((text: string) => setToast(text), []);
@@ -406,7 +437,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             className={s.homeSurface}
             aria-hidden={detailOpen}
             inert={detailOpen}
-            style={noticeTransition ? { viewTransitionName: "home-board" } : undefined}
+            style={noticeTransition && !openingEmpty ? { viewTransitionName: "home-board" } : undefined}
           >
             {home}
           </div>
@@ -415,6 +446,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
               className={s.expanded}
               ref={panel}
               data-testid="expanded-panel"
+              data-loading={openingEmpty || undefined}
               aria-label={detail?.label}
               style={noticeTransition ? { viewTransitionName: "notice-card" } : undefined}
             >
@@ -424,6 +456,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             children
           )}
         </div>
+        <LoadingMask active={pending !== null} />
         {detailOpen ? (
           <NoticeStrip
             current={detail?.mark ?? null}
