@@ -3643,7 +3643,7 @@ export interface components {
         };
         MaterialView: {
             id: string;
-            objectType: "issue" | "task";
+            objectType: "issue" | "task" | "meeting";
             objectId: string;
             fileName: string;
             format: "markdown" | "pdf" | "docx" | "html";
@@ -3672,7 +3672,7 @@ export interface components {
         MaterialListResponse: {
             materials: {
                 id: string;
-                objectType: "issue" | "task";
+                objectType: "issue" | "task" | "meeting";
                 objectId: string;
                 fileName: string;
                 format: "markdown" | "pdf" | "docx" | "html";
@@ -3731,7 +3731,7 @@ export interface components {
         MaterialDetailResponse: {
             material: {
                 id: string;
-                objectType: "issue" | "task";
+                objectType: "issue" | "task" | "meeting";
                 objectId: string;
                 fileName: string;
                 format: "markdown" | "pdf" | "docx" | "html";
@@ -7350,7 +7350,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                objectType: "issue" | "task";
+                objectType: "issue" | "task" | "meeting";
                 objectId: string;
             };
             cookie?: never;
@@ -7391,7 +7391,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                objectType: "issue" | "task";
+                objectType: "issue" | "task" | "meeting";
                 objectId: string;
             };
             cookie?: never;
@@ -7468,7 +7468,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                objectType: "issue" | "task";
+                objectType: "issue" | "task" | "meeting";
                 objectId: string;
                 materialId: string;
             };
@@ -7510,7 +7510,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                objectType: "issue" | "task";
+                objectType: "issue" | "task" | "meeting";
                 objectId: string;
                 materialId: string;
             };
@@ -7559,7 +7559,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                objectType: "issue" | "task";
+                objectType: "issue" | "task" | "meeting";
                 objectId: string;
                 materialId: string;
             };
@@ -7604,7 +7604,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                objectType: "issue" | "task";
+                objectType: "issue" | "task" | "meeting";
                 objectId: string;
                 materialId: string;
             };

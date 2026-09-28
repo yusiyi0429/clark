@@ -4,7 +4,8 @@ import { Type, type Static } from "@sinclair/typebox";
  * 工单 09 材料区：议题、执行事项的材料。群成员都能上传，只有主人能删；
  * 只有 Agent 能改，且只能改 Markdown 和 HTML 源码；每改一次存一版。
  */
-export const MaterialObjectType = Type.Union([Type.Literal("issue"), Type.Literal("task")]);
+/** meeting：工单 14，会议页也有群组材料区，规则同议题、执行事项。 */
+export const MaterialObjectType = Type.Union([Type.Literal("issue"), Type.Literal("task"), Type.Literal("meeting")]);
 /** html：工单 12，在沙箱里原样显示；和 Markdown 一样只能让 Agent 改源码。 */
 export const MaterialFormat = Type.Union([Type.Literal("markdown"), Type.Literal("pdf"), Type.Literal("docx"), Type.Literal("html")]);
 

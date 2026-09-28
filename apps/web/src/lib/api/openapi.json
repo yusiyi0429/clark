@@ -3056,7 +3056,8 @@
               "type": "string",
               "enum": [
                 "issue",
-                "task"
+                "task",
+                "meeting"
               ]
             }
           },
@@ -3114,7 +3115,8 @@
               "type": "string",
               "enum": [
                 "issue",
-                "task"
+                "task",
+                "meeting"
               ]
             }
           },
@@ -3223,7 +3225,8 @@
               "type": "string",
               "enum": [
                 "issue",
-                "task"
+                "task",
+                "meeting"
               ]
             }
           },
@@ -3298,7 +3301,8 @@
               "type": "string",
               "enum": [
                 "issue",
-                "task"
+                "task",
+                "meeting"
               ]
             }
           },
@@ -3369,7 +3373,8 @@
               "type": "string",
               "enum": [
                 "issue",
-                "task"
+                "task",
+                "meeting"
               ]
             }
           },
@@ -3438,7 +3443,8 @@
               "type": "string",
               "enum": [
                 "issue",
-                "task"
+                "task",
+                "meeting"
               ]
             }
           },
@@ -18612,6 +18618,10 @@
               {
                 "const": "task",
                 "type": "string"
+              },
+              {
+                "const": "meeting",
+                "type": "string"
               }
             ]
           },
@@ -18809,6 +18819,10 @@
                     },
                     {
                       "const": "task",
+                      "type": "string"
+                    },
+                    {
+                      "const": "meeting",
                       "type": "string"
                     }
                   ]
@@ -19158,6 +19172,10 @@
                   },
                   {
                     "const": "task",
+                    "type": "string"
+                  },
+                  {
+                    "const": "meeting",
                     "type": "string"
                   }
                 ]

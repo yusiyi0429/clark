@@ -881,7 +881,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           operationId: "listMaterials",
           summary: "对象的材料（工单 09）；群成员能读（议题未建群时为 CEO），其他人 404",
           parameters: [
-            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
           ],
           responses: {
@@ -894,7 +894,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           operationId: "uploadMaterial",
           summary: "上传一份材料（PDF、Word、Markdown、HTML，单个 20 MB，每个对象最多 30 份）",
           parameters: [
-            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
           ],
           requestBody: {
@@ -920,7 +920,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           operationId: "getMaterial",
           summary: "一份材料的某一版（默认最新）和它相对上一版的标注、改动记录",
           parameters: [
-            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
             { name: "materialId", in: "path", required: true, schema: { type: "string" } },
             { name: "version", in: "query", required: false, schema: { type: "integer", minimum: 1 } },
@@ -935,7 +935,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           operationId: "deleteMaterial",
           summary: "主人删自己的材料（软删）；不是主人 403",
           parameters: [
-            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
             { name: "materialId", in: "path", required: true, schema: { type: "string" } },
           ],
@@ -952,7 +952,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           operationId: "downloadMaterial",
           summary: "下载（attachment）：原件；Agent 写的材料下载当前版 .md；HTML 材料下载当前版 .html",
           parameters: [
-            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
             { name: "materialId", in: "path", required: true, schema: { type: "string" } },
           ],
@@ -968,7 +968,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           operationId: "previewMaterial",
           summary: "PDF inline、Word 清理后的 HTML、HTML 材料指定版本的源码（带沙箱 CSP，不持久化）",
           parameters: [
-            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
             { name: "materialId", in: "path", required: true, schema: { type: "string" } },
             { name: "version", in: "query", required: false, schema: { type: "integer", minimum: 1 }, description: "只对 HTML 材料有效；缺省为当前版本" },
