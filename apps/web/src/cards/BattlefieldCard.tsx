@@ -6,18 +6,19 @@ import { ArrowLeft, ArrowLeftRight, ChevronRight, Crown } from "lucide-react";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type BattlefieldPayload, type MissionPayload } from "./payloads";
 import { useBattlefieldDisplay } from "./battlefieldDisplay";
+import { BattlefieldProgressPreview } from "./BattlefieldProgressPreview";
 import { HeroButton } from "@/components/HeroButton";
 import { IssueRow, meetingTimesByIssue } from "@/components/IssueRow";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { ReferenceButton } from "@/conversation/references";
-import { calendarDate, monthDayTime } from "@/lib/companyTime";
+import { monthDayTime } from "@/lib/companyTime";
 import s from "@/styles/battlefield-card.module.css";
 import b from "@/styles/home-board.module.css";
 
 /**
  * 战场翻转卡（clark `progress-card.tsx` 的正反面与翻面焦点衔接）。
  * 正面：负责人、Mission、六个月目标（放在 clark「战场总结」那一格）与待决策议题；
- * 背面：当月战场结果、普通待办，负责人反馈收在「反馈与依据」里。不计算完成率（§2.4）。
+ * 背面：进展（概念版三环）；MVP 先放示意图并盖磨砂蒙版写「建设中」，负责人反馈仍收在「反馈与依据」里。
  */
 export function BattlefieldCard({ card, collection, onNavigate }: CardRenderProps) {
   const payload = payloadOf<BattlefieldPayload>(card);
@@ -158,31 +159,7 @@ export function BattlefieldCard({ card, collection, onNavigate }: CardRenderProp
               ) : null}
             </Button>
           </header>
-          <div className={s.backBody}>
-            <div className={s.block}>
-              <span className={s.eyebrow}>当月战场结果{payload.period ? ` · ${payload.period}` : ""}</span>
-              {payload.target ? <p className={s.target}>{payload.target}</p> : <p className={s.missing}>尚未签发当月目标</p>}
-            </div>
-            <div className={s.block}>
-              <span className={s.eyebrow}>普通待办</span>
-              {payload.todos.length ? (
-                <ul className={s.todos}>
-                  {payload.todos.map((todo) => (
-                    <li key={todo.id}>
-                      <span>{todo.title}</span>
-                      <small>
-                        {todo.dueAt ? `${calendarDate(todo.dueAt)} · ` : ""}
-                        {todo.exportStatus === "delivered" ? "已送达" : todo.exportStatus === "failed" ? "外发失败" : "待外发"}
-                      </small>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className={s.missing}>当月没有归属该战场的普通待办</p>
-              )}
-            </div>
-            <p className={s.note}>天枢不计算完成百分比，也不跟踪待办执行状态。</p>
-          </div>
+          <BattlefieldProgressPreview id={id} />
           <div
             className={s.evidence}
             data-open={evidenceOpen}

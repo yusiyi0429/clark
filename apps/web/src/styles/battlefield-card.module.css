@@ -54,15 +54,6 @@
 .issues{flex:none;min-height:0;overflow:visible;margin:0 -6px;padding:0 6px}
 
 /* 背面：天枢的当月战场结果与普通待办；负责人反馈进「反馈与依据」。 */
-.backBody{flex:1;display:flex;flex-direction:column;gap:14px;min-height:0;padding:12px 0 8px}
-.block{display:flex;flex-direction:column;gap:6px;min-width:0}
-.eyebrow{font-size:12px;font-weight:500;color:#777d88;letter-spacing:.02em}
-.target{margin:0;font-size:var(--type-body,14px);line-height:1.65;color:#1d1d1f;overflow-wrap:anywhere}
-.todos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
-.todos li{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border-radius:10px;background:#f5f7fa;font-size:13px;line-height:1.55;color:#1d1d1f}
-.todos small{font-size:11px;color:#8b9097}
-.missing{margin:0;font-size:13px;line-height:1.6;color:#6d737d}
-.note{margin:0;font-size:11px;line-height:1.6;color:#8b9097}
 .evidence{position:static;margin-top:7px;color:#717882;font-size:11px}
 .evidence>button{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;min-height:28px;list-style:none;border:0;padding:0;width:100%;text-align:left;background:none;color:inherit;font:inherit}
 .evidence>button:before{content:'›';margin-right:0;transition:transform 160ms}.evidence[data-open=true]>button:before{transform:rotate(90deg)}
@@ -74,4 +65,4 @@
 @media(min-width:1800px){.face{padding:24px 28px}}
 @media(max-width:1100px){.face{padding:17px}.header{gap:6px}.header h2{font-size:18px}.flip{padding:6px}}
 @media(prefers-reduced-motion:reduce){.frame{perspective:none}.rotor,.flip,.evidence>div,.atmosphere,.missionToggle>svg{transition:none}.rotor[data-flipped=true],.front,.back{transform:none}.face[aria-hidden=true]{visibility:hidden}}
-@media(prefers-contrast:more){.rotor{border-color:#777}.eyebrow,.evidence,.evidence>button>span,.note{color:#444}.finding{border-color:#777}.ownerBadge{color:#333}}
+@media(prefers-contrast:more){.rotor{border-color:#777}.evidence,.evidence>button>span{color:#444}.finding{border-color:#777}.ownerBadge{color:#333}}
