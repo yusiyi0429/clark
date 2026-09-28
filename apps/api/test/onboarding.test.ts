@@ -212,7 +212,7 @@ describe("首次登录引导", () => {
       expect((await read(t, cookie)).next).toEqual({ text: "有 2 个红色议题等你判断", action: "去看看", href: "/" });
       for (const status of ["draft", "negotiating"] as const) {
         await plan(t, status);
-        expect((await read(t, cookie)).next).toEqual({ text: "10 月的目标等你核对和签发", action: "核对 10 月目标", href: "/plans/2026-10" });
+        expect((await read(t, cookie)).next).toEqual({ text: "10 月的目标等你核对和签发", action: "进入工作台", href: "/" });
       }
       await plan(t, "confirmed");
       expect((await read(t, cookie)).next.text).toBe("有 2 个红色议题等你判断");

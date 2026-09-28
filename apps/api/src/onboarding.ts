@@ -37,7 +37,8 @@ function memberCardNext(cards: WorkCard[], deciders: Map<string, string>): Next 
   const deadline = card.closesAt && new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(card.closesAt));
   return {
     text: card.phase === "open" ? `${month} 月 Mission Card 讨论开放到 ${deadline}` : `${month} 月 Mission Card 已截止，等${deciders.get(card.roundId)}拍板`,
-    action: `查看我的 ${month} 月卡`, href: card.href,
+    // 引导的最后一步统一进首页；本月卡的状态留在说明里，首页左侧能直接点开。
+    action: "进入工作台", href: "/me",
   };
 }
 
@@ -46,14 +47,12 @@ function ceoRoundNext(rounds: TMissionRoundSummary[]): Next | null {
     ?? rounds.find((item) => item.phase === "reviewing" && item.counts.pending > 0)
     ?? rounds.find((item) => item.phase === "reviewing");
   if (!round) return null;
-  const card = round.cards.find((item) => round.phase === "reviewing" && item.pending > 0) ?? round.cards[0];
-  if (!card) return null;
+  if (!round.cards.length) return null;
   const month = Number(round.period.slice(5));
   return {
     text: round.phase === "draft" ? `${month} 月个人卡草稿已就绪，可以统一开放讨论`
       : round.counts.pending ? `${month} 月 Mission Card 有 ${round.counts.pending} 条意见待你处理` : "意见已全部处理，待你确认",
-    action: `查看 ${month} 月个人卡`,
-    href: `/mission-cards/${card.cardId}${round.phase === "reviewing" && card.firstPendingFeedbackId ? `?feedback=${encodeURIComponent(card.firstPendingFeedbackId)}` : ""}`,
+    action: "进入工作台", href: "/",
   };
 }
 
@@ -61,7 +60,7 @@ async function ceoNext(q: Query, plan: Plan | undefined, period: string, now: Da
   // 尚未生成的计划没有可打开的对象；不能把第一次进入的人带到空链接。
   if (plan && plan.status !== "confirmed") {
     const month = Number(period.slice(5));
-    return { text: `${month} 月的目标等你核对和签发`, action: `核对 ${month} 月目标`, href: `/plans/${period}` };
+    return { text: `${month} 月的目标等你核对和签发`, action: "进入工作台", href: "/" };
   }
   const issues = await q("SELECT count(*)::int AS count FROM issues WHERE status = 'pending' AND urgency->>'level' = 'red'");
   const redCount = issues.rows[0].count as number;
@@ -110,7 +109,7 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
       listMissionRoundDraftCards(q, people, secret, person, period, now, draftsDirectory),
     ]);
     const month = Number(period.slice(5));
-    const next = slots[0] ? { text: `${month} 月目标已签发，可以整理个人卡草稿`, action: `整理 ${month} 月个人卡`, href: `/?missionRoundDraft=${encodeURIComponent(slots[0].objectRef.id)}` }
+    const next = slots[0] ? { text: `${month} 月目标已签发，可以整理个人卡草稿`, action: "进入工作台", href: "/" }
       : ceoRoundNext(rounds.map((card) => card.payload as TMissionRoundSummary)) ?? await ceoNext(q, plan, period, now);
     const names = new Map(people.map((entry) => [entry.personId, entry.displayName]));
     return {

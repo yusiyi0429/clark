@@ -86,7 +86,7 @@ describe("Mission Card notices and onboarding", () => {
       expect(home.payload).toEqual(review);
       expect(home.navigation[0].href).toBe(`/mission-cards/${ids.other}`);
       const next = (await read(t, ceo, "/api/me/onboarding")).next;
-      expect(next).toEqual({ text: "10 月 Mission Card 有 1 条意见待你处理", action: "查看 10 月个人卡", href: `/mission-cards/${ids.mine}?feedback=${feedback}` });
+      expect(next).toEqual({ text: "10 月 Mission Card 有 1 条意见待你处理", action: "进入工作台", href: "/" });
       const decided = await execute(t, ceo, ids.round, review.version, "decide", { decision: "decline" }, feedback);
       expect(decided.statusCode).toBe(200);
       expect((await read(t, ceo, "/api/me/onboarding")).next.text).toBe("意见已全部处理，待你确认");
@@ -110,11 +110,11 @@ describe("Mission Card notices and onboarding", () => {
       expect(onboarding.work.missions).toEqual([]);
       expect(onboarding.work.missionCards).toHaveLength(1);
       expect(onboarding.work.missionCards[0]).toMatchObject({ cardId: ids.mine, roundId: ids.round, period: "2026-10", phase: "draft", closesAt: null, placeholder: true, missionCount: 0 });
-      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月个人卡草稿已就绪，可以统一开放讨论", action: "查看 10 月个人卡", href: `/mission-cards/${ids.other}` });
+      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月个人卡草稿已就绪，可以统一开放讨论", action: "进入工作台", href: "/" });
       await seedMissions(t, ids);
       await execute(t, ceo, ids.round, 1, "open");
       onboarding = await read(t, member, "/api/me/onboarding");
-      expect(onboarding.next).toEqual({ text: "10 月 Mission Card 讨论开放到 10/3 00:30", action: "查看我的 10 月卡", href: `/me/mission-cards/${ids.mine}` });
+      expect(onboarding.next).toEqual({ text: "10 月 Mission Card 讨论开放到 10/3 00:30", action: "进入工作台", href: "/me" });
       const page = (await read(t, member, `/api/mission-cards/${ids.mine}`)).cards[0];
       expect(onboarding.work.missionCards[0].status).toBe(page.payload.card.status);
       now = CLOSE;
@@ -138,11 +138,11 @@ describe("Mission Card notices and onboarding", () => {
       const ids = await seed(t); const ceo = await t.loginCookie();
       await t.sql("DELETE FROM personal_mission_cards"); await t.sql("DELETE FROM mission_rounds");
       await t.sql("UPDATE battlefield_config SET code='01' WHERE id='growth'");
-      expect((await read(t, ceo, "/api/me/onboarding")).next.href).toBe("/?missionRoundDraft=growth%3A2026-10");
+      expect((await read(t, ceo, "/api/me/onboarding")).next.href).toBe("/");
       await writeFile(join(directory, "2026-10-mission-cards.battlefield-01.json"), "{}", "utf8");
-      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月目标已签发，可以整理个人卡草稿", action: "整理 10 月个人卡", href: "/?missionRoundDraft=growth%3A2026-10" });
+      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月目标已签发，可以整理个人卡草稿", action: "进入工作台", href: "/" });
       await t.sql("UPDATE monthly_plans SET status='negotiating',confirmed_at=NULL WHERE id=$1", [ids.plan]);
-      expect((await read(t, ceo, "/api/me/onboarding")).next.href).toBe("/plans/2026-10");
+      expect((await read(t, ceo, "/api/me/onboarding")).next).toMatchObject({ text: "10 月的目标等你核对和签发", href: "/" });
     } finally {
       await t.close();
       await rm(join(directory, "2026-10-mission-cards.battlefield-01.json"), { force: true });
