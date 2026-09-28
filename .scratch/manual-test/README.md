@@ -15,6 +15,7 @@ pwsh -NoProfile -File .scratch/manual-test/start.ps1   # 启动：API 4500 + 网
 pwsh -NoProfile -File .scratch/manual-test/stop.ps1    # 关闭：删库、停网页、删副本
 ```
 
+- 本机没有 54329 的测试库时（例如只开了 55432 的容器），启动前先设 `$env:TEST_PG_URL = 'postgres://postgres:postgres@localhost:55432/postgres'`。
 - **电脑**：打开 `http://localhost:3500`。
 - **手机**（和电脑同一个 Wi‑Fi）：先启动本机 HTTPS 反代（`pwsh -NoProfile -File .scratch/lan-https/start.ps1`），再打开 `https://192.168.124.44:8444`。登录要 https：会话 cookie 带 Secure，http 的局域网地址存不下。
 - **第一次打开要编译**，等 10–30 秒。
@@ -71,6 +72,7 @@ pwsh -NoProfile -File .scratch/manual-test/stop.ps1    # 关闭：删库、停�
 
 时钟只往前拨，不能倒回。想从头来，stop 再 start。
 
-- 声纹：合成环境里没有接，引导里不会出现声纹那一步。
+- 语音转文字（输入框的麦克风 / 首页「点击说话」）：走真实的火山识别，密钥取自 `apps/api/.env` 的 `VOLC_ASR_*`（只取这几项）。用的是和会议录音同一个已开通的 2.0 模型，不用另外开通。
+- 声纹：走真实的腾讯云声纹（凭据取自 `apps/api/.env`，只取声纹那几项），引导里有声纹那一步、个人菜单能录能删。测试身份的声纹注册在单独的分组 `tianshu_manual_test`，不进正式分组；stop 删库时不会顺带删腾讯那边的声纹。
 - 雷达扫描：没有接外部检索；王路遥已有演示信号，可测设置、列表与阅读状态。手动刷新不会产生新的真实资讯。
-- 声纹和雷达请在开发环境（3200）测。
+- 雷达请在开发环境（3200）测。

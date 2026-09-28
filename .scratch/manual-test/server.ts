@@ -1,6 +1,7 @@
 /** 手动测试用的「时间机器」环境：Web 3500（电脑和同一 Wi-Fi 的手机都能开）/ API 4500，只用 54329 的一次性测试库。
  * 每次启动都是一套全新的库和合成身份；应用时钟可以拨（见 README.md）。
- * No .env, actual credentials, model calls, external notifications or voiceprint work.
+ * No .env, actual credentials, model calls or external notifications — except speech: the Volc ASR key (VOLC_ASR_*)
+ * and Tencent voiceprint credentials are read from apps/api/.env, so dictation and voiceprint behave as in production.
  * control.cjs 通过 run/ 里的命令文件与它通信；advance/near/next-month 只拨本进程的应用时钟。
  * advance moves this process's application clock to the deadline before making its snapshot.
  */
@@ -10,6 +11,7 @@ import { createRequire } from "node:module";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseEnv } from "node:util";
 import type { TestApp } from "../../apps/api/test/helpers.js";
 import { LUYAO, clearWangLuyao, seedWangLuyao } from "./demo-luyao.js";
 
@@ -17,6 +19,16 @@ import { LUYAO, clearWangLuyao, seedWangLuyao } from "./demo-luyao.js";
 const testDatabaseUrl = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 process.env.TEST_PG_URL = testDatabaseUrl;
 const root = fileURLToPath(new URL("../../", import.meta.url));
+// 听写与声纹走真实服务：只从 apps/api/.env 取火山识别（VOLC_ASR_*）和腾讯云声纹的凭据，其余凭据一概不读。
+const SPEECH_KEYS = /^(VOLC_ASR_|TENCENTCLOUD_SECRET_(ID|KEY)$|TENCENT_ASR_REGION$)/;
+try {
+  const apiEnv = parseEnv(await readFile(join(root, "apps/api/.env"), "utf8"));
+  for (const [key, value] of Object.entries(apiEnv)) if (SPEECH_KEYS.test(key) && value) process.env[key] = value;
+} catch {
+  /* 没有 .env：听写与声纹如实提示未配置 */
+}
+// 测试身份的声纹进单独的分组，不混进正式分组（混进去会让正式会议的 1:N 先匹配到库里认不出的测试声纹）。
+process.env.TENCENT_VOICEPRINT_GROUP = "tianshu_manual_test";
 const runDir = fileURLToPath(new URL("./run/", import.meta.url));
 const commandFile = join(runDir, "command.json");
 const responseFile = join(runDir, "response.json");
@@ -121,7 +133,6 @@ async function main() {
   let clockAnchor = Date.now();
   const appNow = () => new Date(now.getTime() + Date.now() - clockAnchor);
   applicationNow = appNow;
-  const unavailable = () => { throw new Error("声纹不属于本次浏览器验收"); };
   app = await createTestApp({ companyPeopleSeed: peopleFile, companyName: "天枢（手动测试）", missionCardDraftsDir: join(root, "seed/placeholders") }, {
     async run(input) {
       const answer = "这是隔离验收中的私人只读回复。公开意见请在事项群组发表；这段私聊不会进入集中 Review。";
@@ -146,7 +157,6 @@ async function main() {
         todos: [],
       } };
     } },
-    voiceprintDeps: { configured: () => false, requireConfig: unavailable, toPcm: async () => unavailable(), enroll: async () => unavailable(), update: async () => unavailable(), remove: async () => unavailable(), groupVerify: async () => unavailable() },
   });
   await app.sql("UPDATE battlefield_config SET code='01',name='灯塔项目',owner_id=$1,six_month_outcome='以真实战略工作验证可复用的交付方式，形成持续运行的 CEO 与 DRI 工作闭环。' WHERE id='growth'", ["browser-dri"]);
   for (const [id, code, name, order] of [["supporting", "02", "团队协作", 2], ["private-field", "09", "不可见的验收战场", 9]] as const) {
