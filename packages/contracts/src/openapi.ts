@@ -398,7 +398,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/mission-cards/{cardId}": {
         get: {
-          operationId: "getPersonalMissionCard", summary: "读取可见的个人卡正文、版本、意见和本轮动作",
+          operationId: "getPersonalMissionCard", summary: "读取可见的任务卡正文、版本、意见和本轮动作",
           parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }],
           responses: { "200": { description: "Personal Mission Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } }, "401": errorResponse, "404": errorResponse },
         },
@@ -413,7 +413,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/mission-cards/{cardId}/corrections": {
         post: {
-          operationId: "createPersonalMissionCardCorrection", summary: "已确定的本月个人卡：非拍板人申请更正，拍板人直接更正并写回；按 clientId 幂等",
+          operationId: "createPersonalMissionCardCorrection", summary: "已确定的本月任务卡：非拍板人申请更正，拍板人直接更正并写回；按 clientId 幂等",
           parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/CreateMissionCardCorrectionRequest" }),
           responses: { "200": { description: "更正记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MissionCardCorrectionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
@@ -466,7 +466,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/mission-rounds/actions/execute": {
         post: {
           operationId: "executeMissionRoundAction",
-          summary: "拍板人整理个人卡草稿、统一开放或重开；版本冲突返回 latestCard",
+          summary: "拍板人整理任务卡草稿、统一开放或重开；版本冲突返回 latestCard",
           requestBody: jsonBody({ $ref: "#/components/schemas/ExecuteMissionRoundActionRequest" }),
           responses: {
             "200": { description: "当前 Mission round Card；同一动作重放不重复写入", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
@@ -745,7 +745,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/me/home": {
         get: {
           operationId: "getMyHome",
-          summary: "成员工作台：参与的战场、本月个人卡、执行事项，以及开着时的个人雷达小组件",
+          summary: "成员工作台：参与的战场、本月任务卡、执行事项，以及开着时的个人雷达小组件",
           responses: {
             "200": { description: "我的执行事项", content: { "application/json": { schema: { $ref: "#/components/schemas/MeHomeResponse" } } } },
             "401": errorResponse,
@@ -755,7 +755,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/me/battlefields/{id}": {
         get: {
           operationId: "getMyBattlefield",
-          summary: "成员可参与的战场：目标、本月个人卡与制定轮次",
+          summary: "成员可参与的战场：目标、本月任务卡与制定轮次",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           responses: {
             "200": { description: "成员战场详情", content: { "application/json": { schema: { $ref: "#/components/schemas/MemberBattlefieldResponse" } } } },
@@ -1014,7 +1014,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/mission-cards/{cardId}/items": {
         get: {
-          operationId: "getMissionCardItems", summary: "卡主人、当轮拍板人及 CEO 读取个人卡各任务下的执行事项摘要",
+          operationId: "getMissionCardItems", summary: "卡主人、当轮拍板人及 CEO 读取任务卡各任务下的执行事项摘要",
           parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }],
           responses: { "200": { description: "个人任务下的执行事项", content: { "application/json": { schema: { $ref: "#/components/schemas/MissionCardItemsResponse" } } } }, "401": errorResponse, "404": errorResponse },
         },
@@ -1022,7 +1022,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/me/plan": {
         get: {
           operationId: "getMyMonthPlan",
-          summary: "整月一张计划图：本人个人卡上的每项个人任务一组、最后一组独立事项；period 默认公司当前月",
+          summary: "整月一张计划图：本人任务卡上的每项个人任务一组、最后一组独立事项；period 默认公司当前月",
           parameters: [{ name: "period", in: "query", required: false, schema: { type: "string", pattern: "^\\d{4}-(0[1-9]|1[0-2])$" } }],
           responses: {
             "200": { description: "本月计划", content: { "application/json": { schema: { $ref: "#/components/schemas/MonthPlanResponse" } } } },

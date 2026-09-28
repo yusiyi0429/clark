@@ -403,7 +403,7 @@ async function seedAgentOwners(t: TestDb) {
   await t.db.query(`INSERT INTO personal_mission_cards (id,round_id,owner_id,sort_order,member_ids,created_at)
     VALUES ($1,$2,'bai-tiantian',0,'["bai-tiantian","ceo"]',$3)`, [priorCard, priorRound, START]);
   await t.db.query(`INSERT INTO missions (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,why,success_evidence,boundaries,key_path,milestones,resources,dependencies,human_agent_split,risk,retrospect,source_ref,source_document_id,source_revision,source_title,personal_mission_card_id)
-    VALUES ('prior-bai',1,'prior-bai','2026-09','上月任务','bai-tiantian','cap-03','["growth"]','上月结果','上月背景','["证据"]','边界','路径','["9/20 完成"]','资源','依赖','分工','风险','复盘','fixture://prior','prior',1,'上月个人卡',$1)`, [priorCard]);
+    VALUES ('prior-bai',1,'prior-bai','2026-09','上月任务','bai-tiantian','cap-03','["growth"]','上月结果','上月背景','["证据"]','边界','路径','["9/20 完成"]','资源','依赖','分工','风险','复盘','fixture://prior','prior',1,'上月任务卡',$1)`, [priorCard]);
   await t.db.query(`INSERT INTO missions (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,source_ref,source_document_id,source_revision,source_title)
     VALUES ('current-sun',1,'current-sun','2026-10','本月登记任务','sun-mingze','cap-03','["growth"]','本月结果','fixture://current','current',1,'已登记')`);
 }
@@ -422,7 +422,7 @@ async function settledDraft(t: TestDb, roundId: string) {
   throw new Error("Co-Agent 草稿未完成");
 }
 
-describe("Co-Agent 起草个人卡", () => {
+describe("Co-Agent 起草任务卡", () => {
   it("无人且没有占位文件时给出可操作提示", async () => {
     await createTestDb(async (t) => {
       await importRelations(t);

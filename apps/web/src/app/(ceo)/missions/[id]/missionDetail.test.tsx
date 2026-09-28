@@ -96,7 +96,7 @@ describe("Mission 详情渲染", () => {
     expect(planRelation("2026-09", null)).toBe("2026-09 · 尚未签发");
   });
 
-  it("签发月度目标不能让个人卡草稿冒充生效版本，也不提供普通编辑", () => {
+  it("签发月度目标不能让任务卡草稿冒充生效版本，也不提供普通编辑", () => {
     for (const status of ["draft", "open", "reviewing"] as const) {
       const html = render({ placeholder: true, personalCard: { cardId: "personal-01", roundId: "round-01", status } }, "已签发");
       expect(html).toContain("草稿 · 占位");
@@ -106,11 +106,11 @@ describe("Mission 详情渲染", () => {
     }
   });
 
-  it("已确认的个人卡标已确定，仍保留占位来源且没有普通编辑入口", () => {
+  it("已确认的任务卡标已确定，仍保留占位来源且没有普通编辑入口", () => {
     const html = render({ placeholder: true, personalCard: { cardId: "personal-01", roundId: "round-01", status: "confirmed" } }, "已签发");
     expect(html).toContain("已确定 · 占位");
     expect(html).not.toContain("编辑 Mission");
     expect(html).toContain('href="/mission-cards/personal-01"');
-    expect(html).toContain("查看所属个人卡");
+    expect(html).toContain("查看所属任务卡");
   });
 });

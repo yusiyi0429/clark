@@ -52,7 +52,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
             <ActionNoticeCard id="thread-unread" title="群聊新消息" mark="issue" notices={home.unreadThreads.map((item) => ({ id: `${item.objectType}:${item.objectId}`, title: `${item.objectType === "issue" ? "议题" : item.objectType === "meeting" ? "会议" : "执行事项"}「${item.title}」 · ${item.unread} 条新消息`, detail: "群聊", onOpen: (from: Element | null) => {
               window.dispatchEvent(new CustomEvent("open-thread-channel", { detail: { objectType: item.objectType, objectId: item.objectId } }));
               api.navigate(`${item.href}?channel=group`, from);
-            }, buttons: [] })).concat(home.unreadMissionGroups.map((item) => ({ id: `mission-card:${item.cardId}`, title: `个人卡「${item.title}」 · ${item.unread} 条新消息`, detail: "群聊", onOpen: (from: Element | null) => {
+            }, buttons: [] })).concat(home.unreadMissionGroups.map((item) => ({ id: `mission-card:${item.cardId}`, title: `任务卡「${item.title}」 · ${item.unread} 条新消息`, detail: "群聊", onOpen: (from: Element | null) => {
               window.dispatchEvent(new CustomEvent("open-mission-group-channel", { detail: { cardId: item.cardId } }));
               api.navigate(`${item.href}?channel=group`, from);
             }, buttons: [] })))} onSettled={() => undefined} />

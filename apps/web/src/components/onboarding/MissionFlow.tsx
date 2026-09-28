@@ -4,10 +4,10 @@ import s from "./MissionFlow.module.css";
 // 每一步只留一句用户在意的话（用户 2026-09-28：字太多太小，要更简洁、仍然读得懂）。按短语分段，窄时只在短语之间换行。
 const stages = [
   { title: "本月目标", line: ["Co-Agent 起草，", "一号位签发"] },
-  { title: "个人卡草稿", line: ["Co-Agent\u00a0", "为每个人起草"] },
+  { title: "任务卡草稿", line: ["Co-Agent\u00a0", "为每个人起草"] },
   { title: "48 小时讨论", line: ["大家一起改同一张卡"] },
   { title: "集中处理", line: ["拍板人逐条处理意见"] },
-  { title: "确定", line: ["本月个人卡定稿"] },
+  { title: "确定", line: ["本月任务卡定稿"] },
 ] as const;
 const phrases = (parts: readonly string[]) => parts.map((part) => <span key={part} className={s.phrase}>{part}</span>);
 

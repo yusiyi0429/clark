@@ -4,7 +4,7 @@ import { call,executionFixture,newTask } from "./executionFixture.js";
 import { TEST_MEMBER } from "./helpers.js";
 
 describe("本月计划",()=>{
-  it("按个人卡分组、解析开头里程碑日期并区分三种只读原因",async()=>{
+  it("按任务卡分组、解析开头里程碑日期并区分三种只读原因",async()=>{
     const f=await executionFixture();
     try {
       const plan=(await call(f,f.member,"GET","/api/me/plan?period=2026-10")).json();
@@ -15,13 +15,13 @@ describe("本月计划",()=>{
       ]);
       const independent=(await call(f,f.member,"POST","/api/me/tasks",newTask(null))).json();
       expect((await call(f,f.member,"GET","/api/me/plan?period=2026-10")).json().groups[2].items[0].id).toBe(independent.id);
-      expect((await call(f,f.member,"GET","/api/me/plan?period=2026-11")).json().closedReason).toBe("这个月还没有你的个人卡");
+      expect((await call(f,f.member,"GET","/api/me/plan?period=2026-11")).json().closedReason).toBe("这个月还没有你的任务卡");
       f.setNow(new Date("2026-11-01T02:00:00Z"));
       expect((await call(f,f.member,"GET","/api/me/plan?period=2026-10")).json().closedReason).toBe("月份已过，计划只读");
       expect((await call(f,f.member,"PUT","/api/me/plan",{period:"2026-10",groups:[]})).json().code).toBe("PLAN_NOT_EDITABLE");
     } finally { await f.t.close(); }
     const open=await executionFixture("open");
-    try { expect((await call(open,open.member,"GET","/api/me/plan?period=2026-10")).json().closedReason).toBe("个人卡确定之后才能拆成执行事项"); }
+    try { expect((await call(open,open.member,"GET","/api/me/plan?period=2026-10")).json().closedReason).toBe("任务卡确定之后才能拆成执行事项"); }
     finally { await open.t.close(); }
   });
 

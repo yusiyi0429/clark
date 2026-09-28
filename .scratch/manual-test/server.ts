@@ -139,7 +139,7 @@ async function main() {
         battlefields: [
           { battlefieldId: "growth", outcome: goalText },
           { battlefieldId: "supporting", outcome: "把跨人员交接与成功证据整理成可共同核对的清单，并完成一次非当事人回看。" },
-          { battlefieldId: "product", outcome: "完成 CEO 与 DRI 双视角走查，按人核对四张个人卡与讨论意见。" },
+          { battlefieldId: "product", outcome: "完成 CEO 与 DRI 双视角走查，按人核对四张任务卡与讨论意见。" },
         ],
         capabilities: [],
         todos: [],
@@ -178,7 +178,7 @@ async function main() {
         '{"edits":[],"checkedItemIds":["company","battlefield:growth","battlefield:supporting","battlefield:product"],"feedback":[],"note":"隔离验收已核对目标"}',
         '{"status":"ready","pendingSince":null,"runId":null,"previousRunIds":[],"error":null,"generatedAt":"2026-10-01T00:00:00.000Z"}')`,
         [planId, JSON.stringify([{ battlefieldId: "growth", outcome: goalText }, { battlefieldId: "supporting", outcome: "把跨人员交接与成功证据整理成可共同核对的清单。" },
-          { battlefieldId: "product", outcome: "完成 CEO 与 DRI 双视角走查，按人核对四张个人卡与五条讨论意见。" }])]);
+          { battlefieldId: "product", outcome: "完成 CEO 与 DRI 双视角走查，按人核对四张任务卡与五条讨论意见。" }])]);
     }
     if (stage === "issued") {
       const { value, headers } = await projectAs("browserceo", `/api/cards/monthly-plans/${planId}`);
@@ -204,7 +204,7 @@ async function main() {
     await app.sql(`INSERT INTO missions (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,source_ref,source_document_id,source_revision,source_title)
       VALUES ($1,1,$1,'2026-10',$2,$3,'method',$4::jsonb,'形成可核对的协作清单','fixture://03','browser03',1,'隔离演练的登记资料')`, [id, title, personId, JSON.stringify(personId === "sun-mingze" ? ["growth", fieldId] : [fieldId])]);
   }
-  for (const [personId, title, status] of [["sun-mingze", "核对 DRI 首页的目标与个人卡入口", "in_progress"], ["sun-mingze", "补齐灯塔项目的端到端验收记录", "not_started"], ["sun-mingze", "同步个人卡阅读与反馈口径", "done"], ["browser-dri", "核对本月跨人员交接与承诺", "in_progress"], ["browser-no-card", "整理本周交接中的待确认点", "not_started"]]) {
+  for (const [personId, title, status] of [["sun-mingze", "核对 DRI 首页的目标与任务卡入口", "in_progress"], ["sun-mingze", "补齐灯塔项目的端到端验收记录", "not_started"], ["sun-mingze", "同步任务卡阅读与反馈口径", "done"], ["browser-dri", "核对本月跨人员交接与承诺", "in_progress"], ["browser-no-card", "整理本周交接中的待确认点", "not_started"]]) {
     const id = randomUUID();
     await app.sql("INSERT INTO tasks (id,title,status,owner_id,created_by,due_date) VALUES ($1,$2,$3,$4,'meeting','2026-10-07')", [id, title, status, personId]);
     await app.sql("INSERT INTO task_members (task_id,person_id,role,added_by) VALUES ($1,$2,'owner','meeting')", [id, personId]);

@@ -1,6 +1,6 @@
 "use client";
 
-/** clark BattlefieldGoals 的目标阅读面；轮次与个人卡改读成员接口，不带 CEO 决策内容。 */
+/** clark BattlefieldGoals 的目标阅读面；轮次与任务卡改读成员接口，不带 CEO 决策内容。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Crown } from "lucide-react";
@@ -86,7 +86,7 @@ export function MemberBattlefieldScreen({ initialData }: { initialData: TMemberB
   const mine = view.missionCards.find((card) => card.ownerId === workspace.viewerId);
   const shownRound = round && awaitingSnapshot ? { ...round, phase: "closed" as const } : round;
   const status = shownRound ? roundStatusText(shownRound, { cardId: mine?.cardId, feedbackCount: mine?.feedbackCount ?? 0, confirmation: view.confirmation })
-    : view.monthTargetState === "confirmed" ? "个人卡草稿还没整理" : view.monthTargetText;
+    : view.monthTargetState === "confirmed" ? "任务卡草稿还没整理" : view.monthTargetText;
   const pendingCard = round?.approver && round.phase === "reviewing" ? round.cards.find((card) => card.pending > 0 && card.firstPendingFeedbackId) : undefined;
   // 已确定后拍板人的待办是更正申请（GAP-04）：同样直达第一条。
   const correctionCard = round?.approver && round.phase === "confirmed" && round.todo ? round.cards.find((card) => card.pendingCorrections > 0 && card.firstPendingCorrectionId) : undefined;
@@ -114,17 +114,17 @@ export function MemberBattlefieldScreen({ initialData }: { initialData: TMemberB
           <div className={s.roundFoot}>
             <p>{round?.approver ? `${round.counts.cards} 张卡 · 待处理 ${round.counts.pending}` : mine ? `我的卡：${mine.missionCount} 项 · ${mine.feedbackCount} 条意见` : "这个月还没有你的卡"}</p>
             {/* 待办句已在上方状态行；按钮只写动作，与引导「下一件事」同一措辞。 */}
-            {round?.approver && round.todo && nextHref ? <Button variant="primary" className={s.primary} aria-label={`查看 ${month} 月个人卡`} data-origin={nextHref} onPress={(event) => workspace.navigate(nextHref, event.target as Element)}>{`查看 ${month} 月个人卡`}<ChevronRight size={17} aria-hidden /></Button>
+            {round?.approver && round.todo && nextHref ? <Button variant="primary" className={s.primary} aria-label={`查看 ${month} 月任务卡`} data-origin={nextHref} onPress={(event) => workspace.navigate(nextHref, event.target as Element)}>{`查看 ${month} 月任务卡`}<ChevronRight size={17} aria-hidden /></Button>
               : mine?.canOpen && mine.href ? <Button variant="ghost" className={s.open} aria-label="打开我的本月卡" data-origin={mine.href} onPress={(event) => workspace.navigate(mine.href!, event.target as Element)}>打开我的卡<ChevronRight size={17} aria-hidden /></Button> : null}
           </div>
         </section>
 
         <section className={s.section} aria-labelledby="battlefield-cards-title">
-          <div className={s.sectionHeading}><h2 id="battlefield-cards-title">本月个人卡</h2>{view.missionCards.length ? <span>{view.missionCards.length} 张</span> : null}</div>
+          <div className={s.sectionHeading}><h2 id="battlefield-cards-title">本月任务卡</h2>{view.missionCards.length ? <span>{view.missionCards.length} 张</span> : null}</div>
           {view.missionCards.length ? <ul className={s.cards}>{view.missionCards.map((card) => {
             const content = <><span className={s.initial} aria-hidden>{card.ownerName.slice(0, 1)}</span><span className={s.identity}><strong>{card.ownerName}{card.ownerId === workspace.viewerId ? <em>你</em> : null}</strong><span>{card.roleLabel ?? "参与 DRI"} · {card.missionCount} 项</span></span><span className={s.cardStatus}>{awaitingSnapshot ? "汇总中" : card.status}</span>{card.canOpen && card.href ? <ChevronRight size={18} aria-hidden /> : null}</>;
             return <li key={card.cardId}>{card.canOpen && card.href ? <Button variant="ghost" className={s.cardRow} aria-label={`打开${card.ownerName}的本月卡`} data-origin={card.href} onPress={(event) => workspace.navigate(card.href!, event.target as Element)}>{content}</Button> : <div className={s.cardRow}>{content}</div>}</li>;
-          })}</ul> : <p className={s.empty}>这个战场的本月个人卡还没有登记。</p>}
+          })}</ul> : <p className={s.empty}>这个战场的本月任务卡还没有登记。</p>}
         </section>
 
         <section className={s.section} aria-labelledby="battlefield-missions-title">

@@ -36,8 +36,8 @@ import { NotificationRail } from "./NotificationRail";
 const draft = {
   schemaVersion: 1, id: "mission-round-slot:01:2026-10", version: 1, kind: "mission-round", title: "10 月 Mission Card · 灯塔项目",
   objectRef: { type: "mission-round-slot", id: "01:2026-10", version: 1 },
-  payload: { period: "2026-10", battlefieldId: "01", battlefieldName: "灯塔项目", placeholder: true, todo: "可以整理个人卡草稿", serverNow: "2026-10-01T00:00:00.000Z" },
-  actions: [{ actionId: "opaque-slot", actionType: "mission-round.draft", label: "整理个人卡草稿" }],
+  payload: { period: "2026-10", battlefieldId: "01", battlefieldName: "灯塔项目", placeholder: true, todo: "可以整理任务卡草稿", serverNow: "2026-10-01T00:00:00.000Z" },
+  actions: [{ actionId: "opaque-slot", actionType: "mission-round.draft", label: "整理任务卡草稿" }],
 } as Card;
 const round = { ...draft, id: "mission-round:actual", objectRef: { type: "mission-round", id: "actual", version: 1 }, payload: { ...personalPayload.round, phase: "draft", cards: [{ ...personalPayload.round.cards[0], cardId: "first-personal-card" }] }, actions: [] } as Card;
 const event = { target: { closest: () => null } };
@@ -45,7 +45,7 @@ const event = { target: { closest: () => null } };
 beforeEach(() => { vi.clearAllMocks(); ui.buttons.clear(); ui.effects = []; ui.refreshEffect = undefined; });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-describe("CEO 整理个人卡草稿交互", () => {
+describe("CEO 整理任务卡草稿交互", () => {
   function render(card: Card = draft) {
     const onCard = vi.fn();
     const onNavigate = vi.fn();
@@ -57,11 +57,11 @@ describe("CEO 整理个人卡草稿交互", () => {
   it("先说明占位来源并确认；取消时不执行动作", async () => {
     ui.ask.mockResolvedValue(false);
     await render().press();
-    expect(ui.ask).toHaveBeenCalledWith(expect.stringContaining("这个战场还没有可以起草的人，先用占位文件整理草稿"), "整理个人卡草稿");
+    expect(ui.ask).toHaveBeenCalledWith(expect.stringContaining("这个战场还没有可以起草的人，先用占位文件整理草稿"), "整理任务卡草稿");
     expect(ui.run).not.toHaveBeenCalled();
   });
 
-  it("确认后走轮次端点，交回真实轮次、刷新首页并打开第一张个人卡", async () => {
+  it("确认后走轮次端点，交回真实轮次、刷新首页并打开第一张任务卡", async () => {
     ui.ask.mockResolvedValue(true);
     ui.run.mockResolvedValue(round);
     const view = render();
@@ -73,7 +73,7 @@ describe("CEO 整理个人卡草稿交互", () => {
     expect(view.onNavigate).toHaveBeenCalledExactlyOnceWith("/mission-cards/first-personal-card", null);
   });
 
-  it("已建轮次直接打开第一张个人卡，不重复整理", async () => {
+  it("已建轮次直接打开第一张任务卡，不重复整理", async () => {
     const view = render(round);
     await view.press();
     expect(ui.ask).not.toHaveBeenCalled();

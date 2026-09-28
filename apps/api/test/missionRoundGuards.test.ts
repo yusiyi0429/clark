@@ -57,7 +57,7 @@ describe("Mission Card attachment boundaries", () => {
         const projected = await t.app.inject({ method: "GET", url: `/api/cards/missions/${original.objectRef.id}`, headers });
         expect(projected.json().cards[0]).toMatchObject({ actions: [], payload: { placeholder: true, personalCard: { cardId, roundId, status } } });
         const rejected = await t.app.inject({ method: "POST", url: "/api/actions/execute", headers,
-          payload: { actionId: original.actions[0].actionId, input: { title: "绕过个人卡编辑" } } });
+          payload: { actionId: original.actions[0].actionId, input: { title: "绕过任务卡编辑" } } });
         expect(rejected.statusCode).toBe(409);
         expect(rejected.json().code).toBe("MISSION_IN_MISSION_CARD");
       }

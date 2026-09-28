@@ -200,7 +200,7 @@ describe("Mission 配置页渲染", () => {
     expect(empty).toContain("选择左侧 Mission 后编辑结果承诺与关系。");
   });
 
-  it("挂在个人卡上的 Mission 在配置里解释锁定原因，不展开可编辑表单", () => {
+  it("挂在任务卡上的 Mission 在配置里解释锁定原因，不展开可编辑表单", () => {
     const locked = { ...card, actions: [], payload: { ...payload, placeholder: true, personalCard: { cardId: "personal-01", roundId: "round-01", status: "draft" } } } as Card;
     const html = renderToStaticMarkup(<MissionManagementScreen missions={[locked]} battlefields={battlefields} capabilities={capabilities} people={people} initialMissionId="lhr-a" />);
     expect(html).toContain("草稿 · 占位");
@@ -211,16 +211,16 @@ describe("Mission 配置页渲染", () => {
     expect(html).not.toContain('value="CEO Agent 架构与质量"');
   });
 
-  it("已确定个人卡继续锁住普通编辑，并说明修订暂未开放", () => {
+  it("已确定任务卡继续锁住普通编辑，并说明修订暂未开放", () => {
     const locked = { ...card, actions: [], payload: { ...payload, personalCard: { cardId: "personal-01", roundId: "round-01", status: "confirmed" } } } as Card;
     const html = renderToStaticMarkup(<MissionManagementScreen missions={[locked]} battlefields={battlefields} capabilities={capabilities} people={people} initialMissionId="lhr-a" />);
-    expect(html).toContain("个人 Mission Card 已确定，不能在配置页单独修改；要改字段，请在个人卡上更正。");
+    expect(html).toContain("个人 Mission Card 已确定，不能在配置页单独修改；要改字段，请在任务卡上更正。");
     expect(html).toContain("Organization Fact · CEO 确认");
     expect(html).not.toContain("月度承诺 · 含待确认草稿");
     expect(html).not.toContain("保存新版本");
   });
 
-  it("当前查看独立历史 Mission 时，不被列表里的未确认个人卡改变顶栏文案", () => {
+  it("当前查看独立历史 Mission 时，不被列表里的未确认任务卡改变顶栏文案", () => {
     const draftCard = { ...secondCard, actions: [], payload: { ...secondPayload, personalCard: { cardId: "personal-02", roundId: "round-01", status: "open" } } } as Card;
     const html = renderToStaticMarkup(<MissionManagementScreen missions={[card, draftCard]} battlefields={battlefields} capabilities={capabilities} people={people} initialMissionId="lhr-a" />);
     expect(html).toContain("Organization Fact · CEO 确认");

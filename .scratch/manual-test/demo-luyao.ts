@@ -99,7 +99,7 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
     outcome,why,success_evidence,boundaries,key_path,milestones,resources,dependencies,human_agent_split,risk,retrospect,
     source_ref,source_document_id,source_revision,source_title,personal_mission_card_id)
     VALUES ($1,1,$2,'2026-10',$3,$4,'cap-03','["supporting"]',$5,$6,$7::jsonb,$8,$9,$10::jsonb,$11,$12,$13,$14,$15,
-    'fixture://demo-luyao','demo-luyao',1,'王路遥演示个人卡',$16)`,
+    'fixture://demo-luyao','demo-luyao',1,'王路遥演示任务卡',$16)`,
   [m.id,m.code,m.title,LUYAO.personId,m.outcome,m.why,JSON.stringify(m.success),m.boundaries,m.keyPath,
     JSON.stringify(m.milestones),m.resources,m.dependencies,m.humanAgent,m.risk,m.retrospect,cardId]);
   await sql(`INSERT INTO missions (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,
@@ -127,12 +127,12 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
       ["建立走查问题与改动追踪表", "把走查中的问题、引用原话与处理结论连成一张可回看的表。", "讨论意见散落在卡片和群组中，拍板时需要逐条定位。", "依赖顾清和提供界面修订版本。", "同一问题重复登记会让待办数量失真。"],
     ] },
     { ownerId: "demo-xu-zhiwei", name: "许知微", role: "交互实现与核验", items: [
-      ["完成双视角关键页面的交互核验", "核验登录、视角切换、通知和个人卡四条路径，并留下复现步骤。", "一号位与 DRI 共用账号时，切换后应看到各自的工作入口。", "依赖王路遥提供两种视角的验收清单。", "只验证页面跳转而漏验 API 权限会造成假通过。"],
-      ["修订移动端个人卡阅读路径", "在 390 宽屏完成四张个人卡和意见入口的走查，记录可点区域。", "移动端人员切换和字段讨论需要保持连续上下文。", "依赖周听澜提供优先级最高的阅读阻塞。", "长字段可能挤出屏幕并遮住意见入口。"],
+      ["完成双视角关键页面的交互核验", "核验登录、视角切换、通知和任务卡四条路径，并留下复现步骤。", "一号位与 DRI 共用账号时，切换后应看到各自的工作入口。", "依赖王路遥提供两种视角的验收清单。", "只验证页面跳转而漏验 API 权限会造成假通过。"],
+      ["修订移动端任务卡阅读路径", "在 390 宽屏完成四张任务卡和意见入口的走查，记录可点区域。", "移动端人员切换和字段讨论需要保持连续上下文。", "依赖周听澜提供优先级最高的阅读阻塞。", "长字段可能挤出屏幕并遮住意见入口。"],
     ] },
     { ownerId: "sun-mingze", name: "孙铭泽", role: "CEO 与 DRI 界面反馈", items: [
-      ["核对 CEO 工作台的四人卡入口", "让 CEO 从通知栏进入四张个人卡，并在每张卡上找到讨论状态。", "拍板人需要按人查看草稿，不能靠轮次总数猜谁有意见。", "依赖许知微提供最新界面构建。", "人员页签如果只显示姓名，容易漏看未处理意见。"],
-      ["核对 DRI 工作台的个人任务", "确认个人卡两项任务与执行事项在 DRI 首页各有清楚入口。", "成员需要区分每月个人任务与具体推进的执行事项。", "依赖王路遥确认任务文案和战场归属。", "如果把任务当成 Mission，会误导用户对承诺层级的理解。"],
+      ["核对 CEO 工作台的四人卡入口", "让 CEO 从通知栏进入四张任务卡，并在每张卡上找到讨论状态。", "拍板人需要按人查看草稿，不能靠轮次总数猜谁有意见。", "依赖许知微提供最新界面构建。", "人员页签如果只显示姓名，容易漏看未处理意见。"],
+      ["核对 DRI 工作台的个人任务", "确认任务卡两项任务与执行事项在 DRI 首页各有清楚入口。", "成员需要区分每月个人任务与具体推进的执行事项。", "依赖王路遥确认任务文案和战场归属。", "如果把任务当成 Mission，会误导用户对承诺层级的理解。"],
     ] },
   ] as const;
   for (const [sortOrder, person] of topics.entries()) {
@@ -147,13 +147,13 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
         outcome,why,success_evidence,boundaries,key_path,milestones,resources,dependencies,human_agent_split,risk,retrospect,
         source_ref,source_document_id,source_revision,source_title,personal_mission_card_id)
         VALUES ($1,1,$2,'2026-10',$3,$4,'cap-03','["product"]',$5,$6,$7::jsonb,$8,$9,$10::jsonb,$11,$12,$13,$14,$15,
-          'fixture://demo-luyao-product','demo-luyao-product',1,'产品战场演示个人卡',$16)`,
+          'fixture://demo-luyao-product','demo-luyao-product',1,'产品战场演示任务卡',$16)`,
         [missionId,`DEMO-P${sortOrder + 1}-${index + 1}`,title,person.ownerId,outcome,why,
           JSON.stringify([`${person.name}提交可查看的成果`,"王路遥核对完成证据并记录结论"]),
           "只覆盖产品战场十月演示范围；正式业务结论仍由负责人确认。",
           `先核对现状与原话，再完成「${title}」，最后请相关人独立复核。`,
           JSON.stringify([`10/${12 + index * 5} 完成初稿与样例`,`10/${24 + index * 3} 完成复核并记录结论`]),
-          "使用产品战场走查材料、个人卡讨论和现有工作台，不接入外部真实业务资料。",
+          "使用产品战场走查材料、任务卡讨论和现有工作台，不接入外部真实业务资料。",
           dependencies,`${person.name}判断和确认；Co-Agent 整理访谈与意见，不代替人拍板。`,risk,
           "月底按可查看的证据、未解决的问题和复核意见决定下月改进顺序。",productCardId]);
       productMissions.push({ id: missionId, outcome, why, dependencies, risk });
@@ -161,10 +161,10 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
     productCards.push({ ownerId: person.ownerId, cardId: productCardId, missions: productMissions });
   }
   const productFeedback = [
-    [0,0,"comment","sun-mingze","outcome","建议把验收表中的四张个人卡入口也列为必查项。",null,null],
+    [0,0,"comment","sun-mingze","outcome","建议把验收表中的四张任务卡入口也列为必查项。",null,null],
     [1,0,"quote",LUYAO.personId,"why","这句说明了访谈为什么要按人归档，建议保留。","真实使用者反馈",null],
     [2,0,"suggestion","sun-mingze","dependencies","建议先拿到双视角验收清单，再做权限核验。",null,"依赖王路遥先提供双视角验收清单及测试账号。"],
-    [3,0,"suggestion","demo-zhou-tinglan","outcome","通知栏入口需要把讨论状态直接展示给 CEO。",null,"让 CEO 从通知栏进入四张个人卡，并直接看到每张卡的讨论状态与意见数。"],
+    [3,0,"suggestion","demo-zhou-tinglan","outcome","通知栏入口需要把讨论状态直接展示给 CEO。",null,"让 CEO 从通知栏进入四张任务卡，并直接看到每张卡的讨论状态与意见数。"],
     [0,1,"quote","demo-xu-zhiwei","risk","移动端也要检查切换后 API 权限的结果。","只看静态截图",null],
   ] as const;
   for (const [cardIndex,missionIndex,kind,author,field,body,quote,proposed] of productFeedback) {
@@ -258,14 +258,14 @@ export async function seedWangLuyao(app: TestApp, planId: string, now: Date, pas
   await sql(`INSERT INTO issues (id,version,origin,origin_ref,title,location,urgency,status,research)
     VALUES ($1,1,'dri',$2::jsonb,'十月验收口径要不要按 CEO 与 DRI 两种角色拆开','{"level":"battlefield","battlefieldId":"product"}'::jsonb,
       '{"level":"yellow","reason":"讨论截止前要定口径"}'::jsonb,'pending',$3::jsonb)`,
-  [issueId,JSON.stringify({whyNow:"产品战场十月一轮正在讨论，四张个人卡里的验收写法不一致，截止前要定一个口径。"}),JSON.stringify({
+  [issueId,JSON.stringify({whyNow:"产品战场十月一轮正在讨论，四张任务卡里的验收写法不一致，截止前要定一个口径。"}),JSON.stringify({
     status:"ready",runId:"demo-luyao-research",startedAt:at,previousRunIds:[],error:null,doc:{
       summary:"四张卡都把「走查完成」当作验收，但 CEO 视角要看拍板条件，DRI 视角要看下一步是否清楚；只用一条口径会让一半的证据落空。",
       options:[
         {id:"split",label:"按角色拆成两条验收",consequences:["CEO 与 DRI 各有一条可核对的证据","卡片字段要多写一行，四人需要改卡"]},
         {id:"single",label:"保持一条综合验收",consequences:["改动最少，讨论期内能定下来","月底复盘时难以说明哪个视角没有达成"]},
       ],
-      evidence:[{quote:"拍板人需要按人查看草稿，不能靠轮次总数猜谁有意见。",sourceTitle:"孙铭泽的 10 月个人卡"}],
+      evidence:[{quote:"拍板人需要按人查看草稿，不能靠轮次总数猜谁有意见。",sourceTitle:"孙铭泽的 10 月任务卡"}],
       unknowns:["许知微的移动端走查能否在截止前完成"],
       sources:[],
     }})]);

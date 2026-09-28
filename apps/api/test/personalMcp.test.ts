@@ -52,7 +52,7 @@ describe("个人令牌与执行事项 MCP", () => {
     } finally { await f.t.close(); }
   });
 
-  it("网页进展、协作者权限、个人卡摘要、到期与数量限制", async () => {
+  it("网页进展、协作者权限、任务卡摘要、到期与数量限制", async () => {
     const f = await executionFixture();
     try {
       const task = (await call(f, f.member, "POST", "/api/me/tasks", newTask())).json();

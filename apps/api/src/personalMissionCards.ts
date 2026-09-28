@@ -182,10 +182,10 @@ export async function createPersonalMissionCardFeedback(pool: Pool, people: Memo
     // Serializes retries across cards as well as within one card, matching the global author/client key.
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`mission-feedback:${person.personId}:${input.clientId}`]);
     let visible = await visiblePersonalMissionCard(q, person, cardId);
-    if (!visible) { await client.query("ROLLBACK"); return fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "个人卡不存在或不可见"); }
+    if (!visible) { await client.query("ROLLBACK"); return fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "任务卡不存在或不可见"); }
     await client.query("SELECT id FROM mission_rounds WHERE id=$1 FOR SHARE", [visible.round.id]);
     visible = await visiblePersonalMissionCard(q, person, cardId);
-    if (!visible) { await client.query("ROLLBACK"); return fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "个人卡不存在或不可见"); }
+    if (!visible) { await client.query("ROLLBACK"); return fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "任务卡不存在或不可见"); }
     let at = now();
     if (visible.round.status === "open" && visible.round.closes_at! <= at) {
       // Release SHARE before taking UPDATE: simultaneous due writers cannot deadlock on lock upgrades.
@@ -193,7 +193,7 @@ export async function createPersonalMissionCardFeedback(pool: Pool, people: Memo
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`mission-feedback:${person.personId}:${input.clientId}`]);
       await client.query("SELECT id FROM mission_rounds WHERE id=$1 FOR UPDATE", [visible.round.id]);
       visible = await visiblePersonalMissionCard(q, person, cardId);
-      if (!visible) { await client.query("ROLLBACK"); return fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "个人卡不存在或不可见"); }
+      if (!visible) { await client.query("ROLLBACK"); return fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "任务卡不存在或不可见"); }
       at = now(); visible.round = await closeIfDue(client, visible.round, at);
     }
     const { round } = visible;
@@ -250,7 +250,7 @@ export async function getPersonalMissionCardGroup(q: Query, people: MemoryPerson
     const deciderId = round.battlefield_owner_id || people.find((p) => p.roles.includes("ceo"))?.personId || "CEO";
     const previous = Number(round.period.slice(5)) === 1 ? 12 : Number(round.period.slice(5)) - 1;
     const origin = round.draft_origin === "agent" ? "Co-Agent 起草 · 待大家讨论修改。"
-      : `占位 · 沿用 ${previous} 月个人卡；仍需讨论修改。`;
+      : `占位 · 沿用 ${previous} 月任务卡；仍需讨论修改。`;
     entries.push({ type: "opening", at, text: `这个群讨论${names.get(card.owner_id) ?? card.owner_id}的 ${Number(round.period.slice(5))} 月 Mission Card（${count} 项个人任务），开放到 ${localTime(new Date(round.first_opened_at.getTime() + 48 * 3600000))}：可以在字段上评论、划词引用、提修改建议。截止后 Co-Agent 汇总大家的意见，交${names.get(deciderId) ?? deciderId}拍板。${origin}${round.draft_origin === "agent" && countRow.placeholder ? "这张卡是占位，需重点核对。" : ""}` });
   }
   round.reopens.forEach((reopen, i) => {

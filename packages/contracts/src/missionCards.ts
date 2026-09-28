@@ -4,7 +4,7 @@ import { ActionDescriptor } from "./cards.js";
 import { MissionCardPayload } from "./missions.js";
 import { ThreadMember } from "./threads.js";
 
-/** 个人任务允许建议的 12 个字段；唯一责任人由个人卡归属决定。 */
+/** 个人任务允许建议的 12 个字段；唯一责任人由任务卡归属决定。 */
 export const MissionCardField = Type.Union([
   Type.Literal("title"), Type.Literal("why"), Type.Literal("outcome"), Type.Literal("successEvidence"),
   Type.Literal("boundaries"), Type.Literal("keyPath"), Type.Literal("milestones"), Type.Literal("resources"),
@@ -13,7 +13,7 @@ export const MissionCardField = Type.Union([
 
 /** closed 是已到截止但尚未写入快照的投影态，不写入轮次 status。 */
 export const MissionRoundPhase = Type.Union([
-  /** drafting：Co-Agent 正在起草个人卡（工单 10），完成后进入 draft。 */
+  /** drafting：Co-Agent 正在起草任务卡（工单 10），完成后进入 draft。 */
   Type.Literal("drafting"),
   Type.Literal("draft"), Type.Literal("open"), Type.Literal("closed"),
   Type.Literal("reviewing"), Type.Literal("confirmed"),
@@ -117,7 +117,7 @@ export const PersonalMissionCardMission = Type.Object({
   ...MissionCardPayload.properties, version: Type.Integer({ minimum: 1 }), changedFields: Type.Array(MissionCardField),
 }, { additionalProperties: false });
 /**
- * 已确定个人卡的更正（GAP-04）：非拍板人申请、拍板人逐条采纳或不采纳；拍板人自己更正直接生效（direct）。
+ * 已确定任务卡的更正（GAP-04）：非拍板人申请、拍板人逐条采纳或不采纳；拍板人自己更正直接生效（direct）。
  * 每条都留痕；stale 表示申请之后字段又改过，不能直接采纳。
  */
 export const MissionCardCorrectionView = Type.Object({

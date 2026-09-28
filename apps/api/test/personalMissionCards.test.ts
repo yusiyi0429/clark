@@ -16,7 +16,7 @@ async function fixture(t: Pick<TestApp, "sql">) {
   for (const [id, owner, members] of [[card, 'person-fixture-002', ['person-fixture-002', 'person-fixture-001']], [other, 'outsider', ['outsider', 'person-fixture-001']]] as const) {
     await t.sql(`INSERT INTO personal_mission_cards (id,round_id,owner_id,sort_order,member_ids,created_at) VALUES ($1,$2,$3,0,$4::jsonb,$5)`, [id, round, owner, JSON.stringify(members), START]);
     await t.sql(`INSERT INTO missions (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,success_evidence,source_ref,source_document_id,source_revision,source_title,placeholder,personal_mission_card_id)
-      VALUES ($1,1,$1,'2026-10','草稿任务',$2,'method','["growth"]','原始  结果','["证据一","证据二"]','https://example.test/source','fixture',9,'占位 · 沿用 9 月个人卡',true,$3)`, [id, owner, id]);
+      VALUES ($1,1,$1,'2026-10','草稿任务',$2,'method','["growth"]','原始  结果','["证据一","证据二"]','https://example.test/source','fixture',9,'占位 · 沿用 9 月任务卡',true,$3)`, [id, owner, id]);
   }
   return { round, card, other };
 }

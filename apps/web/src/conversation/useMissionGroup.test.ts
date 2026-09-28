@@ -34,7 +34,7 @@ function start(visible = false) {
 }
 const flush = () => vi.advanceTimersByTimeAsync(0);
 
-describe("个人卡群组的请求与重试", () => {
+describe("任务卡群组的请求与重试", () => {
   it("没有新 seq 的逐条处理也刷新正文并重新取得已有意见的处理结果", async () => {
     const message = { type: "message", feedback: { id: "f", seq: 7, createdAt: "2026-10-01T00:00:00Z", verdict: { text: "待拍板人处理", tone: "wait" } } };
     fetchMock.mockResolvedValueOnce(response({ ...empty, entries: [message] }));

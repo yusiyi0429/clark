@@ -300,7 +300,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 读取可见的个人卡正文、版本、意见和本轮动作 */
+        /** 读取可见的任务卡正文、版本、意见和本轮动作 */
         get: operations["getPersonalMissionCard"];
         put?: never;
         post?: never;
@@ -336,7 +336,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 已确定的本月个人卡：非拍板人申请更正，拍板人直接更正并写回；按 clientId 幂等 */
+        /** 已确定的本月任务卡：非拍板人申请更正，拍板人直接更正并写回；按 clientId 幂等 */
         post: operations["createPersonalMissionCardCorrection"];
         delete?: never;
         options?: never;
@@ -438,7 +438,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 拍板人整理个人卡草稿、统一开放或重开；版本冲突返回 latestCard */
+        /** 拍板人整理任务卡草稿、统一开放或重开；版本冲突返回 latestCard */
         post: operations["executeMissionRoundAction"];
         delete?: never;
         options?: never;
@@ -779,7 +779,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 成员工作台：参与的战场、本月个人卡、执行事项，以及开着时的个人雷达小组件 */
+        /** 成员工作台：参与的战场、本月任务卡、执行事项，以及开着时的个人雷达小组件 */
         get: operations["getMyHome"];
         put?: never;
         post?: never;
@@ -796,7 +796,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 成员可参与的战场：目标、本月个人卡与制定轮次 */
+        /** 成员可参与的战场：目标、本月任务卡与制定轮次 */
         get: operations["getMyBattlefield"];
         put?: never;
         post?: never;
@@ -1056,7 +1056,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 卡主人、当轮拍板人及 CEO 读取个人卡各任务下的执行事项摘要 */
+        /** 卡主人、当轮拍板人及 CEO 读取任务卡各任务下的执行事项摘要 */
         get: operations["getMissionCardItems"];
         put?: never;
         post?: never;
@@ -1073,7 +1073,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 整月一张计划图：本人个人卡上的每项个人任务一组、最后一组独立事项；period 默认公司当前月 */
+        /** 整月一张计划图：本人任务卡上的每项个人任务一组、最后一组独立事项；period 默认公司当前月 */
         get: operations["getMyMonthPlan"];
         /** 保存计划：只传改过的组和字段，日期可不定；组内顺序即先后，没列出的已有事项保留在后面；列出的事项已不在该组时 409 PLAN_STALE */
         put: operations["saveMyMonthPlan"];

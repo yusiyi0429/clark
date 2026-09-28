@@ -26,14 +26,14 @@ describe("成员工作台外壳", () => {
     expect(html).toContain("查看“我的 Agent”的对话记录");
   });
 
-  it("个人卡在展开区内，首页 DOM 保留并暂停交互，左侧通知折成同一窄条", () => {
+  it("任务卡在展开区内，首页 DOM 保留并暂停交互，左侧通知折成同一窄条", () => {
     navigation.pathname = "/me/mission-cards/personal-01";
-    const html = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" viewerId="sun" ><h1>个人卡正文</h1></MemberWorkspace>);
+    const html = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" viewerId="sun" ><h1>任务卡正文</h1></MemberWorkspace>);
     expect(html).toContain('data-detail-open="true"');
     expect(html).toContain('data-testid="expanded-panel"');
     expect(html).toContain('data-testid="notice-strip"');
     expect(html).toContain('aria-hidden="true" inert=""');
-    expect(html).toContain("个人卡正文");
+    expect(html).toContain("任务卡正文");
     expect(html).toContain('aria-label="执行事项"');
     expect(html).not.toContain('aria-label="配置"');
     navigation.pathname = "/me";

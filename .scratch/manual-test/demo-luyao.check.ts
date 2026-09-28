@@ -45,7 +45,7 @@ try {
       '{"status":"ready","pendingSince":null,"runId":null,"previousRunIds":[],"error":null,"generatedAt":null}',$3)`,
     [planId,JSON.stringify([{battlefieldId:"growth",outcome:"让灯塔项目完成从目标到执行与复盘的闭环。"},
       {battlefieldId:"supporting",outcome:"把跨人员交接与成功证据整理成可共同核对的清单。"},
-      {battlefieldId:"product",outcome:"完成双视角走查并按人核对四张个人卡。"}]),now]);
+      {battlefieldId:"product",outcome:"完成双视角走查并按人核对四张任务卡。"}]),now]);
   await app.sql(`INSERT INTO missions (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,
     source_ref,source_document_id,source_revision,source_title)
     VALUES ('browser03-sun-mingze',1,'browser03-sun-mingze','2026-10','把 DRI 的交接场景落到一致的界面反馈',

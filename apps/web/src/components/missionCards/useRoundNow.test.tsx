@@ -10,7 +10,7 @@ function ReadClock({ closesAt = "2026-10-03T00:00:30.000Z", serverNow = "2026-10
 let cleanup: (() => void)[] = [];
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z")); ui.hooks = []; ui.effects = []; vi.stubGlobal("window", new EventTarget()); vi.stubGlobal("document", Object.assign(new EventTarget(), { visibilityState: "visible" })); });
 afterEach(() => { cleanup.forEach((fn) => fn()); cleanup = []; vi.useRealTimers(); vi.unstubAllGlobals(); });
-describe("个人卡共享分钟时钟", () => {
+describe("任务卡共享分钟时钟", () => {
   it("同一截止时刻只有一个定时器，用serverNow校正并对齐截止秒位", () => {
     renderToStaticMarkup(<><ReadClock /><ReadClock /></>);
     cleanup = ui.hooks.map((hook) => hook.subscribe(vi.fn()));

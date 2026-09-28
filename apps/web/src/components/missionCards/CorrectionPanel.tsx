@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * GAP-04 已确定个人卡的更正：字段下方的内联编辑、已采纳的历史、待处理与未采纳的申请。
+ * GAP-04 已确定任务卡的更正：字段下方的内联编辑、已采纳的历史、待处理与未采纳的申请。
  * 显示哪些入口只看服务端给的 correctionAccess；草稿、展开状态与请求都由 MissionCardScreen 持有。
  */
 import { Button } from "ts-design/primitives";

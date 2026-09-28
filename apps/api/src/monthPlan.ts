@@ -36,8 +36,8 @@ export async function readMonthPlan(q:Query,ownerId:string,period:string,names:M
   const firstDay=`${period}-01`;
   const lastDay=new Date(Date.UTC(Number(period.slice(0,4)),Number(period.slice(5,7)),0)).toISOString().slice(0,10);
   // 已确定的卡就能拆；同月别的战场还在讨论的卡，确定后再出现在计划里。
-  const closedReason=!cards.length ? "这个月还没有你的个人卡" : !cards.some((card)=>card.status==="confirmed")
-    ? "个人卡确定之后才能拆成执行事项" : period<companyPeriod(now) ? "月份已过，计划只读" : null;
+  const closedReason=!cards.length ? "这个月还没有你的任务卡" : !cards.some((card)=>card.status==="confirmed")
+    ? "任务卡确定之后才能拆成执行事项" : period<companyPeriod(now) ? "月份已过，计划只读" : null;
   const result=await q(`SELECT id::text
     FROM tasks WHERE owner_id=$1 AND (mission_id=ANY($2::text[]) OR (mission_id IS NULL AND
       (((start_date IS NULL OR start_date BETWEEN $3 AND $4) AND (due_date IS NULL OR due_date BETWEEN $3 AND $4)

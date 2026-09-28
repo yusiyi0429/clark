@@ -4,7 +4,7 @@ import { groupInputState, mergeGroupEntries } from "./missionCardGroup";
 import { MissionGroupTranscript } from "./MissionGroupTranscript";
 import { MissionGroupComposer } from "./MissionGroupComposer";
 
-describe("个人卡群组的阶段和公开记录", () => {
+describe("任务卡群组的阶段和公开记录", () => {
   it.each([
     ["draft", false, "讨论还没开放"],
     ["open", true, "输入你的想法…"],
@@ -32,7 +32,7 @@ describe("个人卡群组的阶段和公开记录", () => {
   it("有开场时没有暂无消息；群组展示版本与截止后标签", () => {
     const html = renderToStaticMarkup(<MissionGroupTranscript entries={[
       { type: "divider", at: "2026-10-01T00:00:00Z", text: "全战场统一开放 48 小时讨论" },
-      { type: "opening", at: "2026-10-01T00:00:00Z", text: "占位 · 沿用 9 月个人卡" },
+      { type: "opening", at: "2026-10-01T00:00:00Z", text: "占位 · 沿用 9 月任务卡" },
       { type: "message", feedback: { id: "f", seq: 1, authorName: "孙铭泽", body: "核对交付边界", quote: "原文", sourceVersion: 1, proposed: null, original: null, late: true, kind: "quote", createdAt: "2026-10-03T00:00:00Z", verdict: { text: "截止后留言 · 不在这一轮", tone: "late" } } as never },
     ]} />);
     expect(html).toContain("Co-Agent");

@@ -22,7 +22,7 @@ beforeEach(() => ui.presses.clear());
 const render = (work: MemberWork | null = homeWork, radar?: ReactNode) => renderToStaticMarkup(<MemberHomeWidgets work={work} onNavigate={vi.fn()} onRefresh={vi.fn()} radar={radar} />);
 
 describe("DRI 首页小组件", () => {
-  it("战场只写本月原文，负责人有同形皇冠，个人卡显示服务端状态与上海截止时刻", () => {
+  it("战场只写本月原文，负责人有同形皇冠，任务卡显示服务端状态与上海截止时刻", () => {
     const html = render();
     expect(html).toContain("灯塔客户"); expect(html).toContain("完成首批客户验证。");
     expect(html).toContain("你是这个战场的 DRI");

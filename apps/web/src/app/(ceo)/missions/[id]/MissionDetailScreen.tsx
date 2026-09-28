@@ -49,7 +49,7 @@ export function MissionDetailScreen({ mission, planStatus, card }: { mission: Mi
         <div className={m.content}>
           <p className={m.owner}>唯一 DRI · {mission.ownerDisplayName || "待指派"}</p>
           <MissionStatus mission={mission} />
-          {mission.personalCard ? <a className={m.personalCardLink} href={`/mission-cards/${mission.personalCard.cardId}`} onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigate(`/mission-cards/${mission.personalCard!.cardId}`); } }}>查看所属个人卡</a> : null}
+          {mission.personalCard ? <a className={m.personalCardLink} href={`/mission-cards/${mission.personalCard.cardId}`} onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigate(`/mission-cards/${mission.personalCard!.cardId}`); } }}>查看所属任务卡</a> : null}
 
           <div className={m.relations} data-testid="mission-relations">
             <Relation label="能力域" value={`${mission.capabilityCode} ${mission.capabilityName}`.trim()} />

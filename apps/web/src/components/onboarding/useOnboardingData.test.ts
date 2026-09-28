@@ -27,9 +27,9 @@ const initial: components["schemas"]["OnboardingResponse"] = {
   voiceprint: { configured: false, enrolled: false, updatedAt: null },
   radar: { configured: false, enabled: true, directions: 0 },
   company: { sixMonthGoal: "", battlefields: [], capabilities: [], people: [] },
-  next: { text: "3 条意见待你处理", action: "查看 10 月个人卡", href: "/mission-cards/first" },
+  next: { text: "3 条意见待你处理", action: "查看 10 月任务卡", href: "/mission-cards/first" },
 };
-const latest = { ...initial, next: { text: "意见已全部处理，待你确认", action: "查看 10 月个人卡", href: "/mission-cards/first" } };
+const latest = { ...initial, next: { text: "意见已全部处理，待你确认", action: "查看 10 月任务卡", href: "/mission-cards/first" } };
 const cleanups: (() => void)[] = [];
 function render() { hooks.index = 0; hooks.effects = []; return useOnboardingData(initial); }
 function mount() { const state = render(); hooks.effects.forEach((effect) => { const cleanup = effect(); if (cleanup) cleanups.push(cleanup); }); return state; }

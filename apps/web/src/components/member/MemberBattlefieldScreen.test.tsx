@@ -52,7 +52,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe("成员战场阅读与个人卡入口", () => {
+describe("成员战场阅读与任务卡入口", () => {
   it("保留概念版目标阅读层级，展示六个月与本月原文，不出现 CEO 决策或演示进度", () => {
     const html = render();
     expect(html).toContain("形成可复用的六个月交付方式");
@@ -62,7 +62,7 @@ describe("成员战场阅读与个人卡入口", () => {
     expect(html).not.toMatch(/待决策|甘特|完成率|健康判断|演示进度/);
     expect(ui.register).toHaveBeenCalledWith({ scope: "global", label: "灯塔战场", mark: null, cards: [] });
   });
-  it("全部 Owner 可识别，普通人只得到 API 允许的个人卡入口", () => {
+  it("全部 Owner 可识别，普通人只得到 API 允许的任务卡入口", () => {
     const html = render();
     expect(html).toContain("孙铭泽");
     expect(html).toContain("白田田");
@@ -82,7 +82,7 @@ describe("成员战场阅读与个人卡入口", () => {
     expect(ui.navigate).toHaveBeenCalledWith("/me/mission-cards/card", null);
   });
   it.each([
-    ["none", "本月目标还没出来"], ["negotiating", "本月目标还在协商"], ["confirmed", "个人卡草稿还没整理"],
+    ["none", "本月目标还没出来"], ["negotiating", "本月目标还在协商"], ["confirmed", "任务卡草稿还没整理"],
   ] as const)("%s 无轮次照实写来源状态，不推断没有工作", (state, line) => {
     const data = fixture();
     data.round = null; data.missionCards = []; data.myMissions = []; data.monthTargetState = state;
@@ -103,7 +103,7 @@ describe("成员战场阅读与个人卡入口", () => {
     expect(html).toContain("2 张卡 · 待处理 2");
     expect(html).toContain("你是这个战场的 DRI");
     expect(html).toContain("2 条待你处理");
-    ui.buttons.get("查看 10 月个人卡")!({ target: null });
+    ui.buttons.get("查看 10 月任务卡")!({ target: null });
     expect(ui.navigate).toHaveBeenCalledWith("/me/mission-cards/card?feedback=feedback-1", null);
     expect(ui.buttons.has("打开孙铭泽的本月卡")).toBe(true);
   });
@@ -114,7 +114,7 @@ describe("成员战场阅读与个人卡入口", () => {
     const rows = [{ ...data.round!.cards[0], pendingCorrections: 1, firstPendingCorrectionId: "correction-1" }];
     data.round = { ...data.round!, phase: "confirmed", approver: true, todo: "1 条更正申请待你处理", counts: { ...data.round!.counts, corrections: 1 }, cards: rows };
     expect(render(data)).toContain("1 条更正申请待你处理");
-    ui.buttons.get("查看 10 月个人卡")!({ target: null });
+    ui.buttons.get("查看 10 月任务卡")!({ target: null });
     expect(ui.navigate).toHaveBeenCalledWith("/me/mission-cards/card?correction=correction-1", null);
     // 月份过后服务端不再给待办，只留计数：状态句不能再催。
     data.round = { ...data.round, todo: null };
@@ -122,9 +122,9 @@ describe("成员战场阅读与个人卡入口", () => {
     const closed = render(data);
     expect(closed).toContain("已确定 · 刘明华 10/4 18:00");
     expect(closed).not.toContain("待你处理");
-    expect(ui.buttons.has("查看 10 月个人卡")).toBe(false);
+    expect(ui.buttons.has("查看 10 月任务卡")).toBe(false);
   });
-  it("确认后仍保留个人卡，显示确认人、上海时间和已确定占位标记", () => {
+  it("确认后仍保留任务卡，显示确认人、上海时间和已确定占位标记", () => {
     const data = fixture();
     data.round = { ...data.round!, phase: "confirmed" };
     data.confirmation = { byName: "刘明华", at: "2026-10-04T10:00:00.000Z" };

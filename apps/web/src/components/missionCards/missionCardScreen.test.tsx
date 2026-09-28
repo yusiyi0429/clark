@@ -52,18 +52,18 @@ async function submit() { ui.buttons.get("提交修改建议")!.onPress!(); awai
 beforeEach(() => { ui.state = []; ui.cursor = 0; ui.controls = null; ui.ownerPlan = null; ui.viewerId = "viewer"; ui.effects = []; vi.clearAllMocks(); vi.stubGlobal("window", { dispatchEvent: ui.dispatch }); ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [card] } }); ui.ask.mockResolvedValue(true); });
 afterEach(() => vi.unstubAllGlobals());
 
-describe("个人卡建议交互", () => {
+describe("任务卡建议交互", () => {
   it("拍板人可在页头切换各人的卡；普通卡主人没有人员页签", () => {
     const second = { ...personalPayload.round.cards[0], cardId: "other", ownerId: "other", ownerName: "孙铭泽", line: "待处理 1", placeholder: false };
     const changed = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, cards: [personalPayload.round.cards[0], second] } } } as Card;
     const html = renderToStaticMarkup(<MissionCardScreen initialCard={changed} entry="member" />);
-    expect(html).toContain('aria-label="切换个人卡"');
+    expect(html).toContain('aria-label="切换任务卡"');
     expect(html).toContain("孙铭泽");
     ui.buttons.get("打开孙铭泽的 Mission Card · 待处理 1")!.onPress!();
     expect(ui.navigate).toHaveBeenCalledWith("/me/mission-cards/other");
     ui.state = []; ui.cursor = 0;
     const ordinary = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, approver: false, cards: [personalPayload.round.cards[0]] } } } as Card;
-    expect(renderToStaticMarkup(<MissionCardScreen initialCard={ordinary} entry="member" />)).not.toContain('aria-label="切换个人卡"');
+    expect(renderToStaticMarkup(<MissionCardScreen initialCard={ordinary} entry="member" />)).not.toContain('aria-label="切换任务卡"');
   });
   it("只有卡主人接入个人任务与本月计划页签", () => {
     render();
@@ -110,7 +110,7 @@ describe("个人卡建议交互", () => {
     expect(html).toContain('aria-describedby="proposal-error-mission-outcome"');
     expect(html).toContain("断网时继续保留的建议");
   });
-  it("划词交给当前个人卡群组并带源版本，超长引用给可操作提示", () => {
+  it("划词交给当前任务卡群组并带源版本，超长引用给可操作提示", () => {
     render(); ui.controls!.onQuote(mission, "outcome", "形成可核验结果"); render();
     expect(ui.register.mock.calls.at(-1)![0]).toMatchObject({ scope: "mission-card:card", group: { cardId: "card", viewerId: "viewer", round: 1, reference: { missionId: "mission", field: "outcome", sourceVersion: 1, quote: "形成可核验结果" } } });
     ui.controls!.onQuote(mission, "outcome", "长".repeat(2001));
@@ -195,7 +195,7 @@ describe("拍板动作与跨卡处理", () => {
   });
 });
 
-describe("已确定个人卡的更正", () => {
+describe("已确定任务卡的更正", () => {
   type Access = { canRequest: boolean; canApply: boolean; closedReason: string | null };
   const requester: Access = { canRequest: true, canApply: false, closedReason: null };
   const decider: Access = { canRequest: false, canApply: true, closedReason: null };
@@ -211,7 +211,7 @@ describe("已确定个人卡的更正", () => {
   it.each([
     ["非拍板人申请", requester, "更正申请已提交，等刘明华处理；正文先不变。"],
     ["拍板人直接更正", decider, "已更正，改前改后都已留痕。"],
-  ] as const)("%s：草稿预填当前文字，原因必填，body 带版本与字段，成功后关闭并重新加载个人卡", async (_who, access, notice) => {
+  ] as const)("%s：草稿预填当前文字，原因必填，body 带版本与字段，成功后关闭并重新加载任务卡", async (_who, access, notice) => {
     ui.post.mockResolvedValue({ response: { ok: true, status: 200 }, data: { correction: item } });
     confirmed(access); fixes().onOpen(mission, "outcome"); render();
     expect(fixes().draft).toMatchObject({ missionId: "mission", field: "outcome", sourceVersion: 1, text: "形成可核验结果", reason: "" });
@@ -246,7 +246,7 @@ describe("已确定个人卡的更正", () => {
     expect(fixes().draftError).toBe("暂时无法连接服务器，请稍后重试；输入已保留。");
     expect(ui.get).not.toHaveBeenCalled();
   });
-  it("采纳只带结论；不采纳必须写一句原因；成功后刷新个人卡并让通知同步", async () => {
+  it("采纳只带结论；不采纳必须写一句原因；成功后刷新任务卡并让通知同步", async () => {
     ui.post.mockResolvedValue({ response: { ok: true, status: 200 }, data: { correction: item } });
     confirmed(decider);
     fixes().onDecide(item, "reject"); await settle();

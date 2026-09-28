@@ -49,7 +49,7 @@ export const AppendTaskProgressRequest = Type.Object({
   links: Type.Optional(Type.Array(TaskProgressLink, { maxItems: 5 })),
 }, { additionalProperties: false });
 
-/** 所属个人任务：本人已确定个人卡上的一项；同一项个人任务下的执行事项按先后排成第 1..steps 步。 */
+/** 所属个人任务：本人已确定任务卡上的一项；同一项个人任务下的执行事项按先后排成第 1..steps 步。 */
 export const TaskMissionRef = Type.Object(
   {
     missionId: Type.String({ minLength: 1 }),
@@ -160,7 +160,7 @@ export const TaskDetailResponse = Type.Object(
     myNote: Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()]),
     myNoteAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     role: Type.Union([Type.Literal("owner"), Type.Literal("collaborator")]),
-    /** 可挂的个人任务：本人已确定、月份未过的个人卡上的条目。 */
+    /** 可挂的个人任务：本人已确定、月份未过的任务卡上的条目。 */
     missionOptions: Type.Array(Type.Object(
       { missionId: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }), battlefieldName: Type.String(), period: Period },
       { additionalProperties: false },
@@ -202,7 +202,7 @@ export const MonthPlanGroup = Type.Object(
   { additionalProperties: false },
 );
 
-/** 整月一张计划图：个人卡确定之后、月份未过时可编辑，否则 closedReason 写明原因。 */
+/** 整月一张计划图：任务卡确定之后、月份未过时可编辑，否则 closedReason 写明原因。 */
 export const MonthPlanResponse = Type.Object(
   {
     period: Period,

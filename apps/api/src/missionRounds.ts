@@ -118,7 +118,7 @@ export async function projectMissionRoundCard(
     version: row.version, phase, round: Math.max(1, row.window_seq), openedAt: row.opened_at?.toISOString() ?? null,
     closesAt: row.closes_at?.toISOString() ?? null, reviewAt: review?.taken_at.toISOString() ?? null,
     serverNow: now.toISOString(), approver, deciderName: (deciderId && names.get(deciderId)) || deciderId || "CEO",
-    todo: !approver ? null : phase === "drafting" ? "Co-Agent 正在起草" : phase === "draft" ? "个人卡草稿已就绪，可以统一开放讨论"
+    todo: !approver ? null : phase === "drafting" ? "Co-Agent 正在起草" : phase === "draft" ? "任务卡草稿已就绪，可以统一开放讨论"
       : phase === "reviewing" ? pending > 0 ? `${pending} 条待你处理` : "意见已全部处理，待你确认"
       : phase === "confirmed" && corrections.length > 0 && correctable ? `${corrections.length} 条更正申请待你处理` : null,
     placeholder: row.draft_origin === "placeholder",
@@ -248,7 +248,7 @@ async function executeRoundAction(
     const project = () => projectMissionRoundCard(q, people, secret, person, row, at);
     if (row.action_fingerprints.includes(fingerprint)) return await finish({ card: await project(), replayed: true });
     if (row.version !== scope.objectVersion) return await finish({ conflict: true, latestCard: await project() });
-    if (row.status === "confirmed") return await finish(failure(409, "ROUND_CONFIRMED", "本月 Mission Card 已确定；要改字段，请在个人卡上更正"));
+    if (row.status === "confirmed") return await finish(failure(409, "ROUND_CONFIRMED", "本月 Mission Card 已确定；要改字段，请在任务卡上更正"));
     if (operation === "open") {
       if (row.status !== "draft") return await finish(failure(409, "ROUND_ALREADY_OPEN", "本轮已经开放，倒计时不会重置"));
       const plan = (await client.query<{ id: string; version: number; status: string; confirmed_at: Date | null; battlefields: { battlefieldId: string; outcome: string }[] }>(
@@ -258,7 +258,7 @@ async function executeRoundAction(
       if (!monthOutcome?.trim() || !row.six_month_outcome.trim()) return await finish(failure(409, "ROUND_GOALS_MISSING", "缺少本战场的六个月目标或已签发本月目标，暂不能开放讨论"));
       const cards = await client.query<{ count: number }>(`SELECT count(m.id)::int AS count FROM personal_mission_cards c
         LEFT JOIN missions m ON m.personal_mission_card_id=c.id WHERE c.round_id=$1 GROUP BY c.id`, [row.id]);
-      if (!cards.rows.length || cards.rows.some((item) => item.count === 0)) return await finish(failure(409, "ROUND_EMPTY_CARD", "每张个人卡至少需要一项个人任务，暂不能开放讨论"));
+      if (!cards.rows.length || cards.rows.some((item) => item.count === 0)) return await finish(failure(409, "ROUND_EMPTY_CARD", "每张任务卡至少需要一项个人任务，暂不能开放讨论"));
       const goal: GoalSnapshot = { sixMonthOutcome: row.six_month_outcome, monthOutcome, signedAt: plan.confirmed_at.toISOString(),
         battlefieldId: row.battlefield_id, battlefieldVersion: row.battlefield_version, monthlyPlanId: plan.id, monthlyPlanVersion: plan.version };
       const updated = await client.query(`UPDATE mission_rounds SET status='open',window_seq=1,opened_at=$2,first_opened_at=$2,
@@ -467,7 +467,7 @@ export async function importMissionCardDrafts(
     if (!battlefield) throw new MissionDraftImportError(400, "INVALID_BATTLEFIELD", `战场 code ${value.battlefieldCode} 未登记`);
     if (action) {
       if (action.scope.objectId !== `${battlefield.id}:${value.period}`) throw new MissionDraftImportError(400, "INVALID_DRAFT_SCHEMA", "候选文件的战场或月份与整理草稿入口不一致");
-      if (!canApprove(action.person, { battlefield_owner_id: battlefield.owner_id })) throw new MissionDraftImportError(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以整理个人卡草稿");
+      if (!canApprove(action.person, { battlefield_owner_id: battlefield.owner_id })) throw new MissionDraftImportError(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以整理任务卡草稿");
     }
     const existing = (await client.query<{ id: string; draft_source: { sha256?: string } }>("SELECT id,draft_source FROM mission_rounds WHERE battlefield_id=$1 AND period=$2 FOR UPDATE", [battlefield.id, value.period])).rows[0];
     if (existing) {
@@ -483,7 +483,7 @@ export async function importMissionCardDrafts(
     const knownPeople = new Set(people.map((person) => person.personId));
     const capabilities = new Map((await client.query<{ id: string; code: string }>("SELECT id,code FROM capability_config")).rows.map((item) => [item.code, item.id]));
     for (const card of value.cards) {
-      if (!knownPeople.has(card.ownerId)) throw new MissionDraftImportError(400, "INVALID_OWNER", `个人卡 Owner 未登记：${card.ownerId}`);
+      if (!knownPeople.has(card.ownerId)) throw new MissionDraftImportError(400, "INVALID_OWNER", `任务卡 Owner 未登记：${card.ownerId}`);
       for (const mission of card.missions) if (!capabilities.has(mission.capabilityCode)) throw new MissionDraftImportError(400, "INVALID_CAPABILITY", `个人任务 ${mission.code} 的能力域 code ${mission.capabilityCode} 未登记`);
     }
     const codes = value.cards.flatMap((card) => card.missions.map((mission) => mission.code));
@@ -627,7 +627,7 @@ export async function completeMissionRoundDraft(
         successEvidence: mission.success_evidence.length ? mission.success_evidence : ["待定"], boundaries: mission.boundaries || "待定",
         keyPath: mission.key_path || "待定", milestones: mission.milestones.length ? mission.milestones : ["待定"],
         resources: mission.resources || "待定", dependencies: mission.dependencies || "待定", humanAgentSplit: mission.human_agent_split || "待定",
-        risk: mission.risk || "待定", retrospect: mission.retrospect || "待定", basis: `沿用 ${Number(previousPeriod(row.period).slice(5))} 月个人卡`,
+        risk: mission.risk || "待定", retrospect: mission.retrospect || "待定", basis: `沿用 ${Number(previousPeriod(row.period).slice(5))} 月任务卡`,
       }));
       const fileCard = fallbackFile?.cards.find((card) => card.ownerId === result.owner.owner_id);
       const fileMissions = fileCard?.missions.slice(0, 4).map((mission) => ({ ...mission, basis: fallbackFile!.placeholderNote }));
@@ -656,7 +656,7 @@ export async function completeMissionRoundDraft(
           `起草依据：${mission.basis}`, result.placeholder, result.owner.id, at, code]);
       }
     }
-    if (!written) throw new MissionDraftImportError(409, "MISSION_DRAFTS_NOT_FOUND", "没有起草成功的个人卡，也没有上月卡或占位候选");
+    if (!written) throw new MissionDraftImportError(409, "MISSION_DRAFTS_NOT_FOUND", "没有起草成功的任务卡，也没有上月卡或占位候选");
     await client.query("UPDATE mission_rounds SET status='draft',draft_origin='agent',draft_source=$2::jsonb,version=version+1,updated_at=$3 WHERE id=$1", [roundId,
       JSON.stringify({ runIds: results.map((result) => result.runId).filter(Boolean), placeholderOwners: results.filter((result) => result.placeholder).map((result) => result.owner.owner_id) }), at]);
     await client.query("COMMIT");
@@ -687,7 +687,7 @@ export async function executeDraftMissionRound(
   const q: Query = (sql, params) => pool.query(sql, params);
   const battlefield = (await q("SELECT id,code,owner_id FROM battlefield_config WHERE id=$1", [match[1]])).rows[0] as { id: string; code: string; owner_id: string } | undefined;
   if (!battlefield) return failure(404, "ROUND_NOT_FOUND", "战场不存在");
-  if (!canApprove(person, { battlefield_owner_id: battlefield.owner_id })) return failure(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以整理个人卡草稿");
+  if (!canApprove(person, { battlefield_owner_id: battlefield.owner_id })) return failure(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以整理任务卡草稿");
   try {
     if (agent) {
       const client = await pool.connect();
@@ -697,7 +697,7 @@ export async function executeDraftMissionRound(
         await client.query("BEGIN");
         const locked = (await client.query<{ id: string; code: string; owner_id: string }>("SELECT id,code,owner_id FROM battlefield_config WHERE id=$1 FOR UPDATE", [battlefield.id])).rows[0];
         if (!locked || !canApprove(person, { battlefield_owner_id: locked.owner_id })) {
-          await client.query("ROLLBACK"); return failure(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以整理个人卡草稿");
+          await client.query("ROLLBACK"); return failure(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以整理任务卡草稿");
         }
         const existing = (await client.query<{ id: string; status: string; draft_origin: string | null; draft_source: { sha256?: string }; action_fingerprints: string[] }>(
           "SELECT id,status,draft_origin,draft_source,action_fingerprints FROM mission_rounds WHERE battlefield_id=$1 AND period=$2 FOR UPDATE", [battlefield.id, match[2]])).rows[0];
@@ -770,12 +770,12 @@ export async function listMissionRoundDraftCards(
     const owners = await draftOwners(q, people, battlefield.id, period);
     const slotId = `${battlefield.id}:${period}`;
     const payload: TMissionRoundDraftPayload = { period, battlefieldId: battlefield.id, battlefieldName: battlefield.name,
-      placeholder: !owners.length, todo: "可以整理个人卡草稿", serverNow: now.toISOString() };
+      placeholder: !owners.length, todo: "可以整理任务卡草稿", serverNow: now.toISOString() };
     const scope: ActionScope = { actionType: "mission-round.draft", objectType: "mission-round-slot", objectId: slotId, objectVersion: 1 };
     cards.push({ schemaVersion: 1, id: `mission-round-slot:${slotId}`, kind: "mission-round", version: 1,
       objectRef: { type: "mission-round-slot", id: slotId, version: 1 },
       title: `${Number(period.slice(5))} 月 Mission Card · ${battlefield.name}`, badge: "Mission Card", urgency: "normal", payload,
-      actions: [{ actionId: signActionId(secret, scope), actionType: scope.actionType, label: "整理个人卡草稿" }] });
+      actions: [{ actionId: signActionId(secret, scope), actionType: scope.actionType, label: "整理任务卡草稿" }] });
   }
   return cards;
 }

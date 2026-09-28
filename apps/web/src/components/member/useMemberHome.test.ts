@@ -77,7 +77,7 @@ describe("常驻成员首页的网络恢复", () => {
     release({ response: { status: 200, ok: true }, data: { myTasks: [], notifications: [], rounds: [] } });
     await Promise.all([first, second]);
   });
-  it("通知加载未确认个人卡轮次，确认后的下一次投影可清退整组", async () => {
+  it("通知加载未确认任务卡轮次，确认后的下一次投影可清退整组", async () => {
     online(); render(); await refresh();
     expect(render().rounds).toEqual([{ roundId: "round-01", phase: "open" }]);
     expect(api.GET).toHaveBeenCalledWith("/api/me/mission-cards");
@@ -85,7 +85,7 @@ describe("常驻成员首页的网络恢复", () => {
     await refresh(); expect(render().rounds).toEqual([]);
   });
 
-  it("把个人卡群的未读消息合入通知数据，并在刷新后清退已读项", async () => {
+  it("把任务卡群的未读消息合入通知数据，并在刷新后清退已读项", async () => {
     api.GET.mockImplementation(async (path: string) => ({ response: { status: 200, ok: true }, data:
       path === "/api/me/home" ? { myTasks: [], work, radar: null }
         : path === "/api/me/mission-cards" ? { rounds: [{ roundId: "round-01", cards: [{ cardId: "card-01", ownerName: "测试乙" }] }] }

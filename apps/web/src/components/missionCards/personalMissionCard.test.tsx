@@ -17,7 +17,7 @@ const controls = { onQuote: vi.fn(), onPropose: vi.fn(), onSelect: vi.fn() };
 beforeEach(() => { roundUi.effects = []; roundUi.expanded.mockClear(); });
 afterEach(() => vi.unstubAllGlobals());
 
-describe("个人卡正文的阶段与追溯", () => {
+describe("任务卡正文的阶段与追溯", () => {
   it("卡主人有个人任务和本月计划页签，个人任务下能打开关联执行事项", () => {
     const linked = { id: "task-1", title: "完成核对", status: "in_progress", dueDate: "2026-10-12", owner: { personId: "owner", name: "白田田" }, collaborators: [{ personId: "peer", name: "同事" }], mission: { missionId: "mission", title: "完善方法闭环", step: 1, steps: 1 } };
     const plan = { groups: [{ missionId: "mission", items: [linked] }] } as TMonthPlanResponse;
@@ -36,7 +36,7 @@ describe("个人卡正文的阶段与追溯", () => {
     expect((html.match(/>引用并评论</g) ?? []).length).toBe(phase === "open" ? 12 : 0);
     expect((html.match(/>引用到群组</g) ?? []).length).toBe(phase === "closed" || phase === "reviewing" ? 12 : 0);
     expect(html).toContain("唯一责任人");
-    expect(html).toContain("占位 · 沿用 9 月个人卡");
+    expect(html).toContain("占位 · 沿用 9 月任务卡");
     expect(html).toContain("飞书 r9");
     expect(html).not.toContain("下载原件");
     expect(html).not.toContain("未报告");
@@ -64,7 +64,7 @@ describe("个人卡正文的阶段与追溯", () => {
 
 describe("本轮状态与倒计时", () => {
   it.each([
-    ["draft", "个人卡草稿已就绪，可以统一开放讨论", 0],
+    ["draft", "任务卡草稿已就绪，可以统一开放讨论", 0],
     ["reviewing", "3 条待你处理", 3],
     ["reviewing", "意见已全部处理，待你确认", 0],
     ["closed", "已截止 · 汇总中", 0],

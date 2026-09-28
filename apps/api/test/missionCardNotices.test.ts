@@ -52,7 +52,7 @@ describe("Mission Card notices and onboarding", () => {
       expect(notices.rounds[0].cards[0]).toMatchObject({ line: "未开放", mine: true });
       const all = await read(t, ceo);
       expect(all.rounds[0].cards.map((c: any) => c.cardId)).toEqual([ids.other, ids.mine]);
-      expect(all.rounds[0].todo).toBe("个人卡草稿已就绪，可以统一开放讨论");
+      expect(all.rounds[0].todo).toBe("任务卡草稿已就绪，可以统一开放讨论");
       await t.sql("UPDATE battlefield_config SET owner_id=$1 WHERE id='growth'", [TEST_MEMBER.personId]);
       notices = await read(t, member); expect(notices.rounds[0].cards).toHaveLength(2); expect(notices.rounds[0].approver).toBe(true);
       await t.sql("UPDATE battlefield_config SET owner_id=$1 WHERE id='growth'", [TEST_CEO.personId]);
@@ -110,7 +110,7 @@ describe("Mission Card notices and onboarding", () => {
       expect(onboarding.work.missions).toEqual([]);
       expect(onboarding.work.missionCards).toHaveLength(1);
       expect(onboarding.work.missionCards[0]).toMatchObject({ cardId: ids.mine, roundId: ids.round, period: "2026-10", phase: "draft", closesAt: null, placeholder: true, missionCount: 0 });
-      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月个人卡草稿已就绪，可以统一开放讨论", action: "进入工作台", href: "/" });
+      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月任务卡草稿已就绪，可以统一开放讨论", action: "进入工作台", href: "/" });
       await seedMissions(t, ids);
       await execute(t, ceo, ids.round, 1, "open");
       onboarding = await read(t, member, "/api/me/onboarding");
@@ -140,7 +140,7 @@ describe("Mission Card notices and onboarding", () => {
       await t.sql("UPDATE battlefield_config SET code='01' WHERE id='growth'");
       expect((await read(t, ceo, "/api/me/onboarding")).next.href).toBe("/");
       await writeFile(join(directory, "2026-10-mission-cards.battlefield-01.json"), "{}", "utf8");
-      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月目标已签发，可以整理个人卡草稿", action: "进入工作台", href: "/" });
+      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月目标已签发，可以整理任务卡草稿", action: "进入工作台", href: "/" });
       await t.sql("UPDATE monthly_plans SET status='negotiating',confirmed_at=NULL WHERE id=$1", [ids.plan]);
       expect((await read(t, ceo, "/api/me/onboarding")).next).toMatchObject({ text: "10 月的目标等你核对和签发", href: "/" });
     } finally {

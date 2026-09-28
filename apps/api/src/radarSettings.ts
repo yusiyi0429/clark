@@ -243,7 +243,7 @@ function shortTopic(text: string): string | null {
 }
 
 /**
- * 方向建议（≤3，不自动选中）：本人本月的 Mission／个人卡里的个人任务标题、参与的战场名、这些 Mission 的能力域，
+ * 方向建议（≤3，不自动选中）：本人本月的 Mission／任务卡里的个人任务标题、参与的战场名、这些 Mission 的能力域，
  * 三类轮流取一条；来自讨论候选（占位卡）的写明「{M} 月讨论候选」；已在本人方向里的不再建议。
  */
 async function directionSuggestions(

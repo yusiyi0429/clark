@@ -37,8 +37,8 @@ beforeEach(() => { ui.state = []; ui.cursor = 0; vi.clearAllMocks(); ui.ask.mock
 
 describe("本月计划", () => {
   it("只读时说明原因且没有编辑控件", () => {
-    const all = render({ ...plan, editable: false, closedReason: "个人卡确定之后才能拆成执行事项" });
-    expect(all.some(node => node.props.children === "个人卡确定之后才能拆成执行事项")).toBe(true);
+    const all = render({ ...plan, editable: false, closedReason: "任务卡确定之后才能拆成执行事项" });
+    expect(all.some(node => node.props.children === "任务卡确定之后才能拆成执行事项")).toBe(true);
     expect(all.some(node => node.props.children === "保存计划" || node.props.children === "＋ 加一步" || node.props.type === "date")).toBe(false);
   });
   it("新步骤无日期可直接保存，只提交变动组和已有事项的变动字段", async () => {

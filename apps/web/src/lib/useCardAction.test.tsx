@@ -14,7 +14,7 @@ describe("Action 客户端端点", () => {
     const onCard = vi.fn();
     function Harness() { action = useCardAction(onCard, endpoint); return null; }
     renderToStaticMarkup(<Harness />);
-    const descriptor = { actionId: "opaque-signed-slot", actionType: "mission-round.draft", label: "整理个人卡草稿" } as CardAction;
+    const descriptor = { actionId: "opaque-signed-slot", actionType: "mission-round.draft", label: "整理任务卡草稿" } as CardAction;
     const updated = { id: "mission-round:actual", kind: "mission-round" } as Card;
     api.POST.mockResolvedValue({ data: { cards: [updated] }, response: { status: 200 } });
     await expect(action.run(descriptor)).resolves.toEqual(updated);

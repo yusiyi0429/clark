@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { personalPayload } from "./personalMissionFixture";
 import { roundStatusText } from "./roundStatusText";
 
-describe("个人卡与成员战场共用本轮状态句", () => {
+describe("任务卡与成员战场共用本轮状态句", () => {
   it("起草中直接写 Co-Agent 正在起草", () => {
     expect(roundStatusText({ ...personalPayload.round, phase: "drafting" }, { feedbackCount: 0 })).toBe("Co-Agent 正在起草");
   });
@@ -15,7 +15,7 @@ describe("个人卡与成员战场共用本轮状态句", () => {
     expect(roundStatusText(round, { feedbackCount: 0 })).toBe("讨论中 · 全战场 7 条意见");
     expect(roundStatusText({ ...round, phase: "reviewing" }, { feedbackCount: 0 })).toBe("等刘明华拍板");
   });
-  it("草稿、汇总中、拍板待办直接保持个人卡原句", () => {
+  it("草稿、汇总中、拍板待办直接保持任务卡原句", () => {
     const round = personalPayload.round;
     expect(roundStatusText({ ...round, phase: "draft", approver: false }, { cardId: "card", feedbackCount: 0 })).toBe("草稿已整理 · 等刘明华统一开放讨论");
     expect(roundStatusText({ ...round, phase: "closed" }, { feedbackCount: 0 })).toBe("已截止 · 汇总中");

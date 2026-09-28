@@ -79,7 +79,7 @@ describe("CEO 与成员共享的工作区开合", () => {
     expect(navigation.refresh).toHaveBeenCalledOnce();
   });
 
-  it("从个人卡转去战场再关闭，先回个人卡，下一次才回 /me", () => {
+  it("从任务卡转去战场再关闭，先回任务卡，下一次才回 /me", () => {
     render();
     api.navigate("/me/mission-cards/card-01");
     navigation.pathname = "/me/mission-cards/card-01";

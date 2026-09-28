@@ -47,7 +47,7 @@ describe("本月 Mission Card 通知分组", () => {
     expect(ready.match(/>占位</g)).toHaveLength(1);
   });
 
-  it("行进入对应个人卡，待处理提示直接定位第一条未处理意见", () => {
+  it("行进入对应任务卡，待处理提示直接定位第一条未处理意见", () => {
     const onNavigate = vi.fn();
     renderToStaticMarkup(<MissionCardNoticeGroup round={summary()} entry="ceo" onNavigate={onNavigate} onRefresh={vi.fn()} />);
     const event = { target: { closest: () => null } };
@@ -77,8 +77,8 @@ describe("本月 Mission Card 通知分组", () => {
 
   it("草稿待办和全部处理后待确认提示都打开第一张卡；成员沿自己的路由", () => {
     const onNavigate = vi.fn();
-    renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ phase: "draft", todo: "个人卡草稿已就绪，可以统一开放讨论" })} entry="member" onNavigate={onNavigate} onRefresh={vi.fn()} />);
-    ui.presses.get("个人卡草稿已就绪，可以统一开放讨论")!({ target: { closest: () => null } });
+    renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ phase: "draft", todo: "任务卡草稿已就绪，可以统一开放讨论" })} entry="member" onNavigate={onNavigate} onRefresh={vi.fn()} />);
+    ui.presses.get("任务卡草稿已就绪，可以统一开放讨论")!({ target: { closest: () => null } });
     expect(onNavigate).toHaveBeenLastCalledWith("/me/mission-cards/first", null);
   });
 });

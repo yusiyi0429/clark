@@ -50,7 +50,7 @@ export function RoundLine({ payload, actions, viewerId, pending, onAction, onVie
   const showNote = () => { if (open) { noteInput.current?.focus(); noteInput.current?.scrollIntoView({ block: "center" }); } else { focusNote.current = true; setOpen(true); } };
   const steps = [
     { done: true, current: false, title: `月度计划已签发${round.goals ? ` · ${monthDayTime(round.goals.signedAt)}` : ""}`, description: "本轮依据已签发的本月目标；统一开放时冻结目标版本。" },
-    { done: !drafting, current: drafting, title: drafting ? "Co-Agent 正在起草" : `草稿${round.approver ? ` · ${count} 张` : ""}${round.placeholder ? " · 占位" : ""}`, description: drafting ? "每人一张卡，完成后可统一开放讨论。" : round.draftOrigin === "agent" ? "Co-Agent 起草 · 待大家讨论修改。" : `沿用 ${Number(round.period.slice(5)) === 1 ? 12 : Number(round.period.slice(5)) - 1} 月个人卡整理为讨论候选。` },
+    { done: !drafting, current: drafting, title: drafting ? "Co-Agent 正在起草" : `草稿${round.approver ? ` · ${count} 张` : ""}${round.placeholder ? " · 占位" : ""}`, description: drafting ? "每人一张卡，完成后可统一开放讨论。" : round.draftOrigin === "agent" ? "Co-Agent 起草 · 待大家讨论修改。" : `沿用 ${Number(round.period.slice(5)) === 1 ? 12 : Number(round.period.slice(5)) - 1} 月任务卡整理为讨论候选。` },
     { done: !drafting && !draft && !discussing, current: discussing, title: drafting || draft ? "全战场统一开放 48 小时讨论" : `第 ${round.round} 轮讨论 · ${monthDayTime(round.closesAt)} 截止`, description: "在字段上评论、划词引用、提修改建议；刷新和换人都不会重置窗口。" },
     { done: reviewing || confirmed, current: closed, title: "集中 Review · 规则汇总", description: "截止时收下公开意见并列出同字段冲突与依赖，私聊不进入集中 Review。" },
     { done: confirmed, current: reviewing, title: confirmed ? "本月 Mission Card 已确定" : `由${round.deciderName}逐条处理并统一确认`, description: "采纳先形成候选版本，全战场一次确认后才成为本月承诺。" },

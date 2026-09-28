@@ -65,7 +65,7 @@ describe("CEO Mission draft entry and October rehearsal", () => {
         expect(mission.id).toBe(mission.code);
         expect((mission.milestones as string[]).every((line) => line.startsWith("待定 · "))).toBe(true);
       }
-      expect((await home())[0].payload).toMatchObject({ phase: "draft", todo: "个人卡草稿已就绪，可以统一开放讨论" });
+      expect((await home())[0].payload).toMatchObject({ phase: "draft", todo: "任务卡草稿已就绪，可以统一开放讨论" });
       const before = await t.sql("SELECT row_to_json(r) AS row FROM mission_rounds r");
       expect((await execute(entry.actions[0].actionId)).statusCode).toBe(200);
       expect(await t.sql("SELECT row_to_json(r) AS row FROM mission_rounds r")).toEqual(before);

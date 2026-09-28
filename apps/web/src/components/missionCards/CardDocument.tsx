@@ -34,7 +34,7 @@ export type DocumentControls = {
   onDecide?: (item: TPersonalMissionCardPayload["feedback"][number], decision: "accept" | "decline") => void;
   pending?: boolean;
   decisionError?: { feedbackId: string; message: string } | null;
-  /** 已确定个人卡的更正（GAP-04）。 */
+  /** 已确定任务卡的更正（GAP-04）。 */
   corrections?: CorrectionControls;
 };
 
@@ -81,7 +81,7 @@ export function CardDocument({ payload, controls, artifact, ownerPlan, linkedIte
     {access.closedReason && card.shown === "confirmed" ? <p className={s.readonly}>{access.closedReason}</p> : null}
     <div className={s.version}>
       <div className={s.versionMain}><strong>{card.ownerName}</strong><span>{card.status}</span></div>
-      <div className={s.source}>{round.draftOrigin === "agent" ? <span>Co-Agent 起草 · 待大家讨论修改</span> : round.draftOrigin === "placeholder" ? <span>占位 · 沿用 {Number(round.period.slice(5)) === 1 ? 12 : Number(round.period.slice(5)) - 1} 月个人卡</span> : null}{round.cards.find((row) => row.cardId === card.cardId)?.placeholder && round.draftOrigin === "agent" ? <span className={s.placeholder}>这张卡占位</span> : null}{sources.map((source) => <span key={`${source.sourceRef}:${source.sourceRevision}`}>飞书 r{source.sourceRevision} · <a href={source.sourceRef} target="_blank" rel="noreferrer">打开来源</a></span>)}</div>
+      <div className={s.source}>{round.draftOrigin === "agent" ? <span>Co-Agent 起草 · 待大家讨论修改</span> : round.draftOrigin === "placeholder" ? <span>占位 · 沿用 {Number(round.period.slice(5)) === 1 ? 12 : Number(round.period.slice(5)) - 1} 月任务卡</span> : null}{round.cards.find((row) => row.cardId === card.cardId)?.placeholder && round.draftOrigin === "agent" ? <span className={s.placeholder}>这张卡占位</span> : null}{sources.map((source) => <span key={`${source.sourceRef}:${source.sourceRevision}`}>飞书 r{source.sourceRevision} · <a href={source.sourceRef} target="_blank" rel="noreferrer">打开来源</a></span>)}</div>
     </div>
     {artifact ? <div className={s.tabs} role="tablist" aria-label="这张 Mission Card 的两种读法"><button role="tab" aria-selected={artifact.showOriginal} onClick={() => artifact.onSelect(true)}>原件</button><button role="tab" aria-selected={!artifact.showOriginal} onClick={() => artifact.onSelect(false)}>个人任务 · {card.missions.length}</button></div> : null}
     {ownerPlan ? <div className={s.tabs} role="tablist" aria-label="个人任务与本月计划"><button role="tab" aria-selected={!ownerPlan.selected} onClick={() => ownerPlan.onSelect(false)}>个人任务</button><button role="tab" aria-selected={ownerPlan.selected} onClick={() => ownerPlan.onSelect(true)}>本月计划</button></div> : null}

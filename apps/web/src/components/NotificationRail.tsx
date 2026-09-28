@@ -49,7 +49,7 @@ export function clock(date: Date): { time: string; weekday: string; day: string 
 const sameCompanyDay = (a: Date, b: Date) => clock(a).day === clock(b).day;
 
 function missionRoundMeta(payload: TMissionRoundSummary | TMissionRoundDraftPayload): string {
-  if (!("phase" in payload)) return "可以整理个人卡草稿";
+  if (!("phase" in payload)) return "可以整理任务卡草稿";
   if (payload.phase === "drafting") return "Co-Agent 正在起草";
   if (payload.phase === "draft") return "草稿 · 可以统一开放讨论";
   if (payload.phase === "open" && payload.closesAt) {
@@ -134,7 +134,7 @@ export function railGroups(cards: Card[], now: Date = new Date()): RailGroup[] {
   });
 
   const groups: RailGroup[] = [
-    { kind: "decisions", ...RAIL.decisions, subtitle: missionRounds.length ? "月度目标与个人卡" : "月度协商", items: [...monthly, ...missionRounds] },
+    { kind: "decisions", ...RAIL.decisions, subtitle: missionRounds.length ? "月度目标与任务卡" : "月度协商", items: [...monthly, ...missionRounds] },
     { kind: "meetings", ...RAIL.meetings, subtitle: meetingSubtitle, items: meetingItems },
     { kind: "research", ...RAIL.research, subtitle: researchSubtitle, items: researchItems },
   ];
@@ -248,7 +248,7 @@ export function NotificationRail({
     const draft = item.missionRound.actions.find((descriptor) => descriptor.actionType === "mission-round.draft");
     if (!draft) {
       if (item.href !== "/") onNavigate(item.href, origin);
-      else setNotice("这一轮暂无可打开的个人卡。");
+      else setNotice("这一轮暂无可打开的任务卡。");
       return;
     }
     setNotice("");
@@ -257,14 +257,14 @@ export function NotificationRail({
     const onlyPlaceholder = payloadOf<TMissionRoundDraftPayload>(item.missionRound).placeholder;
     if (!await ask(onlyPlaceholder
       ? "这个战场还没有可以起草的人，先用占位文件整理草稿，待大家讨论修改。整理草稿不会确认个人承诺，也不会开放讨论。"
-      : "Co-Agent 会按签发的本月计划和上个月的个人卡，为这个战场的每个人起草个人卡，需要一两分钟；起草不成的人先沿用上个月的卡。整理草稿不会确认个人承诺，也不会开放讨论。", "整理个人卡草稿")) return;
+      : "Co-Agent 会按签发的本月计划和上个月的任务卡，为这个战场的每个人起草任务卡，需要一两分钟；起草不成的人先沿用上个月的卡。整理草稿不会确认个人承诺，也不会开放讨论。", "整理任务卡草稿")) return;
     const saved = await action.run(draft);
     if (saved) {
       // Co-Agent 在后台起草：留在通知栏看「正在起草」，好了再点进去；这时的卡可能在起草失败后被替换。
-      if (payloadOf<TMissionRoundSummary>(saved).phase === "drafting") { setNotice("Co-Agent 已开始起草个人卡，起草好的卡会列在这一轮下面。"); return; }
+      if (payloadOf<TMissionRoundSummary>(saved).phase === "drafting") { setNotice("Co-Agent 已开始起草任务卡，起草好的卡会列在这一轮下面。"); return; }
       const firstCard = payloadOf<TMissionRoundSummary>(saved).cards[0];
       if (firstCard) onNavigate(`/mission-cards/${firstCard.cardId}`, origin);
-      else setNotice("草稿已整理，这一轮暂无可打开的个人卡。");
+      else setNotice("草稿已整理，这一轮暂无可打开的任务卡。");
     }
   }
 
@@ -357,9 +357,9 @@ export function NotificationRail({
                   </HeroButton>
                 ))}
                 {group.kind === "decisions" ? <>
-                  {action.pending ? <p role="status">正在整理个人卡草稿…</p> : null}
+                  {action.pending ? <p role="status">正在整理任务卡草稿…</p> : null}
                   {notice ? <p role="status">{notice}</p> : null}
-                  <ActionFeedback state={action.state} onRetry={action.retry} label="整理个人卡草稿" />
+                  <ActionFeedback state={action.state} onRetry={action.retry} label="整理任务卡草稿" />
                 </> : null}
               </div>
             </HeroCard>

@@ -247,7 +247,7 @@ export async function executeEditMission(
     }
     if (row.personal_mission_card_id) {
       await client.query("ROLLBACK");
-      return { error: { status: 409, code: "MISSION_IN_MISSION_CARD", message: "讨论中请在个人卡上提修改建议；已确定之后请在个人卡上申请更正" } };
+      return { error: { status: 409, code: "MISSION_IN_MISSION_CARD", message: "讨论中请在任务卡上提修改建议；已确定之后请在任务卡上申请更正" } };
     }
     const relationError = await validateMissionRelations(q, ownerNames, input);
     if (relationError) {

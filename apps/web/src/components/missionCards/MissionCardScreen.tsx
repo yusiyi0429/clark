@@ -64,7 +64,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const isOwner = workspace.viewerId !== null && workspace.viewerId === card.ownerId;
   const onPlanDirtyChange = useCallback((dirty: boolean) => setPlanDirty(dirty), []);
   const selectPlan = (selected: boolean) => { void (async () => { if (!selected && planDirty && !(await ask("本月计划有未保存的改动，确定离开？", "离开计划"))) return; setPlanSelected(selected); })(); };
-  const leaveCard = () => { void (async () => { if (planDirty && !(await ask("本月计划有未保存的改动，确定离开？", "离开个人卡"))) return; workspace.close(); })(); };
+  const leaveCard = () => { void (async () => { if (planDirty && !(await ask("本月计划有未保存的改动，确定离开？", "离开任务卡"))) return; workspace.close(); })(); };
   const roundKey = `${noteViewer}:${round.roundId}:${round.round}`;
   const note = noteDraft.roundKey === roundKey ? noteDraft.text : "";
   const acceptView = useCallback((next: Card) => setView((current) => next.id === current.id && next.version < current.version ? current : next), []);
@@ -77,9 +77,9 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
       try {
         const { data, response, error: failure } = await browserApi.GET("/api/mission-cards/{cardId}", { params: { path: { cardId: card.cardId } } });
         if (response.status === 401) { router.push("/access"); return; }
-        if (!response.ok || !data?.cards[0]) throw new Error(failure?.message ?? "暂时无法刷新个人卡，请稍后重试");
+        if (!response.ok || !data?.cards[0]) throw new Error(failure?.message ?? "暂时无法刷新任务卡，请稍后重试");
         acceptView(data.cards[0]);
-      } catch (cause) { setError(requestError(cause, "暂时无法刷新个人卡，请检查网络后重试。")); }
+      } catch (cause) { setError(requestError(cause, "暂时无法刷新任务卡，请检查网络后重试。")); }
       finally { refreshInFlight.current = null; }
     })();
     return refreshInFlight.current;
@@ -211,7 +211,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   return <div className={s.screen}>
     <DetailFrame title={title} subtitle={round.battlefieldName} onBack={leaveCard} actions={<RoundClock round={shownPayload.round} now={now} />}>
       <div className={s.content}>
-        {round.approver && round.cards.length ? <nav ref={peopleTabs} className={s.peopleTabs} aria-label="切换个人卡">{round.cards.map((row) => <Button key={row.cardId} variant="ghost" className={s.peopleTab} aria-current={row.cardId === card.cardId ? "page" : undefined} aria-label={`打开${row.ownerName}的 Mission Card · ${row.line}`} onPress={() => workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${row.cardId}`)}><span className={s.peopleInitial} aria-hidden>{row.ownerName.slice(0, 1)}</span><span className={s.peopleText}><strong>{row.ownerName}{row.placeholder ? " · 占位" : ""}</strong><small>{row.line}</small></span></Button>)}</nav> : null}
+        {round.approver && round.cards.length ? <nav ref={peopleTabs} className={s.peopleTabs} aria-label="切换任务卡">{round.cards.map((row) => <Button key={row.cardId} variant="ghost" className={s.peopleTab} aria-current={row.cardId === card.cardId ? "page" : undefined} aria-label={`打开${row.ownerName}的 Mission Card · ${row.line}`} onPress={() => workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${row.cardId}`)}><span className={s.peopleInitial} aria-hidden>{row.ownerName.slice(0, 1)}</span><span className={s.peopleText}><strong>{row.ownerName}{row.placeholder ? " · 占位" : ""}</strong><small>{row.line}</small></span></Button>)}</nav> : null}
         <RoundLine payload={shownPayload} actions={view.actions} viewerId={workspace.viewerId} pending={pending} onAction={(action, input) => void runAction(action, input)} onViewGoals={() => setGoalsOpen(true)} onStartProcessing={startProcessing} note={note} onNoteChange={(text) => { setNoteDraft({ roundKey, text }); saveRoundNote(noteViewer, round.roundId, round.round, text); }} error={error} />
         {error && !(effectivePhase === "reviewing" && round.approver && !round.counts.pending) ? <p className={s.error} role="alert">{error}</p> : null}
         {notice ? <p className={s.notice} role="status">{notice}</p> : null}

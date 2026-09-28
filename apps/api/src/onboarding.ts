@@ -50,7 +50,7 @@ function ceoRoundNext(rounds: TMissionRoundSummary[]): Next | null {
   if (!round.cards.length) return null;
   const month = Number(round.period.slice(5));
   return {
-    text: round.phase === "draft" ? `${month} 月个人卡草稿已就绪，可以统一开放讨论`
+    text: round.phase === "draft" ? `${month} 月任务卡草稿已就绪，可以统一开放讨论`
       : round.counts.pending ? `${month} 月 Mission Card 有 ${round.counts.pending} 条意见待你处理` : "意见已全部处理，待你确认",
     action: "进入工作台", href: "/",
   };
@@ -109,7 +109,7 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
       listMissionRoundDraftCards(q, people, secret, person, period, now, draftsDirectory),
     ]);
     const month = Number(period.slice(5));
-    const next = slots[0] ? { text: `${month} 月目标已签发，可以整理个人卡草稿`, action: "进入工作台", href: "/" }
+    const next = slots[0] ? { text: `${month} 月目标已签发，可以整理任务卡草稿`, action: "进入工作台", href: "/" }
       : ceoRoundNext(rounds.map((card) => card.payload as TMissionRoundSummary)) ?? await ceoNext(q, plan, period, now);
     const names = new Map(people.map((entry) => [entry.personId, entry.displayName]));
     return {

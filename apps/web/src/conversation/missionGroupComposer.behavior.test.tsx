@@ -80,7 +80,7 @@ function group(props: ComponentProps<typeof MissionGroupComposer>) { return rend
 function type(text: string) { harness.field.onChange({ target: { value: text } }); }
 function agent(viewerId = "member") {
   const data = { scope: "mission-card:card-01", streaming: false, attachments: [], send: vi.fn().mockResolvedValue(false), stop: vi.fn() } as unknown as ConversationData;
-  return render(<ColumnComposer data={data} label="个人卡" channels={[]} channel="agent" onChannel={() => {}} narrow={false} mobileOpen={false} onMobileOpen={() => {}} references={[]} onHeightChange={() => {}} draftOwnerId={viewerId} allowAttachments={false} />);
+  return render(<ColumnComposer data={data} label="任务卡" channels={[]} channel="agent" onChannel={() => {}} narrow={false} mobileOpen={false} onMobileOpen={() => {}} references={[]} onHeightChange={() => {}} draftOwnerId={viewerId} allowAttachments={false} />);
 }
 
 beforeEach(() => {
@@ -91,7 +91,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe("个人卡群组输入行为", () => {
+describe("任务卡群组输入行为", () => {
   it("按人和卡恢复草稿，切换身份或卡片看不到另一份输入", () => {
     const mine = groupProps(); group(mine); type("成员在第一张卡的意见");
     remount(); group(groupProps({ viewerId: "ceo" })); expect(harness.field.value).toBe(""); type("CEO 的草稿");

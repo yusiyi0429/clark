@@ -10,11 +10,11 @@ type Failure = { error: { status: number; code: string; message: string } };
 type Outcome = { correction: TMissionCardCorrectionView } | Failure;
 const fail = (status: number, code: string, message: string): Failure => ({ error: { status, code, message } });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const notVisible = () => fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "个人卡不存在或不可见");
-const periodClosed = () => fail(409, "CORRECTION_PERIOD_CLOSED", "月份已过，这张卡只读；要改的放进下个月的个人卡");
+const notVisible = () => fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "任务卡不存在或不可见");
+const periodClosed = () => fail(409, "CORRECTION_PERIOD_CLOSED", "月份已过，这张卡只读；要改的放进下个月的任务卡");
 
 /**
- * 已确定个人卡的更正（GAP-04）：非拍板人记一条待处理申请；拍板人直接更正，同一事务里写回并留痕。
+ * 已确定任务卡的更正（GAP-04）：非拍板人记一条待处理申请；拍板人直接更正，同一事务里写回并留痕。
  * 同一 author+clientId 重放返回同一条，内容不同则冲突。
  */
 export async function createMissionCardCorrection(
