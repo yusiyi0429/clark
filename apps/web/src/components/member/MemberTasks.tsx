@@ -64,10 +64,12 @@ export function MemberTasks({ tasks, busyId, error, onStatus, onNavigate }: {
       </button>
       {showDone ? <ul className={s.doneList}>{done.map((task) => {
         const href = `/me/tasks/${encodeURIComponent(task.id)}`;
-        return <li key={task.id}><button type="button" className={s.doneRow} data-origin={href} aria-label={`查看详情：${task.title}（已完成）`} onClick={(event) => onNavigate?.(href, event.currentTarget)}>
+        return <li key={task.id} className={s.doneItem}><button type="button" className={s.doneRow} data-origin={href} aria-label={`查看详情：${task.title}（已完成）`} onClick={(event) => onNavigate?.(href, event.currentTarget)}>
           <Check size={14} aria-hidden /><span className={s.doneTitle}>{task.title}</span>
           <span className={s.doneMeta}>{task.mission ? `${task.mission.title} · 第 ${task.mission.step} 步` : task.source === "meeting" && task.origin ? `会后分派 · ${task.origin.meetingTitle}` : "独立事项"}</span>
-        </button></li>;
+        </button>
+        {/* 点错了「完成」可以直接改回来。 */}
+        <button type="button" className={s.reopen} disabled={busyId === task.id} aria-label={`把「${task.title}」改回进行中`} onClick={() => onStatus(task, "in_progress")}>改回进行中</button></li>;
       })}</ul> : null}
     </div> : null}
   </section>;

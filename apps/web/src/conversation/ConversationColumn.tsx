@@ -26,7 +26,7 @@ export interface ConversationChannel {
   kind: "agent" | "group";
   /** 当前频道永远不画；只画在收起后的频道钮和开关的非当前段上。 */
   unread: number;
-  /** 右列页头上写的名字：「CEO Agent」「DRI Agent」；不给就用 label。 */
+  /** 右列页头上写的名字：CEO 和成员都是「我的 Agent」；不给就用 label。 */
   title?: string;
 }
 
