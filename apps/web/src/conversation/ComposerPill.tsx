@@ -4,7 +4,7 @@
  * 二级页的输入条（clark `conversation/composer-pill.tsx`），一直是两行：
  * - 上面一行是文字；写多了往上长，最多 7 行，再多在框里滚。有附件时附件条在最上面。
  * - 下面一行是操作区：左边频道开关（当前那颗实心频道色、白字，整张卡的底色和占位文字跟着换 ——「这句话发给谁」
- *   一眼看得到）；右边一颗钮三态：空时麦克风（语音未接入，置灰），有字时发送，回答中是停止。
+ *   一眼看得到）；右边一颗钮三态：空时麦克风（点了开始听写，见 useDictation），有字时发送，回答中是停止。
  * - 点卡片上的空白处就是点文字框。
  *
  * 这里只管样子和排布；文字框、发送、停止由调用方给（ColumnComposer）。颜色读 conversation-column.module.css
@@ -211,20 +211,20 @@ function ActionIcons() {
 }
 
 /**
- * 右端那颗钮：语音没接入，所以麦克风态是灰的、按不下去，悬停写「语音对话尚未接入」（禁用的钮收不到悬停，
- * 提示挂在外面那一层）。有字时是发送，回答中是停止。
+ * 右端那颗钮：空时是麦克风，按下开始听写（onMic）；没给 onMic 时灰着、按不下去，悬停写「语音对话尚未接入」
+ * （禁用的钮收不到悬停，提示挂在外面那一层）。有字时是发送，回答中是停止。
  */
-export function ComposerAction({ state, onStop, isDisabled = false, sendLabel = "发送", unavailable = "语音对话尚未接入" }: { state: ActionState; onStop?: () => void; isDisabled?: boolean; sendLabel?: string; unavailable?: string }) {
-  const label = state === "stop" ? "停止本次回答" : state === "send" ? sendLabel : unavailable;
+export function ComposerAction({ state, onStop, onMic, isDisabled = false, sendLabel = "发送", unavailable = "语音对话尚未接入" }: { state: ActionState; onStop?: () => void; onMic?: () => void; isDisabled?: boolean; sendLabel?: string; unavailable?: string }) {
+  const label = state === "stop" ? "停止本次回答" : state === "send" ? sendLabel : onMic ? "语音输入" : unavailable;
   return (
-    <span className={p.actionSlot} title={state === "mic" ? unavailable : undefined}>
+    <span className={p.actionSlot} title={state === "mic" && !onMic ? unavailable : undefined}>
       <Button
         isIconOnly
         className={p.actionButton}
         data-state={state}
         type={state === "send" ? "submit" : "button"}
-        isDisabled={state === "mic" || (state === "send" && isDisabled) || (state === "stop" && !onStop)}
-        onPress={state === "stop" ? onStop : undefined}
+        isDisabled={(state === "mic" && (!onMic || isDisabled)) || (state === "send" && isDisabled) || (state === "stop" && !onStop)}
+        onPress={state === "stop" ? onStop : state === "mic" ? onMic : undefined}
         aria-label={label}
       >
         <ActionIcons />

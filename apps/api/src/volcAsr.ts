@@ -167,6 +167,34 @@ function contextOf(words: string[]): string {
   return JSON.stringify({ hotwords });
 }
 
+const FLASH_URL = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash";
+
+/**
+ * 「录音文件极速版」接口：一次请求直接拿到文字，不用 TOS、不用轮询 —— 输入框里说一句话转文字用它。
+ * 音频以 base64 放在 body 里（厂商只认 WAV / MP3 / OGG OPUS，调用方先转好 mp3）。静音返回空串，不算失败。
+ *
+ * 资源 id 和会议录音用同一个（asrResourceId，默认 2.0 `volc.seedasr.auc`）：实测这个接口认它；文档写的
+ * `volc.bigasr.auc_turbo` 在新版控制台里没有单独开通的入口。
+ */
+export async function recognizeFlash(mp3: Buffer): Promise<string> {
+  const res = await fetch(FLASH_URL, {
+    method: "POST",
+    headers: { ...authHeaders(), "X-Api-Request-Id": randomUUID(), "X-Api-Sequence": "-1" },
+    body: JSON.stringify({
+      user: { uid: "tianshu" },
+      audio: { data: mp3.toString("base64") },
+      request: { model_name: "bigmodel", enable_punc: true, enable_itn: true },
+    }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  const code = res.headers.get("X-Api-Status-Code") ?? "";
+  if (code === STATUS.silent) return "";
+  if (code && code !== STATUS.ok) throw rejection(code, res, await safeText(res));
+  if (!res.ok) throw new Error(`语音转文字失败（HTTP ${res.status}）：${await safeText(res)}`);
+  const body = (await res.json()) as { result?: { text?: unknown } | null } | null;
+  return typeof body?.result?.text === "string" ? body.result.text.trim() : "";
+}
+
 function authHeaders(): Record<string, string> {
   const cfg = volcAsrConfig();
   // 提交和查询必须用同一个 resource id，所以只从 config 一处取
@@ -195,7 +223,8 @@ const KNOWN_CODE: Record<string, string> = {
   "45000002": "这是一段空音频",
   "45000131": "半小时内提交的音频总时长超了厂商的上限（默认 500 小时）",
   "45000132": "这份音频超过 512 MB 了",
-  "45000151": "这份音频的格式厂商不认",
+  // 实测：资源没开通时回 HTTP 403 + 这个码，message 写 "requested resource not granted"
+  "45000030": "火山账号没开通这个识别模型（看豆包语音控制台里 VOLC_ASR_RESOURCE_ID 对应的模型是否已开通）",  "45000151": "这份音频的格式厂商不认",
   "55000031": "厂商那边服务繁忙",
 };
 

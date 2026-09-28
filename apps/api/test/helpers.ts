@@ -16,6 +16,7 @@ import type { OntologyUpdater, PostMeetingAgent } from "../src/outcome.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService, type RecordingDeps } from "../src/meetingRecordings.js";
 import type { VoiceprintDeps } from "../src/voiceprints.js";
+import type { DictationDeps } from "../src/dictation.js";
 import type { RadarService } from "../src/radar.js";
 import type { PersonalRadarService } from "../src/personalRadar.js";
 import type { ThreadIntroAgent } from "../src/threadIntro.js";
@@ -197,6 +198,8 @@ export async function createTestApp(
     recordingDeps?: RecordingDeps;
     /** /api/me/voiceprint 的假 ffmpeg/腾讯云；不注入时按环境变量判断未配置。 */
     voiceprintDeps?: VoiceprintDeps;
+    /** /api/me/dictation 的假 ffmpeg/火山极速版。 */
+    dictationDeps?: DictationDeps;
     /** 公司雷达与个人雷达服务替身；不注入时 app 用未配置的桩。 */
     radarService?: RadarService;
     personalRadarService?: PersonalRadarService;

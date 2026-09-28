@@ -1,6 +1,6 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
 import { addTaskCollaborators, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
@@ -8,6 +8,7 @@ import { companyPeriod } from "../monthlyPlans.js";
 import { personDisplayNames } from "../people.js";
 import { canUseMemberView } from "../memberAccess.js";
 import { deleteVoiceprint, enrollVoiceprint, MAX_VOICEPRINT_UPLOAD_BYTES, voiceprintStatus } from "../voiceprints.js";
+import { dictate, MAX_DICTATION_UPLOAD_BYTES } from "../dictation.js";
 import { idParams, type AppInstance, type Guard, type RouteContext } from "./shared.js";
 import { readMemberWork } from "../memberWork.js";
 import { readMemberBattlefield } from "../memberBattlefields.js";
@@ -21,7 +22,7 @@ import { isActiveMember, unreadThreads } from "../threads.js";
 
 // 成员工作台：普通视图对象，不走 Card/Action 签名（spec §3.5）。
 export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, fail, requirePerson, companyMemory, voiceprints, materialMultipartLimitError } = ctx;
+  const { pool, q, fail, requirePerson, companyMemory, voiceprints, dictation, materialMultipartLimitError } = ctx;
 
   const names = () => personDisplayNames(companyMemory);
   const invitable = () => new Set(companyMemory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId));
@@ -182,6 +183,33 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
       }
       const result = await enrollVoiceprint(q, voiceprints, req.person!.personId, { consent, audio });
       return result.ok ? result.value : fail(reply, result.status, result.code, result.message);
+    },
+  );
+
+  // 输入框语音转文字：CEO 与成员都能用，录音不落库（见 dictation.ts）。
+  app.post(
+    "/api/me/dictation",
+    { preHandler: requirePerson, bodyLimit: MAX_DICTATION_UPLOAD_BYTES * 2 },
+    async (req, reply): Promise<TDictationResult | FastifyReply> => {
+      let audio: Buffer | null = null;
+      try {
+        for await (const part of req.parts({ limits: { fileSize: MAX_DICTATION_UPLOAD_BYTES, files: 1 } })) {
+          if (part.type !== "file") continue;
+          if (part.fieldname !== "audio") return fail(reply, 400, "DICTATION_AUDIO_REQUIRED", "录音必须放在 audio 字段里上传");
+          audio = await part.toBuffer();
+        }
+      } catch (error) {
+        const limited = materialMultipartLimitError(
+          error,
+          { status: 413, code: "DICTATION_AUDIO_TOO_LARGE", message: "这段录音超过 10 MB 了，分几次说吧" },
+          { status: 400, code: "DICTATION_AUDIO_REQUIRED", message: "一次只能上传一段录音" },
+          { status: 400, code: "DICTATION_AUDIO_REQUIRED", message: "录音上传中断了，请重试" },
+        );
+        if (limited) return fail(reply, limited.status, limited.code, limited.message);
+        throw error;
+      }
+      const result = await dictate(dictation, audio);
+      return result.ok ? { text: result.text } : fail(reply, result.status, result.code, result.message);
     },
   );
 

@@ -3,7 +3,7 @@
  * 不走真实网络：fetch 被替换成记录请求的假实现。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AsrRejected, mapResult, queryTask, submitTask } from "../src/volcAsr.js";
+import { AsrRejected, mapResult, queryTask, recognizeFlash, submitTask } from "../src/volcAsr.js";
 import { RecordingNotConfigured, assertRecordingConfigured, recordingConfigured, tosConfig, volcAsrConfig } from "../src/recordingConfig.js";
 
 /** 文档里那段返回的形状。`us` 是要塞进 `result.utterances` 的那几条。 */
@@ -305,5 +305,35 @@ describe("缺配消息", () => {
     process.env.VOLC_ASR_API_KEY = "fake-api-key";
     expect(recordingConfigured()).toEqual({ tos: true, asr: true });
     expect(() => assertRecordingConfigured()).not.toThrow();
+  });
+});
+
+describe("recognizeFlash（极速版）", () => {
+  it("一次请求：极速版地址、和会议录音同一个资源 id、音频 base64 放 body、回 result.text", async () => {
+    process.env.VOLC_ASR_API_KEY = "fake-api-key";
+    process.env.VOLC_ASR_RESOURCE_ID = "volc.seedasr.auc";
+    const calls = stubFetch(() => ({ headers: { "X-Api-Status-Code": "20000000" }, body: { audio_info: { duration: 2499 }, result: { text: " 关闭透传。 " } } }));
+
+    expect(await recognizeFlash(Buffer.from("mp3 bytes"))).toBe("关闭透传。");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash");
+    expect(headerOf(calls[0].init, "X-Api-Key")).toBe("fake-api-key");
+    expect(headerOf(calls[0].init, "X-Api-Resource-Id")).toBe("volc.seedasr.auc");
+    expect(headerOf(calls[0].init, "X-Api-Sequence")).toBe("-1");
+    expect(headerOf(calls[0].init, "X-Api-Request-Id")).toMatch(/^[0-9a-f-]{36}$/);
+    const body = JSON.parse(String(calls[0].init.body));
+    expect(Buffer.from(body.audio.data, "base64").toString()).toBe("mp3 bytes");
+    expect(body.request).toMatchObject({ model_name: "bigmodel", enable_punc: true, enable_itn: true });
+  });
+
+  it("静音回空串；45 开头判掉是 AsrRejected", async () => {
+    process.env.VOLC_ASR_API_KEY = "fake-api-key";
+    stubFetch(() => ({ headers: { "X-Api-Status-Code": "20000003" } }));
+    expect(await recognizeFlash(Buffer.from("x"))).toBe("");
+    stubFetch(() => ({ status: 400, headers: { "X-Api-Status-Code": "45000151", "X-Tt-Logid": "log-1" } }));
+    const err = await recognizeFlash(Buffer.from("x")).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AsrRejected);
+    expect((err as Error).message).toContain("45000151 · log-1");
   });
 });

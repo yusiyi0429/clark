@@ -85,10 +85,11 @@ describe("对话端点与附件", () => {
 });
 
 describe("全局输入条（clark workspace 614–640）", () => {
-  it("默认是语音面：未接入时主按钮写明「语音未接入」，不请求麦克风", () => {
+  it("默认是语音面：主按钮「点击说话」（语音输入），渲染时不请求麦克风", () => {
     const html = dock();
-    expect(html).toContain("语音未接入");
-    expect(html).toContain('aria-label="语音未接入，改用键盘"');
+    expect(html).toContain("点击说话");
+    expect(html).toContain('aria-label="语音输入"');
+    expect(html).not.toContain("语音未接入");
     expect(html).toContain('aria-label="切换键盘输入"');
     expect(html).toContain("查看“公司全局”的对话记录");
   });

@@ -129,6 +129,7 @@ import {
   NotificationList,
   MarkNotificationsSeenRequest,
   VoiceprintStatus,
+  DictationResult,
   OnboardingResponse,
   CompleteOnboardingResponse,
   MyRadar,
@@ -1149,6 +1150,29 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/me/dictation": {
+        post: {
+          operationId: "dictate",
+          summary: "输入框语音转文字（multipart：audio 单段浏览器录音）：火山录音文件极速版一次返回文字，录音不落库；CEO 与成员都可用",
+          requestBody: {
+            required: true,
+            content: {
+              "multipart/form-data": {
+                schema: { type: "object", required: ["audio"], properties: { audio: { type: "string", format: "binary" } } },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "转好的文字（没听到人声时为空串）", content: { "application/json": { schema: { $ref: "#/components/schemas/DictationResult" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "413": errorResponse,
+            "502": errorResponse,
+            "503": errorResponse,
+          },
+        },
+      },
       "/api/me/voiceprint": {
         get: {
           operationId: "getMyVoiceprint",
@@ -1957,6 +1981,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingRecording: MeetingRecording as JsonSchema,
         StartMeetingRecordingResponse: StartMeetingRecordingResponse as JsonSchema,
         VoiceprintStatus: VoiceprintStatus as JsonSchema,
+        DictationResult: DictationResult as JsonSchema,
         OnboardingResponse: OnboardingResponse as JsonSchema,
         CompleteOnboardingResponse: CompleteOnboardingResponse as JsonSchema,
       },

@@ -8,12 +8,15 @@ import type { Card } from "@/lib/api/client";
 import { HeroButton } from "@/components/HeroButton";
 import { ReferenceTray } from "./references";
 import { STAGE_COPY } from "./Transcript";
+import { DictationControls } from "./DictationControls";
+import { useDictation, withDictation } from "./useDictation";
 import type { ConversationData } from "./useConversation";
 import d from "@/styles/conversation-dock.module.css";
 
 /**
  * 全局输入条（clark `workspace.tsx` 614–640）：历史、键盘/语音切换、两个常驻输入面、发送。
- * 语音未接入：主按钮显示「语音未接入」，点它改用键盘；从不请求麦克风（SSOT C-07）。
+ * 宽屏上输入条右边缘固定、只向左伸缩（不再横移到正中）。语音面的主按钮「点击说话」：原地展开并直接开始听写
+ * （useDictation），✓ 把文字放进输入框、不自动发送；✕ / Esc / 没转成文字时缩回原样。麦克风只在点这一下时请求。
  * 回答进行中主按钮变「停止回答」。
  */
 export function ConversationDock({
@@ -73,6 +76,13 @@ export function ConversationDock({
   const activeReferences = global ? references : [];
   const hasTray = activeReferences.length > 0 || data.attachments.length > 0;
   const busy = data.streaming;
+  /** 这次听写是不是从收起的语音面开始的：是的话，没留下文字就缩回语音面。 */
+  const fromVoice = useRef(false);
+  const collapseIfEmpty = () => {
+    if (fromVoice.current && !input) onKeyboardChange(false);
+    fromVoice.current = false;
+  };
+  const dictation = useDictation({ onCancel: collapseIfEmpty });
 
   // 草稿按对话范围保存（C-03：切换对象或频道后不串草稿），关闭和改变宽度不丢。
   useEffect(() => {
@@ -103,6 +113,12 @@ export function ConversationDock({
     setCaption(data.error);
     setCaptionDismissed(false);
   }, [data.error]);
+  // 听写没听清、没授权：说在同一个气泡里。
+  useEffect(() => {
+    if (!dictation.error) return;
+    setCaption(dictation.error);
+    setCaptionDismissed(false);
+  }, [dictation.error]);
 
   useEffect(() => {
     if (!prefill) return;
@@ -154,9 +170,28 @@ export function ConversationDock({
     setComposerHeight((previous) => (previous === next ? previous : next));
   }, [input, keyboard, composerExpanded, hasTray]);
 
+  function startDictation() {
+    fromVoice.current = !keyboard;
+    onKeyboardChange(true);
+    void dictation.start();
+  }
+
+  async function confirmDictation() {
+    const text = await dictation.confirm();
+    if (!text) return collapseIfEmpty();
+    fromVoice.current = false;
+    const next = withDictation(input, text);
+    updateInput(next);
+    requestAnimationFrame(() => {
+      const element = inputElement.current;
+      element?.focus({ preventScroll: true });
+      element?.setSelectionRange(next.length, next.length);
+    });
+  }
+
   async function submit() {
     const text = input.trim();
-    if (!text || busy) return;
+    if (!text || busy || dictation.active) return;
     const sentReferences = activeReferences.map((card) => ({ cardId: card.id, version: card.version }));
     const keptInput = input;
     const keptReferences = activeReferences;
@@ -176,7 +211,8 @@ export function ConversationDock({
     onHeightChange?.(keyboard && composerExpanded ? composerHeight + 12 : 56);
   }, [onHeightChange, keyboard, composerExpanded, composerHeight]);
 
-  const placeholder = activeReferences.length ? "围绕引用的卡片，聊聊你的判断…" : detail ? "继续聊聊…" : "输入你的想法…";
+  const placeholder =
+    dictation.phase === "transcribing" ? "正在转成文字…" : dictation.active ? "正在听…" : activeReferences.length ? "围绕引用的卡片，聊聊你的判断…" : detail ? "继续聊聊…" : "输入你的想法…";
   const captionText = caption || (busy ? `${STAGE_COPY[data.stage]}…` : "");
   const dockHeight = keyboard ? (composerExpanded ? composerHeight + (hasTray ? 48 : 12) : hasTray ? 84 : 48) : undefined;
 
@@ -250,11 +286,15 @@ export function ConversationDock({
           size="sm"
           isIconOnly
           className={clsx(d.iconButton, d.modeButton)}
-          onPress={() => onKeyboardChange(!keyboard)}
+          onPress={() => {
+            // 听写中切回语音面：这段不要了。
+            if (dictation.active) dictation.cancel();
+            onKeyboardChange(!keyboard);
+          }}
           ref={modeButton}
-          aria-label={keyboard ? "切换到按住说话" : "切换键盘输入"}
+          aria-label={keyboard ? "切换到语音输入" : "切换键盘输入"}
           aria-expanded={keyboard}
-          title={keyboard ? "切换到按住说话" : "语音暂不可用，使用键盘继续"}
+          title={keyboard ? "切换到语音输入" : "切换键盘输入"}
         >
           <span className={clsx(d.modeIcon, d.keyboardIcon)} aria-hidden>
             <Keyboard size={20} strokeWidth={1.7} />
@@ -268,13 +308,12 @@ export function ConversationDock({
             <button
               type="button"
               className={d.holdButton}
-              data-failed={!busy}
               data-busy={busy}
-              onClick={() => (busy ? data.stop() : onKeyboardChange(true))}
-              aria-label={busy ? "停止本次回答" : "语音未接入，改用键盘"}
+              onClick={() => (busy ? data.stop() : startDictation())}
+              aria-label={busy ? "停止本次回答" : "语音输入"}
             >
               {busy ? <Square size={16} strokeWidth={2.2} aria-hidden /> : <Mic size={20} strokeWidth={1.8} aria-hidden />}
-              <span>{busy ? "停止回答" : "语音未接入"}</span>
+              <span>{busy ? "停止回答" : "点击说话"}</span>
             </button>
           </div>
           <div className={d.textLayer} aria-hidden={!keyboard} inert={!keyboard}>
@@ -289,6 +328,7 @@ export function ConversationDock({
                 ref={inputElement}
                 rows={1}
                 value={input}
+                readOnly={dictation.active}
                 onChange={(event) => updateInput(event.target.value)}
                 onCompositionStart={() => {
                   composing.current = true;
@@ -315,7 +355,11 @@ export function ConversationDock({
                 placeholder={placeholder}
                 aria-label={global ? "全局对话输入" : `${label}对话输入`}
               />
-              {busy ? (
+              {dictation.active ? (
+                <span className={d.dictation}>
+                  <DictationControls dictation={dictation} onConfirm={() => void confirmDictation()} />
+                </span>
+              ) : busy ? (
                 <HeroButton variant="ghost" size="sm" isIconOnly className={d.sendButton} type="button" onPress={data.stop} aria-label="停止本次回答" data-ready="true">
                   <Square size={16} />
                 </HeroButton>

@@ -55,6 +55,7 @@ import { registerMyRadarRoutes } from "./routes/myRadar.js";
 import { registerOntologyRoutes } from "./routes/ontology.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
+import { realDictationDeps, type DictationDeps } from "./dictation.js";
 import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js";
 
 type ValidationItem = { instancePath?: string; dataPath?: string; message?: string };
@@ -108,6 +109,7 @@ export async function buildApp({
   monthlyPlanService,
   recordingService,
   voiceprintDeps = realVoiceprintDeps,
+  dictationDeps = realDictationDeps,
   threadIntroAgent,
   webSearch,
   outlets,
@@ -131,6 +133,8 @@ export async function buildApp({
   recordingService?: MeetingRecordingService;
   /** 本人声纹录入/删除用的 ffmpeg 与腾讯云依赖；缺省为真实实现（测试注入假实现）。 */
   voiceprintDeps?: VoiceprintDeps;
+  /** 输入框语音转文字用的 ffmpeg 与火山极速版；缺省为真实实现（测试注入假实现）。 */
+  dictationDeps?: DictationDeps;
   threadIntroAgent?: ThreadIntroAgent;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
@@ -301,6 +305,7 @@ export async function buildApp({
     monthlyPlanService,
     recordings,
     voiceprints: voiceprintDeps,
+    dictation: dictationDeps,
     threadIntroAgent: threadIntroAgent ?? createThreadIntroAgent(pool, env),
     materialStorageDir,
     conversationAttachmentStorageDir,

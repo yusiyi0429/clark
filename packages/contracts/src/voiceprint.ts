@@ -12,3 +12,8 @@ export const VoiceprintStatus = Type.Object(
 );
 
 export type TVoiceprintStatus = Static<typeof VoiceprintStatus>;
+
+/** 输入框语音转文字（POST /api/me/dictation）：只回转好的文字；没听到人声时是空串。录音不落库。 */
+export const DictationResult = Type.Object({ text: Type.String() }, { additionalProperties: false });
+
+export type TDictationResult = Static<typeof DictationResult>;

@@ -9,8 +9,11 @@ import { HeroButton } from "@/components/HeroButton";
 import { ChannelSwitch, ComposerAction, ComposerPill, pillStyles, usePillRows } from "./ComposerPill";
 import { columnComposerClass, pressChannel, type ConversationChannel } from "./ConversationColumn";
 import { AttachButton } from "./ConversationAttachments";
+import { DictationControls } from "./DictationControls";
+import { useDictation, withDictation } from "./useDictation";
 import type { ConversationData } from "./useConversation";
 import d from "@/styles/conversation-dock.module.css";
+import ds from "@/styles/dictation.module.css";
 
 /**
  * 二级页右列底下的输入条（clark CEO dock 的 `data-form=pill` 形态）：两行，底行左边是频道开关，右边一颗三态钮。
@@ -59,6 +62,7 @@ export function ColumnComposer({
   const composing = useRef(false);
   const rows = usePillRows(input, pill, inputElement);
   const busy = data.streaming;
+  const dictation = useDictation();
 
   // 草稿按对话范围保存（C-03：切换对象后不串草稿），关闭和改变宽度不丢。
   useEffect(() => {
@@ -70,6 +74,7 @@ export function ColumnComposer({
   }, [draftKey]);
   const updateInput = (value: string) => {
     setInput(value);
+    dictation.clearError();
     try {
       if (value) localStorage.setItem(draftKey, value);
       else localStorage.removeItem(draftKey);
@@ -90,9 +95,21 @@ export function ColumnComposer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只响应新的引用
   }, [prefill?.nonce]);
 
+  async function confirmDictation() {
+    const text = await dictation.confirm();
+    if (!text) return;
+    const next = withDictation(input, text);
+    updateInput(next);
+    requestAnimationFrame(() => {
+      const element = inputElement.current;
+      element?.focus({ preventScroll: true });
+      element?.setSelectionRange(next.length, next.length);
+    });
+  }
+
   async function submit() {
     const text = input.trim();
-    if (!text || busy) return;
+    if (!text || busy || dictation.active) return;
     const kept = input;
     updateInput("");
     // C-04：服务端还没接收就失败时，把输入放回去，不先清空后提示失败。
@@ -100,8 +117,9 @@ export function ColumnComposer({
   }
 
   const showSwitch = channels.length > 1 || narrow;
-  const attachments = data.attachments.length ? (
+  const attachments = data.attachments.length || dictation.error ? (
     <>
+      {dictation.error ? <p role="alert" className={ds.error}>{dictation.error}</p> : null}
       {data.attachments.map((attachment) => (
         <span key={attachment.id} className={pillStyles.reference}>
           <Paperclip size={12} aria-hidden="true" />
@@ -157,6 +175,7 @@ export function ColumnComposer({
             ref={inputElement}
             rows={rows}
             value={input}
+            readOnly={dictation.active}
             onChange={(event) => updateInput(event.target.value)}
             onCompositionStart={() => {
               composing.current = true;
@@ -181,15 +200,19 @@ export function ColumnComposer({
               event.preventDefault();
               event.currentTarget.form?.requestSubmit();
             }}
-            placeholder={data.viewingMaterialEditable ? "让 Agent 改这份材料…" : "问你的 Agent…"}
+            placeholder={dictation.phase === "transcribing" ? "正在转成文字…" : dictation.active ? "正在听…" : data.viewingMaterialEditable ? "让 Agent 改这份材料…" : "问你的 Agent…"}
             aria-label={`${label}对话输入`}
           />
         }
         action={
-          <>
-            {allowAttachments ? <AttachButton data={data} className={pillStyles.tool} /> : null}
-            <ComposerAction state={busy ? "stop" : input.trim() ? "send" : "mic"} onStop={data.stop} />
-          </>
+          dictation.active ? (
+            <DictationControls dictation={dictation} onConfirm={() => void confirmDictation()} />
+          ) : (
+            <>
+              {allowAttachments ? <AttachButton data={data} className={pillStyles.tool} /> : null}
+              <ComposerAction state={busy ? "stop" : input.trim() ? "send" : "mic"} onStop={data.stop} onMic={() => void dictation.start()} />
+            </>
+          )
         }
       />
     </div>

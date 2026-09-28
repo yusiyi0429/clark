@@ -18,6 +18,7 @@ import type { ResearchService } from "../research.js";
 import type { MonthlyPlanService } from "../monthlyDraft.js";
 import type { MeetingRecordingService } from "../meetingRecordings.js";
 import type { VoiceprintDeps } from "../voiceprints.js";
+import type { DictationDeps } from "../dictation.js";
 import type { ThreadIntroAgent } from "../threadIntro.js";
 import type { AppEnv } from "../app.js";
 
@@ -62,6 +63,7 @@ export type RouteContext = {
   monthlyPlanService?: MonthlyPlanService;
   recordings: MeetingRecordingService;
   voiceprints: VoiceprintDeps;
+  dictation: DictationDeps;
   threadIntroAgent: ThreadIntroAgent;
   materialStorageDir: string;
   conversationAttachmentStorageDir: string;

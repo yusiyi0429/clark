@@ -60,11 +60,12 @@ describe("右列底下的两行输入条", () => {
     expect(narrow).toContain("我的 Agent");
   });
 
-  it("提示文字是「问你的 Agent…」，空着时右端是置灰的麦克风", () => {
+  it("提示文字是「问你的 Agent…」，空着时右端是能按的麦克风（语音输入）", () => {
     const html = composer();
     expect(html).toContain('placeholder="问你的 Agent…"');
-    expect(html).toContain('aria-label="语音对话尚未接入"');
+    expect(html).toContain('aria-label="语音输入"');
     expect(html).toContain('data-state="mic"');
+    expect(html).not.toContain("语音对话尚未接入");
   });
 
   it("回答进行中右端变成停止", () => {

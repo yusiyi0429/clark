@@ -72,6 +72,9 @@
 .historySheet[data-material=monthly] .chatBrandMark{--brand-deep:#927642;--brand-bright:#c9a45a}
 .historySheet[data-material=meeting] .chatBrandMark{--brand-deep:#536b91;--brand-bright:#8fa7a0}
 @keyframes historyRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+/* 宽屏：对话记录贴右边一栏，宽 = 首页输入条宽 + 左右各 16（输入条在它底部居中，右边缘不动），左边的卡片照常看得到。 */
+@media(min-width:960px){.historySheet{left:auto;right:var(--shell-edge);bottom:14px;width:min(592px,calc(100vw - var(--main-start) - var(--shell-edge)));transform-origin:right bottom}}
+@media(min-width:1800px){.historySheet{width:min(652px,calc(100vw - var(--main-start) - var(--shell-edge)))}}
 .historyBackdrop{position:fixed;z-index:90;left:var(--main-start);right:var(--shell-edge);top:var(--shell-edge);bottom:var(--shell-edge);border:0;border-radius:24px;background:#25252712;cursor:default!important;animation:historyVeil 180ms ease-out both}
 @keyframes historyVeil{from{opacity:0}to{opacity:1}}
 
