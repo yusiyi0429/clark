@@ -31,7 +31,8 @@ export function connectCommands(client: AgentClient, endpoint: string, token: st
 
 export const GUIDE_FILE_NAME = "天枢连接说明.md";
 
-export function connectionGuide({ client, endpoint, token, expires }: { client: AgentClient; endpoint: string; token: string; expires: string }): string {
+/** weeklySync：用户在生成前打开了「每周五自动同步」，设定时任务就是必做的一步。 */
+export function connectionGuide({ client, endpoint, token, expires, weeklySync }: { client: AgentClient; endpoint: string; token: string; expires: string; weeklySync: boolean }): string {
   const name = clientName(client);
   const steps = client === "other" ? [
     "天枢是一个远程 MCP 服务（Streamable HTTP，Bearer 令牌）。请按你所在工具自己的方式添加它，名称用 `tianshu`：",
@@ -79,20 +80,22 @@ export function connectionGuide({ client, endpoint, token, expires }: { client: 
     `- 用户说「同步本周进展」时，照这段做：${SYNC_INSTRUCTION}`,
     "- 可以问用户要不要把上面两条写进常用项目的 AGENTS.md 或 CLAUDE.md（不要写令牌）。",
     "",
-    "## 可选：每周自动同步",
-    "",
-    ...(client === "other" ? [
-      "如果用户希望每周五 18:00 自动同步，且你的工具有非交互（命令行）运行方式，帮用户在系统里建一个每周定时任务（Windows 用任务计划程序 schtasks，macOS / Linux 用 crontab），让它带着上面「同步本周进展」那段指令运行；工具不支持就告诉用户改成每周手动说一次。",
-    ] : [
-      "如果用户希望每周五 18:00 自动同步，帮用户在系统里建一个每周定时任务（Windows 用任务计划程序 schtasks，macOS / Linux 用 crontab），工作目录设成用户最常用的项目目录，运行：",
+    ...(weeklySync ? [
+      "## 第三步：设好每周五自动同步（用户已选择开启）",
       "",
-      "```",
-      syncCommand(client),
-      "```",
-    ]),
-    "",
-    "建好后把任务名和下次运行时间告诉用户。",
-    "",
+      ...(client === "other" ? [
+        "帮用户在系统里建一个每周五 18:00 运行的定时任务（Windows 用任务计划程序 schtasks，macOS / Linux 用 crontab），用你所在工具的非交互（命令行）方式，带着上面「同步本周进展」那段指令运行，工作目录设成用户最常用的项目目录。你的工具不支持非交互运行的话，告诉用户改成每周五手动说一次「同步本周进展」。",
+      ] : [
+        "帮用户在系统里建一个每周五 18:00 运行的定时任务（Windows 用任务计划程序 schtasks，macOS / Linux 用 crontab），工作目录设成用户最常用的项目目录，运行：",
+        "",
+        "```",
+        syncCommand(client),
+        "```",
+      ]),
+      "",
+      "建好后把任务名和下次运行时间告诉用户，并手动跑一次确认能写进天枢。",
+      "",
+    ] : []),
     "## 最后",
     "",
     "提醒用户删掉这个文件。令牌丢了或不用了，可以在天枢的「账号菜单 → 连接到外部工具」里撤销再生成。",

@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
+import { ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { Button } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { monthDayTime } from "@/lib/companyTime";
 import { GUIDE_FILE_NAME, SYNC_INSTRUCTION, clientName, connectCommands, connectionGuide, syncCommand } from "@/lib/connectionGuide";
+import f from "@/components/onboarding/foundation.module.css";
 import s from "@/styles/connection-dialog.module.css";
 
 type TokenView = components["schemas"]["PersonalTokenView"];
@@ -21,6 +23,9 @@ export function ConnectionDialog() {
   const [name, setName] = useState("");
   const [client, setClient] = useState<TokenView["client"]>("codex");
   const [expiresInDays, setExpiresInDays] = useState<30 | 90 | null>(30);
+  /** 默认每周五自动同步：写进说明文件，由 Agent 连接时一并设好定时任务。 */
+  const [weeklySync, setWeeklySync] = useState(true);
+  const [createdWeekly, setCreatedWeekly] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
@@ -40,7 +45,7 @@ export function ConnectionDialog() {
     try {
       const { data, error: failure } = await browserApi.POST("/api/me/tokens", { body: { name: name.trim(), client, expiresInDays } });
       if (!data) throw new Error(failure?.message ?? "连接说明没生成，请重试");
-      setCreated(data); setTokens((current) => [data.view, ...current]); setName("");
+      setCreated(data); setCreatedWeekly(weeklySync); setTokens((current) => [data.view, ...current]); setName("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "连接说明没生成，请重试"); }
     finally { setBusy(false); }
   };
@@ -64,7 +69,7 @@ export function ConnectionDialog() {
   const activeCount = tokens.filter((token) => !token.expiresAt || Date.parse(token.expiresAt) > Date.now()).length;
   const download = () => {
     if (!created) return;
-    const text = connectionGuide({ client: created.view.client, endpoint, token: created.token, expires: when(created.view.expiresAt) });
+    const text = connectionGuide({ client: created.view.client, endpoint, token: created.token, expires: when(created.view.expiresAt), weeklySync: createdWeekly });
     const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url; link.download = GUIDE_FILE_NAME;
@@ -75,9 +80,24 @@ export function ConnectionDialog() {
   return <div className={s.root}>
     <p className={s.lead}>让你自己用的 AI 工具（Codex、Claude Code、OpenCode 等）连上天枢：它能读你的执行事项、帮你写进展。</p>
     <section className={s.section} aria-label="连接一个 Agent"><h3>连接一个 Agent</h3>
-      <div className={s.fields}><label>给这次连接起个名字<input value={name} maxLength={40} placeholder="比如：我的笔记本" onChange={(event) => setName(event.target.value)} /></label>
-        <label>你用的是<select value={client} onChange={(event) => setClient(event.target.value as TokenView["client"])}><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="other">其他工具（OpenCode、Cursor 等）</option></select></label>
-        <label>有效期<select value={expiresInDays ?? "never"} onChange={(event) => setExpiresInDays(event.target.value === "never" ? null : Number(event.target.value) as 30 | 90)}><option value={30}>30 天</option><option value={90}>90 天</option><option value="never">不过期</option></select></label></div>
+      <label className={s.nameField}>给这次连接起个名字<input value={name} maxLength={40} placeholder="比如：我的笔记本" onChange={(event) => setName(event.target.value)} /></label>
+      <div className={s.choice}><span id="connection-client">你用的是</span>
+        <ToggleButtonGroup className={s.segmented} aria-labelledby="connection-client" selectionMode="single" disallowEmptySelection selectedKeys={[client]}
+          onSelectionChange={(keys) => { const next = [...keys][0]; if (next === "codex" || next === "claude" || next === "other") setClient(next); }}>
+          <ToggleButton id="codex">Codex</ToggleButton><ToggleButton id="claude">Claude Code</ToggleButton><ToggleButton id="other">其他工具</ToggleButton>
+        </ToggleButtonGroup>
+        {client === "other" ? <p className={s.muted}>OpenCode、Cursor 等支持远程 MCP 的工具。</p> : null}
+      </div>
+      <div className={s.choice}><span id="connection-expiry">有效期</span>
+        <ToggleButtonGroup className={s.segmented} aria-labelledby="connection-expiry" selectionMode="single" disallowEmptySelection selectedKeys={[String(expiresInDays ?? "never")]}
+          onSelectionChange={(keys) => { const next = [...keys][0]; setExpiresInDays(next === "never" ? null : Number(next) as 30 | 90); }}>
+          <ToggleButton id="30">30 天</ToggleButton><ToggleButton id="90">90 天</ToggleButton><ToggleButton id="never">不过期</ToggleButton>
+        </ToggleButtonGroup>
+      </div>
+      <button type="button" role="switch" aria-checked={weeklySync} className={s.switchRow} onClick={() => setWeeklySync((value) => !value)}>
+        <span className={s.switchText}><strong>每周五 18:00 自动同步进展</strong><span>连接时让 Agent 一并设好定时任务，每周把你的进展写进天枢。</span></span>
+        <span className={f.switch} data-on={weeklySync} aria-hidden="true"><span /></span>
+      </button>
       <Button variant="primary" isDisabled={busy || !name.trim() || activeCount >= 5} onPress={() => void create()}>生成连接说明</Button>
       {activeCount >= 5 ? <p className={s.muted}>最多保留 5 个连接。可以在下面撤销不用的再生成。</p> : null}
       {created ? <div className={s.ready} aria-label="连接说明已生成">
@@ -97,7 +117,7 @@ export function ConnectionDialog() {
       </div> : null}
     </section>
     <section className={s.section} aria-label="每周同步进展"><h3>每周同步进展</h3>
-      <p className={s.muted}>连上以后，对你的 Agent 说「同步本周进展」就行。想每周五自动同步，让它照连接说明里的步骤帮你设好。本体每周从天枢统一拉取。</p>
+      <p className={s.muted}>连上以后，随时对你的 Agent 说「同步本周进展」就行；生成连接说明时打开「每周五自动同步」，它会一并设好定时任务。天枢每周汇总后同步给本体。</p>
       <details className={s.manual}><summary>同步指令和定时命令</summary>
         <div className={s.manualBody}>
           <div className={s.commandBlock}><strong>同步指令</strong><div className={s.command}><code>{SYNC_INSTRUCTION}</code><button type="button" onClick={() => void copy("同步指令", SYNC_INSTRUCTION)}>复制指令</button></div></div>

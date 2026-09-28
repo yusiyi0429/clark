@@ -10,7 +10,8 @@ describe("responsive workspace CSS", () => {
     expect(menu).toContain(".dialog.wide { box-sizing: border-box; width: min(560px, calc(100vw - 32px))");
     expect(menu).toContain("@media (max-width: 759px) { .dialog.wide { width: calc(100vw - 20px)");
     expect(connection).toContain(".command code{flex:1;min-width:0;overflow-wrap:anywhere;white-space:pre-wrap");
-    expect(connection).toContain("@media(max-width:520px){.fields{grid-template-columns:minmax(0,1fr)}");
+    expect(connection).toContain(".segmented{display:inline-flex;justify-self:start;max-width:100%;");
+    expect(connection).toContain("overflow-x:auto}");
   });
   it("keeps the member home widgets and tasks visible on phones, with notifications in the same scroll", () => {
     const source = css("./app-shell.module.css");
