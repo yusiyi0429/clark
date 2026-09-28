@@ -4,10 +4,10 @@ import { dirname, join } from "node:path";
 import type { Pool } from "pg";
 import type { TMaterialDetailResponse, TMaterialObjectType, TMaterialView } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
-import type { ParsedMaterial } from "./materialParser.js";
-import { MAX_MATERIAL_TEXT_CHARS } from "./materialParser.js";
+import type { ObjectParsedMaterial } from "./materialParser.js";
+import { MAX_MATERIAL_HTML_CHARS, MAX_MATERIAL_TEXT_CHARS } from "./materialParser.js";
 import { moveStagedFile } from "./meetingMaterials.js";
-import { diffMaterialBlocks, splitMaterialBlocks } from "./materialDiff.js";
+import { diffHtmlMaterialLines, diffMaterialBlocks, splitMaterialBlocks } from "./materialDiff.js";
 import { isActiveMember, postCoAgentMessage, type ThreadRef } from "./threads.js";
 
 export class ObjectMaterialError extends Error {
@@ -16,10 +16,10 @@ export class ObjectMaterialError extends Error {
 
 export type MaterialViewer = { personId: string; role: "ceo" | "member"; displayName: string };
 type MaterialRow = { id: string; object_type: TMaterialObjectType; object_id: string; file_name: string;
-  format: "markdown" | "pdf" | "docx"; size_bytes: number; page_count: number | null; storage_key: string | null;
+  format: "markdown" | "pdf" | "docx" | "html"; size_bytes: number; page_count: number | null; storage_key: string | null;
   origin: "upload" | "agent"; owner_id: string; current_version: number; created_at: Date; updated_at: Date;
   revision_version: number | null; revision_by: string | null; revision_summary: string | null; revision_at: Date | null };
-type RevisionRow = { version: number; body: string; requested_by: string | null; summary: string | null; created_at: Date };
+type RevisionRow = { version: number; requested_by: string | null; summary: string | null; created_at: Date };
 const COLUMNS = `m.*, r.version AS revision_version, r.requested_by AS revision_by,
   r.summary AS revision_summary, r.created_at AS revision_at`;
 const JOIN = `LEFT JOIN material_revisions r ON r.material_id=m.id AND r.version=m.current_version`;
@@ -47,7 +47,7 @@ function view(row: MaterialRow, viewer: MaterialViewer, names: Map<string, strin
     format: row.format, sizeBytes: row.size_bytes, ...(row.page_count ? { pageCount: row.page_count } : {}),
     origin: row.origin, owner: person(row.owner_id, names), createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(), version: row.current_version,
-    editable: row.format === "markdown", canDelete: row.owner_id === viewer.personId,
+    editable: row.format === "markdown" || row.format === "html", canDelete: row.owner_id === viewer.personId,
     lastRevision: (row.current_version > 1 || row.origin === "agent") && row.revision_at ? {
       version: row.revision_version!, requestedBy: person(row.revision_by!, names),
       summary: row.revision_summary!, at: row.revision_at.toISOString(),
@@ -82,19 +82,25 @@ export async function getObjectMaterialDetail(q: Query, ref: ThreadRef, id: stri
   names: Map<string, string>, version?: number): Promise<TMaterialDetailResponse> {
   await requireMaterialAccess(q, ref, viewer);
   const row = await rowFor(q, ref, id);
-  const revisions = await q("SELECT version,body,requested_by,summary,created_at FROM material_revisions WHERE material_id=$1 ORDER BY version DESC", [id]);
+  const revisions = await q("SELECT version,requested_by,summary,created_at FROM material_revisions WHERE material_id=$1 ORDER BY version DESC", [id]);
   const selected = (revisions.rows as RevisionRow[]).find((item) => item.version === (version ?? row.current_version));
   if (!selected) throw new ObjectMaterialError(404, "MATERIAL_REVISION_NOT_FOUND", "材料版本不存在");
-  const previous = (revisions.rows as RevisionRow[]).find((item) => item.version === selected.version - 1);
+  const contents = await q("SELECT version,body FROM material_revisions WHERE material_id=$1 AND version IN ($2,$3)",
+    [id, selected.version, selected.version - 1]);
+  const bodies = new Map((contents.rows as { version: number; body: string }[]).map((item) => [item.version, item.body]));
+  const currentBody = bodies.get(selected.version)!;
+  const previousBody = bodies.get(selected.version - 1);
   return { material: view(row, viewer, names), version: selected.version, latest: selected.version === row.current_version,
     revision: revision(selected, names), revisions: (revisions.rows as RevisionRow[]).map((item) => revision(item, names)),
-    blocks: row.format !== "markdown" ? null : previous
-      ? diffMaterialBlocks(previous.body, selected.body)
-      : splitMaterialBlocks(selected.body).map((text) => ({ text, change: null })) };
+    blocks: row.format === "html" ? (previousBody === undefined ? []
+      : diffHtmlMaterialLines(previousBody, currentBody).filter((block) => block.change !== null))
+      : row.format !== "markdown" ? null : previousBody !== undefined
+        ? diffMaterialBlocks(previousBody, currentBody)
+        : splitMaterialBlocks(currentBody).map((text) => ({ text, change: null })) };
 }
 
 export async function uploadObjectMaterial(pool: Pool, ref: ThreadRef, viewer: MaterialViewer,
-  parsed: ParsedMaterial, storageDir: string, names: Map<string, string>): Promise<TMaterialView> {
+  parsed: ObjectParsedMaterial, storageDir: string, names: Map<string, string>): Promise<TMaterialView> {
   const client = await pool.connect();
   const q = client.query.bind(client) as Query;
   const id = randomUUID();
@@ -110,12 +116,13 @@ export async function uploadObjectMaterial(pool: Pool, ref: ThreadRef, viewer: M
     await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
     await moveStagedFile(parsed.tempPath, destination);
     moved = true;
-    const format = parsed.mimeType === "text/markdown" ? "markdown" : parsed.mimeType === "application/pdf" ? "pdf" : "docx";
+    const format = parsed.mimeType === "text/markdown" ? "markdown" : parsed.mimeType === "text/html" ? "html"
+      : parsed.mimeType === "application/pdf" ? "pdf" : "docx";
     const now = new Date();
     await q(`INSERT INTO object_materials(id,object_type,object_id,file_name,format,size_bytes,page_count,storage_key,sha256,origin,owner_id,created_at,updated_at)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'upload',$10,$11,$11)`,
       [id, ref.objectType, ref.objectId, parsed.fileName, format, parsed.sizeBytes, parsed.pageCount ?? null, storageKey, parsed.sha256, viewer.personId, now]);
-    await q("INSERT INTO material_revisions(material_id,version,body,created_at) VALUES($1,1,$2,$3)", [id, parsed.extractedText, now]);
+    await q("INSERT INTO material_revisions(material_id,version,body,created_at) VALUES($1,1,$2,$3)", [id, parsed.source ?? parsed.extractedText, now]);
     const row = await rowFor(q, ref, id);
     await client.query("COMMIT");
     return view(row, viewer, names);
@@ -145,19 +152,29 @@ export async function editObjectMaterial(pool: Pool, ref: ThreadRef, id: string,
     const current = await rowFor(q, ref, id);
     const fail = (code: string, message: string) => { throw new ObjectMaterialError(409, code, message, current.current_version); };
     if (baseVersion !== current.current_version) fail("MATERIAL_VERSION_CONFLICT", "版本已变化，请重新读取材料");
-    if (current.format !== "markdown") fail("MATERIAL_READ_ONLY", "只有 Markdown 材料能修改");
+    if (current.format !== "markdown" && current.format !== "html") fail("MATERIAL_READ_ONLY", "只有 Markdown 和 HTML 材料能修改");
     if (!summary.trim() || summary.length > 200 || edits.length < 1 || edits.length > 20) fail("INVALID_MATERIAL_EDIT", "修改说明或修改条数不合法");
     const result = await q("SELECT body FROM material_revisions WHERE material_id=$1 AND version=$2", [id, current.current_version]);
     let body = result.rows[0].body as string;
     for (const edit of edits) {
+      if ("append" in edit ? edit.append.includes("\u0000") : edit.find.includes("\u0000") || edit.replace.includes("\u0000"))
+        fail("INVALID_MATERIAL_EDIT", "文件里有无法保存的空字符");
       // 追加的内容另起一段，不粘在原文最后一行上。
-      if ("append" in edit) body = `${body.replace(/\s+$/u, "")}\n\n${edit.append.replace(/^\s+/u, "")}`;
+      if ("append" in edit) {
+        if (current.format === "html") {
+          const closing = /<\/body\s*>/ig;
+          let match: RegExpExecArray | null, position = -1;
+          while ((match = closing.exec(body))) position = match.index;
+          body = position < 0 ? `${body}\n${edit.append}` : `${body.slice(0, position)}${edit.append}\n${body.slice(position)}`;
+        } else body = `${body.replace(/\s+$/u, "")}\n\n${edit.append.replace(/^\s+/u, "")}`;
+      }
       else {
         if (!edit.find || body.indexOf(edit.find) < 0 || body.indexOf(edit.find) !== body.lastIndexOf(edit.find))
           fail("MATERIAL_FIND_NOT_UNIQUE", "要替换的文字必须恰好出现一次，请重新读取材料");
-        body = body.replace(edit.find, edit.replace);
+        body = body.replace(edit.find, () => edit.replace);
       }
-      if (body.length > MAX_MATERIAL_TEXT_CHARS) fail("MATERIAL_TEXT_TOO_LARGE", "修改后超过 100,000 字");
+      if (current.format === "html" && body.length > MAX_MATERIAL_HTML_CHARS) fail("MATERIAL_HTML_TOO_LARGE", "HTML 太大");
+      if (current.format === "markdown" && body.length > MAX_MATERIAL_TEXT_CHARS) fail("MATERIAL_TEXT_TOO_LARGE", "修改后超过 100,000 字");
     }
     const version = current.current_version + 1;
     const now = new Date();

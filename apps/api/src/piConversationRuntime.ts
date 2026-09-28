@@ -62,7 +62,7 @@ const SYSTEM_PROMPT = `# 角色
 
 你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
 
-唯一例外是对方明确要求修改或新写当前议题、执行事项的材料时，可以用 edit_material、create_material；只能改 Markdown，改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
+唯一例外是对方明确要求修改或新写当前议题、执行事项的材料时，可以用 edit_material、create_material；只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
 
 需要 CEO 做决定时，直接说明该决定什么、代价是什么，由 CEO 自己执行。CEO 的要求超出只读权限时，说明边界并给出可执行的下一步。
 
@@ -118,7 +118,7 @@ function driSystemPrompt(displayName: string, personalCard = false): string {
 
 你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，不形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
 
-唯一例外是对方明确要求修改或新写当前议题、执行事项的材料时，可以用 edit_material、create_material；只能改 Markdown，改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
+唯一例外是对方明确要求修改或新写当前议题、执行事项的材料时，可以用 edit_material、create_material；只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
 
 你看不到 CEO 的决策面，包括战场总览和待 CEO 决策的议题。被问到这些时直接说明看不到，不要推测。要求超出只读权限时，说明边界并给出可执行的下一步。
 
@@ -432,14 +432,16 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
               return { materials: list.materials.map((m) => ({ id: m.id, fileName: m.fileName, format: m.format,
                 editable: m.editable, version: m.version, owner: m.owner })) };
             }) }),
-          defineTool({ name: "read_material", label: "阅读材料", description: "读取当前对象一份材料的全文与版本；修改前必须调用",
+          defineTool({ name: "read_material", label: "阅读材料", description: "读取当前对象一份材料及版本；修改前必须调用。HTML 只返回最多 100,000 字符的源码，不返回去标签全文；截断时须用能唯一匹配的原文片段修改，或在文末追加",
             parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), version: Type.Optional(Type.Integer({ minimum: 1 })) }, { additionalProperties: false }),
             execute: async (_id, args) => result(async () => {
               const material = await readObjectMaterial(q, ref, args.materialId, viewer, args.version);
-              return { id: args.materialId, body: material.body, version: material.version,
-                currentVersion: material.currentVersion, editable: material.format === "markdown" };
+              return { id: args.materialId, body: material.format === "html" ? material.body.slice(0, 100_000) : material.body,
+                ...(material.format === "html" && material.body.length > 100_000 ? { truncated: true,
+                  note: "材料太长只给了前 100,000 字符；改动请用能唯一匹配的原文片段，或在文末追加" } : {}), version: material.version,
+                currentVersion: material.currentVersion, editable: material.format === "markdown" || material.format === "html" };
             }) }),
-          defineTool({ name: "edit_material", label: "修改材料", description: "按当前版本修改 Markdown 材料；只在用户明确要求时使用",
+          defineTool({ name: "edit_material", label: "修改材料", description: "按当前版本修改 Markdown 或 HTML 材料；只在用户明确要求时使用。HTML 可能只读到前 100,000 字符；find 必须在完整源码中唯一匹配，append 会插在最后一个 </body> 前（没有时追加到文末）",
             parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), baseVersion: Type.Integer({ minimum: 1 }),
               edits: Type.Array(Type.Union([
                 Type.Object({ find: Type.String({ minLength: 1 }), replace: Type.String() }, { additionalProperties: false }),

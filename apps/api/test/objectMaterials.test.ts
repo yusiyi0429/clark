@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createObjectMaterial, editObjectMaterial, listObjectMaterials, readObjectMaterial } from "../src/objectMaterials.js";
+import { parseMaterialBatch } from "../src/materialParser.js";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 
 const multipart = (name: string, body: string, mime = "text/markdown") => {
@@ -52,7 +53,9 @@ describe("议题材料", () => {
       const latest = (await get(member, `${base}/${materialId}`)).json();
       expect(latest.blocks[1]).toMatchObject({ text: "明天开会。", change: { kind: "modified", before: "今天开会。" } });
       expect((await get(member, `${base}/${materialId}?version=1`)).json()).toMatchObject({ version: 1, latest: false });
-      expect((await get(member, `${base}/${materialId}/file`)).body).toContain("今天开会");
+      const file = await get(member, `${base}/${materialId}/file`);
+      expect(file.body).toContain("今天开会");
+      expect(file.headers["content-security-policy"]).toBe("sandbox");
       expect((await t.app.inject({ method: "DELETE", url: `${base}/${materialId}`, headers: { cookie: ceo, origin: t.publicOrigin } })).statusCode).toBe(403);
       expect((await t.app.inject({ method: "DELETE", url: `${base}/${materialId}`, headers: { cookie: member, origin: t.publicOrigin } })).statusCode).toBe(204);
       expect((await get(member)).json().materials).toEqual([]);
@@ -113,6 +116,96 @@ describe("议题材料", () => {
       await expect(editObjectMaterial(t.pool, { objectType: "issue", objectId: id }, pdfId,
         { personId: TEST_CEO.personId, role: "ceo", displayName: "测试甲" }, 1, [{ append: "更多" }], "补充", randomUUID()))
         .rejects.toMatchObject({ code: "MATERIAL_READ_ONLY", version: 1 });
+    } finally { await t.close(); }
+  }, 20_000);
+
+  it("上传 HTML 源码，按版本预览和下载，Agent 能替换并在 body 末尾追加", async () => {
+    const storage = await mkdtemp(join(tmpdir(), "object-html-test-"));
+    const t = await createTestApp({ materialStorageDir: storage });
+    try {
+      const issue = await t.createIssue();
+      const base = `/api/materials/issue/${issue.objectRef.id}`;
+      const cookie = await t.loginCookie();
+      const source = "<html>\n<head><style>p{color:blue}</style><script>secret()</script></head>\n<body>\n<p>旧方案</p>\n</body>\n</html>";
+      const part = multipart("方案.html", source, "text/html");
+      const upload = await t.app.inject({ method: "POST", url: base,
+        headers: { cookie, origin: t.publicOrigin, ...part.headers }, payload: part.payload });
+      expect(upload.statusCode, upload.body).toBe(201);
+      expect(upload.json()).toMatchObject({ format: "html", editable: true, version: 1 });
+      const materialId = upload.json().id as string;
+      const ref = { objectType: "issue" as const, objectId: issue.objectRef.id as string };
+      const viewer = { personId: TEST_CEO.personId, role: "ceo" as const, displayName: "测试甲" };
+      expect((await readObjectMaterial(t.pool.query.bind(t.pool), ref, materialId, viewer)).body).toBe(source);
+      expect((await t.app.inject({ method: "GET", url: `${base}/${materialId}`, headers: { cookie } })).json().blocks).toEqual([]);
+      const edit = await editObjectMaterial(t.pool, ref, materialId, viewer, 1,
+        [{ find: "旧方案", replace: "新方案" }, { append: "<p>新增内容</p>" }], "更新方案", randomUUID());
+      expect(edit).toEqual({ version: 2, changed: 2 });
+      const detail = (await t.app.inject({ method: "GET", url: `${base}/${materialId}`, headers: { cookie } })).json();
+      expect(detail.blocks).toEqual(expect.arrayContaining([
+        expect.objectContaining({ text: "<p>新方案</p>", change: expect.objectContaining({ kind: "modified", before: "<p>旧方案</p>" }) }),
+        expect.objectContaining({ text: "<p>新增内容</p>", change: { kind: "added" } }),
+      ]));
+      expect(detail.blocks).toHaveLength(2);
+      const preview = await t.app.inject({ method: "GET", url: `${base}/${materialId}/preview`, headers: { cookie } });
+      expect(preview.statusCode).toBe(200);
+      expect(preview.headers["content-type"]).toBe("text/html; charset=utf-8");
+      expect(preview.headers["x-content-type-options"]).toBe("nosniff");
+      expect(preview.headers["content-security-policy"]).toBe("sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' https:; style-src 'unsafe-inline' https:; img-src https: data: blob:; font-src https: data:; media-src https: data: blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'");
+      expect(preview.body).toContain("<p>新方案</p>\n<p>新增内容</p>\n</body>");
+      const old = await t.app.inject({ method: "GET", url: `${base}/${materialId}/preview?version=1`, headers: { cookie } });
+      expect(old.body).toBe(source);
+      const download = await t.app.inject({ method: "GET", url: `${base}/${materialId}/file`, headers: { cookie } });
+      expect(download.body).toBe(preview.body);
+      expect(download.headers["content-security-policy"]).toBe("sandbox");
+      expect((await t.app.inject({ method: "GET", url: `${base}/${materialId}?version=1`, headers: { cookie } })).json()).toMatchObject({ version: 1, latest: false });
+      for (const response of [
+        await t.app.inject({ method: "GET", url: `${base}/${materialId}/preview` }),
+        await t.app.inject({ method: "GET", url: `${base}/${materialId}/preview?version=99`, headers: { cookie } }),
+        await t.app.inject({ method: "GET", url: `${base}/${materialId}/preview?version=0`, headers: { cookie } }),
+      ]) {
+        expect([401, 404, 400]).toContain(response.statusCode);
+        expect(response.headers["x-content-type-options"]).toBe("nosniff");
+        expect(response.headers["content-security-policy"]).toBe("sandbox");
+      }
+      const replacement = "$& $$ $' $`";
+      await editObjectMaterial(t.pool, ref, materialId, viewer, 2, [{ find: "新方案", replace: replacement }], "保留美元符", randomUUID());
+      expect((await readObjectMaterial(t.pool.query.bind(t.pool), ref, materialId, viewer)).body).toContain(`<p>${replacement}</p>`);
+      for (const edits of [[{ find: "\u0000", replace: "字" }], [{ find: "新增内容", replace: "\u0000" }], [{ append: "\u0000" }]]) {
+        await expect(editObjectMaterial(t.pool, ref, materialId, viewer, 3, edits, "非法空字符", randomUUID()))
+          .rejects.toMatchObject({ code: "INVALID_MATERIAL_EDIT", version: 3 });
+      }
+    } finally { await t.close(); await rm(storage, { recursive: true, force: true }); }
+  }, 20_000);
+
+  it("允许 .htm 八位流，拒绝过长 HTML，会议解析仍拒绝 HTML", async () => {
+    const t = await createTestApp();
+    try {
+      const issue = await t.createIssue();
+      const cookie = await t.loginCookie();
+      const upload = (name: string, body: string, mime: string) => {
+        const part = multipart(name, body, mime);
+        return t.app.inject({ method: "POST", url: `/api/materials/issue/${issue.objectRef.id}`,
+          headers: { cookie, origin: t.publicOrigin, ...part.headers }, payload: part.payload });
+      };
+      const htm = await upload("图表.htm", "<html><canvas></canvas></html>", "application/octet-stream");
+      expect(htm.statusCode).toBe(201);
+      await editObjectMaterial(t.pool, { objectType: "issue", objectId: issue.objectRef.id as string }, htm.json().id,
+        { personId: TEST_CEO.personId, role: "ceo", displayName: "测试甲" }, 1, [{ append: "<p>后补</p>" }], "补充", randomUUID());
+      const appended = await t.app.inject({ method: "GET", url: `/api/materials/issue/${issue.objectRef.id}/${htm.json().id}/preview`, headers: { cookie } });
+      expect(appended.body).toBe("<html><canvas></canvas></html>\n<p>后补</p>");
+      const download = await t.app.inject({ method: "GET", url: `/api/materials/issue/${issue.objectRef.id}/${htm.json().id}/file`, headers: { cookie } });
+      expect(download.headers["content-disposition"]).toContain("%E5%9B%BE%E8%A1%A8.html");
+      expect(download.body).toBe(appended.body);
+      const large = await upload("过长.html", "<p>" + "x".repeat(2_000_000) + "</p>", "text/html");
+      expect(large.statusCode).toBe(400);
+      expect(large.json()).toMatchObject({ code: "MATERIAL_HTML_TOO_LARGE", message: "HTML 超过 2,000,000 字符，不能上传" });
+      for (const [name, mime] of [["空.html", "text/html"], ["空.md", "text/markdown"]]) {
+        const invalid = await upload(name, "正文\u0000尾巴", mime);
+        expect(invalid.statusCode).toBe(400);
+        expect(invalid.json()).toMatchObject({ code: "MATERIAL_INVALID_TEXT", message: "文件里有无法保存的空字符" });
+      }
+      await expect(parseMaterialBatch([{ filename: "会议.html", mimetype: "text/html", buffer: Buffer.from("<p>会议</p>") }]))
+        .rejects.toMatchObject({ code: "UNSUPPORTED_MATERIAL_TYPE" });
     } finally { await t.close(); }
   }, 20_000);
 });

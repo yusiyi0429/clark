@@ -3104,7 +3104,7 @@
       },
       "post": {
         "operationId": "uploadMaterial",
-        "summary": "上传一份材料（PDF、Word、Markdown，单个 20 MB，每个对象最多 30 份）",
+        "summary": "上传一份材料（PDF、Word、Markdown、HTML，单个 20 MB，每个对象最多 30 份）",
         "parameters": [
           {
             "name": "objectType",
@@ -3359,7 +3359,7 @@
     "/api/materials/{objectType}/{objectId}/{materialId}/file": {
       "get": {
         "operationId": "downloadMaterial",
-        "summary": "下载原件；Agent 写的材料下载当前版 .md",
+        "summary": "下载（attachment）：原件；Agent 写的材料下载当前版 .md；HTML 材料下载当前版 .html",
         "parameters": [
           {
             "name": "objectType",
@@ -3428,7 +3428,7 @@
     "/api/materials/{objectType}/{objectId}/{materialId}/preview": {
       "get": {
         "operationId": "previewMaterial",
-        "summary": "PDF inline、Word 清理后的 HTML（不持久化）",
+        "summary": "PDF inline、Word 清理后的 HTML、HTML 材料指定版本的源码（带沙箱 CSP，不持久化）",
         "parameters": [
           {
             "name": "objectType",
@@ -3457,6 +3457,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "只对 HTML 材料有效；缺省为当前版本"
           }
         ],
         "responses": {
@@ -5641,6 +5651,66 @@
             }
           },
           "422": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ontology/weekly-progress": {
+      "get": {
+        "operationId": "getOntologyWeeklyProgress",
+        "summary": "本体来拉某一 ISO 周（北京时间周一 00:00 起）成员写进执行事项的进展；Bearer ONTOLOGY_SERVICE_TOKEN，未配置时 503",
+        "parameters": [
+          {
+            "name": "week",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-W(0[1-9]|[1-4]\\d|5[0-3])$"
+            },
+            "description": "如 2026-W40；缺省为本周"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "按人、事项分组的本周进展",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyProgressResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -18535,6 +18605,10 @@
               {
                 "const": "docx",
                 "type": "string"
+              },
+              {
+                "const": "html",
+                "type": "string"
               }
             ]
           },
@@ -18728,6 +18802,10 @@
                     },
                     {
                       "const": "docx",
+                      "type": "string"
+                    },
+                    {
+                      "const": "html",
                       "type": "string"
                     }
                   ]
@@ -19074,6 +19152,10 @@
                   {
                     "const": "docx",
                     "type": "string"
+                  },
+                  {
+                    "const": "html",
+                    "type": "string"
                   }
                 ]
               },
@@ -19416,6 +19498,248 @@
                 "at": {
                   "minLength": 1,
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "WeeklyProgressResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "week",
+          "from",
+          "to",
+          "generatedAt",
+          "people"
+        ],
+        "properties": {
+          "week": {
+            "pattern": "^\\d{4}-W(0[1-9]|[1-4]\\d|5[0-3])$",
+            "type": "string"
+          },
+          "from": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "to": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "generatedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName",
+                "items"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "displayName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "items": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "itemId",
+                      "title",
+                      "role",
+                      "status",
+                      "dueDate",
+                      "mission",
+                      "entries"
+                    ],
+                    "properties": {
+                      "itemId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "title": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "role": {
+                        "anyOf": [
+                          {
+                            "const": "owner",
+                            "type": "string"
+                          },
+                          {
+                            "const": "collaborator",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "not_started",
+                            "type": "string"
+                          },
+                          {
+                            "const": "in_progress",
+                            "type": "string"
+                          },
+                          {
+                            "const": "done",
+                            "type": "string"
+                          },
+                          {
+                            "const": "returned",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "dueDate": {
+                        "anyOf": [
+                          {
+                            "format": "date",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mission": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "missionId",
+                              "title",
+                              "cardId",
+                              "period",
+                              "battlefieldName",
+                              "step",
+                              "steps"
+                            ],
+                            "properties": {
+                              "missionId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "title": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "cardId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "period": {
+                                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                                "type": "string"
+                              },
+                              "battlefieldName": {
+                                "type": "string"
+                              },
+                              "step": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "steps": {
+                                "minimum": 1,
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "entries": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "body",
+                            "links",
+                            "source",
+                            "createdAt"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "body": {
+                              "minLength": 1,
+                              "maxLength": 2000,
+                              "type": "string"
+                            },
+                            "links": {
+                              "maxItems": 5,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "url"
+                                ],
+                                "properties": {
+                                  "url": {
+                                    "pattern": "^https?://",
+                                    "maxLength": 500,
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            },
+                            "source": {
+                              "anyOf": [
+                                {
+                                  "const": "web",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "codex",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "claude",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "github",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "createdAt": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }

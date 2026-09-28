@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import { MaterialObjectType, ThreadObjectId } from "@warmap/contracts";
-import { MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch, readStoredMaterial } from "../materialParser.js";
+import { MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch, readStoredMaterial, type ObjectParsedMaterial } from "../materialParser.js";
 import { renderMaterialPreview } from "../materialPreview.js";
 import { personDisplayNames } from "../people.js";
 import { ObjectMaterialError, deleteObjectMaterial, getObjectMaterialDetail, listObjectMaterials, readObjectMaterial,
@@ -27,7 +27,7 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext): voi
   });
   app.post("/api/materials/:objectType/:objectId", { preHandler: requirePerson,
     schema: { params }, bodyLimit: MAX_MATERIAL_FILE_BYTES + 1024 * 1024 }, async (req, reply) => {
-    let parsed: Awaited<ReturnType<typeof parseMaterialBatch>> | undefined;
+    let parsed: { directory: string; materials: ObjectParsedMaterial[] } | undefined;
     try {
       // Check access before parsing an untrusted file.
       await listObjectMaterials(q, req.params, viewer(req.person!), names);
@@ -38,7 +38,7 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext): voi
         files.push({ filename: part.filename, mimetype: part.mimetype, buffer: await part.toBuffer() });
       }
       if (!files.length) return fail(reply, 400, "INVALID_MATERIAL", "请选择一份材料");
-      parsed = await parseMaterialBatch(files);
+      parsed = await parseMaterialBatch(files, { allowHtml: true });
       const material = await uploadObjectMaterial(pool, req.params, viewer(req.person!), parsed.materials[0], materialStorageDir, names);
       return reply.status(201).send(material);
     } catch (cause) {
@@ -53,23 +53,33 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext): voi
     try { return await getObjectMaterialDetail(q, req.params, req.params.materialId, viewer(req.person!), names, req.query.version); }
     catch (cause) { return error(reply, cause); }
   });
-  app.get("/api/materials/:objectType/:objectId/:materialId/file", { preHandler: requirePerson,
+  app.get("/api/materials/:objectType/:objectId/:materialId/file", {
+    onRequest: async (_req, reply) => { reply.header("content-security-policy", "sandbox"); }, preHandler: requirePerson,
     schema: { params: itemParams } }, async (req, reply) => {
     try {
       const material = await readObjectMaterial(q, req.params, req.params.materialId, viewer(req.person!));
       let data: Buffer;
-      try { data = material.storageKey ? await readStoredMaterial(materialStorageDir, material.storageKey) : Buffer.from(material.body); }
+      try { data = material.format === "html" || !material.storageKey ? Buffer.from(material.body)
+        : await readStoredMaterial(materialStorageDir, material.storageKey); }
       catch { return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料原件不存在"); }
       const mime = material.format === "pdf" ? "application/pdf" : material.format === "docx"
-        ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "text/markdown; charset=utf-8";
-      return reply.type(mime).header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(material.fileName)}`)
+        ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        : material.format === "html" ? "text/html; charset=utf-8" : "text/markdown; charset=utf-8";
+      const fileName = material.format === "html" ? material.fileName.replace(/\.htm$/i, ".html") : material.fileName;
+      return reply.type(mime).header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
         .header("x-content-type-options", "nosniff").send(data);
     } catch (cause) { return error(reply, cause); }
   });
-  app.get("/api/materials/:objectType/:objectId/:materialId/preview", { preHandler: requirePerson,
-    schema: { params: itemParams } }, async (req, reply) => {
+  app.get("/api/materials/:objectType/:objectId/:materialId/preview", {
+    onRequest: async (_req, reply) => { reply.header("x-content-type-options", "nosniff").header("content-security-policy", "sandbox"); },
+    preHandler: requirePerson,
+    schema: { params: itemParams, querystring: versionQuery } }, async (req, reply) => {
     try {
-      const material = await readObjectMaterial(q, req.params, req.params.materialId, viewer(req.person!));
+      const material = await readObjectMaterial(q, req.params, req.params.materialId, viewer(req.person!), req.query.version);
+      if (material.format === "html") return reply.type("text/html; charset=utf-8").header("content-disposition", "inline")
+        .header("x-content-type-options", "nosniff")
+        .header("content-security-policy", "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' https:; style-src 'unsafe-inline' https:; img-src https: data: blob:; font-src https: data:; media-src https: data: blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'")
+        .send(material.body);
       if (!material.storageKey || material.format === "markdown") return fail(reply, 400, "MATERIAL_PREVIEW_UNAVAILABLE", "Markdown 请在详情中阅读");
       let buffer: Buffer;
       try { buffer = await readStoredMaterial(materialStorageDir, material.storageKey); }

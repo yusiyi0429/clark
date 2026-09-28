@@ -937,7 +937,7 @@ export interface paths {
         /** 对象的材料（工单 09）；群成员能读（议题未建群时为 CEO），其他人 404 */
         get: operations["listMaterials"];
         put?: never;
-        /** 上传一份材料（PDF、Word、Markdown，单个 20 MB，每个对象最多 30 份） */
+        /** 上传一份材料（PDF、Word、Markdown、HTML，单个 20 MB，每个对象最多 30 份） */
         post: operations["uploadMaterial"];
         delete?: never;
         options?: never;
@@ -970,7 +970,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 下载原件；Agent 写的材料下载当前版 .md */
+        /** 下载（attachment）：原件；Agent 写的材料下载当前版 .md；HTML 材料下载当前版 .html */
         get: operations["downloadMaterial"];
         put?: never;
         post?: never;
@@ -987,7 +987,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** PDF inline、Word 清理后的 HTML（不持久化） */
+        /** PDF inline、Word 清理后的 HTML、HTML 材料指定版本的源码（带沙箱 CSP，不持久化） */
         get: operations["previewMaterial"];
         put?: never;
         post?: never;
@@ -1444,6 +1444,23 @@ export interface paths {
         put?: never;
         /** DRI 服务追加叙述性月度 feedback（externalId 幂等） */
         post: operations["importDriMonthlyFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ontology/weekly-progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本体来拉某一 ISO 周（北京时间周一 00:00 起）成员写进执行事项的进展；Bearer ONTOLOGY_SERVICE_TOKEN，未配置时 503 */
+        get: operations["getOntologyWeeklyProgress"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3629,7 +3646,7 @@ export interface components {
             objectType: "issue" | "task";
             objectId: string;
             fileName: string;
-            format: "markdown" | "pdf" | "docx";
+            format: "markdown" | "pdf" | "docx" | "html";
             sizeBytes: number;
             pageCount?: number;
             origin: "upload" | "agent";
@@ -3658,7 +3675,7 @@ export interface components {
                 objectType: "issue" | "task";
                 objectId: string;
                 fileName: string;
-                format: "markdown" | "pdf" | "docx";
+                format: "markdown" | "pdf" | "docx" | "html";
                 sizeBytes: number;
                 pageCount?: number;
                 origin: "upload" | "agent";
@@ -3717,7 +3734,7 @@ export interface components {
                 objectType: "issue" | "task";
                 objectId: string;
                 fileName: string;
-                format: "markdown" | "pdf" | "docx";
+                format: "markdown" | "pdf" | "docx" | "html";
                 sizeBytes: number;
                 pageCount?: number;
                 origin: "upload" | "agent";
@@ -3778,6 +3795,44 @@ export interface components {
                 } | null;
                 summary: string | null;
                 at: string;
+            }[];
+        };
+        WeeklyProgressResponse: {
+            week: string;
+            from: string;
+            to: string;
+            generatedAt: string;
+            people: {
+                personId: string;
+                displayName: string;
+                items: {
+                    /** Format: uuid */
+                    itemId: string;
+                    title: string;
+                    role: "owner" | "collaborator";
+                    status: "not_started" | "in_progress" | "done" | "returned";
+                    dueDate: string | null;
+                    mission: {
+                        missionId: string;
+                        title: string;
+                        cardId: string;
+                        period: string;
+                        battlefieldName: string;
+                        step: number;
+                        steps: number;
+                    } | null;
+                    entries: {
+                        /** Format: uuid */
+                        id: string;
+                        body: string;
+                        links: {
+                            url: string;
+                            title?: string;
+                        }[];
+                        source: "web" | "codex" | "claude" | "github";
+                        createdAt: string;
+                    }[];
+                }[];
             }[];
         };
         ListPersonalTokensResponse: {
@@ -7543,7 +7598,10 @@ export interface operations {
     };
     previewMaterial: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 只对 HTML 材料有效；缺省为当前版本 */
+                version?: number;
+            };
             header?: never;
             path: {
                 objectType: "issue" | "task";
@@ -9437,6 +9495,56 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getOntologyWeeklyProgress: {
+        parameters: {
+            query?: {
+                /** @description 如 2026-W40；缺省为本周 */
+                week?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 按人、事项分组的本周进展 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeeklyProgressResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

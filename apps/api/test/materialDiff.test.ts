@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffMaterialBlocks, splitMaterialBlocks } from "../src/materialDiff.js";
+import { diffHtmlMaterialLines, diffMaterialBlocks, splitMaterialBlocks } from "../src/materialDiff.js";
 
 describe("material block diff", () => {
   it("splits headings, list items, tables, code and paragraphs", () => {
@@ -25,5 +25,52 @@ describe("material block diff", () => {
   it("does not pair an unrelated removed block with an added one", () => {
     const result = diffMaterialBlocks("开头\n\n- 异常由谁接回", "开头\n\n## 场景三：跨战场交接\n\n涉及两个战场时共同确认。");
     expect(result.map((block) => block.change?.kind ?? null)).toEqual([null, "removed", "added", "added"]);
+  });
+  it("compares nonempty HTML lines and pairs only related changes", () => {
+    const result = diffHtmlMaterialLines("<h1>标题</h1>\n\n<p>旧方案</p>\n<div>无关内容</div>",
+      "<h1>标题</h1>\n<p>新方案</p>\n<section>另一件事</section>\n<p>新增</p>");
+    expect(result.map((block) => block.change?.kind ?? null)).toEqual([null, "modified", "removed", "added", "added"]);
+    expect(result[1].change).toMatchObject({ before: "<p>旧方案</p>" });
+  });
+  it("handles many HTML lines without a quadratic allocation", () => {
+    const lines = Array.from({ length: 4_000 }, (_, index) => `<p>第 ${index} 行</p>`);
+    const changed = [...lines];
+    changed[2_000] = "<p>第 2000 行：已更新</p>";
+    const result = diffHtmlMaterialLines(lines.join("\n"), changed.join("\n"));
+    expect(result.filter((block) => block.change)).toEqual([{ text: changed[2_000],
+      change: expect.objectContaining({ kind: "modified", before: lines[2_000] }) }]);
+  });
+  it("bounds a completely replaced 3,100-line document", () => {
+    const before = Array.from({ length: 3_100 }, (_, i) => `旧${String(i).padStart(4, "0")}${"甲".repeat(14)}`).join("\n");
+    const after = Array.from({ length: 3_100 }, (_, i) => `新${String(i).padStart(4, "0")}${"乙".repeat(14)}`).join("\n");
+    const started = performance.now();
+    const result = diffHtmlMaterialLines(before, after);
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(result.filter((block) => block.change?.kind === "removed")).toHaveLength(3_100);
+    expect(result.filter((block) => block.change?.kind === "added")).toHaveLength(3_100);
+  });
+  it("bounds long-line replacement and character spans", () => {
+    const before = Array.from({ length: 30 }, (_, i) => `<p>${i} ${"甲".repeat(1980)}</p>`).join("\n");
+    const after = Array.from({ length: 30 }, (_, i) => `<p>${i} ${"乙".repeat(1980)}</p>`).join("\n");
+    const started = performance.now();
+    const result = diffHtmlMaterialLines(before, after);
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(result.filter((block) => block.change?.kind === "removed")).toHaveLength(30);
+    expect(result.filter((block) => block.change?.kind === "added")).toHaveLength(30);
+  });
+  it("changes one line in a 2 MB HTML document", () => {
+    const before = `<body>${"甲".repeat(1_999_980)}旧</body>`;
+    const after = before.replace("旧</body>", "新</body>");
+    const started = performance.now();
+    const result = diffHtmlMaterialLines(before, after);
+    expect(performance.now() - started).toBeLessThan(1_500);
+    expect(result.filter((block) => block.change)).toHaveLength(1);
+    expect(result[0].change?.kind).toBe("modified");
+  });
+  it("tracks a first-line move in 19,000 lines as one removal and one addition", () => {
+    const lines = Array.from({ length: 19_000 }, (_, i) => `<p>${i}</p>`);
+    const result = diffHtmlMaterialLines(lines.join("\n"), [...lines.slice(1), lines[0]].join("\n"));
+    expect(result.filter((block) => block.change?.kind === "removed")).toHaveLength(1);
+    expect(result.filter((block) => block.change?.kind === "added")).toHaveLength(1);
   });
 });

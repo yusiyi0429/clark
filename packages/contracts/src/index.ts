@@ -23,3 +23,4 @@ export * from "./voiceprint.js";
 export * from "./onboarding.js";
 export * from "./memberHome.js";
 export * from "./personalRadar.js";
+export * from "./ontologySync.js";

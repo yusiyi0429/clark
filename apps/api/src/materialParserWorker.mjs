@@ -42,7 +42,8 @@ async function parseDocx(buffer) {
 
 try {
   const buffer = await readFile(path);
-  const result = kind === "application/pdf" ? await parsePdf(buffer) : kind.includes("wordprocessingml") ? await parseDocx(buffer) : { text: new TextDecoder("utf-8", { fatal: true }).decode(buffer).replace(/<[^>]*>/g, "") };
+  const result = kind === "application/pdf" ? await parsePdf(buffer) : kind.includes("wordprocessingml") ? await parseDocx(buffer)
+    : { text: new TextDecoder("utf-8", { fatal: true }).decode(buffer).replace(/<[^>]*>/g, "") };
   process.stdout.write(JSON.stringify(result));
 } catch (error) {
   process.stderr.write(error instanceof Error ? error.message : "材料解析失败");

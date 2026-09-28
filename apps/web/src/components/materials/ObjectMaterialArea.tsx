@@ -13,6 +13,7 @@ type ObjectType = "issue" | "task";
 const date = (iso: string) => new Date(iso).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 const endpoint = (type: ObjectType, id: string) => `/api/materials/${type}/${encodeURIComponent(id)}`;
 const hasMarkdownSyntax = (text: string) => /(^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|```|~~~|\|)|\*\*|__|`|\[[^\]]+\]\(|~~)/m.test(text);
+const htmlChangeText = (line: string) => line.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().slice(0, 200);
 
 export function ObjectMaterialArea({ objectType, objectId, baseTabs, selected, onSelect, children }:
   { objectType: ObjectType; objectId: string; baseTabs: MaterialTab[]; selected: string; onSelect: (id: string) => void; children: ReactNode }) {
@@ -56,16 +57,16 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, selected, o
   }, [base, material?.id, material?.version, version]);
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("viewing-material-changed", { detail: {
-      scope: `${objectType}:${objectId}`, id: material?.id ?? null, editable: material?.editable ?? false,
+      scope: `${objectType}:${objectId}`, id: material?.id ?? null, editable: material?.editable ?? false, format: material?.format,
     } }));
     return () => { window.dispatchEvent(new CustomEvent("viewing-material-changed", { detail: { scope: `${objectType}:${objectId}`, id: null, editable: false } })); };
-  }, [objectType, objectId, material?.id, material?.editable]);
+  }, [objectType, objectId, material?.id, material?.editable, material?.format]);
   const tabs = [...baseTabs, ...materials.map((item) => ({ id: item.id, label: item.fileName.replace(/\.[^.]+$/, ""), title: item.fileName }))];
   const choose = (id: string) => { setVersion(undefined); onSelect(id); };
   const upload = async (picked?: File) => {
     if (!picked) return;
     setUploadError("");
-    if (!/\.(md|pdf|docx)$/i.test(picked.name)) return setUploadError("只支持 PDF、Word 和 Markdown");
+    if (!/\.(md|pdf|docx|html|htm)$/i.test(picked.name)) return setUploadError("只支持 PDF、Word、Markdown 和 HTML");
     if (picked.size > 20 * 1024 * 1024) return setUploadError("单份材料不能超过 20 MB");
     setUploading(true);
     try {
@@ -86,10 +87,11 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, selected, o
     await refresh();
   };
   return <div className={s.area} data-material-scope={`${objectType}:${objectId}`}
-    data-viewing-material-id={material?.id ?? ""} data-viewing-material-editable={material?.editable ? "true" : "false"}>
+    data-viewing-material-id={material?.id ?? ""} data-viewing-material-editable={material?.editable ? "true" : "false"}
+    data-viewing-material-format={material?.format ?? ""}>
     {(objectType === "issue" || materials.length > 0 || canUpload) ? <div className={s.toolbar}>
       <MaterialTabs tabs={tabs} selected={selected} onSelect={choose} label="材料页签" />
-      {canUpload ? <><input ref={file} className={s.hidden} type="file" accept=".md,.pdf,.docx" aria-label="上传材料" onChange={(event) => void upload(event.target.files?.[0])} />
+      {canUpload ? <><input ref={file} className={s.hidden} type="file" accept=".md,.pdf,.docx,.html,.htm" aria-label="上传材料" onChange={(event) => void upload(event.target.files?.[0])} />
         <button type="button" className={s.add} aria-label="上传材料" onClick={() => file.current?.click()}><Plus size={16} strokeWidth={2} aria-hidden /></button></> : null}
       {uploading ? <span className={s.uploading} role="status">上传中…</span> : null}
       {uploadError ? <button className={s.uploadError} type="button" onClick={() => setUploadError("")}>{uploadError}</button> : null}
@@ -104,6 +106,8 @@ export function MaterialReader({ material, detail, base, onRemove, onVersion }:
   const [history, setHistory] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
   const [html, setHtml] = useState("");
+  const [changes, setChanges] = useState(false);
+  useEffect(() => { setChanges(false); }, [material.id, detail?.version]);
   useEffect(() => {
     if (material.format !== "docx") return;
     let active = true;
@@ -112,23 +116,32 @@ export function MaterialReader({ material, detail, base, onRemove, onVersion }:
   }, [base, material.id, material.format, material.version]);
   const by = detail?.revision.requestedBy?.displayName ?? material.owner.displayName;
   const changeCount = detail?.blocks?.filter((block) => block.change !== null).length ?? 0;
+  const htmlChanges = <button type="button" onClick={() => setChanges((value) => !value)} aria-expanded={changes}>{changeCount} 处</button>;
   return <article className={s.document} aria-label={material.fileName}>
     <p className={s.meta}>{material.origin === "agent" ? `Agent 按${material.owner.displayName}的要求写` : `${material.owner.displayName} 上传`} · {date(material.createdAt)}
       <a href={`${base}/${material.id}/file`}>下载</a>{material.canDelete ? <button type="button" onClick={() => void onRemove()}>删除</button> : null}</p>
-    {material.format !== "markdown" ? <p className={s.readOnly}>只读 · 只有 Markdown 能让 Agent 修改</p> : null}
+    {material.format !== "markdown" && material.format !== "html" ? <p className={s.readOnly}>只读 · 只有 Markdown 和 HTML 能让 Agent 修改</p> : null}
     {detail?.revision && material.lastRevision ? <div className={s.revision}>
       {detail.latest ? detail.version === 1
         ? `第 1 版 · Agent 按${by}的要求新写 · ${date(detail.revision.at)}`
-        : `第 ${detail.version} 版 · ${by}让 Agent 改了 ${changeCount} 处 · ${date(detail.revision.at)}`
-        : `这是第 ${detail.version} 版，不是最新`}
+        : material.format === "html" ? <>第 {detail.version} 版 · {by}让 Agent 改了 {htmlChanges} · {date(detail.revision.at)}</>
+          : `第 ${detail.version} 版 · ${by}让 Agent 改了 ${changeCount} 处 · ${date(detail.revision.at)}`
+        : material.format === "html" && detail.version > 1 ? <>这是第 {detail.version} 版，不是最新 · 改了 {htmlChanges}</>
+          : `这是第 ${detail.version} 版，不是最新`}
       <button type="button" onClick={() => setHistory((value) => !value)} aria-expanded={history}>改动记录</button>
       {!detail.latest ? <button type="button" onClick={() => onVersion(undefined)}>回到最新</button> : null}
     </div> : null}
     {history && detail ? <ol className={s.history}>{detail.revisions.map((item) => <li key={item.version}>
       <button type="button" onClick={() => { onVersion(item.version); setHistory(false); }}>第 {item.version} 版 · {item.requestedBy?.displayName ?? material.owner.displayName} · {date(item.at)} · {item.summary ?? "上传原件"}</button>
     </li>)}</ol> : null}
+    {material.format === "html" && changes && detail ? <ol className={s.changeList}>{detail.blocks?.filter((block) => block.change !== null).map((block, index) => <li key={index}>
+      {block.change?.kind === "modified" ? <><strong>修改</strong><span>原来：{htmlChangeText(block.change.before)}</span><span>现在：{htmlChangeText(block.text)}</span></>
+        : block.change?.kind === "removed" ? <><strong>删除</strong><span>{htmlChangeText(block.change.before)}</span></>
+          : <><strong>新增</strong><span>{htmlChangeText(block.text)}</span></>}
+    </li>)}</ol> : null}
     {!detail ? <p role="status">正在读取材料…</p> : material.format === "pdf"
       ? <iframe className={s.frame} src={`${base}/${material.id}/preview`} title={`${material.fileName} 预览`} />
+      : material.format === "html" ? <iframe className={s.frame} sandbox="allow-scripts" src={`${base}/${material.id}/preview?version=${detail.version}`} title={`${material.fileName} 预览`} />
       : material.format === "docx" ? <iframe className={s.frame} sandbox="" title={`${material.fileName} 预览`} srcDoc={html} />
       : <div className={s.markdown}>{detail.blocks?.map((block, index, blocks) => {
         const listItem = /^\s{0,3}(?:[-*+]\s|\d+[.)]\s)/.test(block.text);

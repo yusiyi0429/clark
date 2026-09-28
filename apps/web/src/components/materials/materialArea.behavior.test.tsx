@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0,
   useState(initial: unknown) {
@@ -15,7 +16,7 @@ vi.mock("react", async (original) => ({ ...(await original<typeof import("react"
 vi.mock("@/components/shell/MaterialTabs", () => ({ MaterialTabs: () => null, useRememberedScroll: () => undefined }));
 vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: confirm.ask, dialog: null }) }));
 
-import type { TMaterialView } from "@warmap/contracts";
+import type { TMaterialDetailResponse, TMaterialView } from "@warmap/contracts";
 import { ObjectMaterialArea, MaterialReader } from "./ObjectMaterialArea";
 
 type Node = { type?: unknown; props?: Record<string, unknown> };
@@ -73,5 +74,32 @@ describe("材料区操作", () => {
     await (reader?.props?.onRemove as () => Promise<void>)();
     expect(fetch).toHaveBeenCalledWith(`/api/materials/issue/issue-1/${id}`, { method: "DELETE" });
     expect(select).toHaveBeenCalledWith("summary");
+  });
+
+  it("展开 HTML 改动列表，按文字展示修改、删除和新增", () => {
+    const html = { ...material, format: "html" as const, fileName: "方案.html", version: 2,
+      lastRevision: { version: 2, requestedBy: material.owner, summary: "更新方案", at: material.updatedAt } };
+    const detail: TMaterialDetailResponse = { material: html, version: 2, latest: true, revision: html.lastRevision,
+      revisions: [html.lastRevision], blocks: [
+        { text: `<p>${"新".repeat(210)}</p>`, change: { kind: "modified", before: "<p>旧方案</p>", spans: [] } },
+        { text: "", change: { kind: "removed", before: "<b>删去</b>" } },
+        { text: "<p>加上</p>", change: { kind: "added" } },
+      ] };
+    const props = { material: html, detail, base: "/api/materials/issue/issue-1", onRemove: () => undefined, onVersion: () => undefined };
+    hooks.index = 0;
+    const tree = MaterialReader(props);
+    const count = nodes(tree).find((node) => node.type === "button" && node.props?.["aria-expanded"] === false);
+    expect(count?.props?.["aria-expanded"]).toBe(false);
+    (count?.props?.onClick as () => void)();
+    hooks.index = 0;
+    const markup = renderToStaticMarkup(MaterialReader(props));
+    expect(markup).toContain("修改");
+    expect(markup).toContain("原来：旧方案");
+    expect(markup).toContain(`现在：${"新".repeat(200)}`);
+    expect(markup).not.toContain("新".repeat(201));
+    expect(markup).toContain("删除");
+    expect(markup).toContain("删去");
+    expect(markup).toContain("新增");
+    expect(markup).toContain("加上");
   });
 });

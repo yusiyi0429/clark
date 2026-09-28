@@ -148,6 +148,7 @@ import {
   MaterialRevisionView,
   MaterialBlock,
   MaterialDetailResponse,
+  WeeklyProgressResponse,
 } from "./index.js";
 
 const errorResponse = {
@@ -891,7 +892,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         },
         post: {
           operationId: "uploadMaterial",
-          summary: "上传一份材料（PDF、Word、Markdown，单个 20 MB，每个对象最多 30 份）",
+          summary: "上传一份材料（PDF、Word、Markdown、HTML，单个 20 MB，每个对象最多 30 份）",
           parameters: [
             { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
@@ -949,7 +950,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/materials/{objectType}/{objectId}/{materialId}/file": {
         get: {
           operationId: "downloadMaterial",
-          summary: "下载原件；Agent 写的材料下载当前版 .md",
+          summary: "下载（attachment）：原件；Agent 写的材料下载当前版 .md；HTML 材料下载当前版 .html",
           parameters: [
             { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
@@ -965,11 +966,12 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/materials/{objectType}/{objectId}/{materialId}/preview": {
         get: {
           operationId: "previewMaterial",
-          summary: "PDF inline、Word 清理后的 HTML（不持久化）",
+          summary: "PDF inline、Word 清理后的 HTML、HTML 材料指定版本的源码（带沙箱 CSP，不持久化）",
           parameters: [
             { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
             { name: "materialId", in: "path", required: true, schema: { type: "string" } },
+            { name: "version", in: "query", required: false, schema: { type: "integer", minimum: 1 }, description: "只对 HTML 材料有效；缺省为当前版本" },
           ],
           responses: {
             "200": {
@@ -1458,6 +1460,21 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/ontology/weekly-progress": {
+        get: {
+          operationId: "getOntologyWeeklyProgress",
+          summary: "本体来拉某一 ISO 周（北京时间周一 00:00 起）成员写进执行事项的进展；Bearer ONTOLOGY_SERVICE_TOKEN，未配置时 503",
+          parameters: [
+            { name: "week", in: "query", required: false, schema: { type: "string", pattern: "^\\d{4}-W(0[1-9]|[1-4]\\d|5[0-3])$" }, description: "如 2026-W40；缺省为本周" },
+          ],
+          responses: {
+            "200": { description: "按人、事项分组的本周进展", content: { "application/json": { schema: { $ref: "#/components/schemas/WeeklyProgressResponse" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "503": errorResponse,
+          },
+        },
+      },
       "/api/dri/todo-feedback": {
         post: {
           operationId: "importDriMonthlyTodoFeedback",
@@ -1904,6 +1921,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MaterialRevisionView: MaterialRevisionView as JsonSchema,
         MaterialBlock: MaterialBlock as JsonSchema,
         MaterialDetailResponse: MaterialDetailResponse as JsonSchema,
+        WeeklyProgressResponse: WeeklyProgressResponse as JsonSchema,
         ListPersonalTokensResponse: ListPersonalTokensResponse as JsonSchema,
         CreatePersonalTokenRequest: CreatePersonalTokenRequest as JsonSchema,
         CreatePersonalTokenResponse: CreatePersonalTokenResponse as JsonSchema,

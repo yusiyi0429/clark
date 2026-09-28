@@ -53,7 +53,8 @@ async function markdown(buffer: Buffer): Promise<{ text: string }> {
 
 try {
   const buffer = await readFile(path);
-  const result = kind === "application/pdf" ? await pdf(buffer) : kind.includes("wordprocessingml") ? await docx(buffer) : await markdown(buffer);
+  const result = kind === "application/pdf" ? await pdf(buffer) : kind.includes("wordprocessingml") ? await docx(buffer)
+    : await markdown(buffer);
   process.stdout.write(JSON.stringify(result));
 } catch (error) {
   process.stderr.write(error instanceof Error ? error.message : "材料解析失败");

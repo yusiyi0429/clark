@@ -237,12 +237,22 @@ async function main() {
   /** 时间机器没有模型：用 Agent 同一个修改函数，按上传者的要求改最近一份 Markdown，好看到修改标注和群里的说明。 */
   async function simulateMaterialEdit() {
     const { editObjectMaterial, readObjectMaterial } = await import("../../apps/api/src/objectMaterials.js");
-    const [row] = await app!.sql("SELECT id::text, object_type, object_id, owner_id FROM object_materials WHERE format='markdown' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1");
-    if (!row) throw new Error("还没有 Markdown 材料：先在执行事项或议题里上传一份 .md");
+    const [row] = await app!.sql("SELECT id::text, object_type, object_id, owner_id, format FROM object_materials WHERE format IN ('markdown','html') AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1");
+    if (!row) throw new Error("还没有 Markdown 或 HTML 材料：先在执行事项或议题里上传一份 .md 或 .html");
     const ref = { objectType: row.object_type as "issue" | "task", objectId: row.object_id as string };
     const viewer = { personId: row.owner_id as string, role: (row.owner_id === TEST_CEO.personId ? "ceo" : "member") as "ceo" | "member",
       displayName: (people.people as { personId: string; displayName: string }[]).find((person) => person.personId === row.owner_id)?.displayName ?? (row.owner_id as string) };
     const current = await readObjectMaterial(commandPool.query.bind(commandPool), ref, row.id as string, viewer);
+    if (row.format === "html") {
+      // HTML：改一段正文、文末（</body> 前）加一节补充。
+      const para = current.body.split("\n").find((line) => /<p>[^<]+<\/p>/.test(line) && current.body.split(line).length === 2);
+      const htmlEdits = [
+        ...(para ? [{ find: para, replace: para.replace(/。?<\/p>/u, "，并写明负责人和完成证据。</p>") }] : []),
+        { append: "<section><h2>补充</h2><p>按群里的讨论，每个场景都要写明异常由谁接回。</p></section>" },
+      ];
+      return editObjectMaterial(commandPool, ref, row.id as string, viewer, current.currentVersion, htmlEdits,
+        "按群里的讨论补上负责人和完成证据，文末加一节补充", null);
+    }
     const lines = current.body.split("\n");
     const paragraph = lines.find((line) => line.trim() && !/^\s*(#|[-*+]\s|\d+[.)]\s|>|\||```)/.test(line) && current.body.split(line).length === 2);
     const lastItem = [...lines].reverse().find((line) => /^\s*[-*+]\s/.test(line) && current.body.split(line).length === 2);

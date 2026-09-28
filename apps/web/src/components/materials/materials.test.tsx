@@ -28,7 +28,7 @@ describe("材料阅读", () => {
     expect(render({ ...material, canDelete: false })).not.toContain(">删除</button>");
     expect(render(material, { ...detail, version: 1, latest: false })).toContain("回到最新");
     const pdf = { ...material, format: "pdf" as const, editable: false, fileName: "资料.pdf" };
-    expect(render(pdf, { ...detail, material: pdf, blocks: null })).toContain("只有 Markdown 能让 Agent 修改");
+    expect(render(pdf, { ...detail, material: pdf, blocks: null })).toContain("只有 Markdown 和 HTML 能让 Agent 修改");
   });
   it("Agent 新写的首版保留写作记录", () => {
     const first = { ...material, origin: "agent" as const, version: 1,
@@ -43,5 +43,19 @@ describe("材料阅读", () => {
     expect(html).toContain("<strong>新判断</strong>");
     expect(html).not.toContain("**新判断**");
     expect(html).toContain("查看修改前的原文");
+  });
+  it("HTML 用仅允许脚本的 sandbox iframe 加载选中的版本", () => {
+    const html = { ...material, format: "html" as const, fileName: "方案.html" };
+    const markup = render(html, { ...detail, material: html,
+      blocks: [{ text: "<p>新方案</p>", change: { kind: "modified", before: "<p>旧方案</p>", spans: [] } }] });
+    expect(markup).toContain('sandbox="allow-scripts"');
+    expect(markup).toContain(`/preview?version=2`);
+    expect(markup).not.toContain("allow-same-origin");
+    expect(markup).not.toContain("只读");
+    const older = render({ ...html, version: 3 }, { ...detail, material: html, version: 2, latest: false,
+      blocks: [{ text: "<p>新方案</p>", change: { kind: "modified", before: "<p>旧方案</p>", spans: [] } }] });
+    expect(older).toContain("这是第 2 版，不是最新");
+    expect(older).toContain("1 处</button>");
+    expect(older).toContain(`/preview?version=2`);
   });
 });

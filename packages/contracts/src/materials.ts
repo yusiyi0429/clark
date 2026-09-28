@@ -2,10 +2,11 @@ import { Type, type Static } from "@sinclair/typebox";
 
 /**
  * 工单 09 材料区：议题、执行事项的材料。群成员都能上传，只有主人能删；
- * 只有 Agent 能改，且只能改 Markdown；每改一次存一版。
+ * 只有 Agent 能改，且只能改 Markdown 和 HTML 源码；每改一次存一版。
  */
 export const MaterialObjectType = Type.Union([Type.Literal("issue"), Type.Literal("task")]);
-export const MaterialFormat = Type.Union([Type.Literal("markdown"), Type.Literal("pdf"), Type.Literal("docx")]);
+/** html：工单 12，在沙箱里原样显示；和 Markdown 一样只能让 Agent 改源码。 */
+export const MaterialFormat = Type.Union([Type.Literal("markdown"), Type.Literal("pdf"), Type.Literal("docx"), Type.Literal("html")]);
 
 const MaterialPerson = Type.Object(
   { personId: Type.String({ minLength: 1 }), displayName: Type.String({ minLength: 1 }) },
@@ -40,7 +41,7 @@ export const MaterialView = Type.Object(
     createdAt: Type.String({ minLength: 1 }),
     updatedAt: Type.String({ minLength: 1 }),
     version: Type.Integer({ minimum: 1 }),
-    /** 只有 Markdown 能让 Agent 改。 */
+    /** Markdown 和 HTML 能让 Agent 改；PDF、Word 只读。 */
     editable: Type.Boolean(),
     canDelete: Type.Boolean(),
     /** 最近一次 Agent 修改；只有第 1 版时为 null。 */
@@ -82,7 +83,7 @@ export const MaterialDetailResponse = Type.Object(
     version: Type.Integer({ minimum: 1 }),
     latest: Type.Boolean(),
     revision: MaterialRevisionView,
-    /** Markdown 的分块和标注；PDF、Word 为 null，页面用 preview。 */
+    /** Markdown 的分块和标注；HTML 只含有改动的行（第 1 版为空数组）；PDF、Word 为 null，页面用 preview。 */
     blocks: Type.Union([Type.Array(MaterialBlock), Type.Null()]),
     /** 新的在前。 */
     revisions: Type.Array(MaterialRevisionView),

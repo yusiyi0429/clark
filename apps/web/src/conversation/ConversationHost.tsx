@@ -55,7 +55,7 @@ export function ConversationHost({
   detailOpen: boolean;
   /** 是否用右列（二级页里的浏览面，如雷达列表，不用）。 */
   rail?: boolean;
-  /** 右列页头上 Agent 的名字：「CEO Agent」「DRI Agent」。 */
+  /** 右列页头上 Agent 的名字：统一「我的 Agent」。 */
   agentTitle: string;
   ui: ConversationUiState;
 }) {
@@ -64,15 +64,15 @@ export function ConversationHost({
 }
 
 function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { target: ConversationTarget; detailOpen: boolean; rail: boolean; agentTitle: string; ui: ConversationUiState }) {
-  const [viewingMaterial, setViewingMaterial] = useState<{ id: string; editable: boolean } | null>(null);
+  const [viewingMaterial, setViewingMaterial] = useState<{ id: string; editable: boolean; format?: string } | null>(null);
   useEffect(() => {
     const current = [...document.querySelectorAll<HTMLElement>("[data-material-scope]")]
       .find((element) => element.dataset.materialScope === target.scope);
     if (current?.dataset.viewingMaterialId) setViewingMaterial({ id: current.dataset.viewingMaterialId,
-      editable: current.dataset.viewingMaterialEditable === "true" });
+      editable: current.dataset.viewingMaterialEditable === "true", format: current.dataset.viewingMaterialFormat });
     const changed = (event: Event) => {
-      const detail = (event as CustomEvent<{ scope: string; id: string | null; editable: boolean }>).detail;
-      if (detail?.scope === target.scope) setViewingMaterial(detail.id ? { id: detail.id, editable: detail.editable } : null);
+      const detail = (event as CustomEvent<{ scope: string; id: string | null; editable: boolean; format?: string }>).detail;
+      if (detail?.scope === target.scope) setViewingMaterial(detail.id ? { id: detail.id, editable: detail.editable, format: detail.format } : null);
     };
     window.addEventListener("viewing-material-changed", changed);
     return () => window.removeEventListener("viewing-material-changed", changed);
@@ -87,7 +87,8 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { targ
   };
 
   if (rail && !ui.historyOpen) {
-    return <RailConversation data={data} target={target} agentTitle={agentTitle} ui={ui} references={global ? [] : items} onDiscussGlobal={discussGlobal} />;
+    return <RailConversation data={data} target={target} agentTitle={agentTitle} ui={ui} references={global ? [] : items}
+      viewingMaterialFormat={viewingMaterial?.format} onDiscussGlobal={discussGlobal} />;
   }
 
   const closeHistory = () => {
@@ -132,6 +133,7 @@ function RailConversation({
   agentTitle,
   ui,
   references,
+  viewingMaterialFormat,
   onDiscussGlobal,
 }: {
   data: ConversationData;
@@ -139,6 +141,7 @@ function RailConversation({
   agentTitle: string;
   ui: ConversationUiState;
   references: Card[];
+  viewingMaterialFormat?: string;
   onDiscussGlobal: () => void;
 }) {
   const column = useColumnMode();
@@ -228,7 +231,7 @@ function RailConversation({
           </>}
           <div ref={end} />
         </div>
-        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? threadGroup && thread.left ? "你已不在这个群" : `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : missionGroup ? "仅你可见 · 只读：不改这张卡、不进集中 Review" : data.viewingMaterialEditable ? "仅你可见 · 可让 Agent 修改这份 Markdown；其他业务仍只读" : /^(issue|task):/.test(target.scope) ? "仅你可见 · 可让 Agent 改或新写 Markdown 材料；其他业务只读" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
+        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? threadGroup && thread.left ? "你已不在这个群" : `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : missionGroup ? "仅你可见 · 只读：不改这张卡、不进集中 Review" : data.viewingMaterialEditable ? `仅你可见 · 可让 Agent 修改这份${viewingMaterialFormat === "html" ? " HTML" : viewingMaterialFormat === "markdown" ? " Markdown" : "材料"}；其他业务仍只读` : /^(issue|task):/.test(target.scope) ? "仅你可见 · 可让 Agent 改或新写 Markdown 材料；其他业务只读" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
       </ConversationColumn>
       {channel === "group" && target.group ? <MissionGroupComposer cardId={taskGroup?.taskId ?? otherThread?.objectId ?? missionGroup!.cardId} taskId={taskGroup?.taskId ?? otherThread?.objectId} viewerId={target.group.viewerId} phase={threadGroup ? "open" : missionGroup!.phase} channels={channels} channel={channel} onChannel={setChannel} narrow={column.narrow} mobileOpen={ui.railMobileOpen} onMobileOpen={ui.setRailMobileOpen} onHeightChange={setComposerHeight} reference={missionGroup?.reference ?? null} onRemoveReference={missionGroup?.onRemoveReference ?? (() => {})} busy={threadGroup ? thread.sending : group.sending} readOnly={thread.left} error={threadGroup ? thread.error : group.error} onSend={threadGroup ? (body) => thread.send(body) : group.send} /> : <ColumnComposer
         data={data}
