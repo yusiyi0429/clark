@@ -13,7 +13,8 @@ import { fileURLToPath } from "node:url";
 import type { TestApp } from "../../apps/api/test/helpers.js";
 import { LUYAO, clearWangLuyao, seedWangLuyao } from "./demo-luyao.js";
 
-const testDatabaseUrl = "postgres://postgres:postgres@localhost:54329/postgres";
+// Windows 偶尔会把 54329 划进系统保留端口段（重启 winnat 前绑不上）：那时用 TEST_PG_URL 指到别的端口。
+const testDatabaseUrl = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 process.env.TEST_PG_URL = testDatabaseUrl;
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const runDir = fileURLToPath(new URL("./run/", import.meta.url));
