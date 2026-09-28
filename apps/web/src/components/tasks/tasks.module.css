@@ -24,6 +24,20 @@
 .status[data-status=returned] .statusDot{background:var(--ts-judgment,#c9822b)}
 .status[data-status=not_started] .statusDot{background:transparent;box-shadow:inset 0 0 0 1.5px var(--ts-text-muted,#6b7482)}
 .empty{margin:0;color:var(--ts-text-muted,#6b7482);font-size:13px;line-height:1.8}
+/* 已完成：默认折叠成一行，展开是淡色细行，不再用卡片。 */
+.doneGroup{display:grid;gap:4px;min-width:0}
+.doneToggle{display:inline-flex;align-items:center;gap:4px;justify-self:start;min-height:30px;padding:4px 8px 4px 4px;border:0;border-radius:9px;background:none;color:#8a95a5;font-size:12.5px;cursor:pointer}
+.doneToggle:hover{background:#eef2f7a8;color:#5f6b7c}
+.doneToggle svg{transition:transform .18s ease}
+.doneToggle[aria-expanded=true] svg{transform:rotate(90deg)}
+.doneList{display:grid;margin:0;padding:0;list-style:none;border-top:1px solid #e4e9f0b3}
+.doneRow{display:flex;align-items:center;gap:10px;width:100%;min-width:0;min-height:42px;padding:8px 10px;border:0;border-bottom:1px solid #e4e9f0b3;background:none;color:#8a95a5;font-size:13px;text-align:left;cursor:pointer}
+.doneRow:hover{background:#f3f6faa8}
+.doneRow svg{flex:none;color:#7fa98c}
+.doneTitle{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7482}
+.doneMeta{flex:none;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+@media(max-width:690px){.doneMeta{display:none}}
+@media(prefers-reduced-motion:reduce){.doneToggle svg{transition:none}}
 .error{margin:0;color:#a44d3e;font-size:12.5px}
 @media(max-width:1250px){.taskGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:690px){.tasks{order:0}.taskGrid{grid-template-columns:minmax(0,1fr);gap:12px}.taskCard{padding:18px 20px}.taskActions button{min-height:36px}}

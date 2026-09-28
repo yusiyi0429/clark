@@ -54,6 +54,13 @@ describe("成员首页执行事项", () => {
     expect(html).toContain("等上一步：确认范围"); expect(html).toContain("协作 · 林晓"); expect(html).toContain("计划开始 2026-10-01");
     expect(html).toContain("未启动"); expect(html).toContain("进行中"); expect(html).toContain("完成");
   });
+  it("完成的事项不占卡片，收进默认折叠的「已完成 N」", () => {
+    const html = renderToStaticMarkup(<MemberTasks tasks={[task("open", { title: "还在推进" }), task("finished", { title: "已经收尾", status: "done" })]} onStatus={vi.fn()} />);
+    expect(html).toContain("还在推进");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toMatch(/已完成(<!-- -->)? ?1/);
+    expect(html).not.toContain("已经收尾");
+  });
   it("点击卡片空白处打开详情，状态按钮不触发卡片导航", () => {
     const navigate = vi.fn();
     renderToStaticMarkup(<MemberTasks tasks={[task()]} onStatus={vi.fn()} onNavigate={navigate} />);

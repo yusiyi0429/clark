@@ -1,7 +1,7 @@
 "use client";
 
 import { useContext, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ChevronRight } from "lucide-react";
 import { Button } from "ts-design/primitives";
 import type { TMonthPlanResponse, TTaskView } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
@@ -35,13 +35,23 @@ export function useMonthPlan(period: string, enabled: boolean) {
 
 export function LinkedTaskRows({ tasks, viewerId }: { tasks: TTaskView[]; viewerId?: string | null }) {
   const workspace = useContext(WorkspaceContext);
-  return <div className={s.taskList} aria-label="关联的执行事项">{tasks.length ? tasks.map(task => <div key={task.id} className={s.taskRow}>
+  const [showDone, setShowDone] = useState(false);
+  // 完成的收进「已完成」，默认折叠，展开后淡色显示。
+  const done = tasks.filter(task => task.status === "done");
+  const row = (task: TTaskView) => <div key={task.id} className={s.taskRow} data-done={task.status === "done" || undefined}>
     <div className={s.taskMain}>{viewerId === undefined || viewerId === task.owner.personId || task.collaborators.some(person => person.personId === viewerId) ?
       <button type="button" className={s.taskLink} data-target={`/me/tasks/${encodeURIComponent(task.id)}`} onClick={event => workspace?.navigate(`/me/tasks/${encodeURIComponent(task.id)}`, event.currentTarget)}>{task.title}<ArrowUpRight size={15} aria-hidden="true" /></button> : <strong className={s.taskLink}>{task.title}</strong>}
       <p>{task.mission ? `第 ${task.mission.step} 步，共 ${task.mission.steps} 步` : "独立事项"} · {task.dueDate ? `${short(task.dueDate)} 前` : "未定截止日期"} · {[task.owner, ...task.collaborators].map(person => person.name).join("、")}</p>
       {task.latestProgress ? <p className={s.latestProgress} title={task.latestProgress.body.slice(0, 60)}>最新进展 · {({ web: "网页", codex: "Codex", claude: "Claude Code", github: "GitHub" })[task.latestProgress.source]} · {short(task.latestProgress.createdAt.slice(0, 10))} · {task.latestProgress.body.slice(0, 60)}</p> : null}</div>
     <span className={s.taskStatus}>{statusText[task.status]}</span>
-  </div>) : <p className={s.muted}>还没有关联的执行事项。可以在本月计划里加一步。</p>}</div>;
+  </div>;
+  return <div className={s.taskList} aria-label="关联的执行事项">
+    {tasks.length ? tasks.filter(task => task.status !== "done").map(row) : <p className={s.muted}>还没有关联的执行事项。可以在本月计划里加一步。</p>}
+    {done.length ? <>
+      <button type="button" className={s.doneToggle} aria-expanded={showDone} onClick={() => setShowDone(value => !value)}><ChevronRight size={14} aria-hidden="true" />已完成 {done.length}</button>
+      {showDone ? done.map(row) : null}
+    </> : null}
+  </div>;
 }
 
 type Tip = { group: number; index: number; x: number; y: number; below: boolean };

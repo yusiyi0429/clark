@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { Card } from "@heroui/react";
-import { ArrowUpRight, ChevronRight, Plus } from "lucide-react";
+import { ArrowUpRight, Check, ChevronRight, Plus } from "lucide-react";
 import { Button } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
 import { monthDayTime } from "@/lib/companyTime";
@@ -32,11 +33,16 @@ export function MemberTasks({ tasks, busyId, error, onStatus, onNavigate }: {
   onStatus: (task: MemberTask, status: TaskStatus) => void;
   onNavigate?: (href: string, origin?: Element | null) => void;
 }) {
+  const [showDone, setShowDone] = useState(false);
   const open = tasks.filter((task) => task.status !== "done" && task.status !== "returned").length;
+  const sorted = tasksByDue(tasks);
+  const active = sorted.filter((task) => task.status !== "done");
+  // 完成的收进「已完成」，默认折叠；最近更新的在前。
+  const done = sorted.filter((task) => task.status === "done").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return <section className={s.tasks} aria-label="执行事项">
     <div className={s.taskToolbar}><span>{open} 项执行事项在推进</span><Button variant="ghost" size="sm" onPress={(event) => onNavigate?.("/me/tasks/new", event.target)}><Plus size={15} aria-hidden />开启执行事项</Button></div>
     {error ? <p className={s.error} role="alert">{error}</p> : null}
-    {tasks.length ? <div className={s.taskGrid}>{tasksByDue(tasks).map((task) => {
+    {active.length ? <div className={s.taskGrid}>{active.map((task) => {
       const href = `/me/tasks/${encodeURIComponent(task.id)}`;
       return <Card key={task.id} className={s.taskCard} data-task={task.id} data-origin={href} data-waiting={!!task.waitingOn} onClick={(event) => { if (!(event.target as Element).closest("button,a")) onNavigate?.(href, event.currentTarget); }}>
         <div className={s.taskTop}><span className={s.status} data-status={task.status}><span className={s.statusDot} aria-hidden />{TASK_STATUS[task.status]}</span>{task.status === "not_started" && task.startDate ? <span>计划 {dueLabel(task.startDate).replace("前", "开始")}</span> : task.dueDate ? <span>{dueLabel(task.dueDate)}</span> : null}</div>
@@ -51,6 +57,18 @@ export function MemberTasks({ tasks, busyId, error, onStatus, onNavigate }: {
           最新进展 · {({ web: "网页", codex: "Codex", claude: "Claude Code", github: "GitHub" })[task.latestProgress.source]} · {monthDayTime(task.latestProgress.createdAt)}
         </p> : null}
       </Card>;
-    })}</div> : <p className={s.empty}>暂无执行事项。你可以开启一件事，会后分派也会显示在这里。</p>}
+    })}</div> : tasks.length ? null : <p className={s.empty}>暂无执行事项。你可以开启一件事，会后分派也会显示在这里。</p>}
+    {done.length ? <div className={s.doneGroup}>
+      <button type="button" className={s.doneToggle} aria-expanded={showDone} onClick={() => setShowDone((value) => !value)}>
+        <ChevronRight size={14} aria-hidden />已完成 {done.length}
+      </button>
+      {showDone ? <ul className={s.doneList}>{done.map((task) => {
+        const href = `/me/tasks/${encodeURIComponent(task.id)}`;
+        return <li key={task.id}><button type="button" className={s.doneRow} data-origin={href} aria-label={`查看详情：${task.title}（已完成）`} onClick={(event) => onNavigate?.(href, event.currentTarget)}>
+          <Check size={14} aria-hidden /><span className={s.doneTitle}>{task.title}</span>
+          <span className={s.doneMeta}>{task.mission ? `${task.mission.title} · 第 ${task.mission.step} 步` : task.source === "meeting" && task.origin ? `会后分派 · ${task.origin.meetingTitle}` : "独立事项"}</span>
+        </button></li>;
+      })}</ul> : null}
+    </div> : null}
   </section>;
 }

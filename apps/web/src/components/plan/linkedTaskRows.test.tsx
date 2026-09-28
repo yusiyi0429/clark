@@ -18,4 +18,10 @@ describe("个人卡执行事项行", () => {
     const owner = renderToStaticMarkup(<LinkedTaskRows tasks={[task]} viewerId="owner" />);
     expect(owner).toContain("data-target");
   });
+  it("完成的事项收进默认折叠的「已完成 N」", () => {
+    const html = renderToStaticMarkup(<LinkedTaskRows tasks={[task, { ...task, id: "00000000-0000-4000-8000-000000000002", title: "旧的一步", status: "done" }]} viewerId="owner" />);
+    expect(html).toContain("准备上线");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("旧的一步");
+  });
 });
