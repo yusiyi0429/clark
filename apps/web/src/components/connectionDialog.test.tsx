@@ -13,12 +13,15 @@ vi.mock("react", async (original) => {
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: ui.get, POST: ui.post, DELETE: ui.del } }));
 vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: ui.ask, dialog: null }) }));
 import { ConnectionDialog } from "./ConnectionDialog";
+import { ConnectAgentForm } from "./ConnectAgentForm";
 
 type Node = ReactElement<Record<string, unknown>>;
 function nodes(value: ReactNode): Node[] {
   if (Array.isArray(value)) return value.flatMap(nodes);
   if (!isValidElement(value)) return [];
   const node = value as Node;
+  // 连接表单是共用组件：展开它，按钮和输入框就在同一棵树里（hooks 按调用顺序接着计数）。
+  if (node.type === ConnectAgentForm) return [node, ...nodes(ConnectAgentForm(node.props as Parameters<typeof ConnectAgentForm>[0]))];
   return [node, ...nodes(node.props.children as ReactNode)];
 }
 const render = (role: "ceo" | "member" = "member") => { ui.cursor = 0; return nodes(ConnectionDialog({ role })); };

@@ -16,6 +16,8 @@
 .mobileTourCopy { display: none; }
 .details { margin-top: 28px; }
 .details:empty { margin-top: 0; }
+/* 连接外部工具这一步：设置里同一张表单，放在一块玻璃卡里。 */
+.connectPanel { width: min(560px, 100%); margin-inline: auto; padding: 20px 22px; text-align: left; }
 .content[data-step="hello"] { padding-top: 24px; }
 .content[data-step="start"] { padding-top: 24px; }
 .content[data-step="hello"] .description { margin-top: 28px; }
@@ -93,7 +95,8 @@
 .summary .summaryItem + span:not(.summaryItem) { margin-top: 8px; }
 .footer { margin-top: auto; padding-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .footer > button { gap: 12px; min-width: 240px; animation: enter 320ms 180ms var(--onboarding-ease-brand) both; }
-/* 雷达这一步：编辑器把主按钮放进 .radarActions、把「稍后」放进 .radarSlot，排版与其他步骤的主按钮、次按钮一致。 */
+/* 雷达这一步：编辑器把主按钮放进 .radarActions、把「稍后」放进 .radarSlot，排版与其他步骤的主按钮、次按钮一致。
+   连接外部工具那一步也用 .radarActions 放「生成 / 下载连接说明」。 */
 .radarActions, .radarSlot { display: contents; }
 .radarActions > button { gap: 12px; min-width: 240px; animation: enter 320ms 180ms var(--onboarding-ease-brand) both; }
 .footer .actionHint { margin: 0; color: var(--onboarding-faint); font-size: 12px; line-height: 1.7; text-align: center; text-wrap: balance; }

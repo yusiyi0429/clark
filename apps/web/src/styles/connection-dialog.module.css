@@ -40,4 +40,5 @@
 .switchText strong{font-size:13.5px;color:#1f2a3d}
 .switchText span{font-size:12px;line-height:1.55;color:#69788d}
 @media(prefers-reduced-motion:reduce){.segmented button{transition:none}}
-
+/* 共用的连接表单（components/ConnectAgentForm）：设置弹窗和首次引导都用。 */
+.form{display:grid;gap:12px;min-width:0}

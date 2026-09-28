@@ -41,6 +41,7 @@ import { WorkspaceSchematic } from "./WorkspaceSchematic";
 import { MissionFlow } from "./MissionFlow";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { RadarSettingsEditor, type RadarSavedSummary } from "@/components/radar/RadarSettingsEditor";
+import { ConnectAgentForm } from "@/components/ConnectAgentForm";
 import { browserApi } from "@/lib/api/client";
 
 const base = { displayName: "测试", companyName: null, voiceprint: { configured: false, enrolled: false, updatedAt: null }, next: { text: "可以开始工作", action: "进入工作台", href: "/me" } };
@@ -91,6 +92,8 @@ function reachFinish(data: OnboardingData, nextPath?: string, summary?: RadarSav
   const editor = radarEditor(reachRadar(data, nextPath));
   if (summary) editor.onSaved!(summary);
   else editor.onLater!();
+  // 雷达之后是「连接外部工具」：选「稍后」进入结束页。
+  (button(renderFlow(data, nextPath), "稍后").props.onClick as () => void)();
   return renderFlow(data, nextPath);
 }
 
@@ -132,10 +135,10 @@ describe("收尾按钮文案与实际落点一致", () => {
 
 describe("真实数据的首次引导", () => {
   it("成员先导览、再看 Mission 和本月工作；CEO 步骤保持原样", () => {
-    expect(onboardingSteps(member)).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "start"]);
-    expect(onboardingSteps({ ...member, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "voiceprint", "start"]);
-    expect(onboardingSteps(ceo)).toEqual(["hello", "tour-notifications", "tour-board", "radar", "start"]);
-    expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "radar", "voiceprint", "start"]);
+    expect(onboardingSteps(member)).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "connect", "start"]);
+    expect(onboardingSteps({ ...member, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "voiceprint", "connect", "start"]);
+    expect(onboardingSteps(ceo)).toEqual(["hello", "tour-notifications", "tour-board", "radar", "connect", "start"]);
+    expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "radar", "voiceprint", "connect", "start"]);
   });
   it("成员导览复用同一示意图，高亮通知后转向工作", () => {
     let tree = renderFlow(member);
@@ -276,9 +279,9 @@ describe("真实数据的首次引导", () => {
     expect(renderToStaticMarkup(<OnboardingProgress current={2} total={3} />)).toContain("第 2 步，共 3 步");
   });
   it("第 1 步照 spec 说雷达和声纹都可以稍后；声纹没开通时只说雷达", () => {
-    expect(renderToStaticMarkup(<WelcomeFlow data={member} />)).toContain("先花一分钟看看工作台，再看看每个月的 Mission 怎么定下来。<br/>雷达，可以现在设，也可以以后再说。");
+    expect(renderToStaticMarkup(<WelcomeFlow data={member} />)).toContain("先花一分钟看看工作台，再看看每个月的 Mission 怎么定下来。<br/>雷达和外部工具，可以现在设，也可以以后再说。");
     const withVoice = renderToStaticMarkup(<WelcomeFlow data={{ ...member, voiceprint: { ...base.voiceprint, configured: true } }} />);
-    expect(withVoice).toContain("雷达和声纹，可以现在设，也可以以后再说。");
+    expect(withVoice).toContain("雷达、声纹和外部工具，可以现在设，也可以以后再说。");
   });
 });
 
@@ -305,7 +308,9 @@ describe("雷达步骤", () => {
     expect(radarSummaryLine("member", { enabled: false, directions: 0 })).toBe("雷达 · 未开启");
     expect(radarSummaryLine("ceo", { enabled: true, directions: 0 })).toBe("雷达 · 按本月目标自动关注");
     expect(radarSummaryLine("ceo", { enabled: true, directions: 3 })).toBe("雷达 · 已补充 3 个方向");
-    expect(text(reachFinish(member))).toContain("雷达 · 未开启");
+    const skipped = text(reachFinish(member));
+    expect(skipped).toContain("雷达 · 未开启");
+    expect(skipped).toContain("外部工具 · 稍后在个人菜单里连");
     hooks.reset();
     const saved = text(reachFinish(member, undefined, { enabled: true, directions: 1, sources: 0 }));
     expect(saved).toContain("雷达 · 已开启");
@@ -317,5 +322,14 @@ describe("雷达步骤", () => {
     expect(text(reachFinish({ ...ceo, radar: { configured: true, enabled: true, directions: 2 } }))).toContain("雷达 · 已补充 2 个方向");
     hooks.reset();
     expect(text(reachFinish(ceo, undefined, { enabled: true, directions: 4, sources: 1 }))).toContain("雷达 · 已补充 4 个方向");
+  });
+  it("连接外部工具在雷达之后、结束之前：同一张表单预填名字，主按钮放进底栏（不再是「下一步」），可以「稍后」跳过", () => {
+    radarEditor(reachRadar(member)).onLater!();
+    const tree = renderFlow(member);
+    expect(text(tree)).toContain("连上你自己的 AI 工具");
+    const form = elements(tree).find((element) => element.type === ConnectAgentForm);
+    expect(form?.props).toMatchObject({ role: "member", defaultName: "我的电脑" });
+    expect(elements(tree).find((element) => element.type === "button" && text(element.props.children as ReactNode) === "下一步")).toBeUndefined();
+    expect(button(tree, "稍后")).toBeDefined();
   });
 });
