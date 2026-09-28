@@ -47,3 +47,5 @@
 @media(max-width:959px){.tasks{order:0}.taskGrid{grid-template-columns:minmax(0,1fr);gap:12px}.taskCard{padding:18px 20px}.taskActions button{min-height:36px}}
 @media(prefers-reduced-motion:reduce){.taskCard{scroll-behavior:auto}}
 .latestProgress{margin:0;color:#8190a4;font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+/* 手持首页是深色画布：执行事项上面那一行说明和「开启执行事项」直接写在画布上，换成浅字。 */
+@media(max-width:959px){:global([data-detail-open="false"]) .taskToolbar{color:rgb(255 255 255/.72);font-size:14px}:global([data-detail-open="false"]) .taskToolbar button{color:#cfe0ff}}

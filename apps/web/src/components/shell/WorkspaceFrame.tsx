@@ -364,10 +364,22 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
     return () => window.removeEventListener("keydown", onKey);
   }, [close, detailOpen, historyOpen, keyboard, navigate, pathname, peek, railAllowed, railMobileOpen, homeHref]);
 
+  // 触屏：按住按钮滑动页面，松手不算点按。React Aria 只在浏览器发 pointercancel 时取消点按，iOS 在内层滚动容器里
+  // 滚动时不一定发；这里自己判断：手指移动超过 10px、或按住期间有任何滚动，就在它收到 pointerup 之前补发一次 pointercancel。
+  const tap = useRef<{ id: number; x: number; y: number; scrolled: boolean } | null>(null);
+  useEffect(() => {
+    const onScroll = () => {
+      if (tap.current) tap.current.scrolled = true;
+    };
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => document.removeEventListener("scroll", onScroll, { capture: true });
+  }, []);
+
   // 触屏：左缘滑入展开 peek，在 peek 上反向滑动收起（Safari 可能占用边缘手势，尽力而为）。
   const swipe = useRef<{ x: number; y: number; peek: boolean } | null>(null);
   const onPointerDown = (event: ReactPointerEvent) => {
     if (event.target instanceof Element) lastPointer.current = { el: event.target, at: performance.now() };
+    tap.current = event.pointerType === "touch" ? { id: event.pointerId, x: event.clientX, y: event.clientY, scrolled: false } : null;
     if (event.pointerType !== "touch" || !detailOpen) {
       swipe.current = null;
       return;
@@ -382,6 +394,11 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   const onPointerUp = (event: ReactPointerEvent) => {
     const start = swipe.current;
     swipe.current = null;
+    const touch = tap.current;
+    tap.current = null;
+    if (touch && event.pointerId === touch.id && (touch.scrolled || Math.hypot(event.clientX - touch.x, event.clientY - touch.y) > 10)) {
+      event.target.dispatchEvent(new PointerEvent("pointercancel", { pointerId: event.pointerId, pointerType: "touch", bubbles: true }));
+    }
     if (!start || event.pointerType !== "touch") return;
     const dx = event.clientX - start.x;
     const dy = Math.abs(event.clientY - start.y);
@@ -429,6 +446,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
         onPointerUpCapture={onPointerUp}
         onPointerCancelCapture={() => {
           swipe.current = null;
+          tap.current = null;
         }}
       >
         {arriving ? <div className={s.entryCarry} aria-hidden="true"><MorningCanvas /></div> : null}

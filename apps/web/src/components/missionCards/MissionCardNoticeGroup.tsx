@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { TMissionRoundSummary } from "@warmap/contracts";
 import { ChevronRight } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
@@ -20,6 +20,8 @@ export function MissionCardNoticeGroup({ round, entry, embedded = false, current
   onRefresh: () => void;
 }) {
   const now = useRoundNow(round.closesAt, round.serverNow, round.phase === "open" ? onRefresh : undefined);
+  // 手持首页上多张卡先收成一行汇总（像 iOS 的堆叠通知），点开再看每人；三屏以上一直展开（CSS 按宽度切换）。
+  const [expanded, setExpanded] = useState(false);
   const awaitingSnapshot = round.phase === "closed" || (round.phase === "open" && !!round.closesAt && now >= Date.parse(round.closesAt));
   useEffect(() => {
     if (!awaitingSnapshot) return;
@@ -52,7 +54,11 @@ export function MissionCardNoticeGroup({ round, entry, embedded = false, current
       {round.approver && round.todo ? <HeroButton variant="ghost" className={s.todo} data-origin={todoHref} aria-label={round.todo} onPress={(event) => onNavigate(todoHref, (event.target as Element).closest("[data-notice-group]"))}>
         <span className={s.todoDot} aria-hidden="true" /><span className={s.todoText}>{round.todo}</span><ChevronRight size={15} aria-hidden="true" />
       </HeroButton> : null}
-      <ul className={s.rows} aria-label={`${title} · ${round.cards.length} 张`}>
+      {round.cards.length > 1 ? <HeroButton variant="ghost" className={s.summary} aria-expanded={expanded} onPress={() => setExpanded((value) => !value)}>
+        <span className={s.summaryText}>{round.cards.length} 张任务卡{round.counts.feedback ? ` · ${round.counts.feedback} 条意见` : ""}</span>
+        <span className={s.summaryAction}>{expanded ? "收起" : "逐个看"}<ChevronRight size={15} aria-hidden="true" /></span>
+      </HeroButton> : null}
+      <ul className={s.rows} data-collapsed={round.cards.length > 1 && !expanded || undefined} aria-label={`${title} · ${round.cards.length} 张`}>
         {round.cards.map((card) => <li key={card.cardId}>
           <HeroButton variant="ghost" className={s.row} data-origin={path(card.cardId)} aria-current={path(card.cardId) === currentHref?.split("?")[0] ? "true" : undefined} data-waiting={round.approver && (card.pending > 0 || card.pendingCorrections > 0) || undefined}
             aria-label={`${card.ownerName}${card.mine ? "（你）" : ""} · ${card.roleLabel ?? "参与 DRI"} · ${card.missionCount} 项个人任务 · ${awaitingSnapshot ? "汇总中" : card.line}，查看详情：${card.ownerName}的 ${month} 月 Mission Card`}

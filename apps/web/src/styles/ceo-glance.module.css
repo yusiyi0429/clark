@@ -1,23 +1,24 @@
-/* 手持首页的「公司全局」（components/CeoGlance.tsx）：通知下面一张白卡，一个对象一行。三屏以上不显示（那里是完整看板）。 */
+/* 手持首页的「公司全局」（components/CeoGlance.tsx）：通知下面一张磨砂浅色卡（和通知卡同一种），一个对象一行。三屏以上不显示（那里是完整看板）。 */
 .glance{display:none}
 @media(max-width:959px){.glance{display:flex;flex-direction:column;gap:10px;color:#1d1d1f}}
-.title{margin:4px 6px 0;font-size:17px;font-weight:600;line-height:1.4;letter-spacing:-.02em;color:#1d1d1f}
-.list{margin:0;padding:4px 0;list-style:none;border:1px solid #dfe4e9;border-radius:20px;background:#fff;box-shadow:0 2px 8px #29334c08;overflow:hidden}
-.list>li+li{border-top:1px solid #edf0f3}
-.row.row{display:flex;align-items:center;gap:12px;width:100%;height:auto;min-height:60px;padding:10px 14px 10px 12px;border:0;border-radius:0;background:transparent;color:inherit;text-align:left;white-space:normal;font:inherit}
-.row.row:hover{background:#f5f7fa}
-.row.row:active{background:#eef2f7}
-.code,.icon{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:10px;background:#eef2f8;color:#4a5a73;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
-.icon{background:#eaf2ff;color:#2f6fd6}
+/* 放在手持的深色画布上：标题是浅字，列表和通知卡同一种磨砂浅色卡。 */
+.title{margin:10px 6px 0;font-size:17px;font-weight:600;line-height:1.4;letter-spacing:-.02em;color:rgb(255 255 255/.9)}
+.list{margin:0;padding:4px 0;list-style:none;border:0;border-radius:22px;background:rgb(244 246 250/.92);box-shadow:0 10px 30px rgb(4 10 24/.22);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);overflow:hidden}
+.list>li+li{border-top:1px solid rgb(28 34 48/.08)}
+.row.row{display:flex;align-items:center;gap:12px;width:100%;height:auto;min-height:64px;padding:12px 14px 12px 12px;border:0;border-radius:0;background:transparent;color:inherit;text-align:left;white-space:normal;font:inherit}
+.row.row:hover{background:rgb(28 34 48/.04)}
+.row.row:active{background:rgb(28 34 48/.08)}
+.code,.icon{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:10px;background:#e2e7ef;color:#44536c;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.icon{background:#dde8fb;color:#2f6fd6}
 .dot{flex:none;width:8px;height:8px;margin:0 12px;border-radius:50%;background:#8e8e93}
 .dot[data-urgency=red]{background:#d94a43}
 .dot[data-urgency=yellow]{background:#c79624}
 .text{display:flex;flex:1;flex-direction:column;gap:2px;min-width:0}
-.name{font-size:15px;font-weight:600;line-height:1.45;overflow-wrap:anywhere}
-.text small{font-size:12.5px;line-height:1.5;color:#6e6e73}
-.pending{flex:none;padding:3px 9px;border-radius:999px;background:#f1f3f6;color:#56657a;font-size:12px;font-weight:600;white-space:nowrap}
+.name{font-size:17px;font-weight:600;line-height:1.45;overflow-wrap:anywhere}
+.text small{font-size:15px;line-height:1.5;color:#566072}
+.pending{flex:none;padding:3px 10px;border-radius:999px;background:#e6eaf0;color:#465064;font-size:13px;font-weight:600;white-space:nowrap}
 .pending[data-urgency=red]{background:#fdeceb;color:#b3372f}
 .pending[data-urgency=yellow]{background:#fbf3e2;color:#8a6220}
 .arrow{flex:none;color:#a2a6ad}
-@media(prefers-contrast:more){.list{border-color:#777}.text small{color:#444}}
-@media(prefers-reduced-transparency:reduce){.list{box-shadow:none}}
+@media(prefers-contrast:more){.list{background:#fff;box-shadow:0 0 0 1px #777}.text small{color:#444}}
+@media(prefers-reduced-transparency:reduce){.list{background:#f4f6fa;-webkit-backdrop-filter:none;backdrop-filter:none}}

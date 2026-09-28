@@ -17,15 +17,17 @@ describe("responsive workspace CSS", () => {
     const source = css("./app-shell.module.css");
     expect(source).toContain(".shell[data-detail-open=false]{display:flex;flex-direction:column");
     // 双屏上内容列最宽 600、居中，不拉成满屏宽。
-    expect(source).toContain("padding:78px max(12px,calc((100% - 600px) / 2))");
+    expect(source).toContain("padding:calc(14px + env(safe-area-inset-top)) max(12px,calc((100% - 600px) / 2))");
     expect(source).toMatch(/\.shell\[data-detail-open=false\] \.mainArea\{display:block/);
     expect(source).toContain(".shell[data-detail-open=false] .notificationArea{order:-1");
     expect(css("./member-home.module.css")).toContain('height: auto; overflow: visible;');
     // 手持不放完整看板（翻转卡、进展示意、能力卡），换成精简的公司全局。
     expect(css("./home-board.module.css")).toContain("@media(max-width:959px){.board{display:none}.phoneAccount{display:block");
     expect(css("./ceo-glance.module.css")).toContain("@media(max-width:959px){.glance{display:flex");
-    // 时钟条浮在最上面、垫玻璃，滚上去的内容不会从按钮之间透出来（CEO 与成员同一条规则）。
-    expect(css("./notifications.module.css")).toContain(':global([data-detail-open="false"]) .rail>.railClock{position:fixed');
+    // 顶上是锁屏式的日期 + 大号时间，跟着页面滚走：不能 fixed —— 通知区入场有滤镜、返回有转场名，fixed 的子元素会跟着错位（真机反馈的头部跳动）。
+    expect(css("./notifications.module.css")).toContain(':global([data-detail-open="false"]) .rail>.railClock{position:relative');
+    // 手持是深色沉稳的画布，浅色通知卡才显得出来。
+    expect(source).toContain("@media(max-width:959px){.shell{background-color:#141c30");
   });
   it("follows the form-factor contract: handheld ≤959 (phone, tri-fold dual screen), workstation ≥960", () => {
     const source = css("./app-shell.module.css");

@@ -55,3 +55,26 @@
   .header .heading.heading { font-size: 14px; gap: 6px; }
   .header .badges { gap: 4px; }
 }
+
+/*
+ * 手持首页（≤959）：iOS 式浅色通知卡上，标题用深字；多张卡先收成一行「N 张任务卡 · M 条意见」，点「逐个看」再展开每人一行。
+ * 三屏以上没有汇总行，每人一行一直展开。
+ */
+.summary.summary { display: none; }
+@media (max-width: 959px) {
+  :global([data-detail-open="false"]) .header { --ink: #1c2230; --ink-muted: #566072; --morning-blue: #dfe8f8; --onboarding-blue: #3a83f7; }
+  :global([data-detail-open="false"]) .embedded .heading, :global([data-detail-open="false"]) .header .heading.heading { color: #1c2230; font-size: 17px; line-height: 1.45; }
+  :global([data-detail-open="false"]) .name { font-size: 17px; line-height: 24px; }
+  :global([data-detail-open="false"]) .role { font-size: 14px; line-height: 20px; }
+  :global([data-detail-open="false"]) .line { font-size: 14px; }
+  /* 字放大后一行放不下：手持上一律两行 —— 月份标题一行，战场名和徽标一行（不让「·」落到行首）。 */
+  :global([data-detail-open="false"]) .embedded .heading.heading { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 2px; }
+  :global([data-detail-open="false"]) .embedded .titleWords { display: contents; }
+  :global([data-detail-open="false"]) .embedded .monthTitle { flex-basis: 100%; }
+  :global([data-detail-open="false"]) .embedded .sep { display: none; }
+  :global([data-detail-open="false"]) .rows[data-collapsed] { display: none; }
+  :global([data-detail-open="false"]) .summary.summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; height: auto; min-height: 52px; padding: 10px 12px; border-radius: 14px; background: #e9edf3; color: #1c2230; white-space: normal; text-align: left; }
+  .summaryText { font-size: 16px; font-weight: 600; line-height: 1.45; }
+  .summaryAction { display: inline-flex; align-items: center; gap: 2px; flex: none; color: #3a6fd0; font-size: 15px; font-weight: 500; }
+  .summary[aria-expanded='true'] .summaryAction svg { transform: rotate(90deg); }
+}

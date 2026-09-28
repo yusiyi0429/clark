@@ -78,14 +78,39 @@
 @media(max-width:959px){.glassHeader{background:rgb(36 53 78/72%)}.card{box-shadow:0 3px 12px rgb(30 48 70/7%),0 1px 2px rgb(30 48 70/5%)}}
 @media(max-width:959px) and (prefers-contrast:more){.glassHeader{background:#30394a}.card{box-shadow:none}}
 @media(max-width:959px) and (prefers-reduced-transparency:reduce){.glassHeader{background:#2c364a}}
-/* 手持首页（≤959，CEO 与成员同一套）：通知栏不再是一块定高的深色面板，而是整页滚动的开头 —— 通知卡直接落在晨光画布上；
-   时钟条浮在最上面，垫一层玻璃，滚上去的内容不会从两颗按钮之间透出来。个人菜单挪到首页最后（各自首页里的 phoneAccount）。 */
+/*
+ * 手持首页（≤959，CEO 与成员同一套），像 iOS 锁屏：深色沉稳的画布上（app-shell），顶上一行日期、一个大号时间，
+ * 跟着页面一起滚走（不 fixed：通知区入场时有滤镜、返回时有转场名，fixed 的子元素会跟着错位）；下面每组通知一张磨砂浅色卡，
+ * 小字写类别，正文比桌面大一号、行距更松（老花眼也看得清）。个人菜单挪到首页最后（各自首页里的 phoneAccount）。
+ */
 @media(max-width:959px){
- :global([data-detail-open="false"]) .rail{height:auto;overflow:visible;border:0;border-radius:0;background:none;box-shadow:none;isolation:auto}
- :global([data-detail-open="false"]) .rail>.railClock{position:fixed;top:12px;left:max(16px,calc((100vw - 600px) / 2 + 4px));right:max(16px,calc((100vw - 600px) / 2 + 4px));padding:4px;border-radius:var(--onboarding-card-radius);background:var(--onboarding-glass);box-shadow:var(--onboarding-highlight);-webkit-backdrop-filter:blur(var(--onboarding-blur,24px)) saturate(var(--onboarding-sat,160%));backdrop-filter:blur(var(--onboarding-blur,24px)) saturate(var(--onboarding-sat,160%))}
- :global([data-detail-open="false"]) .noticeList{position:static;overflow:visible;padding:0}
+ :global([data-detail-open="false"]) .rail{--type-title:17px;--type-body:17px;--type-meta:15px;--type-note:14px;height:auto;overflow:visible;border:0;border-radius:0;background:none;box-shadow:none;isolation:auto}
+ :global([data-detail-open="false"]) .rail>.railClock{position:relative;inset:auto;display:flex;flex-direction:column;align-items:center;min-height:0;margin:0 0 22px;padding:6px 0 0;color:#fff;text-shadow:none;white-space:normal}
+ :global([data-detail-open="false"]) .railClock>.railLock{position:absolute;top:0;left:2px;margin:0}
+ :global([data-detail-open="false"]) .railLock button{width:38px;height:38px;color:rgb(255 255 255/.86);border:0;background:rgb(255 255 255/.12);box-shadow:none}
+ :global([data-detail-open="false"]) .railClock .homeCapsule{flex-direction:column;gap:2px;min-height:0;padding:0;border:0;border-radius:18px;background:none;box-shadow:none;color:#fff;overflow:visible}
+ :global([data-detail-open="false"]) .railClock .homeCapsule::after,:global([data-detail-open="false"]) .homeCapsule .clockLogo{display:none}
+ :global([data-detail-open="false"]) .railDate{gap:8px;font-size:16px;line-height:1.4;color:rgb(255 255 255/.8)}
+ :global([data-detail-open="false"]) .railWeekday{font-size:16px;color:rgb(255 255 255/.8)}
+ :global([data-detail-open="false"]) .railClock time{margin:0;font-size:68px;font-weight:300;line-height:1.05;letter-spacing:-.02em;color:#fff}
+ :global([data-detail-open="false"]) .noticeList{position:static;overflow:visible;padding:0;gap:12px}
  :global([data-detail-open="false"]) .railFoot{display:none}
+ :global([data-detail-open="false"]) .noticeList>.card>[data-reference-id]{display:none!important}
+ :global([data-detail-open="false"]) .card{--notice-radius:22px;--notice-ink:#1c2230;--notice-muted:#566072;border:0;border-radius:22px;background:rgb(244 246 250/.92);box-shadow:0 10px 30px rgb(4 10 24/.22);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%)}
+ :global([data-detail-open="false"]) .glassHeader{grid-template-columns:24px minmax(0,1fr);gap:9px;min-height:0;padding:14px 16px 4px;border:0;border-radius:0;background:none;box-shadow:none;color:var(--notice-muted);text-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+ :global([data-detail-open="false"]) .glassHeader .glyph{width:24px;height:24px;border-radius:7px;box-shadow:none}
+ :global([data-detail-open="false"]) .card .identity strong{gap:6px;color:var(--notice-muted);font-size:14px;line-height:20px;font-weight:500}
+ :global([data-detail-open="false"]) .card .identity .count{min-width:20px;height:20px;background:#e1e6ee;color:#465064;box-shadow:none}
+ :global([data-detail-open="false"]) .identity small{display:none}
+ :global([data-detail-open="false"]) .tray{padding:2px 8px 8px;background:none}
+ :global([data-detail-open="false"]) .card .tray .item{min-height:64px;padding:12px 8px;gap:12px}
+ :global([data-detail-open="false"]) .card .tray .item+.item{margin-top:0;border-top:1px solid rgb(28 34 48/.08);border-radius:0}
+ :global([data-detail-open="false"]) .card .itemText{gap:4px}
+ :global([data-detail-open="false"]) .card .itemText>span{font-weight:600;line-height:1.45}
+ :global([data-detail-open="false"]) .card .itemText small{line-height:1.5}
 }
+@media(max-width:959px) and (prefers-reduced-transparency:reduce){:global([data-detail-open="false"]) .card{background:#f4f6fa;-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media(max-width:959px) and (prefers-contrast:more){:global([data-detail-open="false"]) .card{--notice-muted:#333a47;background:#fff;box-shadow:0 0 0 1px #777}}
 /* 副标题那一行换成一块（本月 Mission Card 的倒计时）：右边不再给引用键留位，底下多留一点呼吸。 */
 .glassHeader[data-subline]{padding-right:16px;padding-bottom:12px}
 @media(max-width:1200px){.glassHeader[data-subline]{padding-right:13px}}

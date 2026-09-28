@@ -161,7 +161,7 @@
 /* 手持首页是同一个滚动面，内容列最宽 600、居中：新通知在最前，接着是首页主区 —— 成员是执行事项、本月卡、战场、雷达
    （member-home.module.css），CEO 是精简的公司全局（ceo-glance.module.css）；最后是个人菜单。顶部时钟条浮在上面（notifications.module.css）。 */
 @media(max-width:959px){
- .shell[data-detail-open=false]{display:flex;flex-direction:column;gap:20px;overflow-y:auto;padding:78px max(12px,calc((100% - 600px) / 2)) calc(120px + env(safe-area-inset-bottom));scrollbar-width:none}
+ .shell[data-detail-open=false]{display:flex;flex-direction:column;gap:20px;overflow-y:auto;padding:calc(14px + env(safe-area-inset-top)) max(12px,calc((100% - 600px) / 2)) calc(120px + env(safe-area-inset-bottom));scrollbar-width:none}
  .shell[data-detail-open=false]::-webkit-scrollbar{display:none}
  .shell[data-detail-open=false] .mainArea{display:block;flex:none;min-height:0;overflow:visible;border-radius:0}
  .shell[data-detail-open=false] .homeSurface{height:auto}
@@ -214,3 +214,7 @@
 .expandedScroll[data-radar-reader-layout=true]{margin:0;padding:0;overflow:hidden;display:flex;min-width:0}
 @media(max-width:1100px){.expandedScroll[data-radar-reader-layout=true]{overflow-y:auto;overflow-x:hidden}.expandedScroll[data-radar-reader-layout=true]>div{height:auto;flex:none;grid-template-rows:auto}}
 .expandedScroll[data-radar-reader-layout=true]{flex-direction:column;overflow-y:auto}.expandedScroll[data-radar-reader-layout=true]>section{margin:0 24px}.expandedScroll[data-radar-reader-layout=true]>div{flex:none;min-height:100%}
+
+/* 手持（≤959）的画布：深藏青、两块极淡的柔光，沉稳不抢眼，浅色通知卡在上面才显得出来（详情仍是浅色面板，四周留 8px 深色边）。 */
+@media(max-width:959px){.shell{background-color:#141c30;background-image:radial-gradient(60% 42% at 90% 4%,rgb(58 80 136/.5) 0%,transparent 72%),radial-gradient(58% 40% at 4% 96%,rgb(48 66 118/.42) 0%,transparent 72%),linear-gradient(180deg,#1b2543 0%,#121a2d 100%);background-position:center;background-size:auto}}
+@media(max-width:959px) and (prefers-reduced-transparency:reduce){.shell{background:#151d31}}
