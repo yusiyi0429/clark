@@ -67,3 +67,5 @@
 
 @media(max-width:1100px){.body{flex-direction:column}.left{width:100%}.listCard,.relatedCard,.pickCard{height:auto}.confirm{right:24px;left:auto}}
 @media(max-width:1100px){.wide{width:420px;max-width:100%}}
+/* 触屏：编辑、删除两颗图标放大到 40 并拉开间距，免得误点删除。 */
+@media(pointer:coarse){.rowIcon{width:40px;height:40px;border-radius:12px}.rowIcon svg{width:17px;height:17px}.rowIcon+.rowIcon{margin-left:6px}}

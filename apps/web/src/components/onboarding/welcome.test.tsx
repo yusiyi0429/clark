@@ -196,7 +196,9 @@ describe("真实数据的首次引导", () => {
     tree = renderFlow(ceo);
     expect(text(tree)).toContain("右边是公司全局");
     expect(text(tree)).toContain("底部是你的 Agent：问公司的事，它查了再答。");
-    expect(text(tree)).toContain("详情全屏展开，左上角返回");
+    // 手机首页是一条滚动：通知下面就是公司全局；详情铺满屏幕，返回在左上角。
+    expect(text(tree)).toContain("往下是公司全局");
+    expect(text(tree)).toContain("详情铺满屏幕，左上角返回");
     expect(elements(tree).find((element) => element.type === WorkspaceSchematic)?.props).toMatchObject({ role: "ceo", focus: "board" });
     expect(text(tree)).not.toContain("这是天枢里登记的");
     (button(tree, "上一步").props.onClick as () => void)();

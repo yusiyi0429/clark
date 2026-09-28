@@ -11,7 +11,7 @@
 .thinking{display:flex;align-items:center;gap:9px;margin:4px 0 30px;color:#aaaab5;font-size:13px;min-height:30px}.elapsed{font-variant-numeric:tabular-nums;color:#85858f}.thinking button{margin-left:auto;border:0;background:none;color:#aaaab5;font-size:12px;cursor:pointer;padding:6px 10px;border-radius:9px}.thinking button:hover{background:#ffffff0c;color:white}
 .pulse{width:7px;height:7px;background:#c5cedc;border-radius:50%;animation:breathe 1.8s ease-in-out infinite}@keyframes breathe{50%{opacity:.3;transform:scale(.8)}}
 @media(min-width:1800px){.assistant,.user{font-size:16px}}
-@media(max-width:690px){.assistant,.user{font-size:14px}.user{max-width:90%;padding:10px 15px}.meta{font-size:11px}.assistant{margin-bottom:28px}}
+@media(max-width:599px){.assistant,.user{font-size:14px}.user{max-width:90%;padding:10px 15px}.meta{font-size:11px}.assistant{margin-bottom:28px}}
 @media(prefers-reduced-motion:reduce){.pulse{animation:none}}
 
 /* Light tone: the record inside a monthly / meeting workspace sits on that material's light gradient. */

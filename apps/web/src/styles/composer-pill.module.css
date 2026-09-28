@@ -264,7 +264,7 @@
 .tool:disabled { opacity: 0.45; cursor: default; }
 .tool:focus-visible { outline: 2px solid var(--tone-send); outline-offset: 2px; }
 
-@media (max-width: 690px) {
+@media (max-width: 599px) {
   .field textarea { font-size: 16px; }
   .field textarea::placeholder { font-size: 14px; }
 }

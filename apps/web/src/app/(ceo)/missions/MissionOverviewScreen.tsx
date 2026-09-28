@@ -46,6 +46,11 @@ export function battlefieldScope(item: MissionPayload, allBattlefieldIds: string
   return coversAll ? "全战场" : item.battlefieldNames.join(" · ");
 }
 
+/** 能力域显示名：Mission 引用了没登记的能力域时（来源文档里的原值），标出来而不是留空。 */
+export function capabilityLabel(item: MissionPayload): string {
+  return `${item.capabilityCode} ${item.capabilityName}`.trim() || (item.capabilityId ? `${item.capabilityId}（未登记）` : "未挂能力域");
+}
+
 type Option = { id: string; label: string };
 
 function optionsOf(missions: MissionPayload[], pick: (item: MissionPayload) => Option): Option[] {
@@ -82,7 +87,7 @@ export function MissionOverviewScreen({
   });
 
   const capabilityOptions = useMemo(
-    () => optionsOf(missions, (item) => ({ id: item.capabilityId, label: `${item.capabilityCode} ${item.capabilityName}`.trim() })),
+    () => optionsOf(missions, (item) => ({ id: item.capabilityId, label: capabilityLabel(item) })),
     [missions],
   );
   const ownerOptions = useMemo(
@@ -151,7 +156,7 @@ export function MissionOverviewScreen({
                       <span className={m.rowTitle}>{item.title}</span>
                       <MissionStatus mission={item} />
                       <span className={m.rowMeta}>
-                        {item.ownerDisplayName || "待指派"} · {`${item.capabilityCode} ${item.capabilityName}`.trim()} · {battlefieldScope(item, battlefieldIds) || "未关联战场"}
+                        {item.ownerDisplayName || "待指派"} · {capabilityLabel(item)} · {battlefieldScope(item, battlefieldIds) || "未关联战场"}
                       </span>
                       {item.placeholder ? <span className={m.rowMeta}>来源 · {item.sourceTitle}</span> : null}
                     </span>

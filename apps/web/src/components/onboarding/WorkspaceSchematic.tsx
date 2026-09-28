@@ -8,6 +8,8 @@ type Props = {
 
 const notices = ["需要你确认", "战略决策更新", "战略会议安排", "战略问题研究"];
 const memberNotices = ["本月 Mission Card", "新的执行事项", "回复与结果", "雷达 · 值得注意"];
+/** 手持首页通知下面那一段：CEO 是精简的公司全局（战场一行一个、雷达），成员是自己的工作（与真实首页同序）。 */
+const phoneWork = { ceo: ["战场 1", "战场 2", "战场 3", "雷达信号"], member: ["执行事项", "我的本月卡", "参与的战场", "雷达信号"] };
 
 /** 无真实数据的工作台缩影；mobile 可覆盖默认的响应式布局。 */
 export function WorkspaceSchematic({ role, focus, mobile }: Props) {
@@ -51,29 +53,16 @@ export function WorkspaceSchematic({ role, focus, mobile }: Props) {
         </>}
       </div>
     </div>
-    {role === "member" ? <div className={`${s.phone} ${s.memberPhone}`}>
+    <div className={`${s.phone} ${s.memberPhone}`}>
       <div className={s.memberPhoneScroll}>
         <div className={s.memberPhoneNotice} data-region="notifications">
           <div className={s.phoneClock}><span className={s.clockMark}>✦</span><span>今天</span><span>09:41</span></div>
           <div className={s.phoneNotices}>{noticeCards.slice(0, 2)}</div>
         </div>
         <div className={s.memberPhoneWork} data-region="board">
-          <div className={s.phoneWorkCard}><strong>执行事项</strong><span className={s.addButton}>+</span><span className={s.phoneWorkRule} /></div>
-          <div className={s.phoneWorkCard}><strong>我的本月卡</strong><span className={s.phoneWorkRule} /></div>
-          <div className={s.phoneWorkCard}><strong>参与的战场</strong><span className={s.phoneWorkRule} /></div>
-          <div className={s.phoneWorkCard}><strong>雷达信号</strong><span className={s.phoneWorkRule} /></div>
+          {phoneWork[role].map((label, index) => <div className={s.phoneWorkCard} key={label}><strong>{label}</strong>{role === "member" && index === 0 ? <span className={s.addButton}>+</span> : null}<span className={s.phoneWorkRule} /></div>)}
         </div>
       </div>
-    </div> : <div className={s.phone}>
-      <div className={s.phoneHome} data-region="notifications">
-        <div className={s.phoneClock}><span className={s.clockMark}>✦</span><span>今天</span><span>09:41</span></div>
-        <div className={s.phoneNotices}>{noticeCards}</div>
-      </div>
-      <div className={s.phoneDetail} data-region="board">
-        <div className={s.phoneBack}>‹ <span>返回</span></div>
-        <div className={s.phoneDetailCard}><strong>需要你确认</strong><span className={s.rule} /><span className={s.ruleShort} /><span className={s.rule} /></div>
-        <div className={s.phoneAgent}><span className={s.agentSpark}>✦</span><span>我的 Agent</span><span className={s.agentSend}>↑</span></div>
-      </div>
-    </div>}
+    </div>
   </div>;
 }

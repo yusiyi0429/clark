@@ -2,7 +2,7 @@
 
 .reader{height:100%;width:100%;min-height:0;min-width:0;grid-template-rows:minmax(0,1fr);overflow:hidden;box-sizing:border-box}.article,.conversation{min-height:0;box-sizing:border-box;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#d5dae3 transparent}.article h2{margin:18px 0!important}.article h3{margin-bottom:10px!important}.article p{margin:10px 0!important}.story h2{margin:18px 0 10px!important}.reader .article{background:#ffffff90}.feed .error{margin:12px 0 20px}.reader .conversation{padding-bottom:110px}@media(max-width:1100px){.reader{height:auto;overflow:visible}.article,.conversation{overflow:visible}.reader .conversation{min-height:330px}}
 
-@media(max-width:690px){.filters{flex-wrap:wrap;justify-content:flex-start}.toolbar>div{flex-wrap:wrap}.toolbar button{padding:8px}.story{padding:20px}.reader{margin:0}.article h2{font-size:24px!important}.article .lead{font-size:17px!important}}
+@media(max-width:599px){.filters{flex-wrap:wrap;justify-content:flex-start}.toolbar>div{flex-wrap:wrap}.toolbar button{padding:8px}.story{padding:20px}.reader{margin:0}.article h2{font-size:24px!important}.article .lead{font-size:17px!important}}
 
 .storyWrapper{position:relative;min-width:0}
 /* 这张卡是按「一个普通按钮，里面四块从上往下排」写的。换成 HeroUI 的按钮之后，

@@ -9,8 +9,8 @@
 .pane{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
 .agenda{margin:0;padding-left:12px;border-left:2px solid var(--ts-border,#e3e8ef);font-size:var(--ts-type-body,14px);line-height:1.9;color:var(--ts-text-muted,#6b7482)}
 .material{display:flex;flex-direction:column;gap:16px;min-width:0;margin-top:8px}
-@media(min-width:760px) and (max-width:1000px){.reading{padding:var(--material-tabs-gap,6px) calc(20px + var(--conversation-lane,0px)) 130px 20px}}
-@media(max-width:759px){.reading{padding:var(--material-tabs-gap,6px) 18px 140px}}
+@media (min-width: 960px) and (max-width: 1000px){.reading{padding:var(--material-tabs-gap,6px) calc(20px + var(--conversation-lane,0px)) 130px 20px}}
+@media (max-width: 959px){.reading{padding:var(--material-tabs-gap,6px) 18px 140px}}
 
 /* AI 预审页签顶部：编辑会议、返回编辑材料、重新预审，低调的文字钮；编辑会议的弹层挂在这一行下面。 */
 .toolbar{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:4px}

@@ -39,8 +39,24 @@
 .primary{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:10px;background:#007aff;padding:9px 14px;font:inherit;font-size:12.5px;font-weight:500;color:#fff;cursor:pointer}
 .primary:hover{background:#0068db}
 
-@media(max-width:1100px){.body{flex-direction:column}.filters{width:100%;height:auto}.listCard{height:auto}.rows{max-height:60vh}}
-@media(max-width:900px){.summary{flex-wrap:wrap}.stat{flex:1 1 40%}}
+/* 按面板宽度排（app-shell .expanded 是 pane 容器）：筛选 390 + 列表至少 450 才并排，否则上下排，列表跟着页面滚，不再套一层滚动。
+   上下排时每组筛选是一行可横滑的选项，四组一眼看完，不用先划过一长串单选才看到列表。 */
+@container pane (max-width:859px){
+ .body{flex-direction:column;align-items:stretch}.filters{width:100%;height:auto}.listCard{height:auto}.rows{overflow:visible}
+ .filters{gap:10px;padding:16px 14px}
+ .filterGroup{flex-direction:row;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -14px;padding:0 14px}
+ .filterGroup::-webkit-scrollbar{display:none}
+ .filterLabel{flex:none;min-width:3em}
+ .filterRow{flex:none;width:auto;height:34px;padding:0 13px;border-radius:999px;background:#f3f5f8;white-space:nowrap}
+ .filterRow[aria-pressed=true]{background:#e8f1ff;color:#0a5dc2}
+ .check{display:none}
+}
+@container pane (max-width:560px){
+ .summary{flex-wrap:wrap}.stat{flex:1 1 40%}
+ .listCard{padding:16px 12px}
+ .row{padding:10px 6px;gap:10px}
+ .code{width:auto;max-width:64px;overflow-wrap:anywhere}
+}
 /* 放在展开页滚动区里（clark 展开页的页头 + 正文层次）。 */
 .content{display:flex;flex-direction:column;gap:24px;min-width:0}
 .intro{margin:0;max-width:760px;font-size:14px;line-height:1.75;color:#6e6e73}

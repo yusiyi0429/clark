@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@heroui/react";
-import { X } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import type { CardRenderProps } from "./registry";
 import type { TUpdateMonthlyPlanDraftRequest } from "@warmap/contracts";
 import { payloadOf, type MonthlyPlanPayload } from "./payloads";
@@ -184,8 +184,9 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
             <h1 id="monthly-title">月度计划 {payload.period}</h1>
           </div>
         </div>
-        <Button isIconOnly variant="tertiary" data-close-view onPress={() => onNavigate("/")} aria-label="关闭月度计划">
-          <X size={19} aria-hidden="true" />
+        <Button isIconOnly variant="tertiary" className={s.close} data-close-view onPress={() => onNavigate("/")} aria-label="关闭月度计划">
+          <X size={19} aria-hidden="true" className={s.closeIcon} />
+          <ChevronLeft size={24} aria-hidden="true" className={s.backIcon} />
         </Button>
       </header>
 

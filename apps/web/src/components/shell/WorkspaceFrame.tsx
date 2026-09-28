@@ -11,7 +11,7 @@ import type { Account } from "@/components/AccountMenu";
 import { columnHostClass } from "@/conversation/ConversationColumn";
 import { ConversationHost, type ConversationUiState } from "@/conversation/ConversationHost";
 import { ReferenceProvider } from "@/conversation/references";
-import { saveColumnMode } from "@/conversation/useColumnMode";
+import { NARROW_COLUMN_QUERY, saveColumnMode } from "@/conversation/useColumnMode";
 import { prefersReducedMotion, runRouteTransition, supportsViewTransition, type TransitionDirection } from "@/lib/viewTransition";
 import { LoadingMask } from "./LoadingMask";
 import { NoticeStrip } from "./NoticeStrip";
@@ -94,7 +94,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
     setHistoryOpen(false);
     setGlobalView(false);
     setKeyboard(true);
-    if (window.matchMedia("(max-width:759px)").matches) setRailMobileOpen(true);
+    if (window.matchMedia(NARROW_COLUMN_QUERY).matches) setRailMobileOpen(true);
     else saveColumnMode("expanded");
     setPrefill({ text: `关于“${text}”，`, nonce: Date.now() });
   }, []);

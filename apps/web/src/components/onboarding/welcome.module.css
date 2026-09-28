@@ -168,8 +168,6 @@
   .intro h1 { font-size: 25px; }
   .subtitle { font-size: 18px; }
   .description { font-size: 16px; line-height: 1.7; }
-  .desktopTourCopy { display: none; }
-  .mobileTourCopy { display: block; }
   .content[data-step^="tour-"] .description { margin-top: 10px; font-size: 14px; line-height: 1.55; }
   .content[data-step^="tour-"] .details { margin-top: 14px; }
   .content[data-step="mission-flow"] .description { margin-top: 10px; font-size: 14px; line-height: 1.55; }
@@ -186,6 +184,11 @@
   .footer > div[role="status"] { height: 28px; }
   .footer > button, .radarActions > button { width: 100%; }
   .secondary { min-height: 44px; }
+}
+/* 讲的是工作台长什么样：和外壳一起在 599 切到手机版（三折叠双屏已是两栏）。 */
+@media (max-width: 959px) {
+  .desktopTourCopy { display: none; }
+  .mobileTourCopy { display: block; }
 }
 @media (prefers-reduced-motion: reduce) {
   .content .intro h1, .content .subtitle, .content .description, .content .details, .footer > button, .radarActions > button { animation: fadeIn 150ms both !important; }

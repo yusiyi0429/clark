@@ -29,6 +29,13 @@ export function HomeBoard(props: Props) {
   );
 }
 
+/** 雷达卡上那一行小字：扫描中 / 未读数 / 默认邀请。首页看板和手持的「公司全局」共用。 */
+export function radarStatusText(payload: RadarPayload | null): string {
+  if (payload?.lastRun?.status === "running") return "正在扫描";
+  if (payload && payload.unreadCount > 0) return `${payload.unreadCount} 条未读`;
+  return "看看外面的变化";
+}
+
 export function issueRowData(card: Card, meetingTimes: Map<string, string>): IssueRowData {
   const payload = payloadOf<IssuePayload>(card);
   return {
@@ -74,13 +81,7 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
   const capabilityIssues = sections.flatMap((section) => section.issues);
   const row = (card: Card) => <IssueRow key={card.id} issue={issueRowData(card, meetingTimes)} card={card} onNavigate={onNavigate} />;
 
-  const radarPayload = radar ? payloadOf<RadarPayload>(radar) : null;
-  const radarStatus =
-    radarPayload?.lastRun?.status === "running"
-      ? "正在扫描"
-      : radarPayload && radarPayload.unreadCount > 0
-        ? `${radarPayload.unreadCount} 条未读`
-        : "看看外面的变化";
+  const radarStatus = radarStatusText(radar ? payloadOf<RadarPayload>(radar) : null);
 
   return (
     <div className={b.board} data-testid="decision-home">

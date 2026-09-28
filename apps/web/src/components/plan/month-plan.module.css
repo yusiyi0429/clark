@@ -54,7 +54,7 @@
 .legend i[data-state=current]{border-color:#1f58c4;box-shadow:0 0 0 2px #3a83f740}
 .legend i.todayKey{width:0;height:12px;border:0;border-left:1.5px solid #3a83f7;border-radius:0}
 
-@media(max-width:690px){.gantt{--label:164px;--day:18px}}
+@media(max-width:599px){.gantt{--label:164px;--day:18px}}
 @media(prefers-contrast:more){.bar{background:#b9cbe6}.milestone,.legend i{border-color:#1d1d1f}.groupLabel small,.label>small,.legend,.days>span{color:#333}}
 
 /* 悬浮卡：挂在整张图上（不在横向滚动框里，才不会被裁掉），默认在点的上方，靠近顶边时翻到下方。

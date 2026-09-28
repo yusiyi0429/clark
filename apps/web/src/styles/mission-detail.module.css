@@ -31,9 +31,10 @@
 .milestones{margin:0;font-size:12.5px;line-height:21px;color:#4f5866}
 .source{margin:0;font-size:12.5px;line-height:21px;color:#4f5866;word-break:break-all}
 
-@media(max-width:1280px){.body{flex-direction:column}.sidebar{width:100%}}
+/* 按面板宽度排：侧栏 650 旁边至少要留出一栏正文，否则上下排（1440 桌面面板约 940，仍并排）。 */
+@container pane (max-width:899px){.body{flex-direction:column}.sidebar{width:100%}}
 @media(max-width:900px){.relations{flex-wrap:wrap;gap:16px}.relation{flex:1 1 40%}}
-@media(max-width:690px){.page{--main-start:20px;--shell-edge:20px}}
+@media(max-width:599px){.page{--main-start:20px;--shell-edge:20px}}
 /* 放在展开页滚动区里；页头动作：返回总览 + 编辑 Mission。 */
 .content{display:flex;flex-direction:column;gap:20px;min-width:0}
 .headerActions{display:flex;flex-wrap:wrap;gap:8px;flex:none}

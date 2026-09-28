@@ -10,6 +10,7 @@ import s from "@/styles/app-shell.module.css";
 /**
  * 展开页页头（clark `workspace.tsx:592` 的 expandedHeader）：玻璃渐变、ContextMark、眉题 + 标题，
  * 或眉题 + 「返回…」键（信号详情），右侧圆形关闭（data-close-view：打开时外壳把焦点放在这里）。
+ * 手机上这颗键挪到左上角、换成返回箭头（app-shell.module.css ≤599），和任务卡、会议页的返回同一个位置。
  */
 export function DetailHeader({
   mark,
@@ -54,7 +55,8 @@ export function DetailHeader({
       </div>
       {actions}
       <HeroButton variant="ghost" size="sm" isIconOnly data-close-view onPress={onClose} className={s.closeRound} aria-label={closeLabel} isDisabled={closing}>
-        <X size={23} aria-hidden="true" />
+        <X size={23} aria-hidden="true" className={s.closeIcon} />
+        <ChevronLeft size={26} aria-hidden="true" className={s.backIcon} />
       </HeroButton>
     </header>
   );

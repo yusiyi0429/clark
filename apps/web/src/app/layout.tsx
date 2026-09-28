@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { ReduceMotionSync } from "@/components/ReduceMotionSync";
 import "./globals.css";
@@ -18,6 +18,12 @@ export const metadata: Metadata = {
   description: "把公司的判断变成持久对象。",
   robots: { index: false, follow: false },
 };
+
+/**
+ * 弹出软键盘时让整页（外壳是 100dvh）一起缩到键盘上方：底部的输入条、对话记录层跟着上来，不被键盘盖住。
+ * Android / 鸿蒙的 Chromium 内核浏览器默认只缩视觉视口，固定在底部的输入条会被推到键盘后面；iOS Safari 忽略这一项。
+ */
+export const viewport: Viewport = { width: "device-width", initialScale: 1, interactiveWidget: "resizes-content" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

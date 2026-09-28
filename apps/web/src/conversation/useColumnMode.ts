@@ -9,7 +9,7 @@
  *
  * **系统永远不自己展开右列**：来了消息只在收起后的频道钮上打角标。
  *
- * ≤759 没有收起这回事：那里右列本来就是浮层，恒为 expanded。
+ * ≤959 没有收起这回事：那里右列本来就是浮层，恒为 expanded。
  */
 
 import { useCallback, useSyncExternalStore } from "react";
@@ -17,8 +17,8 @@ import { useCallback, useSyncExternalStore } from "react";
 export type ColumnMode = "expanded" | "strip";
 
 export const COLUMN_MODE_STORAGE = "tianshu-conversation-column-v1";
-/** ≤759 右列是浮层。 */
-export const NARROW_COLUMN_QUERY = "(max-width:759px)";
+/** ≤959 右列是浮层（手机与三折叠双屏）。 */
+export const NARROW_COLUMN_QUERY = "(max-width:959px)";
 
 /** 存储里读出来的偏好。认不出的一律当展开。 */
 export function readColumnMode(raw: string | null | undefined): ColumnMode {
@@ -72,7 +72,7 @@ function subscribeNarrow(listener: () => void) {
   return () => query.removeEventListener("change", listener);
 }
 
-/** ≤759：右列是浮层。服务端那一帧按宽屏算，水合后再对。 */
+/** ≤959：右列是浮层。服务端那一帧按宽屏算，水合后再对。 */
 export function useNarrowColumn(): boolean {
   return useSyncExternalStore(subscribeNarrow, () => window.matchMedia(NARROW_COLUMN_QUERY).matches, () => false);
 }

@@ -37,5 +37,5 @@
 @keyframes scan { to { transform:rotate(360deg); } }
 @keyframes echo { 0%,55%,100% { opacity:0; transform:scale(.7); } 4%,12% { opacity:.8; transform:scale(1); } 35% { opacity:.15; } }
 @media(max-width:1250px) { .radar { padding:15px 15px 12px; } }
-@media(max-width:690px) { .radar { padding:14px 12px; } .launch { right:10px; top:17px; width:12px; } }
+@media(max-width:599px) { .radar { padding:14px 12px; } .launch { right:10px; top:17px; width:12px; } }
 @media(prefers-reduced-motion:reduce) { .sweep,.echo { animation:none; } .sweep { transform:rotate(35deg); } .echo { opacity:.35; } .radar,.launch { transition:none; } }

@@ -66,3 +66,5 @@
 @media(max-width:1100px){.face{padding:17px}.header{gap:6px}.header h2{font-size:18px}.flip{padding:6px}}
 @media(prefers-reduced-motion:reduce){.frame{perspective:none}.rotor,.flip,.evidence>div,.atmosphere,.missionToggle>svg{transition:none}.rotor[data-flipped=true],.front,.back{transform:none}.face[aria-hidden=true]{visibility:hidden}}
 @media(prefers-contrast:more){.rotor{border-color:#777}.evidence,.evidence>button>span{color:#444}.finding{border-color:#777}.ownerBadge{color:#333}}
+/* 触屏：「Missions · N」字很小，点击区域上下各外扩 10，不改排版。 */
+@media(pointer:coarse){.missionToggle{padding-block:10px;margin-block:-10px}}

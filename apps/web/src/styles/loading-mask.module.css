@@ -54,7 +54,7 @@
   white-space: nowrap;
 }
 
-@media (max-width: 690px) {
+@media (max-width: 959px) {
   .mask { border-radius: 21px; }
 }
 @media (prefers-reduced-motion: reduce) {

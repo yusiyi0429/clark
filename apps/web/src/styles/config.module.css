@@ -59,7 +59,18 @@
 .primary:disabled{opacity:.5;cursor:default}
 .primary svg{width:15px;height:15px}
 
-@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}.tall,.ltco{height:auto}}
-@media(max-width:690px){.shell{padding:20px 20px 40px}.topbar,.topActions{flex-wrap:wrap}}
+/* 按钮文字永远一行：窄了让提示语让位，不把「完成」压成竖排。 */
+.back,.secondary,.primary{flex:none;white-space:nowrap}
+@media(max-width:900px){
+ .grid{grid-template-columns:minmax(0,1fr)}.tall,.ltco{height:auto}
+ /* 卡片改成随内容长高：页脚和上传区回到文档流里，不再按固定卡高绝对定位、压到输入框上。 */
+ .cardFooter,.upload{position:static}
+ .cardFooter{margin-top:auto;flex-wrap:wrap}
+ /* 顶栏：返回和两个按钮一行，那句说明另起一行。 */
+ .topbar,.topActions{flex-wrap:wrap}
+ .topActions{justify-content:flex-end}
+ .draft{order:1;flex:1 1 100%;text-align:right}
+}
+@media(max-width:599px){.shell{padding:20px 20px 40px}.draft{text-align:left}}
 .secondary:disabled{opacity:.5;cursor:default}
 @media(prefers-contrast:more){.card{outline-color:#777}.field input,.field select,.field textarea,.ltcoInput{outline-color:#777}}

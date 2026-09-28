@@ -13,22 +13,35 @@ describe("responsive workspace CSS", () => {
     expect(connection).toContain(".segmented{display:inline-flex;justify-self:start;max-width:100%;");
     expect(connection).toContain("overflow-x:auto}");
   });
-  it("keeps the member home widgets and tasks visible on phones, with notifications in the same scroll", () => {
+  it("keeps the handheld home (≤959) as one centred scroll for CEO and members: notices, then the glance or member work, then the account", () => {
     const source = css("./app-shell.module.css");
-    expect(source).toContain('.shell[data-testid="member-workspace"][data-detail-open=false]');
-    expect(source).toMatch(/member-workspace[^}]+\.mainArea\s*\{[^}]*display:\s*block/);
+    expect(source).toContain(".shell[data-detail-open=false]{display:flex;flex-direction:column");
+    // 双屏上内容列最宽 600、居中，不拉成满屏宽。
+    expect(source).toContain("padding:78px max(12px,calc((100% - 600px) / 2))");
+    expect(source).toMatch(/\.shell\[data-detail-open=false\] \.mainArea\{display:block/);
+    expect(source).toContain(".shell[data-detail-open=false] .notificationArea{order:-1");
     expect(css("./member-home.module.css")).toContain('height: auto; overflow: visible;');
+    // 手持不放完整看板（翻转卡、进展示意、能力卡），换成精简的公司全局。
+    expect(css("./home-board.module.css")).toContain("@media(max-width:959px){.board{display:none}.phoneAccount{display:block");
+    expect(css("./ceo-glance.module.css")).toContain("@media(max-width:959px){.glance{display:flex");
+    // 时钟条浮在最上面、垫玻璃，滚上去的内容不会从按钮之间透出来（CEO 与成员同一条规则）。
+    expect(css("./notifications.module.css")).toContain(':global([data-detail-open="false"]) .rail>.railClock{position:fixed');
   });
-  it("follows the ts-design responsive contract: phone notices-home, fold keeps the normal overview", () => {
+  it("follows the form-factor contract: handheld ≤959 (phone, tri-fold dual screen), workstation ≥960", () => {
     const source = css("./app-shell.module.css");
     // 全局输入条在各宽度都可达（clark / ts-design v0.4：手机首页、平板总览与桌面均显示 ConversationDock）。
     expect(source).not.toContain(':global([data-testid="global-controls"]){display:none}');
-    // 691–1000 未提供专属阅读桌面：沿用普通总览，不隐藏首页板与通知栏（clark 的空白折叠态即此处缺陷）。
+    // 首页主区在任何宽度都不整块隐藏（clark 的空白折叠态即此处缺陷）：手持换成精简的公司全局，工作台是完整看板。
     expect(source).not.toMatch(/max-width:1000px\)\{[^}]*\.homeSurface\{display:none\}/);
     expect(source).not.toContain(".foldMaterialSurface");
-    // ≤690：通知即首页；打开详情是 48px 窄条 + 正文。
-    expect(source).toMatch(/@media\(max-width:690px\)\{\s*\.shell\{[^}]*display:block/);
-    expect(source).toContain(".shell[data-detail-open=true]{--main-start:62px;--shell-edge:8px;--strip-width:48px;--notice-width:48px}");
+    // 手持（≤959：单屏、三折叠双屏 683–731、三屏竖放）：打开详情铺满屏幕，不留窄条；返回在页头左上角。
+    expect(source).toMatch(/@media\(max-width:959px\)\{\s*\.shell\{[^}]*display:block/);
+    expect(source).toContain(".shell[data-detail-open=true]{--main-start:8px;--shell-edge:8px;--strip-width:0px;--notice-width:0px}");
+    expect(css("./notice-strip.module.css")).toContain("@media(max-width:959px){.strip{display:none}}");
+    expect(source).not.toContain("max-width:690px");
+    // 对话在 ≤959 是底部输入条 + 浮层（手机、三折叠双屏），≥960 才是右列。
+    expect(css("./conversation-column.module.css")).toContain("@media (max-width: 959px)");
+    expect(css("./conversation-column.module.css")).not.toContain("759px");
     // 任何详情打开时，通知栏在所有宽度折成窄条。
     expect(source).toContain(".shell[data-detail-open=true]{--notice-width:var(--strip-width)}");
   });
@@ -38,7 +51,10 @@ describe("responsive workspace CSS", () => {
     expect(source).toContain("max-width:2448px");
     expect(source).toContain(".grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;max-width:2448px;align-items:start}");
     expect(source).toContain("height:44px;border:0;outline:1px solid #d9dde5;border-radius:10px");
-    expect(source).toContain("@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}.tall,.ltco{height:auto}}");
+    expect(source).toContain(".grid{grid-template-columns:minmax(0,1fr)}.tall,.ltco{height:auto}");
+    // 卡片随内容长高时，页脚和上传区回到文档流，不再压到输入框上。
+    expect(source).toContain(".cardFooter,.upload{position:static}");
+    expect(source).toContain(".back,.secondary,.primary{flex:none;white-space:nowrap}");
   });
 
   it("stacks the battlefield management columns below 1100px", () => {
@@ -72,7 +88,8 @@ describe("responsive workspace CSS", () => {
   });
 
   it("clears the global dock on the phone notices-home (clark --notice-bottom-inset)", () => {
-    expect(css("./notifications.module.css")).toContain("padding:78px 16px var(--notice-bottom-inset,52px)");
+    // 通知列表底部留白 64：滚到底最后一条不被左下角的个人胶囊盖住。
+    expect(css("./notifications.module.css")).toContain("padding:78px 16px var(--notice-bottom-inset,64px)");
     expect(css("./app-shell.module.css")).toContain("--notice-bottom-inset:calc(112px + env(safe-area-inset-bottom))");
   });
 
@@ -107,11 +124,13 @@ describe("responsive workspace CSS", () => {
   it("stacks the Mission pages: 390 筛选/列表、1217 编辑器与 650 侧栏", () => {
     const overview = css("./mission-overview.module.css");
     expect(overview).toContain(".filters{flex:none;display:flex;flex-direction:column;gap:16px;box-sizing:border-box;width:390px;height:1106px");
-    expect(overview).toContain("@media(max-width:1100px){.body{flex-direction:column}.filters{width:100%;height:auto}.listCard{height:auto}");
+    // 按面板（pane 容器）宽度而不是屏幕宽度排：三折叠三屏的面板要扣掉对话列。
+    expect(css("./app-shell.module.css")).toContain("container:pane/inline-size");
+    expect(overview).toMatch(/@container pane \(max-width:859px\)\{\s*\.body\{flex-direction:column;align-items:stretch\}\.filters\{width:100%;height:auto\}\.listCard\{height:auto\}/);
 
     const detail = css("./mission-detail.module.css");
     expect(detail).toContain(".sidebar{display:flex;flex:none;flex-direction:column;gap:16px;width:650px;max-width:100%}");
-    expect(detail).toContain("@media(max-width:1280px){.body{flex-direction:column}.sidebar{width:100%}}");
+    expect(detail).toContain("@container pane (max-width:899px){.body{flex-direction:column}.sidebar{width:100%}}");
 
     const management = css("./mission-management.module.css");
     expect(management).toContain("width:690px;height:1217px");

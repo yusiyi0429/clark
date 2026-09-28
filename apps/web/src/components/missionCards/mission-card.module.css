@@ -98,9 +98,11 @@
 .artifact table { display: block; max-width: 100%; overflow-x: auto; }
 @media (hover: none) { .fieldActions { opacity: 1; } }
 @media (max-width: 1000px) { .content { padding-inline: 24px calc(24px + var(--conversation-lane, 0px)); } .field { grid-template-columns: 88px minmax(0,1fr); gap: 12px; } }
+/* ≤959 输入条浮在底部（手机与三折叠双屏）：正文底部让出它。 */
+@media (max-width: 959px) { .content { padding-bottom: 152px; } }
 @media (max-width: 759px) { .content { padding: 16px 16px 152px; } .document { font-size: 15px; } .task h2 { font-size: 20px; } .field { grid-template-columns: 1fr; gap: 8px; padding-block: 16px; } .field dt { font-size: 14px; } .fieldActions { opacity: 1; } .taskMeta { margin-bottom: 16px; } .primary.primary { width: 100%; } .proposal { padding: 12px; } .remark { padding: 12px; } .verdict { margin-left: 0; } }
 /* 手机共同页头的返回键焦点环会向标题外扩；只为个人卡标题留出阅读间距。 */
-@media (max-width: 759px) { .screen :global(.ts-detail-header > h1) { box-sizing: border-box; padding-inline-start: 10px; } }
+@media (max-width: 959px) { .screen :global(.ts-detail-header > h1) { box-sizing: border-box; padding-inline-start: 10px; } }
 @media (prefers-reduced-motion: reduce) { .fieldActions, .content { transition: none; } }
 @media (prefers-reduced-transparency: reduce) { .dialog { background: var(--morning-start); backdrop-filter: none; } }
 @media (prefers-contrast: more) { .field, .version, .remark, .readonly, .corrected > span { border-color: var(--ink-muted); } }

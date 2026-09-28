@@ -30,7 +30,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
     <WorkspaceFrame homeHref="/me" viewerId={viewerId} account={account} agentTitle="我的 Agent"
       home={<MemberHomeBody displayName={displayName} home={home} account={account} />}
       notifications={(api, currentHref) => (
-        <aside className={`${n.rail} ${m.memberRail}`} aria-label="通知">
+        <aside className={n.rail} aria-label="通知">
           <RailClock
             homeActive={!api.detailOpen}
             onHome={() => api.navigate("/me")}
@@ -44,7 +44,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
               </HeroButton>
             }
           />
-          <div className={`${n.noticeList} ${m.memberNotices}`}>
+          <div className={n.noticeList}>
             <MemberMeetingSchedule meetings={home.meetings} onNavigate={api.navigate} />
             {home.rounds.map((round) => <MissionCardNoticeGroup key={round.roundId} round={round} entry="member" currentHref={currentHref} onNavigate={api.navigate} onRefresh={home.refresh} />)}
             <ActionNoticeCard id="assigned" title="分给你的事与邀请" subtitle="会后分派与协作邀请" mark="meeting" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).assigned} onSettled={home.settle} />
@@ -59,7 +59,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
             <MemberRadarNotices signals={radarSignals} currentHref={currentHref} onNavigate={api.navigate} onRead={home.readRadarNotice} />
             {home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + home.notifications.filter((item) => !item.readAt).length + radarSignals.length === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
           </div>
-          <div className={`${n.railFoot} ${m.memberAccount}`}>
+          <div className={n.railFoot}>
             <AccountMenu account={account} onNavigate={api.navigate} />
           </div>
         </aside>

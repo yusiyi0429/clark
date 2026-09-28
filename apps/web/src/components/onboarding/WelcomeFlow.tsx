@@ -176,8 +176,8 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   }
 
   const heading = step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "work" ? "你这个月的工作" : step === "radar" ? data.role === "ceo" ? "公司雷达，还要看什么？" : "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : "可以开始了";
-  // 手机上 CEO 从通知进入详情；成员从通知向下看工作。
-  const phoneHeading = step === "tour-notifications" ? data.role === "ceo" ? "首页就是通知栏" : "最上面是通知" : step === "tour-board" ? data.role === "ceo" ? "点开一条，看详情" : "往下是你的工作" : null;
+  // 手机首页是一条滚动：最上面是通知，往下 CEO 是公司全局、成员是自己的工作。
+  const phoneHeading = step === "tour-notifications" ? "最上面是通知" : step === "tour-board" ? data.role === "ceo" ? "往下是公司全局" : "往下是你的工作" : null;
   const busy = finishing || voice.phase === "saving";
   const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
   const primaryDisabled = busy || (!error && step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort));
@@ -200,7 +200,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
             <h1 ref={title} tabIndex={-1}>{phoneHeading ? <><span className={s.desktopTourCopy}>{heading}</span><span className={s.mobileTourCopy}>{phoneHeading}</span></> : heading}</h1>
             {step === "hello" ? <><p className={s.subtitle}>欢迎使用天枢。</p><p className={s.description}>{data.role === "ceo" ? "先花一分钟看看工作台。" : <>先花一分钟看看工作台，再看看每个月的 Mission 怎么定下来。<br /></>}{data.voiceprint.configured ? "雷达和声纹" : "雷达"}，可以现在设，也可以以后再说。</p></> : null}
             {step === "tour-notifications" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>{data.role === "ceo" ? "要你拍板的事、会议安排和需要研究的问题" : "任务卡的讨论、分给你的事和别人的回复"}，按轻重排在这里。点开一条，右边展开详情；看完关掉，回到原处。</p><p className={`${s.description} ${s.mobileTourCopy}`}>{data.role === "ceo" ? "要你拍板的事、会议安排和需要研究的问题" : "任务卡的讨论、分给你的事和别人的回复"}，按轻重排在这里。</p></> : null}
-            {step === "tour-board" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>{data.role === "ceo" ? <>战略议题、雷达和各个战场都在这里。<br />底部是你的 Agent：问公司的事，它查了再答。</> : <>参与的战场、本月任务卡和执行事项都在这里。<br />执行事项点「+」自己加，也能从任务卡拆出来；推进时在这里同步进展。<br />底部是你的 Agent：问这个月的事，它查了再答。</>}</p><p className={`${s.description} ${s.mobileTourCopy}`}>{data.role === "ceo" ? "点开一条，详情全屏展开，左上角返回；底部是你的 Agent。" : "执行事项、本月任务卡和战场都在下面；执行事项点「+」自己加，进展也在这里同步。"}</p></> : null}
+            {step === "tour-board" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>{data.role === "ceo" ? <>战略议题、雷达和各个战场都在这里。<br />底部是你的 Agent：问公司的事，它查了再答。</> : <>参与的战场、本月任务卡和执行事项都在这里。<br />执行事项点「+」自己加，也能从任务卡拆出来；推进时在这里同步进展。<br />底部是你的 Agent：问这个月的事，它查了再答。</>}</p><p className={`${s.description} ${s.mobileTourCopy}`}>{data.role === "ceo" ? "各个战场和雷达都在通知下面，一个一行。点开任何一条，详情铺满屏幕，左上角返回；底部是你的 Agent。" : "执行事项、本月任务卡和战场都在下面；执行事项点「+」自己加，进展也在这里同步。"}</p></> : null}
             {step === "mission-flow" ? <p className={s.description}>月初一起定方向，之后由你拆成每天的事。</p> : null}
             {/* 「这里改的是公司雷达。」由编辑器顶部那一行说，同一屏不重复。 */}
             {step === "radar" && data.role === "ceo" ? <p className={s.description}>我会按你签发的本月目标自动关注；你还可以补充方向和来源。</p> : null}

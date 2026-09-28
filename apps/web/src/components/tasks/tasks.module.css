@@ -40,10 +40,10 @@
 .doneRow svg{flex:none;color:#7fa98c}
 .doneTitle{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7482}
 .doneMeta{flex:none;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
-@media(max-width:690px){.doneMeta{display:none}}
+@media(max-width:599px){.doneMeta{display:none}}
 @media(prefers-reduced-motion:reduce){.doneToggle svg{transition:none}}
 .error{margin:0;color:#a44d3e;font-size:12.5px}
 @media(max-width:1250px){.taskGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:690px){.tasks{order:0}.taskGrid{grid-template-columns:minmax(0,1fr);gap:12px}.taskCard{padding:18px 20px}.taskActions button{min-height:36px}}
+@media(max-width:959px){.tasks{order:0}.taskGrid{grid-template-columns:minmax(0,1fr);gap:12px}.taskCard{padding:18px 20px}.taskActions button{min-height:36px}}
 @media(prefers-reduced-motion:reduce){.taskCard{scroll-behavior:auto}}
 .latestProgress{margin:0;color:#8190a4;font-size:11px;line-height:1.5;overflow-wrap:anywhere}

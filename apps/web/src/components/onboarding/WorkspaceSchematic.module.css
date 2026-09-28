@@ -29,7 +29,7 @@
 .battlefields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; flex: 1; min-height: 0; }
 .battlefield { padding: 10px; }
 .battlefield .rule { margin-top: 11px; }
-.agent, .phoneAgent { display: flex; align-items: center; align-self: center; gap: 7px; width: min(58%, 270px); height: 29px; padding: 0 9px; border: 1px solid #c8d8ef; border-radius: 99px; background: #fff; box-shadow: 0 2px 7px #29334c12; color: #63758f; font-size: 10px; transition: opacity 300ms var(--onboarding-ease-brand), transform 300ms var(--onboarding-ease-brand), box-shadow 300ms var(--onboarding-ease-brand); }
+.agent { display: flex; align-items: center; align-self: center; gap: 7px; width: min(58%, 270px); height: 29px; padding: 0 9px; border: 1px solid #c8d8ef; border-radius: 99px; background: #fff; box-shadow: 0 2px 7px #29334c12; color: #63758f; font-size: 10px; transition: opacity 300ms var(--onboarding-ease-brand), transform 300ms var(--onboarding-ease-brand), box-shadow 300ms var(--onboarding-ease-brand); }
 .agentSpark { color: #3a83f7; font-size: 14px; line-height: 1; }
 .agentSend { display: grid; place-items: center; width: 16px; height: 16px; margin-left: auto; border-radius: 50%; background: #3a83f7; color: white; font-size: 12px; }
 .root[data-focus="notifications"] .rail { transform: translateY(-4px); box-shadow: 0 0 0 2px #3a83f7a8, 0 0 22px #3a83f75c, 0 12px 25px #193d7830; }
@@ -41,7 +41,7 @@
 .phone { display: none; }
 @keyframes dotBreathe { 50% { opacity: .45; } }
 
-@media (max-width: 759px) {
+@media (max-width: 959px) {
   .root[data-mobile="auto"] { padding: 9px; border-radius: 26px; }
   .root[data-mobile="auto"] .desktop { display: none; }
   .root[data-mobile="auto"] .phone { display: block; }
@@ -50,18 +50,9 @@
 .root[data-mobile="true"] .desktop { display: none; }
 .root[data-mobile="true"] .phone { display: block; }
 .phone { position: relative; width: min(252px, 100%); height: 292px; margin: auto; overflow: hidden; border: 4px solid #dce7f7; border-radius: 28px; background: linear-gradient(160deg, #60728e, #35445f); box-shadow: 0 6px 22px #1d386d22; }
-.phoneHome { height: 100%; padding: 13px 10px; transition: opacity 350ms var(--onboarding-ease-brand); }
 .phoneClock { height: 34px; margin: 0 auto; color: #fff; font-size: 12px; }
 .phoneNotices { display: grid; gap: 9px; margin-top: 19px; }
 .phoneNotices .noticeCard { height: 40px; }
-.phoneDetail { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 13px 10px; background: #f0f6ff; transform: translateX(105%); transition: transform 350ms var(--onboarding-ease-brand), box-shadow 350ms var(--onboarding-ease-brand); }
-.phoneBack { color: #3a83f7; font-size: 20px; line-height: 24px; }
-.phoneBack span { font-size: 11px; vertical-align: 2px; }
-.phoneDetailCard { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; padding: 16px; border: 1px solid #dae5f2; border-radius: 16px; background: #fff; box-shadow: 0 3px 12px #1b3e710f; }
-.phoneDetailCard strong { font-size: 12px; }
-.phoneDetailCard .rule, .phoneDetailCard .ruleShort { margin: 0; }
-.phoneAgent { width: 100%; height: 33px; margin-top: auto; }
-.root[data-focus="board"] .phoneDetail { transform: translateX(0); box-shadow: -10px 0 26px #213f7033; }
 
 /* 成员工作台沿用相同的玻璃外框与左右高亮，只换内部的缩影。 */
 .root[data-role="member"] .desktop { height: 282px; }
@@ -98,7 +89,7 @@
 @keyframes addGlow { 50% { box-shadow: 0 0 0 4px #3a83f747, 0 0 15px #3a83f796; transform: scale(1.09); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .rail, .board, .agent, .phoneHome, .phoneDetail, .focusMarker, .memberPhoneScroll, .memberPhoneNotice, .memberPhoneWork { transition: none; }
+  .rail, .board, .agent, .focusMarker, .memberPhoneScroll, .memberPhoneNotice, .memberPhoneWork { transition: none; }
   .urgentDot { animation: none; }
   .root[data-focus="board"] .addButton { animation: none; }
 }

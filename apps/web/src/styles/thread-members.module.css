@@ -17,3 +17,5 @@
 .note{box-sizing:border-box;width:100%;resize:vertical;border:1px solid #dce6f4;border-radius:12px;padding:9px 11px;background:#fff;font:inherit;font-size:13px;line-height:1.6;color:inherit}
 .note:focus-visible{outline:2px solid #3a83f7;outline-offset:1px}
 .error{margin:0;color:#a44d3e;font-size:13px;line-height:1.7}
+/* 触屏：「拉人进群」高度放到 40。 */
+@media(pointer:coarse){.trigger.trigger{min-height:40px;padding-inline:14px 12px}}

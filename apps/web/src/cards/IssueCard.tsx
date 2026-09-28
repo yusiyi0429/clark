@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Tabs } from "@heroui/react";
-import { CalendarDays, Check, RefreshCw, Trash2, Undo2, X } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, RefreshCw, Trash2, Undo2, X } from "lucide-react";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
 import { issueScopeLabel } from "./scopeNames";
@@ -186,8 +186,9 @@ export function IssueCard({ card, onCard, onNavigate, readOnly = false }: CardRe
           </div>
         </div>
         {!readOnly ? <ThreadMembersMenu objectType="issue" objectId={card.objectRef.id} viewerId={viewerId ?? ""} members={[]} inviteOnly onChanged={() => undefined} /> : null}
-        <Button isIconOnly variant="tertiary" data-close-view onPress={() => onNavigate("/")} aria-label="关闭议题，返回原位置">
-          <X size={19} aria-hidden="true" />
+        <Button isIconOnly variant="tertiary" className={s.close} data-close-view onPress={() => onNavigate("/")} aria-label="关闭议题，返回原位置">
+          <X size={19} aria-hidden="true" className={s.closeIcon} />
+          <ChevronLeft size={24} aria-hidden="true" className={s.backIcon} />
         </Button>
       </header>
 

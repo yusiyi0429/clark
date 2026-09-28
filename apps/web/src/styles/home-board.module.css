@@ -89,7 +89,7 @@
 .strategy:focus-within,.capabilities:focus-within{border-color:#bdd0e9}
 @media(min-width:1800px){.board .capabilities{padding:24px 28px}.capabilities>[data-reference-id]{top:25px;right:29px}}
 @media(max-width:1100px){.board .capabilities{padding:17px}.board .capabilities>.heading h2{font-size:18px}.capabilities>[data-reference-id]{top:18px;right:18px}}
-@media(max-width:690px){.strategy .issue{padding:7px 0}.board .strategy .heading h2{font-size:18px}.board .capabilities{padding:16px}.capabilities>[data-reference-id]{top:17px;right:17px}}
+@media(max-width:599px){.strategy .issue{padding:7px 0}.board .strategy .heading h2{font-size:18px}.board .capabilities{padding:16px}.capabilities>[data-reference-id]{top:17px;right:17px}}
 @media(prefers-reduced-motion:reduce){.strategy,.capabilities{transition:none}}
 @media(prefers-contrast:more){.board .strategy,.board .capabilities{border-color:#777}.board .capabilities :global([data-capability-category]) h3{color:#444}.capabilities :global([data-capability-category]){border-color:#aaa}}
 
@@ -99,6 +99,13 @@
 .groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:12px 25px;min-width:0;width:100%}
 .group{min-width:0;padding-top:14px;border-top:1px solid #e7eaf0}
 .group h3{margin:0 0 6px;color:#1d1d1f;font-size:13px;font-weight:600;line-height:1.6}
+
+/* 矮屏（三折叠三屏横放、笔记本，约 680 高）：顶上一排战略议题 + 雷达压低，让战场卡进到第一屏。 */
+@media(max-height:760px) and (min-width:600px){.board .radar{min-height:140px}.scanStage{min-height:0;max-height:92px}.scanStage > div{height:84px}.strategy{padding-block:15px 11px}}
+
+/* 手持（≤959）：完整看板（战场翻转卡、进展示意、能力卡）留给三屏工作台，这里换成精简的「公司全局」（CeoGlance）；个人菜单排在首页最后。 */
+.phoneAccount{display:none}
+@media(max-width:959px){.board{display:none}.phoneAccount{display:block;margin-top:4px}}
 
 /* 标题不可打开时（天枢没有战略 / 能力详情页）：同一排版，不放箭头。 */
 .headingStatic{cursor:default}

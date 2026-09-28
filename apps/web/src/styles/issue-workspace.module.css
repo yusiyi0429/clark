@@ -53,7 +53,38 @@
 .participants{display:flex;flex-wrap:wrap;gap:6px 14px}.participants label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#303036}
 .participants input{width:15px;height:15px;accent-color:#3a83f7}
 
-@media(max-width:690px){.header{padding:16px}.header h1{font-size:18px}.reading{padding:20px 19px 130px}.tabs{padding:0 19px}.judgment>p{font-size:18px}.meetingHeader{padding:16px 19px 18px}}
+.close .backIcon{display:none}
+/*
+ * 手机、三折叠（≤959 输入条浮在底部）和矮屏：页头、会议块和正文一起滚。固定的页头 + 会议块在 680 高的屏上
+ * 会把阅读区挤到一两百像素，再被输入条盖掉一截；一起滚之后正文从会议块下面接着往下读。
+ */
+@media(max-width:959px),(max-height:820px){
+ .workspace{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+ .columns{flex:none;overflow:visible}
+ .workspace [data-material-scope]{flex:none;min-height:auto}
+ .materials{height:auto}
+ .workspace [data-material-scroll]{flex:none;overflow:visible;min-height:auto}
+}
 @container(max-width:620px){.header{gap:12px;padding:20px}.header h1{font-size:19px}.reading{padding:22px}.discussion>header{flex-wrap:wrap}.discussion>header>span{align-self:flex-start}}
+/* 输入条浮在底部时（≤959），正文末尾让出它。 */
+@media(max-width:959px){.reading,.workspace [data-material-scroll]{padding-bottom:130px}}
+/* 手持（≤959）：返回在页头左上角（和其他详情页一致），标题独占一行，不和「拉人进群」挤成一条细柱。 */
+@media(max-width:959px){
+ .header{flex-wrap:wrap;gap:6px 10px;padding:12px 14px 14px 10px;min-height:0}
+ .header>.close{order:-1;margin-right:auto}
+ .close .closeIcon{display:none}
+ .close .backIcon{display:block}
+ .identity{order:1;flex:1 1 100%;padding-left:4px}
+ .identity>[data-context-mark]{display:none}
+ .header h1{font-size:19px;line-height:1.45;margin-top:4px}
+ .reading{padding:20px 19px 130px}.tabs{padding:0 19px}.judgment>p{font-size:18px}.meetingHeader{padding:16px 19px 18px}
+ /* 会议安排压成一行半：日期和时间一行，主责和「打开会议空间」一行（大号 10:00 留给三屏工作台）；「已安排会议」眉题里已经写了。 */
+ .meetingHeader{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:12px 16px 14px}
+ .meetingState{display:none}
+ .meetingTime{font-size:17px;font-weight:600;letter-spacing:0;line-height:1.4}
+ .meetingMeta{flex-basis:100%;gap:4px 12px}
+}
 @media(prefers-reduced-transparency:reduce){.workspace,.header{background:#f5f5f7}}
 @media(prefers-reduced-motion:reduce){.workspace *{transition:none!important;scroll-behavior:auto!important}}
+/* 触屏：「打开会议空间」是一行小字，点击区域上下外扩到 40。 */
+@media(pointer:coarse){.workspace .meetingMeta .meetingOpen{padding-block:11px;margin-block:-11px}}

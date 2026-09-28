@@ -212,7 +212,7 @@
   .scope :global(.ts-detail-header > h1) { white-space: normal; text-overflow: clip; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 14px; line-height: 18px; }
 }
 
-@media (max-width: 759px) {
+@media (max-width: 959px) {
   /*
    * 手机上 Co-Agent 胶囊只在对话浮层里，不会和页头并排：页头回到 44px，离顶边 8px。右边那颗开始会议／计时
    * 跟着变矮变窄（104），和胶囊之间空 8。

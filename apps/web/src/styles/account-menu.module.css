@@ -43,7 +43,7 @@
 .avatarButton.avatarButton { padding: 0; }
 .avatarButton .avatar { width: 30px; height: 30px; background: transparent; font-size: 13.5px; }
 
-@media (max-width: 690px) {
+@media (max-width: 959px) {
   .chip.chip {
     border-color: var(--hairline);
     background: var(--onboarding-glass);

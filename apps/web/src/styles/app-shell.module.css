@@ -11,7 +11,8 @@
 .mainArea{position:relative;min-width:0;min-height:0;overflow:hidden;border-radius:24px}
 .notificationArea{min-width:0;min-height:0;position:relative;z-index:5}
 
-.expanded{position:absolute;inset:0;z-index:20;border-radius:22px;background:#f5f5f7;display:flex;flex-direction:column;transform-origin:0 0;overflow:hidden;will-change:transform}
+/* 二级页面板也是尺寸容器（pane）：面板宽度要扣掉左边通知栏/窄条和右边对话列，内页的并排/堆叠按它来切，不按屏幕宽度。 */
+.expanded{position:absolute;inset:0;z-index:20;border-radius:22px;background:#f5f5f7;display:flex;flex-direction:column;transform-origin:0 0;overflow:hidden;will-change:transform;container:pane/inline-size}
 /* 从首页打开、页面还没到：空面板透明，加载蒙版（loading-mask.module.css）磨砂的是后面的首页。 */
 .expanded[data-loading]{background:transparent}
 .expandedHeader{display:flex;align-items:center;justify-content:space-between;flex:none;gap:15px;min-height:100px;box-sizing:border-box;padding:25px 27px;background:linear-gradient(145deg,#ffffffa8,#edf1f6a1);border-bottom:1px solid #ffffffbf;-webkit-backdrop-filter:blur(30px) saturate(1.28);backdrop-filter:blur(30px) saturate(1.28);box-shadow:inset 0 1px #fff}
@@ -22,6 +23,10 @@
 .closeRound{display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;border:0;background:#e7e7eb;color:#6e6e73;transition:background .15s,transform .15s}
 .closeRound:hover{background:#dcdce1}
 .closeRound:active{transform:scale(.95)}
+.closeRound .backIcon{display:none}
+/* 纯触屏：直接打开或刷新详情链接时，外壳把焦点放在返回/关闭键上（给读屏），React Aria 此时还没见过点按、按键盘模式画焦点环 ——
+   手机上看起来像按钮卡住了。只在没有悬停、指针是手指的设备上不画这一颗的焦点环。 */
+@media(hover:none) and (pointer:coarse){.shell :global([data-close-view]):focus-visible,.shell :global([data-close-view][data-focus-visible]){outline:none!important;box-shadow:none!important}}
 .expandedScroll{overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;margin:0 22px 0;padding:8px 18px 128px;border-left:0;min-height:0;flex:1;scroll-behavior:smooth;scroll-padding-bottom:128px}
 .sectionIntro{font-size:18px;line-height:1.8;margin:10px 0 30px!important;max-width:660px}
 .contextNote,.empty{color:#888;font-size:13px;line-height:1.8;margin-top:22px!important}
@@ -115,26 +120,34 @@
 .shell[data-detail-open=true] .noticeToast{left:calc(var(--shell-edge) + var(--notice-width) + 10px);max-width:min(360px,calc(100vw - var(--notice-width) - 60px));z-index:1160}
 @keyframes peekIn{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:translateX(0)}}
 @media(prefers-reduced-motion:reduce){.shell{transition:none}.shell[data-detail-open=true][data-notices-peek=true] .notificationArea,.shell[data-detail-open=true] .noticePeekBackdrop{animation:none}}
-@media(min-width:691px) and (max-width:1000px){.shell[data-detail-open=true][data-notices-peek=true] .notificationArea{width:min(320px,calc(100vw - 100px));border-radius:24px}}
+@media(min-width:960px) and (max-width:1000px){.shell[data-detail-open=true][data-notices-peek=true] .notificationArea{width:min(320px,calc(100vw - 100px));border-radius:24px}}
 
-/* 手机：通知即首页；打开详情是 48px 窄条 + 正文。 */
-@media(max-width:690px){
+/* 手持（≤959：单屏、三折叠双屏、三屏竖放）：首页是一条滚动（通知在前，见下方）；打开详情铺满屏幕，不留左侧窄条，返回在页头左上角。 */
+@media(max-width:959px){
  .shell{--shell-edge:8px;--main-start:8px;--notice-bottom-inset:calc(112px + env(safe-area-inset-bottom));position:fixed;inset:0;display:block;height:100dvh;min-height:0;padding:8px;overflow:hidden}
  .mainArea{display:none;height:auto;min-height:0}
  .notificationArea{display:block;height:100%;min-height:0}
  .noticeToast{left:14px;right:14px;max-width:none;bottom:95px}
  .historyBackdrop{inset:0}
- .shell[data-detail-open=true]{--main-start:62px;--shell-edge:8px;--strip-width:48px;--notice-width:48px}
- .shell[data-detail-open=true] .mainArea{display:block;position:fixed;z-index:40;inset:8px 8px 8px 62px;height:auto;min-height:0;border-radius:21px;overflow:hidden}
- .shell[data-detail-open=true][data-notices-peek=true] .notificationArea{display:block;position:fixed;left:62px;right:8px;top:8px;bottom:8px;width:auto;max-width:320px;height:auto;z-index:1150;border-radius:21px;overflow:hidden;box-shadow:12px 0 50px #19243833}
- .shell[data-detail-open=true] .noticePeekBackdrop{display:block;position:fixed;inset:0 0 0 56px;z-index:1100;border:0;background:#20293830}
+ .shell[data-detail-open=true]{--main-start:8px;--shell-edge:8px;--strip-width:0px;--notice-width:0px}
+ .shell[data-detail-open=true] .mainArea{display:block;position:fixed;z-index:40;inset:8px;height:auto;min-height:0;border-radius:21px;overflow:hidden}
+ .shell[data-detail-open=true][data-notices-peek=true] .notificationArea{display:block;position:fixed;left:8px;right:8px;top:8px;bottom:8px;width:auto;max-width:320px;height:auto;z-index:1150;border-radius:21px;overflow:hidden;box-shadow:12px 0 50px #19243833}
+ .shell[data-detail-open=true] .noticePeekBackdrop{display:block;position:fixed;inset:0;z-index:1100;border:0;background:#20293830}
  .shell[data-detail-open=true] .notificationArea{display:none}
  .shell[data-detail-open=true] .homeSurface{display:none}
  .expanded{position:absolute;inset:0;border-radius:23px}
- .expandedHeader{min-height:88px;padding:18px}
- .expandedIdentity>span:first-child{width:36px;height:36px}
+ .expandedHeader{min-height:64px;padding:12px 14px 12px 10px;gap:10px}
+ /* 页头左上角是返回（DetailHeader 把关闭键换成返回箭头排到最前），对象标记让出宽度给标题。 */
+ .expandedHeader>.closeRound{order:-1;width:40px;height:40px;background:none}
+ .closeRound .closeIcon{display:none}
+ .closeRound .backIcon{display:block}
+ .expandedIdentity>[data-context-mark]{display:none}
+ /* 页头右边还有动作（返回总览、管理 Mission…）时，第一行是返回和动作，标题独占第二行，不被挤成一条细柱。 */
+ .expandedHeader:has(>.expandedIdentity+:not(.closeRound)){flex-wrap:wrap;row-gap:2px}
+ .expandedHeader:has(>.expandedIdentity+:not(.closeRound))>.expandedIdentity{order:1;flex:1 1 100%;padding-left:6px}
+ .expandedHeader>:not(.expandedIdentity):not(.closeRound){margin-left:auto}
  .expandedIdentity h1{font-size:18px}
- .historySheet{left:62px;right:8px;bottom:8px;height:calc(100dvh - 42px);border-radius:24px}
+ .historySheet{left:8px;right:8px;bottom:8px;height:calc(100dvh - 42px);border-radius:24px}
  .historySheet .sheetScroll{padding:24px 20px 115px}
  .historySheet .sheetHeader{padding:12px 19px 15px}
  .shell:not([data-detail-open=true]) .historySheet{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));height:calc(100dvh - 44px - env(safe-area-inset-bottom))}
@@ -142,13 +155,14 @@
 }
 
 /* 从同一块晨光中进入首页，控件立即可操作。 */
-/* 成员手机首页是同一个滚动面：新通知在最前，接着是首页主区（执行事项、本月卡、战场、雷达，见 member-home.module.css）。CEO 沿用通知首页。 */
-@media(max-width:690px){
- .shell[data-testid="member-workspace"][data-detail-open=false]{display:flex;flex-direction:column;gap:20px;overflow-y:auto;padding:78px 12px calc(120px + env(safe-area-inset-bottom));scrollbar-width:none}
- .shell[data-testid="member-workspace"][data-detail-open=false]::-webkit-scrollbar{display:none}
- .shell[data-testid="member-workspace"][data-detail-open=false] .mainArea{display:block;flex:none;min-height:0;overflow:visible;border-radius:0}
- .shell[data-testid="member-workspace"][data-detail-open=false] .homeSurface{height:auto}
- .shell[data-testid="member-workspace"][data-detail-open=false] .notificationArea{order:-1;height:auto;flex:none;position:static}
+/* 手持首页是同一个滚动面，内容列最宽 600、居中：新通知在最前，接着是首页主区 —— 成员是执行事项、本月卡、战场、雷达
+   （member-home.module.css），CEO 是精简的公司全局（ceo-glance.module.css）；最后是个人菜单。顶部时钟条浮在上面（notifications.module.css）。 */
+@media(max-width:959px){
+ .shell[data-detail-open=false]{display:flex;flex-direction:column;gap:20px;overflow-y:auto;padding:78px max(12px,calc((100% - 600px) / 2)) calc(120px + env(safe-area-inset-bottom));scrollbar-width:none}
+ .shell[data-detail-open=false]::-webkit-scrollbar{display:none}
+ .shell[data-detail-open=false] .mainArea{display:block;flex:none;min-height:0;overflow:visible;border-radius:0}
+ .shell[data-detail-open=false] .homeSurface{height:auto}
+ .shell[data-detail-open=false] .notificationArea{order:-1;height:auto;flex:none;position:static}
 }
 
 .entryCarry{position:fixed;z-index:4000;inset:0;isolation:isolate;pointer-events:none;animation:entryCarryOut 600ms both var(--onboarding-ease)}
@@ -177,7 +191,7 @@
    440 / 400 / 360 / 300，收起时 0），阅读区沿同一条曲线让位。收起后阅读区铺满右边、连右下角一起盖住，右边两个角圆回来
    （--conversation-join-*）；只有把手和频道钮浮在上面（--conversation-lane）。 */
 .shell.shell{--conversation-edge:var(--shell-edge);--conversation-overlay-left:var(--main-start);--conversation-radius:22px}
-@media(min-width:760px){
+@media (min-width: 960px){
  .shell[data-topic-rail=true] .mainArea{margin-right:var(--conversation-width);border-top-right-radius:var(--conversation-join-radius,0px);border-bottom-right-radius:var(--conversation-join-radius,0px);transition:margin-right 320ms cubic-bezier(.22,1,.36,1),border-top-right-radius 0s linear var(--conversation-join-delay,0s),border-bottom-right-radius 0s linear var(--conversation-join-delay,0s)}
  .shell[data-topic-rail=true] .expanded{border-top-right-radius:var(--conversation-join-radius,0px);border-bottom-right-radius:var(--conversation-join-radius,0px)}
  .shell[data-topic-rail=true] :global([data-testid="global-controls"]){display:flex;z-index:106}
@@ -186,12 +200,12 @@
 }
 /* 转场截的是最终布局：截图那一刻阅读区不能还在滑。 */
 :global(html[data-notice-transition]) .shell .mainArea{transition:none}
-@media(min-width:760px) and (max-width:1000px){.shell[data-topic-rail=true] .expandedHeader{padding:22px 20px;gap:10px}.shell[data-topic-rail=true] .expandedScroll{padding-left:18px;padding-right:18px}}
-@media(max-width:759px){.shell[data-topic-rail=true] :global([data-testid="global-controls"]){display:flex}}
+@media (min-width: 960px) and (max-width: 1000px){.shell[data-topic-rail=true] .expandedHeader{padding:22px 20px;gap:10px}.shell[data-topic-rail=true] .expandedScroll{padding-left:18px;padding-right:18px}}
+@media (max-width: 959px){.shell[data-topic-rail=true] :global([data-testid="global-controls"]){display:flex}}
 
 /* 战场视角切换（与卡片正反面对应）。 */
 .facetSwitch{flex:none;margin-left:4px}
-@media(max-width:690px){.facetSwitch{margin-left:0}}
+@media(max-width:599px){.facetSwitch{margin-left:0}}
 
 /* 信号阅读：滚动区去掉内边距，由阅读列自己排版（clark workspace.module.css L87-88、L217、L230）。 */
 .expandedScroll[data-radar-reader-layout=true]{margin:0;padding:0;overflow:hidden;display:flex;min-width:0}

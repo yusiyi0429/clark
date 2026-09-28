@@ -17,10 +17,10 @@
 .homeCapsule[aria-current=page]::after{animation:homeLight 1500ms ease-out 1}
 @keyframes homeLight{0%{transform:translateX(-45%);opacity:0}20%{opacity:.8}80%{opacity:.7}100%{transform:translateX(45%);opacity:0}}
 
-/* 左下角自己的名字（个人菜单）：浮在通知列表底部留白里。 */
+/* 左下角自己的名字（个人菜单）：浮在通知列表底部留白里（留白 64 = 底边 12 + 胶囊 44 + 8，滚到底最后一条不被它盖住）。 */
 .railFoot{position:absolute;z-index:3;left:16px;right:16px;bottom:12px;display:flex;pointer-events:none}
 .railFoot>*{pointer-events:auto}
-.noticeList{position:absolute;inset:0;display:flex;flex-direction:column;gap:14px;margin:0;padding:78px 16px var(--notice-bottom-inset,52px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none}
+.noticeList{position:absolute;inset:0;display:flex;flex-direction:column;gap:14px;margin:0;padding:78px 16px var(--notice-bottom-inset,64px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none}
 .noticeList::-webkit-scrollbar{display:none}
 .noticeList[data-obscured=true]{overflow:hidden}
 
@@ -65,19 +65,27 @@
 .announcement:empty{display:none}
 .announcement button{border:0;background:transparent;color:inherit;padding:2px;cursor:pointer}
 
-@media(max-width:1200px){.rail{border-radius:23px}.railClock{top:13px;right:13px;left:13px}.noticeList{padding:72px 13px var(--notice-bottom-inset,42px);gap:11px}.card{--notice-radius:18px;border-radius:18px}.glassHeader{min-height:58px;padding:10px 40px 9px 12px;grid-template-columns:34px minmax(0,1fr);gap:10px}.glassHeader .glyph{width:34px;height:34px;border-radius:10px}.card .tray .item{padding:11px 8px 11px 10px}}
-@media(max-width:690px){.rail{background-color:var(--tianshu-canvas);background-image:radial-gradient(ellipse at 85% 0%,var(--tianshu-canvas-glow),transparent 55%),linear-gradient(180deg,var(--tianshu-canvas-top),var(--tianshu-canvas));background-position:center,center,center 54%;background-size:auto,auto,cover;background-repeat:no-repeat}.rail .railClock{color:#2f343b;text-shadow:none}.rail .railWeekday{color:#727b87}.railClock .homeCapsule,.railLock button{color:#565b63;border-color:#ffffffdf;background:linear-gradient(145deg,#ffffffaa,#edf0f57a);box-shadow:inset 0 1px 1px #fff,0 2px 8px #29334508}.homeCapsule .clockLogo{--brand-bright:#a4a7ae;--brand-deep:#666a73}}
+@media(max-width:1200px){.rail{border-radius:23px}.railClock{top:13px;right:13px;left:13px}.noticeList{padding:72px 13px var(--notice-bottom-inset,64px);gap:11px}.card{--notice-radius:18px;border-radius:18px}.glassHeader{min-height:58px;padding:10px 40px 9px 12px;grid-template-columns:34px minmax(0,1fr);gap:10px}.glassHeader .glyph{width:34px;height:34px;border-radius:10px}.card .tray .item{padding:11px 8px 11px 10px}}
+@media(max-width:959px){.rail{background-color:var(--tianshu-canvas);background-image:radial-gradient(ellipse at 85% 0%,var(--tianshu-canvas-glow),transparent 55%),linear-gradient(180deg,var(--tianshu-canvas-top),var(--tianshu-canvas));background-position:center,center,center 54%;background-size:auto,auto,cover;background-repeat:no-repeat}.rail .railClock{color:#2f343b;text-shadow:none}.rail .railWeekday{color:#727b87}.railClock .homeCapsule,.railLock button{color:#565b63;border-color:#ffffffdf;background:linear-gradient(145deg,#ffffffaa,#edf0f57a);box-shadow:inset 0 1px 1px #fff,0 2px 8px #29334508}.homeCapsule .clockLogo{--brand-bright:#a4a7ae;--brand-deep:#666a73}}
 @media(pointer:coarse){.railLock button{width:42px;height:42px;margin:0}}
-@media(min-width:1800px){.noticeList{padding:86px 21px 56px;gap:18px}.card .tray .item{min-height:60px}}
+@media(min-width:1800px){.noticeList{padding:86px 21px 64px;gap:18px}.card .tray .item{min-height:60px}}
 @media(prefers-reduced-motion:reduce){.card,.card button,.homeCapsule{transition:none!important;animation:none!important}.card button:active,.homeCapsule:active{transform:none}.homeCapsule::after{animation:none!important}}
 @media(prefers-reduced-transparency:reduce){.rail{background-image:linear-gradient(160deg,#435473,#34415c)}.glassHeader,.railClock .homeCapsule,.railLock button{-webkit-backdrop-filter:none;backdrop-filter:none;background:#2c364a}.tray{background:#f7f7f8}}
-@media(max-width:690px) and (prefers-reduced-transparency:reduce){.rail{background:#e8e9ed}}
+@media(max-width:959px) and (prefers-reduced-transparency:reduce){.rail{background:#e8e9ed}}
 @media(prefers-contrast:more){.rail{border-color:#737b88}.card{border-color:#777;--notice-muted:#454549}.glassHeader{background:#30394a;-webkit-backdrop-filter:none;backdrop-filter:none}.noticeList>.card[data-current=true]{outline:2px solid var(--notice-ink);outline-offset:-2px}}
 
 /* 在浅色手机画布上保持玻璃标题的白字清晰，并让内容面安静落在背景上。 */
-@media(max-width:690px){.glassHeader{background:rgb(36 53 78/72%)}.card{box-shadow:0 3px 12px rgb(30 48 70/7%),0 1px 2px rgb(30 48 70/5%)}}
-@media(max-width:690px) and (prefers-contrast:more){.glassHeader{background:#30394a}.card{box-shadow:none}}
-@media(max-width:690px) and (prefers-reduced-transparency:reduce){.glassHeader{background:#2c364a}}
+@media(max-width:959px){.glassHeader{background:rgb(36 53 78/72%)}.card{box-shadow:0 3px 12px rgb(30 48 70/7%),0 1px 2px rgb(30 48 70/5%)}}
+@media(max-width:959px) and (prefers-contrast:more){.glassHeader{background:#30394a}.card{box-shadow:none}}
+@media(max-width:959px) and (prefers-reduced-transparency:reduce){.glassHeader{background:#2c364a}}
+/* 手持首页（≤959，CEO 与成员同一套）：通知栏不再是一块定高的深色面板，而是整页滚动的开头 —— 通知卡直接落在晨光画布上；
+   时钟条浮在最上面，垫一层玻璃，滚上去的内容不会从两颗按钮之间透出来。个人菜单挪到首页最后（各自首页里的 phoneAccount）。 */
+@media(max-width:959px){
+ :global([data-detail-open="false"]) .rail{height:auto;overflow:visible;border:0;border-radius:0;background:none;box-shadow:none;isolation:auto}
+ :global([data-detail-open="false"]) .rail>.railClock{position:fixed;top:12px;left:max(16px,calc((100vw - 600px) / 2 + 4px));right:max(16px,calc((100vw - 600px) / 2 + 4px));padding:4px;border-radius:var(--onboarding-card-radius);background:var(--onboarding-glass);box-shadow:var(--onboarding-highlight);-webkit-backdrop-filter:blur(var(--onboarding-blur,24px)) saturate(var(--onboarding-sat,160%));backdrop-filter:blur(var(--onboarding-blur,24px)) saturate(var(--onboarding-sat,160%))}
+ :global([data-detail-open="false"]) .noticeList{position:static;overflow:visible;padding:0}
+ :global([data-detail-open="false"]) .railFoot{display:none}
+}
 /* 副标题那一行换成一块（本月 Mission Card 的倒计时）：右边不再给引用键留位，底下多留一点呼吸。 */
 .glassHeader[data-subline]{padding-right:16px;padding-bottom:12px}
 @media(max-width:1200px){.glassHeader[data-subline]{padding-right:13px}}
