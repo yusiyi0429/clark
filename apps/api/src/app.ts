@@ -52,6 +52,7 @@ import { registerMeRoutes } from "./routes/me.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerMissionCardRoutes } from "./routes/missionCards.js";
 import { registerMyRadarRoutes } from "./routes/myRadar.js";
+import { registerOntologyRoutes } from "./routes/ontology.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js";
@@ -75,6 +76,7 @@ export type AppEnv = {
   /** mission-card-drafts.v1 占位文件目录；未配置时使用仓库 seed/placeholders。 */
   missionCardDraftsDir?: string;
   driServiceToken: string;
+  ontologyServiceToken?: string;
   mcpServiceToken: string;
   buildSha: string;
   piBaseUrl: string;
@@ -326,6 +328,7 @@ export async function buildApp({
   registerMaterialRoutes(app, ctx);
   registerActionRoutes(app, ctx);
   registerDriRoutes(app, ctx);
+  registerOntologyRoutes(app, ctx);
   registerSystemRoutes(app, ctx);
   registerThreadRoutes(app, ctx);
   registerRecordingRoutes(app, ctx);

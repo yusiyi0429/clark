@@ -111,7 +111,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                 {radarTitle}
               </Button>
               {account.role === "member" ? <Button variant="ghost" className={m.item} onPress={() => pick("connection")}>
-                <PlugZap size={16} aria-hidden="true" />连接 Codex / Claude Code
+                <PlugZap size={16} aria-hidden="true" />连接我的 Agent
               </Button> : null}
               <Button variant="ghost" className={m.item} onPress={() => pick("passcode")}>
                 <KeyRound size={16} aria-hidden="true" />
@@ -187,7 +187,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <PasscodeForm loginId={account.loginId} onDone={() => setDialog(null)} />
         </MenuDialog>
       ) : null}
-      {dialog === "connection" ? <MenuDialog title="连接 Codex / Claude Code" wide onClose={() => setDialog(null)}><ConnectionDialog /></MenuDialog> : null}
+      {dialog === "connection" ? <MenuDialog title="连接我的 Agent" wide onClose={() => setDialog(null)}><ConnectionDialog /></MenuDialog> : null}
     </>
   );
 }
