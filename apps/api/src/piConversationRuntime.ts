@@ -62,7 +62,7 @@ const SYSTEM_PROMPT = `# 角色
 
 你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
 
-唯一例外是对方明确要求修改或新写当前议题、执行事项的材料时，可以用 edit_material、create_material；只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
+唯一例外是对方明确要求修改或新写当前议题、执行事项、会议的群组材料时，可以用 edit_material、create_material；只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
 
 需要 CEO 做决定时，直接说明该决定什么、代价是什么，由 CEO 自己执行。CEO 的要求超出只读权限时，说明边界并给出可执行的下一步。
 
@@ -118,13 +118,13 @@ function driSystemPrompt(displayName: string, personalCard = false): string {
 
 你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，不形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
 
-唯一例外是对方明确要求修改或新写当前议题、执行事项的材料时，可以用 edit_material、create_material；只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
+唯一例外是对方明确要求修改或新写当前议题、执行事项、会议的群组材料时，可以用 edit_material、create_material；只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
 
 你看不到 CEO 的决策面，包括战场总览和待 CEO 决策的议题。被问到这些时直接说明看不到，不要推测。要求超出只读权限时，说明边界并给出可执行的下一步。
 
 # 工具
 
-${personalCard ? "当前个人卡的正文、公开意见和轮次已放在 currentObject；只根据这份授权资料讨论个人承诺。不能查询或推测其他人的个人卡，也不能把私聊变为公开意见。" : "- `list_missions`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。"}
+${personalCard ? "当前任务卡的正文、公开意见和轮次已放在 currentObject；只根据这份授权资料讨论个人承诺。不能查询或推测其他人的任务卡，也不能把私聊变为公开意见。" : "- `list_missions`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。"}
 - \`list_sections\`：企业知识章节目录，先看目录再决定读哪里。
 - \`search_sections\`：在企业知识内按关键词定位相关章节。
 - \`get_passages\`：读取指定章节的段落正文。
@@ -407,9 +407,9 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const personalCard = input.scope.startsWith("mission-card:");
       // The current card has already passed object authorization. The unscoped Mission query must not bypass that boundary.
       const viewerBoardTools = isCeo ? boardTools : boardTools.filter((tool) => !CEO_ONLY_TOOLS.has(tool.name) && !(personalCard && tool.name === "list_missions"));
-      const materialScope = /^(issue|task):(.+)$/.exec(input.scope);
+      const materialScope = /^(issue|task|meeting):(.+)$/.exec(input.scope);
       const materialTools = materialScope && options.materialPool ? (() => {
-        const ref = { objectType: materialScope[1] as "issue" | "task", objectId: materialScope[2] };
+        const ref = { objectType: materialScope[1] as "issue" | "task" | "meeting", objectId: materialScope[2] };
         const pool = options.materialPool!;
         const q = pool.query.bind(pool);
         const names = personDisplayNames(options.companyMemory);
@@ -425,7 +425,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           }
         };
         return [
-          defineTool({ name: "list_materials", label: "列出材料", description: "列出当前议题或执行事项的材料",
+          defineTool({ name: "list_materials", label: "列出材料", description: "列出当前议题、执行事项或会议的群组材料",
             parameters: Type.Object({}, { additionalProperties: false }),
             execute: async () => result(async () => {
               const list = await listObjectMaterials(q, ref, viewer, names);

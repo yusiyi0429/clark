@@ -347,14 +347,34 @@ describe("会议录音 → 会议记录候选", () => {
     }
   });
 
-  it("guards the boundary: CEO only, 20 MiB per chunk, unknown recording 404", async () => {
+  it("主持人能开始、上传、结束和读取本场录音", async () => {
+    const { deps } = fakeDeps();
+    const t = await newApp(deps);
+    try {
+      const { meetingId } = await scheduledMeeting(t, "host");
+      const host = await t.memberCookie();
+      const started = await start(t, host, meetingId);
+      expect(started.statusCode).toBe(201);
+      const { recordingId } = started.json() as { recordingId: string };
+      expect((await chunk(t, host, meetingId, recordingId, 0, "host audio")).statusCode).toBe(200);
+      expect((await finish(t, host, meetingId, recordingId)).statusCode).toBe(202);
+      expect((await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/recordings/${recordingId}`, headers: { cookie: host } })).statusCode).toBe(200);
+      await t.recordings!.idle();
+    } finally { await t.close(); }
+  });
+
+  it("guards the boundary: non-host member, 20 MiB per chunk, unknown recording 404", async () => {
     const { deps } = fakeDeps();
     const t = await newApp(deps);
     try {
       const { cookie, meetingId } = await scheduledMeeting(t, "guards");
       const member = await t.memberCookie();
-      expect((await start(t, member, meetingId)).statusCode).toBe(403);
+      await t.sql("UPDATE meetings SET lead_dri_id=$2 WHERE id=$1", [meetingId, "another-host"]);
+      expect((await start(t, member, meetingId)).statusCode).toBe(404);
       const { recordingId } = (await start(t, cookie, meetingId)).json();
+      expect((await chunk(t, member, meetingId, recordingId, 0, "A")).statusCode).toBe(404);
+      expect((await finish(t, member, meetingId, recordingId)).statusCode).toBe(404);
+      expect((await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/recordings/${recordingId}`, headers: { cookie: member } })).statusCode).toBe(404);
       const tooBig = await chunk(t, cookie, meetingId, recordingId, 0, Buffer.alloc(20 * 1024 * 1024 + 1));
       expect(tooBig.statusCode).toBe(413);
       expect((await chunk(t, cookie, meetingId, recordingId, -1, "A")).statusCode).toBe(400);

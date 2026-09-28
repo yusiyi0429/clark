@@ -121,7 +121,7 @@ describe("议题与会议群", () => {
       expect((await t.app.inject({ method: "GET", url: `/api/threads/meeting/${id}`, headers: { cookie: member } })).json().unread).toBe(0);
       expect((await t.app.inject({ method: "GET", url: `/api/threads/meeting/${id}`, headers: { cookie: ceo } })).json().unread).toBe(1);
       const card = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${id}`, headers: { cookie: member } })).json();
-      expect(card.actions).toEqual([]);
+      expect(card.actions.map((action: { actionType: string }) => action.actionType)).toEqual(["meeting.end"]);
       expect(card.payload.purpose).toBeNull();
       expect(card.payload).not.toHaveProperty("draft");
       expect(card.payload).not.toHaveProperty("transcript");

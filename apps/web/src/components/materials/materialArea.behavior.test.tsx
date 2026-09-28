@@ -36,11 +36,23 @@ const render = (selected = "summary") => { hooks.index = 0; return ObjectMateria
   baseTabs: [{ id: "summary", label: "总结与判断", title: "总结与判断" },
     { id: "research", label: "研究与依据", title: "研究与依据" }],
   selected, onSelect: select, children: "议题内容" }); };
+const renderMeeting = () => { hooks.index = 0; return ObjectMaterialArea({ objectType: "meeting", objectId: "meeting-1",
+  baseTabs: [{ id: "preflight", label: "AI 预审", title: "AI 预审" }, { id: "agenda", label: "会前材料", title: "会前材料" }],
+  groupTab: { id: "group-materials", label: "群组材料", title: "群组材料" },
+  selected: "preflight", onSelect: select, children: "会议内容" }); };
 const response = (body: unknown, ok = true) => ({ ok, json: async () => body });
 
 beforeEach(() => { hooks.values = []; vi.clearAllMocks(); });
 
 describe("材料区操作", () => {
+  it("会议材料页签同行显示会前材料、群组材料和上传入口", () => {
+    hooks.values[1] = true;
+    const tree = renderMeeting();
+    const tabs = nodes(tree).find((node) => Array.isArray(node.props?.tabs));
+    expect((tabs?.props?.tabs as { label: string }[]).map((tab) => tab.label)).toEqual(["AI 预审", "会前材料", "群组材料"]);
+    expect(nodes(tree).some((node) => node.type === "button" && node.props?.["aria-label"] === "上传材料")).toBe(true);
+  });
+
   it("显示原有页签和上传入口；上传中显示占位，成功后选中新材料", async () => {
     hooks.values[1] = true;
     const fetch = vi.fn().mockResolvedValueOnce(response(material)).mockResolvedValueOnce(response({ materials: [material], canUpload: true }));

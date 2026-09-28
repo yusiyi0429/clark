@@ -121,7 +121,7 @@ describe("材料页签里的只读预览", () => {
 });
 
 describe("MeetingCard 材料页签", () => {
-  it("页签是 AI 预审加每一份会前材料；空材料集只有 AI 预审", () => {
+  it("页签是 AI 预审、会前材料和群组材料；空材料集仍有群组材料入口", () => {
     const withMaterials = renderToStaticMarkup(
       <MeetingCard card={meetingCard({ materials })} collection={[]} onCard={noop} onNavigate={noop} />,
     );
@@ -130,7 +130,8 @@ describe("MeetingCard 材料页签", () => {
     expect(withMaterials).toContain('aria-label="会议材料：东南亚渠道预算申请（修订版）.pdf"');
     expect(withMaterials).toContain('aria-label="会议材料：履约反馈.md"');
     const empty = renderToStaticMarkup(<MeetingCard card={meetingCard({})} collection={[]} onCard={noop} onNavigate={noop} />);
-    expect(empty).toContain('data-count="1"');
+    expect(empty).toContain('data-count="2"');
+    expect(empty).toContain("群组材料");
   });
 
   it("held 会后默认打开会议记录，材料照样在页签里只读查看", () => {

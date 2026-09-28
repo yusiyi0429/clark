@@ -32,14 +32,14 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
   const { pool, q, env, fail, requirePerson, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
-  // 我的 Agent 按「人 × 页面」私有；个人卡 scope 始终复查对象成员及当前拍板权。
+  // 我的 Agent 按「人 × 页面」私有；任务卡 scope 始终复查对象成员及当前拍板权。
   const scopeObjectFor = async (person: SessionPerson, scope: TConversationScope) => {
     if (person.role !== "ceo" && (scope.startsWith("issue:") || scope.startsWith("meeting:"))) {
       const [objectType, objectId] = scope.split(":", 2) as ["issue" | "meeting", string];
       if (!await isActiveMember(q, { objectType, objectId }, person.personId)) return { snapshot: null, visible: false };
       const card = objectType === "issue"
         ? await getIssueRow(q, objectId).then((row) => row && projectMemberIssueCard(row, env.sessionSecret))
-        : await getMeetingRow(q, objectId).then((row) => row && projectMemberMeetingCard(row, env.sessionSecret));
+        : await getMeetingRow(q, objectId).then((row) => row && projectMemberMeetingCard(row, env.sessionSecret, person.personId));
       if (!card) return { snapshot: null, visible: false };
       return { visible: true, snapshot: { cardId: card.id, version: card.version, kind: card.kind, title: card.title,
         objectRef: card.objectRef, payload: card.payload } };

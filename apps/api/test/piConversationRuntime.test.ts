@@ -60,7 +60,7 @@ function stream(final: AssistantMessage) {
 }
 
 describe("controlled Pi conversation adapter public behavior", () => {
-  it("only offers material tools in issue and task scopes", async () => {
+  it("only offers material tools in issue, task and meeting scopes", async () => {
     const toolsByScope: string[][] = [];
     const runtime = await createPiConversationRuntime({
       companyMemory: loadCompanyMemory(testEnv), materialPool: { query: async () => ({ rows: [] }) } as unknown as Pool,
@@ -75,8 +75,8 @@ describe("controlled Pi conversation adapter public behavior", () => {
         await runtime.run({ scope, viewer: CEO_VIEWER, message: "看看材料", currentObject: null, referencesSnapshot: [],
           runtimeEntries: [], piSessionId: "11111111-1111-4111-8111-111111111111", signal: new AbortController().signal,
           emit: () => undefined });
-      for (const names of [toolsByScope[0], toolsByScope[3]]) expect(names).not.toContain("edit_material");
-      for (const names of [toolsByScope[1], toolsByScope[2]])
+      expect(toolsByScope[0]).not.toContain("edit_material");
+      for (const names of [toolsByScope[1], toolsByScope[2], toolsByScope[3]])
         expect(names).toEqual(expect.arrayContaining(["list_materials", "read_material", "edit_material", "create_material"]));
     } finally { await runtime.close?.(); }
   });

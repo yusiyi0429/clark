@@ -29,18 +29,27 @@ import { personDisplayNames } from "../people.js";
 import { executeRetryMonthlyPlanDraft, executeSignMonthlyPlan, executeUpdateMonthlyPlanDraft } from "../monthlyPlans.js";
 import { executeConfirmItem, executeDismissItem, executeReplaceTranscript, executeRetryOutcome, executeRevokeEffect } from "../outcome.js";
 import { executeConfirmTranscriptCandidate, executeDiscardTranscriptCandidate } from "../transcriptCandidate.js";
+import { getMeetingRow } from "../meetingStore.js";
+import { projectMemberMeetingCardFromCard } from "../memberCards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, env, fail, requireCEO, requestContext, companyMemory, preflight, driExporter, ontologyUpdater, outcome, monthlyPlanService, research, invalidInput, respond } = ctx;
+  const { pool, q, env, fail, requirePerson, requestContext, companyMemory, preflight, driExporter, ontologyUpdater, outcome, monthlyPlanService, research, invalidInput, respond } = ctx;
 
   app.post(
     "/api/actions/execute",
-    { preHandler: requireCEO, schema: { body: ExecuteActionRequest } },
+    { preHandler: requirePerson, schema: { body: ExecuteActionRequest } },
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       const scope = verifyActionId(env.sessionSecret, req.body.actionId);
       if (!scope) {
         return fail(reply, 404, "UNKNOWN_ACTION", "无效 actionId");
+      }
+      if (req.person!.role !== "ceo") {
+        if (scope.actionType !== "meeting.end" || scope.objectType !== "meeting")
+          return fail(reply, 403, "FORBIDDEN", "只有 CEO 可以访问");
+        const meeting = await getMeetingRow(q, scope.objectId);
+        if (!meeting || meeting.lead_dri_id !== req.person!.personId)
+          return fail(reply, 404, "MEETING_NOT_FOUND", "Meeting 不存在");
       }
       requestContext.set(req, { actionType: scope.actionType, objectRef: `${scope.objectType}:${scope.objectId}` });
       const fingerprint = actionFingerprint(env.sessionSecret, req.body.actionId, req.body.input);
@@ -77,7 +86,12 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         return respond(reply, await executeCancelMeeting(pool, env.sessionSecret, scope, fingerprint));
       }
       if (scope.actionType === "meeting.end") {
-        return respond(reply, await executeEndMeeting(pool, env.sessionSecret, scope, fingerprint));
+        const result = await executeEndMeeting(pool, env.sessionSecret, scope, fingerprint);
+        if (req.person!.role === "ceo" || "error" in result) return respond(reply, result);
+        const viewerId = req.person!.personId;
+        return respond(reply, "card" in result
+          ? { ...result, card: projectMemberMeetingCardFromCard(result.card, viewerId) }
+          : { ...result, latestCard: projectMemberMeetingCardFromCard(result.latestCard, viewerId) });
       }
       if (scope.actionType === "meeting.retry_preflight") {
         return respond(reply, await executeRetryPreflight(pool, companyMemory, preflight, env.sessionSecret, scope, fingerprint));

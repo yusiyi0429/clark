@@ -18,8 +18,11 @@ export function projectMemberIssueCard(row: IssueRow, secret: string, locationNa
     actions: [], navigation: [{ href: `/me/issues/${row.id}`, label: "议题" }] };
 }
 
-export function projectMemberMeetingCard(row: MeetingRow, secret: string): TCard {
-  const card = projectMeetingCard(row, secret);
+export function projectMemberMeetingCard(row: MeetingRow, secret: string, viewerId?: string): TCard {
+  return projectMemberMeetingCardFromCard(projectMeetingCard(row, secret), viewerId);
+}
+
+export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string): TCard {
   const payload = card.payload as TMeetingCardPayload;
   return { ...card, payload: {
     status: payload.status, scheduledAt: payload.scheduledAt, endsAt: payload.endsAt, endedAt: payload.endedAt,
@@ -32,5 +35,6 @@ export function projectMemberMeetingCard(row: MeetingRow, secret: string): TCard
       .filter((item) => (item.kind === "decision" || item.kind === "todo") && item.review?.status === "confirmed")
       .map((item) => ({ id: item.id, kind: item.kind, text: item.text, ownerPersonId: item.ownerPersonId })) } : null,
   },
-    actions: [], navigation: [{ href: `/me/meetings/${row.id}`, label: "会议" }] };
+    actions: payload.leadDriId === viewerId ? card.actions.filter((action) => action.actionType === "meeting.end") : [],
+    navigation: [{ href: `/me/meetings/${card.objectRef.id}`, label: "会议" }] };
 }

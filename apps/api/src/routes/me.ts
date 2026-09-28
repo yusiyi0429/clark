@@ -140,7 +140,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
       return fail(reply, 404, "CARD_NOT_FOUND", "会议不存在");
     const row = await getMeetingRow(q, req.params.id);
     if (!row) return fail(reply, 404, "CARD_NOT_FOUND", "会议不存在");
-    return projectMemberMeetingCard(row, ctx.env.sessionSecret);
+    return projectMemberMeetingCard(row, ctx.env.sessionSecret, req.person!.personId);
   });
 
   app.post(

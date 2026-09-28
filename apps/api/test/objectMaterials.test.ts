@@ -13,6 +13,48 @@ const multipart = (name: string, body: string, mime = "text/markdown") => {
     payload: Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\nContent-Type: ${mime}\r\n\r\n${body}\r\n--${boundary}--\r\n`) };
 };
 
+describe("会议群组材料", () => {
+  it("主持成员上传、读取和删除；Agent 改 Markdown；非成员拒绝，CEO 始终可访问", async () => {
+    const storage = await mkdtemp(join(tmpdir(), "meeting-material-test-"));
+    const t = await createTestApp({ materialStorageDir: storage });
+    try {
+      const issue = await t.createIssue();
+      const created = await t.app.inject({ method: "POST", url: "/api/dri/meetings",
+        headers: { authorization: `Bearer ${t.env.driServiceToken}` }, payload: {
+          externalId: `meeting-material-${randomUUID()}`, title: "材料走查会", scheduledAt: "2027-01-01T10:00:00.000+08:00",
+          leadDriId: TEST_MEMBER.personId, ceoParticipantId: TEST_CEO.personId,
+          participants: [TEST_MEMBER.personId], issueIds: [issue.objectRef.id],
+        } });
+      expect(created.statusCode).toBe(201);
+      const id = created.json().cards[0].objectRef.id as string;
+      const base = `/api/materials/meeting/${id}`;
+      const member = await t.memberCookie(), ceo = await t.loginCookie();
+      const part = multipart("讨论.md", "# 讨论\n\n旧结论");
+      const uploaded = await t.app.inject({ method: "POST", url: base,
+        headers: { cookie: member, origin: t.publicOrigin, ...part.headers }, payload: part.payload });
+      expect(uploaded.statusCode, uploaded.body).toBe(201);
+      const materialId = uploaded.json().id as string;
+      expect((await t.app.inject({ method: "GET", url: base, headers: { cookie: member } })).json().materials[0])
+        .toMatchObject({ id: materialId, canDelete: true });
+      expect((await t.app.inject({ method: "GET", url: `${base}/${materialId}`, headers: { cookie: member } })).statusCode).toBe(200);
+      expect((await t.app.inject({ method: "DELETE", url: `${base}/${materialId}`, headers: { cookie: ceo, origin: t.publicOrigin } })).statusCode).toBe(403);
+      const ref = { objectType: "meeting" as const, objectId: id };
+      const viewer = { personId: TEST_MEMBER.personId, role: "member" as const, displayName: "测试乙" };
+      expect(await editObjectMaterial(t.pool, ref, materialId, viewer, 1, [{ find: "旧结论", replace: "新结论" }], "会上修改", randomUUID()))
+        .toEqual({ version: 2, changed: 1 });
+      expect((await t.app.inject({ method: "GET", url: `${base}/${materialId}`, headers: { cookie: member } })).json())
+        .toMatchObject({ version: 2, latest: true });
+      expect((await t.sql("SELECT content FROM thread_messages WHERE object_type='meeting' AND object_id=$1 ORDER BY id", [id]))
+        .map((row) => row.content)).toEqual(expect.arrayContaining([expect.stringContaining("上传了《讨论.md》"), expect.stringContaining("改了《讨论.md》") ]));
+      expect((await t.app.inject({ method: "DELETE", url: `${base}/${materialId}`, headers: { cookie: member, origin: t.publicOrigin } })).statusCode).toBe(204);
+      expect((await t.app.inject({ method: "GET", url: base, headers: { cookie: member } })).json().materials).toEqual([]);
+      await t.sql("UPDATE thread_members SET left_at=now() WHERE object_type='meeting' AND object_id=$1", [id]);
+      expect((await t.app.inject({ method: "GET", url: base, headers: { cookie: member } })).statusCode).toBe(404);
+      expect((await t.app.inject({ method: "GET", url: base, headers: { cookie: ceo } })).statusCode).toBe(200);
+    } finally { await t.close(); await rm(storage, { recursive: true, force: true }); }
+  }, 20_000);
+});
+
 describe("议题材料", () => {
   it("群成员上传、看旧版、本人删除；非成员和非主人被拒绝", async () => {
     const storage = await mkdtemp(join(tmpdir(), "object-material-test-"));

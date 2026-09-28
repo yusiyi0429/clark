@@ -9,14 +9,14 @@ import { MaterialTabs, useRememberedScroll, type MaterialTab } from "@/component
 import { useConfirm } from "@/components/ConfirmDialog";
 import s from "./materials.module.css";
 
-type ObjectType = "issue" | "task";
+type ObjectType = "issue" | "task" | "meeting";
 const date = (iso: string) => new Date(iso).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 const endpoint = (type: ObjectType, id: string) => `/api/materials/${type}/${encodeURIComponent(id)}`;
 const hasMarkdownSyntax = (text: string) => /(^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|```|~~~|\|)|\*\*|__|`|\[[^\]]+\]\(|~~)/m.test(text);
 const htmlChangeText = (line: string) => line.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().slice(0, 200);
 
-export function ObjectMaterialArea({ objectType, objectId, baseTabs, selected, onSelect, children }:
-  { objectType: ObjectType; objectId: string; baseTabs: MaterialTab[]; selected: string; onSelect: (id: string) => void; children: ReactNode }) {
+export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, selected, selectedTab, onSelect, children }:
+  { objectType: ObjectType; objectId: string; baseTabs: MaterialTab[]; groupTab?: MaterialTab; selected: string; selectedTab?: string | null; onSelect: (id: string) => void; children: ReactNode }) {
   const [materials, setMaterials] = useState<TMaterialView[]>([]);
   const [canUpload, setCanUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -27,7 +27,7 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, selected, o
   const { ask, dialog } = useConfirm();
   const base = endpoint(objectType, objectId);
   const material = materials.find((item) => item.id === selected);
-  useRememberedScroll(`${objectType}:${objectId}|${selected}`);
+  useRememberedScroll(objectType === "meeting" ? undefined : `${objectType}:${objectId}|${selected}`);
   const refresh = useCallback(async () => {
     const response = await fetch(base, { headers: { accept: "application/json" } });
     if (!response.ok) return;
@@ -61,7 +61,7 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, selected, o
     } }));
     return () => { window.dispatchEvent(new CustomEvent("viewing-material-changed", { detail: { scope: `${objectType}:${objectId}`, id: null, editable: false } })); };
   }, [objectType, objectId, material?.id, material?.editable, material?.format]);
-  const tabs = [...baseTabs, ...materials.map((item) => ({ id: item.id, label: item.fileName.replace(/\.[^.]+$/, ""), title: item.fileName }))];
+  const tabs = [...baseTabs, ...(groupTab ? [groupTab] : []), ...materials.map((item) => ({ id: item.id, label: item.fileName.replace(/\.[^.]+$/, ""), title: item.fileName }))];
   const choose = (id: string) => { setVersion(undefined); onSelect(id); };
   const upload = async (picked?: File) => {
     if (!picked) return;
@@ -89,15 +89,19 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, selected, o
   return <div className={s.area} data-material-scope={`${objectType}:${objectId}`}
     data-viewing-material-id={material?.id ?? ""} data-viewing-material-editable={material?.editable ? "true" : "false"}
     data-viewing-material-format={material?.format ?? ""}>
-    {(objectType === "issue" || materials.length > 0 || canUpload) ? <div className={s.toolbar}>
-      <MaterialTabs tabs={tabs} selected={selected} onSelect={choose} label="材料页签" />
+    {(objectType === "issue" || objectType === "meeting" || materials.length > 0 || canUpload) ? <div className={s.toolbar}>
+      <MaterialTabs tabs={tabs} selected={selectedTab === undefined ? selected : selectedTab} onSelect={choose} label={objectType === "meeting" ? "会议材料" : "材料页签"} />
       {canUpload ? <><input ref={file} className={s.hidden} type="file" accept=".md,.pdf,.docx,.html,.htm" aria-label="上传材料" onChange={(event) => void upload(event.target.files?.[0])} />
         <button type="button" className={s.add} aria-label="上传材料" onClick={() => file.current?.click()}><Plus size={16} strokeWidth={2} aria-hidden /></button></> : null}
       {uploading ? <span className={s.uploading} role="status">上传中…</span> : null}
       {uploadError ? <button className={s.uploadError} type="button" onClick={() => setUploadError("")}>{uploadError}</button> : null}
     </div> : null}
     {material ? <div className={s.reader} data-material-scroll><MaterialReader material={material} detail={detail}
-      base={base} onRemove={remove} onVersion={setVersion} />{dialog}</div> : children}
+      base={base} onRemove={remove} onVersion={setVersion} />{dialog}</div>
+      : groupTab && selected === groupTab.id ? <div className={s.groupList}>
+        {materials.length ? <ul>{materials.map((item) => <li key={item.id}><button type="button" onClick={() => choose(item.id)}>{item.fileName}</button></li>)}</ul>
+          : <p className={s.empty}>还没有群组材料，点右侧「+」上传。</p>}
+      </div> : children}
   </div>;
 }
 

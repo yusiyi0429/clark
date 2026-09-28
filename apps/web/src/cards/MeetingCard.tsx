@@ -11,7 +11,8 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { MeetingClock, MeetingHeaderActions, MeetingStatus, meetingDayWord, meetingPhase, meetingSlot } from "@/components/meeting/MeetingHeader";
 import { useMeetingRecorder, type RecorderState } from "@/components/meeting/useMeetingRecorder";
 import { DetailFrame } from "@/components/shell/DetailFrame";
-import { HeaderMaterialToggle, MaterialTabs, pressMaterial, toggleWhole, useRememberedScroll, type MaterialTab, type MaterialView } from "@/components/shell/MaterialTabs";
+import { HeaderMaterialToggle, pressMaterial, toggleWhole, useRememberedScroll, type MaterialTab, type MaterialView } from "@/components/shell/MaterialTabs";
+import { ObjectMaterialArea } from "@/components/materials/ObjectMaterialArea";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 import { ActionFeedback, useCardAction, type ActionState } from "@/lib/useCardAction";
@@ -363,6 +364,7 @@ export function recordingNote(state: RecorderState): string {
 }
 
 const PREFLIGHT_TAB: MaterialTab = { id: "preflight", label: "AI 预审", title: "AI 预审：会前材料的评审结论" };
+const GROUP_MATERIAL_TAB: MaterialTab = { id: "group-materials", label: "群组材料", title: "群组材料" };
 /** 整场会的那一页：页头胶囊里的入口。会前在这里导入妙记或逐字稿，会后在这里逐项复核。 */
 const RECORD_TAB: MaterialTab = { id: "record", label: "会议记录", title: "会议记录：妙记或逐字稿与会后复核" };
 
@@ -448,7 +450,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     draft: { readIssueIds: [], carriedIssueIds: [], checkedEntryIds: [], editsByEntryId: {}, supplementRequests: [], note: "" },
     transcript: null, transcriptCandidate: null, recording: null,
   } : source;
-  const { homeCards } = useWorkspace();
+  const workspace = useWorkspace();
+  const { homeCards } = workspace;
   const { ask, dialog: confirmDialog } = useConfirm();
   const { state, run, retry, pending } = useCardAction(onCard);
   const [note, setNote] = useState(payload.draft.note);
@@ -492,7 +495,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const materialRef = useRef<HTMLInputElement>(null);
   const candidateDialog = useRef<HTMLDialogElement>(null);
 
-  const actions = memberReadOnly ? [] : card.actions;
+  const isHost = memberReadOnly && payload.leadDriId === workspace.viewerId;
+  const actions = memberReadOnly ? card.actions.filter((action) => action.actionType === "meeting.end") : card.actions;
   const actionOf = (type: string) => actions.find((action) => action.actionType === type);
   const itemAction = (type: string, itemId: string) =>
     actions.find((action) => action.actionType === type && action.itemId === itemId);
@@ -843,7 +847,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const phase = meetingPhase(startedAt, ended);
   const endAction = actionOf("meeting.end");
   const clock =
-    memberReadOnly || payload.status === "cancelled" ? undefined : (
+    (memberReadOnly && !isHost) || payload.status === "cancelled" ? undefined : (
       <MeetingClock
         phase={phase}
         startedAt={startedAt}
@@ -1447,12 +1451,9 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       >
         <div className={s.reading}>
           <div className={s.pane}>
-            <MaterialTabs
-              label="会议材料"
-              tabs={tabs}
-              selected={view.current === RECORD_TAB.id ? null : view.current}
-              onSelect={(id) => setView((current) => pressMaterial(current, id))}
-            />
+            <ObjectMaterialArea objectType="meeting" objectId={card.objectRef.id} baseTabs={tabs} groupTab={GROUP_MATERIAL_TAB}
+              selected={view.current} selectedTab={view.current === RECORD_TAB.id ? null : view.current}
+              onSelect={(id) => setView((current) => pressMaterial(current, id))}>
             <MeetingStatus phase={phase} facts={facts} now={statusNow} endedAt={payload.endedAt} />
             {(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose) ?
               <p className={s.agenda}>{memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose}</p> : null}
@@ -1468,6 +1469,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
                 </>
               )}
             </section>
+            </ObjectMaterialArea>
             <ActionFeedback state={state} onRetry={retry} />
           </div>
         </div>
@@ -1495,13 +1497,15 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   );
 }
 
-/** 成员工作区登记同一张只读 Card，右列 Agent 与会议群使用相同的可见投影。 */
+/** 成员工作区登记同一张成员投影 Card；主持人只多出本场结束 Action。 */
 export function MemberMeetingDetail({ card }: { card: CardRenderProps["card"] }) {
   const workspace = useWorkspace();
-  const cards = useMemo(() => [card], [card]);
+  const [currentCard, setCurrentCard] = useState(card);
+  useEffect(() => setCurrentCard(card), [card]);
+  const cards = useMemo(() => [currentCard], [currentCard]);
   const group = useMemo(() => ({ kind: "thread" as const, objectType: "meeting" as const,
     objectId: card.objectRef.id, viewerId: workspace.viewerId ?? "", members: [] }), [card.objectRef.id, workspace.viewerId]);
-  useRegisterDetail({ scope: `meeting:${card.objectRef.id}`, label: card.title, mark: "meeting", cards, group });
-  return <MeetingCard card={card} collection={cards} onCard={() => undefined}
+  useRegisterDetail({ scope: `meeting:${card.objectRef.id}`, label: currentCard.title, mark: "meeting", cards, group });
+  return <MeetingCard card={currentCard} collection={cards} onCard={setCurrentCard}
     onNavigate={(href, origin) => href === "/" ? workspace.close() : workspace.navigate(href, origin)} readOnly />;
 }

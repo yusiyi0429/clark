@@ -1082,6 +1082,34 @@ describe("Meeting 计划结束时间与「这场会开完了」", () => {
     }
   });
 
+  it("主持人只拿到 meeting.end，并且执行和冲突响应都保持成员投影", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { cookie, meetingId, card } = await readyMeeting(t, "member-host-end");
+      const member = await t.memberCookie();
+      const memberCard = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${meetingId}`, headers: { cookie: member } })).json();
+      expect(memberCard.actions.map((action: { actionType: string }) => action.actionType)).toEqual(["meeting.end"]);
+      expect(memberCard.payload).not.toHaveProperty("draft");
+      expect((await execute(t, member, actionOf(card as ActionCard, "meeting.edit_details").actionId, { title: "越权修改" })).statusCode).toBe(403);
+      expect((await execute(t, cookie, actionOf(card as ActionCard, "meeting.edit_details").actionId, { title: "CEO 改名" })).statusCode).toBe(200);
+      const stale = await execute(t, member, memberCard.actions[0].actionId);
+      expect(stale.statusCode).toBe(409);
+      expect(stale.json().latestCard.payload).not.toHaveProperty("draft");
+      const fresh = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${meetingId}`, headers: { cookie: member } })).json();
+      const ended = await execute(t, member, fresh.actions[0].actionId);
+      expect(ended.statusCode).toBe(200);
+      expect(ended.json().cards[0].payload.endedAt).toEqual(expect.any(String));
+      expect(ended.json().cards[0].payload).not.toHaveProperty("draft");
+      expect(ended.json().cards[0].actions).toEqual([]);
+
+      const other = await readyMeeting(t, "member-not-host-end");
+      await t.sql("UPDATE meetings SET lead_dri_id=$2 WHERE id=$1", [other.meetingId, "another-host"]);
+      const visible = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${other.meetingId}`, headers: { cookie: member } })).json();
+      expect(visible.actions).toEqual([]);
+      expect((await execute(t, member, actionOf(other.card as ActionCard, "meeting.end").actionId)).statusCode).toBe(404);
+    } finally { await t.close(); }
+  }, 20_000);
+
   it.each(["cancelled", "held"] as const)("neither offers nor executes meeting.end on a %s Meeting", async (status) => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {

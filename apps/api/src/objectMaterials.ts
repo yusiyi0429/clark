@@ -26,7 +26,12 @@ const JOIN = `LEFT JOIN material_revisions r ON r.material_id=m.id AND r.version
 
 export async function canAccessObjectMaterials(q: Query, ref: ThreadRef, viewer: MaterialViewer): Promise<boolean> {
   if (await isActiveMember(q, ref, viewer.personId)) return true;
-  if (ref.objectType !== "issue" || viewer.role !== "ceo") return false;
+  if (viewer.role !== "ceo") return false;
+  if (ref.objectType === "meeting") {
+    const meeting = await q("SELECT 1 FROM meetings WHERE id::text=$1", [ref.objectId]);
+    return Boolean(meeting.rowCount);
+  }
+  if (ref.objectType !== "issue") return false;
   const issue = await q("SELECT 1 FROM issues WHERE id::text=$1", [ref.objectId]);
   if (!issue.rowCount) return false;
   const group = await q("SELECT 1 FROM thread_members WHERE object_type='issue' AND object_id=$1 LIMIT 1", [ref.objectId]);
@@ -124,6 +129,7 @@ export async function uploadObjectMaterial(pool: Pool, ref: ThreadRef, viewer: M
       [id, ref.objectType, ref.objectId, parsed.fileName, format, parsed.sizeBytes, parsed.pageCount ?? null, storageKey, parsed.sha256, viewer.personId, now]);
     await q("INSERT INTO material_revisions(material_id,version,body,created_at) VALUES($1,1,$2,$3)", [id, parsed.source ?? parsed.extractedText, now]);
     const row = await rowFor(q, ref, id);
+    if (ref.objectType === "meeting") await postCoAgentMessage(q, ref, `${viewer.displayName}上传了《${parsed.fileName}》`, [viewer.personId]);
     await client.query("COMMIT");
     return view(row, viewer, names);
   } catch (error) {
