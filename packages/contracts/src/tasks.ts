@@ -22,7 +22,8 @@ export const TaskPerson = Type.Object(
   { additionalProperties: false },
 );
 
-export const TaskProgressSource = Type.Union([Type.Literal("web"), Type.Literal("codex"), Type.Literal("claude"), Type.Literal("github")]);
+/** other：用「其他工具」令牌写的进展。 */
+export const TaskProgressSource = Type.Union([Type.Literal("web"), Type.Literal("codex"), Type.Literal("claude"), Type.Literal("github"), Type.Literal("other")]);
 export const TaskProgressLink = Type.Object({
   url: Type.String({ pattern: "^https?://", maxLength: 500 }),
   title: Type.Optional(Type.String({ maxLength: 120 })),

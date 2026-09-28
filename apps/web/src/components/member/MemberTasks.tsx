@@ -54,7 +54,7 @@ export function MemberTasks({ tasks, busyId, error, onStatus, onNavigate }: {
         {task.status === "returned" && task.returnReason ? <p className={s.returned}>已退回：{task.returnReason}</p> : null}
         {task.status !== "returned" ? <div className={s.taskActions} role="group" aria-label={`${task.title}的状态`}>{(["not_started", "in_progress", "done"] as const).map((status) => <Button key={status} variant="ghost" size="sm" aria-pressed={task.status === status} isDisabled={busyId === task.id || task.status === status} onPress={() => onStatus(task, status)}>{TASK_STATUS[status]}</Button>)}</div> : null}
         {task.latestProgress ? <p className={s.latestProgress} title={task.latestProgress.body.slice(0, 60)} aria-label={`最新进展：${task.latestProgress.body.slice(0, 60)}`}>
-          最新进展 · {({ web: "网页", codex: "Codex", claude: "Claude Code", github: "GitHub" })[task.latestProgress.source]} · {monthDayTime(task.latestProgress.createdAt)}
+          最新进展 · {({ web: "网页", codex: "Codex", claude: "Claude Code", github: "GitHub", other: "外部工具" })[task.latestProgress.source]} · {monthDayTime(task.latestProgress.createdAt)}
         </p> : null}
       </Card>;
     })}</div> : tasks.length ? null : <p className={s.empty}>暂无执行事项。你可以开启一件事，会后分派也会显示在这里。</p>}

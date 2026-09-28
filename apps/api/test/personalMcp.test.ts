@@ -63,13 +63,15 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(written.statusCode).toBe(200);
       expect((await call(f, f.third, "POST", url, { clientEventId: event, body: "协作完成验证" })).json().id).toBe(written.json().id);
       expect((await call(f, f.third, "PATCH", `/api/me/tasks/${task.id}`, { version: 1, status: "done" })).statusCode).toBe(404);
-      const collaboratorToken = (await call(f, f.third, "POST", "/api/me/tokens", { name: "协作端", client: "claude", expiresInDays: 30 })).json();
+      // 其他工具（OpenCode 等）的令牌同样可用，写的进展来源记为 other。
+      const collaboratorToken = (await call(f, f.third, "POST", "/api/me/tokens", { name: "协作端", client: "other", expiresInDays: 30 })).json();
       const sendCollaborator = (id: number, name: string, args: Record<string, unknown>) => f.t.app.inject({ method: "POST", url: "/mcp/me",
         headers: { authorization: `Bearer ${collaboratorToken.token}`, accept: "application/json, text/event-stream" }, payload: rpc(id, "tools/call", { name, arguments: args }) });
       expect((await sendCollaborator(1, "append_progress", { itemId: task.id, body: "Claude 补充证据" })).json().result.isError).toBe(false);
       expect((await sendCollaborator(2, "update_status", { itemId: task.id, status: "done", version: 1 })).json().result.content[0].text).toContain("找不到这件执行事项");
       const ceoItems = await call(f, f.ceo, "GET", `/api/mission-cards/${f.card}/items`);
       expect(ceoItems.json().missions[0].items[0].latestProgress.body).toBe("Claude 补充证据");
+      expect(ceoItems.json().missions[0].items[0].latestProgress.source).toBe("other");
       expect((await call(f, f.ceo, "GET", `/api/me/tasks/${task.id}`)).statusCode).toBe(403);
       expect((await call(f, f.third, "GET", `/api/mission-cards/${f.card}/items`)).statusCode).toBe(404);
       const tokens = [];

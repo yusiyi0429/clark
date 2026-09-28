@@ -17,7 +17,7 @@ type TaskRow = {
   mission_title: string | null; card_id: string | null; period: string | null; battlefield_name: string | null;
   step_order: number | null; steps: number | null; previous_id: string | null; previous_title: string | null; previous_status: string | null;
   collaborators: string[]; created_at: Date; updated_at: Date;
-  latest_progress_body: string | null; latest_progress_source: "web" | "codex" | "claude" | "github" | null;
+  latest_progress_body: string | null; latest_progress_source: "web" | "codex" | "claude" | "github" | "other" | null;
   latest_progress_author_id: string | null; latest_progress_created_at: Date | null;
 };
 

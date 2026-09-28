@@ -7732,6 +7732,10 @@
                           {
                             "const": "github",
                             "type": "string"
+                          },
+                          {
+                            "const": "other",
+                            "type": "string"
                           }
                         ]
                       },
@@ -17772,6 +17776,10 @@
                       {
                         "const": "github",
                         "type": "string"
+                      },
+                      {
+                        "const": "other",
+                        "type": "string"
                       }
                     ]
                   },
@@ -17884,6 +17892,10 @@
           {
             "const": "github",
             "type": "string"
+          },
+          {
+            "const": "other",
+            "type": "string"
           }
         ]
       },
@@ -17961,6 +17973,10 @@
               {
                 "const": "github",
                 "type": "string"
+              },
+              {
+                "const": "other",
+                "type": "string"
               }
             ]
           },
@@ -18028,6 +18044,10 @@
               },
               {
                 "const": "github",
+                "type": "string"
+              },
+              {
+                "const": "other",
                 "type": "string"
               }
             ]
@@ -18373,6 +18393,10 @@
                                   {
                                     "const": "github",
                                     "type": "string"
+                                  },
+                                  {
+                                    "const": "other",
+                                    "type": "string"
                                   }
                                 ]
                               },
@@ -18483,6 +18507,10 @@
           {
             "const": "claude",
             "type": "string"
+          },
+          {
+            "const": "other",
+            "type": "string"
           }
         ]
       },
@@ -18515,6 +18543,10 @@
               },
               {
                 "const": "claude",
+                "type": "string"
+              },
+              {
+                "const": "other",
                 "type": "string"
               }
             ]
@@ -19728,6 +19760,10 @@
                                 {
                                   "const": "github",
                                   "type": "string"
+                                },
+                                {
+                                  "const": "other",
+                                  "type": "string"
                                 }
                               ]
                             },
@@ -19785,6 +19821,10 @@
                     },
                     {
                       "const": "claude",
+                      "type": "string"
+                    },
+                    {
+                      "const": "other",
                       "type": "string"
                     }
                   ]
@@ -19847,6 +19887,10 @@
               {
                 "const": "claude",
                 "type": "string"
+              },
+              {
+                "const": "other",
+                "type": "string"
               }
             ]
           },
@@ -19908,6 +19952,10 @@
                   },
                   {
                     "const": "claude",
+                    "type": "string"
+                  },
+                  {
+                    "const": "other",
                     "type": "string"
                   }
                 ]
@@ -20314,6 +20362,10 @@
                           {
                             "const": "github",
                             "type": "string"
+                          },
+                          {
+                            "const": "other",
+                            "type": "string"
                           }
                         ]
                       },
@@ -20576,6 +20628,10 @@
                     },
                     {
                       "const": "github",
+                      "type": "string"
+                    },
+                    {
+                      "const": "other",
                       "type": "string"
                     }
                   ]
@@ -21007,6 +21063,10 @@
                             },
                             {
                               "const": "github",
+                              "type": "string"
+                            },
+                            {
+                              "const": "other",
                               "type": "string"
                             }
                           ]
@@ -21482,6 +21542,10 @@
                                   {
                                     "const": "github",
                                     "type": "string"
+                                  },
+                                  {
+                                    "const": "other",
+                                    "type": "string"
                                   }
                                 ]
                               },
@@ -21930,6 +21994,10 @@
                             },
                             {
                               "const": "github",
+                              "type": "string"
+                            },
+                            {
+                              "const": "other",
                               "type": "string"
                             }
                           ]

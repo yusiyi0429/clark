@@ -1905,7 +1905,7 @@ export interface components {
                 }[];
                 latestProgress: {
                     body: string;
-                    source: "web" | "codex" | "claude" | "github";
+                    source: "web" | "codex" | "claude" | "github" | "other";
                     author: {
                         personId: string;
                         name: string;
@@ -3518,7 +3518,7 @@ export interface components {
             }[];
             latestProgress: {
                 body: string;
-                source: "web" | "codex" | "claude" | "github";
+                source: "web" | "codex" | "claude" | "github" | "other";
                 author: {
                     personId: string;
                     name: string;
@@ -3536,7 +3536,7 @@ export interface components {
             createdAt: string;
             updatedAt: string;
         };
-        TaskProgressSource: "web" | "codex" | "claude" | "github";
+        TaskProgressSource: "web" | "codex" | "claude" | "github" | "other";
         TaskProgressLink: {
             url: string;
             title?: string;
@@ -3550,7 +3550,7 @@ export interface components {
                 personId: string;
                 name: string;
             };
-            source: "web" | "codex" | "claude" | "github";
+            source: "web" | "codex" | "claude" | "github" | "other";
             body: string;
             links: {
                 url: string;
@@ -3560,7 +3560,7 @@ export interface components {
         };
         TaskLatestProgress: {
             body: string;
-            source: "web" | "codex" | "claude" | "github";
+            source: "web" | "codex" | "claude" | "github" | "other";
             author: {
                 personId: string;
                 name: string;
@@ -3611,7 +3611,7 @@ export interface components {
                     }[];
                     latestProgress: {
                         body: string;
-                        source: "web" | "codex" | "claude" | "github";
+                        source: "web" | "codex" | "claude" | "github" | "other";
                         author: {
                             personId: string;
                             name: string;
@@ -3631,12 +3631,12 @@ export interface components {
                 }[];
             }[];
         };
-        PersonalTokenClient: "codex" | "claude";
+        PersonalTokenClient: "codex" | "claude" | "other";
         PersonalTokenView: {
             /** Format: uuid */
             id: string;
             name: string;
-            client: "codex" | "claude";
+            client: "codex" | "claude" | "other";
             createdAt: string;
             expiresAt: string | null;
             lastUsedAt: string | null;
@@ -3829,7 +3829,7 @@ export interface components {
                             url: string;
                             title?: string;
                         }[];
-                        source: "web" | "codex" | "claude" | "github";
+                        source: "web" | "codex" | "claude" | "github" | "other";
                         createdAt: string;
                     }[];
                 }[];
@@ -3840,7 +3840,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 name: string;
-                client: "codex" | "claude";
+                client: "codex" | "claude" | "other";
                 createdAt: string;
                 expiresAt: string | null;
                 lastUsedAt: string | null;
@@ -3850,7 +3850,7 @@ export interface components {
         };
         CreatePersonalTokenRequest: {
             name: string;
-            client: "codex" | "claude";
+            client: "codex" | "claude" | "other";
             expiresInDays: 30 | 90 | null;
         };
         CreatePersonalTokenResponse: {
@@ -3859,7 +3859,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 name: string;
-                client: "codex" | "claude";
+                client: "codex" | "claude" | "other";
                 createdAt: string;
                 expiresAt: string | null;
                 lastUsedAt: string | null;
@@ -3920,7 +3920,7 @@ export interface components {
                 }[];
                 latestProgress: {
                     body: string;
-                    source: "web" | "codex" | "claude" | "github";
+                    source: "web" | "codex" | "claude" | "github" | "other";
                     author: {
                         personId: string;
                         name: string;
@@ -3962,7 +3962,7 @@ export interface components {
                     personId: string;
                     name: string;
                 };
-                source: "web" | "codex" | "claude" | "github";
+                source: "web" | "codex" | "claude" | "github" | "other";
                 body: string;
                 links: {
                     url: string;
@@ -4021,7 +4021,7 @@ export interface components {
                 }[];
                 latestProgress: {
                     body: string;
-                    source: "web" | "codex" | "claude" | "github";
+                    source: "web" | "codex" | "claude" | "github" | "other";
                     author: {
                         personId: string;
                         name: string;
@@ -4088,7 +4088,7 @@ export interface components {
                     }[];
                     latestProgress: {
                         body: string;
-                        source: "web" | "codex" | "claude" | "github";
+                        source: "web" | "codex" | "claude" | "github" | "other";
                         author: {
                             personId: string;
                             name: string;
@@ -4155,7 +4155,7 @@ export interface components {
                 }[];
                 latestProgress: {
                     body: string;
-                    source: "web" | "codex" | "claude" | "github";
+                    source: "web" | "codex" | "claude" | "github" | "other";
                     author: {
                         personId: string;
                         name: string;

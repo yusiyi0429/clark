@@ -14,7 +14,7 @@ type TokenView = components["schemas"]["PersonalTokenView"];
 type Created = components["schemas"]["CreatePersonalTokenResponse"];
 const when = (date: string | null) => date ? monthDayTime(date) : "不过期";
 
-/** 连接我的 Agent：主路径是下载一份说明文件发给自己的 Codex / Claude Code，由它完成设置；命令行步骤收在「手动设置」里。 */
+/** 连接到外部工具：主路径是下载一份说明文件发给自己的 Codex、Claude Code 或其他 AI 工具，由它完成设置；命令行步骤收在「手动设置」里。 */
 export function ConnectionDialog() {
   const [tokens, setTokens] = useState<TokenView[]>([]);
   const [created, setCreated] = useState<Created | null>(null);
@@ -45,7 +45,7 @@ export function ConnectionDialog() {
     finally { setBusy(false); }
   };
   const revoke = async (token: TokenView) => {
-    if (!await ask(`撤销「${token.name}」？使用它的 Codex 或 Claude Code 会立即断开。`, "撤销")) return;
+    if (!await ask(`撤销「${token.name}」？使用它的工具会立即断开。`, "撤销")) return;
     setBusy(true); setError("");
     try {
       const { response, error: failure } = await browserApi.DELETE("/api/me/tokens/{id}", { params: { path: { id: token.id } } });
@@ -73,16 +73,17 @@ export function ConnectionDialog() {
   };
   const commandBlock = (label: string, value: string) => <div key={label} className={s.commandBlock}><strong>{label}</strong><div className={s.command}><code>{value}</code><button type="button" onClick={() => void copy(label, value)}>复制</button></div></div>;
   return <div className={s.root}>
-    <p className={s.lead}>让你自己的 Codex 或 Claude Code 连上天枢：它能读你的执行事项、帮你写进展。</p>
+    <p className={s.lead}>让你自己用的 AI 工具（Codex、Claude Code、OpenCode 等）连上天枢：它能读你的执行事项、帮你写进展。</p>
     <section className={s.section} aria-label="连接一个 Agent"><h3>连接一个 Agent</h3>
       <div className={s.fields}><label>给这次连接起个名字<input value={name} maxLength={40} placeholder="比如：我的笔记本" onChange={(event) => setName(event.target.value)} /></label>
-        <label>你用的是<select value={client} onChange={(event) => setClient(event.target.value as TokenView["client"])}><option value="codex">Codex</option><option value="claude">Claude Code</option></select></label>
+        <label>你用的是<select value={client} onChange={(event) => setClient(event.target.value as TokenView["client"])}><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="other">其他工具（OpenCode、Cursor 等）</option></select></label>
         <label>有效期<select value={expiresInDays ?? "never"} onChange={(event) => setExpiresInDays(event.target.value === "never" ? null : Number(event.target.value) as 30 | 90)}><option value={30}>30 天</option><option value={90}>90 天</option><option value="never">不过期</option></select></label></div>
       <Button variant="primary" isDisabled={busy || !name.trim() || activeCount >= 5} onPress={() => void create()}>生成连接说明</Button>
       {activeCount >= 5 ? <p className={s.muted}>最多保留 5 个连接。可以在下面撤销不用的再生成。</p> : null}
       {created ? <div className={s.ready} aria-label="连接说明已生成">
         <strong>连接说明已生成</strong>
         <p>下载后把文件发给你的 {clientName(created.view.client)}，对它说：「按这个文件帮我连上天枢」。它会自己完成设置，连好后删掉文件。</p>
+        {created.view.client === "other" ? <p className={s.muted}>你用的工具要支持远程 MCP（HTTP）；不支持的话，换成 Codex 或 Claude Code。</p> : null}
         <Button variant="primary" onPress={download}><Download size={16} aria-hidden />下载连接说明</Button>
         <p className={s.muted}>文件里有你的连接令牌，只能在这次下载；关掉后要连就重新生成一份。</p>
         <details className={s.manual}><summary>手动设置（熟悉命令行的同事用）</summary>

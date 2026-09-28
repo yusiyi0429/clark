@@ -1,6 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
-export const PersonalTokenClient = Type.Union([Type.Literal("codex"), Type.Literal("claude")]);
+/** other：OpenCode、Cursor 等支持远程 MCP 的其他工具，连接说明给通用步骤。 */
+export const PersonalTokenClient = Type.Union([Type.Literal("codex"), Type.Literal("claude"), Type.Literal("other")]);
 export const PersonalTokenView = Type.Object({
   id: Type.String({ format: "uuid" }),
   name: Type.String({ minLength: 1, maxLength: 40 }),
