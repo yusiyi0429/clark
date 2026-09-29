@@ -1,6 +1,6 @@
 # CEO WarMap 单机 Compose（.tech/08）。
 # 火山方案 B：宿主机 Nginx 终止 TLS，edge 只绑 127.0.0.1:3130；web/api/postgres/wechat 仅内网。
-# 长期服务 restart: unless-stopped，崩溃或宿主机重启后由 Docker 拉起。
+# 长期服务 restart: unless-stopped，崩溃或宿主机重启后由 Docker 拉起；共享主机（15G、无 swap）上按容器设内存上限，合计约 3G。
 # migration 由 API 启动前内联执行（apps/api/src/migrate.ts：advisory lock、只向前、失败不 listen），
 # 不存在自动 down/rollback；回滚依赖部署前备份（infra/backup）与旧镜像。
 name: warmap
@@ -8,6 +8,7 @@ name: warmap
 services:
   postgres:
     restart: unless-stopped
+    mem_limit: 768m
     image: postgres:17-alpine
     environment:
       POSTGRES_DB: warmap
@@ -40,6 +41,7 @@ services:
   # WarMap API 只经内网 MCP 调用它并持静态 Token；微信 Cookie 只存在 sidecar 的 wechat_data 卷。
   wechat:
     restart: unless-stopped
+    mem_limit: 384m
     # AGPL sidecar：钉 tag + digest，避免 tag 重推静默换代码（供应链接口与来源可审计）
     image: tmwgsicp/wechat-download-api:1.7.0@sha256:4723fcbbda1e4c28edb605760fade4e5815636a087d25bf0dfa7ddd397e82c3a
     environment:
@@ -67,6 +69,7 @@ services:
 
   api:
     restart: unless-stopped
+    mem_limit: 1280m
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
@@ -129,6 +132,7 @@ services:
 
   web:
     restart: unless-stopped
+    mem_limit: 512m
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
@@ -140,6 +144,7 @@ services:
 
   edge:
     restart: unless-stopped
+    mem_limit: 128m
     image: caddy:2
     # 只绑宿主机回环：公网 80/443 归宿主机 Nginx（终止 TLS 后整域名转发到这里）
     ports:

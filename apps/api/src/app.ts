@@ -232,6 +232,7 @@ export async function buildApp({
       requestId: String(req.id),
       method: req.method,
       url: req.url,
+      clientIp: req.ip,
       status: String(reply.statusCode),
       durationMs: Math.round(reply.elapsedTime),
       errorCode: reply.statusCode >= 400 ? (ctx.errorCode ?? `HTTP_${reply.statusCode}`) : undefined,

@@ -7,6 +7,8 @@
 
 主机是 `tokenhub-prod-app-01`（Ubuntu 22.04，8C16G，公网 115.191.26.230），同时跑着 TokenHub 官网、clark-main（`demo`/旧 `mvp`）、本体 world-lab、openviking、tkos-lab 等。宿主机 Nginx 占 80/443，站点配置在 `/etc/nginx/sites-available/` 并软链到 `sites-enabled/`，证书由 certbot（nginx 插件）签发与续期。天枢只把 edge 绑在 `127.0.0.1:3130`，由宿主机 Nginx 终止 TLS 后整域名转发过来，不按路径拆。
 
+部署目录按主机约定放在数据盘 `/srv/tokenhub/apps/tianshu`（与 world-lab、world-02、clark 同级；Docker 数据目录也在这块盘上），不放系统盘。
+
 1. **备案与解析（已就绪）**：`tokenkingos.com` 在火山云解析，`mvp` A 记录已指向 115.191.26.230。
 2. **端口**：`ss -ltnp | grep 3130` 应为空（2026-09-28 核查为空；被占用时改 `infra/docker-compose.yml` 里 edge 的宿主端口，并同步 Nginx 配置）。
 3. **证书（已就绪）**：`/etc/letsencrypt/live/mvp.tokenkingos.com/` 已存在，certbot 自动续期；`sudo certbot renew --dry-run` 可复核。
@@ -16,7 +18,7 @@
    sudo cp infra/host-nginx/mvp.tokenkingos.com.conf /etc/nginx/sites-available/mvp.conf
    sudo nginx -t && sudo systemctl reload nginx
    ```
-   新配置沿用同一证书路径，已含 110m 上传上限、SSE 不缓冲、600s 读超时，以及转发 `Host`/`X-Forwarded-Proto`/`X-Forwarded-For`。回退：把备份拷回 `sites-available/mvp.conf` 后 reload。
+   新配置沿用同一证书路径，已含 120m 上传上限、SSE 不缓冲、600s 读超时，以及转发 `Host`/`X-Forwarded-Proto`/`X-Forwarded-For`。回退：把备份拷回 `sites-available/mvp.conf` 后 reload。
 5. **镜像与依赖下载**：大陆主机直连 Docker Hub 与 npm 常失败。先试 `docker pull caddy:2 postgres:17-alpine node:22-alpine node:22.13-alpine`；失败时在 `/etc/docker/daemon.json` 配 `registry-mirrors`（火山镜像仓库或可用加速地址）后 `systemctl restart docker`。`tmwgsicp/wechat-download-api` 按 digest 拉取，镜像站没有时在可联网机器 `docker save` 后 `docker load`。构建时 `pnpm install` 慢可在 `infra/.env` 所在 shell 设 `NPM_CONFIG_REGISTRY=https://registry.npmmirror.com` 后构建。
 6. **出网连通**（在主机上执行，任何一项不通都先解决再上线）：
    ```bash
@@ -100,8 +102,9 @@ UPDATE radar_config SET version = version + 1, updated_at = now(), sources = jso
 默认 `BACKUP_SOURCE_MODE=compose`：PostgreSQL 只在 Compose 内网且**从不映射端口**，宿主机通过 `docker compose exec -T postgres pg_dump/psql` 在容器内备份；脚本不读取/拼接/打印 `POSTGRES_PASSWORD`。
 
 ```cron
+# 火山主机已有定时任务在 01:30、02:40、03:20–03:50、04:30、06:30，天枢备份放在 05:00 错开
 PATH=/opt/homebrew/opt/libpq/bin:/opt/homebrew/bin:/usr/bin:/bin
-15 3 * * * BACKUP_AGE_RECIPIENT=age1... BACKUP_SSH_HOST=... BACKUP_SSH_USER=... \
+0 5 * * * BACKUP_AGE_RECIPIENT=age1... BACKUP_SSH_HOST=... BACKUP_SSH_USER=... \
   BACKUP_SSH_PATH=/srv/warmap-backups BACKUP_SSH_KEY_PATH=/root/.ssh/warmap_backup \
   WARMAP_ENV_FILE=/path/to/repo/infra/.env \
   /path/to/repo/infra/backup/backup.sh >> /var/log/warmap-backup.log 2>&1

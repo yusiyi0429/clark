@@ -53,7 +53,7 @@ describe.skipIf(!hasDocker)("Compose deployment boundaries", () => {
   const config = JSON.parse(execFileSync("docker", [
     "compose", "-f", COMPOSE_FILE, "--env-file", envFile, "config", "--format", "json",
   ], { cwd: REPO, encoding: "utf8" })) as {
-    services: Record<string, { restart?: string; ports?: { published?: string; host_ip?: string }[]; image?: string; environment?: Record<string, string>; volumes?: unknown[]; user?: string; entrypoint?: unknown; depends_on?: Record<string, { condition?: string }> }>;
+    services: Record<string, { restart?: string; mem_limit?: string | number; ports?: { published?: string; host_ip?: string }[]; image?: string; environment?: Record<string, string>; volumes?: unknown[]; user?: string; entrypoint?: unknown; depends_on?: Record<string, { condition?: string }> }>;
   };
 
   it("binds only Caddy to host loopback 3130 (host Nginx terminates TLS) and keeps every other service internal", () => {
@@ -72,6 +72,16 @@ describe.skipIf(!hasDocker)("Compose deployment boundaries", () => {
       expect(config.services[name].restart, `${name} 需要自动拉起`).toBe("unless-stopped");
     }
     expect(config.services["storage-init"].restart ?? "no").toBe("no");
+  });
+
+  it("caps each long-running service's memory so the shared host (15G, no swap) keeps about 3G for Tianshu", () => {
+    let total = 0;
+    for (const name of ["postgres", "wechat", "api", "web", "edge"]) {
+      const limit = Number(config.services[name].mem_limit);
+      expect(limit, `${name} 需要内存上限`).toBeGreaterThan(0);
+      total += limit;
+    }
+    expect(total).toBeLessThanOrEqual(3.2 * 1024 ** 3);
   });
 
   it("runs the WeChat sidecar as a pinned internal service without Caddy exposure", () => {
