@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # 独立恢复流程（.tech/08 §11 + ADR 0017）：只恢复到空 PostgreSQL 与显式指定的空 volume，不覆盖现有库。
 # 默认 dry-run；必须显式 --execute 才写。任何一步不满足即中止，不做自动回滚。
-# 不带卷参数时为数据库-only 恢复：显式不支持 meeting_materials / conversation_attachments 卷数据，
-# 脚本会打印该限制；完整恢复必须同时提供 --meeting-materials-archive/--conversation-attachments-archive
-# 与 --meeting-materials-volume/--conversation-attachments-volume（目标卷必须已存在且为空）。
+# 不带卷参数时为数据库-only 恢复：显式不支持 meeting_materials / conversation_attachments /
+# meeting_recordings / wechat_data 卷数据，脚本会打印该限制；完整恢复必须同时提供四个卷各自的
+# --<卷>-archive 与 --<卷>-volume（目标卷必须已存在且为空）。
 # 恢复完成后以 DB 为准校验每个 storageKey 的 SHA-256 与卷内文件一致；不一致立即失败（fail closed）。
 # 用法：restore.sh --backup <file.dump.age> [--checksum <file.sha256>] --target-url <postgres://...>
 #                 [--age-identity <key.txt>] [--execute]
 #                 [--meeting-materials-archive <tar.gz.age>] [--meeting-materials-volume <name>]
 #                 [--conversation-attachments-archive <tar.gz.age>] [--conversation-attachments-volume <name>]
+#                 [--meeting-recordings-archive <tar.gz.age>] [--meeting-recordings-volume <name>]
+#                 [--wechat-data-archive <tar.gz.age>] [--wechat-data-volume <name>]
 set -euo pipefail
 
 EXECUTE=0
@@ -20,6 +22,10 @@ MEETING_ARCHIVE=""
 MEETING_VOLUME=""
 ATTACHMENT_ARCHIVE=""
 ATTACHMENT_VOLUME=""
+RECORDING_ARCHIVE=""
+RECORDING_VOLUME=""
+WECHAT_ARCHIVE=""
+WECHAT_VOLUME=""
 # 卷内文件属主：API 镜像以 node(1000:1000) 运行（deployment.test.ts 断言非 root）
 VOLUME_UID="${WARMAP_VOLUME_UID:-1000}"
 VOLUME_GID="${WARMAP_VOLUME_GID:-1000}"
@@ -37,7 +43,11 @@ while [ $# -gt 0 ]; do
     --meeting-materials-volume) MEETING_VOLUME="${2:?restore: --meeting-materials-volume 需要卷名}"; shift ;;
     --conversation-attachments-archive) ATTACHMENT_ARCHIVE="${2:?restore: --conversation-attachments-archive 需要路径}"; shift ;;
     --conversation-attachments-volume) ATTACHMENT_VOLUME="${2:?restore: --conversation-attachments-volume 需要卷名}"; shift ;;
-    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    --meeting-recordings-archive) RECORDING_ARCHIVE="${2:?restore: --meeting-recordings-archive 需要路径}"; shift ;;
+    --meeting-recordings-volume) RECORDING_VOLUME="${2:?restore: --meeting-recordings-volume 需要卷名}"; shift ;;
+    --wechat-data-archive) WECHAT_ARCHIVE="${2:?restore: --wechat-data-archive 需要路径}"; shift ;;
+    --wechat-data-volume) WECHAT_VOLUME="${2:?restore: --wechat-data-volume 需要卷名}"; shift ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "restore: 未知参数 $1" >&2; exit 2 ;;
   esac
   shift
@@ -63,10 +73,12 @@ DOCKER_BIN="${DOCKER_BIN:-docker}"
 [ -n "$AGE_IDENTITY" ] || die "缺少 --age-identity（备份私钥，仅宿主机受限文件）"
 [ -f "$AGE_IDENTITY" ] || die "age 私钥不存在: $AGE_IDENTITY"
 
-# 卷对要么都给，要么都不给：半个卷恢复比不恢复更危险
-if { [ -n "$MEETING_VOLUME" ] || [ -n "$MEETING_ARCHIVE" ] || [ -n "$ATTACHMENT_VOLUME" ] || [ -n "$ATTACHMENT_ARCHIVE" ]; } && \
-   { [ -z "$MEETING_VOLUME" ] || [ -z "$MEETING_ARCHIVE" ] || [ -z "$ATTACHMENT_VOLUME" ] || [ -z "$ATTACHMENT_ARCHIVE" ]; }; then
-  die "卷恢复参数不完整：需要同时提供 --meeting-materials-archive/--meeting-materials-volume/--conversation-attachments-archive/--conversation-attachments-volume"
+# 卷参数要么都给，要么都不给：半个卷恢复比不恢复更危险
+VOLUME_ARGS=("$MEETING_VOLUME" "$MEETING_ARCHIVE" "$ATTACHMENT_VOLUME" "$ATTACHMENT_ARCHIVE" "$RECORDING_VOLUME" "$RECORDING_ARCHIVE" "$WECHAT_VOLUME" "$WECHAT_ARCHIVE")
+given=0
+for arg in "${VOLUME_ARGS[@]}"; do [ -n "$arg" ] && given=$((given + 1)); done
+if [ "$given" -ne 0 ] && [ "$given" -ne "${#VOLUME_ARGS[@]}" ]; then
+  die "卷恢复参数不完整：需要同时提供 meeting-materials/conversation-attachments/meeting-recordings/wechat-data 四个卷各自的 --<卷>-archive 与 --<卷>-volume"
 fi
 VOLUME_MODE=0
 [ -n "$MEETING_VOLUME" ] && VOLUME_MODE=1
@@ -90,20 +102,21 @@ verify_checksum() {
 verify_checksum "$BACKUP_FILE" "$CHECKSUM_FILE"
 
 if [ "$VOLUME_MODE" = 1 ]; then
-  verify_checksum "$MEETING_ARCHIVE"
-  verify_checksum "$ATTACHMENT_ARCHIVE"
-  for vol in "$MEETING_VOLUME" "$ATTACHMENT_VOLUME"; do
+  for archive in "$MEETING_ARCHIVE" "$ATTACHMENT_ARCHIVE" "$RECORDING_ARCHIVE" "$WECHAT_ARCHIVE"; do
+    verify_checksum "$archive"
+  done
+  for vol in "$MEETING_VOLUME" "$ATTACHMENT_VOLUME" "$RECORDING_VOLUME" "$WECHAT_VOLUME"; do
     "$DOCKER_BIN" volume inspect "$vol" >/dev/null 2>&1 || die "目标 volume 不存在: ${vol}（必须预先创建空卷，本脚本不创建）"
   done
   # 目标卷必须为空：非空卷意味着可能指向在用环境
-  for vol in "$MEETING_VOLUME" "$ATTACHMENT_VOLUME"; do
+  for vol in "$MEETING_VOLUME" "$ATTACHMENT_VOLUME" "$RECORDING_VOLUME" "$WECHAT_VOLUME"; do
     if ! "$DOCKER_BIN" run --rm -v "$vol":/data:ro "$VOLUME_IMAGE" sh -c '[ -z "$(ls -A /data)" ]'; then
       die "目标 volume 非空: ${vol}，拒绝恢复（只恢复到显式创建的空卷）"
     fi
   done
 else
-  echo "restore: 警告：数据库-only 恢复。meeting_materials / conversation_attachments 卷数据不在本次范围，"
-  echo "restore: 警告：此模式对会前材料与会话附件不是完整恢复；完整恢复必须显式提供卷归档与空目标卷参数。"
+  echo "restore: 警告：数据库-only 恢复。meeting_materials / conversation_attachments / meeting_recordings / wechat_data 卷数据不在本次范围，"
+  echo "restore: 警告：此模式对会前材料、会话附件、录音与公众号登录态不是完整恢复；完整恢复必须显式提供卷归档与空目标卷参数。"
 fi
 
 # 只允许空库：public schema 下不得已有基本表
@@ -126,13 +139,19 @@ plain="$tmpdir/restore.dump"
 "$PG_RESTORE_BIN" --dbname="$TARGET_URL" --no-owner --no-privileges --exit-on-error < "$plain"
 
 if [ "$VOLUME_MODE" = 1 ]; then
-  # 解密两个卷归档并解压进空卷；--user 1000:1000 + tar 默认 --no-same-owner 保证非 root 属主兼容
-  "$AGE_BIN" -d -i "$AGE_IDENTITY" -o "$tmpdir/$MEETING_VOLUME.tar.gz" "$MEETING_ARCHIVE"
-  "$DOCKER_BIN" run --rm --user "$VOLUME_UID:$VOLUME_GID" -v "$MEETING_VOLUME":/target -v "$tmpdir":/src:ro "$VOLUME_IMAGE" \
-    tar -xzf "/src/$MEETING_VOLUME.tar.gz" -C /target --no-same-owner
-  "$AGE_BIN" -d -i "$AGE_IDENTITY" -o "$tmpdir/$ATTACHMENT_VOLUME.tar.gz" "$ATTACHMENT_ARCHIVE"
-  "$DOCKER_BIN" run --rm --user "$VOLUME_UID:$VOLUME_GID" -v "$ATTACHMENT_VOLUME":/target -v "$tmpdir":/src:ro "$VOLUME_IMAGE" \
-    tar -xzf "/src/$ATTACHMENT_VOLUME.tar.gz" -C /target --no-same-owner
+  # 解密 API 卷归档并解压进空卷；--user 1000:1000 + tar 默认 --no-same-owner 保证非 root 属主兼容
+  restore_api_volume() {
+    "$AGE_BIN" -d -i "$AGE_IDENTITY" -o "$tmpdir/$1.tar.gz" "$2"
+    "$DOCKER_BIN" run --rm --user "$VOLUME_UID:$VOLUME_GID" -v "$1":/target -v "$tmpdir":/src:ro "$VOLUME_IMAGE" \
+      tar -xzf "/src/$1.tar.gz" -C /target --no-same-owner
+  }
+  restore_api_volume "$MEETING_VOLUME" "$MEETING_ARCHIVE"
+  restore_api_volume "$ATTACHMENT_VOLUME" "$ATTACHMENT_ARCHIVE"
+  restore_api_volume "$RECORDING_VOLUME" "$RECORDING_ARCHIVE"
+  # 公众号 sidecar 以 root 运行：root 解压保留原属主
+  "$AGE_BIN" -d -i "$AGE_IDENTITY" -o "$tmpdir/$WECHAT_VOLUME.tar.gz" "$WECHAT_ARCHIVE"
+  "$DOCKER_BIN" run --rm -v "$WECHAT_VOLUME":/target -v "$tmpdir":/src:ro "$VOLUME_IMAGE" \
+    tar -xzf "/src/$WECHAT_VOLUME.tar.gz" -C /target
 fi
 
 # 恢复后抽查：六实体（MeetingOutcome/Transcript 内嵌在 meetings）+ 消息 + Pi entries（计数为 0 也如实打印，不伪造成功明细）

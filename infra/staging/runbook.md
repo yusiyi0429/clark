@@ -3,6 +3,33 @@
 本文件是 Ticket 16 的可执行上线清单，对应 `docs/technical/ceo-warmap/08-联调与部署.md`。
 真实凭据只放宿主机受限文件 `infra/.env`（Compose 自动读取，不入库）；本文件不记录任何真实值。
 
+## 0. 火山主机准备（方案 B，一次性）
+
+主机是 `tokenhub-prod-app-01`（Ubuntu 22.04，8C16G，公网 115.191.26.230），同时跑着 TokenHub 官网、clark-main（`demo`/旧 `mvp`）、本体 world-lab、openviking、tkos-lab 等。宿主机 Nginx 占 80/443，站点配置在 `/etc/nginx/sites-available/` 并软链到 `sites-enabled/`，证书由 certbot（nginx 插件）签发与续期。天枢只把 edge 绑在 `127.0.0.1:3130`，由宿主机 Nginx 终止 TLS 后整域名转发过来，不按路径拆。
+
+1. **备案与解析（已就绪）**：`tokenkingos.com` 在火山云解析，`mvp` A 记录已指向 115.191.26.230。
+2. **端口**：`ss -ltnp | grep 3130` 应为空（2026-09-28 核查为空；被占用时改 `infra/docker-compose.yml` 里 edge 的宿主端口，并同步 Nginx 配置）。
+3. **证书（已就绪）**：`/etc/letsencrypt/live/mvp.tokenkingos.com/` 已存在，certbot 自动续期；`sudo certbot renew --dry-run` 可复核。
+4. **Nginx（切换时做）**：现有 `/etc/nginx/sites-available/mvp.conf` 把 `mvp` 转给 `127.0.0.1:3120`（clark-main，与 `demo.tokenkingos.com` 共用同一容器）。切到天枢时只替换这一个文件，`demo` 不受影响：
+   ```bash
+   sudo cp /etc/nginx/sites-available/mvp.conf /root/mvp.conf.clark-$(date +%Y%m%d)
+   sudo cp infra/host-nginx/mvp.tokenkingos.com.conf /etc/nginx/sites-available/mvp.conf
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+   新配置沿用同一证书路径，已含 110m 上传上限、SSE 不缓冲、600s 读超时，以及转发 `Host`/`X-Forwarded-Proto`/`X-Forwarded-For`。回退：把备份拷回 `sites-available/mvp.conf` 后 reload。
+5. **镜像与依赖下载**：大陆主机直连 Docker Hub 与 npm 常失败。先试 `docker pull caddy:2 postgres:17-alpine node:22-alpine node:22.13-alpine`；失败时在 `/etc/docker/daemon.json` 配 `registry-mirrors`（火山镜像仓库或可用加速地址）后 `systemctl restart docker`。`tmwgsicp/wechat-download-api` 按 digest 拉取，镜像站没有时在可联网机器 `docker save` 后 `docker load`。构建时 `pnpm install` 慢可在 `infra/.env` 所在 shell 设 `NPM_CONFIG_REGISTRY=https://registry.npmmirror.com` 后构建。
+6. **出网连通**（在主机上执行，任何一项不通都先解决再上线）：
+   ```bash
+   for u in https://api.edgecloudapp.com https://api.bochaai.com https://tos-cn-beijing.volces.com \
+            https://openspeech.bytedance.com https://asr.tencentcloudapi.com https://github.com \
+            https://world-lab.tokenkingos.com; do
+     printf '%-45s ' "$u"; curl -s -o /dev/null -m 10 -w '%{http_code}\n' "$u" || echo 不通
+   done
+   ```
+   模型接口（`PI_BASE_URL` 所在域名）不通时对话、雷达与预研全部不可用。雷达的 GitHub Trending 来源依赖 `github.com`，大陆访问时好时坏。`LANGSMITH_*` 在大陆多半不通，生产留空即可（缺失时完全 no-op）。
+7. **`infra/.env`**：`PUBLIC_DOMAIN=mvp.tokenkingos.com`；`EXTRA_ALLOWED_ORIGINS` 留空；其余按 `.env.example`。
+8. **`tkos.ai` 跳转（已就绪，2026-09-28）**：`.ai` 不能在大陆备案，请求打到这台主机会被火山拦截，所以跳转在 Porkbun 的 URL Forwarding 做，不经宿主机 Nginx：`tkos.ai`、`www.tkos.ai` → `https://tokenkingos.com`（301，不带路径）；`mvp.tkos.ai` → `https://mvp.tokenkingos.com`（301，带路径）。用户最终停在 `mvp.tokenkingos.com`，登录 Cookie 也只在这个域名下；发给成员 Agent 的连接地址一律写 `mvp.tokenkingos.com`（301 会让部分客户端把 POST 改成 GET）。
+
 ## 1. 部署顺序
 
 1. 宿主机准备 `infra/.env`（变量清单见 `.env.example`；真实 Bocha key、公众号 sidecar token、模型 key、人员 seed 路径）。
@@ -10,9 +37,9 @@
 3. `docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build`。
    - migration 由 API 启动前内联执行（advisory lock、只向前、失败则不 listen）；没有 down migration，回滚靠部署前备份与旧镜像。
    - `wechat` sidecar 只在内网，无 `ports`，不经 Caddy；首次需访问其内网登录页扫码（见 §5）。
-   - 首次上线（或新增人员）后发初始码：`docker compose -f infra/docker-compose.yml --env-file infra/.env exec api pnpm access:issue`，把输出表格里的「ID / 初始码」私下发给每个人；首次登录会要求改成自己的 4 位口令。重置某人：`... exec api pnpm access:issue <personId>`（旧会话立即失效）。
+   - 首次上线（或新增人员）后发初始码：`docker compose -f infra/docker-compose.yml --env-file infra/.env exec api pnpm --filter @warmap/api access:issue`，把输出表格里的「ID / 初始码」私下发给每个人；首次登录会要求改成自己的 4 位口令。重置某人：`... exec api pnpm --filter @warmap/api access:issue <personId>`（旧会话立即失效）。容器工作目录是 workspace 根，不带 `--filter` 会报 `Command "access:issue" not found`。
 4. `bash infra/staging/smoke.sh`（需要 `PUBLIC_ORIGIN`、`CEO_LOGIN_ID` 与 `CEO_PASSCODE`）。
-5. Caddy 边界复验：`bash infra/caddy/verify.sh`（本地 stub）或对 staging 复跑 `/`（Web）、`/api/healthz`（API）、`/mcp/company-memory`（401）、SSE 与 multipart。
+5. 入口复验：`bash infra/caddy/verify.sh`（本地 stub）或对线上域名复跑 `/`（Web）、`/api/healthz`（API）、`/mcp/company-memory`（401）、SSE 与 multipart；宿主机上 `curl -s http://127.0.0.1:3130/api/healthz` 可绕过 Nginx 单独确认 edge。
 
 ## 2. 迁移与版本检查
 
@@ -127,6 +154,6 @@ curl -N -b cookie.txt -X POST "$PUBLIC_ORIGIN/api/conversations/<scope>/messages
 
 ## 备份/恢复（ADR 0017 + §11）
 
-- 备份：`infra/backup/backup.sh`（宿主机 cron）。compose 模式自动停/启 `api` 冻结写入，同批次产出 dump.age、两个卷归档 .age 与 manifest；恢复必须使用同一批次。
-- 恢复：`infra/backup/restore.sh` 默认 dry-run；完整恢复需要加密 dump + 两个卷归档 + 显式命名的**空**目标卷；脚本以恢复后的 DB 逐行核对 storageKey/SHA-256，不一致即失败。数据库-only 恢复对材料/会话附件**不是完整恢复**（脚本会显式提示）。
+- 备份：`infra/backup/backup.sh`（宿主机 cron）。compose 模式自动停/启 `api` 冻结写入，同批次产出 dump.age、四个卷归档 .age（会前材料、会话附件、录音、公众号 sidecar 数据）与 manifest；恢复必须使用同一批次。
+- 恢复：`infra/backup/restore.sh` 默认 dry-run；完整恢复需要加密 dump + 四个卷归档 + 显式命名的**空**目标卷（`--<卷>-archive`/`--<卷>-volume` 四对，缺一即拒绝）；脚本以恢复后的 DB 逐行核对 storageKey/SHA-256，不一致即失败。数据库-only 恢复对材料/会话附件/录音/公众号登录态**不是完整恢复**（脚本会显式提示）。
 - 演练环境提醒：隔离恢复演练必须在 API 启动前把 `PI_BASE_URL` 指向死地址，避免 recovery/scheduler 外呼（见 `.scratch/ceo-warmap-mvp/evidence/isolated-audit-runbook.md`）。

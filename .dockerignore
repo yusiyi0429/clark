@@ -12,8 +12,9 @@ seed
 backend
 infra/.env
 infra/backup/.state
-.env
-.env.*
-!.env.example
+# 任意层级的本地 env（如 apps/api/.env）都不进构建上下文，否则会被 COPY apps/api 打进镜像
+**/.env
+**/.env.*
+!**/.env.example
 **/*.log
 .DS_Store

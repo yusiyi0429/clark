@@ -53,18 +53,25 @@ describe.skipIf(!hasDocker)("Compose deployment boundaries", () => {
   const config = JSON.parse(execFileSync("docker", [
     "compose", "-f", COMPOSE_FILE, "--env-file", envFile, "config", "--format", "json",
   ], { cwd: REPO, encoding: "utf8" })) as {
-    services: Record<string, { ports?: { published?: string }[]; image?: string; environment?: Record<string, string>; volumes?: unknown[]; user?: string; entrypoint?: unknown; depends_on?: Record<string, { condition?: string }> }>;
+    services: Record<string, { restart?: string; ports?: { published?: string; host_ip?: string }[]; image?: string; environment?: Record<string, string>; volumes?: unknown[]; user?: string; entrypoint?: unknown; depends_on?: Record<string, { condition?: string }> }>;
   };
 
-  it("exposes 80/443 only through Caddy and keeps every other service internal", () => {
+  it("binds only Caddy to host loopback 3130 (host Nginx terminates TLS) and keeps every other service internal", () => {
     for (const [name, service] of Object.entries(config.services)) {
-      const published = (service.ports ?? []).map((port) => String(port.published));
+      const published = (service.ports ?? []).map((port) => `${port.host_ip ?? ""}:${port.published}`);
       if (name === "edge") {
-        expect(published.sort()).toEqual(["443", "80"]);
+        expect(published).toEqual(["127.0.0.1:3130"]);
       } else {
         expect(published, `${name} 不得暴露公网端口`).toEqual([]);
       }
     }
+  });
+
+  it("restarts every long-running service after a crash or host reboot", () => {
+    for (const name of ["postgres", "wechat", "api", "web", "edge"]) {
+      expect(config.services[name].restart, `${name} 需要自动拉起`).toBe("unless-stopped");
+    }
+    expect(config.services["storage-init"].restart ?? "no").toBe("no");
   });
 
   it("runs the WeChat sidecar as a pinned internal service without Caddy exposure", () => {
@@ -256,10 +263,12 @@ describe("backup.sh source modes", () => {
     expect(local.some((f) => f.endsWith(".dump.age.sha256"))).toBe(true);
     expect(local.some((f) => f.endsWith("meeting_materials.tar.gz.age"))).toBe(true);
     expect(local.some((f) => f.endsWith("conversation_attachments.tar.gz.age"))).toBe(true);
+    expect(local.some((f) => f.endsWith("meeting_recordings.tar.gz.age"))).toBe(true);
+    expect(local.some((f) => f.endsWith("wechat_data.tar.gz.age"))).toBe(true);
     expect(local.some((f) => f.endsWith(".manifest.json"))).toBe(true);
-    // dump + manifest + 2 卷，各带 checksum sidecar
-    expect(local.length).toBe(8);
-    expect(readdirSync(offsite).length).toBe(8);
+    // dump + manifest + 4 卷，各带 checksum sidecar
+    expect(local.length).toBe(12);
+    expect(readdirSync(offsite).length).toBe(12);
   });
 
   it("compose mode freezes only a running api before pg_dump and restarts it last (trap)", () => {
@@ -284,10 +293,12 @@ describe("backup.sh source modes", () => {
     // 只冻结 api：postgres/edge/wechat 不出现在 stop/start
     expect(calls.join("\n")).not.toMatch(/ stop (postgres|edge|wechat)$/);
     expect(calls[calls.length - 1]).toMatch(/ start api$/);
-    // 两个卷都在同批次归档
-    expect(calls.filter((c) => c.includes("--entrypoint tar")).length).toBe(2);
+    // 四个卷都在同批次归档；公众号卷经 sidecar 自己的镜像
+    expect(calls.filter((c) => c.includes("--entrypoint tar")).length).toBe(4);
     expect(calls.some((c) => c.includes("meeting_materials"))).toBe(true);
     expect(calls.some((c) => c.includes("conversation_attachments"))).toBe(true);
+    expect(calls.some((c) => c.includes("meeting_recordings"))).toBe(true);
+    expect(calls.some((c) => c.includes("--entrypoint tar wechat czf - -C /app/data"))).toBe(true);
     const manifest = readdirSync(join(dir, "local")).find((f) => f.endsWith(".manifest.json"));
     const manifestText = readFileSync(join(dir, "local", manifest ?? ""), "utf8");
     expect(manifestText).toContain("meet/m-1");
@@ -458,20 +469,30 @@ function volumeFixture(dir: string, opts: { volumeEmpty: boolean; rows: string; 
   } };
 }
 
-function volumeBackupFixture(dir: string): { meetingArchive: string; attachmentArchive: string; meetingVolume: string; attachmentVolume: string; manifest: string } {
+function volumeBackupFixture(dir: string): { meetingArchive: string; attachmentArchive: string; meetingVolume: string; attachmentVolume: string; manifest: string; args: string[] } {
   const dump = join(dir, "warmap-test.dump.age");
   writeFileSync(dump, "encrypted-bytes");
   writeFileSync(`${dump}.sha256`, `${createHash("sha256").update("encrypted-bytes").digest("hex")}  warmap-test.dump.age\n`);
   writeFileSync(join(dir, "age-identity.txt"), "AGE-SECRET-KEY-DUMMY\n");
   const meetingArchive = join(dir, "warmap-x.meeting_materials.tar.gz.age");
   const attachmentArchive = join(dir, "warmap-x.conversation_attachments.tar.gz.age");
-  for (const [file, content] of [[meetingArchive, "mm-bytes"], [attachmentArchive, "att-bytes"]] as const) {
+  const recordingArchive = join(dir, "warmap-x.meeting_recordings.tar.gz.age");
+  const wechatArchive = join(dir, "warmap-x.wechat_data.tar.gz.age");
+  for (const [file, content] of [[meetingArchive, "mm-bytes"], [attachmentArchive, "att-bytes"], [recordingArchive, "rec-bytes"], [wechatArchive, "wx-bytes"]] as const) {
     writeFileSync(file, content);
     writeFileSync(`${file}.sha256`, `${createHash("sha256").update(content).digest("hex")}  ${file.split("/").pop()}\n`);
   }
   const manifest = join(dir, "warmap-x.manifest.json");
   writeFileSync(manifest, JSON.stringify({ batch: "warmap-x", storageRows: [] }));
-  return { meetingArchive, attachmentArchive, meetingVolume: "meeting_materials_restore", attachmentVolume: "conversation_attachments_restore", manifest };
+  const meetingVolume = "meeting_materials_restore";
+  const attachmentVolume = "conversation_attachments_restore";
+  const args = [
+    "--meeting-materials-archive", meetingArchive, "--meeting-materials-volume", meetingVolume,
+    "--conversation-attachments-archive", attachmentArchive, "--conversation-attachments-volume", attachmentVolume,
+    "--meeting-recordings-archive", recordingArchive, "--meeting-recordings-volume", "meeting_recordings_restore",
+    "--wechat-data-archive", wechatArchive, "--wechat-data-volume", "wechat_data_restore",
+  ];
+  return { meetingArchive, attachmentArchive, meetingVolume, attachmentVolume, manifest, args };
 }
 
 describe("restore.sh volume-backed recovery", () => {
@@ -483,8 +504,7 @@ describe("restore.sh volume-backed recovery", () => {
       "--backup", join(dir, "warmap-test.dump.age"),
       "--target-url", "postgres://u:p@restore/db",
       "--age-identity", join(dir, "age-identity.txt"),
-      "--meeting-materials-archive", v.meetingArchive, "--meeting-materials-volume", v.meetingVolume,
-      "--conversation-attachments-archive", v.attachmentArchive, "--conversation-attachments-volume", v.attachmentVolume,
+      ...v.args,
     ], env);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("目标 volume 非空");
@@ -499,8 +519,7 @@ describe("restore.sh volume-backed recovery", () => {
       volumeSha: "b".repeat(64),
     });
     const result = run(RESTORE_SH, ["--backup", join(dir, "warmap-test.dump.age"), "--target-url", "postgres://u:p@restore/db", "--age-identity", join(dir, "age-identity.txt"),
-      "--meeting-materials-archive", v.meetingArchive, "--meeting-materials-volume", v.meetingVolume,
-      "--conversation-attachments-archive", v.attachmentArchive, "--conversation-attachments-volume", v.attachmentVolume,
+      ...v.args,
       "--execute"], env);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("存储校验失败");
@@ -514,8 +533,7 @@ describe("restore.sh volume-backed recovery", () => {
     const { env } = volumeFixture(dir, { volumeEmpty: true, rows, volumeSha: "a".repeat(64) });
     // sha256sum stub 对每个文件都返回同一摘要：第二行(反例)只在混合摘要时失败——这里两行分别校验
     const result = run(RESTORE_SH, ["--backup", join(dir, "warmap-test.dump.age"), "--target-url", "postgres://u:p@restore/db", "--age-identity", join(dir, "age-identity.txt"),
-      "--meeting-materials-archive", v.meetingArchive, "--meeting-materials-volume", v.meetingVolume,
-      "--conversation-attachments-archive", v.attachmentArchive, "--conversation-attachments-volume", v.attachmentVolume,
+      ...v.args,
       "--execute"], { ...env, WARMAP_TEST_VOLUME_SHA: "a".repeat(64) });
     // 第二行的 DB sha 是 b…，而卷始终返回 a… → 必须失败
     expect(result.status).not.toBe(0);
@@ -527,11 +545,20 @@ describe("restore.sh volume-backed recovery", () => {
     const v2 = volumeBackupFixture(dir2);
     const env2 = volumeFixture(dir2, { volumeEmpty: true, rows: rowsMatch, volumeSha: "a".repeat(64) });
     const ok = run(RESTORE_SH, ["--backup", join(dir2, "warmap-test.dump.age"), "--target-url", "postgres://u:p@restore/db", "--age-identity", join(dir2, "age-identity.txt"),
-      "--meeting-materials-archive", v2.meetingArchive, "--meeting-materials-volume", v2.meetingVolume,
-      "--conversation-attachments-archive", v2.attachmentArchive, "--conversation-attachments-volume", v2.attachmentVolume,
+      ...v2.args,
       "--execute"], env2.env);
     expect(ok.status).toBe(0);
     expect(ok.stdout).toContain("存储校验通过（2 行");
+  });
+
+  it("refuses a partial volume set (e.g. without recordings and WeChat data)", () => {
+    const dir = tempDir();
+    const v = volumeBackupFixture(dir);
+    const { env } = volumeFixture(dir, { volumeEmpty: true, rows: "", volumeSha: "x" });
+    const result = run(RESTORE_SH, ["--backup", join(dir, "warmap-test.dump.age"), "--target-url", "postgres://u:p@restore/db", "--age-identity", join(dir, "age-identity.txt"),
+      ...v.args.slice(0, 8)], env);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("卷恢复参数不完整");
   });
 
   it("database-only restore is allowed but explicitly declares volumes unsupported", () => {

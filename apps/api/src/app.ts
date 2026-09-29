@@ -208,7 +208,9 @@ export async function buildApp({
     async recoverStaleRuns() {},
     async idle() {},
   };
-  const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
+  // 线上链路是 宿主机 Nginx → Caddy → API，两跳都经 Docker 内网：信任内网地址上的代理，
+  // req.ip（登录限流的键）才是用户而不是 Caddy；用户在最前面伪造的 X-Forwarded-For 越不过第一个公网地址
+  const app = Fastify({ logger: false, trustProxy: "loopback,uniquelocal" }).withTypeProvider<TypeBoxTypeProvider>();
   // 未注入真实 Runner 时不虚构预研：Issue 保留 pending，等显式配置
   const research = researchService ?? {
     async start() {},

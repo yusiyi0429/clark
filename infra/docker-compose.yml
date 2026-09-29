@@ -1,11 +1,13 @@
 # CEO WarMap 单机 Compose（.tech/08）。
-# 只有 edge 暴露公网端口；web/api/postgres/wechat 仅内网。
+# 火山方案 B：宿主机 Nginx 终止 TLS，edge 只绑 127.0.0.1:3130；web/api/postgres/wechat 仅内网。
+# 长期服务 restart: unless-stopped，崩溃或宿主机重启后由 Docker 拉起。
 # migration 由 API 启动前内联执行（apps/api/src/migrate.ts：advisory lock、只向前、失败不 listen），
 # 不存在自动 down/rollback；回滚依赖部署前备份（infra/backup）与旧镜像。
 name: warmap
 
 services:
   postgres:
+    restart: unless-stopped
     image: postgres:17-alpine
     environment:
       POSTGRES_DB: warmap
@@ -37,6 +39,7 @@ services:
   # 公众号账号级来源的独立 AGPL sidecar：官方镜像、不 vendor 源码、无 ports（不经 Caddy）。
   # WarMap API 只经内网 MCP 调用它并持静态 Token；微信 Cookie 只存在 sidecar 的 wechat_data 卷。
   wechat:
+    restart: unless-stopped
     # AGPL sidecar：钉 tag + digest，避免 tag 重推静默换代码（供应链接口与来源可审计）
     image: tmwgsicp/wechat-download-api:1.7.0@sha256:4723fcbbda1e4c28edb605760fade4e5815636a087d25bf0dfa7ddd397e82c3a
     environment:
@@ -63,6 +66,7 @@ services:
       start_period: 30s
 
   api:
+    restart: unless-stopped
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
@@ -71,6 +75,7 @@ services:
       PUBLIC_ORIGIN: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN required}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET required}
       SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-2592000}
+      EXTRA_ALLOWED_ORIGINS: ${EXTRA_ALLOWED_ORIGINS:-}
       DRI_SERVICE_TOKEN: ${DRI_SERVICE_TOKEN:?DRI_SERVICE_TOKEN required}
       ONTOLOGY_SERVICE_TOKEN: ${ONTOLOGY_SERVICE_TOKEN:-}
       COMPANY_MEMORY_MCP_TOKEN: ${COMPANY_MEMORY_MCP_TOKEN:?COMPANY_MEMORY_MCP_TOKEN required}
@@ -123,6 +128,7 @@ services:
         condition: service_started
 
   web:
+    restart: unless-stopped
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
@@ -133,12 +139,11 @@ services:
       - api
 
   edge:
+    restart: unless-stopped
     image: caddy:2
+    # 只绑宿主机回环：公网 80/443 归宿主机 Nginx（终止 TLS 后整域名转发到这里）
     ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
+      - "127.0.0.1:3130:80"
     volumes:
       - ../infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

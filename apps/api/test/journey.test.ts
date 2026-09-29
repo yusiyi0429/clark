@@ -183,6 +183,30 @@ describe("CEO login → real Card journey", () => {
     }
   });
 
+  it("behind host Nginx + Caddy, counts each real client separately and ignores a spoofed X-Forwarded-For", async () => {
+    const t = await createTestApp();
+    const { app } = t;
+    // 连接来自 Caddy；Caddy 交来的 X-Forwarded-For 末尾是宿主机 Nginx，倒数第二个才是用户
+    const via = (forwardedFor: string, payload: object) => app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      remoteAddress: "172.18.0.5",
+      headers: { origin: t.publicOrigin, "x-forwarded-for": `${forwardedFor}, 172.18.0.1` },
+      payload,
+    });
+    try {
+      for (let i = 0; i < 20; i++) {
+        expect((await via("203.0.113.7", { loginId: `nobody${i}`, passcode: "0000" })).statusCode).toBe(401);
+      }
+      // 同一用户在最前面伪造一个 IP 也逃不出自己的额度
+      expect((await via("198.51.100.99, 203.0.113.7", TEST_LOGIN)).statusCode).toBe(429);
+      // 另一个用户不受影响
+      expect((await via("203.0.113.8", TEST_LOGIN)).statusCode).toBe(200);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("service tokens are a separate boundary from the CEO session", async () => {
     const t = await createTestApp();
     const { app } = t;
