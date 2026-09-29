@@ -5,6 +5,8 @@
 
 ## 0. 火山主机准备（方案 B，一次性）
 
+> **2026-09-29 实际上线**：天枢生产域名改为 `tk.tokenkingos.com`（新建 `sites-available/tk.conf`，配置见 `infra/host-nginx/tk.tokenkingos.com.conf`，证书 certbot webroot 签发）；`mvp.tokenkingos.com` 保持 clark 不变。镜像在主机上按国内源构建，公众号 sidecar 用 `infra/volcano.override.yml` 的本地标签。
+
 主机是 `tokenhub-prod-app-01`（Ubuntu 22.04，8C16G，公网 115.191.26.230），同时跑着 TokenHub 官网、clark-main（`demo`/旧 `mvp`）、本体 world-lab、openviking、tkos-lab 等。宿主机 Nginx 占 80/443，站点配置在 `/etc/nginx/sites-available/` 并软链到 `sites-enabled/`，证书由 certbot（nginx 插件）签发与续期。天枢只把 edge 绑在 `127.0.0.1:3130`，由宿主机 Nginx 终止 TLS 后整域名转发过来，不按路径拆。
 
 部署目录按主机约定放在数据盘 `/srv/tokenhub/apps/tianshu`（与 world-lab、world-02、clark 同级；Docker 数据目录也在这块盘上），不放系统盘。
