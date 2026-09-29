@@ -21,6 +21,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/demo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 演示入口是否可用（只在时间机器里注册） */
+        get: operations["getDemoEntry"];
+        put?: never;
+        /** 免口令进入演示账号（只在时间机器里注册） */
+        post: operations["enterDemo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/passcode": {
         parameters: {
             query?: never;
@@ -440,6 +458,91 @@ export interface paths {
         put?: never;
         /** 拍板人整理任务卡草稿、统一开放或重开；版本冲突返回 latestCard */
         post: operations["executeMissionRoundAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monthly-reviews/{period}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** CEO 读取某月复盘总览；当月还没有复盘时 review 为 null 并带开启动作 */
+        get: operations["getMonthlyReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monthly-review-items/{itemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 负责人或 CEO 读取一项复盘；其他人 404 */
+        get: operations["getMonthlyReviewItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monthly-review-items/{itemId}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 讨论与补充：负责人、CEO 与本单元当月 Mission 负责人在确认前发言；按 clientId 幂等 */
+        post: operations["createMonthlyReviewComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/monthly-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 按复盘当前状态现算的本人待办通知（负责人与 CEO） */
+        get: operations["getMyMonthlyReviewNotices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monthly-reviews/actions/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 执行复盘动作；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT */
+        post: operations["executeMonthlyReviewAction"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1951,6 +2054,9 @@ export interface components {
             role?: "ceo" | "member";
             onboarded?: boolean;
         };
+        DemoEntryResponse: {
+            displayName: string;
+        };
         ChangePasscodeRequest: {
             loginId: string;
             passcode: string;
@@ -2113,6 +2219,7 @@ export interface components {
             sortOrder: number;
             name: string;
             group?: string;
+            ownerId?: string;
             sixMonthOutcome: string;
             supportRefs?: ({
                 /** @constant */
@@ -2132,6 +2239,7 @@ export interface components {
             sortOrder?: number;
             name?: string;
             group?: string;
+            ownerId?: string;
             sixMonthOutcome?: string;
             supportRefs?: ({
                 /** @constant */
@@ -2402,6 +2510,693 @@ export interface components {
         };
         MissionRoundConfirmInput: {
             note: string;
+        };
+        MonthlyReviewResponse: {
+            period: string;
+            review: {
+                reviewId: string;
+                period: string;
+                nextPeriod: string;
+                version: number;
+                status: "collecting" | "summarizing" | "ltco_pending" | "closed";
+                counts: {
+                    total: number;
+                    submitted: number;
+                    confirmed: number;
+                    returned: number;
+                };
+                items: {
+                    itemId: string;
+                    subjectType: "battlefield" | "capability";
+                    subjectId: string;
+                    subjectCode: string;
+                    subjectName: string;
+                    ownerName: string;
+                    ownerUnassigned: boolean;
+                    status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                    lead: string | null;
+                    assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
+                    assessmentOverall: string | null;
+                    deviationCount: number;
+                    actions: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    }[];
+                }[];
+                summary: {
+                    status: ("pending" | "running" | "ready" | "failed") | "none";
+                    error: {
+                        code: string;
+                        message: string;
+                        /** @description ISO 8601 */
+                        at: string;
+                    } | null;
+                    overall: string;
+                    judgments: {
+                        title: string;
+                        body: string;
+                    }[];
+                    nextFocus: string[];
+                    confirmedAt: string | null;
+                };
+                ltco: {
+                    current: string;
+                    units: {
+                        subjectType: "battlefield" | "capability";
+                        subjectId: string;
+                        subjectCode: string;
+                        subjectName: string;
+                        current: string;
+                    }[];
+                    suggestion: {
+                        change: boolean;
+                        proposedLtco: string;
+                        rationale: string;
+                        units: {
+                            subjectType: "battlefield" | "capability";
+                            subjectId: string;
+                            proposedOutcome: string;
+                            rationale: string;
+                        }[];
+                    } | null;
+                    decision: {
+                        decision: "keep" | "revise";
+                        ltcoBefore: string;
+                        ltcoAfter: string;
+                        units: {
+                            subjectType: "battlefield" | "capability";
+                            subjectId: string;
+                            before: string;
+                            after: string;
+                        }[];
+                        /** @description ISO 8601 */
+                        decidedAt: string;
+                        planExisted: boolean;
+                    } | null;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            } | null;
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        MonthlyReviewItemResponse: {
+            item: {
+                itemId: string;
+                reviewId: string;
+                period: string;
+                version: number;
+                subjectType: "battlefield" | "capability";
+                subjectId: string;
+                subjectCode: string;
+                subjectName: string;
+                ownerId: string;
+                ownerName: string;
+                ownerUnassigned: boolean;
+                target: string | null;
+                sixMonthOutcome: string;
+                status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                draftError: {
+                    code: string;
+                    message: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                selfReview: {
+                    overall: {
+                        text: string;
+                        sources: string[];
+                    };
+                    judgments: {
+                        text: string;
+                        sources: string[];
+                    };
+                    nextFocus: {
+                        text: string;
+                        sources: string[];
+                    };
+                    escalations: {
+                        text: string;
+                        sources: string[];
+                    };
+                } | null;
+                suggestions: {
+                    field: "overall" | "judgments" | "nextFocus" | "escalations";
+                    text: string;
+                    rationale: string;
+                    /** @description ISO 8601 */
+                    createdAt: string;
+                }[];
+                returnReason: string | null;
+                assessment: {
+                    status: ("pending" | "running" | "ready" | "failed") | "none";
+                    result: {
+                        overall: string;
+                        deviations: {
+                            point: string;
+                            evidence: string;
+                        }[];
+                        questions: string[];
+                    } | null;
+                    error: {
+                        code: string;
+                        message: string;
+                        /** @description ISO 8601 */
+                        at: string;
+                    } | null;
+                };
+                history: {
+                    /** @description ISO 8601 */
+                    at: string;
+                    by: string;
+                    byName: string;
+                    action: "submit" | "return" | "confirm";
+                    reason: string | null;
+                }[];
+                comments: {
+                    id: string;
+                    authorId: string;
+                    authorName: string;
+                    body: string;
+                    /** @description ISO 8601 */
+                    createdAt: string;
+                }[];
+                participantNames: string[];
+                submittedAt: string | null;
+                confirmedAt: string | null;
+                viewer: {
+                    isOwner: boolean;
+                    isCeo: boolean;
+                    isParticipant: boolean;
+                    canComment: boolean;
+                };
+                conversationScope: string;
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+        };
+        MonthlyReviewPayload: {
+            reviewId: string;
+            period: string;
+            nextPeriod: string;
+            version: number;
+            status: "collecting" | "summarizing" | "ltco_pending" | "closed";
+            counts: {
+                total: number;
+                submitted: number;
+                confirmed: number;
+                returned: number;
+            };
+            items: {
+                itemId: string;
+                subjectType: "battlefield" | "capability";
+                subjectId: string;
+                subjectCode: string;
+                subjectName: string;
+                ownerName: string;
+                ownerUnassigned: boolean;
+                status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                lead: string | null;
+                assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
+                assessmentOverall: string | null;
+                deviationCount: number;
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            }[];
+            summary: {
+                status: ("pending" | "running" | "ready" | "failed") | "none";
+                error: {
+                    code: string;
+                    message: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                overall: string;
+                judgments: {
+                    title: string;
+                    body: string;
+                }[];
+                nextFocus: string[];
+                confirmedAt: string | null;
+            };
+            ltco: {
+                current: string;
+                units: {
+                    subjectType: "battlefield" | "capability";
+                    subjectId: string;
+                    subjectCode: string;
+                    subjectName: string;
+                    current: string;
+                }[];
+                suggestion: {
+                    change: boolean;
+                    proposedLtco: string;
+                    rationale: string;
+                    units: {
+                        subjectType: "battlefield" | "capability";
+                        subjectId: string;
+                        proposedOutcome: string;
+                        rationale: string;
+                    }[];
+                } | null;
+                decision: {
+                    decision: "keep" | "revise";
+                    ltcoBefore: string;
+                    ltcoAfter: string;
+                    units: {
+                        subjectType: "battlefield" | "capability";
+                        subjectId: string;
+                        before: string;
+                        after: string;
+                    }[];
+                    /** @description ISO 8601 */
+                    decidedAt: string;
+                    planExisted: boolean;
+                } | null;
+            };
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        MonthlyReviewItemPayload: {
+            itemId: string;
+            reviewId: string;
+            period: string;
+            version: number;
+            subjectType: "battlefield" | "capability";
+            subjectId: string;
+            subjectCode: string;
+            subjectName: string;
+            ownerId: string;
+            ownerName: string;
+            ownerUnassigned: boolean;
+            target: string | null;
+            sixMonthOutcome: string;
+            status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+            draftError: {
+                code: string;
+                message: string;
+                /** @description ISO 8601 */
+                at: string;
+            } | null;
+            selfReview: {
+                overall: {
+                    text: string;
+                    sources: string[];
+                };
+                judgments: {
+                    text: string;
+                    sources: string[];
+                };
+                nextFocus: {
+                    text: string;
+                    sources: string[];
+                };
+                escalations: {
+                    text: string;
+                    sources: string[];
+                };
+            } | null;
+            suggestions: {
+                field: "overall" | "judgments" | "nextFocus" | "escalations";
+                text: string;
+                rationale: string;
+                /** @description ISO 8601 */
+                createdAt: string;
+            }[];
+            returnReason: string | null;
+            assessment: {
+                status: ("pending" | "running" | "ready" | "failed") | "none";
+                result: {
+                    overall: string;
+                    deviations: {
+                        point: string;
+                        evidence: string;
+                    }[];
+                    questions: string[];
+                } | null;
+                error: {
+                    code: string;
+                    message: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+            };
+            history: {
+                /** @description ISO 8601 */
+                at: string;
+                by: string;
+                byName: string;
+                action: "submit" | "return" | "confirm";
+                reason: string | null;
+            }[];
+            comments: {
+                id: string;
+                authorId: string;
+                authorName: string;
+                body: string;
+                /** @description ISO 8601 */
+                createdAt: string;
+            }[];
+            participantNames: string[];
+            submittedAt: string | null;
+            confirmedAt: string | null;
+            viewer: {
+                isOwner: boolean;
+                isCeo: boolean;
+                isParticipant: boolean;
+                canComment: boolean;
+            };
+            conversationScope: string;
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        MonthlyReviewItemRow: {
+            itemId: string;
+            subjectType: "battlefield" | "capability";
+            subjectId: string;
+            subjectCode: string;
+            subjectName: string;
+            ownerName: string;
+            ownerUnassigned: boolean;
+            status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+            lead: string | null;
+            assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
+            assessmentOverall: string | null;
+            deviationCount: number;
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        MyMonthlyReviewNoticesResponse: {
+            notices: {
+                id: string;
+                kind: "item_todo" | "item_participant" | "items_to_review" | "summary_pending" | "ltco_pending";
+                period: string;
+                text: string;
+                href: string;
+                /** @description ISO 8601 */
+                createdAt: string;
+            }[];
+        };
+        MonthlyReviewNotice: {
+            id: string;
+            kind: "item_todo" | "item_participant" | "items_to_review" | "summary_pending" | "ltco_pending";
+            period: string;
+            text: string;
+            href: string;
+            /** @description ISO 8601 */
+            createdAt: string;
+        };
+        ExecuteMonthlyReviewActionRequest: {
+            actionId: string;
+            input?: unknown;
+        };
+        ExecuteMonthlyReviewActionResponse: {
+            item?: {
+                itemId: string;
+                reviewId: string;
+                period: string;
+                version: number;
+                subjectType: "battlefield" | "capability";
+                subjectId: string;
+                subjectCode: string;
+                subjectName: string;
+                ownerId: string;
+                ownerName: string;
+                ownerUnassigned: boolean;
+                target: string | null;
+                sixMonthOutcome: string;
+                status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                draftError: {
+                    code: string;
+                    message: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                selfReview: {
+                    overall: {
+                        text: string;
+                        sources: string[];
+                    };
+                    judgments: {
+                        text: string;
+                        sources: string[];
+                    };
+                    nextFocus: {
+                        text: string;
+                        sources: string[];
+                    };
+                    escalations: {
+                        text: string;
+                        sources: string[];
+                    };
+                } | null;
+                suggestions: {
+                    field: "overall" | "judgments" | "nextFocus" | "escalations";
+                    text: string;
+                    rationale: string;
+                    /** @description ISO 8601 */
+                    createdAt: string;
+                }[];
+                returnReason: string | null;
+                assessment: {
+                    status: ("pending" | "running" | "ready" | "failed") | "none";
+                    result: {
+                        overall: string;
+                        deviations: {
+                            point: string;
+                            evidence: string;
+                        }[];
+                        questions: string[];
+                    } | null;
+                    error: {
+                        code: string;
+                        message: string;
+                        /** @description ISO 8601 */
+                        at: string;
+                    } | null;
+                };
+                history: {
+                    /** @description ISO 8601 */
+                    at: string;
+                    by: string;
+                    byName: string;
+                    action: "submit" | "return" | "confirm";
+                    reason: string | null;
+                }[];
+                comments: {
+                    id: string;
+                    authorId: string;
+                    authorName: string;
+                    body: string;
+                    /** @description ISO 8601 */
+                    createdAt: string;
+                }[];
+                participantNames: string[];
+                submittedAt: string | null;
+                confirmedAt: string | null;
+                viewer: {
+                    isOwner: boolean;
+                    isCeo: boolean;
+                    isParticipant: boolean;
+                    canComment: boolean;
+                };
+                conversationScope: string;
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+            review?: {
+                reviewId: string;
+                period: string;
+                nextPeriod: string;
+                version: number;
+                status: "collecting" | "summarizing" | "ltco_pending" | "closed";
+                counts: {
+                    total: number;
+                    submitted: number;
+                    confirmed: number;
+                    returned: number;
+                };
+                items: {
+                    itemId: string;
+                    subjectType: "battlefield" | "capability";
+                    subjectId: string;
+                    subjectCode: string;
+                    subjectName: string;
+                    ownerName: string;
+                    ownerUnassigned: boolean;
+                    status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                    lead: string | null;
+                    assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
+                    assessmentOverall: string | null;
+                    deviationCount: number;
+                    actions: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    }[];
+                }[];
+                summary: {
+                    status: ("pending" | "running" | "ready" | "failed") | "none";
+                    error: {
+                        code: string;
+                        message: string;
+                        /** @description ISO 8601 */
+                        at: string;
+                    } | null;
+                    overall: string;
+                    judgments: {
+                        title: string;
+                        body: string;
+                    }[];
+                    nextFocus: string[];
+                    confirmedAt: string | null;
+                };
+                ltco: {
+                    current: string;
+                    units: {
+                        subjectType: "battlefield" | "capability";
+                        subjectId: string;
+                        subjectCode: string;
+                        subjectName: string;
+                        current: string;
+                    }[];
+                    suggestion: {
+                        change: boolean;
+                        proposedLtco: string;
+                        rationale: string;
+                        units: {
+                            subjectType: "battlefield" | "capability";
+                            subjectId: string;
+                            proposedOutcome: string;
+                            rationale: string;
+                        }[];
+                    } | null;
+                    decision: {
+                        decision: "keep" | "revise";
+                        ltcoBefore: string;
+                        ltcoAfter: string;
+                        units: {
+                            subjectType: "battlefield" | "capability";
+                            subjectId: string;
+                            before: string;
+                            after: string;
+                        }[];
+                        /** @description ISO 8601 */
+                        decidedAt: string;
+                        planExisted: boolean;
+                    } | null;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+        };
+        MonthlyReviewItemUpdateInput: {
+            fields: {
+                field: "overall" | "judgments" | "nextFocus" | "escalations";
+                text: string;
+                sources?: string[];
+            }[];
+        };
+        MonthlyReviewComment: {
+            id: string;
+            authorId: string;
+            authorName: string;
+            body: string;
+            /** @description ISO 8601 */
+            createdAt: string;
+        };
+        CreateMonthlyReviewCommentRequest: {
+            /** Format: uuid */
+            clientId: string;
+            body: string;
+        };
+        CreateMonthlyReviewCommentResponse: {
+            comment: {
+                id: string;
+                authorId: string;
+                authorName: string;
+                body: string;
+                /** @description ISO 8601 */
+                createdAt: string;
+            };
+        };
+        MonthlyReviewResolveSuggestionInput: {
+            field: "overall" | "judgments" | "nextFocus" | "escalations";
+            decision: "adopt" | "dismiss";
+        };
+        MonthlyReviewReturnInput: {
+            reason: string;
+        };
+        MonthlyReviewUpdateSummaryInput: {
+            overall: string;
+            judgments: {
+                title: string;
+                body: string;
+            }[];
+            nextFocus: string[];
+        };
+        MonthlyReviewDecideLtcoInput: {
+            /** @constant */
+            decision: "keep";
+        } | {
+            /** @constant */
+            decision: "revise";
+            ltco?: string;
+            units?: {
+                subjectType: "battlefield" | "capability";
+                subjectId: string;
+                sixMonthOutcome: string;
+            }[];
         };
         MissionCardFeedbackView: {
             id: string;
@@ -2825,6 +3620,8 @@ export interface components {
                 sortOrder: number;
                 name: string;
                 group: string;
+                ownerId: string;
+                ownerDisplayName: string;
                 sixMonthOutcome: string;
                 supportRefs: ({
                     /** @constant */
@@ -4870,6 +5667,73 @@ export interface operations {
             };
         };
     };
+    getDemoEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 演示账号 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoEntryResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    enterDemo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已登录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     changePasscode: {
         parameters: {
             query?: never;
@@ -5844,6 +6708,246 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMonthlyReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 月度复盘总览 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyReviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMonthlyReviewItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 复盘项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyReviewItemResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createMonthlyReviewComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMonthlyReviewCommentRequest"];
+            };
+        };
+        responses: {
+            /** @description 新评论 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMonthlyReviewCommentResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyMonthlyReviewNotices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 复盘通知 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyMonthlyReviewNoticesResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    executeMonthlyReviewAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecuteMonthlyReviewActionRequest"];
+            };
+        };
+        responses: {
+            /** @description 动作对象的最新视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecuteMonthlyReviewActionResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

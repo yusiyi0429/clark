@@ -20,6 +20,9 @@ import { recoverInterruptedPreflight } from "./meetingPreflight.js";
 import { createMonthlyPlanService } from "./monthlyDraft.js";
 import { createMonthlyDraftAgent } from "./monthlyDraftAgent.js";
 import { createMonthlyPlanScheduler } from "./monthlyPlanScheduler.js";
+import { createMonthlyReviewService } from "./monthlyReviewService.js";
+import { createMonthlyReviewAssessAgent, createMonthlyReviewDraftAgent, createMonthlyReviewSummaryAgent } from "./monthlyReviewAgents.js";
+import { createMonthlyReviewScheduler } from "./monthlyReviewScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
 import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
@@ -135,6 +138,17 @@ const monthlyPlanService = createMonthlyPlanService({
   }),
 });
 const monthlyScheduler = createMonthlyPlanScheduler(monthlyPlanService);
+const reviewAgentOptions = { query: pool.query.bind(pool), baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.heavyModel };
+const monthlyReviewService = createMonthlyReviewService({
+  pool,
+  companyMemory,
+  agents: {
+    draft: createMonthlyReviewDraftAgent(reviewAgentOptions),
+    assess: createMonthlyReviewAssessAgent(reviewAgentOptions),
+    summarize: createMonthlyReviewSummaryAgent(reviewAgentOptions),
+  },
+});
+const monthlyReviewScheduler = createMonthlyReviewScheduler(monthlyReviewService);
 const now = () => new Date();
 const missionRoundScheduler = createMissionRoundScheduler(pool, now);
 await recoverStaleMissionDrafts(pool, now());
@@ -147,6 +161,8 @@ await recoverInterruptedResearch(pool.query.bind(pool));
 await recoverInterruptedPreflight(pool.query.bind(pool));
 // Ticket 12：崩溃留下的未完成月度草案标为可见 failed，不自动重跑
 await monthlyPlanService.recoverInterrupted();
+// ADR-0024：崩溃留下的未完成复盘起草、评估、汇总标为可见 failed，等待手动重试
+await monthlyReviewService.recoverInterrupted();
 // Ticket 10：崩溃留下的未完成会后抽取同样标为可见 failed，等待 CEO 显式重试
 await recoverInterruptedOutcome(pool.query.bind(pool));
 // 02c：会议录音识别中的接着轮询（火山任务 id 已落库，不重复计费）；卡在拼接/转码/上传的标为可见 failed
@@ -164,6 +180,7 @@ const app = await buildApp({
   personalRadarService,
   researchService,
   monthlyPlanService,
+  monthlyReviewService,
   recordingService,
   webSearch: bochaSearch,
   outlets: outletAdapter,
@@ -171,10 +188,13 @@ const app = await buildApp({
 app.addHook("onClose", async () => {
   scheduler.close();
   monthlyScheduler.close();
+  monthlyReviewScheduler.close();
+  await monthlyReviewService.idle();
   missionRoundScheduler.close();
 });
 scheduler.start();
 monthlyScheduler.start();
+monthlyReviewScheduler.start();
 missionRoundScheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);

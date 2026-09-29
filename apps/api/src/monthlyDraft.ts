@@ -12,6 +12,7 @@ import type { CompanyMemoryRepository } from "./companyMemory.js";
 import { getRegisteredBattlefieldIds, findUnregisteredBattlefieldId } from "./battlefields.js";
 import { getRegisteredCapabilityIds, findUnregisteredCapabilityId } from "./capabilities.js";
 import { companyPeriod, getMonthlyPlanRow, projectMonthlyFeedback, type MonthlyPlanRow, type StoredMonthlyFeedback } from "./monthlyPlans.js";
+import { loadPreviousReview, type PreviousMonthlyReview } from "./monthlyReviews.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -31,6 +32,8 @@ export type MonthlyDraftAgentInput = {
     feedback: TMonthlyPlanFeedback[];
   } | null;
   driFeedback: TMonthlyPlanFeedback[];
+  /** 上月已确认的复盘（关键经营判断与各项四栏自评）；没有已关闭的复盘时为 null。 */
+  previousReview: PreviousMonthlyReview;
   /** 已登记能力：Agent 只能引用这些 capabilityId，六个月目标只作为背景，不复制到当月 PCO。 */
   capabilities: { capabilityId: string; name: string; sixMonthOutcome: string }[];
   /** Company LTCO：长期目标，是本月公司结果的长期约束，不作为当月结果原样复制。 */
@@ -49,6 +52,8 @@ export type MonthlyDraftAgent = {
 export type MonthlyPlanService = {
   /** 为当前 period 最多创建一个 draft；重复触发与启动补跑都只返回一次 created。 */
   runScheduled(at?: Date): Promise<{ period: string; status: "created" | "skipped"; planId?: string }>;
+  /** 为指定 period 最多创建一个 draft 并启动生成；LTCO 决定后为下月调用。 */
+  createForPeriod(period: string): Promise<{ period: string; status: "created" | "skipped"; planId?: string }>;
   /** 执行已由 Action 置为 running 的 run（显式重试用）。 */
   executeRun(planId: string, runId: string): Promise<void>;
   /** 启动恢复：崩溃留下的未完成草案标为可见 failed，等待 CEO 显式重试。 */
@@ -73,6 +78,22 @@ function uniqueBy<T>(values: T[], key: (value: T) => string): T[] {
     seen.add(id);
     return true;
   });
+}
+
+/** 已确认方向：已拍板 Issue 的有效决定；月度草案与复盘汇总共用。 */
+export async function listConfirmedDirections(q: Query): Promise<MonthlyDraftAgentInput["confirmedDirections"]> {
+  const decided = await q(
+    `SELECT id, title, receipts FROM issues
+      WHERE status = 'decided'
+      ORDER BY updated_at DESC LIMIT 20`,
+  );
+  return (
+    decided.rows as { id: string; title: string; receipts: { decisionText: string; optionId?: string; revokedAt?: string }[] }[]
+  ).flatMap((issue) =>
+    issue.receipts
+      .filter((receipt) => !receipt.revokedAt)
+      .map((receipt) => ({ issueId: issue.id, title: issue.title, decisionText: receipt.decisionText, optionId: receipt.optionId ?? null })),
+  );
 }
 
 /**
@@ -101,18 +122,7 @@ export function createMonthlyPlanService({
   }
 
   async function buildInput(row: MonthlyPlanRow): Promise<MonthlyDraftAgentInput> {
-    const decided = await q(
-      `SELECT id, title, receipts FROM issues
-        WHERE status = 'decided'
-        ORDER BY updated_at DESC LIMIT 20`,
-    );
-    const confirmedDirections = (
-      decided.rows as { id: string; title: string; receipts: { decisionText: string; optionId?: string; revokedAt?: string }[] }[]
-    ).flatMap((issue) =>
-      issue.receipts
-        .filter((receipt) => !receipt.revokedAt)
-        .map((receipt) => ({ issueId: issue.id, title: issue.title, decisionText: receipt.decisionText, optionId: receipt.optionId ?? null })),
-    );
+    const confirmedDirections = await listConfirmedDirections(q);
 
     const previousResult = await q(
       `SELECT period, company_outcome, battlefields, todos, negotiation FROM monthly_plans
@@ -155,6 +165,7 @@ export function createMonthlyPlanService({
         ...(previousPlan?.feedback ?? []),
         ...row.negotiation.feedback.map(projectMonthlyFeedback),
       ],
+      previousReview: await loadPreviousReview(q, row.period),
       capabilities: (await q("SELECT id, name, six_month_outcome FROM capability_config ORDER BY sort_order, code, id")).rows.map(
         (row) => {
           const capability = row as { id: string; name: string; six_month_outcome: string };
@@ -275,37 +286,41 @@ export function createMonthlyPlanService({
     await execute(planId, runId);
   }
 
+  async function createForPeriod(period: string) {
+    const planId = randomUUID();
+    const client = await pool.connect();
+    let created = false;
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["monthly-plan:create"]);
+      const inserted = await client.query(
+        `INSERT INTO monthly_plans
+           (id, version, period, status, company_outcome, battlefields, capabilities, todos, negotiation, generation)
+         VALUES ($1, 1, $2, 'draft', '', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, $3::jsonb, $4::jsonb)
+         ON CONFLICT (period) DO NOTHING
+         RETURNING id`,
+        [planId, period, JSON.stringify(emptyNegotiation()), JSON.stringify(emptyGeneration(now().toISOString()))],
+      );
+      created = inserted.rowCount === 1;
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+    if (created) {
+      // 调度触发的启动失败不能静默：没有 plan 级错误状态时至少留下日志
+      void track(start(planId)).catch((err) => console.error("monthly draft start failed", err));
+    }
+    return { period, status: created ? ("created" as const) : ("skipped" as const), ...(created ? { planId } : {}) };
+  }
+
   return {
-    async runScheduled(at?: Date) {
-      const period = companyPeriod(at ?? now());
-      const planId = randomUUID();
-      const client = await pool.connect();
-      let created = false;
-      try {
-        await client.query("BEGIN");
-        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["monthly-plan:create"]);
-        const inserted = await client.query(
-          `INSERT INTO monthly_plans
-             (id, version, period, status, company_outcome, battlefields, capabilities, todos, negotiation, generation)
-           VALUES ($1, 1, $2, 'draft', '', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, $3::jsonb, $4::jsonb)
-           ON CONFLICT (period) DO NOTHING
-           RETURNING id`,
-          [planId, period, JSON.stringify(emptyNegotiation()), JSON.stringify(emptyGeneration(now().toISOString()))],
-        );
-        created = inserted.rowCount === 1;
-        await client.query("COMMIT");
-      } catch (err) {
-        await client.query("ROLLBACK").catch(() => undefined);
-        throw err;
-      } finally {
-        client.release();
-      }
-      if (created) {
-        // 调度触发的启动失败不能静默：没有 plan 级错误状态时至少留下日志
-        void track(start(planId)).catch((err) => console.error("monthly draft start failed", err));
-      }
-      return { period, status: created ? ("created" as const) : ("skipped" as const), ...(created ? { planId } : {}) };
+    runScheduled(at?: Date) {
+      return createForPeriod(companyPeriod(at ?? now()));
     },
+    createForPeriod,
     executeRun(planId: string, runId: string): Promise<void> {
       return track(execute(planId, runId));
     },

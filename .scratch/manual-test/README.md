@@ -68,6 +68,7 @@ pwsh -NoProfile -File .scratch/manual-test/stop.ps1    # 关闭：删库、停�
 | `welcome-ceo` | 重置验收 CEO 的首次登录引导 |
 | `welcome-luyao` | 重置王路遥的首次登录引导 |
 | `material-edit` | 模拟「我的 Agent」按上传者的要求改最近上传的一份 Markdown：改写一段、删一个列表项、文末加一段；材料上出现修改标注，群里出现一条说明（时间机器的 Agent 不连模型） |
+| `review-open` | 用 CEO 的「开始复盘」提前开启当月的月末复盘（平时月底倒数第 3 天自动开启）。打开 `/reviews/<当月>` 看总览；Method 能力域的负责人是孙铭泽（`browsermember`），其他待指派的项由 CEO 代复盘。三个复盘 Agent 给的是演示内容，会等两三秒 |
 | `target-none` / `target-negotiating` / `target-issued` | 本月目标的三种状态；只能在整理草稿之前用 |
 
 时钟只往前拨，不能倒回。想从头来，stop 再 start。
@@ -76,3 +77,6 @@ pwsh -NoProfile -File .scratch/manual-test/stop.ps1    # 关闭：删库、停�
 - 声纹：走真实的腾讯云声纹（凭据取自 `apps/api/.env`，只取声纹那几项），引导里有声纹那一步、个人菜单能录能删。测试身份的声纹注册在单独的分组 `tianshu_manual_test`，不进正式分组；stop 删库时不会顺带删腾讯那边的声纹。
 - 雷达扫描：没有接外部检索；王路遥已有演示信号，可测设置、列表与阅读状态。手动刷新不会产生新的真实资讯。
 - 雷达请在开发环境（3200）测。
+- 想另起一套（不碰正在用的 3500 / 4500），启动 `server.ts` 前设 `TM_API_PORT`、`TM_WEB_PORT`、`TM_RUN_DIR`；`control.cjs` 也要带同样的 `TM_API_PORT` 和 `TM_RUN_DIR`。网页副本需要自己复制到别的目录（start.ps1 固定用 `apps/web-manual-preview`）。
+
+- **演示入口**：登录页右下角有一行淡色的「天枢系统」，点一下免口令进入王路遥（杜撰的调试身份）。只在时间机器里出现：server.ts 设置了 	estEnv.demoLoginId；正式环境没有这个配置，接口 /api/auth/demo 不注册，按钮也不显示。

@@ -28,7 +28,7 @@ function navigationDelay() {
 
 type Result = { ok: true; mustChangePasscode: boolean; role?: Role; onboarded?: boolean } | { ok: false; message: string };
 
-async function post(url: string, body: Record<string, string>): Promise<Result> {
+async function post(url: string, body: Record<string, string> = {}): Promise<Result> {
   const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const data = (await response.json().catch(() => null)) as { mustChangePasscode?: boolean; role?: Role; onboarded?: boolean; message?: string } | null;
   if (response.ok) return { ok: true, mustChangePasscode: Boolean(data?.mustChangePasscode), role: data?.role, onboarded: data?.onboarded };
@@ -40,7 +40,7 @@ async function post(url: string, body: Record<string, string>): Promise<Result> 
  * 天枢是「你的 ID + 4 位口令」：口令输满即提交；初始码登录后原地换成「设置你的 4 位口令」，输两遍。
  * 验证通过后以 replace 进入（不留锁屏历史）。
  */
-export function AccessScreen({ nextPath }: { nextPath?: string }) {
+export function AccessScreen({ nextPath, demoName = null }: { nextPath?: string; demoName?: string | null }) {
   const [stage, setStage] = useState<Stage>({ kind: "login" });
   const [loginId, setLoginId] = useState("");
   const [lastLogin, setLastLogin] = useState<LastLogin | null | undefined>(undefined);
@@ -125,6 +125,17 @@ export function AccessScreen({ nextPath }: { nextPath?: string }) {
         return;
       }
       await rememberLastLogin(stage.loginId);
+      await enter(result.role ?? "member", result.onboarded);
+    });
+
+  // 演示入口：免口令进入演示账号，之后的去向与正常登录一样；不记成「上次登录」，锁屏不留演示账号。
+  const enterDemo = () =>
+    run(async () => {
+      const result = await post("/api/auth/demo");
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
       await enter(result.role ?? "member", result.onboarded);
     });
 
@@ -245,6 +256,12 @@ export function AccessScreen({ nextPath }: { nextPath?: string }) {
       <footer className={a.panelFooter}>
         <span>天枢 · TKOS</span>
       </footer>
+
+      {demoName ? (
+        <button type="button" className={a.demoEntry} disabled={busy} onClick={() => void enterDemo()} aria-label={`天枢系统：演示入口，直接进入${demoName}的工作台`}>
+          天枢系统
+        </button>
+      ) : null}
 
     </main>
   );

@@ -13,6 +13,7 @@ import { RESEARCH_PROMPT } from "../src/researchAgent.js";
 import { POST_MEETING_PROMPT } from "../src/postMeetingAgent.js";
 import { MONTHLY_DRAFT_PROMPT } from "../src/monthlyDraftAgent.js";
 import { PERSONAL_RADAR_PROMPT } from "../src/personalRadarAgent.js";
+import { MONTHLY_REVIEW_ASSESS_PROMPT, MONTHLY_REVIEW_DRAFT_PROMPT, MONTHLY_REVIEW_SUMMARY_PROMPT } from "../src/monthlyReviewAgents.js";
 
 describe("turn-phrase validation", () => {
   it("hits the four core variants", () => {
@@ -42,6 +43,7 @@ describe("shared rules reach the prompts", () => {
 
   it("monthly draft prompt carries the long-term strategy constraint", () => {
     expect(MONTHLY_DRAFT_PROMPT).toContain("不得把长期表述原样复制成当月结果");
+    expect(MONTHLY_DRAFT_PROMPT).toContain("previousReview 是上月已确认的复盘，是本月结果的重要依据");
   });
 
   it("personal radar prompt is versioned, owner-only and asks for no promotion", () => {
@@ -52,7 +54,8 @@ describe("shared rules reach the prompts", () => {
   });
 
   it("every candidate prompt carries the shared style block", () => {
-    for (const prompt of [PREFLIGHT_PROMPT, RADAR_PROMPT, RESEARCH_PROMPT, POST_MEETING_PROMPT, MONTHLY_DRAFT_PROMPT, PERSONAL_RADAR_PROMPT]) {
+    for (const prompt of [PREFLIGHT_PROMPT, RADAR_PROMPT, RESEARCH_PROMPT, POST_MEETING_PROMPT, MONTHLY_DRAFT_PROMPT, PERSONAL_RADAR_PROMPT,
+      MONTHLY_REVIEW_DRAFT_PROMPT, MONTHLY_REVIEW_ASSESS_PROMPT, MONTHLY_REVIEW_SUMMARY_PROMPT]) {
       expect(prompt).toContain(HUMAN_WRITING_STYLE);
       expect(prompt).toContain("不是……而是……");
     }

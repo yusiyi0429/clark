@@ -53,6 +53,8 @@ export const CreateCapabilityRequest = Type.Object(
     sortOrder: SortOrder,
     name: Type.String({ minLength: 1, maxLength: 100 }),
     group: Type.Optional(Type.String({ maxLength: 100 })),
+    /** 能力域负责人：月末复盘由他提交；省略或空串显示“待指派”。 */
+    ownerId: Type.Optional(Type.String({ maxLength: 200 })),
     sixMonthOutcome: Type.String({ minLength: 1, maxLength: 4000 }),
     supportRefs: Type.Optional(SupportRefs),
   },
@@ -82,6 +84,7 @@ export const PatchCapabilityRequest = Type.Object(
     sortOrder: Type.Optional(SortOrder),
     name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
     group: Type.Optional(Type.String({ maxLength: 100 })),
+    ownerId: Type.Optional(Type.String({ maxLength: 200 })),
     sixMonthOutcome: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
     supportRefs: Type.Optional(SupportRefs),
   },
@@ -108,6 +111,9 @@ export const CapabilityManagementResponse = Type.Object(
           sortOrder: Type.Integer(),
           name: Type.String({ minLength: 1 }),
           group: Type.String(),
+          ownerId: Type.String(),
+          /** 投影时现查 company-people.v1；空 ownerId 显示为“待指派”。 */
+          ownerDisplayName: Type.String(),
           sixMonthOutcome: Type.String(),
           supportRefs: SupportRefs,
         },

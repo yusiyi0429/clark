@@ -7,6 +7,7 @@ import { ActionNoticeCard } from "@/components/ActionNoticeCard";
 import { HeroButton } from "@/components/HeroButton";
 import { RailClock } from "@/components/NotificationRail";
 import { MissionCardNoticeGroup } from "@/components/missionCards/MissionCardNoticeGroup";
+import { MonthlyReviewNotices } from "@/components/monthlyReview/MonthlyReviewNotices";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
@@ -46,9 +47,10 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
           />
           <div className={n.noticeList}>
             <MemberMeetingSchedule meetings={home.meetings} onNavigate={api.navigate} />
+            <MonthlyReviewNotices onNavigate={api.navigate} />
             {home.rounds.map((round) => <MissionCardNoticeGroup key={round.roundId} round={round} entry="member" currentHref={currentHref} onNavigate={api.navigate} onRefresh={home.refresh} />)}
             <ActionNoticeCard id="assigned" title="分给你的事与邀请" subtitle="会后分派与协作邀请" mark="meeting" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).assigned} onSettled={home.settle} />
-            <ActionNoticeCard id="results" title="回复与结果" mark="issue" notices={memberNoticeGroups(home.notifications, home).results} onSettled={home.settle} />
+            <ActionNoticeCard id="results" title="回复与结果" mark="issue" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).results} onSettled={home.settle} />
             <ActionNoticeCard id="thread-unread" title="群聊新消息" mark="issue" notices={home.unreadThreads.map((item) => ({ id: `${item.objectType}:${item.objectId}`, title: `${item.objectType === "issue" ? "议题" : item.objectType === "meeting" ? "会议" : "执行事项"}「${item.title}」 · ${item.unread} 条新消息`, detail: "群聊", onOpen: (from: Element | null) => {
               window.dispatchEvent(new CustomEvent("open-thread-channel", { detail: { objectType: item.objectType, objectId: item.objectId } }));
               api.navigate(`${item.href}?channel=group`, from);

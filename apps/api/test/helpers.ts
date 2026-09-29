@@ -12,6 +12,7 @@ import type { PreflightAgent } from "../src/meetingPreflight.js";
 import type { DriExporter } from "../src/meetingStore.js";
 import { createMonthlyPlanService, type MonthlyDraftAgent, type MonthlyPlanService } from "../src/monthlyDraft.js";
 import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createMonthlyReviewService, type MonthlyReviewAgents, type MonthlyReviewService } from "../src/monthlyReviewService.js";
 import type { OntologyUpdater, PostMeetingAgent } from "../src/outcome.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService, type RecordingDeps } from "../src/meetingRecordings.js";
@@ -168,6 +169,8 @@ export type TestApp = {
   sql: (text: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
   /** 仅当注入 monthlyDraftAgent 时存在；测试用它触发 Company Day scheduler。 */
   monthlyPlans?: MonthlyPlanService;
+  /** 仅当注入 monthlyReviewAgents 时存在；测试用它触发月末复盘 scheduler、等生成跑完。 */
+  monthlyReviews?: MonthlyReviewService;
   /** 仅当注入 recordingDeps 时存在；测试用它等流水线跑完、模拟重启恢复。 */
   recordings?: MeetingRecordingService;
   restart: (runtime: ConversationRuntime) => Promise<FastifyInstance>;
@@ -194,6 +197,9 @@ export async function createTestApp(
     ontologyUpdater?: OntologyUpdater;
     monthlyDraftAgent?: MonthlyDraftAgent;
     monthlyNow?: () => Date;
+    /** 月末复盘的假起草、评估、汇总 Agent；与 monthlyDraftAgent 共用 monthlyNow。 */
+    monthlyReviewAgents?: MonthlyReviewAgents;
+    monthlyReviewRetryDelayMs?: number;
     /** 会议录音的假 ffmpeg/TOS/火山；不注入时 app 装配真实依赖（不会被调用）。 */
     recordingDeps?: RecordingDeps;
     /** /api/me/voiceprint 的假 ffmpeg/腾讯云；不注入时按环境变量判断未配置。 */
@@ -218,14 +224,17 @@ export async function createTestApp(
   await seedTestAccess(client);
   client.release();
   const env = { ...testEnv, ...seedOverrides };
-  const { monthlyDraftAgent, monthlyNow, recordingDeps, ...appRuntimeOptions } = runtimeOptions;
+  const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, ...appRuntimeOptions } = runtimeOptions;
   const monthlyPlans = monthlyDraftAgent
     ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
+    : undefined;
+  const monthlyReviews = monthlyReviewAgents
+    ? createMonthlyReviewService({ pool, companyMemory: loadCompanyMemory(env), agents: monthlyReviewAgents, now: monthlyNow, retryDelayMs: monthlyReviewRetryDelayMs })
     : undefined;
   const recordings = recordingDeps
     ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, companyMemory: loadCompanyMemory(env), deps: recordingDeps })
     : undefined;
-  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, recordingService: recordings, now: monthlyNow,
+  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, recordingService: recordings, now: monthlyNow,
     threadIntroAgent: { async generate(input) { return { message: `${input.inviter}邀请${input.newcomers.join("、")}加入「${input.title}」，请查看对象进展。` }; } },
     ...appRuntimeOptions });
   const apps = [app];
@@ -233,6 +242,7 @@ export async function createTestApp(
     app,
     pool,
     monthlyPlans,
+    monthlyReviews,
     recordings,
     publicOrigin: testEnv.publicOrigin,
     env: testEnv,
@@ -282,11 +292,12 @@ export async function createTestApp(
     agentRuns: async () => (await pool.query("SELECT * FROM agent_runs ORDER BY started_at, id")).rows,
     sql: async (text, params) => (await pool.query(text, params)).rows,
     restart: async (runtime) => {
-      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, researchService, monthlyPlanService: monthlyPlans, recordingService: recordings, now: monthlyNow, ...appRuntimeOptions });
+      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, recordingService: recordings, now: monthlyNow, ...appRuntimeOptions });
       apps.push(restarted);
       return restarted;
     },
     close: async () => {
+      await monthlyReviews?.idle();
       await Promise.all(apps.map((instance) => instance.close()));
       await pool.end();
       await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);

@@ -736,8 +736,8 @@ describe("CEO 配置页编辑路由", () => {
       const list = await t.app.inject({ method: "GET", url: "/api/config/capabilities", headers: { cookie: headers.cookie! } });
       expect(list.statusCode).toBe(200);
       expect(list.json().capabilities).toEqual([
-        { id: "供应链能力", version: 1, code: "01", sortOrder: 10, name: "供应链能力", group: "交付组织", sixMonthOutcome: "供应链能力六个月目标", supportRefs: [] },
-        { id: "渠道能力", version: 1, code: "02", sortOrder: 20, name: "渠道能力", group: "增长组织", sixMonthOutcome: "渠道能力六个月目标", supportRefs: [] },
+        { id: "供应链能力", version: 1, code: "01", sortOrder: 10, name: "供应链能力", group: "交付组织", ownerId: "", ownerDisplayName: "", sixMonthOutcome: "供应链能力六个月目标", supportRefs: [] },
+        { id: "渠道能力", version: 1, code: "02", sortOrder: 20, name: "渠道能力", group: "增长组织", ownerId: "", ownerDisplayName: "", sixMonthOutcome: "渠道能力六个月目标", supportRefs: [] },
       ]);
 
       const patched = await t.app.inject({ method: "PATCH", url: "/api/config/capabilities/供应链能力", headers, payload: { name: "区域仓配服务", group: "", code: "09", sortOrder: 90 } });

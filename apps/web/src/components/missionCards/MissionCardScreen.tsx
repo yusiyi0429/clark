@@ -62,6 +62,8 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const actionInFlight = useRef(false);
   const noteViewer = workspace.viewerId ?? card.ownerId;
   const isOwner = workspace.viewerId !== null && workspace.viewerId === card.ownerId;
+  // 个人月计划属于 DRI 工作台（/api/me/plan 只对 DRI 视角开放）：CEO 视角打开自己名下的卡时不显示「本月计划」。
+  const planOwner = isOwner && entry === "member";
   const onPlanDirtyChange = useCallback((dirty: boolean) => setPlanDirty(dirty), []);
   const selectPlan = (selected: boolean) => { void (async () => { if (!selected && planDirty && !(await ask("本月计划有未保存的改动，确定离开？", "离开计划"))) return; setPlanSelected(selected); })(); };
   const leaveCard = () => { void (async () => { if (planDirty && !(await ask("本月计划有未保存的改动，确定离开？", "离开任务卡"))) return; workspace.close(); })(); };
@@ -116,7 +118,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
     const timer = setInterval(() => void refresh(), 3_000);
     return () => clearInterval(timer);
   }, [effectivePhase, refresh]);
-  const { plan, setPlan, error: planError, loading: planLoading } = useMonthPlan(round.period, isOwner);
+  const { plan, setPlan, error: planError, loading: planLoading } = useMonthPlan(round.period, planOwner);
   const loadLinkedItems = useCallback(async () => {
     const { data } = await browserApi.GET("/api/mission-cards/{cardId}/items", { params: { path: { cardId: card.cardId } } });
     if (data) setLinkedItems(Object.fromEntries(data.missions.map((mission) => [mission.missionId, mission.items])));
@@ -215,7 +217,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
         <RoundLine payload={shownPayload} actions={view.actions} viewerId={workspace.viewerId} pending={pending} onAction={(action, input) => void runAction(action, input)} onViewGoals={() => setGoalsOpen(true)} onStartProcessing={startProcessing} note={note} onNoteChange={(text) => { setNoteDraft({ roundKey, text }); saveRoundNote(noteViewer, round.roundId, round.round, text); }} error={error} />
         {error && !(effectivePhase === "reviewing" && round.approver && !round.counts.pending) ? <p className={s.error} role="alert">{error}</p> : null}
         {notice ? <p className={s.notice} role="status">{notice}</p> : null}
-        <CardDocument payload={shownPayload} linkedItems={linkedItems} viewerId={workspace.viewerId} ownerPlan={isOwner ? { selected: planSelected, onSelect: selectPlan, plan, error: planError, loading: planLoading, content: plan ? <MonthPlan key={plan.period} plan={plan} onSaved={(next) => { setPlan(next); void loadLinkedItems(); }} onDirtyChange={onPlanDirtyChange} /> : null } : undefined} controls={{ onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); },
+        <CardDocument payload={shownPayload} linkedItems={linkedItems} viewerId={workspace.viewerId} ownerPlan={planOwner ? { selected: planSelected, onSelect: selectPlan, plan, error: planError, loading: planLoading, content: plan ? <MonthPlan key={plan.period} plan={plan} onSaved={(next) => { setPlan(next); void loadLinkedItems(); }} onDirtyChange={onPlanDirtyChange} /> : null } : undefined} controls={{ onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); },
           corrections: { draft: correction, draftError: correctionError, history: correctionHistory, rejecting, decisionError: correctionDecisionError, busy: posting || pending, onOpen: openCorrection, onEdit: (patch) => setCorrection((current) => current && { ...current, ...patch, clientId: crypto.randomUUID() }), onCancel: () => setCorrection(null), onSubmit: () => void sendCorrection(), onHistory: setCorrectionHistory, onRejecting: setRejecting, onDecide: (item, decision) => void decideCorrection(item, decision) },
           proposalEditor: (mission, field) => proposal?.missionId === mission.missionId && proposal.field === field && effectivePhase !== "confirmed" ? <div className={s.proposal}>
           <label htmlFor={`proposal-${mission.missionId}-${field}`}>建议修改：{fieldNames[field]}</label>

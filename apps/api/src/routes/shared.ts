@@ -16,6 +16,7 @@ import type { RadarService } from "../radar.js";
 import type { PersonalRadarService } from "../personalRadar.js";
 import type { ResearchService } from "../research.js";
 import type { MonthlyPlanService } from "../monthlyDraft.js";
+import type { MonthlyReviewService } from "../monthlyReviewService.js";
 import type { MeetingRecordingService } from "../meetingRecordings.js";
 import type { VoiceprintDeps } from "../voiceprints.js";
 import type { DictationDeps } from "../dictation.js";
@@ -61,6 +62,7 @@ export type RouteContext = {
   driExporter?: DriExporter;
   ontologyUpdater: OntologyUpdater;
   monthlyPlanService?: MonthlyPlanService;
+  monthlyReviewService?: MonthlyReviewService;
   recordings: MeetingRecordingService;
   voiceprints: VoiceprintDeps;
   dictation: DictationDeps;

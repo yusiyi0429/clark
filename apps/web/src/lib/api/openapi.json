@@ -89,6 +89,70 @@
         }
       }
     },
+    "/api/auth/demo": {
+      "get": {
+        "operationId": "getDemoEntry",
+        "summary": "演示入口是否可用（只在时间机器里注册）",
+        "responses": {
+          "200": {
+            "description": "演示账号",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoEntryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "enterDemo",
+        "summary": "免口令进入演示账号（只在时间机器里注册）",
+        "responses": {
+          "200": {
+            "description": "已登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/passcode": {
       "post": {
         "operationId": "changePasscode",
@@ -1209,6 +1273,287 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monthly-reviews/{period}": {
+      "get": {
+        "operationId": "getMonthlyReview",
+        "summary": "CEO 读取某月复盘总览；当月还没有复盘时 review 为 null 并带开启动作",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "月度复盘总览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyReviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monthly-review-items/{itemId}": {
+      "get": {
+        "operationId": "getMonthlyReviewItem",
+        "summary": "负责人或 CEO 读取一项复盘；其他人 404",
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "复盘项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyReviewItemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monthly-review-items/{itemId}/comments": {
+      "post": {
+        "operationId": "createMonthlyReviewComment",
+        "summary": "讨论与补充：负责人、CEO 与本单元当月 Mission 负责人在确认前发言；按 clientId 幂等",
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMonthlyReviewCommentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "新评论",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateMonthlyReviewCommentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/monthly-reviews": {
+      "get": {
+        "operationId": "getMyMonthlyReviewNotices",
+        "summary": "按复盘当前状态现算的本人待办通知（负责人与 CEO）",
+        "responses": {
+          "200": {
+            "description": "复盘通知",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyMonthlyReviewNoticesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monthly-reviews/actions/execute": {
+      "post": {
+        "operationId": "executeMonthlyReviewAction",
+        "summary": "执行复盘动作；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteMonthlyReviewActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "动作对象的最新视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecuteMonthlyReviewActionResponse"
                 }
               }
             }
@@ -7986,6 +8331,18 @@
           }
         }
       },
+      "DemoEntryResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "displayName"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string"
+          }
+        }
+      },
       "ChangePasscodeRequest": {
         "additionalProperties": false,
         "type": "object",
@@ -8113,7 +8470,7 @@
         ],
         "properties": {
           "scope": {
-            "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+            "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
             "description": "global 或稳定对象 scope",
             "type": "string"
           },
@@ -8336,7 +8693,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8370,7 +8727,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8424,7 +8781,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8473,7 +8830,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8515,7 +8872,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8552,7 +8909,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8587,7 +8944,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8759,6 +9116,10 @@
             "maxLength": 100,
             "type": "string"
           },
+          "ownerId": {
+            "maxLength": 200,
+            "type": "string"
+          },
           "sixMonthOutcome": {
             "minLength": 1,
             "maxLength": 4000,
@@ -8847,6 +9208,10 @@
           },
           "group": {
             "maxLength": 100,
+            "type": "string"
+          },
+          "ownerId": {
+            "maxLength": 200,
             "type": "string"
           },
           "sixMonthOutcome": {
@@ -10417,6 +10782,4298 @@
             "type": "string"
           }
         }
+      },
+      "MonthlyReviewResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period",
+          "review",
+          "actions"
+        ],
+        "properties": {
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "reviewId",
+                  "period",
+                  "nextPeriod",
+                  "version",
+                  "status",
+                  "counts",
+                  "items",
+                  "summary",
+                  "ltco",
+                  "actions"
+                ],
+                "properties": {
+                  "reviewId": {
+                    "type": "string"
+                  },
+                  "period": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  },
+                  "nextPeriod": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "const": "collecting",
+                        "type": "string"
+                      },
+                      {
+                        "const": "summarizing",
+                        "type": "string"
+                      },
+                      {
+                        "const": "ltco_pending",
+                        "type": "string"
+                      },
+                      {
+                        "const": "closed",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "counts": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "total",
+                      "submitted",
+                      "confirmed",
+                      "returned"
+                    ],
+                    "properties": {
+                      "total": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "submitted": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "confirmed": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "returned": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "itemId",
+                        "subjectType",
+                        "subjectId",
+                        "subjectCode",
+                        "subjectName",
+                        "ownerName",
+                        "ownerUnassigned",
+                        "status",
+                        "lead",
+                        "assessmentStatus",
+                        "assessmentOverall",
+                        "deviationCount",
+                        "actions"
+                      ],
+                      "properties": {
+                        "itemId": {
+                          "type": "string"
+                        },
+                        "subjectType": {
+                          "anyOf": [
+                            {
+                              "const": "battlefield",
+                              "type": "string"
+                            },
+                            {
+                              "const": "capability",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "subjectId": {
+                          "type": "string"
+                        },
+                        "subjectCode": {
+                          "type": "string"
+                        },
+                        "subjectName": {
+                          "type": "string"
+                        },
+                        "ownerName": {
+                          "type": "string"
+                        },
+                        "ownerUnassigned": {
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "drafting",
+                              "type": "string"
+                            },
+                            {
+                              "const": "draft_failed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "draft",
+                              "type": "string"
+                            },
+                            {
+                              "const": "submitted",
+                              "type": "string"
+                            },
+                            {
+                              "const": "returned",
+                              "type": "string"
+                            },
+                            {
+                              "const": "confirmed",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "lead": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "assessmentStatus": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "const": "pending",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "running",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "ready",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "failed",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            {
+                              "const": "none",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "assessmentOverall": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deviationCount": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "actions": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "actionId",
+                              "actionType",
+                              "label"
+                            ],
+                            "properties": {
+                              "actionId": {
+                                "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                                "type": "string"
+                              },
+                              "actionType": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "itemId": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "summary": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "status",
+                      "error",
+                      "overall",
+                      "judgments",
+                      "nextFocus",
+                      "confirmedAt"
+                    ],
+                    "properties": {
+                      "status": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "pending",
+                                "type": "string"
+                              },
+                              {
+                                "const": "running",
+                                "type": "string"
+                              },
+                              {
+                                "const": "ready",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failed",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          {
+                            "const": "none",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "error": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "code",
+                              "message",
+                              "at"
+                            ],
+                            "properties": {
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "at": {
+                                "description": "ISO 8601",
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "overall": {
+                        "type": "string"
+                      },
+                      "judgments": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "title",
+                            "body"
+                          ],
+                          "properties": {
+                            "title": {
+                              "minLength": 1,
+                              "maxLength": 60,
+                              "type": "string"
+                            },
+                            "body": {
+                              "minLength": 1,
+                              "maxLength": 1500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "nextFocus": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "confirmedAt": {
+                        "anyOf": [
+                          {
+                            "description": "ISO 8601",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "ltco": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "current",
+                      "units",
+                      "suggestion",
+                      "decision"
+                    ],
+                    "properties": {
+                      "current": {
+                        "type": "string"
+                      },
+                      "units": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "subjectType",
+                            "subjectId",
+                            "subjectCode",
+                            "subjectName",
+                            "current"
+                          ],
+                          "properties": {
+                            "subjectType": {
+                              "anyOf": [
+                                {
+                                  "const": "battlefield",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "capability",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "subjectId": {
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            "subjectCode": {
+                              "type": "string"
+                            },
+                            "subjectName": {
+                              "type": "string"
+                            },
+                            "current": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "suggestion": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "change",
+                              "proposedLtco",
+                              "rationale",
+                              "units"
+                            ],
+                            "properties": {
+                              "change": {
+                                "type": "boolean"
+                              },
+                              "proposedLtco": {
+                                "minLength": 1,
+                                "maxLength": 4000,
+                                "type": "string"
+                              },
+                              "rationale": {
+                                "minLength": 1,
+                                "maxLength": 1500,
+                                "type": "string"
+                              },
+                              "units": {
+                                "maxItems": 30,
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "subjectType",
+                                    "subjectId",
+                                    "proposedOutcome",
+                                    "rationale"
+                                  ],
+                                  "properties": {
+                                    "subjectType": {
+                                      "anyOf": [
+                                        {
+                                          "const": "battlefield",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "capability",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "subjectId": {
+                                      "minLength": 1,
+                                      "maxLength": 100,
+                                      "type": "string"
+                                    },
+                                    "proposedOutcome": {
+                                      "minLength": 1,
+                                      "maxLength": 4000,
+                                      "type": "string"
+                                    },
+                                    "rationale": {
+                                      "minLength": 1,
+                                      "maxLength": 1000,
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "decision": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "decision",
+                              "ltcoBefore",
+                              "ltcoAfter",
+                              "units",
+                              "decidedAt",
+                              "planExisted"
+                            ],
+                            "properties": {
+                              "decision": {
+                                "anyOf": [
+                                  {
+                                    "const": "keep",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "revise",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "ltcoBefore": {
+                                "type": "string"
+                              },
+                              "ltcoAfter": {
+                                "type": "string"
+                              },
+                              "units": {
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "subjectType",
+                                    "subjectId",
+                                    "before",
+                                    "after"
+                                  ],
+                                  "properties": {
+                                    "subjectType": {
+                                      "anyOf": [
+                                        {
+                                          "const": "battlefield",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "capability",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "subjectId": {
+                                      "minLength": 1,
+                                      "maxLength": 100,
+                                      "type": "string"
+                                    },
+                                    "before": {
+                                      "type": "string"
+                                    },
+                                    "after": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "decidedAt": {
+                                "description": "ISO 8601",
+                                "type": "string"
+                              },
+                              "planExisted": {
+                                "type": "boolean"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "actionId",
+                        "actionType",
+                        "label"
+                      ],
+                      "properties": {
+                        "actionId": {
+                          "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                          "type": "string"
+                        },
+                        "actionType": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "itemId": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "actionId",
+                "actionType",
+                "label"
+              ],
+              "properties": {
+                "actionId": {
+                  "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                  "type": "string"
+                },
+                "actionType": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthlyReviewItemResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "item"
+        ],
+        "properties": {
+          "item": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "itemId",
+              "reviewId",
+              "period",
+              "version",
+              "subjectType",
+              "subjectId",
+              "subjectCode",
+              "subjectName",
+              "ownerId",
+              "ownerName",
+              "ownerUnassigned",
+              "target",
+              "sixMonthOutcome",
+              "status",
+              "draftError",
+              "selfReview",
+              "suggestions",
+              "returnReason",
+              "assessment",
+              "history",
+              "comments",
+              "participantNames",
+              "submittedAt",
+              "confirmedAt",
+              "viewer",
+              "conversationScope",
+              "actions"
+            ],
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "reviewId": {
+                "type": "string"
+              },
+              "period": {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "subjectType": {
+                "anyOf": [
+                  {
+                    "const": "battlefield",
+                    "type": "string"
+                  },
+                  {
+                    "const": "capability",
+                    "type": "string"
+                  }
+                ]
+              },
+              "subjectId": {
+                "type": "string"
+              },
+              "subjectCode": {
+                "type": "string"
+              },
+              "subjectName": {
+                "type": "string"
+              },
+              "ownerId": {
+                "type": "string"
+              },
+              "ownerName": {
+                "type": "string"
+              },
+              "ownerUnassigned": {
+                "type": "boolean"
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sixMonthOutcome": {
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "drafting",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft_failed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft",
+                    "type": "string"
+                  },
+                  {
+                    "const": "submitted",
+                    "type": "string"
+                  },
+                  {
+                    "const": "returned",
+                    "type": "string"
+                  },
+                  {
+                    "const": "confirmed",
+                    "type": "string"
+                  }
+                ]
+              },
+              "draftError": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "code",
+                      "message",
+                      "at"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "selfReview": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "overall",
+                      "judgments",
+                      "nextFocus",
+                      "escalations"
+                    ],
+                    "properties": {
+                      "overall": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "judgments": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "nextFocus": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "escalations": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "suggestions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "field",
+                    "text",
+                    "rationale",
+                    "createdAt"
+                  ],
+                  "properties": {
+                    "field": {
+                      "anyOf": [
+                        {
+                          "const": "overall",
+                          "type": "string"
+                        },
+                        {
+                          "const": "judgments",
+                          "type": "string"
+                        },
+                        {
+                          "const": "nextFocus",
+                          "type": "string"
+                        },
+                        {
+                          "const": "escalations",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "text": {
+                      "maxLength": 4000,
+                      "type": "string"
+                    },
+                    "rationale": {
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "description": "ISO 8601",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "returnReason": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "assessment": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "status",
+                  "result",
+                  "error"
+                ],
+                "properties": {
+                  "status": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "pending",
+                            "type": "string"
+                          },
+                          {
+                            "const": "running",
+                            "type": "string"
+                          },
+                          {
+                            "const": "ready",
+                            "type": "string"
+                          },
+                          {
+                            "const": "failed",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "const": "none",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "result": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "overall",
+                          "deviations",
+                          "questions"
+                        ],
+                        "properties": {
+                          "overall": {
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "type": "string"
+                          },
+                          "deviations": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "point",
+                                "evidence"
+                              ],
+                              "properties": {
+                                "point": {
+                                  "minLength": 1,
+                                  "maxLength": 500,
+                                  "type": "string"
+                                },
+                                "evidence": {
+                                  "minLength": 1,
+                                  "maxLength": 1000,
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "questions": {
+                            "maxItems": 5,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "code",
+                          "message",
+                          "at"
+                        ],
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "description": "ISO 8601",
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "history": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "at",
+                    "by",
+                    "byName",
+                    "action",
+                    "reason"
+                  ],
+                  "properties": {
+                    "at": {
+                      "description": "ISO 8601",
+                      "type": "string"
+                    },
+                    "by": {
+                      "type": "string"
+                    },
+                    "byName": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "anyOf": [
+                        {
+                          "const": "submit",
+                          "type": "string"
+                        },
+                        {
+                          "const": "return",
+                          "type": "string"
+                        },
+                        {
+                          "const": "confirm",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "comments": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "authorId",
+                    "authorName",
+                    "body",
+                    "createdAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "authorId": {
+                      "type": "string"
+                    },
+                    "authorName": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "description": "ISO 8601",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "participantNames": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "submittedAt": {
+                "anyOf": [
+                  {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "confirmedAt": {
+                "anyOf": [
+                  {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "viewer": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "isOwner",
+                  "isCeo",
+                  "isParticipant",
+                  "canComment"
+                ],
+                "properties": {
+                  "isOwner": {
+                    "type": "boolean"
+                  },
+                  "isCeo": {
+                    "type": "boolean"
+                  },
+                  "isParticipant": {
+                    "type": "boolean"
+                  },
+                  "canComment": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "conversationScope": {
+                "type": "string"
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "actionId",
+                    "actionType",
+                    "label"
+                  ],
+                  "properties": {
+                    "actionId": {
+                      "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                      "type": "string"
+                    },
+                    "actionType": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthlyReviewPayload": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reviewId",
+          "period",
+          "nextPeriod",
+          "version",
+          "status",
+          "counts",
+          "items",
+          "summary",
+          "ltco",
+          "actions"
+        ],
+        "properties": {
+          "reviewId": {
+            "type": "string"
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "nextPeriod": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "collecting",
+                "type": "string"
+              },
+              {
+                "const": "summarizing",
+                "type": "string"
+              },
+              {
+                "const": "ltco_pending",
+                "type": "string"
+              },
+              {
+                "const": "closed",
+                "type": "string"
+              }
+            ]
+          },
+          "counts": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "total",
+              "submitted",
+              "confirmed",
+              "returned"
+            ],
+            "properties": {
+              "total": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "submitted": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "confirmed": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "returned": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "itemId",
+                "subjectType",
+                "subjectId",
+                "subjectCode",
+                "subjectName",
+                "ownerName",
+                "ownerUnassigned",
+                "status",
+                "lead",
+                "assessmentStatus",
+                "assessmentOverall",
+                "deviationCount",
+                "actions"
+              ],
+              "properties": {
+                "itemId": {
+                  "type": "string"
+                },
+                "subjectType": {
+                  "anyOf": [
+                    {
+                      "const": "battlefield",
+                      "type": "string"
+                    },
+                    {
+                      "const": "capability",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "subjectId": {
+                  "type": "string"
+                },
+                "subjectCode": {
+                  "type": "string"
+                },
+                "subjectName": {
+                  "type": "string"
+                },
+                "ownerName": {
+                  "type": "string"
+                },
+                "ownerUnassigned": {
+                  "type": "boolean"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "drafting",
+                      "type": "string"
+                    },
+                    {
+                      "const": "draft_failed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "draft",
+                      "type": "string"
+                    },
+                    {
+                      "const": "submitted",
+                      "type": "string"
+                    },
+                    {
+                      "const": "returned",
+                      "type": "string"
+                    },
+                    {
+                      "const": "confirmed",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "lead": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "assessmentStatus": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        {
+                          "const": "running",
+                          "type": "string"
+                        },
+                        {
+                          "const": "ready",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "const": "none",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "assessmentOverall": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "deviationCount": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "actionId",
+                      "actionType",
+                      "label"
+                    ],
+                    "properties": {
+                      "actionId": {
+                        "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                        "type": "string"
+                      },
+                      "actionType": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "itemId": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "summary": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "status",
+              "error",
+              "overall",
+              "judgments",
+              "nextFocus",
+              "confirmedAt"
+            ],
+            "properties": {
+              "status": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "const": "pending",
+                        "type": "string"
+                      },
+                      {
+                        "const": "running",
+                        "type": "string"
+                      },
+                      {
+                        "const": "ready",
+                        "type": "string"
+                      },
+                      {
+                        "const": "failed",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "const": "none",
+                    "type": "string"
+                  }
+                ]
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "code",
+                      "message",
+                      "at"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "overall": {
+                "type": "string"
+              },
+              "judgments": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "title",
+                    "body"
+                  ],
+                  "properties": {
+                    "title": {
+                      "minLength": 1,
+                      "maxLength": 60,
+                      "type": "string"
+                    },
+                    "body": {
+                      "minLength": 1,
+                      "maxLength": 1500,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "nextFocus": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "confirmedAt": {
+                "anyOf": [
+                  {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "ltco": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "current",
+              "units",
+              "suggestion",
+              "decision"
+            ],
+            "properties": {
+              "current": {
+                "type": "string"
+              },
+              "units": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "subjectType",
+                    "subjectId",
+                    "subjectCode",
+                    "subjectName",
+                    "current"
+                  ],
+                  "properties": {
+                    "subjectType": {
+                      "anyOf": [
+                        {
+                          "const": "battlefield",
+                          "type": "string"
+                        },
+                        {
+                          "const": "capability",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "subjectId": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "subjectCode": {
+                      "type": "string"
+                    },
+                    "subjectName": {
+                      "type": "string"
+                    },
+                    "current": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "suggestion": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "change",
+                      "proposedLtco",
+                      "rationale",
+                      "units"
+                    ],
+                    "properties": {
+                      "change": {
+                        "type": "boolean"
+                      },
+                      "proposedLtco": {
+                        "minLength": 1,
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "rationale": {
+                        "minLength": 1,
+                        "maxLength": 1500,
+                        "type": "string"
+                      },
+                      "units": {
+                        "maxItems": 30,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "subjectType",
+                            "subjectId",
+                            "proposedOutcome",
+                            "rationale"
+                          ],
+                          "properties": {
+                            "subjectType": {
+                              "anyOf": [
+                                {
+                                  "const": "battlefield",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "capability",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "subjectId": {
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            "proposedOutcome": {
+                              "minLength": 1,
+                              "maxLength": 4000,
+                              "type": "string"
+                            },
+                            "rationale": {
+                              "minLength": 1,
+                              "maxLength": 1000,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "decision": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "decision",
+                      "ltcoBefore",
+                      "ltcoAfter",
+                      "units",
+                      "decidedAt",
+                      "planExisted"
+                    ],
+                    "properties": {
+                      "decision": {
+                        "anyOf": [
+                          {
+                            "const": "keep",
+                            "type": "string"
+                          },
+                          {
+                            "const": "revise",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "ltcoBefore": {
+                        "type": "string"
+                      },
+                      "ltcoAfter": {
+                        "type": "string"
+                      },
+                      "units": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "subjectType",
+                            "subjectId",
+                            "before",
+                            "after"
+                          ],
+                          "properties": {
+                            "subjectType": {
+                              "anyOf": [
+                                {
+                                  "const": "battlefield",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "capability",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "subjectId": {
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            "before": {
+                              "type": "string"
+                            },
+                            "after": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "decidedAt": {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      },
+                      "planExisted": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "actionId",
+                "actionType",
+                "label"
+              ],
+              "properties": {
+                "actionId": {
+                  "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                  "type": "string"
+                },
+                "actionType": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthlyReviewItemPayload": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "itemId",
+          "reviewId",
+          "period",
+          "version",
+          "subjectType",
+          "subjectId",
+          "subjectCode",
+          "subjectName",
+          "ownerId",
+          "ownerName",
+          "ownerUnassigned",
+          "target",
+          "sixMonthOutcome",
+          "status",
+          "draftError",
+          "selfReview",
+          "suggestions",
+          "returnReason",
+          "assessment",
+          "history",
+          "comments",
+          "participantNames",
+          "submittedAt",
+          "confirmedAt",
+          "viewer",
+          "conversationScope",
+          "actions"
+        ],
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "reviewId": {
+            "type": "string"
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "subjectType": {
+            "anyOf": [
+              {
+                "const": "battlefield",
+                "type": "string"
+              },
+              {
+                "const": "capability",
+                "type": "string"
+              }
+            ]
+          },
+          "subjectId": {
+            "type": "string"
+          },
+          "subjectCode": {
+            "type": "string"
+          },
+          "subjectName": {
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "ownerName": {
+            "type": "string"
+          },
+          "ownerUnassigned": {
+            "type": "boolean"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sixMonthOutcome": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "drafting",
+                "type": "string"
+              },
+              {
+                "const": "draft_failed",
+                "type": "string"
+              },
+              {
+                "const": "draft",
+                "type": "string"
+              },
+              {
+                "const": "submitted",
+                "type": "string"
+              },
+              {
+                "const": "returned",
+                "type": "string"
+              },
+              {
+                "const": "confirmed",
+                "type": "string"
+              }
+            ]
+          },
+          "draftError": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selfReview": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "overall",
+                  "judgments",
+                  "nextFocus",
+                  "escalations"
+                ],
+                "properties": {
+                  "overall": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "sources"
+                    ],
+                    "properties": {
+                      "text": {
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "sources": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "judgments": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "sources"
+                    ],
+                    "properties": {
+                      "text": {
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "sources": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "nextFocus": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "sources"
+                    ],
+                    "properties": {
+                      "text": {
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "sources": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "escalations": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "sources"
+                    ],
+                    "properties": {
+                      "text": {
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "sources": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "field",
+                "text",
+                "rationale",
+                "createdAt"
+              ],
+              "properties": {
+                "field": {
+                  "anyOf": [
+                    {
+                      "const": "overall",
+                      "type": "string"
+                    },
+                    {
+                      "const": "judgments",
+                      "type": "string"
+                    },
+                    {
+                      "const": "nextFocus",
+                      "type": "string"
+                    },
+                    {
+                      "const": "escalations",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "text": {
+                  "maxLength": 4000,
+                  "type": "string"
+                },
+                "rationale": {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "createdAt": {
+                  "description": "ISO 8601",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "returnReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assessment": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "status",
+              "result",
+              "error"
+            ],
+            "properties": {
+              "status": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "const": "pending",
+                        "type": "string"
+                      },
+                      {
+                        "const": "running",
+                        "type": "string"
+                      },
+                      {
+                        "const": "ready",
+                        "type": "string"
+                      },
+                      {
+                        "const": "failed",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "const": "none",
+                    "type": "string"
+                  }
+                ]
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "overall",
+                      "deviations",
+                      "questions"
+                    ],
+                    "properties": {
+                      "overall": {
+                        "minLength": 1,
+                        "maxLength": 300,
+                        "type": "string"
+                      },
+                      "deviations": {
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "point",
+                            "evidence"
+                          ],
+                          "properties": {
+                            "point": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            },
+                            "evidence": {
+                              "minLength": 1,
+                              "maxLength": 1000,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "questions": {
+                        "maxItems": 5,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "code",
+                      "message",
+                      "at"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "at",
+                "by",
+                "byName",
+                "action",
+                "reason"
+              ],
+              "properties": {
+                "at": {
+                  "description": "ISO 8601",
+                  "type": "string"
+                },
+                "by": {
+                  "type": "string"
+                },
+                "byName": {
+                  "type": "string"
+                },
+                "action": {
+                  "anyOf": [
+                    {
+                      "const": "submit",
+                      "type": "string"
+                    },
+                    {
+                      "const": "return",
+                      "type": "string"
+                    },
+                    {
+                      "const": "confirm",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "reason": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "authorId",
+                "authorName",
+                "body",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "authorId": {
+                  "type": "string"
+                },
+                "authorName": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "description": "ISO 8601",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "participantNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "submittedAt": {
+            "anyOf": [
+              {
+                "description": "ISO 8601",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmedAt": {
+            "anyOf": [
+              {
+                "description": "ISO 8601",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "viewer": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "isOwner",
+              "isCeo",
+              "isParticipant",
+              "canComment"
+            ],
+            "properties": {
+              "isOwner": {
+                "type": "boolean"
+              },
+              "isCeo": {
+                "type": "boolean"
+              },
+              "isParticipant": {
+                "type": "boolean"
+              },
+              "canComment": {
+                "type": "boolean"
+              }
+            }
+          },
+          "conversationScope": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "actionId",
+                "actionType",
+                "label"
+              ],
+              "properties": {
+                "actionId": {
+                  "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                  "type": "string"
+                },
+                "actionType": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthlyReviewItemRow": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "itemId",
+          "subjectType",
+          "subjectId",
+          "subjectCode",
+          "subjectName",
+          "ownerName",
+          "ownerUnassigned",
+          "status",
+          "lead",
+          "assessmentStatus",
+          "assessmentOverall",
+          "deviationCount",
+          "actions"
+        ],
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "subjectType": {
+            "anyOf": [
+              {
+                "const": "battlefield",
+                "type": "string"
+              },
+              {
+                "const": "capability",
+                "type": "string"
+              }
+            ]
+          },
+          "subjectId": {
+            "type": "string"
+          },
+          "subjectCode": {
+            "type": "string"
+          },
+          "subjectName": {
+            "type": "string"
+          },
+          "ownerName": {
+            "type": "string"
+          },
+          "ownerUnassigned": {
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "drafting",
+                "type": "string"
+              },
+              {
+                "const": "draft_failed",
+                "type": "string"
+              },
+              {
+                "const": "draft",
+                "type": "string"
+              },
+              {
+                "const": "submitted",
+                "type": "string"
+              },
+              {
+                "const": "returned",
+                "type": "string"
+              },
+              {
+                "const": "confirmed",
+                "type": "string"
+              }
+            ]
+          },
+          "lead": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assessmentStatus": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "pending",
+                    "type": "string"
+                  },
+                  {
+                    "const": "running",
+                    "type": "string"
+                  },
+                  {
+                    "const": "ready",
+                    "type": "string"
+                  },
+                  {
+                    "const": "failed",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "const": "none",
+                "type": "string"
+              }
+            ]
+          },
+          "assessmentOverall": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deviationCount": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "actionId",
+                "actionType",
+                "label"
+              ],
+              "properties": {
+                "actionId": {
+                  "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                  "type": "string"
+                },
+                "actionType": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MyMonthlyReviewNoticesResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "notices"
+        ],
+        "properties": {
+          "notices": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "kind",
+                "period",
+                "text",
+                "href",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "item_todo",
+                      "type": "string"
+                    },
+                    {
+                      "const": "item_participant",
+                      "type": "string"
+                    },
+                    {
+                      "const": "items_to_review",
+                      "type": "string"
+                    },
+                    {
+                      "const": "summary_pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "ltco_pending",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "period": {
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "href": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "description": "ISO 8601",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthlyReviewNotice": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "period",
+          "text",
+          "href",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "item_todo",
+                "type": "string"
+              },
+              {
+                "const": "item_participant",
+                "type": "string"
+              },
+              {
+                "const": "items_to_review",
+                "type": "string"
+              },
+              {
+                "const": "summary_pending",
+                "type": "string"
+              },
+              {
+                "const": "ltco_pending",
+                "type": "string"
+              }
+            ]
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "href": {
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "ISO 8601",
+            "type": "string"
+          }
+        }
+      },
+      "ExecuteMonthlyReviewActionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actionId"
+        ],
+        "properties": {
+          "actionId": {
+            "type": "string"
+          },
+          "input": {}
+        }
+      },
+      "ExecuteMonthlyReviewActionResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "item": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "itemId",
+              "reviewId",
+              "period",
+              "version",
+              "subjectType",
+              "subjectId",
+              "subjectCode",
+              "subjectName",
+              "ownerId",
+              "ownerName",
+              "ownerUnassigned",
+              "target",
+              "sixMonthOutcome",
+              "status",
+              "draftError",
+              "selfReview",
+              "suggestions",
+              "returnReason",
+              "assessment",
+              "history",
+              "comments",
+              "participantNames",
+              "submittedAt",
+              "confirmedAt",
+              "viewer",
+              "conversationScope",
+              "actions"
+            ],
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "reviewId": {
+                "type": "string"
+              },
+              "period": {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "subjectType": {
+                "anyOf": [
+                  {
+                    "const": "battlefield",
+                    "type": "string"
+                  },
+                  {
+                    "const": "capability",
+                    "type": "string"
+                  }
+                ]
+              },
+              "subjectId": {
+                "type": "string"
+              },
+              "subjectCode": {
+                "type": "string"
+              },
+              "subjectName": {
+                "type": "string"
+              },
+              "ownerId": {
+                "type": "string"
+              },
+              "ownerName": {
+                "type": "string"
+              },
+              "ownerUnassigned": {
+                "type": "boolean"
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sixMonthOutcome": {
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "drafting",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft_failed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft",
+                    "type": "string"
+                  },
+                  {
+                    "const": "submitted",
+                    "type": "string"
+                  },
+                  {
+                    "const": "returned",
+                    "type": "string"
+                  },
+                  {
+                    "const": "confirmed",
+                    "type": "string"
+                  }
+                ]
+              },
+              "draftError": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "code",
+                      "message",
+                      "at"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "selfReview": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "overall",
+                      "judgments",
+                      "nextFocus",
+                      "escalations"
+                    ],
+                    "properties": {
+                      "overall": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "judgments": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "nextFocus": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "escalations": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "suggestions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "field",
+                    "text",
+                    "rationale",
+                    "createdAt"
+                  ],
+                  "properties": {
+                    "field": {
+                      "anyOf": [
+                        {
+                          "const": "overall",
+                          "type": "string"
+                        },
+                        {
+                          "const": "judgments",
+                          "type": "string"
+                        },
+                        {
+                          "const": "nextFocus",
+                          "type": "string"
+                        },
+                        {
+                          "const": "escalations",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "text": {
+                      "maxLength": 4000,
+                      "type": "string"
+                    },
+                    "rationale": {
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "description": "ISO 8601",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "returnReason": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "assessment": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "status",
+                  "result",
+                  "error"
+                ],
+                "properties": {
+                  "status": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "pending",
+                            "type": "string"
+                          },
+                          {
+                            "const": "running",
+                            "type": "string"
+                          },
+                          {
+                            "const": "ready",
+                            "type": "string"
+                          },
+                          {
+                            "const": "failed",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "const": "none",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "result": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "overall",
+                          "deviations",
+                          "questions"
+                        ],
+                        "properties": {
+                          "overall": {
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "type": "string"
+                          },
+                          "deviations": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "point",
+                                "evidence"
+                              ],
+                              "properties": {
+                                "point": {
+                                  "minLength": 1,
+                                  "maxLength": 500,
+                                  "type": "string"
+                                },
+                                "evidence": {
+                                  "minLength": 1,
+                                  "maxLength": 1000,
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "questions": {
+                            "maxItems": 5,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "code",
+                          "message",
+                          "at"
+                        ],
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "description": "ISO 8601",
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "history": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "at",
+                    "by",
+                    "byName",
+                    "action",
+                    "reason"
+                  ],
+                  "properties": {
+                    "at": {
+                      "description": "ISO 8601",
+                      "type": "string"
+                    },
+                    "by": {
+                      "type": "string"
+                    },
+                    "byName": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "anyOf": [
+                        {
+                          "const": "submit",
+                          "type": "string"
+                        },
+                        {
+                          "const": "return",
+                          "type": "string"
+                        },
+                        {
+                          "const": "confirm",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "comments": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "authorId",
+                    "authorName",
+                    "body",
+                    "createdAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "authorId": {
+                      "type": "string"
+                    },
+                    "authorName": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "description": "ISO 8601",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "participantNames": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "submittedAt": {
+                "anyOf": [
+                  {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "confirmedAt": {
+                "anyOf": [
+                  {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "viewer": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "isOwner",
+                  "isCeo",
+                  "isParticipant",
+                  "canComment"
+                ],
+                "properties": {
+                  "isOwner": {
+                    "type": "boolean"
+                  },
+                  "isCeo": {
+                    "type": "boolean"
+                  },
+                  "isParticipant": {
+                    "type": "boolean"
+                  },
+                  "canComment": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "conversationScope": {
+                "type": "string"
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "actionId",
+                    "actionType",
+                    "label"
+                  ],
+                  "properties": {
+                    "actionId": {
+                      "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                      "type": "string"
+                    },
+                    "actionType": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "review": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "reviewId",
+              "period",
+              "nextPeriod",
+              "version",
+              "status",
+              "counts",
+              "items",
+              "summary",
+              "ltco",
+              "actions"
+            ],
+            "properties": {
+              "reviewId": {
+                "type": "string"
+              },
+              "period": {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              "nextPeriod": {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "collecting",
+                    "type": "string"
+                  },
+                  {
+                    "const": "summarizing",
+                    "type": "string"
+                  },
+                  {
+                    "const": "ltco_pending",
+                    "type": "string"
+                  },
+                  {
+                    "const": "closed",
+                    "type": "string"
+                  }
+                ]
+              },
+              "counts": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "total",
+                  "submitted",
+                  "confirmed",
+                  "returned"
+                ],
+                "properties": {
+                  "total": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "submitted": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "confirmed": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "returned": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                }
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "itemId",
+                    "subjectType",
+                    "subjectId",
+                    "subjectCode",
+                    "subjectName",
+                    "ownerName",
+                    "ownerUnassigned",
+                    "status",
+                    "lead",
+                    "assessmentStatus",
+                    "assessmentOverall",
+                    "deviationCount",
+                    "actions"
+                  ],
+                  "properties": {
+                    "itemId": {
+                      "type": "string"
+                    },
+                    "subjectType": {
+                      "anyOf": [
+                        {
+                          "const": "battlefield",
+                          "type": "string"
+                        },
+                        {
+                          "const": "capability",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "subjectId": {
+                      "type": "string"
+                    },
+                    "subjectCode": {
+                      "type": "string"
+                    },
+                    "subjectName": {
+                      "type": "string"
+                    },
+                    "ownerName": {
+                      "type": "string"
+                    },
+                    "ownerUnassigned": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "drafting",
+                          "type": "string"
+                        },
+                        {
+                          "const": "draft_failed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "draft",
+                          "type": "string"
+                        },
+                        {
+                          "const": "submitted",
+                          "type": "string"
+                        },
+                        {
+                          "const": "returned",
+                          "type": "string"
+                        },
+                        {
+                          "const": "confirmed",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "lead": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "assessmentStatus": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "const": "pending",
+                              "type": "string"
+                            },
+                            {
+                              "const": "running",
+                              "type": "string"
+                            },
+                            {
+                              "const": "ready",
+                              "type": "string"
+                            },
+                            {
+                              "const": "failed",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "assessmentOverall": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "deviationCount": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "actionId",
+                          "actionType",
+                          "label"
+                        ],
+                        "properties": {
+                          "actionId": {
+                            "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                            "type": "string"
+                          },
+                          "actionType": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "itemId": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "summary": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "status",
+                  "error",
+                  "overall",
+                  "judgments",
+                  "nextFocus",
+                  "confirmedAt"
+                ],
+                "properties": {
+                  "status": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "pending",
+                            "type": "string"
+                          },
+                          {
+                            "const": "running",
+                            "type": "string"
+                          },
+                          {
+                            "const": "ready",
+                            "type": "string"
+                          },
+                          {
+                            "const": "failed",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "const": "none",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "code",
+                          "message",
+                          "at"
+                        ],
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "description": "ISO 8601",
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "overall": {
+                    "type": "string"
+                  },
+                  "judgments": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "title",
+                        "body"
+                      ],
+                      "properties": {
+                        "title": {
+                          "minLength": 1,
+                          "maxLength": 60,
+                          "type": "string"
+                        },
+                        "body": {
+                          "minLength": 1,
+                          "maxLength": 1500,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "nextFocus": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "confirmedAt": {
+                    "anyOf": [
+                      {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "ltco": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "current",
+                  "units",
+                  "suggestion",
+                  "decision"
+                ],
+                "properties": {
+                  "current": {
+                    "type": "string"
+                  },
+                  "units": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "subjectType",
+                        "subjectId",
+                        "subjectCode",
+                        "subjectName",
+                        "current"
+                      ],
+                      "properties": {
+                        "subjectType": {
+                          "anyOf": [
+                            {
+                              "const": "battlefield",
+                              "type": "string"
+                            },
+                            {
+                              "const": "capability",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "subjectId": {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        },
+                        "subjectCode": {
+                          "type": "string"
+                        },
+                        "subjectName": {
+                          "type": "string"
+                        },
+                        "current": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "suggestion": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "change",
+                          "proposedLtco",
+                          "rationale",
+                          "units"
+                        ],
+                        "properties": {
+                          "change": {
+                            "type": "boolean"
+                          },
+                          "proposedLtco": {
+                            "minLength": 1,
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "minLength": 1,
+                            "maxLength": 1500,
+                            "type": "string"
+                          },
+                          "units": {
+                            "maxItems": 30,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "subjectType",
+                                "subjectId",
+                                "proposedOutcome",
+                                "rationale"
+                              ],
+                              "properties": {
+                                "subjectType": {
+                                  "anyOf": [
+                                    {
+                                      "const": "battlefield",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "capability",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "subjectId": {
+                                  "minLength": 1,
+                                  "maxLength": 100,
+                                  "type": "string"
+                                },
+                                "proposedOutcome": {
+                                  "minLength": 1,
+                                  "maxLength": 4000,
+                                  "type": "string"
+                                },
+                                "rationale": {
+                                  "minLength": 1,
+                                  "maxLength": 1000,
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "decision": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "decision",
+                          "ltcoBefore",
+                          "ltcoAfter",
+                          "units",
+                          "decidedAt",
+                          "planExisted"
+                        ],
+                        "properties": {
+                          "decision": {
+                            "anyOf": [
+                              {
+                                "const": "keep",
+                                "type": "string"
+                              },
+                              {
+                                "const": "revise",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "ltcoBefore": {
+                            "type": "string"
+                          },
+                          "ltcoAfter": {
+                            "type": "string"
+                          },
+                          "units": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "subjectType",
+                                "subjectId",
+                                "before",
+                                "after"
+                              ],
+                              "properties": {
+                                "subjectType": {
+                                  "anyOf": [
+                                    {
+                                      "const": "battlefield",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "capability",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "subjectId": {
+                                  "minLength": 1,
+                                  "maxLength": 100,
+                                  "type": "string"
+                                },
+                                "before": {
+                                  "type": "string"
+                                },
+                                "after": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "decidedAt": {
+                            "description": "ISO 8601",
+                            "type": "string"
+                          },
+                          "planExisted": {
+                            "type": "boolean"
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "actionId",
+                    "actionType",
+                    "label"
+                  ],
+                  "properties": {
+                    "actionId": {
+                      "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                      "type": "string"
+                    },
+                    "actionType": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthlyReviewItemUpdateInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fields"
+        ],
+        "properties": {
+          "fields": {
+            "minItems": 1,
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "field",
+                "text"
+              ],
+              "properties": {
+                "field": {
+                  "anyOf": [
+                    {
+                      "const": "overall",
+                      "type": "string"
+                    },
+                    {
+                      "const": "judgments",
+                      "type": "string"
+                    },
+                    {
+                      "const": "nextFocus",
+                      "type": "string"
+                    },
+                    {
+                      "const": "escalations",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "text": {
+                  "maxLength": 4000,
+                  "type": "string"
+                },
+                "sources": {
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthlyReviewComment": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "authorId",
+          "authorName",
+          "body",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "authorId": {
+            "type": "string"
+          },
+          "authorName": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "ISO 8601",
+            "type": "string"
+          }
+        }
+      },
+      "CreateMonthlyReviewCommentRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientId",
+          "body"
+        ],
+        "properties": {
+          "clientId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "body": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S",
+            "type": "string"
+          }
+        }
+      },
+      "CreateMonthlyReviewCommentResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "comment"
+        ],
+        "properties": {
+          "comment": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "authorId",
+              "authorName",
+              "body",
+              "createdAt"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "authorId": {
+                "type": "string"
+              },
+              "authorName": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              },
+              "createdAt": {
+                "description": "ISO 8601",
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "MonthlyReviewResolveSuggestionInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "field",
+          "decision"
+        ],
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "const": "overall",
+                "type": "string"
+              },
+              {
+                "const": "judgments",
+                "type": "string"
+              },
+              {
+                "const": "nextFocus",
+                "type": "string"
+              },
+              {
+                "const": "escalations",
+                "type": "string"
+              }
+            ]
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "const": "adopt",
+                "type": "string"
+              },
+              {
+                "const": "dismiss",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "MonthlyReviewReturnInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S",
+            "type": "string"
+          }
+        }
+      },
+      "MonthlyReviewUpdateSummaryInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "overall",
+          "judgments",
+          "nextFocus"
+        ],
+        "properties": {
+          "overall": {
+            "minLength": 1,
+            "maxLength": 3000,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "judgments": {
+            "minItems": 1,
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "title",
+                "body"
+              ],
+              "properties": {
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "type": "string"
+                },
+                "body": {
+                  "minLength": 1,
+                  "maxLength": 1500,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "nextFocus": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 500,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MonthlyReviewDecideLtcoInput": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "decision"
+            ],
+            "properties": {
+              "decision": {
+                "const": "keep",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "decision"
+            ],
+            "properties": {
+              "decision": {
+                "const": "revise",
+                "type": "string"
+              },
+              "ltco": {
+                "minLength": 1,
+                "maxLength": 4000,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "units": {
+                "maxItems": 30,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "subjectType",
+                    "subjectId",
+                    "sixMonthOutcome"
+                  ],
+                  "properties": {
+                    "subjectType": {
+                      "anyOf": [
+                        {
+                          "const": "battlefield",
+                          "type": "string"
+                        },
+                        {
+                          "const": "capability",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "subjectId": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "sixMonthOutcome": {
+                      "minLength": 1,
+                      "maxLength": 4000,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
       },
       "MissionCardFeedbackView": {
         "additionalProperties": false,
@@ -13522,6 +18179,8 @@
                 "sortOrder",
                 "name",
                 "group",
+                "ownerId",
+                "ownerDisplayName",
                 "sixMonthOutcome",
                 "supportRefs"
               ],
@@ -13545,6 +18204,12 @@
                   "type": "string"
                 },
                 "group": {
+                  "type": "string"
+                },
+                "ownerId": {
+                  "type": "string"
+                },
+                "ownerDisplayName": {
                   "type": "string"
                 },
                 "sixMonthOutcome": {

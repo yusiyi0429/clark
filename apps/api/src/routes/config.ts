@@ -96,6 +96,7 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     "/api/config/capabilities",
     { preHandler: requireCEO, schema: { body: CreateCapabilityRequest } },
     async (req, reply): Promise<FastifyReply> => {
+      if (!isKnownOwner(personDisplayNames(companyMemory), req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
       const refs = req.body.supportRefs ?? [];
       const refsValid = await validateSupportRefs(q, refs);
       if (!refsValid.ok) return fail(reply, 400, refsValid.code, refsValid.message);
@@ -109,12 +110,13 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
   app.get(
     "/api/config/capabilities",
     { preHandler: requireCEO },
-    async (): Promise<TCapabilityManagementResponse> => ({ capabilities: await listCapabilityRows(q) }),
+    async (): Promise<TCapabilityManagementResponse> => ({ capabilities: await listCapabilityRows(q, personDisplayNames(companyMemory)) }),
   );
   app.patch(
     "/api/config/capabilities/:id",
     { preHandler: requireCEO, schema: { params: idParams, body: PatchCapabilityRequest } },
     async (req, reply): Promise<FastifyReply> => {
+      if (!isKnownOwner(personDisplayNames(companyMemory), req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
       if (req.body.supportRefs !== undefined) {
         const refsValid = await validateSupportRefs(q, req.body.supportRefs);
         if (!refsValid.ok) return fail(reply, 400, refsValid.code, refsValid.message);

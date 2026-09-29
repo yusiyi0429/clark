@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronLeft, Pencil } from "lucide-react";
 import type { TBattlefieldManagementResponse, TCapabilityManagementResponse, TCapabilitySupportRef } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
+import type { PersonOption } from "@/lib/api/server";
 import g from "@/styles/capability-management.module.css";
 // 顶栏与页头复用配置页同一套设计常量（UpgradeDesign.pen 三页共享 Top Navigation 与 Page Header）。
 import c from "@/styles/config.module.css";
@@ -14,10 +15,10 @@ type Battlefield = TBattlefieldManagementResponse["battlefields"][number];
 type Status = { kind: "ok" | "error"; message: string } | null;
 
 /** 编辑草稿：编号/顺序以文本编辑，主要支撑以勾选项集合编辑，存储仍是结构化联合数组。 */
-export type CapabilityDraft = { code: string; sortOrder: string; name: string; group: string; sixMonthOutcome: string; supportRefs: TCapabilitySupportRef[] };
+export type CapabilityDraft = { code: string; sortOrder: string; name: string; group: string; ownerId: string; sixMonthOutcome: string; supportRefs: TCapabilitySupportRef[] };
 
 export function capabilityDraft(item: Capability): CapabilityDraft {
-  return { code: item.code, sortOrder: String(item.sortOrder), name: item.name, group: item.group, sixMonthOutcome: item.sixMonthOutcome, supportRefs: item.supportRefs };
+  return { code: item.code, sortOrder: String(item.sortOrder), name: item.name, group: item.group, ownerId: item.ownerId, sixMonthOutcome: item.sixMonthOutcome, supportRefs: item.supportRefs };
 }
 
 /** 主要支撑的规范键：全部战场 / bf:<id> / m:<code>，用于比较勾选集合。 */
@@ -33,6 +34,7 @@ export function capabilityEditPatch(current: CapabilityDraft, draft: CapabilityD
     sortOrder?: number;
     name?: string;
     group?: string;
+    ownerId?: string;
     sixMonthOutcome?: string;
     supportRefs?: TCapabilitySupportRef[];
   } = {};
@@ -43,6 +45,7 @@ export function capabilityEditPatch(current: CapabilityDraft, draft: CapabilityD
   const sortOrder = Number(draft.sortOrder);
   if (draft.sortOrder.trim() !== "" && Number.isInteger(sortOrder) && draft.sortOrder !== current.sortOrder) patch.sortOrder = sortOrder;
   if (draft.group !== current.group) patch.group = draft.group;
+  if (draft.ownerId !== current.ownerId) patch.ownerId = draft.ownerId;
   if (draft.sixMonthOutcome !== current.sixMonthOutcome) patch.sixMonthOutcome = draft.sixMonthOutcome;
   if (draft.supportRefs.map(supportKey).sort().join("|") !== current.supportRefs.map(supportKey).sort().join("|")) patch.supportRefs = draft.supportRefs;
   return patch;
@@ -65,10 +68,10 @@ function supportOptions(battlefields: Battlefield[]): { key: string; label: stri
  * 能力管理页只消费 GET /api/config/capabilities 一次投影：点行内铅笔编辑注册表字段，
  * 写完用 router.refresh 重读投影；能力删除不在本期范围。
  */
-export function CapabilityScreen({ capabilities, battlefields }: TCapabilityManagementResponse & { battlefields: Battlefield[] }) {
+export function CapabilityScreen({ capabilities, battlefields, people = [] }: TCapabilityManagementResponse & { battlefields: Battlefield[]; people?: PersonOption[] }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<CapabilityDraft>({ code: "", sortOrder: "", name: "", group: "", sixMonthOutcome: "", supportRefs: [] });
+  const [draft, setDraft] = useState<CapabilityDraft>({ code: "", sortOrder: "", name: "", group: "", ownerId: "", sixMonthOutcome: "", supportRefs: [] });
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Status>(null);
   const options = supportOptions(battlefields);
@@ -141,7 +144,7 @@ export function CapabilityScreen({ capabilities, battlefields }: TCapabilityMana
                   {item.code ? <span className={g.code}>{item.code}</span> : null}
                   {item.name}
                 </span>
-                <span className={g.rowMeta}>{item.group ? `${item.group} · ` : ""}{item.sixMonthOutcome}</span>
+                <span className={g.rowMeta}>{item.group ? `${item.group} · ` : ""}负责人 {item.ownerDisplayName || "待指派"} · {item.sixMonthOutcome}</span>
               </span>
               <button type="button" className={g.edit} aria-label={`编辑${item.name}`} onClick={() => openEdit(item)}>
                 <Pencil aria-hidden="true" />
@@ -166,6 +169,13 @@ export function CapabilityScreen({ capabilities, battlefields }: TCapabilityMana
             <label className={g.field}>
               <span>所属分组（可选）</span>
               <input value={draft.group} onChange={(event) => setDraft({ ...draft, group: event.target.value })} />
+            </label>
+            <label className={g.field}>
+              <span>负责人（月末复盘由他提交）</span>
+              <select value={draft.ownerId} onChange={(event) => setDraft({ ...draft, ownerId: event.target.value })}>
+                <option value="">待指派</option>
+                {people.map((person) => <option key={person.personId} value={person.personId}>{person.displayName}</option>)}
+              </select>
             </label>
             <label className={g.field}>
               <span>六个月目标</span>

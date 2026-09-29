@@ -18,6 +18,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
 import { COMPANY_TIMEZONE, monthDayTime } from "@/lib/companyTime";
 import { MissionCardNoticeGroup } from "./missionCards/MissionCardNoticeGroup";
+import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
 import n from "@/styles/notifications.module.css";
 
 type RailKind = "decisions" | "meetings" | "research";
@@ -306,6 +307,7 @@ export function NotificationRail({
       />
       <div className={n.noticeList}>
         {onCard ? <StrategicConfirmCard cards={cards} onCard={onCard} onNavigate={onNavigate} /> : null}
+        <MonthlyReviewNotices onNavigate={onNavigate} ceo />
         {groups.map((group) => {
           const current = group.items.some((item) => item.href === currentHref || (item.missionRound && "cards" in payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(item.missionRound) && payloadOf<TMissionRoundSummary>(item.missionRound).cards.some((row) => `/mission-cards/${row.cardId}` === currentHref?.split("?")[0])));
           return (

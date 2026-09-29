@@ -39,6 +39,7 @@ export function memberNoticeGroups(
       title: item.text,
       detail: `会后分给你 · ${monthDayTime(item.createdAt)}`,
       tone: "amber",
+      onOpen: (from) => handlers.openTask?.(item.objectId, from),
       buttons: [{ label: "接下", emphasis: true, run: () => seen(item.id, "已接下，在你的执行事项里") }],
       reason: {
         label: "退回",
@@ -59,6 +60,8 @@ export function memberNoticeGroups(
       title: item.text,
       detail: `${item.kind === "task_returned" ? "有人退回" : "CEO 表态"} · ${monthDayTime(item.createdAt)}`,
       tone: item.kind === "strategic_rejected" ? "amber" : "neutral",
+      // 退回的是执行事项，打开事项；CEO 表态落在会议上，打开会议。
+      onOpen: (from) => item.objectType === "task" ? handlers.openTask?.(item.objectId, from) : handlers.openGroup?.(item.objectType as "issue" | "meeting", item.objectId, from),
       buttons: [{ label: "知道了", emphasis: true, run: () => seen(item.id) }],
     }));
   return { assigned, results };

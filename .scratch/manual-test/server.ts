@@ -29,7 +29,10 @@ try {
 }
 // 测试身份的声纹进单独的分组，不混进正式分组（混进去会让正式会议的 1:N 先匹配到库里认不出的测试声纹）。
 process.env.TENCENT_VOICEPRINT_GROUP = "tianshu_manual_test";
-const runDir = fileURLToPath(new URL("./run/", import.meta.url));
+// 端口和运行目录可以换：验收时另起一套，不碰正在用的 3500 / 4500。
+const API_PORT = Number(process.env.TM_API_PORT ?? 4500);
+const WEB_PORT = Number(process.env.TM_WEB_PORT ?? 3500);
+const runDir = process.env.TM_RUN_DIR ?? fileURLToPath(new URL("./run/", import.meta.url));
 const commandFile = join(runDir, "command.json");
 const responseFile = join(runDir, "response.json");
 const metadataFile = join(runDir, "fixture.json");
@@ -111,10 +114,12 @@ async function main() {
   const { setMemberAccess } = await import("../../apps/api/src/memberAccess.js");
   const { closeDueRounds } = await import("../../apps/api/src/missionRounds.js");
   await mkdir(runDir, { recursive: true });
-  testEnv.publicOrigin = "http://localhost:3500";
+  testEnv.publicOrigin = `http://localhost:${WEB_PORT}`;
   // 同一 Wi-Fi 的手机经本机私有网段地址打开：http 3500 直连，或 https 8444 经本机反代（.scratch/lan-https）。只放行这些来源。
-  const lanOrigins = Object.values(networkInterfaces()).flat().filter((net) => net && net.family === "IPv4" && !net.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(net.address)).flatMap((net) => [`http://${net!.address}:3500`, `https://${net!.address}:8444`]);
-  testEnv.extraOrigins = ["http://127.0.0.1:3500", ...lanOrigins];
+  const lanOrigins = Object.values(networkInterfaces()).flat().filter((net) => net && net.family === "IPv4" && !net.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(net.address)).flatMap((net) => [`http://${net!.address}:${WEB_PORT}`, `https://${net!.address}:8444`]);
+  testEnv.extraOrigins = [`http://127.0.0.1:${WEB_PORT}`, ...lanOrigins];
+  // 演示入口：登录页右下角「天枢系统」免口令进入王路遥（杜撰的调试身份，只在一次性测试库里）。
+  testEnv.demoLoginId = LUYAO.loginId;
   fixtureDir = await mkdtemp(join(tmpdir(), "warmap-manual-test-"));
   const people = JSON.parse(await readFile(join(root, "apps/api/test/fixtures/company-people.json"), "utf8"));
   people.people[0].displayName = "验收 CEO";
@@ -157,6 +162,43 @@ async function main() {
         todos: [],
       } };
     } },
+    // 月末复盘：时间机器没有模型，三个 Agent 都给演示内容（等两三秒，好看到「正在起草 / 评估 / 汇总」）。
+    monthlyReviewAgents: {
+      draft: { async generate(input) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        const goal = input.target ? `本月目标是「${input.target.slice(0, 40)}…」` : "本月没有签发的目标";
+        return { candidate: {
+          overall: { text: `${goal}。（演示起草）已完成两个真实场景的走查，第三个场景没有按期完成。`, sources: input.target ? ["本月目标"] : [] },
+          judgments: { text: "1. 两个场景完成走查，但第三个场景延期；成功证据缺少非当事人回看。缺少材料：延期原因记录，请负责人补充。", sources: [] },
+          nextFocus: { text: "1. 补齐第三个场景与非当事人回看的证据。", sources: [] },
+          escalations: { text: "", sources: [] },
+        } };
+      } },
+      assess: { async generate(input) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return { candidate: {
+          overall: `${input.subject.name}的自评基本如实，达成情况略偏乐观。（演示评估）`,
+          deviations: [{ point: "“已完成两个场景”缺少对应的验收记录", evidence: "本月反馈里只记录了一个场景的走查" }],
+          questions: ["第三个场景延期的具体原因是什么？", "非当事人回看准备找谁？"],
+        } };
+      } },
+      summarize: { async generate(input) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const names = input.items.map((item) => item.subjectName).join("、");
+        return { candidate: {
+          overall: `（演示汇总）${names} 都完成了复盘，两个场景完成走查，交付证据仍需补齐。`,
+          judgments: [
+            { title: "整体进度", body: `（演示汇总）${names} 都完成了复盘，主线推进符合预期。` },
+            { title: "灯塔项目", body: "两个场景跑通，第三个场景延期，下月补齐。" },
+            { title: "交接与证据", body: "交接清单已有初版，但缺少非当事人回看，证据还不完整。" },
+            { title: "能力建设", body: "方法和 Agent 能力在真实场景里用上了，还没有沉淀成可复用的模板。" },
+            { title: "组织", body: "负责人自评普遍偏乐观，下月复盘要求附上验收记录。" },
+          ],
+          nextFocus: ["补齐交付证据与非当事人回看", "把方法沉淀为可复用模板"],
+          ltcoSuggestion: { change: false, proposedLtco: input.ltco || "（未填写 LTCO）", rationale: "战略方向没有变化，本月的偏差是执行层面的，不需要修订 LTCO。", units: [] },
+        } };
+      } },
+    },
   });
   await app.sql("UPDATE battlefield_config SET code='01',name='灯塔项目',owner_id=$1,six_month_outcome='以真实战略工作验证可复用的交付方式，形成持续运行的 CEO 与 DRI 工作闭环。' WHERE id='growth'", ["browser-dri"]);
   for (const [id, code, name, order] of [["supporting", "02", "团队协作", 2], ["private-field", "09", "不可见的验收战场", 9]] as const) {
@@ -166,6 +208,8 @@ async function main() {
   for (const [code, name] of [["03", "Method"], ["04", "Agents"], ["05", "E&O"]]) {
     await app.sql("INSERT INTO capability_config (id,version,code,name,six_month_outcome) VALUES ($1,1,$2,$3,'形成可复用的能力成果')", [`cap-${code}`, code, name]);
   }
+  // 月末复盘：Method 能力域交给孙铭泽（browsermember），好测成员提交复盘；其余能力域待指派，由 CEO 代复盘。
+  await app.sql("UPDATE capability_config SET owner_id='sun-mingze' WHERE id='cap-03'");
   const planId = randomUUID();
   let luyaoTasks: Record<string,string> | undefined;
   const goalText = "让灯塔项目在真实 CEO 与 DRI 的日常战略工作中持续运行，完成从每月目标、个人承诺、执行事项到复盘的完整闭环；形成可复用的验收标准、跨人员交接清单和问题归因记录，确保关键界面的信息层级与反馈一致，并以不少于三组真实场景核对用户能否找到正在推进的事、理解自己的贡献和继续下一步。保留需要人工判断的边界，月底形成可核对的部署就绪结论。";
@@ -241,8 +285,8 @@ async function main() {
   const stopped = new Promise<void>((done) => { settled = done; });
   const stop = () => { void close().catch(() => { process.exitCode = 1; }).finally(() => settled?.()); };
   process.once("SIGINT", stop); process.once("SIGTERM", stop);
-  await app.app.listen({ port: 4500, host: "127.0.0.1" });
-  metadata = { fixtureId, ready: true, port: 4500, webPort: 3500, pid: process.pid, database, fixtureDirectory: fixtureDir,
+  await app.app.listen({ port: API_PORT, host: "127.0.0.1" });
+  metadata = { fixtureId, ready: true, port: API_PORT, webPort: WEB_PORT, pid: process.pid, database, fixtureDirectory: fixtureDir,
     now: now.toISOString(), planStage: "issued", planSigned: true, rounds: 0, memberId: "sun-mingze", driId: "browser-dri", noCardId: "browser-no-card", emptyId: "browser-empty", planId, lanOrigins };
   await writeJson(metadataFile, metadata);
   /** 时间机器没有模型：用 Agent 同一个修改函数，按上传者的要求改最近一份 Markdown，好看到修改标注和群里的说明。 */
@@ -293,6 +337,16 @@ async function main() {
           result = { closed: true, database, fixtureDirectory: fixtureDir };
         } else if (request.command === "inspect") result = await inspect();
         else if (request.command === "material-edit") result = await simulateMaterialEdit();
+        else if (request.command === "review-open") {
+          // 月末复盘平时在月底倒数第 3 天自动开启；时间机器的时钟在月初，这里用 CEO 的「开始复盘」动作提前开启当月复盘。
+          const period = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit" }).format(appNow()).slice(0, 7);
+          const { value, headers } = await projectAs("browserceo", `/api/monthly-reviews/${period}`);
+          const open = value.actions.find((entry: { actionType: string }) => entry.actionType === "monthly-review.open");
+          if (!open) throw new Error(`${period} 的复盘已经开启`);
+          const opened = await app!.app.inject({ method: "POST", url: "/api/monthly-reviews/actions/execute", headers, payload: { actionId: open.actionId } });
+          if (opened.statusCode !== 200) throw new Error(`开启复盘失败：${opened.statusCode} ${opened.body.slice(0, 200)}`);
+          result = { reviewOpened: period, href: `/reviews/${period}` };
+        }
         else if (request.command === "target-none") result = await setPlanStage("none");
         else if (request.command === "target-negotiating") result = await setPlanStage("negotiating");
         else if (request.command === "target-issued") result = await setPlanStage("issued");

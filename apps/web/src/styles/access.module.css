@@ -61,3 +61,11 @@
 @media (prefers-reduced-transparency: reduce) { .codeCell, .passwordField { background: var(--morning-start); --onboarding-blur: 0px; --onboarding-sat: 100%; } }
 @media (prefers-contrast: more) { .codeCell, .passwordField { border: 1px solid var(--ink-muted); } }
 @media (forced-colors: active) { .codeCell, .passwordField { border: 1px solid CanvasText; } .clock { color: CanvasText; } }
+
+/* 演示入口（只在时间机器里出现）：右下角一行小字，不抢锁屏的注意力。 */
+.demoEntry { position: absolute; z-index: 5; right: 20px; bottom: 16px; min-height: 32px; padding: 4px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-faint); font: 500 11px/1.2 var(--font-sans); letter-spacing: .08em; cursor: pointer; opacity: .55; transition: opacity 160ms ease, color 160ms ease; }
+.demoEntry:hover, .demoEntry:focus-visible { opacity: 1; color: var(--ink-muted); }
+.demoEntry:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+.demoEntry:disabled { cursor: default; }
+.shell[data-unlocking="true"] .demoEntry { animation: unlockOut 240ms var(--onboarding-ease) both; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .demoEntry { transition: none; } }

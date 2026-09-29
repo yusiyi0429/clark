@@ -52,3 +52,7 @@ export type TChangePasscodeRequest = Static<typeof ChangePasscodeRequest>;
 export type TLoginResponse = Static<typeof LoginResponse>;
 export type TSessionResponse = Static<typeof SessionResponse>;
 export type TSetViewRequest = Static<typeof SetViewRequest>;
+
+/** 演示入口（只在时间机器里存在）：登录页据此决定是否显示右下角的「天枢系统」。 */
+export const DemoEntryResponse = Type.Object({ displayName: Type.String() }, { additionalProperties: false });
+export type TDemoEntryResponse = Static<typeof DemoEntryResponse>;;

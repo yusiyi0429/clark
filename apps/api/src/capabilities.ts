@@ -14,6 +14,7 @@ type CapabilityDbRow = {
   sort_order: number;
   name: string;
   group: string;
+  owner_id: string;
   six_month_outcome: string;
   support_refs: TCapabilitySupportRef[];
 };
@@ -23,14 +24,15 @@ export type CapabilityWriteInput = {
   sortOrder: number;
   name: string;
   group?: string;
+  ownerId?: string;
   sixMonthOutcome: string;
   supportRefs?: TCapabilitySupportRef[];
 };
 
-/** 能力注册表行：首页 Card 投影与能力管理页列表共用同一份读取。 */
-export async function listCapabilityRows(q: Query): Promise<CapabilityRow[]> {
+/** 能力注册表行：首页 Card 投影与能力管理页列表共用同一份读取；负责人显示名投影时现查，空 ownerId 为空串（界面显示“待指派”）。 */
+export async function listCapabilityRows(q: Query, ownerNames: Map<string, string> = new Map()): Promise<CapabilityRow[]> {
   const result = await q(
-    `SELECT id, version, code, sort_order, name, "group", six_month_outcome, support_refs FROM capability_config ORDER BY sort_order, code, id`,
+    `SELECT id, version, code, sort_order, name, "group", owner_id, six_month_outcome, support_refs FROM capability_config ORDER BY sort_order, code, id`,
   );
   return (result.rows as CapabilityDbRow[]).map((row) => ({
     id: row.id,
@@ -39,6 +41,8 @@ export async function listCapabilityRows(q: Query): Promise<CapabilityRow[]> {
     sortOrder: row.sort_order,
     name: row.name,
     group: row.group,
+    ownerId: row.owner_id,
+    ownerDisplayName: ownerNames.get(row.owner_id) ?? "",
     sixMonthOutcome: row.six_month_outcome,
     supportRefs: row.support_refs ?? [],
   }));
@@ -130,11 +134,11 @@ export async function registerCapability(q: Query, input: CapabilityWriteInput):
     return { ok: false, status: 409, code: "CAPABILITY_CODE_CONFLICT", message: `能力编号 ${input.code} 已被占用` };
   }
   const result = await q(
-    `INSERT INTO capability_config (id, version, code, sort_order, name, "group", six_month_outcome, support_refs)
-     VALUES ($1, 1, $2, $3, $4, $5, $6, $7::jsonb)
+    `INSERT INTO capability_config (id, version, code, sort_order, name, "group", six_month_outcome, support_refs, owner_id)
+     VALUES ($1, 1, $2, $3, $4, $5, $6, $7::jsonb, $8)
      ON CONFLICT (id) DO NOTHING
      RETURNING id`,
-    [id, input.code, input.sortOrder, input.name, input.group ?? "", input.sixMonthOutcome, JSON.stringify(input.supportRefs ?? [])],
+    [id, input.code, input.sortOrder, input.name, input.group ?? "", input.sixMonthOutcome, JSON.stringify(input.supportRefs ?? []), input.ownerId ?? ""],
   );
   if (result.rowCount !== 1) return { ok: false, status: 409, code: "CAPABILITY_EXISTS", message: `能力 ${id} 已注册` };
   return { ok: true, id };
@@ -165,7 +169,7 @@ export async function updateCapability(
     `UPDATE capability_config
         SET code = COALESCE($2, code), sort_order = COALESCE($3, sort_order), name = COALESCE($4, name),
             "group" = COALESCE($5, "group"), six_month_outcome = COALESCE($6, six_month_outcome),
-            support_refs = COALESCE($7::jsonb, support_refs),
+            support_refs = COALESCE($7::jsonb, support_refs), owner_id = COALESCE($9, owner_id),
             version = version + 1
       WHERE id = $1
         AND ($8::text IS NULL OR $8 = id OR NOT EXISTS (SELECT 1 FROM capability_config WHERE id = $8))
@@ -179,6 +183,7 @@ export async function updateCapability(
       input.sixMonthOutcome ?? null,
       input.supportRefs === undefined ? null : JSON.stringify(input.supportRefs),
       nextSlug,
+      input.ownerId ?? null,
     ],
   );
   if (updated.rowCount === 1) return { ok: true, id };

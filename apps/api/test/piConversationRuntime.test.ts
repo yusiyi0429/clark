@@ -71,13 +71,17 @@ describe("controlled Pi conversation adapter public behavior", () => {
       },
     });
     try {
-      for (const scope of ["global", "issue:fixture-001", "task:fixture-001", "meeting:fixture-001"] as const)
+      for (const scope of ["global", "issue:fixture-001", "task:fixture-001", "meeting:fixture-001", "monthly-review-item:fixture-001"] as const)
         await runtime.run({ scope, viewer: CEO_VIEWER, message: "看看材料", currentObject: null, referencesSnapshot: [],
           runtimeEntries: [], piSessionId: "11111111-1111-4111-8111-111111111111", signal: new AbortController().signal,
           emit: () => undefined });
       expect(toolsByScope[0]).not.toContain("edit_material");
       for (const names of [toolsByScope[1], toolsByScope[2], toolsByScope[3]])
         expect(names).toEqual(expect.arrayContaining(["list_materials", "read_material", "edit_material", "create_material"]));
+      // 复盘项对话只多一个改写建议工具，不带材料工具
+      expect(toolsByScope[4]).toContain("propose_review_edit");
+      expect(toolsByScope[4]).not.toContain("edit_material");
+      expect(toolsByScope.slice(0, 4).flat()).not.toContain("propose_review_edit");
     } finally { await runtime.close?.(); }
   });
   it("does not call the model when the public abort signal is already aborted", async () => {

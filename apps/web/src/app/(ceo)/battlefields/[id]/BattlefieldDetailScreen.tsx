@@ -13,7 +13,6 @@ import w from "@/styles/app-shell.module.css";
 import d from "@/styles/battlefield-detail.module.css";
 
 export type BattlefieldTab = "decisions" | "progress";
-type ProgressView = "people" | "campaigns";
 
 /** 本战场本月的 Mission（首页集合只含当期），按负责人分组；组内按编号。 */
 export function missionsByOwner(cards: Card[], battlefieldId: string): { owner: string; missions: MissionPayload[] }[] {
@@ -40,7 +39,6 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
   const payload = payloadOf<BattlefieldPayload>(battlefield);
   const ceoOwns = !!viewerId && payload.ownerId === viewerId;
   const [tab, setTab] = useState<BattlefieldTab>(initialTab);
-  const [view, setView] = useState<ProgressView>("people");
   const meetingTimes = useMemo(() => meetingTimesByIssue(cards), [cards]);
   const issueCards = useMemo(() => {
     const byId = new Map(cards.filter((item) => item.kind === "issue").map((item) => [item.objectRef.id, item]));
@@ -133,7 +131,6 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
                         </li>
                       ))}
                     </ul>
-                    <p className={d.note}>战役 DRI 与实际进展尚未登记。</p>
                   </>
                 ) : (
                   <div className={d.box}>
@@ -145,40 +142,20 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
           ) : (
             <>
               <p className={d.summary}>
-                本月 {missions.length} 条 Mission · 成功证据 {evidenceCount} 项 · 核对状态未报告
+                本月 {missions.length} 条 Mission · 成功证据 {evidenceCount} 项
               </p>
 
               <Goals payload={payload} />
-              <p className={d.note}>六个月与本月的里程碑尚未登记，时间轴暂不显示。</p>
 
               <section className={d.section} aria-label="本月进展">
                 <div className={d.sectionHead}>
                   <h3>
                     本月进展<b>{missions.length}</b>
                   </h3>
-                  <ToggleButtonGroup
-                    aria-label="进展看法"
-                    selectionMode="single"
-                    disallowEmptySelection
-                    selectedKeys={[view]}
-                    onSelectionChange={(keys) => {
-                      const next = [...keys][0] as ProgressView | undefined;
-                      if (next) setView(next);
-                    }}
-                  >
-                    <ToggleButton id="people">按人</ToggleButton>
-                    <ToggleButton id="campaigns">按战役</ToggleButton>
-                    <ToggleButton id="gantt" isDisabled>
-                      甘特图
-                    </ToggleButton>
-                  </ToggleButtonGroup>
                 </div>
-                <p className={d.note}>
-                  甘特图暂不可用：里程碑还没有结构化日期与核对记录。{view === "campaigns" ? "Mission 与战役的关联尚未登记，全部列在「未关联战役」。" : ""}
-                </p>
                 {missions.length ? (
                   <div className={d.groups}>
-                    {(view === "people" ? groups : [{ owner: "未关联战役", missions }]).map((group) => (
+                    {groups.map((group) => (
                       <div key={group.owner} className={d.group}>
                         <h4>
                           {group.owner}
@@ -190,9 +167,7 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
                               <button type="button" className={d.mission} data-origin={`/missions/${encodeURIComponent(mission.missionId)}`} onClick={(event) => openMission(mission, event.currentTarget)}>
                                 <b>{mission.code}</b>
                                 <span>{mission.title}</span>
-                                <small>
-                                  {view === "campaigns" ? `${mission.ownerDisplayName || "待指派"} · ` : ""}成功证据 {mission.successEvidence.length} 项 · 未报告
-                                </small>
+                                <small>成功证据 {mission.successEvidence.length} 项</small>
                                 <ChevronRight size={13} aria-hidden="true" />
                               </button>
                               {mission.milestones.length ? (

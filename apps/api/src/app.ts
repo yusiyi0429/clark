@@ -20,6 +20,7 @@ import { pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } f
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import type { DriExporter } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
+import type { MonthlyReviewService } from "./monthlyReviewService.js";
 import { logEvent } from "./observability.js";
 import { configureLangSmith } from "./langsmith.js";
 import { ensureMaterialStorage } from "./materialParser.js";
@@ -53,6 +54,7 @@ import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerMissionCardRoutes } from "./routes/missionCards.js";
 import { registerMyRadarRoutes } from "./routes/myRadar.js";
 import { registerOntologyRoutes } from "./routes/ontology.js";
+import { registerMonthlyReviewRoutes } from "./routes/monthlyReviews.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
@@ -72,6 +74,11 @@ export type AppEnv = {
   publicOrigin: string;
   /** 本地开发额外允许的浏览器来源（如 127.0.0.1、局域网 IP）；线上不配，只认 publicOrigin。 */
   extraOrigins?: string[];
+  /**
+   * 演示入口：登录页右下角「天枢系统」免口令进入这个登录 ID。只有时间机器在代码里设置；
+   * 正式环境不从环境变量读取，接口不注册。
+   */
+  demoLoginId?: string;
   /** 引导中的公司名，可空；不从其他资料猜测。 */
   companyName?: string;
   /** mission-card-drafts.v1 占位文件目录；未配置时使用仓库 seed/placeholders。 */
@@ -107,6 +114,7 @@ export async function buildApp({
   driExporter,
   ontologyUpdater = pendingOntologyUpdater,
   monthlyPlanService,
+  monthlyReviewService,
   recordingService,
   voiceprintDeps = realVoiceprintDeps,
   dictationDeps = realDictationDeps,
@@ -129,6 +137,8 @@ export async function buildApp({
   /** CEO 确认战略议题后的本体更新；缺省不做事、请求保持 pending（co-agent 同事实现真实 Agent）。 */
   ontologyUpdater?: OntologyUpdater;
   monthlyPlanService?: MonthlyPlanService;
+  /** 月末复盘的起草、评估、汇总；缺省时 open 返回 503，其余生成不运行。 */
+  monthlyReviewService?: MonthlyReviewService;
   /** 会议录音流水线；缺省按 env.recordingStorageDir 装配真实 ffmpeg/TOS/火山依赖（server.ts 注入以便启动时恢复）。 */
   recordingService?: MeetingRecordingService;
   /** 本人声纹录入/删除用的 ffmpeg 与腾讯云依赖；缺省为真实实现（测试注入假实现）。 */
@@ -306,6 +316,7 @@ export async function buildApp({
     driExporter,
     ontologyUpdater,
     monthlyPlanService,
+    monthlyReviewService,
     recordings,
     voiceprints: voiceprintDeps,
     dictation: dictationDeps,
@@ -344,6 +355,7 @@ export async function buildApp({
   registerOnboardingRoutes(app, ctx);
   registerMissionCardRoutes(app, ctx);
   registerMyRadarRoutes(app, ctx);
+  registerMonthlyReviewRoutes(app, ctx);
 
   return app;
 }

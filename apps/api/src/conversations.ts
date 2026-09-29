@@ -18,6 +18,7 @@ import { moveStagedFile } from "./meetingMaterials.js";
 import { getMeetingRow, projectMeetingCard } from "./meetingStore.js";
 import { getMonthlyPlanRow, projectMonthlyPlanCard } from "./monthlyPlans.js";
 import { getMissionRow, projectMissionCard } from "./missions.js";
+import { canReadMonthlyReviewItem, getMonthlyReviewItem } from "./monthlyReviews.js";
 import { getSignalCard } from "./signals.js";
 import { getPersonalMissionCard } from "./personalMissionCards.js";
 import { canReadTask, getTaskView } from "./tasks.js";
@@ -94,6 +95,24 @@ export async function getScopeObject(
     return { visible: true, snapshot: { cardId: `task:${id}`, version: task.version, kind: "task", title: task.title,
       objectRef: { type: "task", id, version: task.version }, payload: { task, mission,
         monthOutcome: mission?.month_outcome ?? null } } };
+  }
+  if (objectType === "monthly-review-item") {
+    // 负责人、CEO 和本单元当月 Mission 负责人能读；对话仍按本人隔离
+    const item = context ? await getMonthlyReviewItem(q, id) : null;
+    if (!item || !context || !await canReadMonthlyReviewItem(q, context.person, item)) return { visible: false, snapshot: null };
+    return { visible: true, snapshot: { cardId: `monthly-review-item:${item.id}`, version: item.version, kind: "monthly-review-item",
+      title: `${item.period} 复盘 · ${item.subject_name}`, objectRef: { type: "monthly-review-item", id: item.id, version: item.version },
+      payload: {
+        period: item.period,
+        subject: { type: item.subject_type, id: item.subject_id, code: item.subject_code, name: item.subject_name, sixMonthOutcome: item.six_month_outcome },
+        ownerId: item.owner_id,
+        target: item.target,
+        selfReview: item.self_review,
+        status: item.status,
+        returnReason: item.return_reason,
+        assessment: item.assessment.result,
+        suggestions: item.suggestions,
+      } } };
   }
   if (objectType === "mission-card") {
     const card = context ? await getPersonalMissionCard(q, context.people, secret, context.person, id, context.now) : null;

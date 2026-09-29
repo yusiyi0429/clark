@@ -764,7 +764,7 @@ describe("strategy map config contracts", () => {
     expect(Value.Check(CapabilityManagementResponse, {
       capabilities: [{
         id: "re-architecture", version: 1, code: "02", sortOrder: 20, name: "Re-architecture",
-        group: "", sixMonthOutcome: "目标", supportRefs: [{ type: "all-battlefields" }],
+        group: "", ownerId: "", ownerDisplayName: "待指派", sixMonthOutcome: "目标", supportRefs: [{ type: "all-battlefields" }],
       }],
     })).toBe(true);
 

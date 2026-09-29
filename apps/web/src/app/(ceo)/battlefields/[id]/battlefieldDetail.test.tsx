@@ -82,15 +82,17 @@ describe("战场二级页", () => {
 
   it("进展：汇总不出百分比；按负责人列 Mission；普通待办与反馈历史都在", () => {
     const html = render("progress");
-    expect(html).toContain("本月 3 条 Mission · 成功证据 6 项 · 核对状态未报告");
+    expect(html).toContain("本月 3 条 Mission · 成功证据 6 项");
+    // 没有真实核对数据时不写「未报告」「尚未登记」，也不放不可用的「按战役 / 甘特图」切换。
+    expect(html).not.toContain("未报告");
+    expect(html).not.toContain("尚未登记");
+    expect(html).not.toContain("甘特图");
     expect(html).not.toMatch(/\d+%/);
     expect(html).toContain("01-3 的标题");
     expect(html).not.toContain("02-1 的标题");
     expect(html).toContain("整理渠道名单");
     expect(html).toContain("已送达");
     expect(html).toContain("较早反馈");
-    // 甘特图缺结构化日期：照实说明，不画。
-    expect(html).toContain("里程碑还没有结构化日期");
   });
 
   it("CEO 兼任负责人：「进展」页签带皇冠，不再写负责人", () => {

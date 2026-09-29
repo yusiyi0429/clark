@@ -4,6 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   COMPANY_MEMORY_TOOLS,
+  MonthlyReviewField,
   SearchPeopleInput,
   WebSearchInput,
   type TRadarSourceItem,
@@ -37,6 +38,7 @@ import { unavailableWebSearchAdapter, type WebSearchAdapter } from "./webSearch.
 import type { Pool } from "pg";
 import { createObjectMaterial, editObjectMaterial, listObjectMaterials, readObjectMaterial, ObjectMaterialError } from "./objectMaterials.js";
 import { personDisplayNames } from "./people.js";
+import { proposeMonthlyReviewSuggestion } from "./monthlyReviews.js";
 
 const SYSTEM_PROMPT = `# 角色
 
@@ -456,6 +458,22 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
               args.title, args.body, args.summary, input.runId ?? null)) }),
         ];
       })() : [];
+      // 复盘项对话：agent 只能给某一栏提改写建议，负责人点「采用」才写入；不经过 Action 签名，仓储函数锁内校验
+      const reviewItemId = /^monthly-review-item:(.+)$/.exec(input.scope)?.[1];
+      const reviewTools = reviewItemId && options.materialPool ? [defineTool({
+        name: "propose_review_edit",
+        label: "提改写建议",
+        description: "给负责人某一栏复盘自评的改写建议；负责人点「采用」才写入。用户要求改写、或上传了手写复盘时使用",
+        parameters: Type.Object({
+          field: MonthlyReviewField,
+          text: Type.String({ minLength: 1, maxLength: 4000 }),
+          rationale: Type.String({ maxLength: 500 }),
+        }, { additionalProperties: false }),
+        execute: async (_id, args) => {
+          const value = await proposeMonthlyReviewSuggestion(options.materialPool!, reviewItemId, input.viewer, args, new Date());
+          return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
+        },
+      })] : [];
       const recreated = !validRuntimeEntries(input.runtimeEntries, input.piSessionId);
       const piSessionId = recreated ? randomUUID() : input.piSessionId;
       const warning = recreated ? "Pi runtime entries were corrupted; rebuilt from current object and recent raw messages" : undefined;
@@ -474,8 +492,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         model,
         modelRuntime,
         resourceLoader: isCeo ? ceoResourceLoader : resourceLoaderFor(driSystemPrompt(input.viewer.displayName, personalCard)),
-        customTools: [...mcpTools, ...viewerBoardTools, ...materialTools, ...outletFeedTools, searchTool],
-        tools: [...COMPANY_MEMORY_TOOLS, ...viewerBoardTools.map((tool) => tool.name), ...materialTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
+        customTools: [...mcpTools, ...viewerBoardTools, ...materialTools, ...reviewTools, ...outletFeedTools, searchTool],
+        tools: [...COMPANY_MEMORY_TOOLS, ...viewerBoardTools.map((tool) => tool.name), ...materialTools.map((tool) => tool.name), ...reviewTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
         sessionManager: manager,
         settingsManager: settings,
         thinkingLevel: "off",

@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { ChangePasscodeRequest, LoginRequest, LoginResponse, SessionResponse, SetViewRequest, type TLoginResponse, type TSessionRole } from "@warmap/contracts";
+import { ChangePasscodeRequest, DemoEntryResponse, LoginRequest, LoginResponse, SessionResponse, SetViewRequest, type TLoginResponse, type TSessionRole } from "@warmap/contracts";
 import { LOCK_AFTER_FAILURES, changePasscode, roleOf, verifyCredentials, type Rejected } from "../memberAccess.js";
 import { sessionClearCookie, sessionSetCookie } from "../session.js";
 import { hasCompletedOnboarding } from "../onboarding.js";
@@ -55,6 +55,26 @@ export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
       return signIn(reply, outcome.person.personId, version, roleOf(outcome.person));
     },
   );
+
+  // 演示入口（时间机器专用）：没有配置 demoLoginId 时这两个接口不存在。
+  const demoLoginId = env.demoLoginId;
+  if (demoLoginId) {
+    const demoAccess = async () => {
+      const row = (await q("SELECT person_id, session_version FROM member_access WHERE login_id = $1", [demoLoginId])).rows[0] as
+        | { person_id: string; session_version: number } | undefined;
+      const person = row ? findPerson(row.person_id) : undefined;
+      return row && person ? { row, person } : null;
+    };
+    app.get("/api/auth/demo", { schema: { response: { 200: DemoEntryResponse } } }, async (_req, reply) => {
+      const access = await demoAccess();
+      return access ? { displayName: access.person.displayName } : fail(reply, 404, "DEMO_NOT_FOUND", "演示账号不存在");
+    });
+    app.post("/api/auth/demo", { preHandler: sameOrigin, config: perIp, schema: { response: { 200: LoginResponse } } }, async (_req, reply) => {
+      const access = await demoAccess();
+      if (!access) return fail(reply, 404, "DEMO_NOT_FOUND", "演示账号不存在");
+      return signIn(reply, access.person.personId, access.row.session_version, roleOf(access.person));
+    });
+  }
 
   app.post("/api/auth/logout", { preHandler: requirePerson }, async (_req, reply) => {
     reply.header("set-cookie", sessionClearCookie());

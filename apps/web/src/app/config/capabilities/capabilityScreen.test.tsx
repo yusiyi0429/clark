@@ -7,8 +7,8 @@ import type { TBattlefieldManagementResponse, TCapabilityManagementResponse, TCa
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 
 const capabilities: TCapabilityManagementResponse["capabilities"] = [
-  { id: "cap-delivery", version: 1, code: "02", sortOrder: 20, name: "区域仓配服务", group: "供应链能力", sixMonthOutcome: "覆盖三国本地仓的仓配与退货能力", supportRefs: [{ type: "battlefield", battlefieldId: "growth" }] },
-  { id: "cap-agent", version: 3, code: "03", sortOrder: 30, name: "Agent 安全基线", group: "平台能力", sixMonthOutcome: "权限限制、审批留痕与紧急停机", supportRefs: [{ type: "all-battlefields" }] },
+  { id: "cap-delivery", version: 1, code: "02", sortOrder: 20, name: "区域仓配服务", group: "供应链能力", ownerId: "", ownerDisplayName: "待指派", sixMonthOutcome: "覆盖三国本地仓的仓配与退货能力", supportRefs: [{ type: "battlefield", battlefieldId: "growth" }] },
+  { id: "cap-agent", version: 3, code: "03", sortOrder: 30, name: "Agent 安全基线", group: "平台能力", ownerId: "p-2", ownerDisplayName: "王路遥", sixMonthOutcome: "权限限制、审批留痕与紧急停机", supportRefs: [{ type: "all-battlefields" }] },
 ];
 const battlefields: TBattlefieldManagementResponse["battlefields"] = [
   {
@@ -38,11 +38,11 @@ describe("能力管理页渲染", () => {
     expect(html).toContain("2 项已登记能力 · 点击编辑");
   });
 
-  it("每行展示编号、名称与「分组 · 六个月目标」，并给出铅笔编辑入口", () => {
+  it("每行展示编号、名称与「分组 · 负责人 · 六个月目标」，并给出铅笔编辑入口", () => {
     expect(html).toContain("区域仓配服务");
-    expect(html).toContain("供应链能力 · 覆盖三国本地仓的仓配与退货能力");
+    expect(html).toContain("供应链能力 · 负责人 待指派 · 覆盖三国本地仓的仓配与退货能力");
     expect(html).toContain("Agent 安全基线");
-    expect(html).toContain("平台能力 · 权限限制、审批留痕与紧急停机");
+    expect(html).toContain("平台能力 · 负责人 王路遥 · 权限限制、审批留痕与紧急停机");
     expect(html).toContain('aria-label="编辑区域仓配服务"');
     expect(html).toContain('aria-label="编辑Agent 安全基线"');
   });
