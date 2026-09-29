@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { announceLevel, announceListening } from "@/components/coagent/presence";
 
 export type RecorderStatus = "idle" | "starting" | "recording" | "stopping" | "finished" | "denied" | "unsupported" | "failed";
 
@@ -35,6 +36,7 @@ export function useMeetingRecorder(meetingId: string) {
   const seq = useRef(0);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const failed = useRef<string | null>(null);
+  const meter = useRef<{ context: AudioContext; timer: number } | null>(null);
   const base = `/api/meetings/${encodeURIComponent(meetingId)}/recordings`;
 
   // 一片一片按顺序传：前一片没传完不传下一片；失败重试一次，再失败记下来，结束时告诉人。
@@ -55,8 +57,36 @@ export function useMeetingRecorder(meetingId: string) {
   );
 
   const releaseMic = () => {
+    if (meter.current) {
+      window.clearInterval(meter.current.timer);
+      void meter.current.context.close().catch(() => {});
+      meter.current = null;
+    }
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
+  };
+
+  // 响度只给 Co-Agent 胶囊看（光或眼睛跟着声音动），和录音是同一条流、不送到扬声器；取不到就不动，录音照常。
+  const startMeter = (source: MediaStream) => {
+    const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    try {
+      const context = new AudioContextClass();
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      context.createMediaStreamSource(source).connect(analyser);
+      void context.resume().catch(() => {});
+      const samples = new Uint8Array(analyser.fftSize);
+      const timer = window.setInterval(() => {
+        analyser.getByteTimeDomainData(samples);
+        let energy = 0;
+        for (const sample of samples) energy += ((sample - 128) / 128) ** 2;
+        announceLevel(Math.min(1, Math.sqrt(energy / samples.length) * 5));
+      }, 60);
+      meter.current = { context, timer };
+    } catch {
+      /* 同上 */
+    }
   };
 
   const start = useCallback(async () => {
@@ -89,6 +119,7 @@ export function useMeetingRecorder(meetingId: string) {
     media.ondataavailable = (event) => upload(event.data);
     media.start(SLICE_MS);
     recorder.current = media;
+    startMeter(stream.current);
     setState({ status: "recording" });
   }, [base, upload]);
 
@@ -127,6 +158,14 @@ export function useMeetingRecorder(meetingId: string) {
     },
     [],
   );
+
+  // 在录的时候，右列顶上摆出 Co-Agent 胶囊（会议页的右列读 `meeting:<id>`）。
+  const recording = state.status === "recording";
+  useEffect(() => {
+    if (!recording) return;
+    announceListening(`meeting:${meetingId}`);
+    return () => announceListening(null);
+  }, [recording, meetingId]);
 
   // 录音中刷新或关掉标签页：浏览器会拦一下，提醒这场会还在录。
   useEffect(() => {

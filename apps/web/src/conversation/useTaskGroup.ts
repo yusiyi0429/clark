@@ -6,6 +6,16 @@ import { browserApi } from "@/lib/api/client";
 
 type Thread = components["schemas"]["ThreadView"];
 
+/**
+ * 第一次进这个群（打开时一条都没读过）时，Co-Agent 在群里说的最后一段 —— 新人被拉进来后它讲的来龙去脉。
+ * 右列据此让 Co-Agent 胶囊出现几秒，强调这段话是它说的。不是第一次进群就没有。
+ */
+export function catchUpMessage(messages: Thread["messages"], firstVisit: boolean): number | null {
+  if (!firstVisit) return null;
+  const ids = messages.filter((message) => message.kind === "co-agent").map((message) => message.id);
+  return ids.length ? Math.max(...ids) : null;
+}
+
 /** 事项详情可见期间轮询公开线程；只有群组频道可见时标记已读。 */
 export function useTaskGroup(taskId: string | undefined, visible: boolean) {
   return useThreadGroup("task", taskId, visible);
@@ -16,6 +26,7 @@ export function useThreadGroup(objectType: "task" | "issue" | "meeting", objectI
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [left, setLeft] = useState(false);
+  const [firstVisit, setFirstVisit] = useState<boolean | null>(null);
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   const reload = useRef<() => Promise<void>>(async () => {});
@@ -26,7 +37,7 @@ export function useThreadGroup(objectType: "task" | "issue" | "meeting", objectI
     let active = true;
     let loading = false;
     latestCoAgent.current = null;
-    setView(null); setLeft(false);
+    setView(null); setLeft(false); setFirstVisit(null);
     const load = async () => {
       if (loading || document.visibilityState === "hidden") return;
       loading = true;
@@ -39,6 +50,7 @@ export function useThreadGroup(objectType: "task" | "issue" | "meeting", objectI
           return;
         }
         setView(data); setLeft(false); setError(null);
+        setFirstVisit((current) => current ?? data.lastReadId === 0);
         const coAgentId = Math.max(0, ...data.messages.filter((message) => message.kind === "co-agent").map((message) => message.id));
         if (latestCoAgent.current !== null && coAgentId > latestCoAgent.current)
           window.dispatchEvent(new CustomEvent("thread-materials-changed", { detail: { scope: `${objectType}:${objectId}` } }));
@@ -71,5 +83,6 @@ export function useThreadGroup(objectType: "task" | "issue" | "meeting", objectI
     } catch { setError("没发出去，输入已保留。"); return false; }
     finally { setSending(false); }
   }, [objectType, objectId, left]);
-  return { view, error, sending, left, send, refresh: () => reload.current() };
+  const catchUp = view ? catchUpMessage(view.messages, firstVisit === true) : null;
+  return { view, error, sending, left, send, catchUp, refresh: () => reload.current() };
 }

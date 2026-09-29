@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Plus } from "lucide-react";
 import type { TMaterialDetailResponse, TMaterialView } from "@warmap/contracts";
-import { MaterialTabs, useRememberedScroll, type MaterialTab } from "@/components/shell/MaterialTabs";
+import { InHeader, MaterialMenu, useRememberedScroll, type MaterialTab } from "@/components/shell/MaterialTabs";
 import { useConfirm } from "@/components/ConfirmDialog";
 import s from "./materials.module.css";
 
@@ -90,9 +89,9 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, s
     data-viewing-material-id={material?.id ?? ""} data-viewing-material-editable={material?.editable ? "true" : "false"}
     data-viewing-material-format={material?.format ?? ""}>
     {(objectType === "issue" || objectType === "meeting" || materials.length > 0 || canUpload) ? <div className={s.toolbar}>
-      <MaterialTabs tabs={tabs} selected={selectedTab === undefined ? selected : selectedTab} onSelect={choose} label={objectType === "meeting" ? "会议材料" : "材料页签"} />
-      {canUpload ? <><input ref={file} className={s.hidden} type="file" accept=".md,.pdf,.docx,.html,.htm" aria-label="上传材料" onChange={(event) => void upload(event.target.files?.[0])} />
-        <button type="button" className={s.add} aria-label="上传材料" onClick={() => file.current?.click()}><Plus size={16} strokeWidth={2} aria-hidden /></button></> : null}
+      <InHeader><MaterialMenu tabs={tabs} selected={selectedTab === undefined ? selected : selectedTab} onSelect={choose}
+        label={objectType === "meeting" ? "会议材料" : "材料"} onAdd={canUpload ? () => file.current?.click() : undefined} /></InHeader>
+      {canUpload ? <input ref={file} className={s.hidden} type="file" accept=".md,.pdf,.docx,.html,.htm" aria-label="上传材料" onChange={(event) => void upload(event.target.files?.[0])} /> : null}
       {uploading ? <span className={s.uploading} role="status">上传中…</span> : null}
       {uploadError ? <button className={s.uploadError} type="button" onClick={() => setUploadError("")}>{uploadError}</button> : null}
     </div> : null}
@@ -100,7 +99,7 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, s
       base={base} onRemove={remove} onVersion={setVersion} />{dialog}</div>
       : groupTab && selected === groupTab.id ? <div className={s.groupList}>
         {materials.length ? <ul>{materials.map((item) => <li key={item.id}><button type="button" onClick={() => choose(item.id)}>{item.fileName}</button></li>)}</ul>
-          : <p className={s.empty}>还没有群组材料，点右侧「+」上传。</p>}
+          : <p className={s.empty}>还没有群组材料，从材料下拉单里的「添加材料」上传。</p>}
       </div> : children}
   </div>;
 }

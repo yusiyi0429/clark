@@ -10,7 +10,7 @@ vi.mock("react", () => ({
 }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: api.get, POST: api.post } }));
 
-import { useTaskGroup, useThreadGroup } from "./useTaskGroup";
+import { catchUpMessage, useTaskGroup, useThreadGroup } from "./useTaskGroup";
 
 const message = { id: 2, kind: "member", authorId: "sun", authorName: "孙铭泽", content: "先核对试点", quote: null, createdAt: "2026-09-27T00:00:00Z" };
 const view = { members: [{ personId: "sun", displayName: "孙铭泽", title: null }], messages: [{ ...message, id: 0, kind: "co-agent" }, message], lastReadId: 0, unread: 1 };
@@ -53,4 +53,12 @@ it("会议群复用轮询、已读与发送路径", async () => {
   expect(api.post).toHaveBeenCalledWith("/api/threads/{objectType}/{objectId}/read", { params: { path: { objectType: "meeting", objectId: "meeting-1" } }, body: { lastReadId: 2 } });
   expect(await group.send("会前看材料")).toBe(true);
   expect(api.post).toHaveBeenCalledWith("/api/threads/{objectType}/{objectId}/messages", { params: { path: { objectType: "meeting", objectId: "meeting-1" } }, body: { content: "会前看材料" } });
+});
+
+it("只有第一次进群时，Co-Agent 讲的最后一段才算来龙去脉", () => {
+  const intro = { ...message, id: 5, kind: "co-agent" as const, authorId: null, authorName: null, content: "孙铭泽把你拉进了这个群……" };
+  const messages = [{ ...message, id: 1, kind: "co-agent" as const }, message, intro, { ...message, id: 6 }];
+  expect(catchUpMessage(messages as never, true)).toBe(5);
+  expect(catchUpMessage(messages as never, false)).toBeNull();
+  expect(catchUpMessage([message] as never, true)).toBeNull();
 });

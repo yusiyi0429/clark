@@ -17,6 +17,9 @@ import { ThreadMembersMenu } from "./ThreadMembersMenu";
 import { TaskGroupTranscript } from "./TaskGroupTranscript";
 import { MissionGroupTranscript } from "./MissionGroupTranscript";
 import { MissionGroupComposer } from "./MissionGroupComposer";
+import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
+import { useListening } from "@/components/coagent/presence";
+import { useCoAgentSkin } from "@/components/coagent/skin";
 import type { DetailGroup } from "./missionCardGroup";
 import groupStyles from "@/styles/mission-group.module.css";
 import w from "@/styles/app-shell.module.css";
@@ -126,6 +129,10 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { targ
   );
 }
 
+/** 胶囊为新人讲来龙去脉出现多久（含凝回去之前），和凝回去要多久（coagent-capsule.module.css 的 capsuleOut）。 */
+const CATCH_UP_MS = 4200;
+const CAPSULE_OUT_MS = 320;
+
 /** 二级页：右列放当前对象的对话，输入条在右列底下。 */
 function RailConversation({
   data,
@@ -155,6 +162,24 @@ function RailConversation({
   const groupVisible = channel === "group" && (column.narrow ? ui.railMobileOpen : column.mode === "expanded");
   const group = useMissionGroup(missionGroup, groupVisible);
   const thread = useThreadGroup(otherThread?.objectType ?? "task", taskGroup?.taskId ?? otherThread?.objectId, groupVisible);
+  const listening = useListening(target.scope);
+  const [skin] = useCoAgentSkin();
+  // 新人第一次进群、群里有 Co-Agent 讲的来龙去脉：群聊看得见时，胶囊出现几秒，那段话同时亮一下。每段只一次。
+  const [catchUp, setCatchUp] = useState<{ id: number; leaving: boolean } | null>(null);
+  const shownCatchUps = useRef(new Set<number>());
+  useEffect(() => {
+    const id = thread.catchUp;
+    if (!groupVisible) { setCatchUp(null); return; }
+    if (id === null || shownCatchUps.current.has(id)) return;
+    shownCatchUps.current.add(id);
+    setCatchUp({ id, leaving: false });
+    const leave = window.setTimeout(() => setCatchUp({ id, leaving: true }), CATCH_UP_MS);
+    const gone = window.setTimeout(() => setCatchUp(null), CATCH_UP_MS + CAPSULE_OUT_MS);
+    return () => { window.clearTimeout(leave); window.clearTimeout(gone); };
+  }, [thread.catchUp, groupVisible]);
+  const capsule = listening || catchUp
+    ? <PresenceCapsule skin={skin} pose={catchUp && (!catchUp.leaving || !listening) ? "speaking" : "listening"} leaving={!listening && !!catchUp?.leaving} />
+    : undefined;
   const members = threadGroup ? (thread.view?.members ?? threadGroup.members) : (group.view?.members ?? missionGroup?.members ?? []);
   const groupLabel = otherThread?.objectType === "issue" ? "议题群聊" : otherThread?.objectType === "meeting" ? "会议群聊" : "事项群组";
   const channels: ConversationChannel[] = [
@@ -220,11 +245,13 @@ function RailConversation({
         mobileOpen={ui.railMobileOpen}
         onMobileOpen={ui.setRailMobileOpen}
         composerHeight={composerHeight}
+        coagent={capsule}
+        coagentBrief={!listening}
         headerAction={channel === "group" && threadGroup && !thread.left ? <ThreadMembersMenu objectType={otherThread?.objectType ?? "task"} objectId={taskGroup?.taskId ?? otherThread!.objectId} viewerId={threadGroup.viewerId} members={(thread.view?.members ?? threadGroup.members.map((member) => ({ ...member, title: null })))} onChanged={() => void thread.refresh()} /> : undefined}
       >
         {channel === "agent" ? <AttachmentStatus data={data} className={cs.error} /> : null}
         <div className={cs.log} role="log" aria-label={channel === "group" ? "事项群组公开讨论" : `与${agentTitle}的对话`} aria-live="polite" aria-relevant="additions text">
-          {channel === "group" ? threadGroup ? <TaskGroupTranscript messages={thread.view?.messages ?? []} /> : <MissionGroupTranscript entries={group.view?.entries ?? []} /> : <>
+          {channel === "group" ? threadGroup ? <TaskGroupTranscript messages={thread.view?.messages ?? []} highlightId={catchUp?.id} /> : <MissionGroupTranscript entries={group.view?.entries ?? []} /> : <>
             {data.messages.length ? <ConversationTurns messages={data.messages} /> : !data.streaming ? <p className={cs.empty}>暂无消息</p> : null}
             {data.error && !data.streaming ? <ConversationNotice text={data.error} /> : null}
             {data.streaming ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} /> : null}

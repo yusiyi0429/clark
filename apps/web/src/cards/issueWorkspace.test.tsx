@@ -195,7 +195,7 @@ describe("议题工作区", () => {
     const member = { ...pendingIssue, payload: { ...(pendingIssue.payload as object),
       originRef: { whyNow: "渠道窗口将关闭" } }, actions: [] } as unknown as Card;
     const html = renderReadOnly(member);
-    expect(html).toContain("材料页签");
+    expect(html).toContain("材料：正在看 总结与判断，切换材料");
     expect(html).toContain("为什么现在");
     expect(html).toContain("渠道窗口将关闭");
     expect(html).toContain("紧急程度：紧急");

@@ -120,21 +120,16 @@ describe("材料页签里的只读预览", () => {
   });
 });
 
-describe("MeetingCard 材料页签", () => {
-  it("页签是 AI 预审、会前材料和群组材料；空材料集仍有群组材料入口", () => {
-    const withMaterials = renderToStaticMarkup(
-      <MeetingCard card={meetingCard({ materials })} collection={[]} onCard={noop} onNavigate={noop} />,
-    );
-    expect(withMaterials).toContain("data-material-tabs");
-    expect(withMaterials).toContain("AI 预审");
-    expect(withMaterials).toContain('aria-label="会议材料：东南亚渠道预算申请（修订版）.pdf"');
-    expect(withMaterials).toContain('aria-label="会议材料：履约反馈.md"');
-    const empty = renderToStaticMarkup(<MeetingCard card={meetingCard({})} collection={[]} onCard={noop} onNavigate={noop} />);
-    expect(empty).toContain('data-count="2"');
-    expect(empty).toContain("群组材料");
+describe("MeetingCard 材料", () => {
+  it("下拉单里每份会前材料的名字：短名去扩展名，完整名给读屏", () => {
+    expect(materialTab(materials[0])).toEqual({ id: "m-1", label: "东南亚渠道预算申请（修订版）", title: "会议材料：东南亚渠道预算申请（修订版）.pdf" });
+    expect(materialTab(materials[2]).label).toBe("履约反馈");
+    const html = renderToStaticMarkup(<MeetingCard card={meetingCard({ materials })} collection={[]} onCard={noop} onNavigate={noop} />);
+    expect(html).toContain("data-header-tools");
+    expect(html).toContain("AI 预审");
   });
 
-  it("held 会后默认打开会议记录，材料照样在页签里只读查看", () => {
+  it("held 会后默认打开会议记录", () => {
     const held = renderToStaticMarkup(
       <MeetingCard
         card={meetingCard({
@@ -147,7 +142,7 @@ describe("MeetingCard 材料页签", () => {
         onNavigate={noop}
       />,
     );
-    expect(held).toContain('aria-label="会议材料：东南亚渠道预算申请（修订版）.pdf"');
+    expect(held).toContain('aria-label="会议记录：妙记或逐字稿与会后复核"');
     expect(held).toContain("会后复核只以 Transcript 为输入");
   });
 });

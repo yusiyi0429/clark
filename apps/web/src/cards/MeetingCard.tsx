@@ -367,6 +367,8 @@ const PREFLIGHT_TAB: MaterialTab = { id: "preflight", label: "AI 预审", title:
 const GROUP_MATERIAL_TAB: MaterialTab = { id: "group-materials", label: "群组材料", title: "群组材料" };
 /** 整场会的那一页：页头胶囊里的入口。会前在这里导入妙记或逐字稿，会后在这里逐项复核。 */
 const RECORD_TAB: MaterialTab = { id: "record", label: "会议记录", title: "会议记录：妙记或逐字稿与会后复核" };
+/** 会中录音与「开始会议」／计时留到下一版（用户 2026-09-29 定）：代码保留，这一版页头不放；会后照常导入会议记录。 */
+const MEETING_CLOCK_ENABLED = false;
 
 /** 材料页签上的短名：去掉扩展名，补充材料前面写「补充」。 */
 export function materialTab(material: MaterialMeta): MaterialTab {
@@ -433,9 +435,10 @@ export function meetingNow(payload: MeetingPayload, ended: boolean): string {
 }
 
 /**
- * Meeting 页面（clark 会议二级页，C-08）：页头胶囊里是计划时段、会名、会议记录入口，右边一颗开始会议／计时；页头下面是
- * 材料页签（AI 预审 + 每一份会前材料）和一行状态，再下面是正在看的那一份。会前预审、妙记导入、会后逐项复核这些真实功能
- * 都在：AI 预审页签（编辑会议、返回编辑材料、重新预审在它顶部）、材料页签（只读预览）、会议记录（导入与复核）。
+ * Meeting 页面（clark 会议二级页，C-08）：矩形页头里是计划时段、会名、材料下拉钮（AI 预审 + 每一份会前材料 + 群组材料 +
+ * 添加材料）、会议记录入口（开始会议／计时这一版不放，见 MEETING_CLOCK_ENABLED）；页头下面一行状态，再下面是正在看的那一份。
+ * 会前预审、妙记导入、会后逐项复核这些真实功能都在：AI 预审（编辑会议、返回编辑材料、重新预审在它顶部）、材料（只读预览）、
+ * 会议记录（导入与复核）。
  */
 export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: memberReadOnly = false }: CardRenderProps & { readOnly?: boolean }) {
   const source = payloadOf<MeetingPayload & { purpose?: string | null }>(card);
@@ -842,12 +845,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     </section>
   );
 
-  /* 页头：计划时段、会议记录入口、开始会议／计时（已取消的会没有计时）。 */
+  /* 页头：计划时段、会议记录入口、开始会议／计时（这一版不放；已取消的会也没有计时）。 */
   const ended = Boolean(payload.endedAt) || payload.status === "held" || payload.status === "reviewed";
   const phase = meetingPhase(startedAt, ended);
   const endAction = actionOf("meeting.end");
   const clock =
-    (memberReadOnly && !isHost) || payload.status === "cancelled" ? undefined : (
+    !MEETING_CLOCK_ENABLED || (memberReadOnly && !isHost) || payload.status === "cancelled" ? undefined : (
       <MeetingClock
         phase={phase}
         startedAt={startedAt}

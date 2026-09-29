@@ -13,7 +13,7 @@ const confirm = vi.hoisted(() => ({ ask: vi.fn() }));
 vi.mock("react", async (original) => ({ ...(await original<typeof import("react")>()),
   useState: hooks.useState, useEffect: () => undefined, useCallback: (fn: unknown) => fn,
   useRef: () => ({ current: { value: "" } }) }));
-vi.mock("@/components/shell/MaterialTabs", () => ({ MaterialTabs: () => null, useRememberedScroll: () => undefined }));
+vi.mock("@/components/shell/MaterialTabs", () => ({ MaterialMenu: () => null, InHeader: () => null, useRememberedScroll: () => undefined }));
 vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: confirm.ask, dialog: null }) }));
 
 import type { TMaterialDetailResponse, TMaterialView } from "@warmap/contracts";
@@ -45,22 +45,27 @@ const response = (body: unknown, ok = true) => ({ ok, json: async () => body });
 beforeEach(() => { hooks.values = []; vi.clearAllMocks(); });
 
 describe("材料区操作", () => {
-  it("会议材料页签同行显示会前材料、群组材料和上传入口", () => {
+  it("会议材料下拉单列出会前材料、群组材料，最后一项添加材料", () => {
     hooks.values[1] = true;
     const tree = renderMeeting();
-    const tabs = nodes(tree).find((node) => Array.isArray(node.props?.tabs));
-    expect((tabs?.props?.tabs as { label: string }[]).map((tab) => tab.label)).toEqual(["AI 预审", "会前材料", "群组材料"]);
-    expect(nodes(tree).some((node) => node.type === "button" && node.props?.["aria-label"] === "上传材料")).toBe(true);
+    const menu = nodes(tree).find((node) => Array.isArray(node.props?.tabs));
+    expect((menu?.props?.tabs as { label: string }[]).map((tab) => tab.label)).toEqual(["AI 预审", "会前材料", "群组材料"]);
+    expect(typeof menu?.props?.onAdd).toBe("function");
   });
 
-  it("显示原有页签和上传入口；上传中显示占位，成功后选中新材料", async () => {
+  it("没有上传权限时下拉单里没有添加材料", () => {
+    const menu = nodes(renderMeeting()).find((node) => Array.isArray(node.props?.tabs));
+    expect(menu?.props?.onAdd).toBeUndefined();
+  });
+
+  it("显示原有材料和添加入口；上传中显示占位，成功后选中新材料", async () => {
     hooks.values[1] = true;
     const fetch = vi.fn().mockResolvedValueOnce(response(material)).mockResolvedValueOnce(response({ materials: [material], canUpload: true }));
     vi.stubGlobal("fetch", fetch);
     const tree = render();
-    const tabs = nodes(tree).find((node) => Array.isArray(node.props?.tabs));
-    expect((tabs?.props?.tabs as { label: string }[]).map((tab) => tab.label)).toEqual(["总结与判断", "研究与依据"]);
-    expect(nodes(tree).some((node) => node.props?.["aria-label"] === "上传材料" && node.type === "button")).toBe(true);
+    const menu = nodes(tree).find((node) => Array.isArray(node.props?.tabs));
+    expect((menu?.props?.tabs as { label: string }[]).map((tab) => tab.label)).toEqual(["总结与判断", "研究与依据"]);
+    expect(typeof menu?.props?.onAdd).toBe("function");
     const input = nodes(tree).find((node) => node.type === "input");
     (input?.props?.onChange as (event: unknown) => void)({ target: { files: [new File(["正文"], "计划.md")] } });
     expect(nodes(render()).some((node) => node.props?.role === "status" && node.props.children === "上传中…")).toBe(true);

@@ -4,16 +4,21 @@
  * 二级页右边那一列（clark `conversation/column.tsx`）：顶部页头写明这条线在跟谁说话，中间是当前频道的对话，
  * 底部让给输入条。输入条不在这里面 —— 宿主渲染（ColumnComposer），位置由这里给（`columnComposerClass`）。
  *
- * 左边的材料和右列是同一块面板，中间只隔一条线；收起钮是骑在这条线上的一个小把手。≥760 右列可以收起：
- * 右列缩到 0，阅读页铺满右边；把手和带未读数的频道钮留下来，浮在阅读页右边那一溜上。系统永远不自己展开右列。
+ * 左边的材料和右列是同一块面板，中间只隔一条线。≥760 右列可以收起：开关在右列右上角（和 Codex / Claude 一样，
+ * 用户 2026-09-29 定），收起后它原地不动，停在阅读页右上角；带未读数的频道钮留在阅读页右边那一溜上。
+ * 系统永远不自己展开右列。
  * ≤759 右列是浮层，入口是输入条底行左边那个开关。
  *
- * 群组频道（成员头像、成员名单）随议题群一起接（2b）；会议中的 Co-Agent 胶囊在第 5 步。
+ * 群组频道（成员头像、成员名单）随议题群一起接（2b）。
+ *
+ * Co-Agent 胶囊（components/coagent）浮在右列顶部居中，和左侧页头胶囊同一条上沿；中线按右列展开时的宽度算，
+ * 收起右列时它原地不动。两种出现法：`lasting`（会议在录音）一直在，右列页头挪到它下面；`brief`（新人第一次进群、
+ * Co-Agent 讲来龙去脉）只出现几秒，这几秒里暂时盖住右列页头，不挪版面。
  */
 
 import { useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { Button } from "ts-design/primitives";
-import { ChevronLeft, ChevronRight, Users, X } from "lucide-react";
+import { PanelRightClose, PanelRightOpen, Users, X } from "lucide-react";
 import { TianshuMark } from "@/components/TianshuMark";
 import { formatUnread, unreadPhrase } from "./seen";
 import { useNarrowColumn, type ColumnMode } from "./useColumnMode";
@@ -70,6 +75,8 @@ export function ConversationColumn({
   testId,
   children,
   headerAction,
+  coagent,
+  coagentBrief = false,
 }: {
   channels: ConversationChannel[];
   channel: string;
@@ -88,6 +95,10 @@ export function ConversationColumn({
   /** 当前频道的正文：日志、空态、说明。自己滚动。 */
   children: ReactNode;
   headerAction?: ReactNode;
+  /** Co-Agent 胶囊（components/coagent/PresenceCapsule）；没有就不画。 */
+  coagent?: ReactNode;
+  /** 胶囊只出现几秒：不挪右列页头，暂时盖住它。 */
+  coagentBrief?: boolean;
 }) {
   const narrow = useNarrowColumn();
   const strip = !narrow && mode === "strip";
@@ -97,8 +108,26 @@ export function ConversationColumn({
   const aside = useRef<HTMLElement>(null);
   const handle = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const hasCoagent = Boolean(coagent);
   // 焦点跟着这一列自己发起的变化走：从收起后的频道钮展开时落到把手上（展开不等于要打字）；关浮层回到开关。
   const pendingFocus = useRef<"handle" | "switch" | null>(null);
+
+  // 页头在阅读容器内，胶囊固定在视口上。扣除阅读区实际占用的滚动条，收起后两者才准确留 12px。
+  useLayoutEffect(() => {
+    if (!hasCoagent) return;
+    const host = root.current?.closest<HTMLElement>(`.${c.host}`);
+    const reader = host?.querySelector<HTMLElement>(".ts-detail");
+    if (!host || !reader) return;
+    const measure = () => {
+      const style = getComputedStyle(reader);
+      const scrollbar = reader.offsetWidth - reader.clientWidth - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
+      host.style.setProperty("--reading-scrollbar", `${Math.max(0, scrollbar)}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(reader);
+    return () => { observer.disconnect(); host.style.removeProperty("--reading-scrollbar"); };
+  }, [hasCoagent]);
 
   useLayoutEffect(() => {
     const target = pendingFocus.current;
@@ -163,6 +192,7 @@ export function ConversationColumn({
       data-narrow={narrow || undefined}
       data-mobile-open={overlayOpen || undefined}
       data-channel={current?.kind ?? "agent"}
+      data-coagent={coagent ? (coagentBrief ? "brief" : "lasting") : undefined}
       style={{ "--conversation-composer-height": `${composerHeight}px` } as CSSProperties}
       onKeyDown={(event) => {
         // Escape 的顺序（C-06）：输入框 → 这层浮层 → 工作区。
@@ -183,9 +213,10 @@ export function ConversationColumn({
           aria-label={strip ? "展开对话栏" : "收起对话栏"}
           onPress={() => onMode(strip ? "expanded" : "strip")}
         >
-          {strip ? <ChevronLeft size={18} strokeWidth={2.2} aria-hidden /> : <ChevronRight size={18} strokeWidth={2.2} aria-hidden />}
+          {strip ? <PanelRightOpen size={18} strokeWidth={1.8} aria-hidden /> : <PanelRightClose size={18} strokeWidth={1.8} aria-hidden />}
         </Button>
       )}
+      {coagent ? <div className={c.jelly}>{coagent}</div> : null}
       {/* 右列是浅色阅读面：`data-tone=light` 让对话记录换成浅色那一套。 */}
       <aside
         ref={aside}

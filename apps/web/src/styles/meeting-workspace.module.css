@@ -1,16 +1,16 @@
-/* Meeting 二级页（clark 会议页，C-08）：外框铺满工作区，里面是 DetailFrame 的阅读页 —— 页头胶囊、材料页签、一行状态，
+/* Meeting 二级页（clark 会议页，C-08）：外框铺满工作区，里面是 DetailFrame 的阅读页 —— 页头（材料下拉钮在里面）、一行状态，
    下面是正在看的那一份（AI 预审 / 一份材料 / 会议记录）。 */
 .workspace{--ink-muted:#63686f;position:absolute;inset:0;z-index:70;display:flex;flex-direction:column;overflow:hidden;border-radius:inherit;color:#1d1d1f}
 
 /* 阅读页里的正文（clark dri .detailReading / .meetingPane）：一栏按 --reading-measure 放在阅读页正中，右列收起时跟着挪到新的正中；
-   最上面是吸在页头下面的材料页签，然后一行状态、一行评审目的，下面是正在看的那一份。 */
-.reading{padding:var(--material-tabs-gap,6px) calc(32px + var(--conversation-lane,0px)) 130px 32px;min-width:0;transition:padding-right 320ms cubic-bezier(.22,1,.36,1)}
+   最上面一行状态、一行评审目的，下面是正在看的那一份。 */
+.reading{padding:12px calc(32px + var(--conversation-lane,0px)) 130px 32px;min-width:0;transition:padding-right 320ms cubic-bezier(.22,1,.36,1)}
 .reading>*{max-width:var(--reading-measure,880px);margin-inline:auto}
 .pane{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
 .agenda{margin:0;padding-left:12px;border-left:2px solid var(--ts-border,#e3e8ef);font-size:var(--ts-type-body,14px);line-height:1.9;color:var(--ts-text-muted,#6b7482)}
 .material{display:flex;flex-direction:column;gap:16px;min-width:0;margin-top:8px}
-@media (min-width: 960px) and (max-width: 1000px){.reading{padding:var(--material-tabs-gap,6px) calc(20px + var(--conversation-lane,0px)) 130px 20px}}
-@media (max-width: 959px){.reading{padding:var(--material-tabs-gap,6px) 18px 140px}}
+@media (min-width: 960px) and (max-width: 1000px){.reading{padding:12px calc(20px + var(--conversation-lane,0px)) 130px 20px}}
+@media (max-width: 959px){.reading{padding:12px 18px 140px}}
 
 /* AI 预审页签顶部：编辑会议、返回编辑材料、重新预审，低调的文字钮；编辑会议的弹层挂在这一行下面。 */
 .toolbar{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:4px}

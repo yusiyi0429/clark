@@ -18,3 +18,10 @@
 .composer [data-state='send']:disabled { opacity: .5; }
 .groupFootnote { color: #786c5b; font-size: 12px; }
 .error { margin: 4px 8px 8px; color: var(--danger, #be123c); font-size: 13px; line-height: 1.6; }
+
+/* Co-Agent 胶囊为这一段出现时（新人进群、它讲来龙去脉）：这段亮一下，用胶囊那种蓝，胶囊凝回去时一起淡掉。 */
+.message[data-coagent-said] { position: relative; isolation: isolate; }
+.message[data-coagent-said]::before { content: ""; position: absolute; inset: -8px -10px; z-index: -1; border-radius: 14px; background: rgb(0 40 255 / 5%); box-shadow: inset 0 0 0 1px rgb(0 40 255 / 16%), 0 8px 20px -12px rgb(0 17 253 / 40%); animation: coagentSaid 4500ms ease both; }
+.message[data-coagent-said] header strong { color: #1230d8; }
+@keyframes coagentSaid { 0% { opacity: 0; } 10% { opacity: 1; } 78% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .message[data-coagent-said]::before { animation: none; } }

@@ -2,7 +2,7 @@
 
 /**
  * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。本人能改的设置都收在这里 ——
- * 声纹（已配置时）、雷达、修改口令、重看首次引导；双身份者还能切换工作台。
+ * 声纹（已配置时）、雷达、Co-Agent 形象、修改口令、重看首次引导；双身份者还能切换工作台。
  * CEO 多一项组织配置；最后是退出登录。
  * 声纹、雷达和口令各开一个小弹窗，不离开当前页面。
  */
@@ -10,13 +10,14 @@
 import { useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { ArrowLeftRight, ArrowRight, AudioLines, KeyRound, LogOut, PlugZap, Radar, RotateCcw, Settings2, X } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, AudioLines, KeyRound, LogOut, PlugZap, Radar, RotateCcw, Settings2, Smile, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { logout } from "@/lib/logout";
 import { VoiceprintCard } from "@/components/member/VoiceprintCard";
 import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import m from "@/styles/account-menu.module.css";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
+import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
 
 export interface Account {
   displayName: string;
@@ -31,7 +32,7 @@ export function avatarInitial(name: string): string {
   return chars.length >= 3 ? chars[1] : chars[0];
 }
 
-type Dialog = "voiceprint" | "radar" | "connection" | "passcode" | null;
+type Dialog = "voiceprint" | "radar" | "connection" | "coagent" | "passcode" | null;
 
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -113,6 +114,10 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
               <Button variant="ghost" className={m.item} onPress={() => pick("connection")}>
                 <PlugZap size={16} aria-hidden="true" />连接到外部工具
               </Button>
+              <Button variant="ghost" className={m.item} onPress={() => pick("coagent")}>
+                <Smile size={16} aria-hidden="true" />
+                Co-Agent 形象
+              </Button>
               <Button variant="ghost" className={m.item} onPress={() => pick("passcode")}>
                 <KeyRound size={16} aria-hidden="true" />
                 修改口令
@@ -187,6 +192,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <PasscodeForm loginId={account.loginId} onDone={() => setDialog(null)} />
         </MenuDialog>
       ) : null}
+      {dialog === "coagent" ? <MenuDialog title="Co-Agent 形象" wide onClose={() => setDialog(null)}><CoAgentSkinPicker /></MenuDialog> : null}
       {dialog === "connection" ? <MenuDialog title="连接到外部工具" wide onClose={() => setDialog(null)}><ConnectionDialog role={account.role} /></MenuDialog> : null}
     </>
   );

@@ -129,7 +129,7 @@ const candidateBase: TTranscriptCandidateProjection = {
 };
 
 describe("Meeting 页头（clark 会议页，C-08）", () => {
-  it("成员只读模式沿用计划时段和材料页签，不出现 CEO 的会议操作", () => {
+  it("成员只读模式沿用计划时段和材料下拉钮，不出现 CEO 的会议操作", () => {
     const card = meetingCard({ purpose: "对齐预算", preflight: { status: "ready", brief: "预审摘要", readiness: "ready" },
       materials: [{ id: "m1", fileName: "预算.pdf", mimeType: "application/pdf", sizeBytes: 1024, receivedBy: "CEO", providedBy: null, uploadedAt: "2026-09-28" }] },
     [{ actionId: "edit", actionType: "meeting.edit_details", label: "编辑会议" },
@@ -139,7 +139,7 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     const html = render(card, true);
     expect(html).toContain("data-header-lead");
     expect(html).toContain("会议记录");
-    expect(html).toContain("预算.pdf");
+    expect(html).toContain("data-header-tools");
     expect(html).toContain("预审摘要");
     expect(html).toContain("对齐预算");
     for (const label of ["开始会议", "编辑会议", "导入会议记录", "请求补充材料", "会前备注", "替换材料集", "标记已核对", "保存准备状态"]) {
@@ -162,16 +162,17 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     expect(html).not.toMatch(/<button[^>]*>确认/);
   });
 
-  it("页头胶囊：返回、计划时段、会名、会议记录入口，右边一颗开始会议；没有四段进度条", () => {
+  it("页头：返回、计划时段、会名、材料下拉钮那一格、会议记录入口；这一版没有开始会议，也没有四段进度条", () => {
     const html = render(meetingCard({}));
     expect(html).toContain("返回总览");
     expect(html).toContain("data-header-lead");
     expect(html).toContain("22:00");
     expect(html).toContain("23:30");
     expect(html).toContain('id="meeting-title"');
+    expect(html).toContain("data-header-tools");
     expect(html).toContain("data-header-whole");
     expect(html).toContain("会议记录");
-    expect(html).toContain("开始会议");
+    expect(html).not.toContain("开始会议");
     expect(html).not.toContain("会议阶段");
     expect(html).not.toContain("Outcome 复核</span>");
   });
@@ -181,10 +182,10 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     expect(html).toContain("林晓主持 · 参会：林晓、陈珂 · 会前预审 · 可提交");
   });
 
-  it("已取消的会没有开始会议那颗；开完了写已开完", () => {
+  it("这一版页头不放开始会议／计时；开完了由状态行写这场会开完了", () => {
     expect(render(meetingCard({ status: "cancelled" }))).not.toContain("开始会议");
     const ended = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z" }));
-    expect(ended).toContain("已开完");
+    expect(ended).not.toContain("已开完");
     expect(ended).toContain("这场会开完了");
     expect(ended).not.toContain("开始会议");
   });

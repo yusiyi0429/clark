@@ -1,0 +1,69 @@
+"use client";
+
+/**
+ * Co-Agent 胶囊（clark `coagent/panel.tsx`，C-07）：浮在右列顶部居中的那一颗，没有按钮，谁也不能点它。
+ *
+ * 两种时候出现：会议页在录音（一直在，姿势是「在听」）；新人第一次进群、Co-Agent 在群里给他讲来龙去脉时
+ * （出现几秒，姿势是「在说」，强调那段话是它说的，然后凝回去）。天枢还没有会中实时对话，所以不长大、不写字。
+ *
+ * 三种形象（skin.ts）只换样子：
+ * - 默认：蓝色液态玻璃里一道 Siri 色光，在听时跟着说话的声音起伏。
+ * - 生命感：同一颗蓝色玻璃，光换成一双发光的眼睛。在听时眼睛竖着、随声音微微伸缩；在说时眯成两道、往下看
+ *   （下面就是它说的那段话）。换姿势时眨一下 —— 只在状态变的那一刻动，待着不眨（「动」只表示有事在发生）。
+ * - 熊猫：白色的身子、黑眼圈、两只小耳朵（耳朵探出胶囊上沿，身子和页头胶囊照旧齐平）；底下一圈蓝光，
+ *   不会被当成旁边那颗浅色的页头胶囊。
+ */
+
+import { useId, type CSSProperties } from "react";
+import { SiriWave } from "@/components/onboarding/SiriWave";
+import { useListeningLevel } from "./presence";
+import type { CoAgentSkin } from "./skin";
+import s from "@/styles/coagent-capsule.module.css";
+
+export type CapsulePose = "listening" | "speaking";
+
+export function PresenceCapsule({ skin, pose, level: preview, leaving = false }: {
+  skin: CoAgentSkin;
+  pose: CapsulePose;
+  /** 0–1：只有选形象时的预览传（模拟的声音）；不传就读会议录音那条麦克风流。 */
+  level?: number;
+  /** 正在凝回去：播完退场就会被移走。 */
+  leaving?: boolean;
+}) {
+  const live = useListeningLevel();
+  const level = preview ?? live;
+  const patchId = useId();
+  return (
+    <div className={s.capsule} data-skin={skin} data-pose={pose} data-leaving={leaving || undefined}>
+      {skin === "panda" ? <><span className={s.ear} data-side="left" aria-hidden /><span className={s.ear} data-side="right" aria-hidden /></> : null}
+      <div className={s.glass} aria-hidden>
+        {skin === "classic" ? (
+          <SiriWave energy={pose === "speaking" ? 0.9 : level} className={s.wave} />
+        ) : (
+          // key：换姿势时重挂一次，眼睛从闭着睁开 —— 眨一下。
+          <span key={pose} className={s.face} style={{ "--level": pose === "listening" ? level.toFixed(2) : 0 } as CSSProperties}>
+            {(["left", "right"] as const).map((side) => (
+              <span key={side} className={s.eye}>
+                {skin === "panda" ? (
+                  <svg className={s.patch} viewBox="0 0 30 30" focusable="false">
+                    <defs>
+                      <radialGradient id={`${patchId}-${side}`} cx="46%" cy="12%" r="90%">
+                        <stop offset="0" stopColor="#535963" />
+                        <stop offset="0.45" stopColor="#30343d" />
+                        <stop offset="1" stopColor="#1b1e25" />
+                      </radialGradient>
+                    </defs>
+                    {/* 从参考图左眼圈轮廓拟合的连续圆弧，保留鹅卵石的饱满度；右侧只镜像，不旋转眼珠。 */}
+                    <path d="M18.42.14C15.78.14 13.21.81 10.92 2.06C8.64 3.31 6.58 5.15 4.88 7.25C3.17 9.35 1.86 11.56 1 13.97C.14 16.38-.35 19.18.17 21.79C.7 24.4 2.23 26.71 4.43 28.13C6.63 29.56 9.36 30.07 12.06 30.04C14.75 30 17.41 29.52 19.8 28.57C22.19 27.63 24.43 26.09 26.2 24.06C27.97 22.04 29.01 19.66 29.54 17.09C30.06 14.52 30.19 11.73 29.64 9.14C29.09 6.56 27.76 4.17 25.75 2.52C23.74.88 21.06.15 18.42.14Z" fill={`url(#${patchId}-${side})`} />
+                  </svg>
+                ) : null}
+                <i className={s.pupil} />
+              </span>
+            ))}
+          </span>
+        )}
+      </div>
+      {preview === undefined ? <span className={s.sr} role="status">{pose === "listening" ? "Co-Agent 在录这场会" : "Co-Agent 在群里给你讲了来龙去脉"}</span> : null}
+    </div>
+  );
+}
