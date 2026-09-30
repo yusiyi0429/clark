@@ -26,6 +26,8 @@ Owner: 天枢（对接人孙铭泽）；本体侧对接 E&O / 本体后端
 - 进展条目：主链接放 entries 的 `url`，其余链接放同组件 `artifacts`，不拆条。
 - 块内容一律放 `payload.blocks.<块 id>`；外部事件内容放 `content`。
 
+- **Content Pact（已定 10/8 切换）**：本体 10/8 按新块重建 world-02（凭证与 ids 第三次重发）；天枢取新凭证、重跑 `world:link-missions`。06 的候选内容块按新块写（见 06）；其余形状不变。
+
 ## 工单
 
 | # | 工单 | 批次 | 依赖 | 状态 |
