@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowRight, Download } from "lucide-react";
 import { ToggleButton, ToggleButtonGroup } from "@heroui/react";
@@ -15,10 +15,30 @@ import s from "@/styles/connection-dialog.module.css";
 type TokenView = components["schemas"]["PersonalTokenView"];
 type Created = components["schemas"]["CreatePersonalTokenResponse"];
 export const expiryText = (date: string | null) => date ? monthDayTime(date) : "不过期";
+/** 连接列表与生成后的状态：写过进展 > 调通过 > 还没连。 */
+export const connectionState = (token: TokenView) => token.lastProgressAt ? `最近同步 ${monthDayTime(token.lastProgressAt)}`
+  : token.lastUsedAt ? `已连上 · 最近使用 ${monthDayTime(token.lastUsedAt)}` : "等待连接";
+
+/** 生成后等 Agent 第一次调通：每隔一会儿读一次连接列表，连上或被撤销就停；返回停止函数。 */
+export function watchFirstUse(id: string, onView: (view: TokenView) => void, intervalMs = 5_000): () => void {
+  let stopped = false;
+  let timer: number | undefined;
+  const tick = async () => {
+    try {
+      const { data } = await browserApi.GET("/api/me/tokens");
+      const view = data?.tokens.find((token) => token.id === id);
+      if (data && !view) stopped = true;
+      if (view && !stopped) { onView(view); if (view.lastUsedAt) stopped = true; }
+    } catch { /* 网络抖动：下一轮再看 */ }
+    if (!stopped) timer = window.setTimeout(() => void tick(), intervalMs);
+  };
+  timer = window.setTimeout(() => void tick(), intervalMs);
+  return () => { stopped = true; window.clearTimeout(timer); };
+}
 
 /** 连接一个外部工具：填名字、选工具与有效期（成员还有每周同步开关）→ 生成 → 下载说明文件发给自己的 Agent。
  *  设置里的「连接到外部工具」和首次引导共用这一份。 */
-export function ConnectAgentForm({ role, defaultName = "", activeCount = 0, revokedIds = [], actionsTarget, onCreated, onDownloaded }: {
+export function ConnectAgentForm({ role, defaultName = "", activeCount = 0, revokedIds = [], actionsTarget, onCreated, onUpdated, onDownloaded }: {
   role: "ceo" | "member";
   /** 首次引导：主按钮（生成 → 下载）放进引导底栏的这个位置，和其他步骤的主按钮同一处，不会被挤出可视区。 */
   actionsTarget?: HTMLElement | null;
@@ -28,19 +48,31 @@ export function ConnectAgentForm({ role, defaultName = "", activeCount = 0, revo
   /** 已有的有效连接数；满 5 个时不能再生成。 */
   activeCount?: number;
   onCreated?: (view: TokenView) => void;
+  /** 生成后轮询到这条连接的最新状态（首次调通、写入进展）。 */
+  onUpdated?: (view: TokenView) => void;
   onDownloaded?: () => void;
 }) {
   const [createdRaw, setCreated] = useState<Created | null>(null);
   const created = createdRaw && !revokedIds.includes(createdRaw.view.id) ? createdRaw : null;
   const [name, setName] = useState(defaultName);
   const [client, setClient] = useState<TokenView["client"]>("codex");
-  const [expiresInDays, setExpiresInDays] = useState<30 | 90 | null>(30);
+  /** 打开每周同步时默认不过期，免得第 5 周令牌过期、同步静默失败；仍可手动改。 */
+  const [expiresInDays, setExpiresInDays] = useState<30 | 90 | null>(role === "member" ? null : 30);
   /** 默认每周五自动同步：写进说明文件，由 Agent 连接时一并设好定时任务。 */
   const [weeklySync, setWeeklySync] = useState(true);
   const [createdWeekly, setCreatedWeekly] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
+  /** 刚生成的这条连接的最新状态；Agent 第一次调通后 lastUsedAt 才有值。 */
+  const [live, setLive] = useState<TokenView | null>(null);
+  const createdId = created?.view.id;
+  useEffect(() => {
+    if (!createdId) return;
+    return watchFirstUse(createdId, (view) => { setLive(view); onUpdated?.(view); });
+    // 只跟着这条连接走；回调变化不重启轮询。
+  }, [createdId]);
+  const connected = Boolean(created && live?.id === created.view.id && live.lastUsedAt);
   const create = async () => {
     if (!name.trim() || busy) return;
     setBusy(true); setError(""); setCreated(null);
@@ -84,7 +116,7 @@ export function ConnectAgentForm({ role, defaultName = "", activeCount = 0, revo
         <ToggleButton id="30">30 天</ToggleButton><ToggleButton id="90">90 天</ToggleButton><ToggleButton id="never">不过期</ToggleButton>
       </ToggleButtonGroup>
     </div>
-    {role === "member" ? <button type="button" role="switch" aria-checked={weeklySync} className={s.switchRow} onClick={() => setWeeklySync((value) => !value)}>
+    {role === "member" ? <button type="button" role="switch" aria-checked={weeklySync} className={s.switchRow} onClick={() => { setExpiresInDays(weeklySync ? 30 : null); setWeeklySync(!weeklySync); }}>
       <span className={s.switchText}><strong>每周五 18:00 自动同步进展</strong><span>连接时让 Agent 一并设好定时任务，每周把你的进展写进天枢。</span></span>
       <span className={f.switch} data-on={weeklySync} aria-hidden="true"><span /></span>
     </button> : null}
@@ -99,12 +131,13 @@ export function ConnectAgentForm({ role, defaultName = "", activeCount = 0, revo
       {created.view.client === "other" ? <p className={s.muted}>你用的工具要支持远程 MCP（HTTP）；不支持的话，换成 Codex 或 Claude Code。</p> : null}
       {actionsTarget === undefined ? <Button variant="primary" onPress={download}><Download size={16} aria-hidden />下载连接说明</Button> : null}
       <p className={s.muted}>文件里有你的连接令牌，只能在这次下载；关掉后要连就重新生成一份。</p>
+      <p role="status" className={connected ? s.connected : s.muted}>{connected ? "✓ 已连上天枢" : "等待你的 Agent 连上…（连上后这里会自动变化）"}</p>
       <details className={s.manual}><summary>手动设置（熟悉命令行的同事用）</summary>
         <div className={s.manualBody}>
           {commandBlock("令牌", created.token)}
           <p className={s.muted}>连接地址：{endpoint}</p>
           {connectCommands(created.view.client, endpoint, created.token).map(({ label, value }) => commandBlock(label, value))}
-          {created.view.client === "codex" ? <p className={s.muted}>存好环境变量后，重新打开终端再添加。</p> : null}
+          {created.view.client === "codex" ? <p className={s.muted}>保存后完全退出并重新打开 Codex。</p> : null}
         </div>
       </details>
     </div> : null}

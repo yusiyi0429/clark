@@ -112,8 +112,14 @@ export const MissionCardItemsResponse = Type.Object({
 }, { additionalProperties: false });
 
 /** 成员工作台：参与的本月工作、我负责的执行事项（全部状态，新到旧），以及开着时的个人雷达小组件。 */
+/** 周五 18:00 到周日结束，本周没有外部 Agent 写入的进展时提醒；no_connection 没有有效连接，not_synced 连了但没同步。 */
+export const WeeklySyncReminder = Type.Object(
+  { reason: Type.Union([Type.Literal("no_connection"), Type.Literal("not_synced")]) },
+  { additionalProperties: false },
+);
+
 export const MeHomeResponse = Type.Object(
-  { myTasks: Type.Array(TaskView), work: MemberWork, radar: Type.Union([MemberRadarBrief, Type.Null()]) },
+  { myTasks: Type.Array(TaskView), work: MemberWork, radar: Type.Union([MemberRadarBrief, Type.Null()]), weeklySync: Type.Union([WeeklySyncReminder, Type.Null()]) },
   { additionalProperties: false },
 );
 
@@ -312,6 +318,7 @@ export type TSaveMonthPlanRequest = Static<typeof SaveMonthPlanRequest>;
 export type TTaskOrigin = Static<typeof TaskOrigin>;
 export type TTaskView = Static<typeof TaskView>;
 export type TMeHomeResponse = Static<typeof MeHomeResponse>;
+export type TWeeklySyncReminder = Static<typeof WeeklySyncReminder>;
 export type TPatchMyTaskRequest = Static<typeof PatchMyTaskRequest>;
 export type TReturnMyTaskRequest = Static<typeof ReturnMyTaskRequest>;
 export type TNotificationKind = Static<typeof NotificationKind>;

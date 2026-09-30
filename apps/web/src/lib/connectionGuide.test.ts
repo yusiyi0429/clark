@@ -2,14 +2,20 @@ import { describe, expect, it } from "vitest";
 import { connectCommands, connectionGuide, syncCommand } from "./connectionGuide";
 
 describe("连接说明文件", () => {
-  it("Codex：环境变量存令牌再添加，含验证、用法、每周同步和删文件提醒", () => {
+  it("Codex：令牌与工具放行写进 config.toml，不靠环境变量；含验证、用法、每周同步和删文件提醒", () => {
     const text = connectionGuide({ role: "member", client: "codex", endpoint: "https://t.example/mcp/me", token: "tsm_x", expires: "不过期", weeklySync: true });
     expect(text).toContain("# 把 Codex 连到天枢");
-    expect(text).toContain('SetEnvironmentVariable("TIANSHU_TOKEN", "tsm_x", "User")');
-    expect(text).toContain("codex mcp add tianshu --url https://t.example/mcp/me --bearer-token-env-var TIANSHU_TOKEN");
+    expect(text).toContain("[mcp_servers.tianshu]");
+    expect(text).toContain('url = "https://t.example/mcp/me"');
+    expect(text).toContain('http_headers = { Authorization = "Bearer tsm_x" }');
+    expect(text).toContain('default_tools_approval_mode = "approve"');
+    expect(text).not.toContain("TIANSHU_TOKEN");
+    expect(connectCommands("codex", "https://t.example/mcp/me", "tsm_x")[0].value).toContain("http_headers");
     expect(text).toContain("list_my_items");
     expect(text).toContain("第三步：设好每周五自动同步");
-    expect(text).toContain("codex exec");
+    expect(text).toContain("codex exec --skip-git-repo-check");
+    expect(text).toContain("LaunchAgent");
+    expect(text).toContain("申请在沙箱外执行");
     expect(text).toContain("提醒用户删掉这个文件");
   });
   it("Claude Code：user 作用域，换目录也能用", () => {
@@ -29,7 +35,7 @@ describe("连接说明文件", () => {
   });
   it("CEO：验证待办、常用只读问法和回天枢处理动作，没有同步说明", () => {
     const text = connectionGuide({ role: "ceo", client: "codex", endpoint: "https://t.example/mcp/me", token: "tsm_ceo", expires: "不过期", weeklySync: true });
-    expect(text).toContain("codex mcp add tianshu");
+    expect(text).toContain("[mcp_servers.tianshu]");
     expect(text).toContain("`list_pending`");
     expect(text).toContain("`get_issue`");
     expect(text).toContain("`company_progress`");

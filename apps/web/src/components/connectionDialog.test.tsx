@@ -13,7 +13,7 @@ vi.mock("react", async (original) => {
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: ui.get, POST: ui.post, DELETE: ui.del } }));
 vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: ui.ask, dialog: null }) }));
 import { ConnectionDialog } from "./ConnectionDialog";
-import { ConnectAgentForm } from "./ConnectAgentForm";
+import { ConnectAgentForm, connectionState, watchFirstUse } from "./ConnectAgentForm";
 
 type Node = ReactElement<Record<string, unknown>>;
 function nodes(value: ReactNode): Node[] {
@@ -83,7 +83,7 @@ describe("个人连接对话框", () => {
     (named(tree, "生成连接说明")!.props.onPress as () => void)();
     await vi.waitFor(() => expect(render().some((node) => JSON.stringify(node).includes(secret))).toBe(true));
     tree = render();
-    expect(JSON.stringify(tree)).toContain("codex mcp add tianshu");
+    expect(JSON.stringify(tree)).toContain("[mcp_servers.tianshu]");
     const blobs: Blob[] = [];
     const link = { click: vi.fn(), remove: vi.fn(), href: "", download: "" };
     vi.stubGlobal("URL", { createObjectURL: (blob: Blob) => { blobs.push(blob); return "blob:guide"; }, revokeObjectURL: vi.fn() });
@@ -98,6 +98,46 @@ describe("个人连接对话框", () => {
     expect(text).toContain("不要提交到 git");
     ui.values = [];
     expect(JSON.stringify(render())).not.toContain(secret);
+  });
+
+  it("成员默认不过期；关掉每周同步回到 30 天，再打开又回到不过期", () => {
+    const selected = (tree: Node[]) => tree.find((node) => node.props["aria-labelledby"] === "connection-expiry")!.props.selectedKeys;
+    let tree = render();
+    expect(selected(tree)).toEqual(["never"]);
+    (tree.find((node) => node.props.role === "switch")!.props.onClick as () => void)();
+    tree = render();
+    expect(selected(tree)).toEqual(["30"]);
+    (tree.find((node) => node.props.role === "switch")!.props.onClick as () => void)();
+    expect(selected(render())).toEqual(["never"]);
+    ui.values = [];
+    expect(selected(render("ceo"))).toEqual(["30"]);
+  });
+
+  it("连接列表按状态显示：等待连接、已连上、最近同步", () => {
+    const base = { id: "t", name: "笔记本", client: "codex" as const, createdAt: "2026-09-28T00:00:00Z", expiresAt: null };
+    expect(connectionState({ ...base, lastUsedAt: null, lastProgressAt: null })).toBe("等待连接");
+    expect(connectionState({ ...base, lastUsedAt: "2026-09-30T02:00:00Z", lastProgressAt: null })).toMatch(/^已连上 · 最近使用 /);
+    expect(connectionState({ ...base, lastUsedAt: "2026-09-30T02:00:00Z", lastProgressAt: "2026-09-30T02:05:00Z" })).toMatch(/^最近同步 /);
+  });
+
+  it("生成后轮询到首次调通就停；连接被撤销也停", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("window", { setTimeout, clearTimeout, location: { origin: "https://tianshu.example" } });
+    try {
+      const seen: (string | null)[] = [];
+      const view = (lastUsedAt: string | null) => ({ id: "token-1", name: "笔记本", client: "codex", createdAt: "2026-09-28T00:00:00Z", expiresAt: null, lastUsedAt, lastProgressAt: null });
+      ui.get.mockResolvedValueOnce({ data: { tokens: [view(null)] } }).mockResolvedValueOnce({ data: { tokens: [view("2026-09-30T02:00:00Z")] } });
+      watchFirstUse("token-1", (item) => seen.push(item.lastUsedAt), 5_000);
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(ui.get).toHaveBeenCalledTimes(2);
+      expect(seen).toEqual([null, "2026-09-30T02:00:00Z"]);
+      ui.get.mockReset(); ui.get.mockResolvedValue({ data: { tokens: [] } });
+      watchFirstUse("token-1", () => undefined, 5_000);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(ui.get).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
   });
 
   it("撤销先确认，确认后从列表移除", async () => {

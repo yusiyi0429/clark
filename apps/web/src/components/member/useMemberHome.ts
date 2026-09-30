@@ -12,6 +12,7 @@ import { browserApi } from "@/lib/api/client";
 import { RADAR_SETTINGS_CHANGED, type MemberRadarBrief } from "@/components/radar/personalRadar";
 import type { MemberTask, TaskStatus } from "./MemberTasks";
 import type { MemberWork } from "./MemberHomeWidgets";
+import type { WeeklySyncReminder } from "./weeklySyncNotice";
 
 export interface MemberNotification {
   id: string;
@@ -40,6 +41,8 @@ export function useMemberHome() {
   const [work, setWork] = useState<MemberWork | null>(null);
   /** 雷达关着时为 null，首页整块不出现。 */
   const [radar, setRadar] = useState<MemberRadarBrief | null>(null);
+  /** 周五 18:00 到周日本周还没同步时由服务端给出；其余时间为 null。 */
+  const [weeklySync, setWeeklySync] = useState<WeeklySyncReminder | null>(null);
   const [homeError, setHomeError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -53,7 +56,7 @@ export function useMemberHome() {
         window.location.assign("/access?next=%2Fme");
         return;
       }
-      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setWork(home.data.work); setRadar(home.data.radar ?? null); }
+      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setWork(home.data.work); setRadar(home.data.radar ?? null); setWeeklySync(home.data.weeklySync ?? null); }
       setHomeError(home.data ? null : REFRESH_ERROR);
       if (list.data) setNotifications(list.data.notifications as MemberNotification[]);
       if (meetingList.data) setMeetings(meetingList.data.meetings);
@@ -164,5 +167,5 @@ export function useMemberHome() {
     [load],
   );
 
-  return { tasks, notifications, meetings, unreadThreads, unreadMissionGroups, rounds, work, radar, homeError, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, readRadarNotice, settle };
+  return { tasks, notifications, meetings, unreadThreads, unreadMissionGroups, rounds, work, radar, weeklySync, homeError, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, readRadarNotice, settle };
 }

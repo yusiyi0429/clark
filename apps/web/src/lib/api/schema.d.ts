@@ -4856,6 +4856,7 @@ export interface components {
             createdAt: string;
             expiresAt: string | null;
             lastUsedAt: string | null;
+            lastProgressAt: string | null;
         };
         MaterialView: {
             id: string;
@@ -5060,6 +5061,7 @@ export interface components {
                 createdAt: string;
                 expiresAt: string | null;
                 lastUsedAt: string | null;
+                lastProgressAt: string | null;
             }[];
             /** @constant */
             mcpPath: "/mcp/me";
@@ -5079,6 +5081,7 @@ export interface components {
                 createdAt: string;
                 expiresAt: string | null;
                 lastUsedAt: string | null;
+                lastProgressAt: string | null;
             };
         };
         TaskPerson: {
@@ -5467,6 +5470,12 @@ export interface components {
                     collectedAt: string;
                 }[];
             } | null;
+            weeklySync: {
+                reason: "no_connection" | "not_synced";
+            } | null;
+        };
+        WeeklySyncReminder: {
+            reason: "no_connection" | "not_synced";
         };
         MemberWork: {
             period: string;

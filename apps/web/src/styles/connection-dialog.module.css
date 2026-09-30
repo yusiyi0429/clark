@@ -17,6 +17,7 @@
 .ready>strong{color:#1f4f9a;font-size:14px}
 .ready>p{margin:0;color:#3d4c62;font-size:13px;line-height:1.7}
 .ready>p.muted{color:#69788d;font-size:12px}
+.ready>p.connected{color:#2f7a4f;font-weight:600}
 .ready button svg{margin-right:6px}
 .manual{justify-self:stretch;min-width:0}
 .manual>summary{width:max-content;max-width:100%;color:#69788d;font-size:12px;cursor:pointer;list-style-position:inside}

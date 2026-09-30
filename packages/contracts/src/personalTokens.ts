@@ -9,6 +9,8 @@ export const PersonalTokenView = Type.Object({
   createdAt: Type.String({ minLength: 1 }),
   expiresAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
   lastUsedAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  /** 这个令牌最近一次写入进展的时间：连接对话框据此显示「最近同步」。 */
+  lastProgressAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
 }, { additionalProperties: false });
 export const ListPersonalTokensResponse = Type.Object({
   tokens: Type.Array(PersonalTokenView),

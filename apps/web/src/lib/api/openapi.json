@@ -25531,7 +25531,8 @@
           "client",
           "createdAt",
           "expiresAt",
-          "lastUsedAt"
+          "lastUsedAt",
+          "lastProgressAt"
         ],
         "properties": {
           "id": {
@@ -25575,6 +25576,17 @@
             ]
           },
           "lastUsedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastProgressAt": {
             "anyOf": [
               {
                 "minLength": 1,
@@ -26821,7 +26833,8 @@
                 "client",
                 "createdAt",
                 "expiresAt",
-                "lastUsedAt"
+                "lastUsedAt",
+                "lastProgressAt"
               ],
               "properties": {
                 "id": {
@@ -26865,6 +26878,17 @@
                   ]
                 },
                 "lastUsedAt": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "lastProgressAt": {
                   "anyOf": [
                     {
                       "minLength": 1,
@@ -26952,7 +26976,8 @@
               "client",
               "createdAt",
               "expiresAt",
-              "lastUsedAt"
+              "lastUsedAt",
+              "lastProgressAt"
             ],
             "properties": {
               "id": {
@@ -26996,6 +27021,17 @@
                 ]
               },
               "lastUsedAt": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lastProgressAt": {
                 "anyOf": [
                   {
                     "minLength": 1,
@@ -28757,7 +28793,8 @@
         "required": [
           "myTasks",
           "work",
-          "radar"
+          "radar",
+          "weeklySync"
         ],
         "properties": {
           "myTasks": {
@@ -29636,6 +29673,55 @@
               },
               {
                 "type": "null"
+              }
+            ]
+          },
+          "weeklySync": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "const": "no_connection",
+                        "type": "string"
+                      },
+                      {
+                        "const": "not_synced",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WeeklySyncReminder": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "const": "no_connection",
+                "type": "string"
+              },
+              {
+                "const": "not_synced",
+                "type": "string"
               }
             ]
           }

@@ -14,6 +14,7 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(created.statusCode).toBe(200);
       const { token, view } = created.json();
       expect(token).toMatch(/^tsm_[0-9a-f]{32}_[A-Za-z0-9_-]{43}$/);
+      expect(view.lastProgressAt).toBeNull();
       const stored = (await f.t.sql("SELECT secret_hash FROM personal_tokens WHERE id=$1", [view.id]))[0].secret_hash as string;
       expect(stored).not.toContain(token);
       expect((await call(f, f.member, "GET", "/api/me/tokens")).json()).toMatchObject({ mcpPath: "/mcp/me", tokens: [{ id: view.id, name: "测试设备" }] });
@@ -39,6 +40,9 @@ describe("个人令牌与执行事项 MCP", () => {
       const replay = await invoke(7, "append_progress", { itemId: task.id, body: "完成接口核对", clientEventId: event });
       expect(JSON.parse(progress.content[0].text).id).toBe(JSON.parse(replay.content[0].text).id);
       expect((await f.t.sql("SELECT count(*) AS n FROM task_progress WHERE task_id=$1", [task.id]))[0].n).toBe("1");
+      const usedToken = (await call(f, f.member, "GET", "/api/me/tokens")).json().tokens.find((item: { id: string }) => item.id === view.id);
+      expect(usedToken.lastUsedAt).not.toBeNull();
+      expect(usedToken.lastProgressAt).not.toBeNull();
       expect((await call(f, f.member, "GET", `/api/me/tasks/${task.id}`)).json().progress[0].source).toBe("codex");
       const updated = await invoke(8, "update_status", { itemId: task.id, status: "in_progress", version: 1 });
       expect(JSON.parse(updated.content[0].text).version).toBe(2);

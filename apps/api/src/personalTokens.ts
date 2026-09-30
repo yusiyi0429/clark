@@ -4,15 +4,16 @@ import type { TCreatePersonalTokenRequest, TPersonalTokenClient, TPersonalTokenV
 import type { Query } from "./meetingStore.js";
 
 type Row = { id: string; person_id: string; name: string; client: TPersonalTokenClient; secret_hash: string;
-  created_at: Date; expires_at: Date | null; last_used_at: Date | null; revoked_at: Date | null };
+  created_at: Date; expires_at: Date | null; last_used_at: Date | null; revoked_at: Date | null; last_progress_at?: Date | null };
 const view = (row: Row): TPersonalTokenView => ({ id: row.id, name: row.name, client: row.client,
   createdAt: row.created_at.toISOString(), expiresAt: row.expires_at?.toISOString() ?? null,
-  lastUsedAt: row.last_used_at?.toISOString() ?? null });
+  lastUsedAt: row.last_used_at?.toISOString() ?? null, lastProgressAt: row.last_progress_at?.toISOString() ?? null });
 const hash = (random: string, pepper: string) => createHash("sha256").update(random).update(pepper).digest();
 const TOKEN = /^tsm_([0-9a-f]{32})_([A-Za-z0-9_-]{43})$/;
 
 export async function listPersonalTokens(q: Query, personId: string): Promise<TPersonalTokenView[]> {
-  const rows = (await q("SELECT * FROM personal_tokens WHERE person_id=$1 AND revoked_at IS NULL ORDER BY created_at DESC,id DESC", [personId])).rows as Row[];
+  const rows = (await q(`SELECT t.*, (SELECT max(p.created_at) FROM task_progress p WHERE p.token_id=t.id) AS last_progress_at
+    FROM personal_tokens t WHERE t.person_id=$1 AND t.revoked_at IS NULL ORDER BY t.created_at DESC,t.id DESC`, [personId])).rows as Row[];
   return rows.map(view);
 }
 
