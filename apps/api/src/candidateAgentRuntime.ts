@@ -32,6 +32,8 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   query: Query;
   kind: string;
   objectRef?: { type: string; id: string; version?: number };
+  /** 这次 run 属于谁：只进 LangSmith metadata，系统/公司级 run 不传。 */
+  personId?: string;
   input: unknown;
   prompt: string;
   schema: T;
@@ -150,6 +152,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
       agentKind: options.kind,
       promptHash,
       objectRef: options.objectRef,
+      personId: options.personId,
       inputs: options.input,
       outputs: candidate,
       toolEvents: [{ name: "submit_candidate", isError: false }],
@@ -175,6 +178,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
       agentKind: options.kind,
       promptHash,
       objectRef: options.objectRef,
+      personId: options.personId,
       inputs: options.input,
       outputs: candidate,
       toolEvents: [{ name: "submit_candidate", isError: !candidate }],

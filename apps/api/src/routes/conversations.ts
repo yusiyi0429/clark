@@ -326,6 +326,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           agentKind: "conversation",
           promptHash: runtime.promptHash,
           objectRef: object.snapshot?.objectRef ?? { type: "global", id: "global" },
+          personId: owner,
+          threadId: row.id,
           inputs: { message: req.body.message, currentObject: object.snapshot, references: references.snapshots },
           outputs: runOutput,
           toolEvents: runToolEvents,

@@ -305,8 +305,11 @@ describe("LangSmith optional adapter", () => {
           status: "succeeded",
           toolEvents: [{ name: "web_search", isError: false }],
           usage: { input: 3, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 5 },
+          metadata: { user_id: TEST_CEO.personId },
         },
       });
+      const threadId = (payloads[0].body.extra as { metadata: { thread_id: string } }).metadata.thread_id;
+      expect(threadId).toBe((await t.pool.query("SELECT id FROM conversations WHERE owner_id = $1 AND scope = 'global'", [TEST_CEO.personId])).rows[0].id);
       expect(JSON.stringify(payloads[0].body)).not.toContain("ls-secret-key");
 
       await recordAgentTrace({

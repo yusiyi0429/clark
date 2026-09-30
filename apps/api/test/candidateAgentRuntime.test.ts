@@ -140,6 +140,7 @@ describe("batch candidate runtime public seam", () => {
           query: db.query.bind(db),
           kind: "issue-research",
           objectRef: { type: "issue", id: "fixture-001", version: 1 },
+          personId: "person-fixture-002",
           input: { question: "比较供应链" },
           prompt: "只提交结构化研究候选。",
           schema: Candidate,
@@ -171,7 +172,7 @@ describe("batch candidate runtime public seam", () => {
           name: "issue-research",
           inputs: { agentKind: "issue-research", input: { question: "比较供应链" } },
           outputs: { summary: "选择合作供应链" },
-          extra: { status: "succeeded", usage, toolEvents: [{ name: "submit_candidate", isError: false }] },
+          extra: { status: "succeeded", usage, toolEvents: [{ name: "submit_candidate", isError: false }], metadata: { user_id: "person-fixture-002" } },
         });
         expect((payloads[0].inputs as { promptHash: string }).promptHash).toMatch(/^[a-f0-9]{64}$/);
         expect(payloads[1]).toMatchObject({
@@ -179,6 +180,7 @@ describe("batch candidate runtime public seam", () => {
           extra: { status: "failed", toolEvents: [{ name: "submit_candidate", isError: true }] },
         });
         expect(payloads[1].error).toContain("submit_candidate");
+        expect(payloads[1].extra.metadata.user_id).toBeUndefined();
         expect(JSON.stringify(payloads)).not.toContain("ls-batch");
       });
     } finally {

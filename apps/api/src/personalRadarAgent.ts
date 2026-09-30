@@ -32,6 +32,7 @@ export function createPersonalRadarJudge(options: {
         ...options,
         kind: "personal-radar-assess",
         objectRef: { type: "person-radar", id: personId },
+        personId,
         input: { directions, sources },
         prompt: PERSONAL_RADAR_PROMPT,
         schema: PersonalRadarJudgeSubmission,

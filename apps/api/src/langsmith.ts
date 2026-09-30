@@ -10,6 +10,10 @@ export type AgentTrace = {
   agentKind: string;
   promptHash?: string;
   objectRef?: unknown;
+  /** 发起或所属的人；系统/公司级 run 缺省。 */
+  personId?: string;
+  /** LangSmith Threads 按它把同一会话的多轮串起来。 */
+  threadId?: string;
   inputs?: unknown;
   outputs?: unknown;
   toolEvents?: unknown[];
@@ -56,7 +60,10 @@ export async function recordAgentTrace(trace: AgentTrace): Promise<void> {
       inputs: { agentKind: trace.agentKind, promptHash: trace.promptHash, objectRef: trace.objectRef, input: trace.inputs },
       outputs: trace.outputs,
       error: trace.error,
-      extra: { status: trace.status, durationMs: trace.durationMs, toolEvents: trace.toolEvents, usage: trace.usage },
+      extra: {
+        status: trace.status, durationMs: trace.durationMs, toolEvents: trace.toolEvents, usage: trace.usage,
+        metadata: { user_id: trace.personId, thread_id: trace.threadId },
+      },
     });
     const response = await send(`${config.endpoint}/runs`, {
       method: "POST",

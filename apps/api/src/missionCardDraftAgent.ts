@@ -36,7 +36,7 @@ export function createMissionCardDraftAgent(options: {
 }): MissionCardDraftAgent {
   return { async generate(input, signal) {
     const result = await runCandidateAgent({
-      query: options.query, kind: "mission-card-draft", objectRef: { type: "person", id: input.owner.personId },
+      query: options.query, kind: "mission-card-draft", objectRef: { type: "person", id: input.owner.personId }, personId: input.owner.personId,
       input, prompt: PROMPT, schema: MissionCardDraftCandidate,
       baseUrl: options.baseUrl, apiKey: options.apiKey, modelId: options.modelId, modelSlot: "heavy", signal,
       ...(options.streamSimple ? { streamSimple: options.streamSimple } : {}),
