@@ -353,3 +353,5 @@ html[data-notice-transition="close"]::view-transition-new(*) { animation-duratio
   ::-webkit-scrollbar-button, ::-webkit-scrollbar-corner { display: none; background: transparent; }
 }
 
+/* 天枢标志默认用深色渐变（与 favicon 一致，#275AC4 → #3E82F7）。:where 零优先级：各处给标志单独设的 --brand-* 仍然生效；不改全站的品牌色。 */
+:where(svg[data-tianshu-mark]) { --brand-deep: #275ac4; --brand-bright: #3e82f7; }
