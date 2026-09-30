@@ -127,3 +127,4 @@
 .card .identity .tag{font-style:normal;font-size:12px;font-weight:400;color:rgb(255 255 255/78%)}
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
 @media(max-width:959px){.card .identity .count.count{font-size:13px}}
+.meetingFollowUp{display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 12px 30px}.meetingFollowUp button{font:inherit;font-size:12px;padding:6px 9px;border:1px solid currentColor;border-radius:8px;background:transparent;color:inherit;cursor:pointer}.meetingFollowUp button:focus-visible{outline:2px solid #96beff;outline-offset:2px}

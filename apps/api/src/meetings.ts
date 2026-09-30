@@ -329,14 +329,19 @@ export async function executeEditMeetingDetails(
   input: { title?: string; scheduledAt?: string; endsAt?: string; leadDriId?: string },
   fingerprint: string,
   introAgent?: ThreadIntroAgent,
+  access?: { hostId?: string; futureOnly?: boolean; now?: Date },
 ): Promise<MeetingActionOutcome> {
   let scheduledAt: Date | null = null;
   if (input.scheduledAt !== undefined) {
     scheduledAt = parseScheduledAt(input.scheduledAt);
     if (!scheduledAt) return { error: { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } } };
+    if (access?.futureOnly && scheduledAt.getTime() <= (access.now ?? new Date()).getTime())
+      return { error: { status: 400, code: "INVALID_INPUT", message: "重新安排的开始时间必须在将来", fieldErrors: { scheduledAt: "future required" } } };
   }
   return withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
     if (row.status !== "scheduled") return { error: { status: 409, code: "MEETING_NOT_SCHEDULED", message: "只有 scheduled Meeting 可以编辑" } };
+    if ((scheduledAt || input.endsAt) && row.transcript_candidate)
+      return { error: { status: 409, code: "TRANSCRIPT_CANDIDATE_EXISTS", message: "请先确认或清除已上传的会议记录，再重新安排会议" } };
     const endsAt = resolveEndsAt(scheduledAt ?? row.scheduled_at, input.endsAt, row.ends_at.getTime() - row.scheduled_at.getTime());
     if (!(endsAt instanceof Date)) return { error: endsAt };
     let participants: TMeetingParticipant[] | null = null;
@@ -352,7 +357,8 @@ export async function executeEditMeetingDetails(
       row.id,
       `title = COALESCE($3, title), scheduled_at = COALESCE($4, scheduled_at),
        lead_dri_id = COALESCE($5, lead_dri_id), participants = COALESCE($6::jsonb, participants),
-       ends_at = $7, version = version + 1, action_fingerprints = $2::jsonb`,
+       ends_at = $7, ended_at = CASE WHEN $4::timestamptz IS NOT NULL AND $4::timestamptz <> scheduled_at THEN NULL ELSE ended_at END,
+       version = version + 1, action_fingerprints = $2::jsonb`,
       [
         JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint)),
         input.title ?? null,
@@ -370,7 +376,7 @@ export async function executeEditMeetingDetails(
         participants.map((person) => person.personId).filter((id) => !existingIds.includes(id)), existingIds);
     }
     return result;
-  });
+  }, access?.hostId);
 }
 
 export async function executeRequestSupplement(
@@ -496,6 +502,7 @@ export async function executeEndMeeting(
   secret: string,
   scope: ActionScope,
   fingerprint: string,
+  hostId?: string,
 ): Promise<MeetingActionOutcome> {
   return withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
     if (row.status !== "scheduled") return { error: { status: 409, code: "MEETING_NOT_ENDABLE", message: "只有 scheduled Meeting 可以标记开完" } };
@@ -506,7 +513,7 @@ export async function executeEndMeeting(
       [JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
     );
     return commit(client, updated, secret);
-  });
+  }, hostId);
 }
 export type DriMeetingImportResult =
   | { status: 201 | 200; card: TCard }

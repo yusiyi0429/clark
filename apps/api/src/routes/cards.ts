@@ -5,7 +5,7 @@ import { listCapabilityCards } from "../capabilities.js";
 import { getMissionRow, listMissionCards, projectMissionCard } from "../missions.js";
 import { listMissionRoundCards, listMissionRoundDraftCards } from "../missionRounds.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "../issues.js";
-import { getMeetingRow, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "../meetingStore.js";
+import { getMeetingRow, hasMeetingNotice, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "../meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice, getMonthlyPlanRow, listMonthlyPlanRows, projectMonthlyPlanCard } from "../monthlyPlans.js";
 import { personDisplayNames } from "../people.js";
 import { projectRadarCard } from "../signals.js";
@@ -49,8 +49,8 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
     ]);
     // 会前通知看 scheduled；会后有待 CEO 确认的战略议题的会议也进首页（通知栏「需要你确认」）
     const meetings = meetingRows
-      .filter((row) => row.status === "scheduled" || hasPendingStrategicItem(row.outcome))
-      .map((row) => projectMeetingCard(row, env.sessionSecret));
+      .filter((row) => hasMeetingNotice(row, req.person!.personId, at) || hasPendingStrategicItem(row.outcome))
+      .map((row) => projectMeetingCard(row, env.sessionSecret, at));
     const monthly = monthlyNotice && (monthlyNotice.payload as { status?: string }).status !== "confirmed" ? [monthlyNotice] : [];
     return { cards: [radarCard, ...battlefields, ...capabilities, ...issues, ...meetings, ...missions, ...monthly, ...mergeMissionRoundCards(rounds, draftSlots)] };
   });
@@ -84,10 +84,11 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
 
   // 会前通知与 Meeting 详情是同一 projector 的投影，不保存第二份 Meeting。
   // 月度通知与月度页面同样读取同一 MonthlyPlan 持久对象。
-  app.get("/api/cards/notifications", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
-    const rows = (await listMeetingRows(q)).filter((row) => row.status === "scheduled");
-    const monthlyNotice = await getMonthlyPlanNotice(q, env.sessionSecret, now());
-    return { cards: [...(monthlyNotice ? [monthlyNotice] : []), ...rows.map((row) => projectMeetingCard(row, env.sessionSecret))] };
+  app.get("/api/cards/notifications", { preHandler: requireCEO }, async (req): Promise<TCardCollection> => {
+    const at = now();
+    const rows = (await listMeetingRows(q)).filter((row) => hasMeetingNotice(row, req.person!.personId, at));
+    const monthlyNotice = await getMonthlyPlanNotice(q, env.sessionSecret, at);
+    return { cards: [...(monthlyNotice ? [monthlyNotice] : []), ...rows.map((row) => projectMeetingCard(row, env.sessionSecret, at))] };
   });
 
   app.get("/api/cards/monthly-plans", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {

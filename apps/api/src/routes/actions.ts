@@ -29,7 +29,7 @@ import { personDisplayNames } from "../people.js";
 import { executeRetryMonthlyPlanDraft, executeSignMonthlyPlan, executeUpdateMonthlyPlanDraft } from "../monthlyPlans.js";
 import { executeConfirmItem, executeDismissItem, executeReplaceTranscript, executeRetryOutcome, executeRevokeEffect } from "../outcome.js";
 import { executeConfirmTranscriptCandidate, executeDiscardTranscriptCandidate } from "../transcriptCandidate.js";
-import { getMeetingRow } from "../meetingStore.js";
+import { getMeetingRow, type MeetingActionOutcome } from "../meetingStore.js";
 import { projectMemberMeetingCardFromCard } from "../memberCards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
@@ -45,7 +45,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         return fail(reply, 404, "UNKNOWN_ACTION", "无效 actionId");
       }
       if (req.person!.role !== "ceo") {
-        if (scope.actionType !== "meeting.end" || scope.objectType !== "meeting")
+        if (!["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(scope.actionType) || scope.objectType !== "meeting")
           return fail(reply, 403, "FORBIDDEN", "只有 CEO 可以访问");
         const meeting = await getMeetingRow(q, scope.objectId);
         if (!meeting || meeting.lead_dri_id !== req.person!.personId)
@@ -54,6 +54,13 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       requestContext.set(req, { actionType: scope.actionType, objectRef: `${scope.objectType}:${scope.objectId}` });
       const fingerprint = actionFingerprint(env.sessionSecret, req.body.actionId, req.body.input);
       const input = req.body.input;
+      const hostId = req.person!.role === "ceo" ? undefined : req.person!.personId;
+      const respondMeeting = (result: MeetingActionOutcome) => {
+        if (hostId === undefined || "error" in result) return respond(reply, result);
+        return respond(reply, "card" in result
+          ? { ...result, card: projectMemberMeetingCardFromCard(result.card, hostId) }
+          : { ...result, latestCard: projectMemberMeetingCardFromCard(result.latestCard, hostId) });
+      };
 
       // Ticket 09：Issue 侧 Meeting Action 先于 Ticket 08 的通用 Issue Action 分派
       if (scope.actionType === "issue.create_meeting") {
@@ -72,6 +79,12 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         if (!Value.Check(EditMeetingDetailsRequest, input)) return invalidInput(reply, EditMeetingDetailsRequest, input);
         return respond(reply, await executeEditMeetingDetails(pool, companyMemory, env.sessionSecret, scope, input, fingerprint, ctx.threadIntroAgent));
       }
+      if (scope.actionType === "meeting.reschedule") {
+        if (!Value.Check(EditMeetingDetailsRequest, input)) return invalidInput(reply, EditMeetingDetailsRequest, input);
+        if (!input.scheduledAt || Object.keys(input).some((key) => key !== "scheduledAt" && key !== "endsAt"))
+          return fail(reply, 400, "INVALID_INPUT", "重新安排只接受开始和结束时间，且必须填写开始时间");
+        return respondMeeting(await executeEditMeetingDetails(pool, companyMemory, env.sessionSecret, scope, input, fingerprint, undefined, { hostId, futureOnly: true, now: ctx.now() }));
+      }
       if (scope.actionType === "meeting.request_supplement") {
         if (!Value.Check(RequestSupplementRequest, input)) return invalidInput(reply, RequestSupplementRequest, input);
         return respond(reply, await executeRequestSupplement(pool, companyMemory, driExporter, env.sessionSecret, scope, input, fingerprint));
@@ -86,7 +99,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         return respond(reply, await executeCancelMeeting(pool, env.sessionSecret, scope, fingerprint));
       }
       if (scope.actionType === "meeting.end") {
-        const result = await executeEndMeeting(pool, env.sessionSecret, scope, fingerprint);
+        const result = await executeEndMeeting(pool, env.sessionSecret, scope, fingerprint, hostId);
         if (req.person!.role === "ceo" || "error" in result) return respond(reply, result);
         const viewerId = req.person!.personId;
         return respond(reply, "card" in result
@@ -110,12 +123,12 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       // Ticket 27：妙记 Markdown 候选确认/清除；speakerMappings 是确认 Action 的全部输入
       if (scope.actionType === "meeting.confirm_transcript_candidate") {
         if (!Value.Check(ConfirmTranscriptCandidateRequest, input)) return invalidInput(reply, ConfirmTranscriptCandidateRequest, input);
-        return respond(reply, await executeConfirmTranscriptCandidate(pool, companyMemory, outcome, env.sessionSecret, scope, input, fingerprint));
+        return respondMeeting(await executeConfirmTranscriptCandidate(pool, companyMemory, outcome, env.sessionSecret, scope, input, fingerprint, hostId));
       }
       if (scope.actionType === "meeting.discard_transcript_candidate") {
         const discardInput = input ?? {};
         if (!Value.Check(DiscardTranscriptCandidateRequest, discardInput)) return invalidInput(reply, DiscardTranscriptCandidateRequest, discardInput);
-        return respond(reply, await executeDiscardTranscriptCandidate(pool, env.sessionSecret, scope, fingerprint));
+        return respondMeeting(await executeDiscardTranscriptCandidate(pool, env.sessionSecret, scope, fingerprint, hostId));
       }
       // Ticket 11：逐项确认/忽略/撤回；itemId 由签名 actionId 携带
       if (scope.actionType === "meeting.confirm_item") {

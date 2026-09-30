@@ -4703,6 +4703,7 @@ export interface components {
             endsAt: string | null;
             hostName: string;
             href: string;
+            followUp?: boolean;
         };
         MemberMeetingsResponse: {
             meetings: {
@@ -4712,6 +4713,7 @@ export interface components {
                 endsAt: string | null;
                 hostName: string;
                 href: string;
+                followUp?: boolean;
             }[];
         };
         ThreadMessage: {

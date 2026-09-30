@@ -24529,6 +24529,9 @@
           "href": {
             "minLength": 1,
             "type": "string"
+          },
+          "followUp": {
+            "type": "boolean"
           }
         }
       },
@@ -24583,6 +24586,9 @@
                 "href": {
                   "minLength": 1,
                   "type": "string"
+                },
+                "followUp": {
+                  "type": "boolean"
                 }
               }
             }

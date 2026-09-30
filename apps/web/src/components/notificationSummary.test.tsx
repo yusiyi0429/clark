@@ -20,6 +20,16 @@ const meeting = (id: string, scheduledAt: string, lead = "bai") =>
   card("meeting", id, `会议 ${id}`, { status: "scheduled", scheduledAt, leadDriId: lead, participants: [{ personId: "bai", displayName: "白田田" }], issueIds: [] });
 
 describe("通知栏分组（clark 三组）", () => {
+  it("到结束时间或手动结束后退出参会人通知，主持人保留改期与纪要入口", () => {
+    const now = new Date("2026-09-30T08:00:00Z");
+    const ended = card("meeting", "ended", "已结束会议", { status: "scheduled", scheduledAt: "2026-09-30T07:00:00Z", endsAt: now.toISOString(), endedAt: null, leadDriId: "host", participants: [] },
+      { actions: [{ actionId: "reschedule", actionType: "meeting.reschedule", label: "重新安排会议" }] });
+    const marked = card("meeting", "marked", "提前结束", { ...ended.payload as object, endsAt: "2026-10-01T08:00:00Z", endedAt: now.toISOString() });
+    expect(railGroups([ended, marked], now, "attendee")).toEqual([]);
+    expect(railGroups([ended], now, "host")[0].items[0]).toMatchObject({ followUp: true, canReschedule: true });
+    const html = renderToStaticMarkup(<NotificationRail cards={[ended]} viewerId="host" onNavigate={() => undefined} />);
+    expect(html).toContain("重新安排"); expect(html).toContain("上传文字纪要");
+  });
   it("只收需要行动的：未签发月度计划、已排期会议、红色待决议题；顺序固定", () => {
     const now = new Date("2026-09-23T01:00:00Z");
     const groups = railGroups(

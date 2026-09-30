@@ -9,3 +9,5 @@
  .card button small{font-size:15px;color:#566072}
  .card button:hover{background:rgb(28 34 48/.04)}
 }
+.followUp{padding:0 2px 12px 17px;font-size:12px}.followUp>div{display:flex;gap:8px;margin-top:8px}.card .followUp button{width:auto;padding:6px 10px;border:1px solid #ffffff33;border-radius:8px;font-size:12px}
+@media(max-width:959px){.card .followUp button{border-color:#1c223026;font-size:14px}.followUp{font-size:14px}}

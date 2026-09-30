@@ -130,7 +130,15 @@ export function projectTranscriptCandidate(candidate: TStoredTranscriptCandidate
   };
 }
 
-export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
+export function meetingHasEnded(row: Pick<MeetingRow, "ended_at" | "ends_at">, at = new Date()): boolean {
+  return row.ended_at !== null || row.ends_at.getTime() <= at.getTime();
+}
+
+export function hasMeetingNotice(row: MeetingRow, viewerId: string, at: Date): boolean {
+  return row.status === "scheduled" && (!meetingHasEnded(row, at) || row.lead_dri_id === viewerId);
+}
+
+export function projectMeetingCard(row: MeetingRow, secret: string, at = new Date()): TCard {
   const action = (actionType: string, label: string, itemId?: string): TActionDescriptor => {
     const scope: ActionScope = { actionType, objectType: "meeting", objectId: row.id, objectVersion: row.version, itemId };
     return { actionId: signActionId(secret, scope), actionType, label, ...(itemId ? { itemId } : {}) };
@@ -145,6 +153,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
       action("meeting.request_supplement", "请求补充材料"),
       action("meeting.cancel", "取消会议"),
     );
+    if (!row.transcript_candidate) actions.push(action("meeting.reschedule", "重新安排会议"));
     // 「这场会开完了」只记一次结束时刻，不改 status
     if (!row.ended_at) actions.push(action("meeting.end", "这场会开完了"));
     if (row.preflight.status === "failed") actions.push(action("meeting.retry_preflight", "重试预审"));
@@ -192,6 +201,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string): TCard {
       scheduledAt: row.scheduled_at.toISOString(),
       endsAt: row.ends_at.toISOString(),
       endedAt: row.ended_at?.toISOString() ?? null,
+      hasEnded: meetingHasEnded(row, at),
       leadDriId: row.lead_dri_id,
       ceoParticipantId: row.ceo_participant_id,
       participants: row.participants,
@@ -225,6 +235,7 @@ export async function withMeetingLock(
   fingerprint: string,
   expectedVersion: number | undefined,
   run: (client: PoolClient, row: MeetingRow) => Promise<MeetingActionOutcome>,
+  hostId?: string,
 ): Promise<MeetingActionOutcome> {
   const client = await pool.connect();
   try {
@@ -235,6 +246,10 @@ export async function withMeetingLock(
       return { error: { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" } };
     }
     const row = result.rows[0];
+    if (hostId !== undefined && row.lead_dri_id !== hostId) {
+      await client.query("ROLLBACK");
+      return { error: { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" } };
+    }
     if (row.action_fingerprints.includes(fingerprint)) {
       await client.query("COMMIT");
       return { card: projectMeetingCard(row, secret), replayed: true };

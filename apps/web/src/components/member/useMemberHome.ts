@@ -93,9 +93,10 @@ export function useMemberHome() {
     window.addEventListener("focus", resume);
     window.addEventListener("mission-round-changed", roundChanged);
     window.addEventListener("member-tasks-changed", roundChanged);
+    window.addEventListener("meeting-changed", roundChanged);
     window.addEventListener(RADAR_SETTINGS_CHANGED, roundChanged);
     document.addEventListener("visibilitychange", resume);
-    return () => { window.clearInterval(timer); window.removeEventListener("focus", resume); window.removeEventListener("mission-round-changed", roundChanged); window.removeEventListener("member-tasks-changed", roundChanged); window.removeEventListener(RADAR_SETTINGS_CHANGED, roundChanged); document.removeEventListener("visibilitychange", resume); };
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", resume); window.removeEventListener("mission-round-changed", roundChanged); window.removeEventListener("member-tasks-changed", roundChanged); window.removeEventListener("meeting-changed", roundChanged); window.removeEventListener(RADAR_SETTINGS_CHANGED, roundChanged); document.removeEventListener("visibilitychange", resume); };
   }, [load]);
 
   const replaceTask = (task: MemberTask) => setTasks((current) => current.map((item) => (item.id === task.id ? task : item)));

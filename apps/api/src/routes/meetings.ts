@@ -8,6 +8,7 @@ import { getMeetingRow } from "../meetingStore.js";
 import { isActiveMember } from "../threads.js";
 import { importTranscript } from "../outcome.js";
 import { createTranscriptCandidate } from "../transcriptCandidate.js";
+import { projectMemberMeetingCardFromCard } from "../memberCards.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
 export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -15,9 +16,12 @@ export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void
 
   app.post(
     "/api/meetings/:id/transcript",
-    { preHandler: requireCEO, schema: { params: idParams }, bodyLimit: maxTranscriptBytes * 2 },
+    { preHandler: requirePerson, schema: { params: idParams }, bodyLimit: maxTranscriptBytes * 2 },
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       let buffer: Buffer;
+      const hostId = req.person!.role === "ceo" ? undefined : req.person!.personId;
+      if (hostId !== undefined && (await getMeetingRow(q, req.params.id))?.lead_dri_id !== hostId)
+        return fail(reply, 404, "MEETING_NOT_FOUND", "Meeting 不存在");
       try {
         const upload = await req.file({ limits: { fileSize: maxTranscriptBytes, files: 1 } });
         if (!upload) return fail(reply, 400, "INVALID_TRANSCRIPT", "multipart 缺少 Transcript 文件");
@@ -36,16 +40,21 @@ export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void
         const encoding = (err as { code?: string }).code === "ERR_ENCODING_INVALID_ENCODED_DATA";
         return fail(reply, 400, encoding ? "INVALID_TRANSCRIPT_ENCODING" : "INVALID_TRANSCRIPT", encoding ? "Transcript 不是合法 UTF-8" : "Transcript 不是合法 JSON");
       }
-      return respondTranscriptImport(reply, await importTranscript(pool, outcome, env.sessionSecret, req.params.id, parsed));
+      const result = await importTranscript(pool, outcome, env.sessionSecret, req.params.id, parsed, hostId);
+      return respondTranscriptImport(reply, result.status === 200 && hostId !== undefined
+        ? { ...result, card: projectMemberMeetingCardFromCard(result.card, hostId) } : result);
     },
   );
 
   // 妙记 Markdown 只生成 Meeting 内嵌候选；确认是独立 opaque Action，不在此直接写 Transcript。
   app.post(
     "/api/meetings/:id/transcript-candidate",
-    { preHandler: requireCEO, schema: { params: idParams }, bodyLimit: maxTranscriptBytes * 2 },
+    { preHandler: requirePerson, schema: { params: idParams }, bodyLimit: maxTranscriptBytes * 2 },
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       let file: { fileName: string; buffer: Buffer } | null = null;
+      const hostId = req.person!.role === "ceo" ? undefined : req.person!.personId;
+      if (hostId !== undefined && (await getMeetingRow(q, req.params.id))?.lead_dri_id !== hostId)
+        return fail(reply, 404, "MEETING_NOT_FOUND", "Meeting 不存在");
       try {
         const upload = await req.file({ limits: { fileSize: maxTranscriptBytes, files: 1 } });
         if (!upload) return fail(reply, 400, "INVALID_TRANSCRIPT", "multipart 缺少会议记录文件");
@@ -58,8 +67,8 @@ export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void
         }
         throw err;
       }
-      const result = await createTranscriptCandidate(pool, companyMemory, env.sessionSecret, req.params.id, file);
-      if (result.status === 200) return { cards: [result.card] };
+      const result = await createTranscriptCandidate(pool, companyMemory, env.sessionSecret, req.params.id, file, hostId);
+      if (result.status === 200) return { cards: [hostId === undefined ? result.card : projectMemberMeetingCardFromCard(result.card, hostId)] };
       return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
     },
   );

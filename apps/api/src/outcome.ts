@@ -464,9 +464,10 @@ export async function importTranscript(
   secret: string,
   meetingId: string,
   raw: unknown,
+  hostId?: string,
 ): Promise<TranscriptImportResult> {
   const meeting = await getMeetingRow(pool.query.bind(pool), meetingId);
-  if (!meeting) return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
+  if (!meeting || (hostId !== undefined && meeting.lead_dri_id !== hostId)) return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
   const validated = validateTranscript(raw, meeting);
   if (!validated.ok) return { status: 400, code: validated.code, message: validated.message, fieldErrors: validated.fieldErrors };
 
@@ -480,6 +481,10 @@ export async function importTranscript(
       return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
     }
     const row = locked.rows[0];
+    if (hostId !== undefined && row.lead_dri_id !== hostId) {
+      await client.query("ROLLBACK");
+      return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
+    }
     if (row.transcript) {
       await client.query("ROLLBACK");
       return { status: 409, code: "TRANSCRIPT_ALREADY_IMPORTED", message: "Transcript 已存在，替换必须走危险 Action" };
@@ -491,7 +496,7 @@ export async function importTranscript(
     const transcript: TStoredTranscript = { ...validated.value, importedAt: now };
     await client.query(
       `UPDATE meetings
-          SET transcript = $2::jsonb, outcome = $3::jsonb, status = 'held', version = version + 1, updated_at = now()
+          SET transcript = $2::jsonb, transcript_candidate = NULL, outcome = $3::jsonb, status = 'held', version = version + 1, updated_at = now()
         WHERE id = $1`,
       [meetingId, JSON.stringify(transcript), JSON.stringify(pendingOutcome(new Date(now)))],
     );
