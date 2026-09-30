@@ -46,6 +46,7 @@ import { registerRadarRoutes } from "./routes/radar.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerMeetingRoutes } from "./routes/meetings.js";
 import { registerMaterialRoutes } from "./routes/materials.js";
+import type { MaterialAnnotationAgent } from "./materialAnnotationAgent.js";
 import { registerActionRoutes } from "./routes/actions.js";
 import { registerDriRoutes } from "./routes/dri.js";
 import { registerSystemRoutes } from "./routes/system.js";
@@ -121,6 +122,7 @@ export async function buildApp({
   voiceprintDeps = realVoiceprintDeps,
   dictationDeps = realDictationDeps,
   threadIntroAgent,
+  materialAnnotationAgent,
   webSearch,
   outlets,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
@@ -148,6 +150,7 @@ export async function buildApp({
   /** 输入框语音转文字用的 ffmpeg 与火山极速版；缺省为真实实现（测试注入假实现）。 */
   dictationDeps?: DictationDeps;
   threadIntroAgent?: ThreadIntroAgent;
+  materialAnnotationAgent?: MaterialAnnotationAgent;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
@@ -351,7 +354,7 @@ export async function buildApp({
   registerRadarRoutes(app, ctx);
   registerConversationRoutes(app, ctx);
   registerMeetingRoutes(app, ctx);
-  registerMaterialRoutes(app, ctx);
+  registerMaterialRoutes(app, ctx, materialAnnotationAgent);
   registerActionRoutes(app, ctx);
   registerDriRoutes(app, ctx);
   registerOntologyRoutes(app, ctx);

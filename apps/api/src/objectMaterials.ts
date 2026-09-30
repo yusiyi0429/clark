@@ -9,6 +9,8 @@ import { MAX_MATERIAL_HTML_CHARS, MAX_MATERIAL_TEXT_CHARS } from "./materialPars
 import { moveStagedFile } from "./meetingMaterials.js";
 import { diffHtmlMaterialLines, diffMaterialBlocks, splitMaterialBlocks } from "./materialDiff.js";
 import { isActiveMember, postCoAgentMessage, type ThreadRef } from "./threads.js";
+import { annotationRef, annotationView, listMaterialProposals, type AnnotationRow } from "./materialFeedback.js";
+import { materialHistory, type MaterialHistoryRevision } from "./materialHistory.js";
 
 export class ObjectMaterialError extends Error {
   constructor(public status: number, public code: string, message: string, public version?: number) { super(message); }
@@ -18,11 +20,14 @@ export type MaterialViewer = { personId: string; role: "ceo" | "member"; display
 type MaterialRow = { id: string; object_type: TMaterialObjectType; object_id: string; file_name: string;
   format: "markdown" | "pdf" | "docx" | "html"; size_bytes: number; page_count: number | null; storage_key: string | null;
   origin: "upload" | "agent"; owner_id: string; current_version: number; created_at: Date; updated_at: Date;
-  revision_version: number | null; revision_by: string | null; revision_summary: string | null; revision_at: Date | null };
-type RevisionRow = { version: number; requested_by: string | null; summary: string | null; created_at: Date };
+  revision_version: number | null; revision_by: string | null; revision_summary: string | null; revision_at: Date | null;
+  annotation_id: string | null; quote: string; annotation_body: string; author_id: string };
+type RevisionRow = { version: number; body: string; requested_by: string | null; summary: string | null; created_at: Date;
+  annotation_id: string | null; quote: string; annotation_body: string; author_id: string };
 const COLUMNS = `m.*, r.version AS revision_version, r.requested_by AS revision_by,
-  r.summary AS revision_summary, r.created_at AS revision_at`;
-const JOIN = `LEFT JOIN material_revisions r ON r.material_id=m.id AND r.version=m.current_version`;
+  r.summary AS revision_summary, r.created_at AS revision_at, r.annotation_id, a.quote, a.body AS annotation_body, a.author_id`;
+const JOIN = `LEFT JOIN material_revisions r ON r.material_id=m.id AND r.version=m.current_version
+  LEFT JOIN material_annotations a ON a.id=r.annotation_id`;
 
 export async function canAccessObjectMaterials(q: Query, ref: ThreadRef, viewer: MaterialViewer): Promise<boolean> {
   if (await isActiveMember(q, ref, viewer.personId)) return true;
@@ -45,7 +50,7 @@ export async function requireMaterialAccess(q: Query, ref: ThreadRef, viewer: Ma
 function person(id: string, names: Map<string, string>) { return { personId: id, displayName: names.get(id) ?? id }; }
 function revision(row: RevisionRow, names: Map<string, string>) {
   return { version: row.version, requestedBy: row.requested_by ? person(row.requested_by, names) : null,
-    summary: row.summary, at: row.created_at.toISOString() };
+    summary: row.summary, at: row.created_at.toISOString(), annotation: annotationRef(row, names) };
 }
 function view(row: MaterialRow, viewer: MaterialViewer, names: Map<string, string>): TMaterialView {
   return { id: row.id, objectType: row.object_type, objectId: row.object_id, fileName: row.file_name,
@@ -55,7 +60,7 @@ function view(row: MaterialRow, viewer: MaterialViewer, names: Map<string, strin
     editable: row.format === "markdown" || row.format === "html", canDelete: row.owner_id === viewer.personId,
     lastRevision: (row.current_version > 1 || row.origin === "agent") && row.revision_at ? {
       version: row.revision_version!, requestedBy: person(row.revision_by!, names),
-      summary: row.revision_summary!, at: row.revision_at.toISOString(),
+      summary: row.revision_summary!, at: row.revision_at.toISOString(), annotation: annotationRef(row, names),
     } : null };
 }
 async function rowFor(q: Query, ref: ThreadRef, id: string): Promise<MaterialRow> {
@@ -83,25 +88,36 @@ export async function readObjectMaterial(q: Query, ref: ThreadRef, id: string, v
   return { body: result.rows[0].body as string, version: selectedVersion, currentVersion: row.current_version,
     fileName: row.file_name, format: row.format, storageKey: row.storage_key };
 }
+export async function materialRevisionHistory(q: Query, id: string, names: Map<string, string>): Promise<MaterialHistoryRevision[]> {
+  const result = await q(`SELECT r.*, a.quote, a.body AS annotation_body, a.author_id FROM material_revisions r
+    LEFT JOIN material_annotations a ON a.id=r.annotation_id WHERE r.material_id=$1 ORDER BY r.version`, [id]);
+  return (result.rows as RevisionRow[]).map((row) => ({ ...revision(row, names), body: row.body }));
+}
 export async function getObjectMaterialDetail(q: Query, ref: ThreadRef, id: string, viewer: MaterialViewer,
   names: Map<string, string>, version?: number): Promise<TMaterialDetailResponse> {
   await requireMaterialAccess(q, ref, viewer);
   const row = await rowFor(q, ref, id);
-  const revisions = await q("SELECT version,requested_by,summary,created_at FROM material_revisions WHERE material_id=$1 ORDER BY version DESC", [id]);
-  const selected = (revisions.rows as RevisionRow[]).find((item) => item.version === (version ?? row.current_version));
+  const revisions = (await materialRevisionHistory(q, id, names)).filter((item) => item.version <= row.current_version);
+  const selected = revisions.find((item) => item.version === (version ?? row.current_version));
   if (!selected) throw new ObjectMaterialError(404, "MATERIAL_REVISION_NOT_FOUND", "材料版本不存在");
-  const contents = await q("SELECT version,body FROM material_revisions WHERE material_id=$1 AND version IN ($2,$3)",
-    [id, selected.version, selected.version - 1]);
-  const bodies = new Map((contents.rows as { version: number; body: string }[]).map((item) => [item.version, item.body]));
-  const currentBody = bodies.get(selected.version)!;
-  const previousBody = bodies.get(selected.version - 1);
-  return { material: view(row, viewer, names), version: selected.version, latest: selected.version === row.current_version,
-    revision: revision(selected, names), revisions: (revisions.rows as RevisionRow[]).map((item) => revision(item, names)),
-    blocks: row.format === "html" ? (previousBody === undefined ? []
+  const currentBody = selected.body;
+  const previousBody = revisions.find((item) => item.version === selected.version - 1)?.body;
+  const latest = selected.version === row.current_version;
+  const history = latest && (row.format === "markdown" || row.format === "html") ? materialHistory(revisions, row.format) : null;
+  const blocks = row.format === "html" ? (previousBody === undefined ? []
       : diffHtmlMaterialLines(previousBody, currentBody).filter((block) => block.change !== null))
       : row.format !== "markdown" ? null : previousBody !== undefined
         ? diffMaterialBlocks(previousBody, currentBody)
-        : splitMaterialBlocks(currentBody).map((text) => ({ text, change: null })) };
+        : splitMaterialBlocks(currentBody).map((text) => ({ text, change: null }));
+  const annotations = await q("SELECT * FROM material_annotations WHERE material_id=$1 ORDER BY created_at DESC,id DESC", [id]);
+  const views = revisions.map(({ body: _body, ...item }) => item).reverse();
+  let blockIndex = 0;
+  return { material: view(row, viewer, names), version: selected.version, latest,
+    revision: views.find((item) => item.version === selected.version)!, revisions: views,
+    blocks: blocks?.map((block) => ({ ...block, history: block.change?.kind === "removed" ? [] : history?.histories[blockIndex++] ?? [] })) ?? null,
+    annotations: (annotations.rows as AnnotationRow[]).map((item) => annotationView(item, names)),
+    removed: history?.removed.map(({ previous: _previous, index: _index, ...item }) => item) ?? [],
+    proposals: latest ? await listMaterialProposals(q, id, viewer.personId, names) : [] };
 }
 
 export async function uploadObjectMaterial(pool: Pool, ref: ThreadRef, viewer: MaterialViewer,
@@ -147,11 +163,12 @@ export async function deleteObjectMaterial(q: Query, ref: ThreadRef, id: string,
 
 export type MaterialEdit = { find: string; replace: string } | { append: string };
 export async function editObjectMaterial(pool: Pool, ref: ThreadRef, id: string, viewer: MaterialViewer,
-  baseVersion: number, edits: MaterialEdit[], summary: string, runId: string | null): Promise<{ version: number; changed: number }> {
-  const client = await pool.connect();
-  const q = client.query.bind(client) as Query;
+  baseVersion: number, edits: MaterialEdit[], summary: string, runId: string | null,
+  transaction?: { query: Query; annotationId?: string }): Promise<{ version: number; changed: number }> {
+  const client = transaction ? null : await pool.connect();
+  const q = transaction?.query ?? client!.query.bind(client!) as Query;
   try {
-    await client.query("BEGIN");
+    if (client) await client.query("BEGIN");
     await requireMaterialAccess(q, ref, viewer);
     const row = await rowFor(q, ref, id);
     await q("SELECT id FROM object_materials WHERE id=$1 FOR UPDATE", [id]);
@@ -184,14 +201,14 @@ export async function editObjectMaterial(pool: Pool, ref: ThreadRef, id: string,
     }
     const version = current.current_version + 1;
     const now = new Date();
-    await q("INSERT INTO material_revisions(material_id,version,body,requested_by,summary,agent_run_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)",
-      [id, version, body, viewer.personId, summary.trim(), runId, now]);
+    await q("INSERT INTO material_revisions(material_id,version,body,requested_by,summary,agent_run_id,created_at,annotation_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+      [id, version, body, viewer.personId, summary.trim(), runId, now, transaction?.annotationId ?? null]);
     await q("UPDATE object_materials SET current_version=$2,updated_at=$3 WHERE id=$1", [id, version, now]);
     await postCoAgentMessage(q, ref, `按${viewer.displayName}的要求改了《${row.file_name}》：${summary.trim()}`, [viewer.personId]);
-    await client.query("COMMIT");
+    if (client) await client.query("COMMIT");
     return { version, changed: edits.length };
-  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
-  finally { client.release(); }
+  } catch (error) { if (client) await client.query("ROLLBACK").catch(() => undefined); throw error; }
+  finally { client?.release(); }
 }
 export async function createObjectMaterial(pool: Pool, ref: ThreadRef, viewer: MaterialViewer,
   title: string, body: string, summary: string, runId: string | null): Promise<{ id: string; version: number }> {

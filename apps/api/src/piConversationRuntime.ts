@@ -39,6 +39,7 @@ import type { Pool } from "pg";
 import { createObjectMaterial, editObjectMaterial, listObjectMaterials, readObjectMaterial, ObjectMaterialError } from "./objectMaterials.js";
 import { personDisplayNames } from "./people.js";
 import { proposeMonthlyReviewSuggestion } from "./monthlyReviews.js";
+import { proposeMaterialEdit } from "./materialFeedback.js";
 
 const SYSTEM_PROMPT = `# 角色
 
@@ -64,7 +65,7 @@ const SYSTEM_PROMPT = `# 角色
 
 你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
 
-唯一例外是对方明确要求修改或新写当前议题、执行事项、会议的群组材料时，可以用 edit_material、create_material；只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
+材料是上述只读边界的例外。对方明确要求「改」「写进去」或新写当前议题、执行事项、会议的群组材料时，用 edit_material、create_material 直接执行。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由本人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
 
 需要 CEO 做决定时，直接说明该决定什么、代价是什么，由 CEO 自己执行。CEO 的要求超出只读权限时，说明边界并给出可执行的下一步。
 
@@ -120,7 +121,7 @@ function driSystemPrompt(displayName: string, personalCard = false): string {
 
 你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，不形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
 
-唯一例外是对方明确要求修改或新写当前议题、执行事项、会议的群组材料时，可以用 edit_material、create_material；只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。改前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
+材料是上述只读边界的例外。对方明确要求「改」「写进去」或新写当前议题、执行事项、会议的群组材料时，用 edit_material、create_material 直接执行。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由本人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
 
 你看不到 CEO 的决策面，包括战场总览和待 CEO 决策的议题。被问到这些时直接说明看不到，不要推测。要求超出只读权限时，说明边界并给出可执行的下一步。
 
@@ -456,6 +457,10 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
               summary: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
             execute: async (_id, args) => result(() => createObjectMaterial(pool, ref, viewer,
               args.title, args.body, args.summary, input.runId ?? null)) }),
+          defineTool({ name: "propose_material_edit", label: "提议修改材料", description: "双方就当前材料的具体改法达成明确共识时提议；本人点『按这个改』才生效。先读最新版，find 必须唯一",
+            parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), summary: Type.String({ minLength: 1, maxLength: 200 }),
+              edits: Type.Array(Type.Object({ find: Type.String({ minLength: 1 }), replace: Type.String() }, { additionalProperties: false }), { minItems: 1, maxItems: 20 }) }, { additionalProperties: false }),
+            execute: async (_id, args) => result(() => proposeMaterialEdit(pool, ref, args.materialId, viewer, args.summary, args.edits)) }),
         ];
       })() : [];
       // 复盘项对话：agent 只能给某一栏提改写建议，负责人点「采用」才写入；不经过 Action 签名，仓储函数锁内校验

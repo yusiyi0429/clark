@@ -3887,6 +3887,301 @@
         }
       }
     },
+    "/api/materials/{objectType}/{objectId}/{materialId}/annotations": {
+      "post": {
+        "operationId": "createMaterialAnnotation",
+        "summary": "选中材料里的一段文字写批注；Markdown / HTML 写完即排队让 Co-Agent 按批注改（同一份材料按顺序一条条改），PDF / Word 只留批注；按 clientId 幂等",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMaterialAnnotationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "批注",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateMaterialAnnotationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/materials/{objectType}/{objectId}/{materialId}/restore": {
+      "post": {
+        "operationId": "restoreMaterialRemoved",
+        "summary": "把垃圾篓里的一段插回原位，存成新的一版；version 不是最新 409",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreMaterialRemovedRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "恢复后的最新详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/materials/{objectType}/{objectId}/{materialId}/proposals/{proposalId}": {
+      "post": {
+        "operationId": "decideMaterialEditProposal",
+        "summary": "对 Co-Agent 的修改提议点「按这个改」或「忽略」；只有提议对象本人能处理；材料已被改过则 409（提议变 stale）",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "proposalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideMaterialEditProposalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "处理后的最新详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/materials/{objectType}/{objectId}/{materialId}/file": {
       "get": {
         "operationId": "downloadMaterial",
@@ -25733,7 +26028,8 @@
                   "version",
                   "requestedBy",
                   "summary",
-                  "at"
+                  "at",
+                  "annotation"
                 ],
                 "properties": {
                   "version": {
@@ -25780,6 +26076,53 @@
                   "at": {
                     "minLength": 1,
                     "type": "string"
+                  },
+                  "annotation": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "quote",
+                          "body",
+                          "author"
+                        ],
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "quote": {
+                            "type": "string"
+                          },
+                          "body": {
+                            "type": "string"
+                          },
+                          "author": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "displayName"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               },
@@ -25935,7 +26278,8 @@
                         "version",
                         "requestedBy",
                         "summary",
-                        "at"
+                        "at",
+                        "annotation"
                       ],
                       "properties": {
                         "version": {
@@ -25982,6 +26326,53 @@
                         "at": {
                           "minLength": 1,
                           "type": "string"
+                        },
+                        "annotation": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "quote",
+                                "body",
+                                "author"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "quote": {
+                                  "type": "string"
+                                },
+                                "body": {
+                                  "type": "string"
+                                },
+                                "author": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "personId",
+                                    "displayName"
+                                  ],
+                                  "properties": {
+                                    "personId": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "displayName": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       }
                     },
@@ -26005,7 +26396,8 @@
           "version",
           "requestedBy",
           "summary",
-          "at"
+          "at",
+          "annotation"
         ],
         "properties": {
           "version": {
@@ -26052,6 +26444,53 @@
           "at": {
             "minLength": 1,
             "type": "string"
+          },
+          "annotation": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "quote",
+                  "body",
+                  "author"
+                ],
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "quote": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "author": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "displayName"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -26060,7 +26499,8 @@
         "type": "object",
         "required": [
           "text",
-          "change"
+          "change",
+          "history"
         ],
         "properties": {
           "text": {
@@ -26139,6 +26579,119 @@
                 }
               }
             ]
+          },
+          "history": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "version",
+                "kind",
+                "before",
+                "requestedBy",
+                "at",
+                "annotation"
+              ],
+              "properties": {
+                "version": {
+                  "minimum": 2,
+                  "type": "integer"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "modified",
+                      "type": "string"
+                    },
+                    {
+                      "const": "added",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "before": {
+                  "type": "string"
+                },
+                "requestedBy": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "displayName"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "at": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "annotation": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "quote",
+                        "body",
+                        "author"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "quote": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "author": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "displayName"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "displayName": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -26151,7 +26704,10 @@
           "latest",
           "revision",
           "blocks",
-          "revisions"
+          "revisions",
+          "annotations",
+          "removed",
+          "proposals"
         ],
         "properties": {
           "material": {
@@ -26288,7 +26844,8 @@
                       "version",
                       "requestedBy",
                       "summary",
-                      "at"
+                      "at",
+                      "annotation"
                     ],
                     "properties": {
                       "version": {
@@ -26335,6 +26892,53 @@
                       "at": {
                         "minLength": 1,
                         "type": "string"
+                      },
+                      "annotation": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "quote",
+                              "body",
+                              "author"
+                            ],
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "quote": {
+                                "type": "string"
+                              },
+                              "body": {
+                                "type": "string"
+                              },
+                              "author": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "personId",
+                                  "displayName"
+                                ],
+                                "properties": {
+                                  "personId": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     }
                   },
@@ -26359,7 +26963,8 @@
               "version",
               "requestedBy",
               "summary",
-              "at"
+              "at",
+              "annotation"
             ],
             "properties": {
               "version": {
@@ -26406,6 +27011,53 @@
               "at": {
                 "minLength": 1,
                 "type": "string"
+              },
+              "annotation": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "quote",
+                      "body",
+                      "author"
+                    ],
+                    "properties": {
+                      "id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "quote": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "type": "string"
+                      },
+                      "author": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "personId",
+                          "displayName"
+                        ],
+                        "properties": {
+                          "personId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             }
           },
@@ -26418,7 +27070,8 @@
                   "type": "object",
                   "required": [
                     "text",
-                    "change"
+                    "change",
+                    "history"
                   ],
                   "properties": {
                     "text": {
@@ -26497,6 +27150,119 @@
                           }
                         }
                       ]
+                    },
+                    "history": {
+                      "maxItems": 5,
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "version",
+                          "kind",
+                          "before",
+                          "requestedBy",
+                          "at",
+                          "annotation"
+                        ],
+                        "properties": {
+                          "version": {
+                            "minimum": 2,
+                            "type": "integer"
+                          },
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "modified",
+                                "type": "string"
+                              },
+                              {
+                                "const": "added",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "before": {
+                            "type": "string"
+                          },
+                          "requestedBy": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "personId",
+                                  "displayName"
+                                ],
+                                "properties": {
+                                  "personId": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "annotation": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "id",
+                                  "quote",
+                                  "body",
+                                  "author"
+                                ],
+                                "properties": {
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "quote": {
+                                    "type": "string"
+                                  },
+                                  "body": {
+                                    "type": "string"
+                                  },
+                                  "author": {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "personId",
+                                      "displayName"
+                                    ],
+                                    "properties": {
+                                      "personId": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "displayName": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -26515,7 +27281,8 @@
                 "version",
                 "requestedBy",
                 "summary",
-                "at"
+                "at",
+                "annotation"
               ],
               "properties": {
                 "version": {
@@ -26562,9 +27329,875 @@
                 "at": {
                   "minLength": 1,
                   "type": "string"
+                },
+                "annotation": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "quote",
+                        "body",
+                        "author"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "quote": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "author": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "displayName"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "displayName": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
+          },
+          "annotations": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "materialId",
+                "version",
+                "quote",
+                "body",
+                "author",
+                "status",
+                "appliedVersion",
+                "note",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "materialId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "quote": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "author": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "queued",
+                      "type": "string"
+                    },
+                    {
+                      "const": "applying",
+                      "type": "string"
+                    },
+                    {
+                      "const": "applied",
+                      "type": "string"
+                    },
+                    {
+                      "const": "no_change",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "kept",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "appliedVersion": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "version",
+                "text",
+                "requestedBy",
+                "at",
+                "annotation",
+                "restorable"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 2,
+                  "type": "integer"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "requestedBy": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "displayName"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "at": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "annotation": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "quote",
+                        "body",
+                        "author"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "quote": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "author": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "displayName"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "displayName": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "restorable": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "proposals": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "materialId",
+                "version",
+                "summary",
+                "changes",
+                "proposedFor",
+                "status",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "materialId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "summary": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "changes": {
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "before",
+                      "after"
+                    ],
+                    "properties": {
+                      "before": {
+                        "type": "string"
+                      },
+                      "after": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "proposedFor": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "applied",
+                      "type": "string"
+                    },
+                    {
+                      "const": "dismissed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "stale",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MaterialAnnotationView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "materialId",
+          "version",
+          "quote",
+          "body",
+          "author",
+          "status",
+          "appliedVersion",
+          "note",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "materialId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "quote": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "author": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "displayName"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "displayName": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "queued",
+                "type": "string"
+              },
+              {
+                "const": "applying",
+                "type": "string"
+              },
+              {
+                "const": "applied",
+                "type": "string"
+              },
+              {
+                "const": "no_change",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              },
+              {
+                "const": "kept",
+                "type": "string"
+              }
+            ]
+          },
+          "appliedVersion": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "CreateMaterialAnnotationRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientId",
+          "version",
+          "quote",
+          "prefix",
+          "suffix",
+          "body"
+        ],
+        "properties": {
+          "clientId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "quote": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "prefix": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "suffix": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "body": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S",
+            "type": "string"
+          }
+        }
+      },
+      "CreateMaterialAnnotationResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "annotation"
+        ],
+        "properties": {
+          "annotation": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "materialId",
+              "version",
+              "quote",
+              "body",
+              "author",
+              "status",
+              "appliedVersion",
+              "note",
+              "createdAt"
+            ],
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "materialId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "quote": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              },
+              "author": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "displayName"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "queued",
+                    "type": "string"
+                  },
+                  {
+                    "const": "applying",
+                    "type": "string"
+                  },
+                  {
+                    "const": "applied",
+                    "type": "string"
+                  },
+                  {
+                    "const": "no_change",
+                    "type": "string"
+                  },
+                  {
+                    "const": "failed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "kept",
+                    "type": "string"
+                  }
+                ]
+              },
+              "appliedVersion": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "createdAt": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "MaterialRemovedView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "text",
+          "requestedBy",
+          "at",
+          "annotation",
+          "restorable"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "minimum": 2,
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          },
+          "requestedBy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "displayName"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "at": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "annotation": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "quote",
+                  "body",
+                  "author"
+                ],
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "quote": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "author": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "displayName"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "restorable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RestoreMaterialRemovedRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "removedId",
+          "version"
+        ],
+        "properties": {
+          "removedId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        }
+      },
+      "MaterialEditProposalView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "materialId",
+          "version",
+          "summary",
+          "changes",
+          "proposedFor",
+          "status",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "materialId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "summary": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "changes": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "before",
+                "after"
+              ],
+              "properties": {
+                "before": {
+                  "type": "string"
+                },
+                "after": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "proposedFor": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "displayName"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "displayName": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "pending",
+                "type": "string"
+              },
+              {
+                "const": "applied",
+                "type": "string"
+              },
+              {
+                "const": "dismissed",
+                "type": "string"
+              },
+              {
+                "const": "stale",
+                "type": "string"
+              }
+            ]
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "DecideMaterialEditProposalRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "const": "apply",
+                "type": "string"
+              },
+              {
+                "const": "dismiss",
+                "type": "string"
+              }
+            ]
           }
         }
       },

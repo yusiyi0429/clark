@@ -157,6 +157,8 @@ import {
   MaterialRevisionView,
   MaterialBlock,
   MaterialDetailResponse,
+  MaterialAnnotationView, CreateMaterialAnnotationRequest, CreateMaterialAnnotationResponse, MaterialRemovedView,
+  RestoreMaterialRemovedRequest, MaterialEditProposalView, DecideMaterialEditProposalRequest,
   WeeklyProgressResponse,
 } from "./index.js";
 
@@ -1025,6 +1027,46 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "403": errorResponse,
             "404": errorResponse,
           },
+        },
+      },
+      "/api/materials/{objectType}/{objectId}/{materialId}/annotations": {
+        post: {
+          operationId: "createMaterialAnnotation",
+          summary: "选中材料里的一段文字写批注；Markdown / HTML 写完即排队让 Co-Agent 按批注改（同一份材料按顺序一条条改），PDF / Word 只留批注；按 clientId 幂等",
+          parameters: [
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
+            { name: "objectId", in: "path", required: true, schema: { type: "string" } },
+            { name: "materialId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreateMaterialAnnotationRequest" }),
+          responses: { "200": { description: "批注", content: { "application/json": { schema: { $ref: "#/components/schemas/CreateMaterialAnnotationResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/materials/{objectType}/{objectId}/{materialId}/restore": {
+        post: {
+          operationId: "restoreMaterialRemoved",
+          summary: "把垃圾篓里的一段插回原位，存成新的一版；version 不是最新 409",
+          parameters: [
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
+            { name: "objectId", in: "path", required: true, schema: { type: "string" } },
+            { name: "materialId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: jsonBody({ $ref: "#/components/schemas/RestoreMaterialRemovedRequest" }),
+          responses: { "200": { description: "恢复后的最新详情", content: { "application/json": { schema: { $ref: "#/components/schemas/MaterialDetailResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/materials/{objectType}/{objectId}/{materialId}/proposals/{proposalId}": {
+        post: {
+          operationId: "decideMaterialEditProposal",
+          summary: "对 Co-Agent 的修改提议点「按这个改」或「忽略」；只有提议对象本人能处理；材料已被改过则 409（提议变 stale）",
+          parameters: [
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
+            { name: "objectId", in: "path", required: true, schema: { type: "string" } },
+            { name: "materialId", in: "path", required: true, schema: { type: "string" } },
+            { name: "proposalId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: jsonBody({ $ref: "#/components/schemas/DecideMaterialEditProposalRequest" }),
+          responses: { "200": { description: "处理后的最新详情", content: { "application/json": { schema: { $ref: "#/components/schemas/MaterialDetailResponse" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/materials/{objectType}/{objectId}/{materialId}/file": {
@@ -2052,6 +2094,13 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MaterialRevisionView: MaterialRevisionView as JsonSchema,
         MaterialBlock: MaterialBlock as JsonSchema,
         MaterialDetailResponse: MaterialDetailResponse as JsonSchema,
+        MaterialAnnotationView: MaterialAnnotationView as JsonSchema,
+        CreateMaterialAnnotationRequest: CreateMaterialAnnotationRequest as JsonSchema,
+        CreateMaterialAnnotationResponse: CreateMaterialAnnotationResponse as JsonSchema,
+        MaterialRemovedView: MaterialRemovedView as JsonSchema,
+        RestoreMaterialRemovedRequest: RestoreMaterialRemovedRequest as JsonSchema,
+        MaterialEditProposalView: MaterialEditProposalView as JsonSchema,
+        DecideMaterialEditProposalRequest: DecideMaterialEditProposalRequest as JsonSchema,
         WeeklyProgressResponse: WeeklyProgressResponse as JsonSchema,
         ListPersonalTokensResponse: ListPersonalTokensResponse as JsonSchema,
         CreatePersonalTokenRequest: CreatePersonalTokenRequest as JsonSchema,

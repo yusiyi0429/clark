@@ -14,6 +14,15 @@ const MaterialPerson = Type.Object(
   { additionalProperties: false },
 );
 
+/** 这一版是按哪条批注改的（批注原文与意见）；不是按批注改的为 null。 */
+export const MaterialAnnotationRef = Type.Union([
+  Type.Object(
+    { id: Type.String({ minLength: 1 }), quote: Type.String(), body: Type.String(), author: MaterialPerson },
+    { additionalProperties: false },
+  ),
+  Type.Null(),
+]);
+
 /** 某一版是谁让 Agent 改的；上传的第 1 版 requestedBy、summary 为 null。 */
 export const MaterialRevisionView = Type.Object(
   {
@@ -22,6 +31,7 @@ export const MaterialRevisionView = Type.Object(
     summary: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
     /** ISO 8601 */
     at: Type.String({ minLength: 1 }),
+    annotation: MaterialAnnotationRef,
   },
   { additionalProperties: false },
 );
@@ -72,8 +82,103 @@ export const MaterialBlockChange = Type.Union([
   Type.Object({ kind: Type.Literal("removed"), before: Type.String() }, { additionalProperties: false }),
 ]);
 
+/** 一段文字的一次改动（悬停时显示）：改之前的原文、谁让改的、按哪条批注。 */
+export const MaterialBlockHistoryEntry = Type.Object(
+  {
+    version: Type.Integer({ minimum: 2 }),
+    kind: Type.Union([Type.Literal("modified"), Type.Literal("added")]),
+    /** 改之前的原文；added 为空字符串。 */
+    before: Type.String(),
+    requestedBy: Type.Union([MaterialPerson, Type.Null()]),
+    at: Type.String({ minLength: 1 }),
+    annotation: MaterialAnnotationRef,
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * change 是这一版相对上一版；history 是这段文字历次的改动（新的在前，最多 5 条，只在看最新版时给，没改过为空数组）。
+ * 删掉的块不再在正文里提示，页面直接不显示，统一进 removed（垃圾篓）。
+ */
 export const MaterialBlock = Type.Object(
-  { text: Type.String(), change: MaterialBlockChange },
+  { text: Type.String(), change: MaterialBlockChange, history: Type.Array(MaterialBlockHistoryEntry, { maxItems: 5 }) },
+  { additionalProperties: false },
+);
+
+/** 批注状态：queued 排队等 Co-Agent 改 → applying 改着 → applied 改完（appliedVersion）/ no_change 看过不用改 / failed；kept：只读材料（PDF、Word），只留批注。 */
+export const MaterialAnnotationStatus = Type.Union([
+  Type.Literal("queued"), Type.Literal("applying"), Type.Literal("applied"),
+  Type.Literal("no_change"), Type.Literal("failed"), Type.Literal("kept"),
+]);
+
+export const MaterialAnnotationView = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    materialId: Type.String({ minLength: 1 }),
+    /** 写批注时看的版本。 */
+    version: Type.Integer({ minimum: 1 }),
+    quote: Type.String(),
+    body: Type.String(),
+    author: MaterialPerson,
+    status: MaterialAnnotationStatus,
+    appliedVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+    /** no_change 时是 Co-Agent 的一句说明；failed 时是失败原因。 */
+    note: Type.Union([Type.String(), Type.Null()]),
+    createdAt: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+/** 选中材料里的一段文字写批注；prefix / suffix 是选中处前后各最多 200 字，用来在原文里定位。 */
+export const CreateMaterialAnnotationRequest = Type.Object(
+  {
+    clientId: Type.String({ format: "uuid" }),
+    version: Type.Integer({ minimum: 1 }),
+    quote: Type.String({ minLength: 1, maxLength: 2000 }),
+    prefix: Type.String({ maxLength: 200 }),
+    suffix: Type.String({ maxLength: 200 }),
+    body: Type.String({ minLength: 1, maxLength: 2000, pattern: "\\S" }),
+  },
+  { additionalProperties: false },
+);
+export const CreateMaterialAnnotationResponse = Type.Object({ annotation: MaterialAnnotationView }, { additionalProperties: false });
+
+/** 垃圾篓里的一段：哪一版删掉的、谁让删的、按哪条批注；restorable 为 false 时（例如材料已只读）不给恢复。 */
+export const MaterialRemovedView = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    version: Type.Integer({ minimum: 2 }),
+    text: Type.String(),
+    requestedBy: Type.Union([MaterialPerson, Type.Null()]),
+    at: Type.String({ minLength: 1 }),
+    annotation: MaterialAnnotationRef,
+    restorable: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+/** 恢复一段被删的文字：插回原来的位置（跟在它原来前一段后面），存成新的一版。version 是当前最新版，旧了返回 409。 */
+export const RestoreMaterialRemovedRequest = Type.Object(
+  { removedId: Type.String({ minLength: 1 }), version: Type.Integer({ minimum: 1 }) },
+  { additionalProperties: false },
+);
+
+/** 对话里达成共识后 Co-Agent 的修改提议：显示在材料上方，点「按这个改」才改；材料已被别人改过则 stale。 */
+export const MaterialEditProposalView = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    materialId: Type.String({ minLength: 1 }),
+    version: Type.Integer({ minimum: 1 }),
+    summary: Type.String({ minLength: 1, maxLength: 200 }),
+    /** 预览：每处改动的原文与改后（最多 10 处）。 */
+    changes: Type.Array(Type.Object({ before: Type.String(), after: Type.String() }, { additionalProperties: false }), { maxItems: 10 }),
+    proposedFor: MaterialPerson,
+    status: Type.Union([Type.Literal("pending"), Type.Literal("applied"), Type.Literal("dismissed"), Type.Literal("stale")]),
+    createdAt: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+export const DecideMaterialEditProposalRequest = Type.Object(
+  { decision: Type.Union([Type.Literal("apply"), Type.Literal("dismiss")]) },
   { additionalProperties: false },
 );
 
@@ -88,6 +193,12 @@ export const MaterialDetailResponse = Type.Object(
     blocks: Type.Union([Type.Array(MaterialBlock), Type.Null()]),
     /** 新的在前。 */
     revisions: Type.Array(MaterialRevisionView),
+    /** 这份材料上的批注，新的在前。 */
+    annotations: Type.Array(MaterialAnnotationView),
+    /** 垃圾篓：历次被删掉的段落，新的在前（只在看最新版时给；PDF、Word 为空数组）。 */
+    removed: Type.Array(MaterialRemovedView),
+    /** 当前看这份材料的人名下待确认的修改提议（只在看最新版时给）。 */
+    proposals: Type.Array(MaterialEditProposalView),
   },
   { additionalProperties: false },
 );
@@ -101,3 +212,13 @@ export type TMaterialChangeSpan = Static<typeof MaterialChangeSpan>;
 export type TMaterialBlockChange = Static<typeof MaterialBlockChange>;
 export type TMaterialBlock = Static<typeof MaterialBlock>;
 export type TMaterialDetailResponse = Static<typeof MaterialDetailResponse>;
+export type TMaterialAnnotationRef = Static<typeof MaterialAnnotationRef>;
+export type TMaterialBlockHistoryEntry = Static<typeof MaterialBlockHistoryEntry>;
+export type TMaterialAnnotationStatus = Static<typeof MaterialAnnotationStatus>;
+export type TMaterialAnnotationView = Static<typeof MaterialAnnotationView>;
+export type TCreateMaterialAnnotationRequest = Static<typeof CreateMaterialAnnotationRequest>;
+export type TCreateMaterialAnnotationResponse = Static<typeof CreateMaterialAnnotationResponse>;
+export type TMaterialRemovedView = Static<typeof MaterialRemovedView>;
+export type TRestoreMaterialRemovedRequest = Static<typeof RestoreMaterialRemovedRequest>;
+export type TMaterialEditProposalView = Static<typeof MaterialEditProposalView>;
+export type TDecideMaterialEditProposalRequest = Static<typeof DecideMaterialEditProposalRequest>;

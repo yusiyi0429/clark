@@ -146,6 +146,15 @@ async function main() {
     },
   }, {
     monthlyNow: appNow,
+    // 材料批注：时间机器没有模型，演示规则——批注写「改成 X」就把选中的文字换成 X，写「删掉 / 删除」就删掉，其他说看不懂。
+    materialAnnotationAgent: { async generate(input) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const target = input.source.includes(input.quote) && input.source.split(input.quote).length === 2 ? input.quote : null;
+      const replace = /^(?:请)?(?:改成|改为|换成)(.+)$/s.exec(input.body.trim())?.[1]?.trim();
+      if (target && replace) return { candidate: { edits: [{ find: target, replace }], summary: `（演示）按批注改为「${replace.slice(0, 20)}」`, noChange: null } };
+      if (target && /删掉|删除|去掉/.test(input.body)) return { candidate: { edits: [{ find: target, replace: "" }], summary: "（演示）按批注删除", noChange: null } };
+      return { candidate: { edits: [], summary: "（演示）没有修改", noChange: target ? "（演示 Agent 只懂「改成…」和「删掉」）" : "（演示）在最新版里找不到选中的原文" } };
+    } },
     // 时间机器不连模型：进群介绍走线上同样的兜底说明，不用测试里的假话术。
     threadIntroAgent: { async generate() { throw new Error("时间机器没有连接模型"); } },
     // 时间机器没有模型：「重新生成草案」用一份演示草案替换，好看到覆盖改动与核对的效果（失败路径由自动测试覆盖）。

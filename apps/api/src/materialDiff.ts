@@ -1,5 +1,7 @@
 import type { TMaterialBlock, TMaterialChangeSpan } from "@warmap/contracts";
 
+type DiffBlock = Omit<TMaterialBlock, "history">;
+
 /** Keep Markdown syntax in each block; whitespace between blocks belongs to layout, not the diff. */
 export function splitMaterialBlocks(body: string): string[] {
   const lines = body.replace(/\r\n/g, "\n").split("\n");
@@ -126,9 +128,9 @@ function similar(before: string, after: string): boolean {
   return (2 * lcsPairs(oldChars, newChars).length) / (oldChars.length + newChars.length) >= 0.5;
 }
 
-function diffBlocks(before: string[], after: string[]): TMaterialBlock[] {
+function diffBlocks(before: string[], after: string[]): DiffBlock[] {
   const matches = [...linePairs(before, after), [before.length, after.length] as [number, number]];
-  const blocks: TMaterialBlock[] = [];
+  const blocks: DiffBlock[] = [];
   let oldStart = 0, newStart = 0;
   for (const [oldEnd, newEnd] of matches) {
     if ((oldEnd - oldStart) * (newEnd - newStart) > 2_500) {
@@ -157,7 +159,7 @@ function diffBlocks(before: string[], after: string[]): TMaterialBlock[] {
   return blocks;
 }
 
-export function diffMaterialBlocks(beforeBody: string, afterBody: string): TMaterialBlock[] {
+export function diffMaterialBlocks(beforeBody: string, afterBody: string): DiffBlock[] {
   return diffBlocks(splitMaterialBlocks(beforeBody), splitMaterialBlocks(afterBody));
 }
 
@@ -165,6 +167,6 @@ export function splitHtmlMaterialLines(body: string): string[] {
   return body.replace(/\r\n/g, "\n").split("\n").filter((line) => line.trim().length > 0);
 }
 
-export function diffHtmlMaterialLines(beforeBody: string, afterBody: string): TMaterialBlock[] {
+export function diffHtmlMaterialLines(beforeBody: string, afterBody: string): DiffBlock[] {
   return diffBlocks(splitHtmlMaterialLines(beforeBody), splitHtmlMaterialLines(afterBody));
 }

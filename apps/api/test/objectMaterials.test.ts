@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createObjectMaterial, editObjectMaterial, listObjectMaterials, readObjectMaterial } from "../src/objectMaterials.js";
 import { parseMaterialBatch } from "../src/materialParser.js";
+import { injectMaterialSelection } from "../src/materialSelection.js";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 
 const multipart = (name: string, body: string, mime = "text/markdown") => {
@@ -193,11 +194,13 @@ describe("议题材料", () => {
       expect(preview.headers["content-type"]).toBe("text/html; charset=utf-8");
       expect(preview.headers["x-content-type-options"]).toBe("nosniff");
       expect(preview.headers["content-security-policy"]).toBe("sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' https:; style-src 'unsafe-inline' https:; img-src https: data: blob:; font-src https: data:; media-src https: data: blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'");
-      expect(preview.body).toContain("<p>新方案</p>\n<p>新增内容</p>\n</body>");
+      expect(preview.body).toContain("<p>新方案</p>\n<p>新增内容</p>\n<script>");
+      expect(preview.body).toContain("tianshu-material-selection");
       const old = await t.app.inject({ method: "GET", url: `${base}/${materialId}/preview?version=1`, headers: { cookie } });
-      expect(old.body).toBe(source);
+      expect(old.body).toBe(injectMaterialSelection(source));
       const download = await t.app.inject({ method: "GET", url: `${base}/${materialId}/file`, headers: { cookie } });
-      expect(download.body).toBe(preview.body);
+      expect(injectMaterialSelection(download.body)).toBe(preview.body);
+      expect(download.body).not.toContain("tianshu-material-selection");
       expect(download.headers["content-security-policy"]).toBe("sandbox");
       expect((await t.app.inject({ method: "GET", url: `${base}/${materialId}?version=1`, headers: { cookie } })).json()).toMatchObject({ version: 1, latest: false });
       for (const response of [
@@ -234,10 +237,10 @@ describe("议题材料", () => {
       await editObjectMaterial(t.pool, { objectType: "issue", objectId: issue.objectRef.id as string }, htm.json().id,
         { personId: TEST_CEO.personId, role: "ceo", displayName: "测试甲" }, 1, [{ append: "<p>后补</p>" }], "补充", randomUUID());
       const appended = await t.app.inject({ method: "GET", url: `/api/materials/issue/${issue.objectRef.id}/${htm.json().id}/preview`, headers: { cookie } });
-      expect(appended.body).toBe("<html><canvas></canvas></html>\n<p>后补</p>");
+      expect(appended.body).toBe(injectMaterialSelection("<html><canvas></canvas></html>\n<p>后补</p>"));
       const download = await t.app.inject({ method: "GET", url: `/api/materials/issue/${issue.objectRef.id}/${htm.json().id}/file`, headers: { cookie } });
       expect(download.headers["content-disposition"]).toContain("%E5%9B%BE%E8%A1%A8.html");
-      expect(download.body).toBe(appended.body);
+      expect(injectMaterialSelection(download.body)).toBe(appended.body);
       const large = await upload("过长.html", "<p>" + "x".repeat(2_000_000) + "</p>", "text/html");
       expect(large.statusCode).toBe(400);
       expect(large.json()).toMatchObject({ code: "MATERIAL_HTML_TOO_LARGE", message: "HTML 超过 2,000,000 字符，不能上传" });

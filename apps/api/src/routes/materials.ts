@@ -1,21 +1,38 @@
 import { Type } from "@sinclair/typebox";
-import { MaterialObjectType, ThreadObjectId } from "@warmap/contracts";
+import { CreateMaterialAnnotationRequest, DecideMaterialEditProposalRequest, MaterialObjectType, RestoreMaterialRemovedRequest, ThreadObjectId } from "@warmap/contracts";
 import { MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch, readStoredMaterial, type ObjectParsedMaterial } from "../materialParser.js";
 import { renderMaterialPreview } from "../materialPreview.js";
 import { personDisplayNames } from "../people.js";
 import { ObjectMaterialError, deleteObjectMaterial, getObjectMaterialDetail, listObjectMaterials, readObjectMaterial,
   uploadObjectMaterial, type MaterialViewer } from "../objectMaterials.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
+import { createMaterialAnnotation, decideMaterialProposal, restoreMaterialRemoved } from "../materialFeedback.js";
+import { createMaterialAnnotationAgent, type MaterialAnnotationAgent } from "../materialAnnotationAgent.js";
+import { createMaterialAnnotationQueue } from "../materialAnnotationQueue.js";
+import { injectMaterialSelection } from "../materialSelection.js";
 
 const params = Type.Object({ objectType: MaterialObjectType, objectId: ThreadObjectId });
 const itemParams = Type.Object({ objectType: MaterialObjectType, objectId: ThreadObjectId, materialId: Type.String({ format: "uuid" }) });
 const versionQuery = Type.Object({ version: Type.Optional(Type.Integer({ minimum: 1 })) });
 
-export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext): void {
+export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, annotationAgent?: MaterialAnnotationAgent): void {
   const { q, pool, companyMemory, materialStorageDir, requirePerson, fail } = ctx;
   const names = personDisplayNames(companyMemory);
   const viewer = (person: SessionPerson): MaterialViewer => ({ personId: person.personId, role: person.role,
     displayName: names.get(person.personId) ?? person.personId });
+  const queue = createMaterialAnnotationQueue({ pool,
+    agent: annotationAgent ?? createMaterialAnnotationAgent({ baseUrl: ctx.env.piBaseUrl, apiKey: ctx.env.piApiKey, modelId: ctx.env.heavyModel }),
+    viewer: (personId) => ({ personId, displayName: names.get(personId) ?? personId,
+      role: companyMemory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ? "ceo" : "member" }),
+    onError: () => app.log.error("material annotation queue failed"),
+  });
+  let recovery: ReturnType<typeof setInterval> | undefined;
+  app.addHook("onReady", async () => {
+    await queue.recover().catch(() => app.log.error("material annotation recovery failed"));
+    recovery = setInterval(() => { void queue.recover().catch(() => app.log.error("material annotation recovery failed")); }, 60_000);
+    recovery.unref();
+  });
+  app.addHook("onClose", async () => { clearInterval(recovery); await queue.close(); });
   const error = (reply: Parameters<RouteContext["fail"]>[0], cause: unknown) => {
     if (cause instanceof ObjectMaterialError) return fail(reply, cause.status, cause.code, cause.message);
     throw cause;
@@ -53,6 +70,28 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext): voi
     try { return await getObjectMaterialDetail(q, req.params, req.params.materialId, viewer(req.person!), names, req.query.version); }
     catch (cause) { return error(reply, cause); }
   });
+  app.post("/api/materials/:objectType/:objectId/:materialId/annotations", { preHandler: requirePerson,
+    schema: { params: itemParams, body: CreateMaterialAnnotationRequest } }, async (req, reply) => {
+    try {
+      const annotation = await createMaterialAnnotation(q, req.params, req.params.materialId, viewer(req.person!), req.body, names);
+      if (annotation.status === "queued") void queue.enqueue(req.params.materialId);
+      return { annotation };
+    } catch (cause) { return error(reply, cause); }
+  });
+  app.post("/api/materials/:objectType/:objectId/:materialId/restore", { preHandler: requirePerson,
+    schema: { params: itemParams, body: RestoreMaterialRemovedRequest } }, async (req, reply) => {
+    try {
+      await restoreMaterialRemoved(pool, req.params, req.params.materialId, viewer(req.person!), req.body, names);
+      return await getObjectMaterialDetail(q, req.params, req.params.materialId, viewer(req.person!), names);
+    } catch (cause) { return error(reply, cause); }
+  });
+  app.post("/api/materials/:objectType/:objectId/:materialId/proposals/:proposalId", { preHandler: requirePerson,
+    schema: { params: Type.Composite([itemParams, Type.Object({ proposalId: Type.String({ format: "uuid" }) })]), body: DecideMaterialEditProposalRequest } }, async (req, reply) => {
+    try {
+      await decideMaterialProposal(pool, req.params, req.params.materialId, req.params.proposalId, viewer(req.person!), req.body.decision);
+      return await getObjectMaterialDetail(q, req.params, req.params.materialId, viewer(req.person!), names);
+    } catch (cause) { return error(reply, cause); }
+  });
   app.get("/api/materials/:objectType/:objectId/:materialId/file", {
     onRequest: async (_req, reply) => { reply.header("content-security-policy", "sandbox"); }, preHandler: requirePerson,
     schema: { params: itemParams } }, async (req, reply) => {
@@ -79,7 +118,7 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext): voi
       if (material.format === "html") return reply.type("text/html; charset=utf-8").header("content-disposition", "inline")
         .header("x-content-type-options", "nosniff")
         .header("content-security-policy", "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' https:; style-src 'unsafe-inline' https:; img-src https: data: blob:; font-src https: data:; media-src https: data: blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'")
-        .send(material.body);
+        .send(injectMaterialSelection(material.body));
       if (!material.storageKey || material.format === "markdown") return fail(reply, 400, "MATERIAL_PREVIEW_UNAVAILABLE", "Markdown 请在详情中阅读");
       let buffer: Buffer;
       try { buffer = await readStoredMaterial(materialStorageDir, material.storageKey); }

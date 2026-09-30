@@ -21,6 +21,7 @@ import type { DictationDeps } from "../src/dictation.js";
 import type { RadarService } from "../src/radar.js";
 import type { PersonalRadarService } from "../src/personalRadar.js";
 import type { ThreadIntroAgent } from "../src/threadIntro.js";
+import type { MaterialAnnotationAgent } from "../src/materialAnnotationAgent.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
@@ -193,6 +194,7 @@ export async function createTestApp(
     preflightAgent?: PreflightAgent;
     outcomeAgent?: PostMeetingAgent;
     threadIntroAgent?: ThreadIntroAgent;
+    materialAnnotationAgent?: MaterialAnnotationAgent;
     driExporter?: DriExporter;
     ontologyUpdater?: OntologyUpdater;
     monthlyDraftAgent?: MonthlyDraftAgent;

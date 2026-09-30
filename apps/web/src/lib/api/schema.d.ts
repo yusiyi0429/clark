@@ -1134,6 +1134,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/{objectType}/{objectId}/{materialId}/annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 选中材料里的一段文字写批注；Markdown / HTML 写完即排队让 Co-Agent 按批注改（同一份材料按顺序一条条改），PDF / Word 只留批注；按 clientId 幂等 */
+        post: operations["createMaterialAnnotation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{objectType}/{objectId}/{materialId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 把垃圾篓里的一段插回原位，存成新的一版；version 不是最新 409 */
+        post: operations["restoreMaterialRemoved"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{objectType}/{objectId}/{materialId}/proposals/{proposalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 对 Co-Agent 的修改提议点「按这个改」或「忽略」；只有提议对象本人能处理；材料已被改过则 409（提议变 stale） */
+        post: operations["decideMaterialEditProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/{objectType}/{objectId}/{materialId}/file": {
         parameters: {
             query?: never;
@@ -4884,6 +4935,15 @@ export interface components {
                 } | null;
                 summary: string | null;
                 at: string;
+                annotation: {
+                    id: string;
+                    quote: string;
+                    body: string;
+                    author: {
+                        personId: string;
+                        displayName: string;
+                    };
+                } | null;
             } | null;
         };
         MaterialListResponse: {
@@ -4913,6 +4973,15 @@ export interface components {
                     } | null;
                     summary: string | null;
                     at: string;
+                    annotation: {
+                        id: string;
+                        quote: string;
+                        body: string;
+                        author: {
+                            personId: string;
+                            displayName: string;
+                        };
+                    } | null;
                 } | null;
             }[];
             canUpload: boolean;
@@ -4925,6 +4994,15 @@ export interface components {
             } | null;
             summary: string | null;
             at: string;
+            annotation: {
+                id: string;
+                quote: string;
+                body: string;
+                author: {
+                    personId: string;
+                    displayName: string;
+                };
+            } | null;
         };
         MaterialBlock: {
             text: string;
@@ -4944,6 +5022,25 @@ export interface components {
                 kind: "removed";
                 before: string;
             };
+            history: {
+                version: number;
+                kind: "modified" | "added";
+                before: string;
+                requestedBy: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                at: string;
+                annotation: {
+                    id: string;
+                    quote: string;
+                    body: string;
+                    author: {
+                        personId: string;
+                        displayName: string;
+                    };
+                } | null;
+            }[];
         };
         MaterialDetailResponse: {
             material: {
@@ -4972,6 +5069,15 @@ export interface components {
                     } | null;
                     summary: string | null;
                     at: string;
+                    annotation: {
+                        id: string;
+                        quote: string;
+                        body: string;
+                        author: {
+                            personId: string;
+                            displayName: string;
+                        };
+                    } | null;
                 } | null;
             };
             version: number;
@@ -4984,6 +5090,15 @@ export interface components {
                 } | null;
                 summary: string | null;
                 at: string;
+                annotation: {
+                    id: string;
+                    quote: string;
+                    body: string;
+                    author: {
+                        personId: string;
+                        displayName: string;
+                    };
+                } | null;
             };
             blocks: {
                 text: string;
@@ -5003,6 +5118,25 @@ export interface components {
                     kind: "removed";
                     before: string;
                 };
+                history: {
+                    version: number;
+                    kind: "modified" | "added";
+                    before: string;
+                    requestedBy: {
+                        personId: string;
+                        displayName: string;
+                    } | null;
+                    at: string;
+                    annotation: {
+                        id: string;
+                        quote: string;
+                        body: string;
+                        author: {
+                            personId: string;
+                            displayName: string;
+                        };
+                    } | null;
+                }[];
             }[] | null;
             revisions: {
                 version: number;
@@ -5012,7 +5146,151 @@ export interface components {
                 } | null;
                 summary: string | null;
                 at: string;
+                annotation: {
+                    id: string;
+                    quote: string;
+                    body: string;
+                    author: {
+                        personId: string;
+                        displayName: string;
+                    };
+                } | null;
             }[];
+            annotations: {
+                id: string;
+                materialId: string;
+                version: number;
+                quote: string;
+                body: string;
+                author: {
+                    personId: string;
+                    displayName: string;
+                };
+                status: "queued" | "applying" | "applied" | "no_change" | "failed" | "kept";
+                appliedVersion: number | null;
+                note: string | null;
+                createdAt: string;
+            }[];
+            removed: {
+                id: string;
+                version: number;
+                text: string;
+                requestedBy: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                at: string;
+                annotation: {
+                    id: string;
+                    quote: string;
+                    body: string;
+                    author: {
+                        personId: string;
+                        displayName: string;
+                    };
+                } | null;
+                restorable: boolean;
+            }[];
+            proposals: {
+                id: string;
+                materialId: string;
+                version: number;
+                summary: string;
+                changes: {
+                    before: string;
+                    after: string;
+                }[];
+                proposedFor: {
+                    personId: string;
+                    displayName: string;
+                };
+                status: "pending" | "applied" | "dismissed" | "stale";
+                createdAt: string;
+            }[];
+        };
+        MaterialAnnotationView: {
+            id: string;
+            materialId: string;
+            version: number;
+            quote: string;
+            body: string;
+            author: {
+                personId: string;
+                displayName: string;
+            };
+            status: "queued" | "applying" | "applied" | "no_change" | "failed" | "kept";
+            appliedVersion: number | null;
+            note: string | null;
+            createdAt: string;
+        };
+        CreateMaterialAnnotationRequest: {
+            /** Format: uuid */
+            clientId: string;
+            version: number;
+            quote: string;
+            prefix: string;
+            suffix: string;
+            body: string;
+        };
+        CreateMaterialAnnotationResponse: {
+            annotation: {
+                id: string;
+                materialId: string;
+                version: number;
+                quote: string;
+                body: string;
+                author: {
+                    personId: string;
+                    displayName: string;
+                };
+                status: "queued" | "applying" | "applied" | "no_change" | "failed" | "kept";
+                appliedVersion: number | null;
+                note: string | null;
+                createdAt: string;
+            };
+        };
+        MaterialRemovedView: {
+            id: string;
+            version: number;
+            text: string;
+            requestedBy: {
+                personId: string;
+                displayName: string;
+            } | null;
+            at: string;
+            annotation: {
+                id: string;
+                quote: string;
+                body: string;
+                author: {
+                    personId: string;
+                    displayName: string;
+                };
+            } | null;
+            restorable: boolean;
+        };
+        RestoreMaterialRemovedRequest: {
+            removedId: string;
+            version: number;
+        };
+        MaterialEditProposalView: {
+            id: string;
+            materialId: string;
+            version: number;
+            summary: string;
+            changes: {
+                before: string;
+                after: string;
+            }[];
+            proposedFor: {
+                personId: string;
+                displayName: string;
+            };
+            status: "pending" | "applied" | "dismissed" | "stale";
+            createdAt: string;
+        };
+        DecideMaterialEditProposalRequest: {
+            decision: "apply" | "dismiss";
         };
         WeeklyProgressResponse: {
             week: string;
@@ -9247,6 +9525,190 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createMaterialAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task" | "meeting";
+                objectId: string;
+                materialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMaterialAnnotationRequest"];
+            };
+        };
+        responses: {
+            /** @description 批注 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMaterialAnnotationResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    restoreMaterialRemoved: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task" | "meeting";
+                objectId: string;
+                materialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreMaterialRemovedRequest"];
+            };
+        };
+        responses: {
+            /** @description 恢复后的最新详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decideMaterialEditProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task" | "meeting";
+                objectId: string;
+                materialId: string;
+                proposalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideMaterialEditProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description 处理后的最新详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

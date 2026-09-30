@@ -95,13 +95,13 @@ describe("材料区操作", () => {
 
   it("展开 HTML 改动列表，按文字展示修改、删除和新增", () => {
     const html = { ...material, format: "html" as const, fileName: "方案.html", version: 2,
-      lastRevision: { version: 2, requestedBy: material.owner, summary: "更新方案", at: material.updatedAt } };
+      lastRevision: { version: 2, requestedBy: material.owner, summary: "更新方案", at: material.updatedAt, annotation: null } };
     const detail: TMaterialDetailResponse = { material: html, version: 2, latest: true, revision: html.lastRevision,
       revisions: [html.lastRevision], blocks: [
-        { text: `<p>${"新".repeat(210)}</p>`, change: { kind: "modified", before: "<p>旧方案</p>", spans: [] } },
-        { text: "", change: { kind: "removed", before: "<b>删去</b>" } },
-        { text: "<p>加上</p>", change: { kind: "added" } },
-      ] };
+        { text: `<p>${"新".repeat(210)}</p>`, change: { kind: "modified", before: "<p>旧方案</p>", spans: [] }, history: [] },
+        { text: "", change: { kind: "removed", before: "<b>删去</b>" }, history: [] },
+        { text: "<p>加上</p>", change: { kind: "added" }, history: [] },
+      ], annotations: [], removed: [], proposals: [] };
     const props = { material: html, detail, base: "/api/materials/issue/issue-1", onRemove: () => undefined, onVersion: () => undefined };
     hooks.index = 0;
     const tree = MaterialReader(props);
