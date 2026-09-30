@@ -334,6 +334,41 @@ describe("backup.sh source modes", () => {
     expect(calls).not.toMatch(/ start api$/);
   });
 
+  it("target=local keeps encrypted artifacts on this host without SSH settings and passes the compose override", () => {
+    const dir = tempDir();
+    const { bin, dockerLog, offsite } = createBackupStubs(dir);
+    const composeFile = join(dir, "docker-compose.yml");
+    writeFileSync(composeFile, "services: {}\n");
+    const override = join(dir, "volcano.override.yml");
+    writeFileSync(override, "services: {}\n");
+    const composeEnv = join(dir, "compose.env");
+    writeFileSync(composeEnv, "POSTGRES_PASSWORD=test-only\n");
+    const result = run(BACKUP_SH, [], {
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      BACKUP_TARGET: "local",
+      BACKUP_AGE_RECIPIENT: "age1dummy",
+      BACKUP_LOCAL_DIR: join(dir, "local"),
+      BACKUP_RETENTION_DAYS: "14",
+      WARMAP_COMPOSE_FILE: composeFile,
+      WARMAP_COMPOSE_OVERRIDE: override,
+      WARMAP_ENV_FILE: composeEnv,
+      WARMAP_TEST_OFFSITE: offsite,
+    });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("不是异地备份");
+    expect(readdirSync(join(dir, "local")).length).toBe(12);
+    expect(readdirSync(offsite).length).toBe(0);
+    expect(readFileSync(dockerLog, "utf8")).toContain(`-f ${composeFile} -f ${override}`);
+  });
+
+  it("rejects an unknown backup target", () => {
+    const dir = tempDir();
+    const result = run(BACKUP_SH, ["--dry-run"], backupEnv(dir, { BACKUP_TARGET: "s3" }));
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("只支持 ssh 或 local");
+  });
+
   it("url mode is database-only and explicitly declares volumes unsupported", () => {
     const dir = tempDir();
     const { bin, dockerLog, offsite } = createBackupStubs(dir);

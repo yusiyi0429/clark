@@ -7,6 +7,8 @@
 # 不读取、不拼接、不打印 POSTGRES_PASSWORD。BACKUP_SOURCE_MODE=url 时仅备份数据库：
 # volume 数据（会前材料/会话附件/录音/公众号登录与订阅）不在该模式覆盖范围内，恢复亦不支持——脚本会显式打印该限制。
 # API 镜像不包含本脚本；真实凭据只从环境变量/受限文件读取，脚本不打印 secret。
+# BACKUP_TARGET=local 时只留本机（BACKUP_LOCAL_DIR），不要求也不连接 SSH 异机——脚本会显式声明这不是异地备份。
+# WARMAP_COMPOSE_OVERRIDE 可追加一份 compose 覆盖文件（火山主机用 infra/volcano.override.yml）。
 # 用法：backup.sh [--dry-run]
 set -euo pipefail
 
@@ -32,6 +34,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 SOURCE_MODE="${BACKUP_SOURCE_MODE:-compose}"
 COMPOSE_FILE="${WARMAP_COMPOSE_FILE:-$REPO_ROOT/infra/docker-compose.yml}"
+COMPOSE_OVERRIDE="${WARMAP_COMPOSE_OVERRIDE:-}"
 COMPOSE_ENV_FILE="${WARMAP_ENV_FILE:-$REPO_ROOT/infra/.env}"
 COMPOSE_SERVICE="${WARMAP_PG_SERVICE:-postgres}"
 API_SERVICE="${WARMAP_API_SERVICE:-api}"
@@ -44,28 +47,37 @@ VOLUME_RECORDING="${WARMAP_VOLUME_RECORDING:-meeting_recordings}"
 VOLUME_WECHAT="${WARMAP_VOLUME_WECHAT:-wechat_data}"
 WECHAT_SERVICE="${WARMAP_WECHAT_SERVICE:-wechat}"
 
+TARGET_MODE="${BACKUP_TARGET:-ssh}"
+case "$TARGET_MODE" in ssh|local) ;; *) die "BACKUP_TARGET 只支持 ssh 或 local（当前: ${TARGET_MODE}）" ;; esac
+
 : "${BACKUP_AGE_RECIPIENT:?backup: 需要 BACKUP_AGE_RECIPIENT（age 公钥 age1...）}"
-: "${BACKUP_SSH_HOST:?backup: 需要 BACKUP_SSH_HOST（异机地址）}"
-: "${BACKUP_SSH_USER:?backup: 需要 BACKUP_SSH_USER}"
-: "${BACKUP_SSH_PATH:?backup: 需要 BACKUP_SSH_PATH（异机目录）}"
-: "${BACKUP_SSH_KEY_PATH:?backup: 需要 BACKUP_SSH_KEY_PATH（SSH 私钥，仅宿主机）}"
+if [ "$TARGET_MODE" = ssh ]; then
+  : "${BACKUP_SSH_HOST:?backup: 需要 BACKUP_SSH_HOST（异机地址）}"
+  : "${BACKUP_SSH_USER:?backup: 需要 BACKUP_SSH_USER}"
+  : "${BACKUP_SSH_PATH:?backup: 需要 BACKUP_SSH_PATH（异机目录）}"
+  : "${BACKUP_SSH_KEY_PATH:?backup: 需要 BACKUP_SSH_KEY_PATH（SSH 私钥，仅宿主机）}"
+fi
 
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
 [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]] || die "BACKUP_RETENTION_DAYS 必须是整数"
 [ "$RETENTION_DAYS" -ge 7 ] || die "BACKUP_RETENTION_DAYS 至少为 7"
-[ -f "$BACKUP_SSH_KEY_PATH" ] || die "BACKUP_SSH_KEY_PATH 不是文件: $BACKUP_SSH_KEY_PATH"
+if [ "$TARGET_MODE" = ssh ]; then
+  [ -f "$BACKUP_SSH_KEY_PATH" ] || die "BACKUP_SSH_KEY_PATH 不是文件: $BACKUP_SSH_KEY_PATH"
+fi
 
 BACKUP_LOCAL_DIR="${BACKUP_LOCAL_DIR:-$HOME/warmap-backups}"
 AGE_BIN="${AGE_BIN:-age}"
 SSH_BIN="${SSH_BIN:-ssh}"
 SCP_BIN="${SCP_BIN:-scp}"
-SSH_OPTS=(-i "$BACKUP_SSH_KEY_PATH" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
-TARGET="${BACKUP_SSH_USER}@${BACKUP_SSH_HOST}"
+SSH_OPTS=(-i "${BACKUP_SSH_KEY_PATH:-}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+TARGET="${BACKUP_SSH_USER:-}@${BACKUP_SSH_HOST:-}"
 SCHEMA_SQL="SELECT coalesce(max(id), 0) FROM schema_migrations"
 # 存储行清单：materials 与会话附件的 storageKey/SHA 都以 DB 为准（manifest 的校验基准）
 STORAGE_ROWS_SQL="SELECT 'meeting_material|' || m.id || '|' || value->>'storageKey' || '|' || value->>'sha256' FROM meetings m, jsonb_array_elements(m.materials) value WHERE value->>'storageKey' <> '' UNION ALL SELECT 'conversation_attachment|' || cm.id || '|' || a->>'storageKey' || '|' || a->>'sha256' FROM conversation_messages cm, jsonb_array_elements(cm.attachments) a WHERE a->>'storageKey' <> ''"
 
-compose() { docker compose -f "$COMPOSE_FILE" --env-file "$COMPOSE_ENV_FILE" "$@"; }
+COMPOSE_FILES=(-f "$COMPOSE_FILE")
+[ -n "$COMPOSE_OVERRIDE" ] && COMPOSE_FILES+=(-f "$COMPOSE_OVERRIDE")
+compose() { docker compose "${COMPOSE_FILES[@]}" --env-file "$COMPOSE_ENV_FILE" "$@"; }
 
 case "$SOURCE_MODE" in
   compose)
@@ -102,7 +114,12 @@ esac
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
 base="warmap-${timestamp}"
 
-echo "backup: source_mode=$SOURCE_MODE 异机=${BACKUP_SSH_HOST}:${BACKUP_SSH_PATH} 保留=${RETENTION_DAYS}天 时间=${timestamp}"
+if [ "$TARGET_MODE" = local ]; then
+  echo "backup: source_mode=$SOURCE_MODE target=local 本机=${BACKUP_LOCAL_DIR} 保留=${RETENTION_DAYS}天 时间=${timestamp}"
+  echo "backup: 警告：target=local 只留在本机，不是异地备份；主机或数据盘损坏时备份一起丢失"
+else
+  echo "backup: source_mode=$SOURCE_MODE 异机=${BACKUP_SSH_HOST}:${BACKUP_SSH_PATH} 保留=${RETENTION_DAYS}天 时间=${timestamp}"
+fi
 if [ "$DRY_RUN" = 1 ]; then
   echo "backup: freeze → $FREEZE_DESC"
   echo "backup: dump   → $DUMP_DESC"
@@ -200,7 +217,8 @@ fi
 make_checksum "$manifest"
 artifacts+=("$manifest")
 
-# 6) 异机复制（同批次全部产物）
+# 6) 异机复制（同批次全部产物）；target=local 跳过
+if [ "$TARGET_MODE" = ssh ]; then
 "$SCP_BIN" "${SSH_OPTS[@]}" \
   "$BACKUP_LOCAL_DIR/$base.dump.age" "$BACKUP_LOCAL_DIR/$base.dump.age.sha256" \
   "$manifest" "$manifest.sha256" \
@@ -215,10 +233,14 @@ if [ "$SOURCE_MODE" = compose ]; then
     || die "SCP 复制卷归档失败（本机密文保留在 ${BACKUP_LOCAL_DIR}，可重试）"
 fi
 
-# 7) 保留策略：异机与本机同步清理
-"$SSH_BIN" "${SSH_OPTS[@]}" "$TARGET" \
-  "find '$BACKUP_SSH_PATH' -maxdepth 1 -type f -name 'warmap-*' -mtime +${RETENTION_DAYS} -delete" \
-  || die "异机保留策略执行失败"
+fi
+
+# 7) 保留策略：异机（仅 ssh）与本机同步清理
+if [ "$TARGET_MODE" = ssh ]; then
+  "$SSH_BIN" "${SSH_OPTS[@]}" "$TARGET" \
+    "find '$BACKUP_SSH_PATH' -maxdepth 1 -type f -name 'warmap-*' -mtime +${RETENTION_DAYS} -delete" \
+    || die "异机保留策略执行失败"
+fi
 find "$BACKUP_LOCAL_DIR" -maxdepth 1 -type f -name 'warmap-*' -mtime "+${RETENTION_DAYS}" -delete
 
 echo "backup: 完成 $base 批次 (schema=${schema_version}, source_mode=${SOURCE_MODE}, storage_rows=${storage_row_count}, volumes=4)，明文已删除，API 状态已恢复"
