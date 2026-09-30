@@ -45,7 +45,9 @@ describe("看过的更新与演示", () => {
       expect(await t.sql("SELECT key, seen_at FROM person_seen_marks WHERE key = 'release:0.4.2'"))
         .toEqual([{ key: "release:0.4.2", seen_at: new Date("2026-09-30T08:00:00.000Z") }]);
 
-      for (const bad of ["hack:x", "release:", "release:V1", "tour:other"]) {
+      expect((await post(member, "tour:mission-card:owner-confirmation-v2")).statusCode).toBe(200);
+      expect((await t.app.inject({ method: "DELETE", url: "/api/me/seen-marks/tour:mission-card:owner-confirmation-v2", headers: { cookie: member, origin: t.publicOrigin } })).statusCode).toBe(204);
+      for (const bad of ["hack:x", "release:", "release:V1", "tour:other", "tour:mission-card:unknown", "tour:mission-card:owner-confirmation-v3"]) {
         const denied = await post(member, bad);
         expect(denied.statusCode).toBe(400);
         expect(denied.json().code).toBe("INVALID_INPUT");

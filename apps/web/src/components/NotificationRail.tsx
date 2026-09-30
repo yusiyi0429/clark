@@ -55,14 +55,14 @@ const sameCompanyDay = (a: Date, b: Date) => clock(a).day === clock(b).day;
 function missionRoundMeta(payload: TMissionRoundSummary | TMissionRoundDraftPayload): string {
   if (!("phase" in payload)) return "可以整理任务卡草稿";
   if (payload.phase === "drafting") return "Co-Agent 正在起草";
-  if (payload.phase === "draft") return payload.draftFailures.length ? "任务起草未完成" : "草稿 · 待下发审核";
+  if (payload.phase === "draft") return payload.draftFailures.length ? "任务起草未完成" : "草稿 · 待下发本人确认";
   if (payload.phase === "open") {
-    if (payload.closesAt && Date.parse(payload.closesAt) <= Date.parse(payload.serverNow)) return "汇总中";
+    if (payload.closesAt && Date.parse(payload.closesAt) <= Date.parse(payload.serverNow)) return roundStatusText({ ...payload, phase: "closed" }, { feedbackCount: 0 });
     return roundStatusText(payload, { cardId: payload.cards.find((row) => row.mine)?.cardId, feedbackCount: 0 });
   }
-  if (payload.phase === "reviewing") return payload.counts.pending ? `${payload.counts.pending} 条待你处理` : "意见已全部处理，待你确认";
+  if (payload.phase === "reviewing") return roundStatusText(payload, { feedbackCount: 0 });
   if (payload.phase === "confirmed") return payload.todo ?? "已确定";
-  return "汇总中";
+  return roundStatusText(payload, { feedbackCount: 0 });
 }
 
 /**
@@ -273,15 +273,15 @@ export function NotificationRail({
     // 没有可起草的人时只能导入占位文件；否则 Co-Agent 逐人起草（工单 10）。
     const onlyPlaceholder = payloadOf<TMissionRoundDraftPayload>(item.missionRound).placeholder;
     if (!await ask(onlyPlaceholder
-      ? "这个入口用于人工导入历史占位草稿，整理完成后仍需拍板人下发审核。"
-      : "Co-Agent 会按签发的本月计划与现有任务依据，为当前参与者起草任务卡。失败会保留具体原因，供重试未完成的任务；完成后由拍板人下发审核。", "整理任务卡草稿")) return;
+      ? "这个入口用于人工导入历史占位草稿，整理完成后仍需战场 DRI 下发本人确认。"
+      : "Co-Agent 会按签发的本月计划与现有任务依据，为当前参与者起草任务卡。失败会保留具体原因，供重试未完成的任务；完成后由战场 DRI 下发本人确认。", "整理任务卡草稿")) return;
     const saved = await action.run(draft);
     if (saved) {
       // Co-Agent 在后台起草：留在通知栏看「正在起草」，好了再点进去；这时的卡可能在起草失败后被替换。
       if (payloadOf<TMissionRoundSummary>(saved).phase === "drafting") { setNotice("Co-Agent 已开始起草，完成后可以打开各人的任务卡。"); return; }
-      const firstCard = payloadOf<TMissionRoundSummary>(saved).cards[0];
+      const firstCard = payloadOf<TMissionRoundSummary>(saved).cards.find((card) => card.contentVisible !== false);
       if (firstCard) onNavigate(`/mission-cards/${firstCard.cardId}`, origin);
-      else setNotice("草稿已整理，这一轮暂无可打开的任务卡。");
+      else setNotice("草稿已整理，请从任务准备进度查看状态并下发本人确认。");
     }
   }
 

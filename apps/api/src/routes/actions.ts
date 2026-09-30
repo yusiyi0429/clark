@@ -170,7 +170,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
 
       if (scope.actionType === "mission.edit") {
         if (!Value.Check(MissionEditInput, input)) return invalidInput(reply, MissionEditInput, input);
-        return respond(reply, await executeEditMission(pool, env.sessionSecret, personDisplayNames(companyMemory), scope, input, fingerprint));
+        return respond(reply, await executeEditMission(pool, env.sessionSecret, personDisplayNames(companyMemory), scope, input, fingerprint, req.person!));
       }
 
       if (scope.objectType === "issue") {

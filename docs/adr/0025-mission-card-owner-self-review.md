@@ -1,5 +1,7 @@
 # 本人审核任务卡，并在全员完成后汇总
 
+2026-10-01 更新：本记录保留整合时的历史决定。本人准备阶段的可见性、只允许本人修改、取消提前汇总、定向退回、责任人权限及新文案，已由 [本人准备与组合核对口径](../contracts/mission-card-preparation-review.v0.1.md) 替代；以下旧公开讨论与整场重新确认规则不再用于新流程。
+
 日期：2026-09-30。依据：用户确认以 `feat/mvp-member-workspace` 为基础移植 `feat/mission-card-self-review` 的审核流程，并保留现有批注与 Agent 改写。整合范围见 `.scratch/mission-card-integration/spec.md`。
 
 ## 决策

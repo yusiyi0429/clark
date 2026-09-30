@@ -2,7 +2,7 @@ import type { FastifyReply } from "fastify";
 import { PeopleDirectoryResponse, type TCard, type TCardCollection } from "@warmap/contracts";
 import { listBattlefieldCards } from "../battlefields.js";
 import { listCapabilityCards } from "../capabilities.js";
-import { getMissionRow, listMissionCards, projectMissionCard } from "../missions.js";
+import { canReadMission, getMissionRow, listMissionCards, projectMissionCard } from "../missions.js";
 import { listMissionRoundCards, listMissionRoundDraftCards } from "../missionRounds.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "../issues.js";
 import { getMeetingRow, hasMeetingNotice, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "../meetingStore.js";
@@ -42,7 +42,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
       listCapabilityCards(q),
       listMeetingRows(q),
       // 首页只读当前公司周期的 Mission：战场卡 Mission 数、能力面板数量与入口都从这份 collection 派生，不保存汇总；历史周期留在 /api/cards/missions
-      listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), period),
+      listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), period, req.person!),
       getMonthlyPlanNotice(q, env.sessionSecret, at),
       listMissionRoundCards(q, people, env.sessionSecret, req.person!, undefined, at),
       listMissionRoundDraftCards(q, people, env.sessionSecret, req.person!, period, at, env.missionCardDraftsDir),
@@ -106,8 +106,8 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
   );
 
   // Mission Card：总览与详情共用同一 projector；关系显示名在投影时现查。
-  app.get("/api/cards/missions", { preHandler: requireCEO }, async (): Promise<TCardCollection> => ({
-    cards: await listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory)),
+  app.get("/api/cards/missions", { preHandler: requireCEO }, async (req): Promise<TCardCollection> => ({
+    cards: await listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), undefined, req.person!),
   }));
 
   app.get(
@@ -115,7 +115,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
     { preHandler: requireCEO, schema: { params: idParams } },
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       const mission = await getMissionRow(q, req.params.id);
-      return mission
+      return mission && await canReadMission(q, mission, req.person!)
         ? { cards: [projectMissionCard(mission, env.sessionSecret, personDisplayNames(companyMemory))] }
         : fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
     },

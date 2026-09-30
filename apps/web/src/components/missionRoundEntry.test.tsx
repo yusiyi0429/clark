@@ -15,6 +15,7 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: ui.refresh }) }));
 vi.mock("./ConfirmDialog", () => ({ useConfirm: () => ({ ask: ui.ask, dialog: null }) }));
+vi.mock("./missionCards/MissionRoundProgress", () => ({ MissionRoundProgress: () => <button>查看本人确认进度</button> }));
 vi.mock("./HeroButton", () => ({ HeroButton: (props: { "aria-label"?: string; onPress?: (event: unknown) => Promise<void>; children?: ReactNode }) => {
   if (props["aria-label"] && props.onPress) ui.buttons.set(props["aria-label"], props.onPress);
   return <button>{props.children}</button>;
@@ -57,7 +58,7 @@ describe("CEO 整理任务卡草稿交互", () => {
   it("先说明占位来源并确认；取消时不执行动作", async () => {
     ui.ask.mockResolvedValue(false);
     await render().press();
-    expect(ui.ask).toHaveBeenCalledWith(expect.stringContaining("这个战场还没有可以起草的人，先用占位文件整理草稿"), "整理任务卡草稿");
+    expect(ui.ask).toHaveBeenCalledWith(expect.stringContaining("人工导入历史占位草稿，整理完成后仍需战场 DRI 下发本人确认"), "整理任务卡草稿");
     expect(ui.run).not.toHaveBeenCalled();
   });
 

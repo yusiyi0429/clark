@@ -73,7 +73,7 @@ afterEach(() => vi.unstubAllGlobals());
 function setup() {
   const ui: ConversationUiState = { keyboard: false, setKeyboard: vi.fn(), historyOpen: false, setHistoryOpen: vi.fn(),
     globalView: false, setGlobalView: vi.fn(), railMobileOpen: false, setRailMobileOpen: vi.fn(), prefill: null,
-    consumePrefill: () => { ui.prefill = null; } };
+    consumePrefill: () => { ui.prefill = null; }, quotes: [], removeQuotes: vi.fn() };
   const props: ComponentProps<typeof ConversationHost> = { detailOpen: true, rail: true, agentTitle: "Co-Agent", ui,
     page: { scope: "mission-card:card-01", label: "孙铭泽 · 10月任务", group: {
       cardId: "card-01", viewerId: "sun", members: [], phase: "open", round: 1, onRefresh: vi.fn(), onRemoveReference: vi.fn(),
@@ -89,7 +89,7 @@ function setup() {
     }
     throw new Error("Conversation host did not settle");
   };
-  return { ui, render };
+  return { ui, props, render };
 }
 
 describe("任务卡引用进入私聊", () => {
@@ -146,6 +146,18 @@ describe("任务卡引用进入私聊", () => {
     expect(harness.rail!.channel).toBe("group");
     expect(ui.setRailMobileOpen).toHaveBeenCalledWith(true);
     expect(harness.privateSend).not.toHaveBeenCalled();
+    expect(harness.groupSend).not.toHaveBeenCalled();
+  });
+
+  it("本人准备阶段不提供公开群组，旧群组深链和残留频道选择都留在私聊", () => {
+    window.location.search = "?channel=group";
+    const { props, render } = setup();
+    Object.assign(props.page!.group!, { canDiscuss: false, agentNote: "仅你可见 · 确认前可修改正文" });
+    expect(render()).toContain('data-composer="private"');
+    expect(harness.rail!.channel).toBe("agent");
+    harness.rail!.onChannel("group");
+    expect(render()).toContain('data-composer="private"');
+    expect(harness.rail!.channel).toBe("agent");
     expect(harness.groupSend).not.toHaveBeenCalled();
   });
 });

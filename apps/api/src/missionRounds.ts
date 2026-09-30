@@ -13,6 +13,7 @@ import type { MeetingActionOutcome, Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { fieldText, getMissionRow, projectMissionCard } from "./missions.js";
 import type { TMissionCardPayload } from "@warmap/contracts";
+import { buildMissionCardReviewInput } from "./missionCardReview.js";
 
 export type MissionRoundPerson = { personId: string; role: "ceo" | "member" };
 type GoalSnapshot = {
@@ -24,7 +25,7 @@ export type MissionRoundRow = {
   status: "drafting" | "draft" | "open" | "reviewing" | "confirmed";
   draft_origin: "placeholder" | "agent" | null; draft_source: Record<string, unknown>; goal_snapshot: GoalSnapshot | null;
   window_seq: number; first_opened_at: Date | null; opened_at: Date | null; closes_at: Date | null;
-  reopens: { by: string; at: string; closedAt: string }[];
+  reopens: { by: string; at: string; closedAt: string; priorConfirmation?: { by: string; at: string; note: string; reviewId: string | null } }[];
   confirmed_by: string | null; confirmed_at: Date | null; action_fingerprints: string[];
   created_at: Date; updated_at: Date;
   battlefield_owner_id: string; battlefield_name: string; battlefield_version: number; six_month_outcome: string;
@@ -36,7 +37,9 @@ type FeedbackRow = {
   id: string; card_id: string; mission_id: string | null; field: TMissionCardField | null;
   kind: "comment" | "quote" | "suggestion"; proposed: string | null; original: string | null; source_version: number | null; late: boolean; created_at: Date;
 };
-type ReviewRow = { id: string; feedback_ids: string[]; taken_at: Date; mission_versions: Record<string, number> };
+type ReviewRow = { id: string; feedback_ids: string[]; taken_at: Date; mission_versions: Record<string, number>;
+  agent_status: "queued" | "running" | "completed" | "failed"; agent_report: import("@warmap/contracts").TMissionCardReviewReport | null;
+  agent_error: string | null; agent_completed_at: Date | null };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROUND_SELECT = `SELECT r.*, b.owner_id AS battlefield_owner_id, b.name AS battlefield_name,
   b.version AS battlefield_version, b.six_month_outcome
@@ -51,7 +54,7 @@ function draftFailures(row: Pick<MissionRoundRow, "draft_source">): DraftFailure
 
 /** 拍板权每次取当前身份和战场负责人；卡成员则保留建卡时的名单。 */
 export function canApprove(person: MissionRoundPerson, round: Pick<MissionRoundRow, "battlefield_owner_id">): boolean {
-  return person.role === "ceo" || person.personId === round.battlefield_owner_id;
+  return person.personId === round.battlefield_owner_id;
 }
 export function missionCardMembers(ownerId: string, battlefieldOwnerId: string | null, people: MemoryPerson[]): string[] {
   return [...new Set([ownerId, ...(battlefieldOwnerId ? [battlefieldOwnerId] : []),
@@ -68,8 +71,8 @@ async function personalCards(q: Query, roundId: string): Promise<PersonalCardRow
     FROM personal_mission_cards c WHERE c.round_id=$1 ORDER BY c.sort_order,c.owner_id,c.id`, [roundId])).rows as PersonalCardRow[];
 }
 async function canRead(q: Query, person: MissionRoundPerson, row: MissionRoundRow): Promise<boolean> {
-  if (canApprove(person, row)) return true;
-  const found = await q("SELECT 1 FROM personal_mission_cards WHERE round_id=$1 AND member_ids @> $2::jsonb LIMIT 1", [row.id, JSON.stringify([person.personId])]);
+  if (canApprove(person, row) || person.role === "ceo") return true;
+  const found = await q("SELECT 1 FROM personal_mission_cards WHERE round_id=$1 AND owner_id=$2 LIMIT 1", [row.id, person.personId]);
   return !!found.rowCount;
 }
 function roundPhase(row: MissionRoundRow, now: Date): TMissionRoundPhase {
@@ -79,29 +82,30 @@ function roundPhase(row: MissionRoundRow, now: Date): TMissionRoundPhase {
 export function correctionPeriodClosed(row: Pick<MissionRoundRow, "period">, now: Date): boolean {
   return row.period < companyPeriod(now);
 }
-/** 私聊、批注、队列统一的正文冻结规则；已确定后的更正继续使用 corrections。 */
+/** 私聊、批注、队列统一的正文冻结规则；实质更正先退回本人。 */
 export function missionCardWriteProblem(round: Pick<MissionRoundRow, "period" | "status" | "closes_at">,
   card: { owner_confirmed_at: Date | null }, now: Date): { status: number; code: string; message: string } | null {
   if (correctionPeriodClosed(round, now)) return { status: 409, code: "MISSION_CARD_PERIOD_CLOSED", message: "月份已过，正文只读" };
-  if (round.status === "drafting") return { status: 409, code: "MISSION_CARD_DRAFTING", message: "请等待草稿整理完成后下发审核" };
+  if (round.status === "drafting") return { status: 409, code: "MISSION_CARD_DRAFTING", message: "请等待 Co-Agent 完成草稿后，由战场 DRI 交给本人确认" };
   if (round.status !== "open" || round.closes_at && round.closes_at <= now)
-    return { status: 409, code: "ROUND_NOT_OPEN", message: round.status === "draft" ? "请先下发审核，再修改正文" : "审核已结束；如需修改正文，请重新开放审核" };
-  if (card.owner_confirmed_at) return { status: 409, code: "OWNER_CONFIRMED", message: "已完成本人审核，请先取消确认再修改" };
+    return { status: 409, code: "ROUND_NOT_OPEN", message: round.status === "draft" ? "请等待战场 DRI 将草稿交给本人确认"
+      : round.status === "open" ? "本人准备时间已到，请由战场 DRI 延长本人确认后继续"
+        : "本人准备已结束；如需修改，请由战场 DRI 退回受影响的本人重新确认" };
+  if (card.owner_confirmed_at) return { status: 409, code: "OWNER_CONFIRMED", message: "本人已确认，请先取消确认再修改" };
   return null;
 }
 export async function pendingMissionCardAnnotations(q: Query, roundId: string, cardId?: string): Promise<number> {
   return Number((await q(`SELECT count(*)::int AS count FROM mission_card_annotations a JOIN personal_mission_cards c ON c.id=a.card_id
-    WHERE c.round_id=$1 AND a.status IN ('queued','applying','needs_clarification','failed')${cardId ? " AND c.id=$2" : ""}`,
+    WHERE c.round_id=$1 AND a.author_id=c.owner_id AND a.intent='edit' AND a.status IN ('queued','applying','needs_clarification','failed')${cardId ? " AND c.id=$2" : ""}`,
     cardId ? [roundId, cardId] : [roundId])).rows[0].count);
 }
 export function missionCardLine(phase: TMissionRoundPhase, ownerConfirmedAt: Date | null, inReview: number, pending: number, approver: boolean, corrections = 0): string {
   if (phase === "drafting") return "Co-Agent 正在起草";
   if (phase === "draft") return "未开放";
-  if (phase === "open") return ownerConfirmedAt ? "已完成审核" : "审核中";
-  if (phase === "closed") return "汇总中";
+  if (phase === "open") return ownerConfirmedAt ? "本人已确认" : "待本人确认";
+  if (phase === "closed") return ownerConfirmedAt ? "本人已确认" : "待本人确认";
   if (phase === "confirmed") return approver && corrections ? `${corrections} 条更正申请` : "已确定";
-  if (!inReview) return approver ? "无意见" : "等拍板";
-  return approver ? (pending ? `待处理 ${pending}` : "已处理") : `已处理 ${inReview - pending}/${inReview}`;
+  return ownerConfirmedAt ? "本人已确认" : "待本人确认";
 }
 
 /** 同一轮的事实、计数与服务端状态文案；仅可见卡行和动作随看的人变化。 */
@@ -109,32 +113,22 @@ export async function projectMissionRoundCard(
   q: Query, people: MemoryPerson[], secret: string, person: MissionRoundPerson, row: MissionRoundRow, now: Date,
 ): Promise<TCard> {
   const cards = await personalCards(q, row.id);
-  const feedback = (await q("SELECT id,card_id,mission_id,field,kind,proposed,late,created_at FROM mission_card_feedback WHERE round_id=$1 ORDER BY seq", [row.id])).rows as FeedbackRow[];
   const missions = (await q(`SELECT m.id,m.personal_mission_card_id,m.dependencies FROM missions m
     JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id WHERE c.round_id=$1`, [row.id])).rows as { id: string; personal_mission_card_id: string; dependencies: string }[];
-  const review = (await q("SELECT id,feedback_ids,taken_at FROM mission_round_reviews WHERE round_id=$1 AND window_seq=$2 AND superseded_at IS NULL", [row.id, row.window_seq])).rows[0] as ReviewRow | undefined;
+  const review = (await q("SELECT * FROM mission_round_reviews WHERE round_id=$1 AND window_seq=$2 AND superseded_at IS NULL", [row.id, row.window_seq])).rows[0] as ReviewRow | undefined;
   // 确认后的更正申请（GAP-04）：最早的在前，行上的「第一条」据此定位。
   const corrections = (await q("SELECT id,card_id FROM mission_card_corrections WHERE round_id=$1 AND status='pending' ORDER BY created_at,id", [row.id])).rows as { id: string; card_id: string }[];
-  const decisions = review ? (await q("SELECT feedback_id,decision FROM mission_review_decisions WHERE review_id=$1", [review.id])).rows as { feedback_id: string; decision: string }[] : [];
-  const decisionMap = new Map(decisions.map((item) => [item.feedback_id, item.decision]));
-  const snapshotIds = new Set(review?.feedback_ids ?? []);
-  const inReview = feedback.filter((item) => snapshotIds.has(item.id));
-  const pending = inReview.filter((item) => !decisionMap.has(item.id)).length;
-  const suggestions = new Map<string, number>();
-  const acceptedDependencies = new Map<string, string>();
-  for (const item of inReview) {
-    if (item.kind !== "suggestion") continue;
-    const key = `${item.mission_id}:${item.field}`;
-    suggestions.set(key, (suggestions.get(key) ?? 0) + 1);
-    if (item.field === "dependencies" && decisionMap.get(item.id) === "accept") acceptedDependencies.set(item.mission_id!, item.proposed!);
-  }
+  const annotationCounts = (await q(`SELECT a.card_id,count(*)::int AS total,
+    count(*) FILTER (WHERE a.status IN ('queued','applying','needs_clarification','failed'))::int AS pending
+    FROM mission_card_annotations a JOIN personal_mission_cards c ON c.id=a.card_id WHERE c.round_id=$1 AND a.author_id=c.owner_id GROUP BY a.card_id`, [row.id])).rows as { card_id: string; total: number; pending: number }[];
   const approver = canApprove(person, row);
+  const supervisor = approver || person.role === "ceo";
   const phase = roundPhase(row, now);
   // 月份过了没法再处理更正，行文案回到「已确定」；待处理数照实保留。
   const correctable = !correctionPeriodClosed(row, now);
   const names = new Map(people.map((item) => [item.personId, item.displayName]));
-  const deciderId = row.battlefield_owner_id || people.find((item) => item.roles.includes("ceo"))?.personId;
-  const visible = cards.filter((item) => approver || item.member_ids.includes(person.personId));
+  const deciderId = row.battlefield_owner_id;
+  const visible = cards.filter((item) => approver || person.role === "ceo" || item.owner_id === person.personId);
   const failures = draftFailures(row);
   const visibleFailures = failures.filter((failure) => visible.some((card) => card.owner_id === failure.ownerId));
   const retryDraftAction = approver && phase === "draft" && failures.length ? {
@@ -147,50 +141,55 @@ export async function projectMissionRoundCard(
     version: row.version, phase, round: Math.max(1, row.window_seq), openedAt: row.opened_at?.toISOString() ?? null,
     closesAt: row.closes_at?.toISOString() ?? null, reviewAt: review?.taken_at.toISOString() ?? null,
     serverNow: now.toISOString(), approver, deciderName: (deciderId && names.get(deciderId)) || deciderId || "CEO",
-    todo: !approver ? null : phase === "drafting" ? "Co-Agent 正在起草" : phase === "draft" ? failures.length
-      ? `${failures.length} 张任务卡起草未完成，可重试` : "任务卡草稿已就绪，可以下发审核"
-      : phase === "closed" ? "请先处理待改批注，再开始汇总"
-      : phase === "reviewing" ? pending > 0 ? `${pending} 条待你处理` : "意见已全部处理，待你确认"
+    todo: !supervisor ? null : phase === "drafting" ? "Co-Agent 正在起草" : phase === "draft" ? failures.length
+      ? `${failures.length} 张任务卡起草未完成，可重试` : "任务卡草稿已就绪，可以交给本人确认"
+      : ["open", "closed"].includes(phase) ? `${cards.filter((card) => !!card.owner_confirmed_at).length}/${cards.length} 人已确认${phase === "closed" ? " · 本人确认时间已到，请 DRI 延长" : ""}；待确认：${cards.filter((card) => !card.owner_confirmed_at).map((card) => names.get(card.owner_id) ?? card.owner_id).join("、") || "无"}`
+      : phase === "reviewing" ? review?.agent_status === "completed" ? "Co-Agent Review 已完成，待战场 DRI 确认组合" : review?.agent_status === "failed" ? "Co-Agent Review 未完成，可重试" : "Co-Agent 正在审阅任务组合"
       : phase === "confirmed" && corrections.length > 0 && correctable ? `${corrections.length} 条更正申请待你处理` : null,
     placeholder: row.draft_origin === "placeholder",
     draftOrigin: row.draft_origin,
     draftFailures: visibleFailures.map((failure) => ({ ownerId: failure.ownerId, ownerName: names.get(failure.ownerId) ?? failure.ownerId, message: failure.message })),
     retryDraftAction,
+    coAgentReview: review && (row.status !== "confirmed" || review.agent_report !== null) ? { status: review.agent_status, summary: supervisor ? review.agent_report?.summary ?? "" : "",
+      findings: supervisor ? review.agent_report?.findings ?? [] : [], error: review.agent_error,
+      completedAt: review.agent_completed_at?.toISOString() ?? null, retryAction: approver && review.agent_status === "failed" ? {
+        actionType: "mission-round.review-retry", label: "重试 Co-Agent Review", actionId: signActionId(secret, {
+          actionType: "mission-round.review-retry", objectType: "mission-round", objectId: row.id, objectVersion: row.version }),
+      } : null } : null,
     goals: row.goal_snapshot ? { sixMonthOutcome: row.goal_snapshot.sixMonthOutcome, monthOutcome: row.goal_snapshot.monthOutcome, signedAt: row.goal_snapshot.signedAt } : null,
     counts: {
-      cards: cards.length, feedback: review ? inReview.length : feedback.length, pending,
-      conflicts: [...suggestions.values()].filter((count) => count > 1).length,
-      dependencies: missions.reduce((total, mission) => total + (acceptedDependencies.get(mission.id) ?? mission.dependencies).split(/\r?\n/).filter((line) => line.trim()).length, 0),
-      late: feedback.filter((item) => item.late && row.closes_at && item.created_at >= row.closes_at).length,
+      cards: cards.length, feedback: annotationCounts.reduce((n,item)=>n+item.total,0), pending: annotationCounts.reduce((n,item)=>n+item.pending,0),
+      conflicts: review?.agent_report?.findings.filter((item)=>item.kind === "risk").length ?? 0,
+      dependencies: missions.reduce((total, mission) => total + mission.dependencies.split(/\r?\n/).filter((line) => line.trim()).length, 0),
+      late: 0,
       corrections: corrections.length,
       unreviewed: cards.filter((card) => !card.owner_confirmed_at).length,
     },
     cards: visible.map((item) => {
-      const all = feedback.filter((entry) => entry.card_id === item.id);
-      const reviewed = all.filter((entry) => snapshotIds.has(entry.id));
-      const outstanding = reviewed.filter((entry) => !decisionMap.has(entry.id)).length;
       const waiting = corrections.filter((entry) => entry.card_id === item.id);
       return { cardId: item.id, ownerId: item.owner_id, ownerName: names.get(item.owner_id) ?? item.owner_id,
         roleLabel: item.role_label, missionCount: missions.filter((mission) => mission.personal_mission_card_id === item.id).length,
         ownerConfirmedAt: item.owner_confirmed_at?.toISOString() ?? null,
+        contentVisible: item.owner_id === person.personId || (phase === "confirmed" || !!item.owner_confirmed_at) && (approver || person.role === "ceo"),
         line: failures.some((failure) => failure.ownerId === item.owner_id) && phase === "draft" ? "起草未完成，可重试"
-          : missionCardLine(phase, item.owner_confirmed_at, reviewed.length, outstanding, approver, correctable ? waiting.length : 0), pending: outstanding,
-        firstPendingFeedbackId: reviewed.find((entry) => !decisionMap.has(entry.id))?.id ?? null,
+          : missionCardLine(phase, item.owner_confirmed_at, 0, 0, approver, correctable ? waiting.length : 0), pending: annotationCounts.find((entry)=>entry.card_id===item.id)?.pending ?? 0,
+        firstPendingFeedbackId: null,
         pendingCorrections: waiting.length, firstPendingCorrectionId: waiting[0]?.id ?? null, mine: item.owner_id === person.personId,
         placeholder: item.placeholder };
     }),
   };
   const actions: TCard["actions"] = [];
   if (retryDraftAction) actions.push(retryDraftAction);
-  const actionType = approver ? (phase === "draft" && !failures.length ? "mission-round.open" : ["open", "closed"].includes(phase) ? "mission-round.close" : phase === "reviewing" ? "mission-round.reopen" : null) : null;
-  if (actionType) actions.push({ actionType, label: phase === "draft" ? "下发审核" : ["open", "closed"].includes(phase) ? "开始汇总" : "重新开放审核",
+  const actionType = approver ? (phase === "draft" && !failures.length ? "mission-round.open" : phase === "closed" ? "mission-round.reopen" : null) : null;
+  if (actionType) actions.push({ actionType, label: phase === "draft" ? "交给本人确认" : "延长本人确认",
     actionId: signActionId(secret, { actionType, objectType: "mission-round", objectId: row.id, objectVersion: row.version }) });
-  if (approver && phase === "reviewing" && review && pending === 0) actions.push({ actionType: "mission-round.confirm", label: "确认前核对",
+  if (payload.coAgentReview?.retryAction) actions.push(payload.coAgentReview.retryAction);
+  if (approver && phase === "reviewing" && review?.agent_status === "completed") actions.push({ actionType: "mission-round.confirm", label: "确认任务组合",
     actionId: signActionId(secret, { actionType: "mission-round.confirm", objectType: "mission-round", objectId: row.id, objectVersion: row.version }) });
   return { schemaVersion: 1, id: `mission-round:${row.id}`, kind: "mission-round", version: row.version,
     objectRef: { type: "mission-round", id: row.id, version: row.version },
     title: `${Number(row.period.slice(5))} 月 Mission Card · ${row.battlefield_name}`, badge: "Mission Card", urgency: "normal", payload,
-    navigation: visible[0] ? [{ href: `${person.role === "ceo" ? "" : "/me"}/mission-cards/${visible[0].id}`, label: "个人 Mission Card" }] : [], actions };
+    navigation: visible.find((card) => card.owner_id === person.personId || row.status === "confirmed" || !!card.owner_confirmed_at) ? [{ href: `${person.role === "ceo" ? "" : "/me"}/mission-cards/${visible.find((card) => card.owner_id === person.personId || row.status === "confirmed" || !!card.owner_confirmed_at)!.id}`, label: "个人 Mission Card" }] : [], actions };
 }
 
 export async function getMissionRoundCard(
@@ -219,6 +218,7 @@ export async function listMissionRoundCards(
 export async function closeIfDue(client: PoolClient, row: MissionRoundRow, now: Date, explicitClose = false): Promise<MissionRoundRow> {
   if (row.status !== "open" || !row.closes_at || row.closes_at > now) return row;
   if (await pendingMissionCardAnnotations((sql, params) => client.query(sql, params), row.id)) return row;
+  if ((await client.query("SELECT 1 FROM personal_mission_cards WHERE round_id=$1 AND owner_confirmed_at IS NULL LIMIT 1", [row.id])).rowCount) return row;
   // 人工/最后本人确认已经持阶段锁，之前同毫秒提交的意见也须收下；自然截止仍沿用严格截止边界。
   const feedback = await client.query<{ id: string }>(`SELECT id FROM mission_card_feedback WHERE round_id=$1
     AND (created_at<$2${explicitClose ? " OR (created_at=$2 AND NOT late)" : ""}) ORDER BY seq`, [row.id, row.closes_at]);
@@ -227,9 +227,10 @@ export async function closeIfDue(client: PoolClient, row: MissionRoundRow, now: 
   const previous = await client.query<{ id: string }>("SELECT id FROM mission_round_reviews WHERE round_id=$1 AND superseded_at IS NOT NULL ORDER BY window_seq DESC LIMIT 1", [row.id]);
   const reviewId = randomUUID();
   const feedbackIds = feedback.rows.map((item) => item.id);
-  await client.query(`INSERT INTO mission_round_reviews (id,round_id,window_seq,snapshot_at,taken_at,feedback_ids,mission_versions)
-    VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)`,
-  [reviewId, row.id, row.window_seq, row.closes_at, now, JSON.stringify(feedbackIds), JSON.stringify(Object.fromEntries(missions.rows.map((item) => [item.id, item.version])))]);
+  const input = await buildMissionCardReviewInput((sql, params) => client.query(sql, params), row);
+  await client.query(`INSERT INTO mission_round_reviews (id,round_id,window_seq,snapshot_at,taken_at,feedback_ids,mission_versions,agent_input)
+    VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb)`,
+  [reviewId, row.id, row.window_seq, row.closes_at, now, JSON.stringify(feedbackIds), JSON.stringify(Object.fromEntries(missions.rows.map((item) => [item.id, item.version]))), JSON.stringify(input)]);
   if (previous.rows[0]) await client.query(`INSERT INTO mission_review_decisions (review_id,feedback_id,decision,decided_by,decided_at,carried)
     SELECT $1,feedback_id,decision,decided_by,decided_at,true FROM mission_review_decisions
     WHERE review_id=$2 AND feedback_id=ANY($3::uuid[])`, [reviewId, previous.rows[0].id, feedbackIds]);
@@ -264,7 +265,7 @@ function appendFingerprint(existing: string[], fingerprint: string): string[] {
   return [...existing.filter((value) => value !== fingerprint), fingerprint].slice(-100);
 }
 async function executeRoundAction(
-  operation: "open" | "close" | "reopen" | "decide" | "confirm", pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson,
+  operation: "open" | "close" | "reopen" | "decide" | "confirm" | "review-retry", pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson,
   scope: ActionScope, fingerprint: string, now: () => Date, input: { decision?: "accept" | "decline"; note?: string } = {},
 ): Promise<MeetingActionOutcome> {
   if (!UUID.test(scope.objectId)) return failure(404, "ROUND_NOT_FOUND", "Mission Card 轮次不存在");
@@ -280,7 +281,7 @@ async function executeRoundAction(
     }
     // 拍板权在重放与 latestCard 之前复查，旧令牌不保留旧权限。
     if (!canApprove(person, current)) {
-      await client.query("ROLLBACK"); return failure(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以拍板");
+      await client.query("ROLLBACK"); return failure(403, "ROUND_FORBIDDEN", "仅该战场 DRI 可以确认任务组合");
     }
     const at = now();
     // 显式开始汇总先检查令牌与待改批注；遗留截止仍使用原截止时间取快照。
@@ -292,15 +293,15 @@ async function executeRoundAction(
     if (row.status === "confirmed") return await finish(failure(409, "ROUND_CONFIRMED", "本月 Mission Card 已确定；要改字段，请在任务卡上更正"));
     if (operation === "open") {
       if (row.status !== "draft") return await finish(failure(409, "ROUND_ALREADY_OPEN", "本轮已经开放，倒计时不会重置"));
-      if (draftFailures(row).length) return await finish(failure(409, "ROUND_DRAFT_INCOMPLETE", "有任务卡起草未完成，请先重试再开放讨论"));
+      if (draftFailures(row).length) return await finish(failure(409, "ROUND_DRAFT_INCOMPLETE", "有任务卡起草未完成，请先重试，再交给本人确认"));
       const plan = (await client.query<{ id: string; version: number; status: string; confirmed_at: Date | null; battlefields: { battlefieldId: string; outcome: string }[] }>(
         "SELECT id,version,status,confirmed_at,battlefields FROM monthly_plans WHERE id=$1 AND period=$2 FOR SHARE", [row.monthly_plan_id, row.period])).rows[0];
-      if (!plan || plan.status !== "confirmed" || !plan.confirmed_at) return await finish(failure(409, "MONTHLY_PLAN_NOT_CONFIRMED", `${Number(row.period.slice(5))} 月月度计划还没签发：先签发再开放讨论`));
+      if (!plan || plan.status !== "confirmed" || !plan.confirmed_at) return await finish(failure(409, "MONTHLY_PLAN_NOT_CONFIRMED", `${Number(row.period.slice(5))} 月月度计划还没签发：先签发目标，再交给本人确认`));
       const monthOutcome = plan.battlefields.find((item) => item.battlefieldId === row.battlefield_id)?.outcome;
-      if (!monthOutcome?.trim() || !row.six_month_outcome.trim()) return await finish(failure(409, "ROUND_GOALS_MISSING", "缺少本战场的六个月目标或已签发本月目标，暂不能开放讨论"));
+      if (!monthOutcome?.trim() || !row.six_month_outcome.trim()) return await finish(failure(409, "ROUND_GOALS_MISSING", "缺少本战场的六个月目标或已签发本月目标，暂不能交给本人确认"));
       const cards = await client.query<{ count: number }>(`SELECT count(m.id)::int AS count FROM personal_mission_cards c
         LEFT JOIN missions m ON m.personal_mission_card_id=c.id WHERE c.round_id=$1 GROUP BY c.id`, [row.id]);
-      if (!cards.rows.length || cards.rows.some((item) => item.count === 0)) return await finish(failure(409, "ROUND_EMPTY_CARD", "每张任务卡至少需要一项个人任务，暂不能开放讨论"));
+      if (!cards.rows.length || cards.rows.some((item) => item.count === 0)) return await finish(failure(409, "ROUND_EMPTY_CARD", "每张任务卡至少需要一项个人任务，暂不能交给本人确认"));
       const goal: GoalSnapshot = { sixMonthOutcome: row.six_month_outcome, monthOutcome, signedAt: plan.confirmed_at.toISOString(),
         battlefieldId: row.battlefield_id, battlefieldVersion: row.battlefield_version, monthlyPlanId: plan.id, monthlyPlanVersion: plan.version };
       const updated = await client.query(`UPDATE mission_rounds SET status='open',window_seq=1,opened_at=$2,first_opened_at=$2,
@@ -308,74 +309,41 @@ async function executeRoundAction(
       [row.id, at, JSON.stringify(goal), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
       row = { ...row, ...updated.rows[0] };
     } else if (operation === "close") {
-      if (row.status !== "open") return await finish(failure(409, "ROUND_NOT_OPEN", "讨论尚未开放或已经结束"));
+      if (row.status !== "open") return await finish(failure(409, "ROUND_NOT_OPEN", "本人准备尚未开放或已经结束"));
+      if ((await q("SELECT 1 FROM personal_mission_cards WHERE round_id=$1 AND owner_confirmed_at IS NULL LIMIT 1", [row.id])).rowCount) return await finish(failure(409, "OWNERS_NOT_CONFIRMED", "仍有本人未确认任务，不能提前汇总或替人确认"));
       if (await pendingMissionCardAnnotations(q, row.id)) return await finish(failure(409, "ANNOTATIONS_PENDING", "还有待处理的修改批注，请先回答、重试或明确保留备注再开始汇总"));
       const alreadyDue = row.closes_at !== null && row.closes_at <= at;
       const updated = await client.query(`UPDATE mission_rounds SET closes_at=$2,action_fingerprints=$3::jsonb WHERE id=$1 RETURNING *`,
         [row.id, alreadyDue ? row.closes_at : at, JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
       row = await closeIfDue(client, { ...row, ...updated.rows[0] }, at, !alreadyDue);
     } else if (operation === "reopen") {
-      if (row.status !== "reviewing") return await finish(failure(409, "ROUND_NOT_CLOSED", "请先结束讨论并完成汇总"));
-      await client.query("UPDATE personal_mission_cards SET owner_confirmed_at=NULL WHERE round_id=$1 AND owner_confirmed_at IS NOT NULL", [row.id]);
-      await client.query("UPDATE mission_round_reviews SET superseded_at=$3 WHERE round_id=$1 AND window_seq=$2 AND superseded_at IS NULL", [row.id, row.window_seq, at]);
-      const reopens = [...row.reopens, { by: person.personId, at: at.toISOString(), closedAt: row.closes_at!.toISOString() }];
-      const updated = await client.query(`UPDATE mission_rounds SET status='open',window_seq=window_seq+1,opened_at=$2,closes_at=NULL,
-        reopens=$3::jsonb,version=version+1,action_fingerprints=$4::jsonb,updated_at=$2 WHERE id=$1 RETURNING *`,
-      [row.id, at, JSON.stringify(reopens), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
+      if (row.status === "open" && row.closes_at && row.closes_at <= at) {
+        const updated = await client.query(`UPDATE mission_rounds SET closes_at=NULL,window_seq=window_seq+1,version=version+1,
+          action_fingerprints=$2::jsonb,updated_at=$3 WHERE id=$1 RETURNING *`, [row.id, JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint)), at]);
+        row = { ...row, ...updated.rows[0] };
+        return await finish({ card: await project() });
+      }
+      return await finish(failure(409, "SELECT_AFFECTED_CARDS", "请指定受影响的任务卡并说明退回原因；其他人的确认保持有效"));
+    } else if (operation === "review-retry") {
+      if (row.status !== "reviewing") return await finish(failure(409, "ROUND_NOT_REVIEWING", "当前不在组合 Review 阶段"));
+      const updatedReview = await client.query("UPDATE mission_round_reviews SET agent_status='queued',agent_error=NULL,agent_run_id=NULL WHERE round_id=$1 AND window_seq=$2 AND superseded_at IS NULL AND agent_status='failed' RETURNING id", [row.id, row.window_seq]);
+      if (!updatedReview.rowCount) return await finish(failure(409, "REVIEW_NOT_FAILED", "当前 Review 无需重试"));
+      const updated = await client.query("UPDATE mission_rounds SET version=version+1,updated_at=$2,action_fingerprints=$3::jsonb WHERE id=$1 RETURNING *", [row.id, at, JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
       row = { ...row, ...updated.rows[0] };
     } else {
-      if (row.status !== "reviewing") return await finish(failure(409, "ROUND_NOT_REVIEWING", "请先等待讨论截止并完成规则汇总"));
-      const review = (await client.query<ReviewRow>("SELECT id,feedback_ids,taken_at,mission_versions FROM mission_round_reviews WHERE round_id=$1 AND window_seq=$2 AND superseded_at IS NULL", [row.id, row.window_seq])).rows[0];
-      if (!review) return await finish(failure(409, "ROUND_NOT_REVIEWING", "本轮尚未完成规则汇总"));
-      const snapshot = (await client.query<FeedbackRow & { decision: "accept" | "decline" | null }>(`SELECT f.*,d.decision FROM mission_card_feedback f
-        LEFT JOIN mission_review_decisions d ON d.feedback_id=f.id AND d.review_id=$1
-        WHERE f.round_id=$2 AND f.id=ANY($3::uuid[]) ORDER BY f.seq`, [review.id, row.id, review.feedback_ids])).rows;
-      if (operation === "decide") {
-        if (!scope.itemId || !UUID.test(scope.itemId) || !input.decision) return await finish(failure(400, "INVALID_REVIEW_DECISION", "请指定要处理的意见与结论"));
-        const item = snapshot.find((item) => item.id === scope.itemId);
-        if (!item) return await finish(failure(409, "FEEDBACK_NOT_IN_REVIEW", "意见不属于本轮 Review，不能处理"));
-        if (input.decision === "accept" && item.kind === "suggestion") {
-          const mission = await getMissionRow(q, item.mission_id!);
-          if (!mission || fieldText(projectMissionCard(mission, secret, new Map()).payload as TMissionCardPayload, item.field!) !== item.original)
-            return await finish(failure(409, "SUGGESTION_STALE", "提交建议后这段正文已修改，不能直接采纳"));
-        }
-        if (input.decision === "accept" && item.kind === "suggestion" && snapshot.some((other) => other.id !== item.id && other.kind === "suggestion"
-          && other.mission_id === item.mission_id && other.field === item.field && other.decision === "accept")) {
-          return await finish(failure(409, "CONFLICTING_SUGGESTION", "同一字段已采纳另一条"));
-        }
-        await client.query(`INSERT INTO mission_review_decisions (review_id,feedback_id,decision,decided_by,decided_at,carried)
-          VALUES ($1,$2,$3,$4,$5,false) ON CONFLICT (review_id,feedback_id)
-          DO UPDATE SET decision=EXCLUDED.decision,decided_by=EXCLUDED.decided_by,decided_at=EXCLUDED.decided_at,carried=false`,
-        [review.id, item.id, input.decision, person.personId, at]);
-      } else {
-        const note = input.note?.trim() ?? "";
-        if (!note || note.length > 2000) return await finish(failure(400, "INVALID_REVIEW_NOTE", "请填写 1–2000 字的跨人员依赖、冲突与协作核对结论"));
-        if (snapshot.length !== review.feedback_ids.length || snapshot.some((item) => !item.decision)) return await finish(failure(409, "REVIEW_INCOMPLETE", "请逐条处理本轮全部公开意见后再确认"));
-        const accepted = snapshot.filter((item) => item.kind === "suggestion" && item.decision === "accept");
-        const keys = accepted.map((item) => `${item.mission_id}:${item.field}`);
-        if (new Set(keys).size !== keys.length) return await finish(failure(409, "CONFLICTING_SUGGESTION", "同一字段已采纳另一条"));
-        // Lock the complete snapshot before any write, including missions with no accepted change.
-        const missions = (await client.query<{ id: string; version: number }>(`SELECT m.id,m.version FROM missions m
-          JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id WHERE c.round_id=$1 ORDER BY m.id FOR UPDATE OF m`, [row.id])).rows;
-        if (missions.length !== Object.keys(review.mission_versions).length || missions.some((mission) => review.mission_versions[mission.id] !== mission.version)) {
-          return await finish(failure(409, "MISSION_CHANGED", "个人任务版本已变化，请重新审阅后再确认"));
-        }
-        for (const item of accepted) {
-          const mission = await getMissionRow(q, item.mission_id!);
-          if (!mission || fieldText(projectMissionCard(mission, secret, new Map()).payload as TMissionCardPayload, item.field!) !== item.original)
-            return await finish(failure(409, "SUGGESTION_STALE", "已采纳建议的原文已变化，请重新核对这条建议"));
-        }
-        const appliedVersions: Record<string, number> = {};
-        for (const mission of missions) {
-          const changes = accepted.filter((item) => item.mission_id === mission.id);
-          if (!changes.length) continue;
-          appliedVersions[mission.id] = await writeMissionFields(client, mission.id, changes.map((item) => ({ field: item.field!, proposed: item.proposed! })), at);
-        }
-        await client.query("UPDATE mission_round_reviews SET note=$2,applied_versions=$3::jsonb WHERE id=$1", [review.id, note, JSON.stringify(appliedVersions)]);
-      }
-      const updated = await client.query(`UPDATE mission_rounds SET version=version+1,updated_at=$2,action_fingerprints=$3::jsonb
-        ${operation === "confirm" ? ",status='confirmed',confirmed_at=$2,confirmed_by=$4" : ""} WHERE id=$1 RETURNING *`,
-      [row.id, at, JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint)), ...(operation === "confirm" ? [person.personId] : [])]);
+      if (operation === "decide") return await finish(failure(409, "OWNER_RECONFIRMATION_REQUIRED", "修改建议需退回受影响的本人，不能在组合 Review 中改写已确认正文"));
+      if (row.status !== "reviewing") return await finish(failure(409, "ROUND_NOT_REVIEWING", "请先等待全员本人确认与 Co-Agent Review"));
+      const review = (await client.query<ReviewRow>("SELECT * FROM mission_round_reviews WHERE round_id=$1 AND window_seq=$2 AND superseded_at IS NULL", [row.id, row.window_seq])).rows[0];
+      if (!review || review.agent_status !== "completed") return await finish(failure(409, "CO_AGENT_REVIEW_INCOMPLETE", "请先完成 Co-Agent Review，再由战场 DRI 确认任务组合"));
+      if ((await q("SELECT 1 FROM personal_mission_cards WHERE round_id=$1 AND owner_confirmed_at IS NULL LIMIT 1", [row.id])).rowCount)
+        return await finish(failure(409, "OWNERS_NOT_CONFIRMED", "仍有本人未确认任务"));
+      const missions = (await q(`SELECT m.id,m.version FROM missions m JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id WHERE c.round_id=$1 ORDER BY m.id FOR SHARE OF m`, [row.id])).rows;
+      if (missions.length !== Object.keys(review.mission_versions).length || missions.some((mission) => review.mission_versions[mission.id] !== mission.version))
+        return await finish(failure(409, "MISSION_CHANGED", "任务版本已变化，请退回受影响的本人重新确认"));
+      const note = input.note?.trim() ?? "";
+      if (!note || note.length > 2000) return await finish(failure(400, "INVALID_REVIEW_NOTE", "请填写任务组合确认说明"));
+      await q("UPDATE mission_round_reviews SET note=$2 WHERE id=$1", [review.id, note]);
+      const updated = await q("UPDATE mission_rounds SET status='confirmed',confirmed_at=$2,confirmed_by=$3,version=version+1,updated_at=$2,action_fingerprints=$4::jsonb WHERE id=$1 RETURNING *", [row.id, at, person.personId, JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
       row = { ...row, ...updated.rows[0] };
     }
     return await finish({ card: await project() });
@@ -383,9 +351,11 @@ async function executeRoundAction(
     await client.query("ROLLBACK").catch(() => undefined); throw error;
   } finally { client.release(); }
 }
-
 export function executeOpenMissionRound(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope, fingerprint: string, now: () => Date): Promise<MeetingActionOutcome> {
   return executeRoundAction("open", pool, people, secret, person, scope, fingerprint, now);
+}
+export function executeRetryMissionRoundReview(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope, fingerprint: string, now: () => Date): Promise<MeetingActionOutcome> {
+  return executeRoundAction("review-retry", pool, people, secret, person, scope, fingerprint, now);
 }
 export function executeReopenMissionRound(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope, fingerprint: string, now: () => Date): Promise<MeetingActionOutcome> {
   return executeRoundAction("reopen", pool, people, secret, person, scope, fingerprint, now);
@@ -398,6 +368,40 @@ export function executeDecideMissionRound(pool: Pool, people: MemoryPerson[], se
 }
 export function executeConfirmMissionRound(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope, fingerprint: string, now: () => Date, input: TMissionRoundConfirmInput): Promise<MeetingActionOutcome> {
   return executeRoundAction("confirm", pool, people, secret, person, scope, fingerprint, now, input);
+}
+
+/** 组合 Review 只退回具体受影响的卡，不使其他人的已确认承诺失效。 */
+export async function returnMissionCards(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson,
+  roundId: string, input: import("@warmap/contracts").TReturnMissionCardsRequest, now: () => Date): Promise<MeetingActionOutcome> {
+  if (!UUID.test(roundId)) return failure(404, "ROUND_NOT_FOUND", "任务组合不存在");
+  const client = await pool.connect(); const q: Query = (sql, params) => client.query(sql, params);
+  try {
+    await q("BEGIN");
+    await q("SELECT id FROM mission_rounds WHERE id=$1 FOR UPDATE", [roundId]);
+    const row = await getMissionRoundRow(q, roundId);
+    if (!row || !await canRead(q, person, row)) { await q("ROLLBACK"); return failure(404, "ROUND_NOT_FOUND", "任务组合不存在"); }
+    if (!canApprove(person, row)) { await q("ROLLBACK"); return failure(403, "ROUND_FORBIDDEN", "仅战场 DRI 可以退回任务卡"); }
+    const finish = async (result: MeetingActionOutcome) => { await q("COMMIT"); return result; };
+    if (row.version !== input.version) return await finish({ conflict: true, latestCard: await projectMissionRoundCard(q, people, secret, person, row, now()) });
+    if (!["reviewing", "confirmed"].includes(row.status)) return await finish(failure(409, "ROUND_NOT_REVIEWING", "全员本人确认后，才能退回受影响的任务卡"));
+    if (correctionPeriodClosed(row, now())) return await finish(failure(409, "MISSION_CARD_PERIOD_CLOSED", "月份已过，任务卡只读"));
+    if (row.status === "confirmed" && (await q("SELECT 1 FROM personal_mission_cards WHERE round_id=$1 AND owner_confirmed_at IS NULL LIMIT 1", [roundId])).rowCount)
+      return await finish(failure(409, "LEGACY_CONFIRMATION_REQUIRES_NEW_DRAFT", "这份历史组合没有本人确认记录，请单独重新起草；原正式确认与更正历史保持只读"));
+    const cards = (await q("SELECT id FROM personal_mission_cards WHERE round_id=$1 AND id=ANY($2::uuid[]) FOR UPDATE", [roundId, input.cardIds])).rows;
+    if (cards.length !== input.cardIds.length) return await finish(failure(400, "INVALID_RETURN_CARDS", "请选择当前战场里的任务卡"));
+    const reason = input.reason.trim(), at = now();
+    if (!reason || reason.includes("\u0000")) return await finish(failure(400, "INVALID_RETURN_REASON", "请说明需要本人处理的具体问题"));
+    await q("UPDATE personal_mission_cards SET owner_confirmed_at=NULL,return_reason=$3 WHERE round_id=$1 AND id=ANY($2::uuid[])", [roundId, input.cardIds, reason]);
+    await q("UPDATE mission_round_reviews SET superseded_at=$2 WHERE round_id=$1 AND superseded_at IS NULL", [roundId, at]);
+    const priorReview = (await q("SELECT id,note FROM mission_round_reviews WHERE round_id=$1 AND window_seq=$2 ORDER BY taken_at DESC LIMIT 1", [row.id, row.window_seq])).rows[0];
+    const priorConfirmation = row.confirmed_at && row.confirmed_by ? { by: row.confirmed_by, at: row.confirmed_at.toISOString(), note: priorReview?.note ?? "", reviewId: priorReview?.id ?? null } : undefined;
+    const reopens = [...row.reopens, { by: person.personId, at: at.toISOString(), closedAt: row.closes_at?.toISOString() ?? at.toISOString(), cardIds: input.cardIds, reason, priorConfirmation }];
+    await q(`UPDATE mission_rounds SET status='open',window_seq=window_seq+1,opened_at=$2,closes_at=NULL,
+      confirmed_at=NULL,confirmed_by=NULL,reopens=$3::jsonb,version=version+1,updated_at=$2 WHERE id=$1`, [roundId, at, JSON.stringify(reopens)]);
+    const updated = (await getMissionRoundRow(q, roundId))!;
+    return await finish({ card: await projectMissionRoundCard(q, people, secret, person, updated, at) });
+  } catch (cause) { await q("ROLLBACK").catch(() => undefined); throw cause; }
+  finally { client.release(); }
 }
 
 const MISSION_FIELD_COLUMNS: Record<TMissionCardField, string> = {
@@ -523,11 +527,11 @@ export async function importMissionCardDrafts(
     if (!battlefield) throw new MissionDraftImportError(400, "INVALID_BATTLEFIELD", `战场 code ${value.battlefieldCode} 未登记`);
     if (action) {
       if (action.scope.objectId !== `${battlefield.id}:${value.period}`) throw new MissionDraftImportError(400, "INVALID_DRAFT_SCHEMA", "候选文件的战场或月份与整理草稿入口不一致");
-      if (!canApprove(action.person, { battlefield_owner_id: battlefield.owner_id })) throw new MissionDraftImportError(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以整理任务卡草稿");
+      if (!canApprove(action.person, { battlefield_owner_id: battlefield.owner_id })) throw new MissionDraftImportError(403, "ROUND_FORBIDDEN", "仅该战场 DRI 可以整理任务卡草稿");
     }
     const existing = (await client.query<{ id: string; draft_source: { sha256?: string } }>("SELECT id,draft_source FROM mission_rounds WHERE battlefield_id=$1 AND period=$2 FOR UPDATE", [battlefield.id, value.period])).rows[0];
     if (existing) {
-      if (existing.draft_source.sha256 !== sha256) throw new MissionDraftImportError(409, "MISSION_DRAFT_SOURCE_CHANGED", "本轮已存在且候选文件已改变，不能覆盖已经整理或讨论的内容");
+      if (existing.draft_source.sha256 !== sha256) throw new MissionDraftImportError(409, "MISSION_DRAFT_SOURCE_CHANGED", "本月任务卡已存在且候选文件已改变，不能覆盖已有任务内容");
       if (action) await closeIfDue(client, (await getMissionRoundRow(q, existing.id))!, clock());
       const cards = await importedCards(q, existing.id);
       await client.query("COMMIT"); return { roundId: existing.id, imported: false, cards };
@@ -729,7 +733,7 @@ export async function executeDraftMissionRound(
   const q: Query = (sql, params) => pool.query(sql, params);
   const battlefield = (await q("SELECT id,code,owner_id FROM battlefield_config WHERE id=$1", [match[1]])).rows[0] as { id: string; code: string; owner_id: string } | undefined;
   if (!battlefield) return failure(404, "ROUND_NOT_FOUND", "战场不存在");
-  if (!canApprove(person, { battlefield_owner_id: battlefield.owner_id })) return failure(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以整理任务卡草稿");
+  if (!canApprove(person, { battlefield_owner_id: battlefield.owner_id })) return failure(403, "ROUND_FORBIDDEN", "仅该战场 DRI 可以整理任务卡草稿");
   if (!agent) return failure(503, "MISSION_DRAFT_AGENT_UNAVAILABLE", "Co-Agent 起草服务未配置，请配置后重试");
   const client = await pool.connect();
   let roundId: string | undefined;
@@ -739,7 +743,7 @@ export async function executeDraftMissionRound(
     await client.query("BEGIN");
     const locked = (await client.query<{ id: string; owner_id: string }>("SELECT id,owner_id FROM battlefield_config WHERE id=$1 FOR UPDATE", [battlefield.id])).rows[0];
     if (!locked || !canApprove(person, { battlefield_owner_id: locked.owner_id })) {
-      await client.query("ROLLBACK"); return failure(403, "ROUND_FORBIDDEN", "仅 CEO 或该战场 DRI 可以整理任务卡草稿");
+      await client.query("ROLLBACK"); return failure(403, "ROUND_FORBIDDEN", "仅该战场 DRI 可以整理任务卡草稿");
     }
     const existing = (await client.query<{ id: string; version: number; status: string; draft_source: Record<string, unknown>; action_fingerprints: string[] }>(
       "SELECT id,version,status,draft_source,action_fingerprints FROM mission_rounds WHERE battlefield_id=$1 AND period=$2 FOR UPDATE", [battlefield.id, match[2]])).rows[0];

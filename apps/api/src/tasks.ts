@@ -24,7 +24,7 @@ type TaskRow = {
 const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t.start_date::text AS start_date,
  t.due_date::text AS due_date,t.done_definition,t.judgment,t.judgment_at,t.return_reason,t.origin_meeting_id::text,
  t.source_quote,mt.title AS meeting_title,mt.lead_dri_id,t.owner_id,t.mission_id,t.step_order,
- m.title AS mission_title,c.id::text AS card_id,r.period,b.name AS battlefield_name,
+ CASE WHEN r.status='confirmed' THEN m.title ELSE NULL END AS mission_title,c.id::text AS card_id,r.period,b.name AS battlefield_name,
  (SELECT count(*)::int FROM tasks s WHERE s.mission_id=t.mission_id) AS steps,
  prev.id::text AS previous_id,prev.title AS previous_title,prev.status AS previous_status,
  ARRAY(SELECT tm.person_id FROM task_members tm WHERE tm.task_id=t.id AND tm.role='collaborator' AND tm.left_at IS NULL ORDER BY tm.added_at,tm.person_id) AS collaborators,

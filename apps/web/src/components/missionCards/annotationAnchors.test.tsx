@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TMissionCardAnnotationView } from "@warmap/contracts";
-import { annotationMarks, locateAnchor, normalizeAnchorText } from "./annotationAnchors";
+import { annotationMarks, locateAnchor, normalizeAnchorText, revisionAnchor } from "./annotationAnchors";
 import { AnnotatedField, AnnotationNote, FieldAnnotationActivity, RevisionHistory } from "./MissionAnnotations";
 import { personalPayload } from "./personalMissionFixture";
 
@@ -22,7 +22,7 @@ describe("rendered Markdown annotation anchors", () => {
     expect(normalizeAnchorText("  前文\n\t成功证据 后文 ")).toBe("前文 成功证据 后文");
     const html = renderToStaticMarkup(<AnnotatedField mission={mission} field="outcome" text={note.sourceText} notes={[note]} onSelect={vi.fn()} />);
     expect(html).toContain('<strong><mark data-annotation-ids="note">成功证据</mark>');
-    expect(html).toContain('aria-label="查看此处批注"');
+    expect(html).toContain('aria-label="查看此处批注与修改记录"');
     expect(html).not.toContain("**");
   });
   it("preserves multi-node emphasis and marks only the selected span once", () => {
@@ -31,10 +31,36 @@ describe("rendered Markdown annotation anchors", () => {
     expect((html.match(/<mark /g) ?? []).length).toBe(2);
     expect((html.match(/查看此处批注/g) ?? []).length).toBe(1);
   });
-  it("never attaches a stale annotation to changed text", () => {
+  it("does not underline unrelated text but preserves stale notes behind the field-end icon", () => {
     const html = renderToStaticMarkup(<AnnotatedField mission={mission} field="outcome" text={note.sourceText} notes={[{ ...note, stale: true }]} onSelect={vi.fn()} />);
     expect(html).not.toContain("<mark");
-    expect(html).not.toContain("查看此处批注");
+    expect(html).toContain("查看此处批注与修改记录");
+    expect(html).not.toContain("请明确验收口径");
+  });
+  it("groups multiple annotations in the same sentence into one record icon", () => {
+    const text = "请核对入口与讨论状态。下一句保持稳定。";
+    const first = { ...note, quote: "核对入口", prefix: "请", suffix: "与讨论状态。", startOffset: 1 };
+    const second = { ...note, id: "another", quote: "讨论状态", prefix: "请核对入口与", suffix: "。下一句", startOffset: 6 };
+    const html = renderToStaticMarkup(<AnnotatedField mission={mission} field="outcome" text={text} notes={[first, second]} onSelect={vi.fn()} />);
+    expect((html.match(/查看此处批注与修改记录/g) ?? []).length).toBe(1);
+    expect(html).toContain('data-annotation-ids="note another"');
+    expect(html).toContain("下一句保持稳定。");
+  });
+  it("shows the latest passage with one icon linking its revision and original comment", () => {
+    const revision = { id: "revision", cardId: "card", missionId: mission.missionId, field: "outcome" as const, before: "核对旧入口。", after: "核对新版入口。", reason: "按本人意见修改", source: "annotation" as const, authorId: "owner", authorName: "白田田", annotationId: note.id, beforeVersion: 1, afterVersion: 2, createdAt: note.createdAt };
+    const html = renderToStaticMarkup(<AnnotatedField mission={mission} field="outcome" text={revision.after} notes={[{ ...note, stale: true }]} revisions={[revision]} onSelect={vi.fn()} />);
+    expect(html).toContain("新版");
+    expect(html).toContain('data-annotation-ids="revision note"');
+    expect((html.match(/查看此处批注与修改记录/g) ?? []).length).toBe(1);
+    expect(html).not.toContain("旧入口");
+    expect(html).not.toContain("<del");
+    expect(revisionAnchor(revision.before, revision.after)?.quote).toBe("新版");
+  });
+  it("keeps deletion records attached to neighboring current text without displaying removed words", () => {
+    const anchor = revisionAnchor("先核对，再完整复查。", "先核对，复查。");
+    expect(anchor).not.toBeNull();
+    expect(locateAnchor("先核对，复查。", anchor!)).not.toBeNull();
+    expect(anchor?.quote).not.toContain("再完整");
   });
   it("renders the clarification next to the field with a final custom input option", () => {
     const controls = { notes: [note], revisions: [], onSave: vi.fn(), onAnswer: vi.fn(), onRetry: vi.fn() };
@@ -58,5 +84,16 @@ describe("rendered Markdown annotation anchors", () => {
     expect(completed).toContain("请明确验收口径");
     expect(completed).toContain("等待依赖明确，暂时保留备注");
     expect(completed).toContain("正文未修改");
+  });
+  it("saved notes leave confirmation unblocked and can explicitly start an edit only with owner permission", () => {
+    const saved = { ...note, status: "saved" as const, canRetry: true, canAnswer: false };
+    const controls = { notes: [saved], revisions: [], onSave: vi.fn(), onAnswer: vi.fn(), onRetry: vi.fn() };
+    expect(renderToStaticMarkup(<FieldAnnotationActivity notes={[saved]} controls={controls} />)).toBe("");
+    const editable = renderToStaticMarkup(<AnnotationNote note={saved} onRetry={controls.onRetry} />);
+    expect(editable).toContain("让 Agent 修改");
+    expect(editable).toContain("请明确验收口径");
+    const frozen = renderToStaticMarkup(<AnnotationNote note={{ ...saved, canRetry: false }} onRetry={controls.onRetry} />);
+    expect(frozen).not.toContain("让 Agent 修改");
+    expect(frozen).toContain("请明确验收口径");
   });
 });

@@ -58,6 +58,13 @@ function deferred<T>() {
 const snapshot = (annotations: TMissionCardAnnotationView[] = [], revisions: unknown[] = []) => ({ ok: true, json: async () => ({ annotations, revisions }) });
 
 describe("直接批注的阶段与审核权限", () => {
+  it.each(["note", "edit"] as const)("保存明确传递%s意图，保留引用与来源而不生成私聊记录", async (intent) => {
+    const fetchMock = vi.fn().mockResolvedValue(response()); vi.stubGlobal("fetch", fetchMock);
+    const annotations = useMissionAnnotations("card", 2);
+    expect(await annotations.save(selection, "按本人意见核对", "explicit-client", intent)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ intent, body: "按本人意见核对", sourceRound: 2, sourceVersion: 1, quote: "正文" });
+  });
   it("选区冻结来源审核编号，之后页面重开也不能改用新编号；不向会话发送", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response()); vi.stubGlobal("fetch", fetchMock);
     const annotations = useMissionAnnotations("card", 3);
@@ -177,18 +184,30 @@ describe("直接批注的阶段与审核权限", () => {
     post.resolve(response(note)); expect(await mutation).toContain("任务卡已关闭或切换"); await tick();
     expect(ui.writes).toHaveLength(writes); expect(fetchMock).toHaveBeenCalledTimes(calls);
   });
-  it("完成审核后直接批注禁用并解释取消确认，引用私聊仍然可用", () => {
+  it("没有修改权限时不提供批注入口，引用私聊仍然可用", () => {
     const html = renderToStaticMarkup(<SelectionPopover selection={selection} canCreate={false} closedReason="已完成审核，取消确认后可继续修改。" onSave={vi.fn()} onQuote={vi.fn()} onClose={vi.fn()} />);
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?直接批注<\/button>/);
+    expect(html).not.toContain("直接批注");
     const quoteButton = /<button[^>]*>[^]*?引用并对话<\/button>/.exec(html)?.[0].split("</button>").at(-2);
     expect(quoteButton).not.toContain("disabled");
-    expect(html).toContain("取消确认后可继续修改");
+    expect(html).not.toContain("取消确认后可继续修改");
   });
   it("批注输入途中正文冻结时，保留原输入并禁用保存", () => {
     ui.state = ["write", "尚未保存的意见", "", false];
     const html = renderToStaticMarkup(<SelectionPopover selection={selection} canCreate={false} closedReason="已经开始汇总，请重新开放审核后修改。" onSave={vi.fn()} onQuote={vi.fn()} onClose={vi.fn()} />);
     expect(html).toMatch(/<textarea[^>]*disabled=""[^>]*>尚未保存的意见<\/textarea>/);
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>保存批注<\/button>/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>保存<\/button>/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>立即修改<\/button>/);
     expect(html).toContain("已经开始汇总");
+  });
+  it("批注编辑只保留意见输入与保存/立即修改，不重复展示原文和说明", () => {
+    ui.state = ["write", "我的意见", "", false];
+    const html = renderToStaticMarkup(<SelectionPopover selection={selection} canCreate onSave={vi.fn()} onQuote={vi.fn()} onClose={vi.fn()} />);
+    expect(html).toContain('placeholder="写下修改意见"');
+    expect(html).toContain(">保存</button>");
+    expect(html).toContain(">立即修改</button>");
+    expect((html.match(/<button /g) ?? []).length).toBe(2);
+    expect(html).not.toContain("同卡成员可见");
+    expect(html).not.toContain("<blockquote");
+    expect(html).not.toContain("直接批注</strong>");
   });
 });

@@ -20,6 +20,8 @@ export type PersonalMissionGroup = {
   round: number;
   onRefresh: () => void;
   agentNote?: string;
+  /** 个人准备与本人确认通过私聊完成，不提供公开改卡入口。 */
+  canDiscuss?: boolean;
   reference?: MissionGroupReference | null;
   onRemoveReference: () => void;
 };

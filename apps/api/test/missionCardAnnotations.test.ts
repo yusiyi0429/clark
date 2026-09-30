@@ -30,13 +30,13 @@ async function fixture(t: TestApp) {
       VALUES ($1,1,$1,'2026-10','任务',$2,'method','["growth"]',$4,'["证据一","证据二"]','https://example.test/source','fixture',1,'来源',true,$3)`, [id, owner, id, SOURCE]);
   }
   const ceo = await t.loginCookie();
-  const draft = await page(t, ceo, card);
+  const draft = (await get(t, ceo, `/api/mission-rounds/${round}`)).json().cards[0];
   expect((await post(t, ceo, "/api/mission-rounds/actions/execute", { actionId: draft.actions[0].actionId })).statusCode).toBe(200);
   return { round, card, other };
 }
 
 function input(card: string, extra: Partial<TCreateMissionCardAnnotationRequest> = {}): TCreateMissionCardAnnotationRequest {
-  return { clientId: randomUUID(), sourceRound: 1, missionId: card, field: "outcome", sourceVersion: 1, sourceText: SOURCE,
+  return { intent: "edit", clientId: randomUUID(), sourceRound: 1, missionId: card, field: "outcome", sourceVersion: 1, sourceText: SOURCE,
     quote: "核对", prefix: "先做 ", suffix: "，再完成走查。", startOffset: 3, body: "请说明核对对象。", ...extra };
 }
 const get = (t: TestApp, cookie: string, path: string) => t.app.inject({ method: "GET", url: path, headers: { cookie } });
@@ -44,11 +44,51 @@ const post = (t: TestApp, cookie: string, path: string, payload: unknown) => t.a
   method: "POST", url: path, headers: { cookie, origin: t.publicOrigin }, payload,
 });
 const annotations = (card: string) => `/api/mission-cards/${card}/annotations`;
+const pageResponse = (t: TestApp, cookie: string, card: string) => get(t, cookie, `/api/mission-cards/${card}`);
 async function page(t: TestApp, cookie: string, card: string) {
   return (await get(t, cookie, `/api/mission-cards/${card}`)).json().cards[0];
 }
 
 describe("任务卡正文批注", () => {
+  it("本人只能保留自己的待改批注，到期延长与汇总退回提示匹配实际阶段", async () => {
+    const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(START), missionCardAnnotationAgent: noChange });
+    try {
+      const f = await fixture(t), member = await t.memberCookie();
+      const own = (await post(t, member, annotations(f.card), input(f.card, { intent: "note" }))).json().annotation;
+      const legacy = (await post(t, member, annotations(f.card), input(f.card, { intent: "note", body: "历史外人意见" }))).json().annotation;
+      await t.sql("UPDATE mission_card_annotations SET intent='edit',status='failed' WHERE id=ANY($1::uuid[])", [[own.id, legacy.id]]);
+      await t.sql("UPDATE mission_card_annotations SET author_id='person-fixture-001' WHERE id=$1", [legacy.id]);
+      const before = (await t.sql("SELECT author_id,status,note,clarification_history FROM mission_card_annotations WHERE id=$1", [legacy.id]))[0];
+      const read = (await get(t, member, annotations(f.card))).json().annotations;
+      expect(read.find((entry: { id: string }) => entry.id === own.id)).toMatchObject({ canResolve: true });
+      expect(read.find((entry: { id: string }) => entry.id === legacy.id)).toMatchObject({ canResolve: false, canRetry: false, canAnswer: false });
+      const forbidden = await post(t, member, `${annotations(f.card)}/${legacy.id}/resolve`, { reason: "不应改动历史外人意见" });
+      expect(forbidden.statusCode).toBe(403);
+      expect(forbidden.json().code).toBe("ANNOTATION_RESPONSE_FORBIDDEN");
+      expect((await t.sql("SELECT author_id,status,note,clarification_history FROM mission_card_annotations WHERE id=$1", [legacy.id]))[0]).toEqual(before);
+      for (const [status, deadline, expected] of [
+        ["open", START, "延长本人确认"],
+        ["draft", null, "交给本人确认"], ["reviewing", null, "退回受影响的本人"], ["confirmed", null, "退回受影响的本人"],
+      ] as const) {
+        await t.sql(`UPDATE mission_rounds SET status=$2,closes_at=$3,
+          opened_at=CASE WHEN $2='draft' THEN NULL ELSE $4::timestamptz END,
+          confirmed_at=CASE WHEN $2='confirmed' THEN $4::timestamptz ELSE NULL END,
+          confirmed_by=CASE WHEN $2='confirmed' THEN 'person-fixture-001' ELSE NULL END WHERE id=$1`, [f.round, status, deadline, START]);
+        expect((await get(t, member, annotations(f.card))).json().annotations.find((entry: { id: string }) => entry.id === own.id).canResolve).toBe(false);
+        const retained = await post(t, member, `${annotations(f.card)}/${own.id}/resolve`, { reason: "暂时保留原文" });
+        expect(retained.statusCode, retained.body).toBe(409);
+        expect(retained.json()).toMatchObject({ code: "ROUND_NOT_OPEN" });
+        expect(retained.json().message).toContain(expected);
+        const confirmed = await post(t, member, `/api/mission-cards/${f.card}/owner-confirmation`, { confirmed: true, round: 1, missionVersions: { [f.card]: 1 } });
+        expect(confirmed.statusCode, confirmed.body).toBe(409);
+        expect(confirmed.json().message).toContain(expected);
+      }
+      await t.sql("UPDATE mission_rounds SET status='open',closes_at=NULL,confirmed_at=NULL,confirmed_by=NULL WHERE id=$1", [f.round]);
+      await t.sql("UPDATE personal_mission_cards SET owner_confirmed_at=$2 WHERE id=$1", [f.card, START]);
+      expect((await get(t, member, annotations(f.card))).json().annotations.find((entry: { id: string }) => entry.id === own.id).canResolve).toBe(false);
+      expect((await post(t, member, `${annotations(f.card)}/${own.id}/resolve`, { reason: "暂时保留原文" })).json().code).toBe("OWNER_CONFIRMED");
+    } finally { await t.close(); }
+  });
   it("时间边界与取舍可由直接批注即时修改，私聊读取完整新字段与前后留痕", async () => {
     const generate: MissionCardAnnotationAgent["generate"] = async (request) => ({ candidate: {
       action: "apply", proposed: request.field === "timeBoundary" ? "10月31日前完成验收" : "优先完成权限闭环，延后视觉扩展",
@@ -89,7 +129,8 @@ describe("任务卡正文批注", () => {
       expect(saved.statusCode, saved.body).toBe(200);
       expect(saved.json().annotation).toMatchObject({ cardId: f.card, missionId: f.card, field: "outcome", sourceText: SOURCE,
         quote: "核对", body: "请说明核对对象。", authorId: "person-fixture-002", status: "queued", stale: false });
-      const read = await get(t, ceo, annotations(f.card));
+      expect((await get(t, ceo, annotations(f.card))).statusCode).toBe(404);
+      const read = await get(t, member, annotations(f.card));
       expect(read.statusCode).toBe(200);
       expect(Value.Check(MissionCardAnnotationsResponse, read.json())).toBe(true);
       expect(read.json().annotations).toHaveLength(1);
@@ -147,7 +188,7 @@ describe("任务卡正文批注", () => {
       expect((await post(t, member, `${annotations(f.other)}/${saved.id}/answer`, { answer: "DRI" })).statusCode).toBe(404);
       const answered = await post(t, member, url, { answer: "CEO 和 DRI 双视角" });
       expect(answered.statusCode, answered.body).toBe(200);
-      await vi.waitFor(async () => expect((await get(t, ceo, annotations(f.card))).json().annotations[0].status).toBe("applied"));
+      await vi.waitFor(async () => expect((await get(t, member, annotations(f.card))).json().annotations[0].status).toBe("applied"));
       expect((await post(t, member, url, { answer: "CEO 和 DRI 双视角" })).statusCode).toBe(200);
       expect((await get(t, member, annotations(f.card))).json().revisions).toHaveLength(1);
       expect((await page(t, member, f.card)).payload.card.missions[0].outcome).toBe("先做 **CEO 和 DRI 双视角核对**，再完成走查。");
@@ -204,13 +245,10 @@ describe("任务卡正文批注", () => {
       expect((await post(t, member, `${annotations(f.card)}/${saved.id}/retry`, {})).statusCode).toBe(200);
       await vi.waitFor(async () => expect((await get(t, member, annotations(f.card))).json().annotations[0].status).toBe("applied"));
       expect((await get(t, member, annotations(f.card))).json().revisions).toHaveLength(1);
-      // 保留在成员名单但不是卡负责人或当前拍板人，只能留下批注。
+      // 历史 member_ids 不赋予正文/批注权限，真实负责人变化立即撤销访问。
       await t.sql("UPDATE personal_mission_cards SET owner_id='new-owner' WHERE id=$1", [f.card]);
-      const current = (await page(t, member, f.card)).payload.card.missions[0];
-      const note = await post(t, member, annotations(f.card), input(f.card, { sourceVersion: current.version, sourceText: current.outcome }));
-      expect(note.statusCode).toBe(200);
-      expect(note.json().annotation).toMatchObject({ status: "saved", canAnswer: false, canRetry: false });
-      expect(note.json().annotation.note).toContain("只有任务负责人或拍板人");
+      expect((await pageResponse(t, member, f.card)).statusCode).toBe(404);
+      expect((await post(t, member, annotations(f.card), input(f.card))).statusCode).toBe(404);
       expect(generate).toHaveBeenCalledTimes(3);
     } finally { await t.close(); }
   });
@@ -284,10 +322,10 @@ describe("任务卡正文批注", () => {
       expect((await post(t, member, annotations(f.card), input(f.card, { sourceText: "旧正文" }))).json().code).toBe("SOURCE_TEXT_CONFLICT");
       const saved = await post(t, member, annotations(f.card), input(f.card));
       expect(saved.statusCode).toBe(200);
-      await t.sql("UPDATE personal_mission_cards SET member_ids='[\"person-fixture-001\"]' WHERE id=$1", [f.card]);
+      await t.sql("UPDATE personal_mission_cards SET owner_id='new-owner',member_ids='[\"person-fixture-001\"]' WHERE id=$1", [f.card]);
       expect((await get(t, member, annotations(f.card))).statusCode).toBe(404);
       expect((await post(t, member, annotations(f.card), input(f.card))).statusCode).toBe(404);
-      expect((await get(t, ceo, annotations(f.card))).json().annotations).toHaveLength(1);
+      expect((await get(t, ceo, annotations(f.card))).statusCode).toBe(404);
       expect((await t.app.inject({ method: "POST", url: annotations(f.card), headers: { cookie: ceo, origin: "https://elsewhere.invalid" }, payload: input(f.card) })).statusCode).toBe(403);
     } finally { await t.close(); }
   });
@@ -301,90 +339,33 @@ describe("任务卡正文批注", () => {
       expect(again.statusCode, again.body).toBe(200);
       expect(again.json().annotation.id).toBe(first.json().annotation.id);
       expect((await post(t, member, annotations(f.card), { ...request, body: "另一条意见" })).json().code).toBe("CLIENT_ID_CONFLICT");
-      const ceoRequest = input(f.card);
-      expect((await post(t, ceo, annotations(f.card), ceoRequest)).statusCode).toBe(200);
-      expect((await post(t, ceo, annotations(f.other), { ...ceoRequest, missionId: f.other })).json().code).toBe("CLIENT_ID_CONFLICT");
+      await t.sql("UPDATE personal_mission_cards SET owner_id='new-owner' WHERE id=$1", [f.card]);
+      await t.sql("UPDATE personal_mission_cards SET owner_id='person-fixture-002' WHERE id=$1", [f.other]);
+      expect((await post(t, member, annotations(f.other), { ...request, missionId: f.other })).json().code).toBe("CLIENT_ID_CONFLICT");
+      await t.sql("UPDATE personal_mission_cards SET owner_id='outsider' WHERE id=$1", [f.other]);
+      await t.sql("UPDATE personal_mission_cards SET owner_id='person-fixture-002' WHERE id=$1", [f.card]);
       await t.sql("UPDATE missions SET outcome='新的正文',version=version+1 WHERE id=$1", [f.card]);
       const retry = await post(t, member, annotations(f.card), request);
       expect(retry.json().annotation).toMatchObject({ id: first.json().annotation.id, sourceText: SOURCE, stale: true });
-      expect((await get(t, member, annotations(f.card))).json().annotations).toHaveLength(2);
-      await t.sql("UPDATE personal_mission_cards SET member_ids='[\"person-fixture-001\"]' WHERE id=$1", [f.card]);
+      expect((await get(t, member, annotations(f.card))).json().annotations).toHaveLength(1);
+      await t.sql("UPDATE personal_mission_cards SET owner_id='new-owner',member_ids='[\"person-fixture-001\"]' WHERE id=$1", [f.card]);
       expect((await post(t, member, annotations(f.card), request)).statusCode).toBe(404);
     } finally { await t.close(); }
   });
 
-  it("同版本正文变更拒绝旧快照，汇总候选只读并保留 Markdown 批注原锚点", async () => {
+  it("同版本正文变化拒绝旧快照；本人确认冻结原锚点与 Markdown 历史", async () => {
     const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(START), missionCardAnnotationAgent: noChange });
     try {
-      const f = await fixture(t), member = await t.memberCookie(), ceo = await t.loginCookie();
+      const f = await fixture(t), member = await t.memberCookie();
       await t.sql("UPDATE missions SET outcome='同版本的新正文' WHERE id=$1", [f.card]);
       expect((await post(t, member, annotations(f.card), input(f.card))).json().code).toBe("SOURCE_TEXT_CONFLICT");
       await t.sql("UPDATE missions SET outcome=$2 WHERE id=$1", [f.card, SOURCE]);
-      expect((await post(t, member, annotations(f.card), input(f.card))).statusCode).toBe(200);
-      await vi.waitFor(async () => expect((await get(t, member, annotations(f.card))).json().annotations[0].status).toBe("no_change"));
-      const candidate = "先做 **权限核对**，再完成走查。";
-      const suggested = await post(t, member, `/api/mission-cards/${f.card}/feedback`, { clientId: randomUUID(), kind: "suggestion", round: 1,
-        missionId: f.card, field: "outcome", sourceVersion: 1, proposed: candidate, body: "补充权限" });
-      expect(suggested.statusCode, suggested.body).toBe(200);
-      const discussing = await page(t, ceo, f.card);
-      const close = discussing.actions.find((action: { actionType: string }) => action.actionType === "mission-round.close");
-      // 快照严格收取截止时间之前的意见，推动业务时钟后再结束讨论。
-      await t.sql("UPDATE mission_card_feedback SET created_at=created_at-interval '1 second' WHERE card_id=$1", [f.card]);
-      expect((await post(t, ceo, "/api/mission-rounds/actions/execute", { actionId: close.actionId, viewCardId: f.card })).statusCode).toBe(200);
-      const reviewing = await page(t, ceo, f.card);
-      expect((await post(t, ceo, "/api/mission-rounds/actions/execute", { actionId: reviewing.payload.feedback[0].actions[0].actionId,
-        viewCardId: f.card, input: { decision: "accept" } })).statusCode).toBe(200);
-      expect((await page(t, member, f.card)).payload.card.missions[0]).toMatchObject({ version: 1, outcome: candidate });
-      expect((await post(t, member, annotations(f.card), input(f.card))).json().code).toBe("ROUND_NOT_OPEN");
-      const current = await post(t, member, annotations(f.card), input(f.card, { sourceText: candidate, quote: "权限核对" }));
-      expect(current.statusCode, current.body).toBe(409);
-      const notes = (await get(t, member, annotations(f.card))).json().annotations;
-      expect(notes).toHaveLength(1);
-      expect(notes.find((note: { sourceText: string }) => note.sourceText === SOURCE).stale).toBe(true);
-      // 数据库正文还没有被拍板写回；批注保留的是当前显示的候选原文。
+      const original = input(f.card, { intent: "note" });
+      expect((await post(t, member, annotations(f.card), original)).statusCode).toBe(200);
+      expect((await post(t, member, `/api/mission-cards/${f.card}/owner-confirmation`, { confirmed: true, round: 1, missionVersions: { [f.card]: 1 } })).statusCode).toBe(200);
+      expect((await post(t, member, annotations(f.card), input(f.card))).json().code).toBe("OWNER_CONFIRMED");
+      expect((await get(t, member, annotations(f.card))).json().annotations[0]).toMatchObject({ sourceText: SOURCE, quote: "核对", stale: false, status: "saved" });
       expect((await t.sql("SELECT outcome,version FROM missions WHERE id=$1", [f.card]))[0]).toEqual({ outcome: SOURCE, version: 1 });
-    } finally { await t.close(); }
-  });
-
-  it("采纳建议后重新开放再即时修改同字段，建议原文保持不变，排除过期建议后确认即时新版", async () => {
-    const proposed = "先做 **双视角权限核对**，再保存界面与权限证据。";
-    const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(START), missionCardAnnotationAgent: {
-      async generate() { return { candidate: { action: "apply", proposed, reason: "补充证据留存", question: null, options: [] } }; },
-    } });
-    try {
-      const f = await fixture(t), member = await t.memberCookie(), ceo = await t.loginCookie();
-      const candidate = "先做 **双视角权限核对**，再完成走查。";
-      const suggestion = (await post(t, member, `/api/mission-cards/${f.card}/feedback`, { clientId: randomUUID(), kind: "suggestion", round: 1,
-        missionId: f.card, field: "outcome", sourceVersion: 1, proposed: candidate, body: "明确双视角" })).json().feedback;
-      await t.sql("UPDATE mission_card_feedback SET created_at=created_at-interval '1 second' WHERE card_id=$1", [f.card]);
-      const discussing = await page(t, ceo, f.card);
-      await post(t, ceo, "/api/mission-rounds/actions/execute", {
-        actionId: discussing.actions.find((action: { actionType: string }) => action.actionType === "mission-round.close").actionId, viewCardId: f.card,
-      });
-      const reviewing = await page(t, ceo, f.card);
-      await post(t, ceo, "/api/mission-rounds/actions/execute", { actionId: reviewing.payload.feedback[0].actions[0].actionId, viewCardId: f.card, input: { decision: "accept" } });
-      const accepted = await page(t, ceo, f.card);
-      expect(accepted.payload.card.missions[0]).toMatchObject({ outcome: candidate, version: 1 });
-      expect((await post(t, member, annotations(f.card), input(f.card, { sourceText: candidate }))).json().code).toBe("ROUND_NOT_OPEN");
-      await post(t, ceo, "/api/mission-rounds/actions/execute", { actionId: accepted.actions.find((action: { actionType: string }) => action.actionType === "mission-round.reopen").actionId });
-      const saved = await post(t, member, annotations(f.card), input(f.card, { sourceRound: 2, body: "还要保留可复核证据" }));
-      expect(saved.statusCode, saved.body).toBe(200);
-      await vi.waitFor(async () => expect((await get(t, member, annotations(f.card))).json().annotations[0].status).toBe("applied"));
-      let current = await page(t, ceo, f.card);
-      expect(current.payload.card.missions[0]).toMatchObject({ outcome: proposed, version: 2 });
-      expect(current.payload.feedback[0]).toMatchObject({ original: suggestion.original, proposed: suggestion.proposed, body: suggestion.body });
-      await post(t, ceo, "/api/mission-rounds/actions/execute", { actionId: current.actions.find((action: { actionType: string }) => action.actionType === "mission-round.close").actionId });
-      current = await page(t, ceo, f.card);
-      const staleConfirm = current.actions.find((action: { actionType: string }) => action.actionType === "mission-round.confirm");
-      expect((await post(t, ceo, "/api/mission-rounds/actions/execute", { actionId: staleConfirm.actionId, input: { note: "核对" } })).json().code).toBe("SUGGESTION_STALE");
-      await post(t, ceo, "/api/mission-rounds/actions/execute", { actionId: current.payload.feedback[0].actions[0].actionId, input: { decision: "decline" } });
-      current = await page(t, ceo, f.card);
-      const confirm = current.actions.find((action: { actionType: string }) => action.actionType === "mission-round.confirm");
-      const done = await post(t, ceo, "/api/mission-rounds/actions/execute", { actionId: confirm.actionId, viewCardId: f.card, input: { note: "双视角及界面权限证据已核对。" } });
-      expect(done.statusCode, done.body).toBe(200);
-      expect(done.json().cards[0].payload.card.missions[0]).toMatchObject({ outcome: proposed, version: 2 });
-      expect((await t.sql("SELECT original,proposed,body FROM mission_card_feedback WHERE id=$1", [suggestion.id]))[0])
-        .toEqual({ original: suggestion.original, proposed: suggestion.proposed, body: suggestion.body });
     } finally { await t.close(); }
   });
 });

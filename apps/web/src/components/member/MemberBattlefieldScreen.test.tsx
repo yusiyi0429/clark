@@ -134,10 +134,10 @@ describe("成员战场阅读与任务卡入口", () => {
     expect(html).toContain("已确定 · 占位");
     expect(ui.buttons.has("打开白田田的本月卡")).toBe(true);
   });
-  it("与共享分钟时钟越过截止，立即换成汇总中，不残留讨论中", () => {
+  it("与共享分钟时钟越过截止，立即换成本人确认时间已到，不残留讨论中", () => {
     ui.now = Date.parse("2026-10-03T00:00:00.000Z");
     const html = render();
-    expect(html).toContain("汇总中");
+    expect(html).toContain("本人确认时间已到");
     expect(html).not.toContain("草稿 · 讨论中");
   });
 });

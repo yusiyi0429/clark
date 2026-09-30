@@ -1858,6 +1858,94 @@
         }
       }
     },
+    "/api/mission-rounds/{roundId}/return-cards": {
+      "post": {
+        "operationId": "returnMissionCards",
+        "summary": "战场 DRI 退回受影响的任务卡，保留其他人的本人确认",
+        "parameters": [
+          {
+            "name": "roundId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnMissionCardsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "当前任务组合进度",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/monthly-reviews/{period}": {
       "get": {
         "operationId": "getMonthlyReview",
@@ -3550,7 +3638,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "pattern": "^(release:[0-9a-z.-]{1,32}|tour:(execution-items|mission-card))$",
+              "pattern": "^(release:[0-9a-z.-]{1,32}|tour:(execution-items|mission-card|mission-card:owner-confirmation-v2))$",
               "type": "string"
             }
           }
@@ -3607,7 +3695,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "pattern": "^(release:[0-9a-z.-]{1,32}|tour:(execution-items|mission-card))$",
+              "pattern": "^(release:[0-9a-z.-]{1,32}|tour:(execution-items|mission-card|mission-card:owner-confirmation-v2))$",
               "type": "string"
             }
           }
@@ -11210,6 +11298,9 @@
               }
             ]
           },
+          "contentVisible": {
+            "type": "boolean"
+          },
           "line": {
             "type": "string"
           },
@@ -11609,6 +11700,9 @@
                     }
                   ]
                 },
+                "contentVisible": {
+                  "type": "boolean"
+                },
                 "line": {
                   "type": "string"
                 },
@@ -11648,6 +11742,241 @@
                 }
               }
             }
+          },
+          "coAgentReview": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "status",
+                  "summary",
+                  "findings",
+                  "error",
+                  "completedAt",
+                  "retryAction"
+                ],
+                "properties": {
+                  "status": {
+                    "anyOf": [
+                      {
+                        "const": "queued",
+                        "type": "string"
+                      },
+                      {
+                        "const": "running",
+                        "type": "string"
+                      },
+                      {
+                        "const": "completed",
+                        "type": "string"
+                      },
+                      {
+                        "const": "failed",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "summary": {
+                    "type": "string"
+                  },
+                  "findings": {
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "title",
+                        "body",
+                        "sources"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "question",
+                              "type": "string"
+                            },
+                            {
+                              "const": "risk",
+                              "type": "string"
+                            },
+                            {
+                              "const": "suggestion",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "body": {
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "type": "string"
+                        },
+                        "sources": {
+                          "minItems": 1,
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "cardId"
+                            ],
+                            "properties": {
+                              "cardId": {
+                                "type": "string"
+                              },
+                              "missionId": {
+                                "type": "string"
+                              },
+                              "field": {
+                                "anyOf": [
+                                  {
+                                    "const": "title",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "why",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "outcome",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "successEvidence",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "timeBoundary",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "tradeoffs",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "boundaries",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "keyPath",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "milestones",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "resources",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "dependencies",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "humanAgentSplit",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "risk",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "retrospect",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "version": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "annotationId": {
+                                "type": "string"
+                              },
+                              "revisionId": {
+                                "type": "string"
+                              },
+                              "correctionId": {
+                                "type": "string"
+                              },
+                              "quote": {
+                                "maxLength": 2000,
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "completedAt": {
+                    "anyOf": [
+                      {
+                        "description": "应用时钟生成的 ISO 8601 时间",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "retryAction": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "actionId",
+                          "actionType",
+                          "label"
+                        ],
+                        "properties": {
+                          "actionId": {
+                            "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                            "type": "string"
+                          },
+                          "actionType": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "itemId": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -11992,6 +12321,9 @@
                           }
                         ]
                       },
+                      "contentVisible": {
+                        "type": "boolean"
+                      },
                       "line": {
                         "type": "string"
                       },
@@ -12031,6 +12363,241 @@
                       }
                     }
                   }
+                },
+                "coAgentReview": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "status",
+                        "summary",
+                        "findings",
+                        "error",
+                        "completedAt",
+                        "retryAction"
+                      ],
+                      "properties": {
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "queued",
+                              "type": "string"
+                            },
+                            {
+                              "const": "running",
+                              "type": "string"
+                            },
+                            {
+                              "const": "completed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "failed",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "findings": {
+                          "maxItems": 30,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "kind",
+                              "title",
+                              "body",
+                              "sources"
+                            ],
+                            "properties": {
+                              "kind": {
+                                "anyOf": [
+                                  {
+                                    "const": "question",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "risk",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "suggestion",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "title": {
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "type": "string"
+                              },
+                              "body": {
+                                "minLength": 1,
+                                "maxLength": 2000,
+                                "type": "string"
+                              },
+                              "sources": {
+                                "minItems": 1,
+                                "maxItems": 20,
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "cardId"
+                                  ],
+                                  "properties": {
+                                    "cardId": {
+                                      "type": "string"
+                                    },
+                                    "missionId": {
+                                      "type": "string"
+                                    },
+                                    "field": {
+                                      "anyOf": [
+                                        {
+                                          "const": "title",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "why",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "outcome",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "successEvidence",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "timeBoundary",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "tradeoffs",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "boundaries",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "keyPath",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "milestones",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "resources",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "dependencies",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "humanAgentSplit",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "risk",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "retrospect",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "version": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "annotationId": {
+                                      "type": "string"
+                                    },
+                                    "revisionId": {
+                                      "type": "string"
+                                    },
+                                    "correctionId": {
+                                      "type": "string"
+                                    },
+                                    "quote": {
+                                      "maxLength": 2000,
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "error": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "completedAt": {
+                          "anyOf": [
+                            {
+                              "description": "应用时钟生成的 ISO 8601 时间",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "retryAction": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "actionId",
+                                "actionType",
+                                "label"
+                              ],
+                              "properties": {
+                                "actionId": {
+                                  "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                                  "type": "string"
+                                },
+                                "actionType": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "itemId": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -12120,6 +12687,511 @@
             "maxLength": 2000,
             "pattern": "\\S",
             "type": "string"
+          }
+        }
+      },
+      "MissionCardReviewSource": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cardId"
+        ],
+        "properties": {
+          "cardId": {
+            "type": "string"
+          },
+          "missionId": {
+            "type": "string"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "const": "title",
+                "type": "string"
+              },
+              {
+                "const": "why",
+                "type": "string"
+              },
+              {
+                "const": "outcome",
+                "type": "string"
+              },
+              {
+                "const": "successEvidence",
+                "type": "string"
+              },
+              {
+                "const": "timeBoundary",
+                "type": "string"
+              },
+              {
+                "const": "tradeoffs",
+                "type": "string"
+              },
+              {
+                "const": "boundaries",
+                "type": "string"
+              },
+              {
+                "const": "keyPath",
+                "type": "string"
+              },
+              {
+                "const": "milestones",
+                "type": "string"
+              },
+              {
+                "const": "resources",
+                "type": "string"
+              },
+              {
+                "const": "dependencies",
+                "type": "string"
+              },
+              {
+                "const": "humanAgentSplit",
+                "type": "string"
+              },
+              {
+                "const": "risk",
+                "type": "string"
+              },
+              {
+                "const": "retrospect",
+                "type": "string"
+              }
+            ]
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "annotationId": {
+            "type": "string"
+          },
+          "revisionId": {
+            "type": "string"
+          },
+          "correctionId": {
+            "type": "string"
+          },
+          "quote": {
+            "maxLength": 2000,
+            "type": "string"
+          }
+        }
+      },
+      "MissionCardReviewReport": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "summary",
+          "findings"
+        ],
+        "properties": {
+          "summary": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "findings": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "kind",
+                "title",
+                "body",
+                "sources"
+              ],
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "question",
+                      "type": "string"
+                    },
+                    {
+                      "const": "risk",
+                      "type": "string"
+                    },
+                    {
+                      "const": "suggestion",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "body": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                "sources": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "cardId"
+                    ],
+                    "properties": {
+                      "cardId": {
+                        "type": "string"
+                      },
+                      "missionId": {
+                        "type": "string"
+                      },
+                      "field": {
+                        "anyOf": [
+                          {
+                            "const": "title",
+                            "type": "string"
+                          },
+                          {
+                            "const": "why",
+                            "type": "string"
+                          },
+                          {
+                            "const": "outcome",
+                            "type": "string"
+                          },
+                          {
+                            "const": "successEvidence",
+                            "type": "string"
+                          },
+                          {
+                            "const": "timeBoundary",
+                            "type": "string"
+                          },
+                          {
+                            "const": "tradeoffs",
+                            "type": "string"
+                          },
+                          {
+                            "const": "boundaries",
+                            "type": "string"
+                          },
+                          {
+                            "const": "keyPath",
+                            "type": "string"
+                          },
+                          {
+                            "const": "milestones",
+                            "type": "string"
+                          },
+                          {
+                            "const": "resources",
+                            "type": "string"
+                          },
+                          {
+                            "const": "dependencies",
+                            "type": "string"
+                          },
+                          {
+                            "const": "humanAgentSplit",
+                            "type": "string"
+                          },
+                          {
+                            "const": "risk",
+                            "type": "string"
+                          },
+                          {
+                            "const": "retrospect",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "version": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "annotationId": {
+                        "type": "string"
+                      },
+                      "revisionId": {
+                        "type": "string"
+                      },
+                      "correctionId": {
+                        "type": "string"
+                      },
+                      "quote": {
+                        "maxLength": 2000,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MissionCardCoAgentReview": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "summary",
+          "findings",
+          "error",
+          "completedAt",
+          "retryAction"
+        ],
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "const": "queued",
+                "type": "string"
+              },
+              {
+                "const": "running",
+                "type": "string"
+              },
+              {
+                "const": "completed",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "findings": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "kind",
+                "title",
+                "body",
+                "sources"
+              ],
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "question",
+                      "type": "string"
+                    },
+                    {
+                      "const": "risk",
+                      "type": "string"
+                    },
+                    {
+                      "const": "suggestion",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "body": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                "sources": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "cardId"
+                    ],
+                    "properties": {
+                      "cardId": {
+                        "type": "string"
+                      },
+                      "missionId": {
+                        "type": "string"
+                      },
+                      "field": {
+                        "anyOf": [
+                          {
+                            "const": "title",
+                            "type": "string"
+                          },
+                          {
+                            "const": "why",
+                            "type": "string"
+                          },
+                          {
+                            "const": "outcome",
+                            "type": "string"
+                          },
+                          {
+                            "const": "successEvidence",
+                            "type": "string"
+                          },
+                          {
+                            "const": "timeBoundary",
+                            "type": "string"
+                          },
+                          {
+                            "const": "tradeoffs",
+                            "type": "string"
+                          },
+                          {
+                            "const": "boundaries",
+                            "type": "string"
+                          },
+                          {
+                            "const": "keyPath",
+                            "type": "string"
+                          },
+                          {
+                            "const": "milestones",
+                            "type": "string"
+                          },
+                          {
+                            "const": "resources",
+                            "type": "string"
+                          },
+                          {
+                            "const": "dependencies",
+                            "type": "string"
+                          },
+                          {
+                            "const": "humanAgentSplit",
+                            "type": "string"
+                          },
+                          {
+                            "const": "risk",
+                            "type": "string"
+                          },
+                          {
+                            "const": "retrospect",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "version": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "annotationId": {
+                        "type": "string"
+                      },
+                      "revisionId": {
+                        "type": "string"
+                      },
+                      "correctionId": {
+                        "type": "string"
+                      },
+                      "quote": {
+                        "maxLength": 2000,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "description": "应用时钟生成的 ISO 8601 时间",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retryAction": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "actionId",
+                  "actionType",
+                  "label"
+                ],
+                "properties": {
+                  "actionId": {
+                    "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                    "type": "string"
+                  },
+                  "actionType": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "itemId": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ReturnMissionCardsRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cardIds",
+          "reason",
+          "version"
+        ],
+        "properties": {
+          "cardIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "reason": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
           }
         }
       },
@@ -18921,6 +19993,18 @@
             "maxLength": 4000,
             "type": "string"
           },
+          "intent": {
+            "anyOf": [
+              {
+                "const": "note",
+                "type": "string"
+              },
+              {
+                "const": "edit",
+                "type": "string"
+              }
+            ]
+          },
           "authorId": {
             "minLength": 1,
             "type": "string"
@@ -19344,6 +20428,18 @@
                   "maxLength": 4000,
                   "type": "string"
                 },
+                "intent": {
+                  "anyOf": [
+                    {
+                      "const": "note",
+                      "type": "string"
+                    },
+                    {
+                      "const": "edit",
+                      "type": "string"
+                    }
+                  ]
+                },
                 "authorId": {
                   "minLength": 1,
                   "type": "string"
@@ -19748,6 +20844,18 @@
             "minLength": 1,
             "maxLength": 4000,
             "type": "string"
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "const": "note",
+                "type": "string"
+              },
+              {
+                "const": "edit",
+                "type": "string"
+              }
+            ]
           }
         }
       },
@@ -19890,6 +20998,18 @@
                 "minLength": 1,
                 "maxLength": 4000,
                 "type": "string"
+              },
+              "intent": {
+                "anyOf": [
+                  {
+                    "const": "note",
+                    "type": "string"
+                  },
+                  {
+                    "const": "edit",
+                    "type": "string"
+                  }
+                ]
               },
               "authorId": {
                 "minLength": 1,
@@ -20913,6 +22033,9 @@
                         }
                       ]
                     },
+                    "contentVisible": {
+                      "type": "boolean"
+                    },
                     "line": {
                       "type": "string"
                     },
@@ -20952,6 +22075,241 @@
                     }
                   }
                 }
+              },
+              "coAgentReview": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "status",
+                      "summary",
+                      "findings",
+                      "error",
+                      "completedAt",
+                      "retryAction"
+                    ],
+                    "properties": {
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "queued",
+                            "type": "string"
+                          },
+                          {
+                            "const": "running",
+                            "type": "string"
+                          },
+                          {
+                            "const": "completed",
+                            "type": "string"
+                          },
+                          {
+                            "const": "failed",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "summary": {
+                        "type": "string"
+                      },
+                      "findings": {
+                        "maxItems": 30,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "kind",
+                            "title",
+                            "body",
+                            "sources"
+                          ],
+                          "properties": {
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "const": "question",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "risk",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "suggestion",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "title": {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            "body": {
+                              "minLength": 1,
+                              "maxLength": 2000,
+                              "type": "string"
+                            },
+                            "sources": {
+                              "minItems": 1,
+                              "maxItems": 20,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "cardId"
+                                ],
+                                "properties": {
+                                  "cardId": {
+                                    "type": "string"
+                                  },
+                                  "missionId": {
+                                    "type": "string"
+                                  },
+                                  "field": {
+                                    "anyOf": [
+                                      {
+                                        "const": "title",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "why",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "outcome",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "successEvidence",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "timeBoundary",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "tradeoffs",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "boundaries",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "keyPath",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "milestones",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "resources",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "dependencies",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "humanAgentSplit",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "risk",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "retrospect",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "version": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "annotationId": {
+                                    "type": "string"
+                                  },
+                                  "revisionId": {
+                                    "type": "string"
+                                  },
+                                  "correctionId": {
+                                    "type": "string"
+                                  },
+                                  "quote": {
+                                    "maxLength": 2000,
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "error": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "completedAt": {
+                        "anyOf": [
+                          {
+                            "description": "应用时钟生成的 ISO 8601 时间",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "retryAction": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "actionId",
+                              "actionType",
+                              "label"
+                            ],
+                            "properties": {
+                              "actionId": {
+                                "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                                "type": "string"
+                              },
+                              "actionType": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "itemId": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             }
           },
@@ -20998,6 +22356,16 @@
               "pendingAnnotations": {
                 "minimum": 0,
                 "type": "integer"
+              },
+              "returnReason": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             }
           },
@@ -21975,6 +23343,9 @@
                 "type": "boolean"
               },
               "canApply": {
+                "type": "boolean"
+              },
+              "canReject": {
                 "type": "boolean"
               },
               "closedReason": {
@@ -23050,6 +24421,9 @@
             "type": "boolean"
           },
           "canApply": {
+            "type": "boolean"
+          },
+          "canReject": {
             "type": "boolean"
           },
           "closedReason": {
@@ -34994,6 +36368,9 @@
                             }
                           ]
                         },
+                        "contentVisible": {
+                          "type": "boolean"
+                        },
                         "line": {
                           "type": "string"
                         },
@@ -35033,6 +36410,241 @@
                         }
                       }
                     }
+                  },
+                  "coAgentReview": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "status",
+                          "summary",
+                          "findings",
+                          "error",
+                          "completedAt",
+                          "retryAction"
+                        ],
+                        "properties": {
+                          "status": {
+                            "anyOf": [
+                              {
+                                "const": "queued",
+                                "type": "string"
+                              },
+                              {
+                                "const": "running",
+                                "type": "string"
+                              },
+                              {
+                                "const": "completed",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failed",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "findings": {
+                            "maxItems": 30,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "kind",
+                                "title",
+                                "body",
+                                "sources"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "anyOf": [
+                                    {
+                                      "const": "question",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "risk",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "suggestion",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "title": {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                "body": {
+                                  "minLength": 1,
+                                  "maxLength": 2000,
+                                  "type": "string"
+                                },
+                                "sources": {
+                                  "minItems": 1,
+                                  "maxItems": 20,
+                                  "type": "array",
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "cardId"
+                                    ],
+                                    "properties": {
+                                      "cardId": {
+                                        "type": "string"
+                                      },
+                                      "missionId": {
+                                        "type": "string"
+                                      },
+                                      "field": {
+                                        "anyOf": [
+                                          {
+                                            "const": "title",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "why",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "outcome",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "successEvidence",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "timeBoundary",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "tradeoffs",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "boundaries",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "keyPath",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "milestones",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "resources",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "dependencies",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "humanAgentSplit",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "risk",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "retrospect",
+                                            "type": "string"
+                                          }
+                                        ]
+                                      },
+                                      "version": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "annotationId": {
+                                        "type": "string"
+                                      },
+                                      "revisionId": {
+                                        "type": "string"
+                                      },
+                                      "correctionId": {
+                                        "type": "string"
+                                      },
+                                      "quote": {
+                                        "maxLength": 2000,
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "error": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "completedAt": {
+                            "anyOf": [
+                              {
+                                "description": "应用时钟生成的 ISO 8601 时间",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "retryAction": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "actionId",
+                                  "actionType",
+                                  "label"
+                                ],
+                                "properties": {
+                                  "actionId": {
+                                    "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                                    "type": "string"
+                                  },
+                                  "actionType": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "itemId": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               },

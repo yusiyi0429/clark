@@ -567,6 +567,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mission-rounds/{roundId}/return-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 战场 DRI 退回受影响的任务卡，保留其他人的本人确认 */
+        post: operations["returnMissionCards"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/monthly-reviews/{period}": {
         parameters: {
             query?: never;
@@ -2650,6 +2667,7 @@ export interface components {
             roleLabel: string | null;
             missionCount: number;
             ownerConfirmedAt: string | null;
+            contentVisible?: boolean;
             line: string;
             pending: number;
             firstPendingFeedbackId: string | null;
@@ -2712,6 +2730,7 @@ export interface components {
                 roleLabel: string | null;
                 missionCount: number;
                 ownerConfirmedAt: string | null;
+                contentVisible?: boolean;
                 line: string;
                 pending: number;
                 firstPendingFeedbackId: string | null;
@@ -2720,6 +2739,34 @@ export interface components {
                 mine: boolean;
                 placeholder: boolean;
             }[];
+            coAgentReview?: {
+                status: "queued" | "running" | "completed" | "failed";
+                summary: string;
+                findings: {
+                    kind: "question" | "risk" | "suggestion";
+                    title: string;
+                    body: string;
+                    sources: {
+                        cardId: string;
+                        missionId?: string;
+                        field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                        version?: number;
+                        annotationId?: string;
+                        revisionId?: string;
+                        correctionId?: string;
+                        quote?: string;
+                    }[];
+                }[];
+                error: string | null;
+                completedAt: string | null;
+                retryAction: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                } | null;
+            } | null;
         };
         MyMissionRoundsResponse: {
             rounds: {
@@ -2775,6 +2822,7 @@ export interface components {
                     roleLabel: string | null;
                     missionCount: number;
                     ownerConfirmedAt: string | null;
+                    contentVisible?: boolean;
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
@@ -2783,6 +2831,34 @@ export interface components {
                     mine: boolean;
                     placeholder: boolean;
                 }[];
+                coAgentReview?: {
+                    status: "queued" | "running" | "completed" | "failed";
+                    summary: string;
+                    findings: {
+                        kind: "question" | "risk" | "suggestion";
+                        title: string;
+                        body: string;
+                        sources: {
+                            cardId: string;
+                            missionId?: string;
+                            field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                            version?: number;
+                            annotationId?: string;
+                            revisionId?: string;
+                            correctionId?: string;
+                            quote?: string;
+                        }[];
+                    }[];
+                    error: string | null;
+                    completedAt: string | null;
+                    retryAction: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    } | null;
+                } | null;
             }[];
         };
         MissionRoundDraftPayload: {
@@ -2804,6 +2880,67 @@ export interface components {
         };
         MissionRoundConfirmInput: {
             note: string;
+        };
+        MissionCardReviewSource: {
+            cardId: string;
+            missionId?: string;
+            field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+            version?: number;
+            annotationId?: string;
+            revisionId?: string;
+            correctionId?: string;
+            quote?: string;
+        };
+        MissionCardReviewReport: {
+            summary: string;
+            findings: {
+                kind: "question" | "risk" | "suggestion";
+                title: string;
+                body: string;
+                sources: {
+                    cardId: string;
+                    missionId?: string;
+                    field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                    version?: number;
+                    annotationId?: string;
+                    revisionId?: string;
+                    correctionId?: string;
+                    quote?: string;
+                }[];
+            }[];
+        };
+        MissionCardCoAgentReview: {
+            status: "queued" | "running" | "completed" | "failed";
+            summary: string;
+            findings: {
+                kind: "question" | "risk" | "suggestion";
+                title: string;
+                body: string;
+                sources: {
+                    cardId: string;
+                    missionId?: string;
+                    field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                    version?: number;
+                    annotationId?: string;
+                    revisionId?: string;
+                    correctionId?: string;
+                    quote?: string;
+                }[];
+            }[];
+            error: string | null;
+            completedAt: string | null;
+            retryAction: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            } | null;
+        };
+        ReturnMissionCardsRequest: {
+            cardIds: string[];
+            reason: string;
+            version: number;
         };
         MonthlyReviewResponse: {
             period: string;
@@ -3876,6 +4013,7 @@ export interface components {
             suffix: string;
             startOffset: number;
             body: string;
+            intent?: "note" | "edit";
             authorId: string;
             authorName: string;
             status: "saved" | "queued" | "applying" | "needs_clarification" | "applied" | "no_change" | "failed";
@@ -3926,6 +4064,7 @@ export interface components {
                 suffix: string;
                 startOffset: number;
                 body: string;
+                intent?: "note" | "edit";
                 authorId: string;
                 authorName: string;
                 status: "saved" | "queued" | "applying" | "needs_clarification" | "applied" | "no_change" | "failed";
@@ -3977,6 +4116,7 @@ export interface components {
             suffix: string;
             startOffset: number;
             body: string;
+            intent?: "note" | "edit";
         };
         CreateMissionCardAnnotationResponse: {
             annotation: {
@@ -3991,6 +4131,7 @@ export interface components {
                 suffix: string;
                 startOffset: number;
                 body: string;
+                intent?: "note" | "edit";
                 authorId: string;
                 authorName: string;
                 status: "saved" | "queued" | "applying" | "needs_clarification" | "applied" | "no_change" | "failed";
@@ -4138,6 +4279,7 @@ export interface components {
                     roleLabel: string | null;
                     missionCount: number;
                     ownerConfirmedAt: string | null;
+                    contentVisible?: boolean;
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
@@ -4146,6 +4288,34 @@ export interface components {
                     mine: boolean;
                     placeholder: boolean;
                 }[];
+                coAgentReview?: {
+                    status: "queued" | "running" | "completed" | "failed";
+                    summary: string;
+                    findings: {
+                        kind: "question" | "risk" | "suggestion";
+                        title: string;
+                        body: string;
+                        sources: {
+                            cardId: string;
+                            missionId?: string;
+                            field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                            version?: number;
+                            annotationId?: string;
+                            revisionId?: string;
+                            correctionId?: string;
+                            quote?: string;
+                        }[];
+                    }[];
+                    error: string | null;
+                    completedAt: string | null;
+                    retryAction: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    } | null;
+                } | null;
             };
             draftFailure: string | null;
             selfReview: {
@@ -4154,6 +4324,7 @@ export interface components {
                 canEdit: boolean;
                 blockedReason: string | null;
                 pendingAnnotations: number;
+                returnReason?: string | null;
             };
             annotationAccess: {
                 canCreate: boolean;
@@ -4275,6 +4446,7 @@ export interface components {
             correctionAccess: {
                 canRequest: boolean;
                 canApply: boolean;
+                canReject?: boolean;
                 closedReason: string | null;
             };
         };
@@ -4412,6 +4584,7 @@ export interface components {
         MissionCardCorrectionAccess: {
             canRequest: boolean;
             canApply: boolean;
+            canReject?: boolean;
             closedReason: string | null;
         };
         CreateMissionCardCorrectionRequest: {
@@ -6299,6 +6472,7 @@ export interface components {
                     roleLabel: string | null;
                     missionCount: number;
                     ownerConfirmedAt: string | null;
+                    contentVisible?: boolean;
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
@@ -6307,6 +6481,34 @@ export interface components {
                     mine: boolean;
                     placeholder: boolean;
                 }[];
+                coAgentReview?: {
+                    status: "queued" | "running" | "completed" | "failed";
+                    summary: string;
+                    findings: {
+                        kind: "question" | "risk" | "suggestion";
+                        title: string;
+                        body: string;
+                        sources: {
+                            cardId: string;
+                            missionId?: string;
+                            field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                            version?: number;
+                            annotationId?: string;
+                            revisionId?: string;
+                            correctionId?: string;
+                            quote?: string;
+                        }[];
+                    }[];
+                    error: string | null;
+                    completedAt: string | null;
+                    retryAction: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    } | null;
+                } | null;
             } | null;
             confirmation: {
                 byName: string;
@@ -8220,6 +8422,77 @@ export interface operations {
         };
         responses: {
             /** @description 当前 Mission round Card；同一动作重放不重复写入 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    returnMissionCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roundId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnMissionCardsRequest"];
+            };
+        };
+        responses: {
+            /** @description 当前任务组合进度 */
             200: {
                 headers: {
                     [name: string]: unknown;

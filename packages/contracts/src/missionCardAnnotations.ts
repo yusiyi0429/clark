@@ -25,6 +25,7 @@ export const MissionCardAnnotationView = Type.Object({
   cardId: Type.String({ minLength: 1 }),
   ...Anchor,
   body: Type.String({ minLength: 1, maxLength: 4000 }),
+  intent: Type.Optional(Type.Union([Type.Literal("note"), Type.Literal("edit")])),
   authorId: Type.String({ minLength: 1 }),
   authorName: Type.String(),
   status: Type.Union([Type.Literal("saved"), Type.Literal("queued"), Type.Literal("applying"), Type.Literal("needs_clarification"),
@@ -62,6 +63,8 @@ export const CreateMissionCardAnnotationRequest = Type.Object({
   sourceRound: Type.Integer({ minimum: 1 }),
   ...Anchor,
   body: Type.String({ minLength: 1, maxLength: 4000 }),
+  /** 不传时只保存备注；明确 edit 才请求 Co-Agent 改正文。 */
+  intent: Type.Optional(Type.Union([Type.Literal("note"), Type.Literal("edit")])),
 }, { additionalProperties: false });
 
 export const CreateMissionCardAnnotationResponse = Type.Object({

@@ -4,6 +4,7 @@ import { createContext, useContext, useLayoutEffect } from "react";
 import type { Card } from "@/lib/api/client";
 import type { ContextMarkKind } from "@/components/ContextMark";
 import type { DetailGroup } from "@/conversation/missionCardGroup";
+import type { QuoteSource } from "@/conversation/quotes";
 
 /** 当前详情对象向外壳登记的信息：对话范围、窄条上的工作区标记。 */
 export type DetailInfo = {
@@ -26,8 +27,8 @@ export type WorkspaceApi = {
   showToast: (text: string) => void;
   /** 首页已载入的 Card 集合（战场/能力名称、会议安排等只读展示用，不另发请求）。 */
   homeCards: Card[];
-  /** 引用正文追问（clark onQuote）：切到键盘面，把「关于“…”，」放进当前对象的输入条。 */
-  quote: (text: string) => void;
+  /** 引用正文追问：进入当前对象私聊，以独立引用块保留选文和来源，不改用户输入。 */
+  quote: (text: string, source?: QuoteSource) => void;
   /** 当前登录 CEO 的 personId（战场卡据此判断「CEO 本人负责」）；测试桩默认 null。 */
   viewerId: string | null;
 };

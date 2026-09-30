@@ -1,25 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ReactElement, ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import type { Card } from "@/lib/api/client";
 import type { DocumentControls } from "./CardDocument";
 import type { Correction } from "./CorrectionPanel";
-import type { ComponentProps } from "react";
-import type { MissionWorkflowActions as RoundLine } from "./MissionWorkflowActions";
-import { personalPayload } from "./personalMissionFixture";
+import type { MissionDraftStatus } from "./MissionWorkflowActions";
+import type { MissionRoundProgress } from "./MissionRoundProgress";
 import type { MaterialMenu } from "@/components/shell/MaterialTabs";
+import { personalPayload } from "./personalMissionFixture";
 
 const ui = vi.hoisted(() => ({
   state: [] as unknown[], cursor: 0, controls: null as DocumentControls | null,
-  ownerPlan: null as unknown, viewerId: "viewer",
+  payload: null as typeof personalPayload | null, ownerPlan: null as unknown, viewerId: "viewer", annotationPending: false,
   effects: [] as (() => void | (() => void))[],
   buttons: new Map<string, { onPress?: () => Promise<void> | void; isDisabled?: boolean }>(),
-  post: vi.fn(), get: vi.fn(), register: vi.fn(), refresh: vi.fn(), ask: vi.fn(), navigate: vi.fn(), dispatch: vi.fn(), quote: vi.fn(),
-  roundProps: null as ComponentProps<typeof RoundLine> | null,
+  post: vi.fn(), get: vi.fn(), register: vi.fn(), refresh: vi.fn(), navigate: vi.fn(), dispatch: vi.fn(), quote: vi.fn(),
+  draftProps: null as ComponentProps<typeof MissionDraftStatus> | null,
+  progress: null as ComponentProps<typeof MissionRoundProgress> | null,
   viewMenu: null as ComponentProps<typeof MaterialMenu> | null,
 }));
-vi.mock("react", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react")>();
+vi.mock("react", async (original) => {
+  const actual = await original<typeof import("react")>();
   return { ...actual, useEffect: (effect: () => void | (() => void)) => { ui.effects.push(effect); }, useState: (initial: unknown) => {
     const index = ui.cursor++;
     if (!(index in ui.state)) ui.state[index] = initial;
@@ -30,458 +31,201 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: ui.get, POST: ui.post } }));
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ close: vi.fn(), navigate: ui.navigate, quote: ui.quote, viewerId: ui.viewerId }), useRegisterDetail: ui.register }));
 vi.mock("@/lib/useSeenMarks", () => ({ useSeenMarks: () => ({ seen: null, mark: vi.fn() }) }));
-vi.mock("./MissionAnnotations", () => ({ useMissionAnnotations: () => ({ notes: [], revisions: [], error: "", refresh: vi.fn(), save: vi.fn(), answer: vi.fn(), retry: vi.fn(), resolve: vi.fn() }) }));
+vi.mock("./MissionAnnotations", () => ({ useMissionAnnotations: () => ({ notes: [], revisions: [], error: "", pending: ui.annotationPending, refresh: vi.fn(), save: vi.fn(), answer: vi.fn(), retry: vi.fn(), resolve: vi.fn() }) }));
 vi.mock("@/components/shell/DetailFrame", () => ({ DetailFrame: ({ children, actions }: { children: ReactNode; actions: ReactNode }) => <div><header>{actions}</header>{children}</div> }));
 vi.mock("@/components/shell/MaterialTabs", () => ({ InHeader: ({ children }: { children: ReactNode }) => <div data-header-tools>{children}</div>, MaterialMenu: (props: ComponentProps<typeof MaterialMenu>) => { ui.viewMenu = props; return <button data-material-menu>{props.tabs.find((tab) => tab.id === props.selected)?.label}</button>; } }));
-vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: ui.ask, dialog: null }) }));
 vi.mock("./useRoundNow", () => ({ useRoundNow: (_at: string, now: string) => Date.parse(now) }));
-vi.mock("@heroui/react", () => { const part = ({ children }: { children: ReactNode }) => <>{children}</>; return { Modal: Object.assign(() => null, { Backdrop: part, Container: part, Dialog: part }) }; });
-vi.mock("ts-design/primitives", () => { const part = ({ children }: { children?: ReactNode }) => <>{children}</>; const dialog = ({ children, ...props }: { children?: ReactNode }) => <div {...props}>{children}</div>; return { Popover: Object.assign(part, { Content: part, Dialog: dialog }), Button: ({ children, onPress, isDisabled, "aria-label": label }: { children: ReactNode; onPress?: () => Promise<void> | void; isDisabled?: boolean; "aria-label"?: string }) => { ui.buttons.set(String(children), { onPress, isDisabled }); if (label) ui.buttons.set(label, { onPress, isDisabled }); return <button disabled={isDisabled} aria-label={label}>{children}</button>; } }; });
-vi.mock("./MissionWorkflowActions", () => ({ MissionDraftStatus: () => null, MissionWorkflowActions: (props: ComponentProps<typeof RoundLine>) => { ui.roundProps = props; return null; } }));
-vi.mock("./CardDocument", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./CardDocument")>();
-  return { ...actual, CardDocument: ({ controls, ownerPlan, payload }: { controls: DocumentControls; ownerPlan?: unknown; payload: typeof personalPayload }) => { ui.controls = controls; ui.ownerPlan = ownerPlan; return <>{controls.proposalEditor?.(payload.card.missions[0], "outcome")}</>; } };
+vi.mock("ts-design/primitives", () => {
+  const part = ({ children }: { children?: ReactNode }) => <>{children}</>;
+  return { Popover: Object.assign(part, { Content: part, Dialog: ({ children, ...props }: { children?: ReactNode }) => <div {...props}>{children}</div> }),
+    Button: ({ children, onPress, isDisabled, "aria-label": label }: { children?: ReactNode; onPress?: () => Promise<void> | void; isDisabled?: boolean; "aria-label"?: string }) => {
+      ui.buttons.set(String(children), { onPress, isDisabled }); if (label) ui.buttons.set(label, { onPress, isDisabled });
+      return <button disabled={isDisabled} aria-label={label}>{children}</button>;
+    } };
 });
+vi.mock("./MissionWorkflowActions", () => ({ MissionDraftStatus: (props: ComponentProps<typeof MissionDraftStatus>) => { ui.draftProps = props; return null; } }));
+vi.mock("./MissionRoundProgress", () => ({ MissionRoundProgress: (props: ComponentProps<typeof MissionRoundProgress>) => { ui.progress = props; return <button data-progress>任务准备进度</button>; } }));
+vi.mock("./CardDocument", async (original) => ({ ...await original<typeof import("./CardDocument")>(), CardDocument: ({ controls, ownerPlan, payload }: { controls: DocumentControls; ownerPlan?: unknown; payload: typeof personalPayload }) => { ui.controls = controls; ui.ownerPlan = ownerPlan; ui.payload = payload; return null; } }));
 import { MissionCardScreen } from "./MissionCardScreen";
 
-const card = { id: "personal-card", kind: "personal-mission-card", payload: personalPayload, actions: [], conversation: { scope: "mission-card:card" } } as unknown as Card;
+const card = { id: "personal-card", version: 1, kind: "personal-mission-card", payload: personalPayload, actions: [], conversation: { scope: "mission-card:card" } } as unknown as Card;
 const mission = personalPayload.card.missions[0];
-function render() { ui.cursor = 0; ui.buttons.clear(); return renderToStaticMarkup(<MissionCardScreen initialCard={card} entry="member" />); }
-function edit(text: string) {
-  const editor = ui.controls!.proposalEditor!(mission, "outcome") as ReactElement<{ children: ReactElement[] }>;
-  const textarea = editor.props.children[1] as ReactElement<{ onChange: (event: { target: { value: string } }) => void }>;
-  textarea.props.onChange({ target: { value: text } });
-  render();
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+function render() { ui.cursor = 0; ui.buttons.clear(); ui.progress = null; return renderToStaticMarkup(<MissionCardScreen initialCard={card} entry="member" />); }
+const group = () => ui.register.mock.calls.at(-1)![0].group;
+const fixes = () => ui.controls!.corrections!;
+function own(confirmed = false, canConfirm = true) {
+  ui.viewerId = "owner";
+  ui.state[0] = { ...card, version: 3, payload: { ...personalPayload,
+    card: { ...personalPayload.card, ownerConfirmedAt: confirmed ? "2026-10-01T01:00:00Z" : null, missions: [mission, { ...mission, missionId: "mission-two", version: 7 }] },
+    selfReview: { canConfirm: !confirmed && canConfirm, canCancel: confirmed, canEdit: !confirmed, blockedReason: canConfirm ? null : "请先处理 1 条未决修改，再确认我的任务。", pendingAnnotations: canConfirm ? 0 : 1 },
+  } };
+  return render();
 }
-async function submit() { ui.buttons.get("提交修改建议")!.onPress!(); await vi.waitFor(() => expect(ui.post).toHaveBeenCalled()); await new Promise((resolve) => setTimeout(resolve, 0)); return render(); }
-beforeEach(() => { ui.state = []; ui.cursor = 0; ui.controls = null; ui.ownerPlan = null; ui.viewerId = "viewer"; ui.effects = []; vi.clearAllMocks(); vi.stubGlobal("window", { dispatchEvent: ui.dispatch }); ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [card] } }); ui.ask.mockResolvedValue(true); });
+function savedConfirmation() {
+  const old = ui.state[0] as Card;
+  return { ...old, payload: { ...(old.payload as typeof personalPayload), card: { ...(old.payload as typeof personalPayload).card, ownerConfirmedAt: "2026-10-01T01:00:00Z" }, selfReview: { canConfirm: false, canCancel: true, canEdit: false, blockedReason: null, pendingAnnotations: 0 } } };
+}
+beforeEach(() => {
+  ui.state = []; ui.cursor = 0; ui.controls = null; ui.payload = null; ui.ownerPlan = null; ui.viewerId = "viewer"; ui.annotationPending = false; ui.effects = [];
+  vi.clearAllMocks(); vi.stubGlobal("window", { dispatchEvent: ui.dispatch });
+  ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [card] } });
+});
 afterEach(() => vi.unstubAllGlobals());
 
-describe("任务卡建议交互", () => {
-  it("header复用会议材料下拉，任务细节为当前项，执行拆分不可切换", () => {
+describe("任务卡页头与私人引用", () => {
+  it("header复用会议材料下拉，只提供任务细节与暂未开放的执行拆分", () => {
     const html = render();
-    expect(html).toContain("data-header-tools");
-    expect(html).toContain("data-material-menu");
+    expect(html).toContain("data-header-tools"); expect(html).toContain("data-material-menu");
     expect(ui.viewMenu).toMatchObject({ selected: "details", label: "任务视图", switchLabel: "切换任务视图" });
     expect(ui.viewMenu!.tabs).toEqual([
       { id: "details", label: "任务细节", title: "任务细节" },
       { id: "execution", label: "执行拆分", title: "执行拆分 · 下一版本由 Co-Agent 基于当前任务生成", isDisabled: true, hint: "即将开放" },
     ]);
-    expect(ui.viewMenu!.onAdd).toBeUndefined();
+    expect(ui.viewMenu!.onAdd).toBeUndefined(); expect(ui.progress).toMatchObject({ compact: true, entry: "member" });
+    expect(html).not.toContain("开始汇总"); expect(html).not.toContain("重新开放全部");
   });
   it("重试起草不带个人卡viewCardId，返回汇总卡后重新读取当前人的正文", async () => {
     const retry = { actionId: "retry-signed", actionType: "mission-round.draft", label: "重试起草" };
     const fresh = { ...card, version: 2, payload: { ...personalPayload, round: { ...personalPayload.round, phase: "drafting" } } };
-    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [{ id: "round-card", kind: "mission-round-card", payload: fresh.payload.round }] } });
+    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [{ id: "round-card", kind: "mission-round", payload: fresh.payload.round }] } });
     ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [fresh] } });
-    render();
-    ui.roundProps!.onAction(retry);
-    await vi.waitFor(() => expect(ui.get).toHaveBeenCalledWith("/api/mission-cards/{cardId}", { params: { path: { cardId: "card" } } }));
-    render();
+    render(); ui.draftProps!.onAction(retry); await vi.waitFor(() => expect(ui.get).toHaveBeenCalled()); await settle(); render();
     expect(ui.post).toHaveBeenCalledExactlyOnceWith("/api/mission-rounds/actions/execute", { body: { actionId: "retry-signed" } });
-    expect(ui.roundProps!.payload.card.ownerId).toBe("owner");
-    expect(ui.roundProps!.payload.round.phase).toBe("drafting");
+    expect(ui.payload!.card.ownerId).toBe("owner"); expect(ui.payload!.round.phase).toBe("drafting");
   });
-  it("拍板人可在页头切换各人的卡；普通卡主人没有人员页签", () => {
-    const second = { ...personalPayload.round.cards[0], cardId: "other", ownerId: "other", ownerName: "孙铭泽", line: "待处理 1", placeholder: false };
-    const changed = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, cards: [personalPayload.round.cards[0], second] } } } as Card;
-    const html = renderToStaticMarkup(<MissionCardScreen initialCard={changed} entry="member" />);
-    expect(html).toContain('aria-label="任务卡审核进度与操作"');
-    expect(html).toContain("孙铭泽");
-    ui.buttons.get("打开孙铭泽的 Mission Card · 审核中")!.onPress!();
+  it("草稿操作回调不接受旧人工提前汇总与全体重开操作", async () => {
+    render();
+    for (const type of ["mission-round.close", "mission-round.reopen", "mission-round.confirm"]) ui.draftProps!.onAction({ actionId: "obsolete", actionType: type, label: "旧入口" });
+    await settle(); expect(ui.post).not.toHaveBeenCalled();
+  });
+  it("本人未确认的其他卡禁用，确认后才可从页头打开", () => {
+    const other = { ...personalPayload.round.cards[0], cardId: "other", ownerId: "other", ownerName: "孙铭泽", mine: false, contentVisible: false };
+    ui.state[0] = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, cards: [personalPayload.round.cards[0], other] } } };
+    expect(render()).toContain('aria-label="任务准备进度与操作"');
+    const blocked = ui.buttons.get("本人确认后可查看孙铭泽的任务 · 待本人确认")!;
+    expect(blocked.isDisabled).toBe(true); blocked.onPress!(); expect(ui.navigate).not.toHaveBeenCalled();
+    ui.state[0] = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, cards: [personalPayload.round.cards[0], { ...other, contentVisible: true, ownerConfirmedAt: "2026-10-01T01:00:00Z" }] } } };
+    render(); ui.buttons.get("打开孙铭泽的任务 · 本人已确认")!.onPress!();
     expect(ui.navigate).toHaveBeenCalledWith("/me/mission-cards/other");
-    ui.state = []; ui.cursor = 0;
-    const ordinary = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, approver: false, cards: [personalPayload.round.cards[0]] } } } as Card;
-    expect(renderToStaticMarkup(<MissionCardScreen initialCard={ordinary} entry="member" />)).not.toContain('aria-label="任务卡审核进度与操作"');
   });
-  it("任务卡不再加载独立月计划，批注操作供当前可见任务接入", () => {
-    render();
-    expect(ui.ownerPlan).toBeUndefined();
-    ui.viewerId = "owner";
-    ui.state = [];
-    render();
-    expect(ui.ownerPlan).toBeUndefined();
+  it("任务卡只接本人私人Agent；引用独立携带来源，原文不会作为输入预填", () => {
+    own(); expect(ui.ownerPlan).toBeUndefined(); expect(group()).toMatchObject({ reference: null, canDiscuss: false });
     expect(ui.controls!.annotations).toMatchObject({ notes: [], revisions: [] });
-  });
-  it("建议提交带当时版本、字段与轮次，成功才清空；同时刷新左侧意见", async () => {
-    ui.post.mockResolvedValue({ response: { ok: true } });
-    render(); ui.controls!.onPropose(mission, "outcome"); render(); edit("与团队核验的新结果");
-    const html = await submit();
-    expect(ui.post).toHaveBeenCalledWith("/api/mission-cards/{cardId}/feedback", expect.objectContaining({ params: { path: { cardId: "card" } }, body: expect.objectContaining({ kind: "suggestion", round: 1, sourceVersion: 1, missionId: "mission", field: "outcome", proposed: "与团队核验的新结果" }) }));
-    expect(ui.get).toHaveBeenCalled();
-    expect(html).not.toContain("textarea");
-    expect(html).toContain("修改建议已记录");
-  });
-  it("外部重开且正文版本不变时保留旧建议，重新核对前不能跨审核提交", async () => {
-    render(); ui.controls!.onPropose(mission, "outcome"); render(); edit("保留等待重新核对的建议");
-    const reopened = { ...card, version: 5, payload: { ...personalPayload, round: { ...personalPayload.round, round: 2 } } };
-    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [reopened] } });
-    await ui.register.mock.calls.at(-1)![0].group.onRefresh();
-    const html = render();
-    expect(html).toContain("保留等待重新核对的建议");
-    expect(html).toContain("审核已重新开放，旧建议输入已保留");
-    expect(ui.buttons.get("提交修改建议")!.isDisabled).toBe(true);
-    ui.buttons.get("提交修改建议")!.onPress!();
+    ui.controls!.onQuote(mission, "outcome", "核验结果");
+    expect(ui.quote).toHaveBeenCalledExactlyOnceWith("核验结果", { label: "完善方法闭环 · 战役结果", objectType: "mission-card", objectId: "card", missionId: "mission", field: "outcome", sourceRound: 1, sourceVersion: 1 });
     expect(ui.post).not.toHaveBeenCalled();
-    ui.buttons.get("已核对，继续建议")!.onPress!(); render();
-    expect(ui.buttons.get("提交修改建议")!.isDisabled).toBe(false);
-    ui.post.mockResolvedValue({ response: { ok: true } }); await submit();
-    expect(ui.post.mock.calls[0][1].body).toMatchObject({ round: 2, sourceVersion: 1, proposed: "保留等待重新核对的建议" });
   });
-  it("重新核对更新到新正文版本并创建新提交编号，仍保留原建议文字", async () => {
-    ui.post.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    render(); ui.controls!.onPropose(mission, "outcome"); render(); edit("需要重新核对的改法"); await submit();
-    const firstId = ui.post.mock.calls[0][1].body.clientId;
-    const reopened = { ...card, version: 6, payload: { ...personalPayload,
-      round: { ...personalPayload.round, round: 2 }, card: { ...personalPayload.card, missions: [{ ...mission, version: 7, outcome: "重新开放后的正文" }] } } };
-    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [reopened] } });
-    await ui.register.mock.calls.at(-1)![0].group.onRefresh(); render();
-    ui.buttons.get("已核对，继续建议")!.onPress!();
-    expect(render()).toContain("需要重新核对的改法");
-    ui.post.mockResolvedValue({ response: { ok: true } }); await submit();
-    expect(ui.post.mock.calls[1][1].body).toMatchObject({ round: 2, sourceVersion: 7, proposed: "需要重新核对的改法" });
-    expect(ui.post.mock.calls[1][1].body.clientId).not.toBe(firstId);
+  it("超过引用长度明确拒绝，旧公开修改建议回调不提交、不打开编辑器", () => {
+    own(); ui.controls!.onQuote(mission, "outcome", "字".repeat(2001));
+    expect(render()).toContain("超过 2000 字"); expect(ui.quote).not.toHaveBeenCalled();
+    ui.controls!.onPropose(mission, "outcome"); render();
+    expect(ui.controls!.proposalEditor).toBeUndefined(); expect(ui.post).not.toHaveBeenCalled();
   });
-  it("网络失败保留输入，原样重试复用 clientId，编辑后成为新尝试", async () => {
-    ui.post.mockRejectedValue(new Error("网络暂时断开"));
-    render(); ui.controls!.onPropose(mission, "outcome"); render(); edit("尚未送达的新结果");
-    expect(await submit()).toContain("尚未送达的新结果");
-    const first = ui.post.mock.calls[0][1].body.clientId;
-    await submit();
-    expect(ui.post.mock.calls[1][1].body.clientId).toBe(first);
-    edit("修改后的新结果"); await submit();
-    expect(ui.post.mock.calls[2][1].body.clientId).not.toBe(first);
-  });
-  it("版本冲突保留正在写的建议并显示服务端原因", async () => {
-    ui.post.mockResolvedValue({ response: { ok: false, status: 409 }, error: { message: "页面版本已变化，请刷新后重新提交" } });
-    render(); ui.controls!.onPropose(mission, "outcome"); render(); edit("待重新核对的输入");
-    const html = await submit();
-    expect(html).toContain("待重新核对的输入");
-    expect(html).toContain("页面版本已变化，请刷新后重新提交");
-  });
-  it.each([new TypeError("Failed to fetch"), new Error("NetworkError when attempting to fetch resource.")])("断网错误在建议输入旁用中文呈现，不让人滚回页首找失败原因", async (failure) => {
-    ui.post.mockRejectedValue(failure);
-    render(); ui.controls!.onPropose(mission, "outcome"); render(); edit("断网时继续保留的建议");
-    const html = await submit();
-    expect(html).toContain("暂时无法连接服务器，请稍后重试；输入已保留。");
-    expect(html).not.toContain(failure.message);
-    expect(html.indexOf('role="alert"')).toBeGreaterThan(html.indexOf("</textarea>"));
-    expect(html.indexOf('role="alert"')).toBeLessThan(html.indexOf(">提交修改建议</button>"));
-    expect(html).toContain('aria-describedby="proposal-error-mission-outcome"');
-    expect(html).toContain("断网时继续保留的建议");
-  });
-  it("引用预填当前Co-Agent私聊，不向事项群发送记录，超长引用给提示", () => {
-    render(); ui.controls!.onQuote(mission, "outcome", "形成可核验结果"); render();
-    expect(ui.quote).toHaveBeenCalledWith("完善方法闭环 · 战役结果：形成可核验结果");
-    expect(ui.register.mock.calls.at(-1)![0]).toMatchObject({ scope: "mission-card:card", group: { cardId: "card", reference: null } });
-    expect(ui.post).not.toHaveBeenCalled();
-    ui.controls!.onQuote(mission, "outcome", "长".repeat(2001));
-    expect(render()).toContain("请划选其中一段引用");
+  it("引用旧选区保留选中时的来源窗口和正文版本", () => {
+    own(); ui.controls!.onQuote({ ...mission, version: 2 }, "outcome", "核验结果", 4);
+    expect(ui.quote).toHaveBeenCalledWith("核验结果", expect.objectContaining({ sourceRound: 4, sourceVersion: 2 }));
   });
 });
 
-describe("拍板动作与跨卡处理", () => {
-  it("确认成功立即通知常驻成员工作台同步退组，失败不广播", async () => {
-    const confirm = { actionId: "confirm", actionType: "mission-round.confirm", label: "确认" };
-    render();
-    ui.post.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    ui.roundProps!.onAction(confirm, { note: "已完成核对" });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(ui.dispatch).not.toHaveBeenCalled();
-    ui.post.mockResolvedValueOnce({ response: { ok: true }, data: { cards: [{ ...card, payload: { ...personalPayload, round: { ...personalPayload.round, phase: "confirmed" } } }] } });
-    render(); ui.roundProps!.onAction(confirm, { note: "已完成核对" });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(ui.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "mission-round-changed" }));
-  });
-  const deciding = { actionId: "signed-decide", actionType: "mission-round.decide", label: "处理意见" };
-  const feedback = { id: "feedback-1", actions: [deciding] } as Parameters<NonNullable<DocumentControls["onDecide"]>>[0];
-  it("跨卡定位在工作区入场焦点之后落到意见，不被关闭按钮抢走", () => {
-    const frames: (() => void)[] = [], focused: string[] = [];
-    const target = { focus: () => focused.push("feedback"), scrollIntoView: vi.fn() };
-    vi.stubGlobal("document", { getElementById: vi.fn().mockReturnValue(target) });
-    vi.stubGlobal("window", { location: { search: "?feedback=feedback-1" }, matchMedia: () => ({ matches: true }), requestAnimationFrame: (callback: () => void) => frames.push(callback), cancelAnimationFrame: vi.fn() });
-    render(); ui.effects[0]();
-    frames.push(() => focused.push("close"));
-    frames.splice(0).forEach((callback) => callback());
-    frames.splice(0).forEach((callback) => callback());
-    expect(focused).toEqual(["close", "feedback"]);
-    expect(target.scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "instant" });
-  });
-  it("决定带签名 token、当前卡及结论，等待响应时重复点击只发一次", async () => {
-    let finish!: (value: unknown) => void;
-    ui.post.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
-    render();
-    ui.controls!.onDecide!(feedback, "accept");
-    ui.controls!.onDecide!(feedback, "accept");
-    expect(ui.post).toHaveBeenCalledOnce();
-    expect(ui.post).toHaveBeenCalledWith("/api/mission-rounds/actions/execute", { body: { actionId: "signed-decide", input: { decision: "accept" }, viewCardId: "card" } });
-    finish({ response: { ok: true }, data: { cards: [card] } });
-    await new Promise((resolve) => setTimeout(resolve, 0)); render();
-    expect(ui.controls!.decisionError).toBeNull();
-  });
-  it("处理冲突采用服务端新卡与原因，在原意见旁显示，不显示假成功", async () => {
-    const latest = { ...card, version: 2, payload: { ...personalPayload, card: { ...personalPayload.card, status: "候选版本 · 相比草稿 1 处改动" } } };
-    ui.post.mockResolvedValue({ response: { ok: false, status: 409 }, error: { message: "同一字段已采纳另一条", latestCard: latest } });
-    render(); ui.controls!.onDecide!(feedback, "accept");
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const html = render();
-    expect(ui.controls!.decisionError).toEqual({ feedbackId: "feedback-1", message: "同一字段已采纳另一条" });
-    expect(ui.roundProps!.payload.card.status).toContain("1 处改动");
-    expect(html).not.toContain("已重新开启");
-  });
-  it("首条待处理可落在另一张卡，使用服务端给的意见id跨卡定位", () => {
-    render();
-    ui.state[0] = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, phase: "reviewing", cards: [{ ...personalPayload.round.cards[0], pending: 0 }, { ...personalPayload.round.cards[0], cardId: "other-card", pending: 2, firstPendingFeedbackId: "first-feedback" }] } } };
-    render(); ui.roundProps!.onStartProcessing!();
-    expect(ui.navigate).toHaveBeenCalledExactlyOnceWith("/me/mission-cards/other-card?feedback=first-feedback");
-  });
-  it("核对草稿在失败时保留，重开说明全员重新审核，成功才清空", async () => {
-    render(); ui.roundProps!.onNoteChange!("双方已核对依赖。"); render();
-    expect(ui.roundProps!.note).toBe("双方已核对依赖。");
-    const reopen = { actionId: "reopen", actionType: "mission-round.reopen", label: "重新开启" };
-    ui.post.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    ui.roundProps!.onAction(reopen);
-    await new Promise((resolve) => setTimeout(resolve, 0)); render();
-    expect(ui.roundProps!.note).toBe("双方已核对依赖。");
-    expect(ui.ask.mock.calls[0][0]).not.toContain("轮");
-    expect(ui.ask.mock.calls[0][0]).toContain("每个人都需要重新完成审核");
-    ui.post.mockResolvedValueOnce({ response: { ok: true }, data: { cards: [{ ...card, payload: { ...personalPayload, round: { ...personalPayload.round, round: 2 } } }] } });
-    ui.roundProps!.onAction(reopen);
-    await new Promise((resolve) => setTimeout(resolve, 0)); render();
-    expect(ui.roundProps!.note).toBe("");
-  });
-  it("别人重开刷新到新窗口后，旧核对草稿不跨轮显示", () => {
-    render(); ui.roundProps!.onNoteChange!("旧轮结论"); render();
-    ui.state[0] = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, round: 2 } } };
-    render(); expect(ui.roundProps!.note).toBe("");
-  });
-});
-
-describe("本人审核与自动汇总", () => {
-  function own(confirmed = false, canConfirm = true) {
-    ui.viewerId = "owner";
-    ui.state[0] = { ...card, version: 3, payload: { ...personalPayload,
-      card: { ...personalPayload.card, ownerConfirmedAt: confirmed ? "2026-10-01T01:00:00Z" : null, missions: [mission, { ...mission, missionId: "mission-two", version: 7 }] },
-      selfReview: { canConfirm: !confirmed && canConfirm, canCancel: confirmed, canEdit: !confirmed, blockedReason: canConfirm ? null : "请先处理 1 条未决批注，再完成审核。", pendingAnnotations: canConfirm ? 0 : 1 },
-    } };
-    return render();
-  }
-  it("完成审核提交全部当前所见任务版本，成功后显示取消确认；不写入会话", async () => {
-    own();
-    const confirmed = { ...(ui.state[0] as Card), payload: { ...(ui.state[0] as Card).payload as typeof personalPayload, card: { ...((ui.state[0] as Card).payload as typeof personalPayload).card, ownerConfirmedAt: "2026-10-01T01:00:00Z" }, selfReview: { canConfirm: false, canCancel: true, canEdit: false, blockedReason: null, pendingAnnotations: 0 } } };
-    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [confirmed] } });
-    ui.buttons.get("完成本人审核")!.onPress!();
-    await vi.waitFor(() => expect(ui.post).toHaveBeenCalled());
+describe("本人确认及稳定版本", () => {
+  it("确认我的任务提交全部所见版本，成功后取消确认；不写入对话", async () => {
+    own(); ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [savedConfirmation()] } });
+    ui.buttons.get("确认我的任务")!.onPress!(); await vi.waitFor(() => expect(ui.post).toHaveBeenCalled()); await settle();
     expect(ui.post).toHaveBeenCalledExactlyOnceWith("/api/mission-cards/{cardId}/owner-confirmation", { params: { path: { cardId: "card" } }, body: { confirmed: true, round: 1, missionVersions: { mission: 1, "mission-two": 7 } } });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(render()).toContain("取消确认");
-    expect(ui.quote).not.toHaveBeenCalled();
-    expect(ui.register.mock.calls.at(-1)![0].group.agentNote).toContain("取消确认后可继续修改");
+    expect(render()).toContain("取消确认"); expect(group().agentNote).toContain("取消确认后可继续修改"); expect(ui.quote).not.toHaveBeenCalled();
   });
-  it("取消确认重新开放本人编辑；未决批注时完成按钮禁用并解释原因", async () => {
-    expect(own(false, false)).toContain("请先处理 1 条未决批注");
-    expect(ui.buttons.get("完成本人审核")!.isDisabled).toBe(true);
-    ui.buttons.get("完成本人审核")!.onPress!();
-    expect(ui.post).not.toHaveBeenCalled();
-    own(true);
-    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [card] } });
-    ui.buttons.get("取消审核确认")!.onPress!();
-    await vi.waitFor(() => expect(ui.post).toHaveBeenCalled());
+  it("未决修改禁用确认并解释原因；取消只撤销本人确认", async () => {
+    expect(own(false, false)).toContain("请先处理 1 条未决修改");
+    expect(ui.buttons.get("确认我的任务")!.isDisabled).toBe(true); ui.buttons.get("确认我的任务")!.onPress!(); expect(ui.post).not.toHaveBeenCalled();
+    own(true); ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [card] } });
+    ui.buttons.get("取消本人确认")!.onPress!(); await vi.waitFor(() => expect(ui.post).toHaveBeenCalled());
     expect(ui.post.mock.calls[0][1].body).toEqual({ confirmed: false, round: 1, missionVersions: { mission: 1, "mission-two": 7 } });
   });
-  it("确认期间较早发出的同版本刷新不能覆盖刚保存的完成状态", async () => {
-    own();
-    const old = ui.state[0] as Card;
-    let finish!: (value: unknown) => void;
-    ui.get.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
-    const refresh = ui.register.mock.calls.at(-1)![0].group.onRefresh();
-    const confirmed = { ...old, payload: { ...(old.payload as typeof personalPayload), card: { ...(old.payload as typeof personalPayload).card, ownerConfirmedAt: "2026-10-01T01:00:00Z" }, selfReview: { canConfirm: false, canCancel: true, canEdit: false, blockedReason: null, pendingAnnotations: 0 } } };
-    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [confirmed] } });
-    ui.buttons.get("完成本人审核")!.onPress!();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  it("批注提交未结束时无法同时确认", () => {
+    ui.annotationPending = true; own();
+    expect(ui.buttons.get("确认我的任务")!.isDisabled).toBe(true); ui.buttons.get("确认我的任务")!.onPress!();
+    expect(ui.post).not.toHaveBeenCalled();
+  });
+  it("先发出的同版本刷新不能覆盖刚保存的本人确认", async () => {
+    own(); const old = ui.state[0] as Card;
+    let finish!: (value: unknown) => void; ui.get.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const refresh = group().onRefresh();
+    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [savedConfirmation()] } });
+    ui.buttons.get("确认我的任务")!.onPress!(); await settle();
     finish({ response: { ok: true }, data: { cards: [old] } }); await refresh;
     expect(render()).toContain("取消确认");
   });
-  it("版本冲突后读取新正文，保留未完成状态并显示服务端原因", async () => {
-    own();
-    ui.post.mockResolvedValue({ response: { ok: false, status: 409 }, error: { message: "任务内容刚刚变化，请重新阅读后完成审核" } });
+  it("版本冲突读取新正文并保留未确认状态，显示服务端原因", async () => {
+    own(); ui.post.mockResolvedValue({ response: { ok: false, status: 409 }, error: { message: "任务内容刚刚变化，请重新阅读后确认" } });
     ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [{ ...(ui.state[0] as Card), version: 4 }] } });
-    ui.buttons.get("完成本人审核")!.onPress!();
-    await vi.waitFor(() => expect(ui.get).toHaveBeenCalled());
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const html = render();
-    expect(html).toContain("任务内容刚刚变化，请重新阅读后完成审核");
-    expect(html).toContain("完成审核");
-    expect(html).not.toContain("已完成审核，等待其他人");
+    ui.buttons.get("确认我的任务")!.onPress!(); await vi.waitFor(() => expect(ui.get).toHaveBeenCalled()); await settle();
+    const html = render(); expect(html).toContain("任务内容刚刚变化，请重新阅读后确认"); expect(html).toContain("确认我的任务"); expect(html).not.toContain("取消确认");
   });
-  it("提前汇总弹窗逐个列出未审核人，已完成的人不列入；拒绝后不执行", async () => {
-    ui.state[0] = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, cards: [personalPayload.round.cards[0], { ...personalPayload.round.cards[0], cardId: "two", ownerName: "孙铭泽", ownerConfirmedAt: "2026-10-01T01:00:00Z" }, { ...personalPayload.round.cards[0], cardId: "three", ownerName: "王路遥" }] } } };
-    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [{ ...(ui.state[0] as Card), actions: [{ actionId: "current-close", actionType: "mission-round.close", label: "开始汇总" }] }] } });
-    render(); ui.ask.mockResolvedValue(false);
-    ui.roundProps!.onAction({ actionId: "close", actionType: "mission-round.close", label: "开始汇总" });
-    await vi.waitFor(() => expect(ui.ask).toHaveBeenCalled());
-    expect(ui.ask.mock.calls[0][0]).toContain("尚未完成审核：白田田、王路遥");
-    expect(ui.ask.mock.calls[0][0]).not.toContain("孙铭泽");
-    expect(ui.ask.mock.calls[0][0]).toContain("汇总后正文冻结");
-    expect(ui.post).not.toHaveBeenCalled();
-  });
-  it("别人取消确认后汇总前读取同版本最新进度，提醒重新包含该人并使用最新操作", async () => {
-    const close = { actionId: "old-close", actionType: "mission-round.close", label: "开始汇总" };
-    const cards = [
-      { ...personalPayload.round.cards[0], ownerName: "测试甲", ownerConfirmedAt: null },
-      { ...personalPayload.round.cards[0], cardId: "two", ownerName: "测试乙", ownerConfirmedAt: "2026-10-01T01:00:00Z" },
-      { ...personalPayload.round.cards[0], cardId: "three", ownerName: "测试丙", ownerConfirmedAt: "2026-10-01T01:00:00Z" },
-    ];
-    ui.state[0] = { ...card, version: 4, actions: [close], payload: { ...personalPayload, round: { ...personalPayload.round, counts: { ...personalPayload.round.counts, cards: 3 }, cards } } };
-    const latest = { ...(ui.state[0] as Card), actions: [{ ...close, actionId: "latest-close" }], payload: { ...personalPayload,
-      round: { ...personalPayload.round, counts: { ...personalPayload.round.counts, cards: 3 }, cards: cards.map((row) => row.cardId === "two" ? { ...row, ownerConfirmedAt: null } : row) } } };
-    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [latest] } });
-    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [{ ...latest, payload: { ...latest.payload, round: { ...latest.payload.round, phase: "reviewing" } } }] } });
-    render(); ui.roundProps!.onAction(close); ui.roundProps!.onAction(close);
-    await vi.waitFor(() => expect(ui.post).toHaveBeenCalled());
-    expect(ui.get).toHaveBeenCalledExactlyOnceWith("/api/mission-cards/{cardId}", { params: { path: { cardId: "card" } } });
-    expect(ui.ask).toHaveBeenCalledOnce();
-    expect(ui.ask.mock.calls[0][0]).toContain("尚未完成审核：测试甲、测试乙");
-    expect(ui.ask.mock.calls[0][0]).not.toContain("测试丙");
-    expect(ui.ask.mock.calls[0][0]).toContain("3 张任务卡");
-    expect(ui.post).toHaveBeenCalledExactlyOnceWith("/api/mission-rounds/actions/execute", { body: { actionId: "latest-close", viewCardId: "card" } });
-  });
-  it.each([
-    ["已自动汇总", "reviewing", true, "审核状态已变化"],
-    ["拍板权已变化", "open", false, "拍板权限已变化"],
-  ] as const)("汇总前读到%s时更新页面并说明，不再按旧名单询问或执行", async (_name, phase, approver, message) => {
-    const latest = { ...card, version: 4, payload: { ...personalPayload, round: { ...personalPayload.round, phase, approver } } };
-    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [latest] } });
-    render(); ui.roundProps!.onAction({ actionId: "old-close", actionType: "mission-round.close", label: "开始汇总" });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(render()).toContain(message);
-    expect(ui.register.mock.calls.at(-1)![0].group.phase).toBe(phase);
-    expect(ui.ask).not.toHaveBeenCalled();
-    expect(ui.post).not.toHaveBeenCalled();
-  });
-  it("读取最新审核进度失败时不询问或汇总，显示重试说明且可以重新读取", async () => {
-    const close = { actionId: "close", actionType: "mission-round.close", label: "开始汇总" };
-    ui.get.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    render(); ui.roundProps!.onAction(close);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(render()).toContain("暂时无法读取最新审核进度，请重试后再开始汇总。");
-    expect(ui.ask).not.toHaveBeenCalled(); expect(ui.post).not.toHaveBeenCalled();
-    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [{ ...card, actions: [close] }] } });
-    ui.ask.mockResolvedValue(false);
-    ui.roundProps!.onAction(close);
-    await vi.waitFor(() => expect(ui.ask).toHaveBeenCalled());
-    expect(ui.get).toHaveBeenCalledTimes(2);
-    expect(ui.post).not.toHaveBeenCalled();
+  it("最终组合确认和退回原因保留只读记录，不显示本人确认按钮", () => {
+    ui.viewerId = "owner";
+    ui.state[0] = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, phase: "confirmed" }, selfReview: { ...personalPayload.selfReview, returnReason: "明确验收边界" }, confirmation: { by: "dri", byName: "刘明华", at: "2026-10-04T10:00:00Z", note: "依赖已核对" } } };
+    const html = render(); expect(html).toContain("任务组合已确定"); expect(html).toContain("依赖已核对"); expect(html).toContain("明确验收边界"); expect(ui.buttons.has("确认我的任务")).toBe(false);
   });
 });
 
-describe("已确定任务卡的更正", () => {
-  type Access = { canRequest: boolean; canApply: boolean; closedReason: string | null };
-  const requester: Access = { canRequest: true, canApply: false, closedReason: null };
-  const decider: Access = { canRequest: false, canApply: true, closedReason: null };
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-  const fixes = () => ui.controls!.corrections!;
+describe("正式更正需退回本人准备", () => {
+  type Access = typeof personalPayload.correctionAccess;
+  const requester: Access = { canRequest: true, canApply: false, canReject: false, closedReason: null };
+  const dri: Access = { canRequest: false, canApply: false, canReject: true, closedReason: null };
   const item = { id: "fix-1", missionId: "mission", field: "outcome", status: "pending", stale: false } as Correction;
-  function confirmed(access: Access, round: Partial<typeof personalPayload.round> = {}) {
-    const view = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, phase: "confirmed", approver: access.canApply, ...round }, card: { ...personalPayload.card, shown: "confirmed" }, correctionAccess: access } } as unknown as Card;
-    ui.state[0] = view;
-    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [view] } });
-    return render();
+  function confirmed(access: Access) {
+    ui.viewerId = access.canRequest ? "owner" : "viewer";
+    const view = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, phase: "confirmed", approver: access.canReject }, card: { ...personalPayload.card, shown: "confirmed" }, correctionAccess: access } } as Card;
+    ui.state[0] = view; ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [view] } }); return render();
   }
-  it.each([
-    ["非拍板人申请", requester, "更正申请已提交，等刘明华处理；正文先不变。"],
-    ["拍板人直接更正", decider, "已更正，改前改后都已留痕。"],
-  ] as const)("%s：草稿预填当前文字，原因必填，body 带版本与字段，成功后关闭并重新加载任务卡", async (_who, access, notice) => {
-    ui.post.mockResolvedValue({ response: { ok: true, status: 200 }, data: { correction: item } });
-    confirmed(access); fixes().onOpen(mission, "outcome"); render();
+  it("本人申请预填、原因必填、带来源版本；保存后待DRI退回，不直接改正文", async () => {
+    ui.post.mockResolvedValue({ response: { ok: true }, data: { correction: item } });
+    confirmed(requester); fixes().onOpen(mission, "outcome"); render();
     expect(fixes().draft).toMatchObject({ missionId: "mission", field: "outcome", sourceVersion: 1, text: "形成可核验结果", reason: "" });
-    expect(fixes().draft!.clientId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    fixes().onSubmit(); await settle();
-    expect(ui.post).not.toHaveBeenCalled();
-    fixes().onEdit({ text: "与团队完成共同核验" }); fixes().onEdit({ reason: " 客户要求调整口径 " }); render();
-    const clientId = fixes().draft!.clientId;
-    fixes().onSubmit(); await settle();
-    const html = render();
+    fixes().onSubmit(); await settle(); expect(ui.post).not.toHaveBeenCalled();
+    fixes().onEdit({ text: "与团队完成共同核验", reason: " 客户要求调整口径 " }); render(); const clientId = fixes().draft!.clientId;
+    fixes().onSubmit(); await settle(); const html = render();
     expect(ui.post).toHaveBeenCalledExactlyOnceWith("/api/mission-cards/{cardId}/corrections", { params: { path: { cardId: "card" } }, body: { clientId, missionId: "mission", field: "outcome", proposed: "与团队完成共同核验", reason: "客户要求调整口径", sourceVersion: 1 } });
-    expect(fixes().draft).toBeNull();
-    expect(ui.get).toHaveBeenCalledWith("/api/mission-cards/{cardId}", { params: { path: { cardId: "card" } } });
-    expect(html).toContain(notice);
+    expect(fixes().draft).toBeNull(); expect(html).toContain("需由刘明华退回本人准备后修改"); expect(ui.payload!.card.missions[0].outcome).toBe(mission.outcome);
   });
-  it("失败保留草稿并原样显示服务端原因与 fieldErrors；原样重试复用 clientId，改过再提交换新", async () => {
+  it("DRI不能打开他人的更正编辑器或直接采纳更正", async () => {
+    confirmed(dri); fixes().onOpen(mission, "outcome"); render(); expect(fixes().draft).toBeNull();
+    fixes().onDecide(item, "apply"); await settle(); expect(ui.post).not.toHaveBeenCalled();
+  });
+  it("申请失败保留输入和fieldErrors；重试复用clientId、编辑换新", async () => {
     confirmed(requester); fixes().onOpen(mission, "outcome"); render(); fixes().onEdit({ reason: "客户要求调整口径" }); render();
-    ui.post.mockResolvedValueOnce({ response: { ok: false, status: 400 }, error: { code: "INVALID_INPUT", message: "输入校验失败", fieldErrors: { proposed: "must NOT have more than 4000 characters" } } });
+    ui.post.mockResolvedValueOnce({ response: { ok: false }, error: { message: "输入校验失败", fieldErrors: { proposed: "内容过长" } } });
     fixes().onSubmit(); await settle(); render();
-    expect(fixes().draft).toMatchObject({ text: "形成可核验结果", reason: "客户要求调整口径" });
-    expect(fixes().draftError).toBe("输入校验失败；proposed：must NOT have more than 4000 characters");
+    expect(fixes().draftError).toBe("输入校验失败；proposed：内容过长"); expect(fixes().draft!.reason).toBe("客户要求调整口径");
     const first = ui.post.mock.calls[0][1].body.clientId;
-    ui.post.mockResolvedValueOnce({ response: { ok: false, status: 409 }, error: { code: "SOURCE_VERSION_CONFLICT", message: "页面版本已变化，请刷新后重新提交" } });
-    fixes().onSubmit(); await settle(); render();
+    ui.post.mockResolvedValueOnce({ response: { ok: false }, error: { message: "版本变化" } }); fixes().onSubmit(); await settle(); render();
     expect(ui.post.mock.calls[1][1].body.clientId).toBe(first);
-    expect(fixes().draftError).toBe("页面版本已变化，请刷新后重新提交");
-    fixes().onEdit({ text: "改过的新结果" }); render();
-    ui.post.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    fixes().onEdit({ text: "改过的新结果" }); render(); ui.post.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     fixes().onSubmit(); await settle(); render();
-    expect(ui.post.mock.calls[2][1].body.clientId).not.toBe(first);
-    expect(fixes().draft).toMatchObject({ text: "改过的新结果", reason: "客户要求调整口径" });
-    expect(fixes().draftError).toBe("暂时无法连接服务器，请稍后重试；输入已保留。");
-    expect(ui.get).not.toHaveBeenCalled();
+    expect(ui.post.mock.calls[2][1].body.clientId).not.toBe(first); expect(fixes().draft!.text).toBe("改过的新结果"); expect(fixes().draftError).toContain("输入已保留");
   });
-  it("采纳只带结论；不采纳必须写一句原因；成功后刷新任务卡并让通知同步", async () => {
-    ui.post.mockResolvedValue({ response: { ok: true, status: 200 }, data: { correction: item } });
-    confirmed(decider);
-    fixes().onDecide(item, "reject"); await settle();
-    fixes().onRejecting({ id: "fix-1", note: "  " }); render();
-    fixes().onDecide(item, "reject"); await settle();
-    expect(ui.post).not.toHaveBeenCalled();
-    fixes().onRejecting({ id: "fix-1", note: " 本月先不改 " }); render();
-    fixes().onDecide(item, "reject"); await settle(); render();
-    expect(ui.post).toHaveBeenLastCalledWith("/api/mission-cards/{cardId}/corrections/{correctionId}/decision", { params: { path: { cardId: "card", correctionId: "fix-1" } }, body: { decision: "reject", note: "本月先不改" } });
-    expect(fixes().rejecting).toBeNull();
-    expect(ui.get).toHaveBeenCalled();
-    expect(ui.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "mission-round-changed" }));
-    expect(ui.refresh).toHaveBeenCalled();
-    fixes().onDecide(item, "apply"); await settle();
-    expect(ui.post).toHaveBeenLastCalledWith("/api/mission-cards/{cardId}/corrections/{correctionId}/decision", { params: { path: { cardId: "card", correctionId: "fix-1" } }, body: { decision: "apply" } });
+  it("DRI不采纳必须写原因；成功刷新正文与通知", async () => {
+    confirmed(dri); ui.post.mockResolvedValue({ response: { ok: true }, data: { correction: item } });
+    fixes().onRejecting({ id: item.id, note: "  " }); render(); fixes().onDecide(item, "reject"); await settle(); expect(ui.post).not.toHaveBeenCalled();
+    fixes().onRejecting({ id: item.id, note: " 本月先不改 " }); render(); fixes().onDecide(item, "reject"); await settle(); render();
+    expect(ui.post).toHaveBeenCalledExactlyOnceWith("/api/mission-cards/{cardId}/corrections/{correctionId}/decision", { params: { path: { cardId: "card", correctionId: item.id } }, body: { decision: "reject", note: "本月先不改" } });
+    expect(fixes().rejecting).toBeNull(); expect(ui.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "mission-round-changed" })); expect(ui.refresh).toHaveBeenCalled();
   });
-  it("处理中重复点击只发一次；失败原因留在这条申请旁，不采纳的原因保留", async () => {
-    let finish!: (value: unknown) => void;
-    ui.post.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
-    confirmed(decider); fixes().onRejecting({ id: "fix-1", note: "本月先不改" }); render();
-    fixes().onDecide(item, "reject"); fixes().onDecide(item, "reject");
-    expect(ui.post).toHaveBeenCalledOnce();
-    finish({ response: { ok: false, status: 409 }, error: { code: "CORRECTION_DECIDED", message: "这条更正已经处理过" } });
-    await settle(); render();
-    expect(fixes().decisionError).toEqual({ correctionId: "fix-1", message: "这条更正已经处理过" });
-    expect(fixes().rejecting).toEqual({ id: "fix-1", note: "本月先不改" });
-    expect(fixes().busy).toBe(false);
-    expect(ui.dispatch).not.toHaveBeenCalled();
+  it("重复处理只发一次；失败保留不采纳原因", async () => {
+    let finish!: (value: unknown) => void; ui.post.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    confirmed(dri); fixes().onRejecting({ id: item.id, note: "本月先不改" }); render();
+    fixes().onDecide(item, "reject"); fixes().onDecide(item, "reject"); expect(ui.post).toHaveBeenCalledOnce();
+    finish({ response: { ok: false }, error: { message: "这条更正已经处理过" } }); await settle(); render();
+    expect(fixes().decisionError).toEqual({ correctionId: item.id, message: "这条更正已经处理过" }); expect(fixes().rejecting).toEqual({ id: item.id, note: "本月先不改" }); expect(fixes().busy).toBe(false);
   });
-  it("深链 ?correction= 在入场焦点之后落到那条更正申请", () => {
+  it("更正深链在入场关闭按钮定位后聚焦原申请", () => {
     const frames: (() => void)[] = [], focused: string[] = [];
     const target = { focus: () => focused.push("correction"), scrollIntoView: vi.fn() };
-    const getElementById = vi.fn().mockReturnValue(target);
-    vi.stubGlobal("document", { getElementById });
+    const getElementById = vi.fn().mockReturnValue(target); vi.stubGlobal("document", { getElementById });
     vi.stubGlobal("window", { location: { search: "?correction=fix-1" }, matchMedia: () => ({ matches: false }), requestAnimationFrame: (callback: () => void) => frames.push(callback), cancelAnimationFrame: vi.fn() });
-    confirmed(decider); ui.effects[0]();
-    frames.push(() => focused.push("close"));
-    frames.splice(0).forEach((callback) => callback());
-    frames.splice(0).forEach((callback) => callback());
-    expect(focused).toEqual(["close", "correction"]);
-    expect(getElementById).toHaveBeenCalledWith("correction-fix-1");
-    expect(target.scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
-  });
-  it("已确定后从第一条开始：第一条在别的卡就带 ?correction= 打开，在本卡就直接聚焦", () => {
-    const row = personalPayload.round.cards[0];
-    confirmed(decider, { cards: [{ ...row, pendingCorrections: 0 }, { ...row, cardId: "other-card", pendingCorrections: 2, firstPendingCorrectionId: "fix-9" }] });
-    ui.roundProps!.onStartProcessing!();
-    expect(ui.navigate).toHaveBeenCalledExactlyOnceWith("/me/mission-cards/other-card?correction=fix-9");
-    const target = { focus: vi.fn(), scrollIntoView: vi.fn() };
-    vi.stubGlobal("document", { getElementById: (id: string) => id === "correction-fix-1" ? target : null });
-    vi.stubGlobal("window", { matchMedia: () => ({ matches: true }) });
-    confirmed(decider, { cards: [{ ...row, pendingCorrections: 1, firstPendingCorrectionId: "fix-1" }] });
-    ui.roundProps!.onStartProcessing!();
-    expect(target.focus).toHaveBeenCalledWith({ preventScroll: true });
-    expect(target.scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "instant" });
-    expect(ui.navigate).toHaveBeenCalledOnce();
+    confirmed(dri); ui.effects[0](); frames.push(() => focused.push("close"));
+    frames.splice(0).forEach((callback) => callback()); frames.splice(0).forEach((callback) => callback());
+    expect(focused).toEqual(["close", "correction"]); expect(getElementById).toHaveBeenCalledWith("correction-fix-1"); expect(target.scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
   });
 });

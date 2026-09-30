@@ -17,7 +17,7 @@ import { getIssueRow, projectIssueCard } from "./issues.js";
 import { moveStagedFile } from "./meetingMaterials.js";
 import { getMeetingRow, projectMeetingCard } from "./meetingStore.js";
 import { getMonthlyPlanRow, projectMonthlyPlanCard } from "./monthlyPlans.js";
-import { getMissionRow, projectMissionCard } from "./missions.js";
+import { canReadMission, getMissionRow, projectMissionCard } from "./missions.js";
 import { canReadMonthlyReviewItem, getMonthlyReviewItem } from "./monthlyReviews.js";
 import { getSignalCard } from "./signals.js";
 import { getPersonalMissionCard } from "./personalMissionCards.js";
@@ -186,6 +186,7 @@ export async function getScopeObject(
     };
   }
   const mission = objectType === "mission" ? await getMissionRow(q, id) : null;
+  if (mission && !await canReadMission(q, mission, context?.person)) return { visible: false, snapshot: null };
   if (mission) {
     const card = projectMissionCard(mission, secret, new Map());
     return {
@@ -214,6 +215,7 @@ export async function resolveReferenceSnapshots(
   q: Query,
   references: TCardReference[],
   secret: string,
+  person?: MissionRoundPerson,
 ): Promise<
   | { snapshots: TReferenceSnapshot[] }
   | { status: 403 | 404 | 409; code: string; message: string }
@@ -274,6 +276,7 @@ export async function resolveReferenceSnapshots(
       continue;
     }
     const mission = objectType === "mission" ? await getMissionRow(q, id) : null;
+    if (mission && !await canReadMission(q, mission, person)) return { status: 404, code: "REFERENCE_NOT_FOUND", message: "Card 引用不存在" };
     if (mission) {
       const card = projectMissionCard(mission, secret, new Map());
       if (card.version !== reference.version) {

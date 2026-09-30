@@ -7,7 +7,7 @@ vi.mock("@/lib/useSeenMarks", () => ({ useSeenMarks: () => ({ seen: seenState.se
 
 const { ReleaseNotesView } = await import("@/components/whatsNew/WhatsNewCard");
 const { ExecutionItemsTourView, EXECUTION_TOUR_KEY } = await import("./ExecutionItemsTour");
-const { MissionCardTourView } = await import("./MissionCardTour");
+const { MissionCardTourView, MISSION_CARD_TOUR_KEY } = await import("./MissionCardTour");
 const { MISSION_CARD_TOUR_STEPS } = await import("./MissionCardScenes");
 const { StartTaskButton } = await import("./StartTaskButton");
 
@@ -31,6 +31,9 @@ describe("执行事项演示", () => {
 });
 
 describe("任务卡演示", () => {
+  it("新流程使用独立已读版本，旧导览记录不能跳过本人确认说明", () => {
+    expect(MISSION_CARD_TOUR_KEY).toBe("tour:mission-card:owner-confirmation-v2");
+  });
   it("先解释目标与任务，首次看完前没有退出或跳过入口", () => {
     const html = renderToStaticMarkup(<MissionCardTourView onExit={vi.fn()} />);
     expect(html).toContain("第 1 步，共 5 步");
@@ -48,6 +51,8 @@ describe("任务卡演示", () => {
     const html = renderToStaticMarkup(<Scene />);
     const header = /<header\b[^>]*>([\s\S]*?)<\/header>/.exec(html)?.[1];
     expect(header).toContain("孙铭泽 · 10月任务");
+    expect(header).toContain("待本人确认");
+    expect(html).toContain("流程示例");
     expect(header).toContain("任务细节");
     expect(header).toMatch(/data-selected="true"[^>]*>[\s\S]*?任务细节/);
     expect(header).toMatch(/data-disabled="true"[^>]*>[\s\S]*?执行拆分[\s\S]*?<small>下一版<\/small>/);
@@ -60,15 +65,25 @@ describe("任务卡演示", () => {
     const scenes = MISSION_CARD_TOUR_STEPS.map(({ Scene }) => renderToStaticMarkup(<Scene />));
     expect(scenes[1]).toContain("直接批注");
     expect(scenes[1]).toContain("引用并对话");
-    expect(scenes[2]).toContain("同卡成员可见");
-    expect(scenes[2]).toContain("保存批注");
+    expect(scenes[2]).not.toContain("同卡成员可见");
+    expect(scenes[2]).toContain("写下修改意见");
+    expect(scenes[2]).toContain("保存");
+    expect(scenes[2]).toContain("立即修改");
+    expect(scenes[2]).toContain("正文保持原样");
+    expect(MISSION_CARD_TOUR_STEPS[2].body).toContain("也可以确认任务");
     expect(scenes[3]).toContain("逐项核对每个字段");
     expect(scenes[3]).toContain("自己输入");
-    expect(scenes[3]).toContain("最终审核");
+    expect(scenes[3]).toContain("原文与依据");
+    expect(scenes[3]).not.toContain("<del");
+    expect(scenes[3]).not.toContain("<ins");
     expect(scenes[4]).toContain("仅自己可见");
-    expect(scenes[4]).toContain("完成本人审核 → 全员完成后自动汇总 → 拍板确认");
-    expect(MISSION_CARD_TOUR_STEPS[3].body).toContain("审核中且未完成审核时");
-    expect(MISSION_CARD_TOUR_STEPS[4].body).toContain("汇总后需重新开放审核");
+    expect(scenes[4]).toContain("确认我的任务");
+    expect(scenes[4]).toContain("Co-Agent 统一核对任务与记录");
+    expect(scenes[4]).toContain("战场 DRI 确认任务组合");
+    expect(scenes[4]).toMatch(/quotePreview[^>]*>[\s\S]*?<span>引用<\/span>/);
+    expect(MISSION_CARD_TOUR_STEPS[3].body).toContain("请求修改后");
+    expect(MISSION_CARD_TOUR_STEPS[4].body).toContain("CEO 签核本月目标");
+    expect(MISSION_CARD_TOUR_STEPS[4].body).toContain("退回相关本人重新确认");
   });
 
   it("五幕中的段落只包含内联内容，选字菜单不造成 HTML 非法嵌套", () => {

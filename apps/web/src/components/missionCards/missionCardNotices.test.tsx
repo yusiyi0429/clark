@@ -4,11 +4,13 @@ import type { ReactNode } from "react";
 import type { TMissionRoundSummary } from "@warmap/contracts";
 import { personalPayload } from "./personalMissionFixture";
 
-const ui = vi.hoisted(() => ({ presses: new Map<string, (event: unknown) => void>() }));
+const ui = vi.hoisted(() => ({ presses: new Map<string, (event: unknown) => void>(), disabled: new Map<string, boolean | undefined>(), progress: [] as unknown[] }));
 vi.mock("@/components/HeroButton", () => ({ HeroButton: ({ children, onPress, isDisabled, ...props }: { children?: ReactNode; onPress?: (event: unknown) => void; isDisabled?: boolean; "aria-label"?: string }) => {
   if (onPress && props["aria-label"]) ui.presses.set(props["aria-label"], onPress);
+  if (props["aria-label"]) ui.disabled.set(props["aria-label"], isDisabled);
   return <button disabled={isDisabled} {...props}>{children}</button>;
 } }));
+vi.mock("./MissionRoundProgress", () => ({ MissionRoundProgress: (props: { round: TMissionRoundSummary }) => { ui.progress.push(props); return <button aria-label="查看任务准备进度">本人确认进度</button>; } }));
 
 import { MissionCardNoticeGroup } from "./MissionCardNoticeGroup";
 
@@ -17,7 +19,7 @@ const rows: TMissionRoundSummary["cards"] = [
   { cardId: "mine", ownerId: "sun", ownerName: "孙铭泽", roleLabel: "01-3 战役 DRI", missionCount: 2, ownerConfirmedAt: null, line: "待处理 2", pending: 2, firstPendingFeedbackId: "feedback-2", pendingCorrections: 0, firstPendingCorrectionId: null, mine: true, placeholder: false },
 ];
 const summary = (overrides: Partial<TMissionRoundSummary> = {}): TMissionRoundSummary => ({ ...personalPayload.round, phase: "reviewing", approver: true, todo: "2 条意见待你处理", cards: rows, ...overrides });
-beforeEach(() => ui.presses.clear());
+beforeEach(() => { ui.presses.clear(); ui.disabled.clear(); ui.progress = []; });
 
 describe("本月 Mission Card 通知分组", () => {
   it("拍板人看到服务端顺序的全部行、一次草稿与一个共享倒计时，并突出待处理", () => {
@@ -75,10 +77,21 @@ describe("本月 Mission Card 通知分组", () => {
     expect(render({ todo: null })).toBe("");
   });
 
-  it("草稿待办和全部处理后待确认提示都打开第一张卡；成员沿自己的路由", () => {
+  it("草稿待办通过父级进度操作，不能借待办直接打开未确认的第一张私人卡", () => {
     const onNavigate = vi.fn();
-    renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ phase: "draft", todo: "任务卡草稿已就绪，可以统一开放讨论" })} entry="member" onNavigate={onNavigate} onRefresh={vi.fn()} />);
-    ui.presses.get("任务卡草稿已就绪，可以统一开放讨论")!({ target: { closest: () => null } });
-    expect(onNavigate).toHaveBeenLastCalledWith("/me/mission-cards/first", null);
+    const html = renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ phase: "draft", todo: "任务卡草稿已就绪，可以下发本人确认", cards: rows.map((row) => ({ ...row, contentVisible: false })) })} entry="member" onNavigate={onNavigate} onRefresh={vi.fn()} />);
+    expect(html).toContain("本人确认进度");
+    expect(ui.presses.has("任务卡草稿已就绪，可以下发本人确认")).toBe(false);
+    expect(onNavigate).not.toHaveBeenCalled(); expect(ui.progress).toHaveLength(1);
+  });
+  it("上级看到本人确认进度，但未确认的他人卡不能打开且不会误指向旧意见", () => {
+    const onNavigate = vi.fn();
+    const unreadable = rows.map((row) => ({ ...row, mine: false, contentVisible: false }));
+    renderToStaticMarkup(<MissionCardNoticeGroup round={summary({ phase: "open", cards: unreadable, todo: "尚有 2 人待本人确认" })} entry="ceo" onNavigate={onNavigate} onRefresh={vi.fn()} />);
+    expect(ui.progress).toHaveLength(1);
+    const labels = [...ui.presses.keys()].filter((label) => label.includes("查看详情"));
+    expect(labels).toHaveLength(2);
+    for (const label of labels) { expect(ui.disabled.get(label)).toBe(true); ui.presses.get(label)!({ target: { closest: () => null } }); }
+    expect(onNavigate).not.toHaveBeenCalled(); expect(ui.presses.has("尚有 2 人待本人确认")).toBe(false);
   });
 });

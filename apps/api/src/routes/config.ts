@@ -194,8 +194,8 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
   app.get(
     "/api/config/missions",
     { preHandler: requireCEO },
-    async (): Promise<TMissionManagementResponse> => ({
-      missions: (await listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory))).map(
+    async (req): Promise<TMissionManagementResponse> => ({
+      missions: (await listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), undefined, req.person!)).map(
         (card) => card.payload as TMissionManagementResponse["missions"][number],
       ),
     }),

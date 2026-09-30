@@ -12,20 +12,20 @@ vi.mock("ts-design/primitives", () => ({ Button: ({ children, onPress, isDisable
 } }));
 import { CardDocument } from "./CardDocument";
 import type { Correction, CorrectionControls } from "./CorrectionPanel";
-import { RoundLine } from "./RoundLine";
+import { roundStatusText } from "./roundStatusText";
 
 type Access = TPersonalMissionCardPayload["correctionAccess"];
 const mission = personalPayload.card.missions[0];
-const open: Access = { canRequest: true, canApply: false, closedReason: null };
-const decider: Access = { canRequest: false, canApply: true, closedReason: null };
-const closed: Access = { canRequest: false, canApply: false, closedReason: "月份已过，这张卡只读" };
+const open: Access = { canRequest: true, canApply: false, canReject: false, closedReason: null };
+const decider: Access = { canRequest: false, canApply: false, canReject: true, closedReason: null };
+const closed: Access = { canRequest: false, canApply: false, canReject: false, closedReason: "月份已过，这张卡只读" };
 const fix = (overrides: Partial<Correction> = {}): Correction => ({
   id: "fix-1", missionId: "mission", field: "outcome", original: "形成可核验结果", proposed: "与团队完成共同核验", reason: "客户要求调整口径",
   authorId: "owner", authorName: "白田田", direct: false, status: "pending", decidedBy: null, decidedByName: null, decidedAt: null, note: null,
   appliedVersion: null, stale: false, createdAt: "2026-10-05T06:00:00.000Z", ...overrides,
 });
 const payload = (access: Access, corrections: Correction[] = []): TPersonalMissionCardPayload => ({
-  ...personalPayload, round: { ...personalPayload.round, phase: "confirmed", approver: access.canApply }, corrections, correctionAccess: access,
+  ...personalPayload, round: { ...personalPayload.round, phase: "confirmed", approver: Boolean(access.canReject) }, corrections, correctionAccess: access,
   card: { ...personalPayload.card, shown: "confirmed", status: "已确定 · 刘明华 10/4 18:00" },
   confirmation: { by: "ceo", byName: "刘明华", at: "2026-10-04T10:00:00.000Z", note: "依赖已核对" },
 });
@@ -39,8 +39,8 @@ beforeEach(() => ui.buttons.clear());
 
 describe("更正入口只看服务端给的权限", () => {
   it.each([
-    ["拍板人", decider, "更正", 14],
-    ["看得到卡的其他人", open, "申请更正", 14],
+    ["战场 DRI不能代本人更正", decider, "申请更正", 0],
+    ["卡片本人申请", open, "申请更正", 14],
     ["都不能更正", { ...open, canRequest: false }, "申请更正", 0],
   ] as const)("%s", (_who, access, verb, count) => {
     const html = render(payload(access));
@@ -86,10 +86,11 @@ describe("字段下方的内联编辑", () => {
     expect(filled.corrections.onSubmit).toHaveBeenCalledOnce();
     expect(filled.corrections.onCancel).toHaveBeenCalledOnce();
   });
-  it("拍板人直接更正写明立即生效；列表字段一行一条", () => {
-    const html = render(payload(decider), controls({ draft: { ...draft, field: "milestones", text: "待定 · 团队核对\n10/20 · 试用" } }));
-    expect(html).toContain("更正：里程碑");
-    expect(html).toContain("提交后立即生效，改前改后都会留痕。");
+  it("本人申请列表字段一行一条，正式正文等待退回本人修改", () => {
+    const html = render(payload(open), controls({ draft: { ...draft, field: "milestones", text: "待定 · 团队核对\n10/20 · 试用" } }));
+    expect(html).toContain("申请更正：里程碑");
+    expect(html).toContain("正文先不变");
+    expect(html).not.toContain("立即生效");
     expect(html).toContain("每行一条");
     expect(html).toContain(">待定 · 团队核对\n10/20 · 试用</textarea>");
   });
@@ -142,21 +143,20 @@ describe("待处理与已处理的申请", () => {
     expect(html).toContain('id="correction-fix-1"');
     expect(ui.buttons.has("采纳：战役结果")).toBe(false);
   });
-  it("拍板人看到采纳与不采纳；不采纳先展开原因", () => {
+  it("DRI只可退回本人准备或不采纳；不采纳先展开原因", () => {
     const props = controls();
     const html = render(payload(decider, [fix()]), props);
     expect(html).not.toContain("等刘明华处理");
-    ui.buttons.get("采纳：战役结果")!.onPress!();
-    expect(props.corrections.onDecide).toHaveBeenCalledWith(fix(), "apply");
+    expect(ui.buttons.has("采纳：战役结果")).toBe(false);
+    expect(html).toContain("请从页头退回本人准备");
     ui.buttons.get("不采纳：战役结果")!.onPress!();
     expect(props.corrections.onRejecting).toHaveBeenCalledWith({ id: "fix-1", note: "" });
-    expect(props.corrections.onDecide).toHaveBeenCalledOnce();
+    expect(props.corrections.onDecide).not.toHaveBeenCalled();
   });
-  it("原文已变化时停用采纳，仍可不采纳", () => {
+  it("原文已变化时仍可不采纳，始终不提供采纳按钮", () => {
     const html = render(payload(decider, [fix({ stale: true })]));
     expect(html).toMatch(/<span id="stale-fix-1"[^>]*>原文已变化<\/span>/);
-    expect(html).toContain('aria-describedby="stale-fix-1"');
-    expect(ui.buttons.get("采纳：战役结果")?.isDisabled).toBe(true);
+    expect(ui.buttons.has("采纳：战役结果")).toBe(false);
     expect(ui.buttons.get("不采纳：战役结果")?.isDisabled).toBe(false);
   });
   it("不采纳要写一句原因才能确认；失败原因显示在这条旁边", () => {
@@ -185,27 +185,21 @@ describe("待处理与已处理的申请", () => {
   });
 });
 
-describe("本轮那一行（已确定）", () => {
-  const props = { actions: [], viewerId: "ceo", pending: false, onAction: vi.fn(), onSelectCard: vi.fn(), onViewGoals: vi.fn(), onStartProcessing: vi.fn() };
+describe("任务组合已确定的历史状态", () => {
   const applied = [fix({ id: "a", status: "applied", appliedVersion: 2 }), fix({ id: "b", status: "applied", appliedVersion: 3 }), fix({ id: "c" })];
   it("状态句接本卡已采纳的更正数", () => {
-    const html = renderToStaticMarkup(<RoundLine {...props} payload={payload(open, applied)} />);
-    expect(html).toContain("已确定 · 刘明华 10/4 18:00 · 更正 2 处");
-    expect(html).not.toContain(">从第一条开始</button>");
+    const data = payload(open, applied);
+    expect(roundStatusText(data.round, { feedbackCount: 0, confirmation: data.confirmation, corrected: 2 })).toBe("已确定 · 刘明华 10/4 18:00 · 更正 2 处");
   });
-  it("拍板人有待处理申请时写待办，从第一条开始", () => {
+  it("DRI有待处理申请时保持服务端待办", () => {
     const data = payload(decider, applied);
-    const html = renderToStaticMarkup(<RoundLine {...props} payload={{ ...data, round: { ...data.round, todo: "1 条更正申请待你处理", counts: { ...data.round.counts, corrections: 1 } } }} />);
-    expect(html).toContain("1 条更正申请待你处理");
-    ui.buttons.get("从第一条开始")!.onPress!();
-    expect(props.onStartProcessing).toHaveBeenCalledOnce();
+    expect(roundStatusText({ ...data.round, todo: "1 条更正申请待你处理", counts: { ...data.round.counts, corrections: 1 } }, { feedbackCount: 0, confirmation: data.confirmation, corrected: 2 })).toBe("1 条更正申请待你处理");
   });
   it("月份已过时拍板人不再被催处理", () => {
     const data = payload({ ...closed }, applied);
     // 月份过后服务端不再给待办，只留待处理的计数。
-    const html = renderToStaticMarkup(<RoundLine {...props} payload={{ ...data, round: { ...data.round, approver: true, todo: null, counts: { ...data.round.counts, corrections: 1 } } }} />);
-    expect(html).toContain("已确定 · 刘明华 10/4 18:00 · 更正 2 处");
-    expect(html).not.toContain("待你处理");
-    expect(html).not.toContain(">从第一条开始</button>");
+    const line = roundStatusText({ ...data.round, approver: true, todo: null, counts: { ...data.round.counts, corrections: 1 } }, { feedbackCount: 0, confirmation: data.confirmation, corrected: 2 });
+    expect(line).toBe("已确定 · 刘明华 10/4 18:00 · 更正 2 处");
+    expect(line).not.toContain("待你处理");
   });
 });

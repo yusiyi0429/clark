@@ -89,7 +89,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
       }
       // 成员在 2a 看不到任何 Card，也不能借显式引用把 Card 带进自己的 Agent。
       if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
-      const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret);
+      const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret, person);
       if (!("snapshots" in references)) {
         return fail(reply, references.status, references.code, references.message);
       }

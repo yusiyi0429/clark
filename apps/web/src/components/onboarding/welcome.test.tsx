@@ -166,7 +166,7 @@ describe("真实数据的首次引导", () => {
     expect(elements(tree).find((element) => element.type === MissionFlow)).toBeDefined();
     const diagram = renderToStaticMarkup(<MissionFlow />);
     expect(diagram.match(/<li\b/g)).toHaveLength(6);
-    const titles = ["本月目标", "任务卡草稿", "下发审核", "集中处理", "确定", "拆成执行事项"];
+    const titles = ["本月目标", "任务卡草稿", "本人确认", "统一核对", "DRI 确认", "拆成执行事项"];
     let position = -1;
     for (const title of titles) {
       const next = diagram.indexOf(`<strong>${title}</strong>`);

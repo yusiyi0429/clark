@@ -99,23 +99,23 @@ describe("本月 Mission Card 的 CEO 通知入口", () => {
 
   it.each([
     [{ phase: "drafting" }, "Co-Agent 正在起草"],
-    [{ phase: "draft" }, "草稿 · 待下发审核"],
-    [{ phase: "open", closesAt: "2026-10-02T09:24:00.000Z" }, "审核中 · 已完成 0/0"],
-    [{ phase: "closed" }, "汇总中"],
-    [{ phase: "reviewing", counts: { ...round.counts, pending: 5 } }, "5 条待你处理"],
-    [{ phase: "reviewing" }, "意见已全部处理，待你确认"],
+    [{ phase: "draft" }, "草稿 · 待下发本人确认"],
+    [{ phase: "open", closesAt: "2026-10-02T09:24:00.000Z" }, "本人已确认 1/1"],
+    [{ phase: "closed" }, "Co-Agent 正在统一核对"],
+    [{ phase: "reviewing", counts: { ...round.counts, pending: 5 } }, "待战场 DRI 确认任务组合"],
+    [{ phase: "reviewing" }, "待战场 DRI 确认任务组合"],
   ] as const)("已建轮次按服务端阶段给出 %s", (overrides, expected) => {
     expect(railGroups([summaryCard(overrides)], new Date("2030-01-01"))[0].items[0].meta).toBe(expected);
   });
 
   it("越过服务端截止时刻时不显示负数，确认后退出通知栏", () => {
-    expect(railGroups([summaryCard({ phase: "open", closesAt: round.serverNow })])[0].items[0].meta).toBe("汇总中");
+    expect(railGroups([summaryCard({ phase: "open", closesAt: round.serverNow })])[0].items[0].meta).toBe("Co-Agent 正在统一核对");
     expect(railGroups([summaryCard({ phase: "confirmed" })])).toEqual([]);
   });
   it("审核状态来自各卡本人确认，失败草稿不会承诺可以下发", () => {
-    const row = { cardId: "own", ownerId: "sun", ownerName: "孙铭泽", roleLabel: null, missionCount: 1, ownerConfirmedAt: "2026-10-01T01:00:00Z", line: "已完成审核", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: true, placeholder: false };
-    expect(railGroups([summaryCard({ phase: "open", closesAt: null, cards: [row] })])[0].items[0].meta).toBe("审核中 · 已完成 1/1");
-    expect(railGroups([summaryCard({ phase: "open", approver: false, closesAt: null, cards: [row] })])[0].items[0].meta).toBe("已完成审核");
+    const row = { cardId: "own", ownerId: "sun", ownerName: "孙铭泽", roleLabel: null, missionCount: 1, ownerConfirmedAt: "2026-10-01T01:00:00Z", line: "本人已确认", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: true, placeholder: false };
+    expect(railGroups([summaryCard({ phase: "open", closesAt: null, cards: [row] })])[0].items[0].meta).toBe("本人已确认 1/1");
+    expect(railGroups([summaryCard({ phase: "open", approver: false, closesAt: null, cards: [row] })])[0].items[0].meta).toBe("本人已确认");
     expect(railGroups([summaryCard({ phase: "draft", draftFailures: [{ ownerId: "sun", ownerName: "孙铭泽", message: "缺少验收依据" }] })])[0].items[0].meta).toBe("任务起草未完成");
   });
 

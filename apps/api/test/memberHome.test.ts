@@ -86,7 +86,7 @@ describe("DRI home widgets and battlefield detail", () => {
     } finally { await t.close(); }
   });
 
-  it("shows the monthly roster but opens only own cards for members and every card for the current DRI", async () => {
+  it("shows the monthly roster but keeps others' preparation private until the owner confirms, including for the current DRI", async () => {
     const t = await createTestApp({}, undefined, { monthlyNow: () => START });
     try {
       const ids = await seed(t); const cookie = await t.memberCookie();
@@ -102,8 +102,16 @@ describe("DRI home widgets and battlefield detail", () => {
       await t.sql("UPDATE battlefield_config SET owner_id=$1 WHERE id='growth'", [TEST_MEMBER.personId]);
       detail = await read(t, cookie, "/api/me/battlefields/growth");
       expect(detail.isDri).toBe(true); expect(detail.round.approver).toBe(true);
-      expect(detail.missionCards.every((c: any) => c.canOpen && c.href)).toBe(true);
+      expect(detail.missionCards.map((c: any) => ({ cardId: c.cardId, canOpen: c.canOpen, href: c.href }))).toEqual([
+        { cardId: ids.other, canOpen: false, href: null }, { cardId: ids.mine, canOpen: true, href: `/me/mission-cards/${ids.mine}` },
+      ]);
       expect(detail.round.cards).toHaveLength(2);
+      expect(detail.round.cards.find((c: any) => c.cardId === ids.other).contentVisible).toBe(false);
+      await t.sql("UPDATE mission_rounds SET status='open',window_seq=1,first_opened_at=$2,opened_at=$2,closes_at=$3 WHERE id=$1", [ids.round, START, CLOSE]);
+      await t.sql("UPDATE personal_mission_cards SET owner_confirmed_at=$2 WHERE id=$1", [ids.other, START]);
+      detail = await read(t, cookie, "/api/me/battlefields/growth");
+      expect(detail.missionCards.every((c: any) => c.canOpen && c.href)).toBe(true);
+      expect(detail.round.cards.find((c: any) => c.cardId === ids.other).contentVisible).toBe(true);
       const missionOnly = await read(t, cookie, "/api/me/battlefields/mission-only");
       expect(missionOnly.myMissions).toMatchObject([{ missionId: "mission-mine", personalCard: null, placeholder: false }]);
     } finally { await t.close(); }

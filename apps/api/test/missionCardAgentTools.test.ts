@@ -48,12 +48,12 @@ describe("Mission card private Agent tools", () => {
       expect((await invoke(thirdToken, "get_mission_card", { cardId: f.card })).value.code).toBe("MISSION_CARD_NOT_FOUND");
       // Visibility alone grants comment access; it must not grant the ability to rewrite a colleague's promise.
       await f.t.sql("UPDATE personal_mission_cards SET member_ids=member_ids || $2::jsonb WHERE id=$1", [f.card, '["person-fixture-003"]']);
-      expect((await invoke(thirdToken, "get_mission_card", { cardId: f.card })).value.editable).toBe(false);
+      expect((await invoke(thirdToken, "get_mission_card", { cardId: f.card })).value.code).toBe("MISSION_CARD_NOT_FOUND");
       const edit = { cardId: f.card, missionId: "execution-one", field: "outcome", sourceRound: 1, sourceVersion: 1,
         sourceText: "目标", proposed: "交付可复核的界面与权限证据", reason: "用户明确补充验收结果", clientId: randomUUID() };
       const denied = await invoke(thirdToken, "edit_mission_card", edit);
       expect(denied.isError).toBe(true);
-      expect(denied.value.code).toBe("MISSION_CARD_READ_ONLY");
+      expect(denied.value.code).toBe("PERSONAL_MISSION_CARD_NOT_FOUND");
 
       const people = loadCompanyMemory(f.t.env).searchPeople(undefined);
       const annotation = await createMissionCardAnnotation(f.t.pool, people, f.t.env.sessionSecret,
@@ -79,7 +79,7 @@ describe("Mission card private Agent tools", () => {
       const retained = await createMissionCardAnnotation(f.t.pool, people, f.t.env.sessionSecret,
         { personId: TEST_MEMBER.personId, role: "member" }, f.card,
         { clientId: randomUUID(), missionId: "execution-one", field: "outcome", sourceRound: 1, sourceVersion: 2,
-          sourceText: edit.proposed, quote: edit.proposed, prefix: "", suffix: "", startOffset: 0, body: "这条想法先留作审核备注" },
+          intent: "edit", sourceText: edit.proposed, quote: edit.proposed, prefix: "", suffix: "", startOffset: 0, body: "这条想法先留作审核备注" },
         () => new Date("2026-10-10T02:00:00Z"));
       expect("annotation" in retained).toBe(true);
       const retainedId = "annotation" in retained ? retained.annotation.id : "";
@@ -102,13 +102,12 @@ describe("Mission card private Agent tools", () => {
       expect(frozen.value.revisions[0].id).toBe(saved.value.revision.id);
       const afterConfirmation = { ...edit, sourceVersion: 2, sourceText: edit.proposed,
         proposed: "确认后不能悄悄改承诺", clientId: randomUUID() };
-      for (const bearer of [memberToken, ceoToken]) {
-        expect((await invoke(bearer, "edit_mission_card", afterConfirmation)).value.code).toBe("OWNER_CONFIRMED");
-      }
+      expect((await invoke(memberToken, "edit_mission_card", afterConfirmation)).value.code).toBe("OWNER_CONFIRMED");
+      expect((await invoke(ceoToken, "edit_mission_card", afterConfirmation)).value.code).toBe("MISSION_CARD_READ_ONLY");
       expect((await invoke(memberToken, "edit_mission_card", { ...afterConfirmation, sourceRound: undefined })).value.code).toBe("INVALID_INPUT");
       expect((await f.t.sql("SELECT outcome,version FROM missions WHERE id='execution-one'"))[0]).toMatchObject({ outcome: edit.proposed, version: 2 });
       expect(await f.t.sql("SELECT id FROM mission_card_revisions WHERE card_id=$1", [f.card])).toHaveLength(1);
-      await f.t.sql("UPDATE personal_mission_cards SET member_ids='[]'::jsonb WHERE id=$1", [f.card]);
+      await f.t.sql("UPDATE personal_mission_cards SET owner_id='another-owner',member_ids='[]'::jsonb WHERE id=$1", [f.card]);
       expect((await invoke(memberToken, "get_mission_card", { cardId: f.card })).value.code).toBe("MISSION_CARD_NOT_FOUND");
       expect((await invoke(memberToken, "edit_mission_card", { ...edit, clientId: randomUUID() })).isError).toBe(true);
     } finally { await f.t.close(); }
@@ -201,21 +200,16 @@ describe("Mission card private Agent tools", () => {
       const read = contexts[1].messages.findLast((item) => item.role === "toolResult");
       const readText = read?.role === "toolResult" ? read.content.find((item) => item.type === "text") : undefined;
       expect(readText?.type === "text" && JSON.parse(readText.text)).toMatchObject({ round: 1, editable: true });
-      const act = async (actionType: string) => {
-        const page = (await call(f, f.ceo, "GET", `/api/mission-cards/${f.card}`)).json().cards[0];
-        const action = page.actions.find((item: { actionType: string }) => item.actionType === actionType);
-        expect(action).toBeDefined();
-        const response = await call(f, f.ceo, "POST", "/api/mission-rounds/actions/execute", { actionId: action.actionId, viewCardId: f.card });
-        expect(response.statusCode).toBe(200);
-        return response.json().cards[0];
-      };
-      await act("mission-round.close");
+      // 被本人确认后再定向退回的新窗口，旧生成请求不得静默换轮。
+      await f.t.sql("UPDATE personal_mission_cards SET owner_confirmed_at=$2 WHERE id=$1", [f.card, "2026-10-10T02:00:00Z"]);
+      await f.t.sql("UPDATE mission_rounds SET status='reviewing' WHERE id=$1", [f.round]);
       const closedRead = await readMissionCardForAgent(f.t.pool.query.bind(f.t.pool), loadCompanyMemory(f.t.env).searchPeople(undefined),
         f.t.env.sessionSecret, { personId: TEST_MEMBER.personId, role: "member" }, f.card, new Date("2026-10-10T02:00:00Z"));
-      expect(closedRead).toMatchObject({ editable: false, round: 1, reviewContext: { phase: "reviewing",
-        snapshotAt: "2026-10-10T02:00:00.000Z", takenAt: "2026-10-10T02:00:00.000Z" }, annotations: [], revisions: [] });
-      const reopened = await act("mission-round.reopen");
-      expect(reopened.payload.round.round).toBe(2);
+      expect(closedRead).toMatchObject({ editable: false, round: 1 });
+      const progress = (await call(f, f.ceo, "GET", `/api/mission-rounds/${f.round}`)).json().cards[0];
+      const returned = await call(f, f.ceo, "POST", `/api/mission-rounds/${f.round}/return-cards`, { cardIds: [f.card], reason: "重新确认结果", version: progress.version });
+      expect(returned.statusCode, returned.body).toBe(200);
+      expect(returned.json().cards[0].payload.round).toBe(2);
       release(); await run;
       expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ type: "tool", phase: "completed",
         name: "edit_mission_card", toolCallId: "late-window-one", isError: true })]));

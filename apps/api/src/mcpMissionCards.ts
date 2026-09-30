@@ -25,7 +25,7 @@ export async function readMissionCardForAgent(q: Query, people: MemoryPerson[], 
       takenAt: payload.round.reviewAt, confirmedAt: payload.confirmation?.at ?? null },
     pendingOpinions: (summary?.pending ?? 0) + (summary?.pendingCorrections ?? 0),
     editable: payload.selfReview.canEdit && !missionCardWriteProblem(visible.round, visible.card, now)
-      && (visible.card.owner_id === person.personId || canApprove(person, visible.round)),
+      && visible.card.owner_id === person.personId,
     missions: payload.card.missions.map((mission) => ({ id: mission.missionId, version: mission.version,
       title: mission.title, outcome: mission.outcome, why: mission.why,
       timeBoundary: mission.timeBoundary, tradeoffs: mission.tradeoffs,

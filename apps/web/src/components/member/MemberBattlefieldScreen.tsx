@@ -122,7 +122,7 @@ export function MemberBattlefieldScreen({ initialData }: { initialData: TMemberB
         <section className={s.section} aria-labelledby="battlefield-cards-title">
           <div className={s.sectionHeading}><h2 id="battlefield-cards-title">本月任务卡</h2>{view.missionCards.length ? <span>{view.missionCards.length} 张</span> : null}</div>
           {view.missionCards.length ? <ul className={s.cards}>{view.missionCards.map((card) => {
-            const content = <><span className={s.initial} aria-hidden>{card.ownerName.slice(0, 1)}</span><span className={s.identity}><strong>{card.ownerName}{card.ownerId === workspace.viewerId ? <em>你</em> : null}</strong><span>{card.roleLabel ?? "参与 DRI"} · {card.missionCount} 项</span></span><span className={s.cardStatus}>{awaitingSnapshot ? "汇总中" : card.status}</span>{card.canOpen && card.href ? <ChevronRight size={18} aria-hidden /> : null}</>;
+            const content = <><span className={s.initial} aria-hidden>{card.ownerName.slice(0, 1)}</span><span className={s.identity}><strong>{card.ownerName}{card.ownerId === workspace.viewerId ? <em>你</em> : null}</strong><span>{card.roleLabel ?? "参与 DRI"} · {card.missionCount} 项</span></span><span className={s.cardStatus}>{awaitingSnapshot ? "本人确认时间已到" : card.status}</span>{card.canOpen && card.href ? <ChevronRight size={18} aria-hidden /> : null}</>;
             return <li key={card.cardId}>{card.canOpen && card.href ? <Button variant="ghost" className={s.cardRow} aria-label={`打开${card.ownerName}的本月卡`} data-origin={card.href} onPress={(event) => workspace.navigate(card.href!, event.target as Element)}>{content}</Button> : <div className={s.cardRow}>{content}</div>}</li>;
           })}</ul> : <p className={s.empty}>这个战场的本月任务卡还没有登记。</p>}
         </section>

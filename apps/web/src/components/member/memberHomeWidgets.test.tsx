@@ -40,9 +40,9 @@ describe("DRI 首页小组件", () => {
     expect(html).toContain("已确定 · 作为本月工作依据"); expect(html).toContain('data-origin="/me/mission-cards/mine"');
     expect(html).not.toContain("48 小时");
   });
-  it("到达截止但新投影未返回时，与详情同一刻显示汇总中", () => {
+  it("到达截止但新投影未返回时，与详情同一刻显示本人确认时间已到", () => {
     const html = render({ ...homeWork, missionCards: [{ ...homeWork.missionCards[0], serverNow: "2026-10-03T02:00:00.000Z" }] });
-    expect(html).toContain("汇总中"); expect(html).not.toContain(homeWork.missionCards[0].status);
+    expect(html).toContain("本人确认时间已到"); expect(html).not.toContain(homeWork.missionCards[0].status);
   });
   it("空态明确没有登记与没有本人卡，载入时不提前声称无卡", () => {
     const empty = render({ ...homeWork, battlefields: [], missionCards: [] });

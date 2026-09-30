@@ -47,11 +47,11 @@ export function createMissionCardAnnotationQueue(options: { pool: Pool; agent: M
       if (attempt > row.attempts) await q("UPDATE mission_card_annotations SET attempts=$2,updated_at=$3 WHERE id=$1 AND status='applying'", [row.id, attempt, options.now()]);
       try {
         const visible = await visiblePersonalMissionCard(q, person, cardId);
-        if (!visible || visible.card.owner_id !== person.personId && !canApprove(person, visible.round)
+        if (!visible || visible.card.owner_id !== person.personId
           || !!missionCardWriteProblem(visible.round, visible.card, options.now()) || visible.round.window_seq !== sourceRound) {
           const changed = visible && visible.round.window_seq !== sourceRound;
           await q("UPDATE mission_card_annotations SET status=$2,note=$3,updated_at=$4 WHERE id=$1 AND status='applying'",
-            [row.id, changed ? "no_change" : "failed", changed ? "审核已重新开放，请重新批注；原备注已保留" : "当前正文只读或没有修改权限；待改批注已保留，请明确处理", options.now()]);
+            [row.id, changed ? "no_change" : "failed", changed ? "本人准备窗口已变化，请重新批注；原备注已保留" : "当前正文只读或没有修改权限；待改批注已保留，请明确处理", options.now()]);
           return true;
         }
         const card = await getPersonalMissionCard(q, options.people(), options.secret, person, cardId, options.now());
@@ -88,7 +88,7 @@ export function createMissionCardAnnotationQueue(options: { pool: Pool; agent: M
             reason: candidate.reason, annotationId: row.id, clientId: row.id }, options.now);
         if ("error" in applied) {
           if (applied.error.code === "ROUND_CHANGED") {
-            await q("UPDATE mission_card_annotations SET status='saved',note=$2,updated_at=$3 WHERE id=$1 AND status='applying'", [row.id, "审核已重新开放，请重新批注；原备注已保留", options.now()]);
+            await q("UPDATE mission_card_annotations SET status='saved',note=$2,updated_at=$3 WHERE id=$1 AND status='applying'", [row.id, "本人准备窗口已变化，请重新批注；原备注已保留", options.now()]);
             return true;
           }
           if (applied.error.code === "MISSION_CARD_UNCHANGED") {

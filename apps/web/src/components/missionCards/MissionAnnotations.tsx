@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { MessageCircle, MessageSquarePlus, X } from "lucide-react";
-import Markdown from "react-markdown";
+import Markdown, { type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { TianshuPortalTheme } from "ts-design";
 import type { TMissionCardField, TMissionCardAnnotationView, TMissionCardRevisionView } from "@warmap/contracts";
 import { monthDayTime } from "@/lib/companyTime";
-import { annotationMarks, normalizeAnchorText, type TextAnchor } from "./annotationAnchors";
+import { annotationMarks, fieldSelectionRange, normalizeAnchorText, revisionAnchor, type MarkAnchor, type TextAnchor } from "./annotationAnchors";
 import type { PersonalMission } from "./CardDocument";
 import a from "./mission-annotations.module.css";
 
@@ -16,12 +16,19 @@ export type AnnotationSelection = TextAnchor & { mission: PersonalMission; field
 export type AnnotationControls = {
   notes: TMissionCardAnnotationView[];
   revisions: TMissionCardRevisionView[];
-  onSave: (selection: AnnotationSelection, body: string, clientId: string) => Promise<string | null>;
+  onSave: (selection: AnnotationSelection, body: string, clientId: string, intent?: "note" | "edit") => Promise<string | null>;
   onAnswer: (id: string, answer: string) => Promise<string | null>;
   onRetry: (id: string) => Promise<string | null>;
   onResolve?: (id: string, reason: string) => Promise<string | null>;
   closedReason?: string | null;
 };
+const RecordContext = createContext<{ notes: TMissionCardAnnotationView[]; revisions: TMissionCardRevisionView[]; controls?: AnnotationControls } | null>(null);
+function AnnotationSpan({ node, children, ...props }: ComponentProps<"span"> & ExtraProps) {
+  const records = useContext(RecordContext), id = node?.properties.dataAnnotationBubble;
+  const ids = typeof id === "string" ? id.split(" ") : [];
+  return records && ids.length ? <RecordIcon notes={records.notes.filter((note) => ids.includes(note.id))} revisions={records.revisions.filter((revision) => ids.includes(revision.id))} controls={records.controls} /> : <span {...props}>{children}</span>;
+}
+const annotationComponents = { span: AnnotationSpan };
 
 export function useMissionAnnotations(cardId: string, round = 1) {
   const [notes, setNotes] = useState<TMissionCardAnnotationView[]>([]);
@@ -88,11 +95,11 @@ export function useMissionAnnotations(cardId: string, round = 1) {
     return true;
   }, [cardId, isCurrent]);
   const changedCard = "任务卡已关闭或切换，重新打开原任务卡可查看保存结果。";
-  const save = useCallback(async (selection: AnnotationSelection, body: string, clientId: string): Promise<string | null> => {
+  const save = useCallback(async (selection: AnnotationSelection, body: string, clientId: string, intent: "note" | "edit" = "note"): Promise<string | null> => {
     const request = beginMutation();
     if (!request) return changedCard;
     try {
-      const response = await fetch(`/api/mission-cards/${encodeURIComponent(cardId)}/annotations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ clientId, missionId: selection.mission.missionId, field: selection.field, sourceRound: selection.sourceRound ?? round, sourceVersion: selection.mission.version, sourceText: selection.sourceText, quote: selection.quote, prefix: selection.prefix, suffix: selection.suffix, startOffset: selection.startOffset, body }) });
+      const response = await fetch(`/api/mission-cards/${encodeURIComponent(cardId)}/annotations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ clientId, intent, missionId: selection.mission.missionId, field: selection.field, sourceRound: selection.sourceRound ?? round, sourceVersion: selection.mission.version, sourceText: selection.sourceText, quote: selection.quote, prefix: selection.prefix, suffix: selection.suffix, startOffset: selection.startOffset, body }) });
       const data = await response.json() as { annotation?: TMissionCardAnnotationView; message?: string };
       if (!isCurrent(request.scope, cardId)) return changedCard;
       if (!response.ok || !data.annotation) return data.message ?? "批注未保存，请重试；输入已保留。";
@@ -120,33 +127,99 @@ export function useMissionAnnotations(cardId: string, round = 1) {
   return { notes, revisions, error, pending, refresh, save, answer, retry, resolve };
 }
 
-export function AnnotatedField({ mission, field, text, markdownText = text, notes, onSelect, sourceRound }: { mission: PersonalMission; field: TMissionCardField; text: string; markdownText?: string; notes: TMissionCardAnnotationView[]; onSelect: (selection: AnnotationSelection | null) => void; sourceRound?: number }) {
-  const [opened, setOpened] = useState<string | null>(null);
-  const collect = (node: HTMLElement) => {
-    const picked = window.getSelection();
-    if (!picked || picked.isCollapsed || !node.contains(picked.anchorNode) || !node.contains(picked.focusNode)) { onSelect(null); return; }
-    const range = picked.getRangeAt(0).cloneRange();
+export function AnnotatedField({ mission, field, text, markdownText = text, notes, revisions = [], controls, onSelect, sourceRound }: { mission: PersonalMission; field: TMissionCardField; text: string; markdownText?: string; notes: TMissionCardAnnotationView[]; revisions?: TMissionCardRevisionView[]; controls?: AnnotationControls; onSelect: (selection: AnnotationSelection | null) => void; sourceRound?: number }) {
+  const fieldNode = useRef<HTMLDivElement>(null);
+  const frame = useRef<number | null>(null);
+  const collect = useCallback(() => {
+    const node = fieldNode.current;
+    if (!node) return;
+    const range = fieldSelectionRange(node, window.getSelection());
+    if (!range) { onSelect(null); return; }
     const before = document.createRange(); before.selectNodeContents(node); before.setEnd(range.startContainer, range.startOffset);
     const after = document.createRange(); after.selectNodeContents(node); after.setStart(range.endContainer, range.endOffset);
-    const quote = normalizeAnchorText(picked.toString());
+    const quote = normalizeAnchorText(range.toString());
     if (!quote || quote.length > 2000) { onSelect(null); return; }
     const rawBefore = before.toString().replace(/\s+/g, " ").trimStart();
     onSelect({ mission, field, sourceText: text, sourceRound, quote, prefix: rawBefore.slice(-200), suffix: after.toString().replace(/\s+/g, " ").slice(0, 200), startOffset: rawBefore.length, range });
-  };
+  }, [mission, field, text, sourceRound, onSelect]);
+  const schedule = useCallback(() => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(() => { frame.current = null; collect(); });
+  }, [collect]);
+  useEffect(() => {
+    const changed = () => {
+      const node = fieldNode.current, picked = window.getSelection();
+      // Editing a popover never replaces the captured document selection.
+      if (document.activeElement?.closest("[data-mission-selection-panel]")) return;
+      if (node && picked && (node.contains(picked.anchorNode) || node.contains(picked.focusNode))) schedule();
+    };
+    document.addEventListener("selectionchange", changed);
+    return () => { document.removeEventListener("selectionchange", changed); if (frame.current !== null) cancelAnimationFrame(frame.current); };
+  }, [schedule]);
+  const linked = new Set(revisions.map((revision) => revision.annotationId).filter(Boolean));
+  const marks: MarkAnchor[] = [
+    ...notes.filter((note) => !linked.has(note.id)),
+    ...revisions.map((revision) => {
+      const anchor = revisionAnchor(revision.before, revision.after);
+      return { ...(anchor ?? { quote: "", prefix: "", suffix: "", startOffset: 0 }), id: [revision.id, ...notes.filter((note) => note.id === revision.annotationId).map((note) => note.id)].join(" ") };
+    }),
+  ];
   return <div className={a.fieldWrap}>
-    <div className={a.markdown} data-mission-field={`${mission.missionId}:${field}`} onMouseUp={(event) => collect(event.currentTarget)} onKeyUp={(event) => { if (event.shiftKey) collect(event.currentTarget); }} onTouchEnd={(event) => collect(event.currentTarget)}>
-      <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[annotationMarks(notes)]} components={{
-        span: ({ node, children, ...props }) => {
-          const id = node?.properties.dataAnnotationBubble;
-          return typeof id === "string" ? <button type="button" className={a.bubble} aria-label="查看此处批注" aria-expanded={opened === id} onClick={() => setOpened(opened === id ? null : id)}><MessageCircle size={12} aria-hidden /></button> : <span {...props}>{children}</span>;
-        },
-      }}>{markdownText || "未提供"}</Markdown>
+    <div ref={fieldNode} className={a.markdown} data-mission-field={`${mission.missionId}:${field}`} onPointerUp={schedule} onDoubleClick={schedule} onKeyUp={(event) => { if (event.shiftKey) schedule(); }} onTouchEnd={schedule}>
+      <RecordContext.Provider value={{ notes, revisions, controls }}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[annotationMarks(marks)]} components={annotationComponents}>{markdownText || "未提供"}</Markdown></RecordContext.Provider>
     </div>
-    {opened ? <AnnotationNote note={notes.find((note) => note.id === opened)!} onClose={() => setOpened(null)} /> : null}
   </div>;
 }
 
-export function AnnotationNote({ note, onClose }: { note: TMissionCardAnnotationView; onClose?: () => void }) {
+function RecordIcon({ notes, revisions, controls }: { notes: TMissionCardAnnotationView[]; revisions: TMissionCardRevisionView[]; controls?: AnnotationControls }) {
+  const [open, setOpen] = useState(false), [pinned, setPinned] = useState(false);
+  const button = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const returningFocus = useRef(false);
+  const [position, setPosition] = useState({ left: 0, top: 0, maxHeight: 500 });
+  const cancelClose = () => { if (closeTimer.current) clearTimeout(closeTimer.current); };
+  const preview = () => { cancelClose(); if (returningFocus.current) { returningFocus.current = false; return; } setOpen(true); };
+  const close = () => { setOpen(false); setPinned(false); if (document.activeElement !== button.current) { returningFocus.current = true; button.current?.focus(); } };
+  const leave = () => { if (!pinned) closeTimer.current = setTimeout(() => setOpen(false), 120); };
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
+  useEffect(() => {
+    if (!open) return;
+    const viewport = window.visualViewport;
+    const place = () => {
+      if (!button.current) return;
+      const rect = button.current.getBoundingClientRect(), viewport = window.visualViewport;
+      const left = (viewport?.offsetLeft ?? 0) + 12, top = (viewport?.offsetTop ?? 0) + 12;
+      const right = left + (viewport?.width ?? window.innerWidth) - 24, bottom = top + (viewport?.height ?? window.innerHeight) - 24;
+      const width = panel.current?.offsetWidth ?? Math.min(340, right - left), height = panel.current?.offsetHeight ?? 200;
+      setPosition({ left: Math.max(left, Math.min(rect.left, right - width)), top: Math.max(top, Math.min(rect.bottom + 7, bottom - height)), maxHeight: bottom - top });
+    };
+    const outside = (event: PointerEvent) => { if (!button.current?.contains(event.target as Node) && !panel.current?.contains(event.target as Node)) { setOpen(false); setPinned(false); } };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } };
+    place(); document.addEventListener("pointerdown", outside); document.addEventListener("keydown", escape);
+    window.addEventListener("scroll", place, true); window.addEventListener("resize", place);
+    const observer = new ResizeObserver(place); if (panel.current) observer.observe(panel.current);
+    viewport?.addEventListener("resize", place); viewport?.addEventListener("scroll", place);
+    return () => { observer.disconnect(); document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); viewport?.removeEventListener("resize", place); viewport?.removeEventListener("scroll", place); };
+  }, [open, pinned]);
+  const visibleNotes = pinned ? notes : notes.slice(-1), visibleRevisions = pinned ? revisions : revisions.slice(-1);
+  return <>
+    <button ref={button} type="button" className={a.bubble} aria-label="查看此处批注与修改记录" aria-expanded={open} onPointerEnter={(event) => { if (event.pointerType !== "touch") preview(); }} onPointerLeave={leave} onFocus={preview} onBlur={leave} onPointerDown={(event) => event.stopPropagation()} onClick={() => { cancelClose(); if (pinned) { setOpen(false); setPinned(false); } else { setOpen(true); setPinned(true); } }}><MessageCircle size={12} aria-hidden /></button>
+    {open ? createPortal(<TianshuPortalTheme><div ref={panel} className={a.recordPopover} style={position} data-pinned={pinned || undefined} role={pinned ? "dialog" : "tooltip"} aria-label="批注与修改记录" onPointerEnter={cancelClose} onPointerLeave={leave}>
+      <header><span>{revisions.length ? "修改记录" : "批注"}</span>{pinned ? <button type="button" aria-label="收起记录" onClick={close}><X size={14} aria-hidden /></button> : null}</header>
+      {visibleRevisions.map((revision) => <section className={a.recordEntry} key={revision.id}>
+        <div className={a.recordMeta}>{revision.authorName}<time dateTime={revision.createdAt}>{monthDayTime(revision.createdAt)}</time></div>
+        <small>原文</small><p>{revision.before}</p><small>修改依据</small><p>{revision.reason}</p>
+        {notes.filter((note) => note.id === revision.annotationId && !visibleNotes.includes(note)).map((note) => <p key={note.id}>{note.body}</p>)}
+        <small>修改后</small><p>{revision.after}</p>
+      </section>)}
+      {visibleNotes.map((note) => pinned ? <AnnotationNote key={note.id} note={note} onRetry={controls?.onRetry} /> : <section key={note.id} className={a.recordEntry}><div className={a.recordMeta}>{note.authorName}<time dateTime={note.createdAt}>{monthDayTime(note.createdAt)}</time></div><small>原文</small><p>{note.quote}</p><small>批注</small><p>{note.body}</p>{note.note ? <p>{note.note}</p> : null}</section>)}
+      {!pinned && notes.length + revisions.length > visibleNotes.length + visibleRevisions.length ? <small className={a.recordMore}>点击查看全部记录</small> : null}
+    </div></TianshuPortalTheme>, document.body) : null}
+  </>;
+}
+
+export function AnnotationNote({ note, onClose, onRetry }: { note: TMissionCardAnnotationView; onClose?: () => void; onRetry?: AnnotationControls["onRetry"] }) {
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
   if (!note) return null;
   return <aside className={a.note} aria-label="批注内容">
     <header><strong>{note.authorName}</strong><time dateTime={note.createdAt}>{monthDayTime(note.createdAt)}</time>{onClose ? <button type="button" aria-label="收起批注" onClick={onClose}><X size={14} aria-hidden /></button> : null}</header>
@@ -154,6 +227,8 @@ export function AnnotationNote({ note, onClose }: { note: TMissionCardAnnotation
     {note.note ? <p className={a.reason}>{note.note}</p> : null}
     {note.clarifications?.length ? <details className={a.clarificationHistory}><summary>查看沟通记录 · {note.clarifications.length}</summary>{note.clarifications.map((item, index) => <div key={`${item.createdAt}:${index}`}><p>{item.question}</p><p><strong>{item.authorName}</strong>：{item.answer}</p><time dateTime={item.createdAt}>{monthDayTime(item.createdAt)}</time></div>)}</details> : null}
     <small>{({ saved: "批注已保存", queued: "Co-Agent 准备处理", applying: "Co-Agent 正在修改", needs_clarification: "待明确修改意图", applied: "已按批注修改", no_change: "保留备注 · 正文未修改", failed: "修改未完成" } as const)[note.status]}{note.stale ? " · 原文已留存" : ""}</small>
+    {note.status === "saved" && note.canRetry && onRetry ? <button type="button" className={a.noteApply} disabled={busy} onClick={async () => { setBusy(true); setError(""); const failure = await onRetry(note.id); setBusy(false); if (failure) setError(failure); }}>{busy ? "提交中…" : "让 Agent 修改"}</button> : null}
+    {error ? <p className={a.error} role="alert">{error}</p> : null}
   </aside>;
 }
 
@@ -227,7 +302,8 @@ export function SelectionPopover({ selection, onSave, onQuote, onClose, canCreat
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const request = useRef({ body: "", id: "" });
+  const request = useRef({ body: "", intent: "note" as "note" | "edit", id: "" });
+  const [sending, setSending] = useState<"note" | "edit" | null>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0, maxHeight: window.innerHeight - 24, maxWidth: window.innerWidth - 24 });
   useEffect(() => {
@@ -250,32 +326,27 @@ export function SelectionPopover({ selection, onSave, onQuote, onClose, canCreat
     viewport?.addEventListener("resize", place); viewport?.addEventListener("scroll", place);
     const observer = new ResizeObserver(place);
     if (panel.current) observer.observe(panel.current);
-    const dismiss = (event: PointerEvent) => { if (!panel.current?.contains(event.target as Node) && mode === "menu") onClose(); };
+    const dismiss = (event: PointerEvent) => { if (!panel.current?.contains(event.target as Node) && !busyRef.current) onClose(); };
     const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!busyRef.current) onClose(); } };
     document.addEventListener("pointerdown", dismiss); document.addEventListener("keydown", escape);
     return () => { window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); viewport?.removeEventListener("resize", place); viewport?.removeEventListener("scroll", place); observer.disconnect(); document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", escape); };
   }, [mode, selection, onClose]);
-  const send = async () => {
+  const send = async (intent: "note" | "edit") => {
     if (!canCreate || !body.trim() || busyRef.current) return;
-    busyRef.current = true; setBusy(true); setError("");
-    if (request.current.body !== body.trim()) request.current = { body: body.trim(), id: crypto.randomUUID() };
-    const failure = await onSave(selection, body.trim(), request.current.id);
-    busyRef.current = false; setBusy(false);
+    busyRef.current = true; setBusy(true); setSending(intent); setError("");
+    if (request.current.body !== body.trim() || request.current.intent !== intent || !request.current.id) request.current = { body: body.trim(), intent, id: crypto.randomUUID() };
+    const failure = await onSave(selection, body.trim(), request.current.id, intent);
+    busyRef.current = false; setBusy(false); setSending(null);
     if (failure) setError(failure); else onClose();
   };
   const contents: ReactNode = mode === "menu" ? <>
-    <button type="button" disabled={!canCreate} title={closedReason ?? undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => setMode("write")}><MessageSquarePlus size={15} aria-hidden />直接批注</button>
-    <span className={a.divider} aria-hidden />
+    {canCreate ? <><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => setMode("write")}><MessageSquarePlus size={15} aria-hidden />直接批注</button><span className={a.divider} aria-hidden /></> : null}
     <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={onQuote}><MessageCircle size={15} aria-hidden />引用并对话</button>
-    {!canCreate && closedReason ? <small className={a.accessReason}>{closedReason}</small> : null}
   </> : <>
-    <header><strong>直接批注</strong><button type="button" disabled={busy} aria-label="取消批注" onClick={onClose}><X size={15} aria-hidden /></button></header>
-    <blockquote>{selection.quote}</blockquote>
-    <textarea aria-label="批注内容" autoFocus rows={3} maxLength={4000} placeholder="写下你的意见…" value={body} disabled={busy || !canCreate} onChange={(event) => { setBody(event.target.value); setError(""); }} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
-    <small>同卡成员可见 · 批注原文始终保留</small>
+    <textarea aria-label="修改意见" autoFocus rows={3} maxLength={4000} placeholder="写下修改意见" value={body} disabled={busy || !canCreate} onChange={(event) => { setBody(event.target.value); setError(""); }} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void send("note"); } }} />
     {!canCreate && closedReason ? <p className={a.reason} role="status">{closedReason}</p> : null}
     {error ? <p className={a.error} role="alert">{error}</p> : null}
-    <footer><button type="button" className={a.cancel} disabled={busy} onClick={onClose}>取消</button><button type="button" className={a.save} disabled={busy || !canCreate || !body.trim()} onClick={() => void send()}>{busy ? "保存中…" : "保存批注"}</button></footer>
+    <footer><button type="button" className={a.cancel} disabled={busy || !canCreate || !body.trim()} onClick={() => void send("note")}>{sending === "note" ? "保存中…" : "保存"}</button><button type="button" className={a.save} disabled={busy || !canCreate || !body.trim()} onClick={() => void send("edit")}>{sending === "edit" ? "修改中…" : "立即修改"}</button></footer>
   </>;
-  return createPortal(<TianshuPortalTheme><div ref={panel} className={mode === "menu" ? a.menu : a.composer} style={position} role={mode === "menu" ? "toolbar" : "dialog"} aria-label={mode === "menu" ? "选中文字操作" : "添加批注"}>{contents}</div></TianshuPortalTheme>, document.body);
+  return createPortal(<TianshuPortalTheme><div ref={panel} data-mission-selection-panel className={mode === "menu" ? a.menu : a.composer} style={position} role={mode === "menu" ? "toolbar" : "dialog"} aria-label={mode === "menu" ? "选中文字操作" : "添加批注"}>{contents}</div></TianshuPortalTheme>, document.body);
 }

@@ -53,6 +53,8 @@ describe("CEO 个人 MCP", () => {
         JSON.stringify([issueId]), JSON.stringify(preflight), JSON.stringify(emptyDraft()), "2026-10-11T03:00:00Z"]);
       // executionFixture 的简版已签发计划没有首页投影需要的协商数组。
       await f.t.sql("UPDATE monthly_plans SET negotiation=$1::jsonb", [JSON.stringify({ edits: [], checkedItemIds: [], feedback: [], note: "" })]);
+      // 上级只在本人确认后能读取个人卡正文；前面的待办测试仅使用进度。
+      await f.t.sql("UPDATE personal_mission_cards SET owner_confirmed_at=$2 WHERE id=$1",[f.card,"2026-10-10T02:00:00Z"]);
       const results = [
         await invoke(f.t.app, token, 6, "list_pending"),
         await invoke(f.t.app, token, 7, "get_issue", { issueId }),

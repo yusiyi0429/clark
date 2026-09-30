@@ -29,7 +29,7 @@ export function selectedFieldQuote(node: HTMLElement, selection: Pick<Selection,
   return text && selection?.anchorNode && selection.focusNode && node.contains(selection.anchorNode) && node.contains(selection.focusNode) ? text : null;
 }
 export type DocumentControls = {
-  onQuote: (mission: PersonalMission, field: TMissionCardField, quote: string) => void;
+  onQuote: (mission: PersonalMission, field: TMissionCardField, quote: string, sourceRound?: number) => void;
   onPropose: (mission: PersonalMission, field: TMissionCardField) => void;
   onSelect: (mission: PersonalMission, field: TMissionCardField, node: HTMLElement) => void;
   proposalEditor?: (mission: PersonalMission, field: TMissionCardField) => ReactNode;
@@ -49,7 +49,7 @@ export function FeedbackNote({ item, location, controls }: { item: TPersonalMiss
     {item.sourceVersion !== null ? <p className={s.basis}>对照{item.basis === "candidate" ? "候选版本" : "草稿"} v{item.sourceVersion}</p> : null}
     {location ? <p className={s.location}>{location}</p> : null}
     {item.quote ? <blockquote>{item.quote}</blockquote> : null}
-    {item.kind === "suggestion" ? <div className={s.diff}><p><span>提交时原文</span><del>{item.original || "未提供"}</del></p><p><span>建议改为</span><ins>{item.proposed}</ins></p></div> : null}
+    {item.kind === "suggestion" ? <div className={s.feedbackHistory}><p><small>原文</small>{item.original || "未提供"}</p><p><small>建议内容</small>{item.proposed}</p></div> : null}
     <p>{item.body}</p>
     {canDecide ? <div className={s.decide}>
       <div className={s.inlineActions}>
@@ -74,12 +74,10 @@ export function CardDocument({ payload, controls, artifact, ownerPlan, linkedIte
   const { card, round, feedback, corrections, correctionAccess: access } = payload;
   const [selection, setSelection] = useState<AnnotationSelection | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
-  const closeSelection = useCallback(() => { setSelection(null); window.getSelection()?.removeAllRanges(); }, []);
+  // Closing a toolbar must not interrupt the browser's next click in a double/triple click.
+  const closeSelection = useCallback(() => { setSelection(null); }, []);
   const notes = controls.annotations?.notes ?? [];
   const revisions = controls.annotations?.revisions ?? [];
-  const canDiscuss = round.phase === "open" && !card.ownerConfirmedAt && viewerId !== card.ownerId;
-  const loose = feedback.filter((item) => !item.missionId || !item.field);
-  const decisionControls = round.approver && round.phase === "reviewing" ? controls : undefined;
   const fixes = controls.corrections;
   // 入口只看服务端给的更正权限：拍板人直接更正，其他看得到卡的人申请更正。
   const correctVerb = access.canApply ? "更正" : access.canRequest ? "申请更正" : null;
@@ -87,48 +85,39 @@ export function CardDocument({ payload, controls, artifact, ownerPlan, linkedIte
     {payload.annotationAccess.closedReason ? <p className={s.readonly}>{payload.annotationAccess.closedReason}</p> : null}
     {access.closedReason && card.shown === "confirmed" ? <p className={s.readonly}>{access.closedReason}</p> : null}
     {artifact ? <div className={s.tabs} role="tablist" aria-label="这张 Mission Card 的两种读法"><button role="tab" aria-selected={artifact.showOriginal} onClick={() => artifact.onSelect(true)}>原件</button><button role="tab" aria-selected={!artifact.showOriginal} onClick={() => artifact.onSelect(false)}>个人任务 · {card.missions.length}</button></div> : null}
-    {notes.length || revisions.length ? <div className={s.documentTools}><button type="button" className={s.notesToggle} aria-expanded={notesOpen} onClick={() => setNotesOpen(!notesOpen)}>批注与记录 <span>{notes.length + revisions.length}</span></button></div> : null}
-    {notesOpen ? <section className={s.annotationList} aria-label="批注与修改记录">{notes.map((note) => <AnnotationNote key={note.id} note={note} />)}<RevisionHistory revisions={revisions} /></section> : null}
+    {notes.length || revisions.length || feedback.length ? <div className={s.documentTools}><button type="button" className={s.notesToggle} aria-expanded={notesOpen} onClick={() => setNotesOpen(!notesOpen)}>批注与记录 <span>{notes.length + revisions.length + feedback.length}</span></button></div> : null}
+    {notesOpen ? <section className={s.annotationList} aria-label="批注与修改记录">{notes.map((note) => <AnnotationNote key={note.id} note={note} onRetry={controls.annotations?.onRetry} />)}<RevisionHistory revisions={revisions} />{feedback.length ? <details className={s.legacyFeedback}><summary>历史意见 · {feedback.length}</summary>{feedback.map((item) => <FeedbackNote key={item.id} item={item} location={`${card.ownerName}的卡${item.field ? ` · ${fieldNames[item.field]}` : " · 整张卡"}`} />)}</details> : null}</section> : null}
     {artifact?.showOriginal ? <div className={s.artifact}><p>{artifact.note}</p><Markdown remarkPlugins={[remarkGfm]}>{artifact.content}</Markdown></div> : <div className={s.tasks} id="mission-task-details" role="region" aria-label="任务细节">
       {card.missions.map((mission) => <section key={mission.missionId} className={s.task} aria-label={`个人任务：${mission.title}`}>
-        <div className={s.titleWrap}><div className={s.taskTitle} role="heading" aria-level={2}><AnnotatedField mission={mission} field="title" text={mission.title} sourceRound={round.round} notes={notes.filter((note) => note.missionId === mission.missionId && note.field === "title")} onSelect={setSelection} /></div>
-        {canDiscuss ? <div className={s.fieldActions}><Button variant="ghost" className={s.textAction} onPress={() => controls.onPropose(mission, "title")}>建议修改</Button></div> : fixes && correctVerb ? <div className={s.fieldActions}><Button variant="ghost" className={s.textAction} aria-label={`${correctVerb}：名称`} onPress={() => fixes.onOpen(mission, "title")}>{correctVerb}</Button></div> : null}</div>
-        <p className={s.taskMeta}><span>{mission.capabilityName}</span><span>唯一责任人 · {card.ownerName}</span>{mission.placeholder ? <span className={s.placeholder}>占位</span> : null}{mission.selfEditedFields?.includes("title") ? <span className={s.changed}>本人已修改名称</span> : null}</p>
-        {round.phase !== "confirmed" ? controls.proposalEditor?.(mission, "title") : null}
+        <div className={s.titleWrap}><div className={s.taskTitle} role="heading" aria-level={2}><AnnotatedField mission={mission} field="title" text={mission.title} sourceRound={round.round} notes={notes.filter((note) => note.missionId === mission.missionId && note.field === "title")} revisions={revisions.filter((revision) => revision.missionId === mission.missionId && revision.field === "title")} controls={controls.annotations} onSelect={setSelection} /></div>
+        {fixes && correctVerb ? <div className={s.fieldActions}><Button variant="ghost" className={s.textAction} aria-label={`${correctVerb}：名称`} onPress={() => fixes.onOpen(mission, "title")}>{correctVerb}</Button></div> : null}</div>
+        <p className={s.taskMeta}><span>{mission.capabilityName}</span><span>唯一责任人 · {card.ownerName}</span>{mission.placeholder ? <span className={s.placeholder}>占位</span> : null}</p>
         {fixes ? <CorrectionPanel mission={mission} field="title" label={fieldNames.title} items={corrections.filter((item) => item.missionId === mission.missionId && item.field === "title")} access={access} deciderName={round.deciderName} controls={fixes} /> : null}
-        {feedback.filter((item) => item.missionId === mission.missionId && item.field === "title").map((item) => <FeedbackNote key={item.id} item={item} location={`${card.ownerName}的卡 · ${mission.title} · 名称`} controls={decisionControls} />)}
         {controls.annotations ? <FieldAnnotationActivity notes={notes.filter((note) => note.missionId === mission.missionId && note.field === "title")} controls={controls.annotations} /> : null}
-        <RevisionHistory revisions={revisions.filter((revision) => revision.missionId === mission.missionId && revision.field === "title")} />
         <div className={s.fields}>{fields.map((field) => {
           const text = missionFieldText(mission, field);
           const feedbackNotes = feedback.filter((item) => item.missionId === mission.missionId && item.field === field);
           const fieldFixes = corrections.filter((item) => item.missionId === mission.missionId && item.field === field);
           const fieldNotes = notes.filter((note) => note.missionId === mission.missionId && note.field === field);
           const fieldRevisions = revisions.filter((revision) => revision.missionId === mission.missionId && revision.field === field);
-          const editor = round.phase !== "confirmed" ? controls.proposalEditor?.(mission, field) : null;
           // 历史卡缺少正式核心字段时诚实留白；空补充项可省略，但已有意见和记录仍然可读。
           const hasCorrectionDraft = fixes?.draft?.missionId === mission.missionId && fixes.draft.field === field;
-          if (supplementaryFields.has(field) && !text.trim() && !mission.changedFields.includes(field) && !mission.selfEditedFields?.includes(field) && !feedbackNotes.length && !fieldFixes.length && !fieldNotes.length && !fieldRevisions.length && !editor && !hasCorrectionDraft) return null;
+          if (supplementaryFields.has(field) && !text.trim() && !mission.changedFields.includes(field) && !mission.selfEditedFields?.includes(field) && !feedbackNotes.length && !fieldFixes.length && !fieldNotes.length && !fieldRevisions.length && !hasCorrectionDraft) return null;
           const historyKey = `${mission.missionId}-${field}`;
           const historyOpen = fixes?.history === historyKey;
           const markdownText = Array.isArray(mission[field]) ? (mission[field] as string[]).map((line) => `- ${line.replace(/\n/g, "\n  ")}`).join("\n") : text;
-          return <section key={field} className={s.field} data-changed={mission.changedFields.includes(field) || undefined} aria-label={fieldNames[field]}>
-            <h3>{fieldNames[field]}{mission.selfEditedFields?.includes(field) ? <span className={s.changed}>本人已修改</span> : mission.changedFields.includes(field) ? <span className={s.changed}>已采纳修改</span> : null}{fixes && fieldFixes.some((item) => item.status === "applied") ? <Button variant="ghost" className={s.corrected} aria-expanded={historyOpen} aria-controls={historyOpen ? `correction-history-${historyKey}` : undefined} aria-label={`已更正：${fieldNames[field]}，${historyOpen ? "收起" : "查看"}更正记录`} onPress={() => fixes.onHistory(historyOpen ? null : historyKey)}><span>已更正</span></Button> : null}</h3>
-            <div className={s.fieldBody}>{text.trim() ? <AnnotatedField mission={mission} field={field} text={text} sourceRound={round.round} markdownText={markdownText} notes={fieldNotes} onSelect={setSelection} /> : <p className={s.missing}>待明确</p>}
-            {controls.annotations ? <FieldAnnotationActivity notes={fieldNotes} controls={controls.annotations} /> : null}
-            <RevisionHistory revisions={fieldRevisions} />
-            {canDiscuss ? <div className={s.fieldActions}><Button variant="ghost" className={s.textAction} onPress={() => controls.onPropose(mission, field)}>建议修改</Button></div> : null}
+          return <section key={field} className={s.field} aria-label={fieldNames[field]}>
+            <h3>{fieldNames[field]}{fixes && fieldFixes.some((item) => item.status === "applied") ? <Button variant="ghost" className={s.corrected} aria-expanded={historyOpen} aria-controls={historyOpen ? `correction-history-${historyKey}` : undefined} aria-label={`已更正：${fieldNames[field]}，${historyOpen ? "收起" : "查看"}更正记录`} onPress={() => fixes.onHistory(historyOpen ? null : historyKey)}><span>已更正</span></Button> : null}</h3>
+            <div className={s.fieldBody}>{text.trim() || fieldNotes.length || fieldRevisions.length ? <AnnotatedField mission={mission} field={field} text={text} sourceRound={round.round} markdownText={markdownText || "待明确"} notes={fieldNotes} revisions={fieldRevisions} controls={controls.annotations} onSelect={text.trim() ? setSelection : () => setSelection(null)} /> : <p className={s.missing}>待明确</p>}
+            {controls.annotations ? <FieldAnnotationActivity notes={fieldNotes.filter((note) => note.authorId === card.ownerId)} controls={controls.annotations} /> : null}
             {fixes && correctVerb ? <div className={s.fieldActions}><Button variant="ghost" className={s.textAction} aria-label={`${correctVerb}：${fieldNames[field]}`} onPress={() => fixes.onOpen(mission, field)}>{correctVerb}</Button></div> : null}
-            {editor}
             {fixes ? <CorrectionPanel mission={mission} field={field} label={fieldNames[field]} items={fieldFixes} access={access} deciderName={round.deciderName} controls={fixes} /> : null}
-            {feedbackNotes.length ? <div className={s.remarks}>{feedbackNotes.map((item) => <FeedbackNote key={item.id} item={item} location={`${card.ownerName}的卡 · ${mission.title} · ${fieldNames[field]}`} controls={decisionControls} />)}</div> : null}
             </div>
           </section>;
         })}</div>
         {linkedItems || ownerPlan?.plan ? <LinkedTaskRows tasks={linkedItems?.[mission.missionId] ?? ownerPlan?.plan?.groups.find(group => group.missionId === mission.missionId)?.items ?? []} viewerId={viewerId} /> : null}
       </section>)}
     </div>}
-    {loose.length ? <section className={s.loose} aria-label="没有指向具体字段的意见"><h2>整张卡上的意见</h2><div className={s.remarks}>{loose.map((item) => <FeedbackNote key={item.id} item={item} location={`${card.ownerName}的卡 · 整张卡`} controls={decisionControls} />)}</div></section> : null}
-    {selection && controls.annotations ? <SelectionPopover key={`${selection.mission.missionId}:${selection.field}:${selection.startOffset}:${selection.quote}`} selection={selection} canCreate={round.phase === "open" && !card.ownerConfirmedAt && payload.annotationAccess.canCreate && selection.sourceRound === round.round} closedReason={selection.sourceRound !== round.round ? "审核已重新开放，请重新选中文字后批注。" : payload.annotationAccess.closedReason ?? (round.phase !== "open" ? "当前正文已冻结，重新开放审核后可继续批注。" : null)} onSave={controls.annotations.onSave} onClose={closeSelection} onQuote={() => { controls.onQuote(selection.mission, selection.field, selection.quote); closeSelection(); }} /> : null}
+    {selection && controls.annotations ? <SelectionPopover key={`${selection.mission.missionId}:${selection.field}:${selection.startOffset}:${selection.quote}`} selection={selection} canCreate={viewerId === card.ownerId && round.phase === "open" && !card.ownerConfirmedAt && payload.annotationAccess.canCreate && selection.sourceRound === round.round} closedReason={selection.sourceRound !== round.round ? "本人准备已重新开放，请重新选中文字后批注。" : payload.annotationAccess.closedReason ?? (round.phase !== "open" ? "当前正文已冻结，重新开放本人准备后可继续批注。" : null)} onSave={controls.annotations.onSave} onClose={closeSelection} onQuote={() => { controls.onQuote(selection.mission, selection.field, selection.quote, selection.sourceRound); closeSelection(); }} /> : null}
   </article>;
 }

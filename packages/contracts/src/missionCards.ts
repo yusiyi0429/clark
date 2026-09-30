@@ -31,6 +31,7 @@ export const MissionCardRow = Type.Object({
   roleLabel: Type.Union([Type.String(), Type.Null()]),
   missionCount: Count,
   ownerConfirmedAt: NullableDateTime,
+  contentVisible: Type.Optional(Type.Boolean()),
   line: Type.String(),
   pending: Count,
   firstPendingFeedbackId: Type.Union([Type.String(), Type.Null()]),
@@ -39,6 +40,30 @@ export const MissionCardRow = Type.Object({
   mine: Type.Boolean(),
   /** 显式人工导入的历史占位来源；正式自动起草不会生成占位内容。 */
   placeholder: Type.Boolean(),
+}, { additionalProperties: false });
+
+export const MissionCardReviewSource = Type.Object({
+  cardId: Type.String(), missionId: Type.Optional(Type.String()), field: Type.Optional(MissionCardField),
+  version: Type.Optional(Type.Integer({ minimum: 1 })), annotationId: Type.Optional(Type.String()),
+  revisionId: Type.Optional(Type.String()), correctionId: Type.Optional(Type.String()), quote: Type.Optional(Type.String({ maxLength: 2000 })),
+}, { additionalProperties: false });
+export const MissionCardReviewReport = Type.Object({
+  summary: Type.String({ minLength: 1, maxLength: 2000 }),
+  findings: Type.Array(Type.Object({
+    kind: Type.Union([Type.Literal("question"), Type.Literal("risk"), Type.Literal("suggestion")]),
+    title: Type.String({ minLength: 1, maxLength: 200 }), body: Type.String({ minLength: 1, maxLength: 2000 }),
+    sources: Type.Array(MissionCardReviewSource, { minItems: 1, maxItems: 20 }),
+  }, { additionalProperties: false }), { maxItems: 30 }),
+}, { additionalProperties: false });
+export const MissionCardCoAgentReview = Type.Object({
+  status: Type.Union([Type.Literal("queued"), Type.Literal("running"), Type.Literal("completed"), Type.Literal("failed")]),
+  summary: Type.String(), findings: MissionCardReviewReport.properties.findings,
+  error: Type.Union([Type.String(), Type.Null()]), completedAt: NullableDateTime,
+  retryAction: Type.Union([ActionDescriptor, Type.Null()]),
+}, { additionalProperties: false });
+export const ReturnMissionCardsRequest = Type.Object({
+  cardIds: Type.Array(Type.String({ format: "uuid" }), { minItems: 1, maxItems: 100, uniqueItems: true }),
+  reason: Type.String({ minLength: 1, maxLength: 2000, pattern: "\\S" }), version: Type.Integer({ minimum: 1 }),
 }, { additionalProperties: false });
 
 /** 同一轮次的公开事实；动作权限单独通过 approver 与 Card actions 投影。 */
@@ -76,6 +101,7 @@ export const MissionRoundSummary = Type.Object({
     unreviewed: Count,
   }, { additionalProperties: false }),
   cards: Type.Array(MissionCardRow),
+  coAgentReview: Type.Optional(Type.Union([MissionCardCoAgentReview, Type.Null()])),
 }, { additionalProperties: false });
 
 /** 尚未确认的轮次跨月保留；通知按 Owner 或当前拍板权限筛选，不写通知表。 */
@@ -139,7 +165,7 @@ export const MissionCardCorrectionView = Type.Object({
 }, { additionalProperties: false });
 /** 更正入口随看的人变化；closedReason 为 null 时本卡可更正。 */
 export const MissionCardCorrectionAccess = Type.Object({
-  canRequest: Type.Boolean(), canApply: Type.Boolean(), closedReason: NullableText,
+  canRequest: Type.Boolean(), canApply: Type.Boolean(), canReject: Type.Optional(Type.Boolean()), closedReason: NullableText,
 }, { additionalProperties: false });
 export const PersonalMissionCardPayload = Type.Object({
   round: MissionRoundSummary,
@@ -147,6 +173,7 @@ export const PersonalMissionCardPayload = Type.Object({
   selfReview: Type.Object({
     canConfirm: Type.Boolean(), canCancel: Type.Boolean(), canEdit: Type.Boolean(),
     blockedReason: NullableText, pendingAnnotations: Count,
+    returnReason: Type.Optional(NullableText),
   }, { additionalProperties: false }),
   annotationAccess: Type.Object({ canCreate: Type.Boolean(), canApply: Type.Boolean(), closedReason: NullableText }, { additionalProperties: false }),
   card: Type.Object({
@@ -216,3 +243,6 @@ export type TMissionCardCorrectionAccess = Static<typeof MissionCardCorrectionAc
 export type TCreateMissionCardCorrectionRequest = Static<typeof CreateMissionCardCorrectionRequest>;
 export type TDecideMissionCardCorrectionRequest = Static<typeof DecideMissionCardCorrectionRequest>;
 export type TMissionCardGroupView = Static<typeof MissionCardGroupView>;
+export type TMissionCardReviewReport = Static<typeof MissionCardReviewReport>;
+export type TMissionCardReviewSource = Static<typeof MissionCardReviewSource>;
+export type TReturnMissionCardsRequest = Static<typeof ReturnMissionCardsRequest>;

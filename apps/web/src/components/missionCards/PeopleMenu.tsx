@@ -13,13 +13,13 @@ import type { TMissionCardRow, TMissionRoundSummary } from "@warmap/contracts";
 import t from "@/styles/material-tabs.module.css";
 import p from "./people-menu.module.css";
 
-type Row = Pick<TMissionCardRow, "cardId" | "ownerName" | "line" | "ownerConfirmedAt" | "placeholder">;
+type Row = Pick<TMissionCardRow, "cardId" | "ownerName" | "line" | "ownerConfirmedAt" | "placeholder"> & { contentVisible?: boolean };
 function state(round: Pick<TMissionRoundSummary, "phase">, row: Row): "wait" | "done" | undefined {
-  return round.phase === "open" ? row.ownerConfirmedAt ? "done" : "wait" : undefined;
+  return round.phase === "confirmed" ? undefined : row.ownerConfirmedAt ? "done" : ["open", "closed"].includes(round.phase) ? "wait" : undefined;
 }
 function stateText(round: Pick<TMissionRoundSummary, "phase">, row: Row): string {
   const tone = state(round, row);
-  return tone === "done" ? "已完成审核" : tone === "wait" ? "审核中" : row.line;
+  return tone === "done" ? "本人已确认" : tone === "wait" ? "待本人确认" : row.line;
 }
 function Status({ round, row }: { round: Pick<TMissionRoundSummary, "phase">; row: Row }) {
   const tone = state(round, row);
@@ -30,20 +30,21 @@ export function PeopleMenu({ round, cardId, onSelect, children }: { round: TMiss
   const [open, setOpen] = useState(false);
   const current = round.cards.find((row) => row.cardId === cardId);
   if (!current) return null;
-  if (!round.approver) return <span className={p.still} aria-label={`${current.ownerName}：${stateText(round, current)}`}><Status round={round} row={current} /></span>;
+  if (!round.approver && round.cards.length < 2) return <span className={p.still} aria-label={`${current.ownerName}：${stateText(round, current)}`}><Status round={round} row={current} /></span>;
   const done = round.cards.filter((row) => row.ownerConfirmedAt).length;
   return <Popover isOpen={open} onOpenChange={setOpen}>
-    <Button variant="ghost" className={`${t.trigger} ${p.trigger}`} aria-label={`${current.ownerName}：${stateText(round, current)}，查看审核进度与操作`}>
+    <Button variant="ghost" className={`${t.trigger} ${p.trigger}`} aria-label={`${current.ownerName}：${stateText(round, current)}，查看任务准备进度`}>
       <Status round={round} row={current} />
       <ChevronDown size={14} strokeWidth={2} aria-hidden className={t.chevron} />
     </Button>
     <Popover.Content placement="bottom start" offset={6} className={t.popover}>
       <TianshuPortalTheme>
-        <Popover.Dialog className={`${t.menu} ${p.menu}`} aria-label="任务卡审核进度与操作">
-          {round.phase === "open" ? <p className={p.progress}>已完成审核 <strong>{done}</strong> / {round.cards.length}</p> : null}
+        <Popover.Dialog className={`${t.menu} ${p.menu}`} aria-label="任务准备进度与操作">
+          {round.phase !== "confirmed" ? <p className={p.progress}>本人已确认 <strong>{done}</strong> / {round.counts.cards}</p> : null}
           {round.cards.map((row) => (
             <Button key={row.cardId} variant="ghost" className={`${t.item} ${p.item}`} aria-current={row.cardId === cardId || undefined}
-              aria-label={`打开${row.ownerName}的 Mission Card · ${stateText(round, row)}`} onPress={() => { setOpen(false); if (row.cardId !== cardId) onSelect(row.cardId); }}>
+              isDisabled={row.contentVisible === false}
+              aria-label={`${row.contentVisible === false ? "本人确认后可查看" : "打开"}${row.ownerName}的任务 · ${stateText(round, row)}`} onPress={() => { setOpen(false); if (row.cardId !== cardId && row.contentVisible !== false) onSelect(row.cardId); }}>
               <span className={p.initial} aria-hidden>{row.ownerName.slice(0, 1)}</span>
               <span className={`${t.label} ${p.name}`}>{row.ownerName}{row.placeholder ? <em>占位</em> : null}</span>
               <Status round={round} row={row} />

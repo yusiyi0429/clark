@@ -36,8 +36,10 @@ function memberCardNext(cards: WorkCard[], deciders: Map<string, string>): Next 
   const month = Number(card.period.slice(5));
   const deadline = card.closesAt && new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(card.closesAt));
   return {
-    text: card.phase === "open" ? deadline ? `${month} 月 Mission Card 讨论开放到 ${deadline}` : `${month} 月 Mission Card 讨论已开放`
-      : `${month} 月 Mission Card 已截止，等${deciders.get(card.roundId)}拍板`,
+    text: card.phase === "open" ? card.status.startsWith("本人已确认") ? `${month} 月任务本人已确认，等待其他人准备`
+      : deadline ? `${month} 月任务请在 ${deadline} 前确认` : `${month} 月任务待你确认`
+      : card.phase === "closed" ? `${month} 月任务确认时间已到，等待战场 DRI 延长`
+      : `${month} 月任务本人已确认，Co-Agent 核对后交${deciders.get(card.roundId)}确认组合`,
     // 引导的最后一步统一进首页；本月卡的状态留在说明里，首页左侧能直接点开。
     action: "进入工作台", href: "/me",
   };
@@ -45,14 +47,15 @@ function memberCardNext(cards: WorkCard[], deciders: Map<string, string>): Next 
 
 function ceoRoundNext(rounds: TMissionRoundSummary[]): Next | null {
   const round = rounds.find((item) => item.phase === "draft")
-    ?? rounds.find((item) => item.phase === "reviewing" && item.counts.pending > 0)
-    ?? rounds.find((item) => item.phase === "reviewing");
+    ?? rounds.find((item) => item.phase === "closed")
+    ?? rounds.find((item) => item.phase === "reviewing")
+    ?? rounds.find((item) => item.phase === "open");
   if (!round) return null;
   if (!round.cards.length) return null;
   const month = Number(round.period.slice(5));
   return {
-    text: round.phase === "draft" ? `${month} 月任务卡草稿已就绪，可以统一开放讨论`
-      : round.counts.pending ? `${month} 月 Mission Card 有 ${round.counts.pending} 条意见待你处理` : "意见已全部处理，待你确认",
+    text: round.phase === "draft" ? `${month} 月任务卡草稿已就绪，待战场 DRI 交给本人确认`
+      : `${month} 月任务 · ${round.todo ?? "等待战场 DRI 确认组合"}`,
     action: "进入工作台", href: "/",
   };
 }

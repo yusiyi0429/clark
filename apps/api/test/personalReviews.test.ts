@@ -342,8 +342,13 @@ describe("跨月工作台与任务卡起草", () => {
       const seen: MissionCardDraftInput[] = [];
       const candidate = { missions: [1, 2].map((n) => ({ capabilityCode: "01", title: `任务${n}`, why: "原因", outcome: "结果", timeBoundary: "10月完成验收", tradeoffs: "优先当前结果", successEvidence: ["证据"], boundaries: "边界", keyPath: "路径",
         milestones: ["10/12 验收"], resources: "资源", dependencies: "依赖", humanAgentSplit: "分工", risk: "风险", retrospect: "待复盘", basis: "上月独立 Mission 和个人复盘" })) };
-      const result = await executeDraftMissionRound(f.t.pool, loadCompanyMemory(testEnv).searchPeople(undefined), testEnv.sessionSecret,
+      const forbidden = await executeDraftMissionRound(f.t.pool, loadCompanyMemory(testEnv).searchPeople(undefined), testEnv.sessionSecret,
         { personId: TEST_CEO.personId, role: "ceo" }, { actionType: "mission-round.draft", objectType: "mission-round-slot", objectId: "growth:2026-10", objectVersion: 1 },
+        "test-ceo-cannot-draft", () => START, undefined, { async generate(input) { seen.push(input); return { candidate }; } });
+      expect(forbidden).toMatchObject({ error: { status: 403 } });
+      expect(seen).toEqual([]);
+      const result = await executeDraftMissionRound(f.t.pool, loadCompanyMemory(testEnv).searchPeople(undefined), testEnv.sessionSecret,
+        { personId: TEST_MEMBER.personId, role: "member" }, { actionType: "mission-round.draft", objectType: "mission-round-slot", objectId: "growth:2026-10", objectVersion: 1 },
         "test-carryover", () => START, undefined, { async generate(input) { seen.push(input); return { candidate }; } });
       expect(result).toHaveProperty("card");
       await vi.waitFor(async () => expect((await f.t.sql("SELECT status FROM mission_rounds WHERE period='2026-10'"))[0].status).toBe("draft"), { timeout: 5000 });

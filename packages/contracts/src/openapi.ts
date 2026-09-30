@@ -31,6 +31,7 @@ import {
   ExecuteMissionRoundActionRequest,
   MissionRoundDecideInput,
   MissionRoundConfirmInput,
+  MissionCardReviewSource, MissionCardReviewReport, MissionCardCoAgentReview, ReturnMissionCardsRequest,
   MonthlyReviewResponse, MonthlyReviewItemResponse, MonthlyReviewPayload, MonthlyReviewItemPayload, MonthlyReviewItemRow,
   MyMonthlyReviewNoticesResponse, MonthlyReviewNotice, ExecuteMonthlyReviewActionRequest, ExecuteMonthlyReviewActionResponse,
   MonthlyReviewComment, CreateMonthlyReviewCommentRequest, CreateMonthlyReviewCommentResponse,
@@ -521,6 +522,13 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "409": errorResponse,
           },
         },
+      },
+      "/api/mission-rounds/{roundId}/return-cards": {
+        post: { operationId: "returnMissionCards", summary: "战场 DRI 退回受影响的任务卡，保留其他人的本人确认",
+          parameters: [{ name: "roundId", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ReturnMissionCardsRequest" }),
+          responses: { "200": { description: "当前任务组合进度", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse } },
       },
       "/api/monthly-reviews/{period}": {
         get: {
@@ -2037,6 +2045,10 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ExecuteMissionRoundActionRequest: ExecuteMissionRoundActionRequest as JsonSchema,
         MissionRoundDecideInput: MissionRoundDecideInput as JsonSchema,
         MissionRoundConfirmInput: MissionRoundConfirmInput as JsonSchema,
+        MissionCardReviewSource: MissionCardReviewSource as JsonSchema,
+        MissionCardReviewReport: MissionCardReviewReport as JsonSchema,
+        MissionCardCoAgentReview: MissionCardCoAgentReview as JsonSchema,
+        ReturnMissionCardsRequest: ReturnMissionCardsRequest as JsonSchema,
         MonthlyReviewResponse: MonthlyReviewResponse as JsonSchema,
         MonthlyReviewItemResponse: MonthlyReviewItemResponse as JsonSchema,
         MonthlyReviewPayload: MonthlyReviewPayload as JsonSchema,
