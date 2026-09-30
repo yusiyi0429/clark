@@ -6,8 +6,8 @@ import { createMissionCardDraftAgent } from "../missionCardDraftAgent.js";
 import { createMissionCardCorrection, decideMissionCardCorrection } from "../missionCardCorrections.js";
 import { executeCloseMissionRound, executeConfirmMissionRound, executeDecideMissionRound, executeDraftMissionRound, executeOpenMissionRound, executeReopenMissionRound, getMissionRoundCard, listMissionRoundCards } from "../missionRounds.js";
 import type { AppInstance, RouteContext } from "./shared.js";
-import { createPersonalMissionCardFeedback, getPersonalMissionCard, getPersonalMissionCardGroup, markPersonalMissionCardRead, visiblePersonalMissionCard } from "../personalMissionCards.js";
-import { MissionCardItemsResponse } from "@warmap/contracts";
+import { createPersonalMissionCardFeedback, getPersonalMissionCard, getPersonalMissionCardGroup, markPersonalMissionCardRead, setMissionCardOwnerConfirmation, visiblePersonalMissionCard } from "../personalMissionCards.js";
+import { MissionCardItemsResponse, SetMissionCardOwnerConfirmationRequest } from "@warmap/contracts";
 import { canApprove } from "../missionRounds.js";
 import { listMissionItems } from "../tasks.js";
 import { personDisplayNames } from "../people.js";
@@ -43,6 +43,11 @@ export function registerMissionCardRoutes(app: AppInstance, ctx: RouteContext, a
   app.post("/api/mission-cards/:cardId/feedback", { preHandler: ctx.requirePerson, schema: { params: cardParams, body: CreateMissionCardFeedbackRequest } }, async (req, reply) => {
     const result = await createPersonalMissionCardFeedback(ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.cardId, req.body, ctx.now);
     return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
+  app.post("/api/mission-cards/:cardId/owner-confirmation", { preHandler: ctx.requirePerson, schema: { params: cardParams, body: SetMissionCardOwnerConfirmationRequest } }, async (req, reply) => {
+    const result = await setMissionCardOwnerConfirmation(ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret,
+      req.person!, req.params.cardId, req.body, ctx.now);
+    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : { cards: [result.card] };
   });
   // 已确定任务卡的更正（GAP-04）：拍板权与卡可见性在事务内判断。
   app.post("/api/mission-cards/:cardId/corrections", { preHandler: ctx.requirePerson, schema: { params: cardParams, body: CreateMissionCardCorrectionRequest } }, async (req, reply) => {

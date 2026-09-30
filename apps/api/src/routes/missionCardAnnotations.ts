@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import { AnswerMissionCardAnnotationRequest, CreateMissionCardAnnotationRequest, CreateMissionCardAnnotationResponse,
-  MissionCardAnnotationsResponse, MissionCardRevisionsResponse, RetryMissionCardAnnotationRequest } from "@warmap/contracts";
-import { createMissionCardAnnotation, listMissionCardAnnotations, listMissionCardRevisions, respondMissionCardAnnotation } from "../missionCardAnnotations.js";
+  MissionCardAnnotationsResponse, MissionCardRevisionsResponse, RetryMissionCardAnnotationRequest, ResolveMissionCardAnnotationRequest } from "@warmap/contracts";
+import { createMissionCardAnnotation, listMissionCardAnnotations, listMissionCardRevisions, respondMissionCardAnnotation, resolveMissionCardAnnotation } from "../missionCardAnnotations.js";
 import { createMissionCardAnnotationAgent, type MissionCardAnnotationAgent } from "../missionCardAnnotationAgent.js";
 import { createMissionCardAnnotationQueue } from "../missionCardAnnotationQueue.js";
 import type { AppInstance, RouteContext } from "./shared.js";
@@ -53,5 +53,11 @@ export function registerMissionCardAnnotationRoutes(app: AppInstance, ctx: Route
     const revisions = await listMissionCardRevisions(ctx.q, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret,
       req.person!, req.params.cardId, ctx.now());
     return revisions ? { revisions } : ctx.fail(reply, 404, "PERSONAL_MISSION_CARD_NOT_FOUND", "任务卡不存在或不可见");
+  });
+  app.post("/api/mission-cards/:cardId/annotations/:annotationId/resolve", { preHandler: ctx.requirePerson,
+    schema: { params: annotationParams, body: ResolveMissionCardAnnotationRequest, response: { 200: CreateMissionCardAnnotationResponse } } }, async (req, reply) => {
+    const result = await resolveMissionCardAnnotation(ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret,
+      req.person!, req.params.cardId, req.params.annotationId, req.body.reason, ctx.now);
+    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
   });
 }

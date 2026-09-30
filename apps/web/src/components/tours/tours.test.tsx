@@ -66,6 +66,9 @@ describe("任务卡演示", () => {
     expect(scenes[3]).toContain("自己输入");
     expect(scenes[3]).toContain("最终审核");
     expect(scenes[4]).toContain("仅自己可见");
+    expect(scenes[4]).toContain("完成本人审核 → 全员完成后自动汇总 → 拍板确认");
+    expect(MISSION_CARD_TOUR_STEPS[3].body).toContain("审核中且未完成审核时");
+    expect(MISSION_CARD_TOUR_STEPS[4].body).toContain("汇总后需重新开放审核");
   });
 
   it("五幕中的段落只包含内联内容，选字菜单不造成 HTML 非法嵌套", () => {

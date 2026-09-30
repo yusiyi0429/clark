@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { TMissionRoundSummary } from "@warmap/contracts";
-import { ChevronRight } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { ContextMark } from "@/components/ContextMark";
 import { RoundClock } from "./RoundClock";
@@ -33,6 +33,7 @@ export function MissionCardNoticeGroup({ round, entry, embedded = false, current
   const confirmed = round.phase === "confirmed";
   if ((confirmed && !(round.approver && round.counts.corrections > 0)) || !round.cards.length) return null;
   const live = awaitingSnapshot ? { ...round, phase: "closed" as const } : round;
+  const stateText = (card: TMissionRoundSummary["cards"][number]) => awaitingSnapshot ? "汇总中" : round.phase === "open" ? card.ownerConfirmedAt ? "已完成审核" : "审核中" : card.line;
   const month = Number(round.period.slice(5));
   const title = `${month} 月 Mission Card${embedded ? ` · ${round.battlefieldName}` : ""}`;
   const path = (cardId: string) => `${entry === "member" ? "/me" : ""}/mission-cards/${cardId}`;
@@ -61,11 +62,11 @@ export function MissionCardNoticeGroup({ round, entry, embedded = false, current
       <ul className={s.rows} data-collapsed={round.cards.length > 1 && !expanded || undefined} aria-label={`${title} · ${round.cards.length} 张`}>
         {round.cards.map((card) => <li key={card.cardId}>
           <HeroButton variant="ghost" className={s.row} data-origin={path(card.cardId)} aria-current={path(card.cardId) === currentHref?.split("?")[0] ? "true" : undefined} data-waiting={round.approver && (card.pending > 0 || card.pendingCorrections > 0) || undefined}
-            aria-label={`${card.ownerName}${card.mine ? "（你）" : ""} · ${card.roleLabel ?? "参与 DRI"} · ${card.missionCount} 项个人任务 · ${awaitingSnapshot ? "汇总中" : card.line}，查看详情：${card.ownerName}的 ${month} 月 Mission Card`}
+            aria-label={`${card.ownerName}${card.mine ? "（你）" : ""} · ${card.roleLabel ?? "参与 DRI"} · ${card.missionCount} 项个人任务 · ${stateText(card)}，查看详情：${card.ownerName}的 ${month} 月 Mission Card`}
             onPress={(event) => onNavigate(path(card.cardId), (event.target as Element).closest("[data-notice-group]"))}>
             <span className={s.initial} aria-hidden="true">{card.ownerName.slice(0, 1)}</span>
             <span className={s.who}><span className={s.name}>{card.ownerName}{card.mine ? <em className={s.mine}>你</em> : null}{card.placeholder ? <em className={s.mine}>占位</em> : null}</span><span className={s.role}>{(card.roleLabel ?? "参与 DRI").replace(/ 战役 DRI$/, " 战役")} · <span className={s.missionCount}>{card.missionCount} 项</span></span></span>
-            <span className={s.line}>{awaitingSnapshot ? "汇总中" : card.line}</span><ChevronRight size={15} aria-hidden="true" />
+            <span className={s.line} data-review={round.phase === "open" && !awaitingSnapshot ? card.ownerConfirmedAt ? "done" : "wait" : undefined}>{round.phase === "open" && card.ownerConfirmedAt && !awaitingSnapshot ? <Check size={14} aria-hidden /> : null}{stateText(card)}</span><ChevronRight size={15} aria-hidden="true" />
           </HeroButton>
         </li>)}
       </ul>

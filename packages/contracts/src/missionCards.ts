@@ -30,6 +30,7 @@ export const MissionCardRow = Type.Object({
   ownerName: Type.String(),
   roleLabel: Type.Union([Type.String(), Type.Null()]),
   missionCount: Count,
+  ownerConfirmedAt: NullableDateTime,
   line: Type.String(),
   pending: Count,
   firstPendingFeedbackId: Type.Union([Type.String(), Type.Null()]),
@@ -72,6 +73,7 @@ export const MissionRoundSummary = Type.Object({
     cards: Count, feedback: Count, pending: Count, conflicts: Count, dependencies: Count, late: Count,
     /** 确认后等拍板人处理的更正申请（GAP-04）。 */
     corrections: Count,
+    unreviewed: Count,
   }, { additionalProperties: false }),
   cards: Type.Array(MissionCardRow),
 }, { additionalProperties: false });
@@ -120,6 +122,7 @@ export const MissionCardFeedbackView = Type.Object({
 }, { additionalProperties: false });
 export const PersonalMissionCardMission = Type.Object({
   ...MissionCardPayload.properties, version: Type.Integer({ minimum: 1 }), changedFields: Type.Array(MissionCardField),
+  selfEditedFields: Type.Array(MissionCardField),
 }, { additionalProperties: false });
 /**
  * 已确定任务卡的更正（GAP-04）：非拍板人申请、拍板人逐条采纳或不采纳；拍板人自己更正直接生效（direct）。
@@ -141,9 +144,15 @@ export const MissionCardCorrectionAccess = Type.Object({
 export const PersonalMissionCardPayload = Type.Object({
   round: MissionRoundSummary,
   draftFailure: NullableText,
+  selfReview: Type.Object({
+    canConfirm: Type.Boolean(), canCancel: Type.Boolean(), canEdit: Type.Boolean(),
+    blockedReason: NullableText, pendingAnnotations: Count,
+  }, { additionalProperties: false }),
+  annotationAccess: Type.Object({ canCreate: Type.Boolean(), canApply: Type.Boolean(), closedReason: NullableText }, { additionalProperties: false }),
   card: Type.Object({
     cardId: Type.String(), ownerId: Type.String(), ownerName: Type.String(), roleLabel: NullableText,
     members: Type.Array(ThreadMember), status: Type.String(),
+    ownerConfirmedAt: NullableDateTime,
     shown: Type.Union([Type.Literal("draft"), Type.Literal("candidate"), Type.Literal("confirmed")]),
     missions: Type.Array(PersonalMissionCardMission),
   }, { additionalProperties: false }),
@@ -152,6 +161,10 @@ export const PersonalMissionCardPayload = Type.Object({
   /** 新的在前；看得到卡的人都看得到这张卡的更正记录。 */
   corrections: Type.Array(MissionCardCorrectionView),
   correctionAccess: MissionCardCorrectionAccess,
+}, { additionalProperties: false });
+export const SetMissionCardOwnerConfirmationRequest = Type.Object({
+  confirmed: Type.Boolean(), round: Type.Integer({ minimum: 1 }),
+  missionVersions: Type.Record(Type.String({ minLength: 1 }), Type.Integer({ minimum: 1 })),
 }, { additionalProperties: false });
 export const CreateMissionCardFeedbackRequest = Type.Object({
   clientId: Type.String({ format: "uuid" }), kind: FeedbackKind, round: Type.Integer({ minimum: 1 }),
@@ -196,6 +209,7 @@ export type TMissionRoundConfirmInput = Static<typeof MissionRoundConfirmInput>;
 export type TMissionCardFeedbackView = Static<typeof MissionCardFeedbackView>;
 export type TPersonalMissionCardMission = Static<typeof PersonalMissionCardMission>;
 export type TPersonalMissionCardPayload = Static<typeof PersonalMissionCardPayload>;
+export type TSetMissionCardOwnerConfirmationRequest = Static<typeof SetMissionCardOwnerConfirmationRequest>;
 export type TCreateMissionCardFeedbackRequest = Static<typeof CreateMissionCardFeedbackRequest>;
 export type TMissionCardCorrectionView = Static<typeof MissionCardCorrectionView>;
 export type TMissionCardCorrectionAccess = Static<typeof MissionCardCorrectionAccess>;

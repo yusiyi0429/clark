@@ -19,6 +19,7 @@ export type PersonalMissionGroup = {
   phase: MissionGroupPhase;
   round: number;
   onRefresh: () => void;
+  agentNote?: string;
   reference?: MissionGroupReference | null;
   onRemoveReference: () => void;
 };
@@ -41,9 +42,9 @@ export type ThreadGroup = {
 export type DetailGroup = PersonalMissionGroup | TaskGroup | ThreadGroup;
 
 export function groupInputState(phase: MissionGroupPhase) {
-  if (phase === "draft") return { writable: false, placeholder: "讨论还没开放" };
+  if (phase === "draft") return { writable: false, placeholder: "审核尚未下发" };
   if (phase === "confirmed") return { writable: false, placeholder: "本月 Mission Card 已确定" };
-  return { writable: true, placeholder: phase === "open" ? "输入你的想法…" : "讨论结束后留言 · 待后续审核" };
+  return { writable: true, placeholder: phase === "open" ? "输入你的想法…" : "汇总后留言 · 待拍板人处理" };
 }
 
 export function mergeGroupEntries(previous: MissionGroupEntry[], incoming: MissionGroupEntry[]): MissionGroupEntry[] {

@@ -6,10 +6,10 @@ import { MissionGroupComposer } from "./MissionGroupComposer";
 
 describe("任务卡群组的阶段和公开记录", () => {
   it.each([
-    ["draft", false, "讨论还没开放"],
+    ["draft", false, "审核尚未下发"],
     ["open", true, "输入你的想法…"],
-    ["closed", true, "讨论结束后留言 · 待后续审核"],
-    ["reviewing", true, "讨论结束后留言 · 待后续审核"],
+    ["closed", true, "汇总后留言 · 待拍板人处理"],
+    ["reviewing", true, "汇总后留言 · 待拍板人处理"],
     ["confirmed", false, "本月 Mission Card 已确定"],
   ] as const)("%s 的输入和说明", (phase, writable, placeholder) => {
     expect(groupInputState(phase)).toEqual({ writable, placeholder });

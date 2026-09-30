@@ -70,7 +70,7 @@ function PersonalCardEntry({ card, onNavigate, onRefresh }: { card: MemberWork["
   const awaitingSnapshot = card.phase === "open" && !!card.closesAt && now >= Date.parse(card.closesAt);
   return <HeroButton variant="ghost" className={s.personalLink} data-origin={card.href} aria-label={`打开我的本月卡：${card.battlefieldName}`} onPress={(event) => onNavigate(card.href, event.target)}>
     <span className={s.cardName}>{card.battlefieldName}<ChevronRight size={16} aria-hidden /></span>
-    <span className={s.cardStatus}>{awaitingSnapshot ? "已截止 · 汇总中" : card.status}</span>
+    <span className={s.cardStatus}>{awaitingSnapshot ? "汇总中" : card.status}</span>
     <span className={s.cardMeta}>{card.missionCount} 项个人任务{card.placeholder ? " · 占位" : ""}</span>
     {card.closesAt && card.phase !== "confirmed" ? <span className={s.deadline}><time dateTime={card.closesAt}>{monthDayTime(card.closesAt)} 截止</time><span>{clock}</span></span> : null}
   </HeroButton>;

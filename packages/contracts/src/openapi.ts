@@ -39,7 +39,7 @@ import {
   ExecutePersonalReviewActionRequest, ExecutePersonalReviewActionResponse, PersonalReviewUpdateInput, MonthlyCycle, MonthlyCycleResponse,
   MissionCardFeedbackView, PersonalMissionCardMission, PersonalMissionCardPayload,
   MissionCardClarificationView, MissionCardAnnotationView, MissionCardRevisionView, MissionCardAnnotationsResponse, CreateMissionCardAnnotationRequest, CreateMissionCardAnnotationResponse,
-  AnswerMissionCardAnnotationRequest, RetryMissionCardAnnotationRequest, MissionCardRevisionsResponse,
+  AnswerMissionCardAnnotationRequest, RetryMissionCardAnnotationRequest, ResolveMissionCardAnnotationRequest, MissionCardRevisionsResponse, SetMissionCardOwnerConfirmationRequest,
   CreateMissionCardFeedbackRequest, CreateMissionCardFeedbackResponse, MissionCardGroupView,
   MarkMissionCardReadRequest, MarkMissionCardReadResponse,
   MissionCardCorrectionView, MissionCardCorrectionAccess, CreateMissionCardCorrectionRequest, DecideMissionCardCorrectionRequest, MissionCardCorrectionResponse,
@@ -439,6 +439,12 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/mission-cards/{cardId}/annotations": {
         get: { operationId: "getMissionCardAnnotations", summary: "读取正文批注、澄清问题和修改记录", parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }], responses: { "200": { description: "批注与记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MissionCardAnnotationsResponse" } } } }, "401": errorResponse, "404": errorResponse } },
         post: { operationId: "createMissionCardAnnotation", summary: "保存选区批注并交给 Co-Agent 处理", parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }], requestBody: jsonBody({ $ref: "#/components/schemas/CreateMissionCardAnnotationRequest" }), responses: { "200": { description: "已保存的批注", content: { "application/json": { schema: { $ref: "#/components/schemas/CreateMissionCardAnnotationResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse } },
+      },
+      "/api/mission-cards/{cardId}/owner-confirmation": {
+        post: { operationId: "setMissionCardOwnerConfirmation", summary: "本人完成审核或取消确认；最后一人完成时自动汇总", parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }], requestBody: jsonBody({ $ref: "#/components/schemas/SetMissionCardOwnerConfirmationRequest" }), responses: { "200": { description: "最新任务卡", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse } },
+      },
+      "/api/mission-cards/{cardId}/annotations/{annotationId}/resolve": {
+        post: { operationId: "resolveMissionCardAnnotation", summary: "保留备注并明确终止待改意图，记录原因", parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }, { name: "annotationId", in: "path", required: true, schema: { type: "string" } }], requestBody: jsonBody({ $ref: "#/components/schemas/ResolveMissionCardAnnotationRequest" }), responses: { "200": { description: "已保留的备注", content: { "application/json": { schema: { $ref: "#/components/schemas/CreateMissionCardAnnotationResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse } },
       },
       "/api/mission-cards/{cardId}/annotations/{annotationId}/answer": {
         post: { operationId: "answerMissionCardAnnotation", summary: "明确修改意图并继续处理", parameters: [{ name: "cardId", in: "path", required: true, schema: { type: "string" } }, { name: "annotationId", in: "path", required: true, schema: { type: "string" } }], requestBody: jsonBody({ $ref: "#/components/schemas/AnswerMissionCardAnnotationRequest" }), responses: { "200": { description: "已回答的问题", content: { "application/json": { schema: { $ref: "#/components/schemas/CreateMissionCardAnnotationResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse } },
@@ -2067,6 +2073,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         CreateMissionCardAnnotationResponse: CreateMissionCardAnnotationResponse as JsonSchema,
         AnswerMissionCardAnnotationRequest: AnswerMissionCardAnnotationRequest as JsonSchema,
         RetryMissionCardAnnotationRequest: RetryMissionCardAnnotationRequest as JsonSchema,
+        ResolveMissionCardAnnotationRequest: ResolveMissionCardAnnotationRequest as JsonSchema,
+        SetMissionCardOwnerConfirmationRequest: SetMissionCardOwnerConfirmationRequest as JsonSchema,
         MissionCardRevisionsResponse: MissionCardRevisionsResponse as JsonSchema,
         PersonalMissionCardMission: PersonalMissionCardMission as JsonSchema,
         PersonalMissionCardPayload: PersonalMissionCardPayload as JsonSchema,

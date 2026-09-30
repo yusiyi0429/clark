@@ -182,7 +182,7 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
           if (event.type === "tool" && event.phase === "completed" && !event.isError && event.name === "propose_review_edit")
             window.dispatchEvent(new CustomEvent("monthly-review-suggested", { detail: { scope } }));
           if (event.type === "tool" && event.phase === "completed" && !event.isError
-            && (event.name === "edit_mission_card" || event.name === "ask_mission_card_question"))
+            && (event.name === "edit_mission_card" || event.name === "edit_my_mission_card" || event.name === "ask_mission_card_question"))
             window.dispatchEvent(new CustomEvent("mission-card-changed", { detail: { scope } }));
           if (event.type === "error") throw new TurnError(event.code, event.message ?? "Pi Runtime 失败");
           if (event.type === "done" && event.status === "completed") completed = true;

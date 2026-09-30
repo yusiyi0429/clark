@@ -5,7 +5,7 @@ import type { MemoryPerson } from "./companyMemory.js";
 import { MissionCardAnnotationCandidate, type MissionCardAnnotationAgent } from "./missionCardAnnotationAgent.js";
 import { applyMissionCardRevision, type MissionCardAnnotationRow } from "./missionCardAnnotations.js";
 import { fieldText, getPersonalMissionCard, visiblePersonalMissionCard } from "./personalMissionCards.js";
-import { canApprove, correctionPeriodClosed, type MissionRoundPerson } from "./missionRounds.js";
+import { canApprove, missionCardWriteProblem, type MissionRoundPerson } from "./missionRounds.js";
 
 export function createMissionCardAnnotationQueue(options: { pool: Pool; agent: MissionCardAnnotationAgent; people: () => MemoryPerson[];
   secret: string; now: () => Date; onError: (error: unknown) => void }) {
@@ -39,6 +39,8 @@ export function createMissionCardAnnotationQueue(options: { pool: Pool; agent: M
     const row = await claim(cardId);
     if (!row) return false;
     const person = viewer(row.author_id);
+    const captured = await visiblePersonalMissionCard(q, person, cardId);
+    const sourceRound = captured?.round.window_seq;
     let previousError: string | null = null;
     for (let attempt = row.attempts; attempt <= 2; attempt++) {
       if (abort.signal.aborted) return false;
@@ -46,9 +48,10 @@ export function createMissionCardAnnotationQueue(options: { pool: Pool; agent: M
       try {
         const visible = await visiblePersonalMissionCard(q, person, cardId);
         if (!visible || visible.card.owner_id !== person.personId && !canApprove(person, visible.round)
-          || visible.round.status === "drafting" || correctionPeriodClosed(visible.round, options.now())) {
-          await q("UPDATE mission_card_annotations SET status='saved',note=$2,updated_at=$3 WHERE id=$1 AND status='applying'",
-            [row.id, "批注已保存；当前正文只读或没有修改权限", options.now()]);
+          || !!missionCardWriteProblem(visible.round, visible.card, options.now()) || visible.round.window_seq !== sourceRound) {
+          const changed = visible && visible.round.window_seq !== sourceRound;
+          await q("UPDATE mission_card_annotations SET status=$2,note=$3,updated_at=$4 WHERE id=$1 AND status='applying'",
+            [row.id, changed ? "no_change" : "failed", changed ? "审核已重新开放，请重新批注；原备注已保留" : "当前正文只读或没有修改权限；待改批注已保留，请明确处理", options.now()]);
           return true;
         }
         const card = await getPersonalMissionCard(q, options.people(), options.secret, person, cardId, options.now());
@@ -81,9 +84,13 @@ export function createMissionCardAnnotationQueue(options: { pool: Pool; agent: M
         }
         if (candidate.proposed === null || candidate.question !== null || candidate.options.length) throw new Error("修改正文的建议格式无效");
         const applied = await applyMissionCardRevision(options.pool, options.people(), options.secret, person, cardId,
-          { missionId: row.mission_id, field: row.field, sourceVersion: mission.version, sourceText: source, proposed: candidate.proposed,
+          { missionId: row.mission_id, field: row.field, sourceRound: sourceRound!, sourceVersion: mission.version, sourceText: source, proposed: candidate.proposed,
             reason: candidate.reason, annotationId: row.id, clientId: row.id }, options.now);
         if ("error" in applied) {
+          if (applied.error.code === "ROUND_CHANGED") {
+            await q("UPDATE mission_card_annotations SET status='saved',note=$2,updated_at=$3 WHERE id=$1 AND status='applying'", [row.id, "审核已重新开放，请重新批注；原备注已保留", options.now()]);
+            return true;
+          }
           if (applied.error.code === "MISSION_CARD_UNCHANGED") {
             await q("UPDATE mission_card_annotations SET status='no_change',note=$2,updated_at=$3 WHERE id=$1 AND status='applying'", [row.id, "原文已满足这条批注", options.now()]);
             return true;

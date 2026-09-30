@@ -23,7 +23,7 @@ function streamedTool(name: string, phase = "completed", isError = false) {
 }
 
 describe("任务卡私聊工具完成后同步正文与批注", () => {
-  it.each(["edit_mission_card", "ask_mission_card_question"])("%s 成功完成即发送当前卡的刷新事件", async (tool) => {
+  it.each(["edit_mission_card", "edit_my_mission_card", "ask_mission_card_question"])("%s 成功完成即发送当前卡的刷新事件", async (tool) => {
     const fetchMock = vi.fn().mockResolvedValueOnce(streamedTool(tool))
       .mockResolvedValue({ ok: true, json: async () => ({ messages: [] }) });
     vi.stubGlobal("fetch", fetchMock);

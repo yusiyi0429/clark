@@ -36,6 +36,7 @@ export const MissionCardAnnotationView = Type.Object({
   appliedVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
   canAnswer: Type.Boolean(),
   canRetry: Type.Boolean(),
+  canResolve: Type.Boolean(),
   clarifications: Type.Array(MissionCardClarificationView),
   /** 原始字段已变更；保留批注，由阅读页谨慎尝试重新定位。 */
   stale: Type.Boolean(),
@@ -58,6 +59,7 @@ export const MissionCardAnnotationsResponse = Type.Object({
 
 export const CreateMissionCardAnnotationRequest = Type.Object({
   clientId: Type.String({ format: "uuid" }),
+  sourceRound: Type.Integer({ minimum: 1 }),
   ...Anchor,
   body: Type.String({ minLength: 1, maxLength: 4000 }),
 }, { additionalProperties: false });
@@ -70,6 +72,7 @@ export const AnswerMissionCardAnnotationRequest = Type.Object({
   answer: Type.String({ minLength: 1, maxLength: 4000 }),
 }, { additionalProperties: false });
 export const RetryMissionCardAnnotationRequest = Type.Object({}, { additionalProperties: false });
+export const ResolveMissionCardAnnotationRequest = Type.Object({ reason: Type.String({ minLength: 1, maxLength: 1000, pattern: "\\S" }) }, { additionalProperties: false });
 export const MissionCardRevisionsResponse = Type.Object({ revisions: Type.Array(MissionCardRevisionView) }, { additionalProperties: false });
 
 export type TMissionCardAnnotationView = Static<typeof MissionCardAnnotationView>;

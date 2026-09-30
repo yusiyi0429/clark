@@ -18,6 +18,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
 import { COMPANY_TIMEZONE, monthDayTime } from "@/lib/companyTime";
 import { MissionCardNoticeGroup } from "./missionCards/MissionCardNoticeGroup";
+import { roundStatusText } from "./missionCards/roundStatusText";
 import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
 import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
 import { CycleCountdown } from "./CycleCountdown";
@@ -54,14 +55,14 @@ const sameCompanyDay = (a: Date, b: Date) => clock(a).day === clock(b).day;
 function missionRoundMeta(payload: TMissionRoundSummary | TMissionRoundDraftPayload): string {
   if (!("phase" in payload)) return "可以整理任务卡草稿";
   if (payload.phase === "drafting") return "Co-Agent 正在起草";
-  if (payload.phase === "draft") return "草稿 · 可以统一开放讨论";
-  if (payload.phase === "open" && payload.closesAt) {
-    const minutes = Math.max(0, Math.ceil((Date.parse(payload.closesAt) - Date.parse(payload.serverNow)) / 60_000));
-    return minutes ? `讨论中 · ${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分` : "已截止 · 汇总中";
+  if (payload.phase === "draft") return payload.draftFailures.length ? "任务起草未完成" : "草稿 · 待下发审核";
+  if (payload.phase === "open") {
+    if (payload.closesAt && Date.parse(payload.closesAt) <= Date.parse(payload.serverNow)) return "汇总中";
+    return roundStatusText(payload, { cardId: payload.cards.find((row) => row.mine)?.cardId, feedbackCount: 0 });
   }
   if (payload.phase === "reviewing") return payload.counts.pending ? `${payload.counts.pending} 条待你处理` : "意见已全部处理，待你确认";
   if (payload.phase === "confirmed") return payload.todo ?? "已确定";
-  return "已截止 · 汇总中";
+  return "汇总中";
 }
 
 /**
@@ -264,7 +265,7 @@ export function NotificationRail({
     const draft = item.missionRound.actions.find((descriptor) => descriptor.actionType === "mission-round.draft");
     if (!draft) {
       if (item.href !== "/") onNavigate(item.href, origin);
-      else setNotice("这一轮暂无可打开的任务卡。");
+      else setNotice("暂时没有可打开的任务卡。");
       return;
     }
     setNotice("");
@@ -272,12 +273,12 @@ export function NotificationRail({
     // 没有可起草的人时只能导入占位文件；否则 Co-Agent 逐人起草（工单 10）。
     const onlyPlaceholder = payloadOf<TMissionRoundDraftPayload>(item.missionRound).placeholder;
     if (!await ask(onlyPlaceholder
-      ? "这个战场还没有可以起草的人，先用占位文件整理草稿，待大家讨论修改。整理草稿不会确认个人承诺，也不会开放讨论。"
-      : "Co-Agent 会按签发的本月计划和上个月的任务卡，为这个战场的每个人起草任务卡，需要一两分钟；起草不成的人先沿用上个月的卡。整理草稿不会确认个人承诺，也不会开放讨论。", "整理任务卡草稿")) return;
+      ? "这个入口用于人工导入历史占位草稿，整理完成后仍需拍板人下发审核。"
+      : "Co-Agent 会按签发的本月计划与现有任务依据，为当前参与者起草任务卡。失败会保留具体原因，供重试未完成的任务；完成后由拍板人下发审核。", "整理任务卡草稿")) return;
     const saved = await action.run(draft);
     if (saved) {
       // Co-Agent 在后台起草：留在通知栏看「正在起草」，好了再点进去；这时的卡可能在起草失败后被替换。
-      if (payloadOf<TMissionRoundSummary>(saved).phase === "drafting") { setNotice("Co-Agent 已开始起草任务卡，起草好的卡会列在这一轮下面。"); return; }
+      if (payloadOf<TMissionRoundSummary>(saved).phase === "drafting") { setNotice("Co-Agent 已开始起草，完成后可以打开各人的任务卡。"); return; }
       const firstCard = payloadOf<TMissionRoundSummary>(saved).cards[0];
       if (firstCard) onNavigate(`/mission-cards/${firstCard.cardId}`, origin);
       else setNotice("草稿已整理，这一轮暂无可打开的任务卡。");

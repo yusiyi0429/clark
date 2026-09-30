@@ -129,7 +129,7 @@ describe("Personal Mission Card discussion", () => {
       expect(group.entries.filter((e: any) => e.type === 'opening')).toHaveLength(1);
       expect(group.entries[0].type).toBe('divider'); expect(group.entries[1].type).toBe('opening');
       expect(group.entries[1].text).toContain('占位');
-      expect(group.entries.filter((e: any) => e.type === 'divider').map((e: any) => e.text).join('\n')).toContain('第 2 轮');
+      expect(group.entries.filter((e: any) => e.type === 'divider').map((e: any) => e.text).join('\n')).toContain('重新开放审核');
       await t.sql("UPDATE mission_rounds SET status='confirmed',confirmed_at=$1,confirmed_by='person-fixture-001' WHERE id=$2", [CLOSE, f.round]);
       expect((await get(t, member, `/api/mission-cards/${f.card}/group`)).json().entries.some((e: any) => e.type === 'divider' && e.text.includes('确认了本月 Mission Card'))).toBe(true);
     } finally { await t.close(); }

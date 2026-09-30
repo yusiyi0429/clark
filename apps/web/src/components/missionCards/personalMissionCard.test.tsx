@@ -54,6 +54,23 @@ describe("任务卡正文的阶段与追溯", () => {
     expect(html).toContain("10 月内完成团队核验");
     expect(html).toContain("本月优先验证方法闭环");
   });
+  it("本人审核通过Agent修改，避免自己给自己提交公开建议；完成后冻结所有建议入口", () => {
+    const mine = renderToStaticMarkup(<CardDocument payload={personalPayload} controls={controls} viewerId="owner" />);
+    expect(mine).not.toContain(">建议修改<");
+    expect(mine).toContain("形成可核验结果");
+    const frozen = { ...personalPayload, card: { ...personalPayload.card, ownerConfirmedAt: "2026-10-01T02:00:00Z" }, annotationAccess: { canCreate: false, canApply: false, closedReason: "已完成审核，取消确认后可继续修改。" } };
+    const html = renderToStaticMarkup(<CardDocument payload={frozen} controls={controls} viewerId="other" />);
+    expect(html).not.toContain(">建议修改<");
+    expect(html).toContain("取消确认后可继续修改");
+    expect(html).toContain("形成可核验结果");
+  });
+  it("本人修改过的字段有轻标签，空补充项也保留并显示待明确", () => {
+    const mission = { ...personalPayload.card.missions[0], resources: "", selfEditedFields: ["outcome", "resources"] as const };
+    const html = renderToStaticMarkup(<CardDocument payload={{ ...personalPayload, card: { ...personalPayload.card, missions: [{ ...mission, selfEditedFields: [...mission.selfEditedFields] }] } }} controls={controls} />);
+    expect((html.match(/>本人已修改</g) ?? [])).toHaveLength(2);
+    expect(html).toContain('aria-label="资源与权限"');
+    expect(html).toContain("待明确");
+  });
   it("列表按原文连接，历史缺失核心字段标注待明确，空补充项省略", () => {
     expect(missionFieldText(personalPayload.card.missions[0], "successEvidence")).toBe("证据一\n证据二");
     // 旧卡在新契约出现前没有 timeBoundary；这里故意使用旧响应形状验证阅读兼容。
@@ -102,7 +119,7 @@ describe("本轮状态与倒计时", () => {
     ["draft", "任务卡草稿已就绪，可以统一开放讨论", 0],
     ["reviewing", "3 条待你处理", 3],
     ["reviewing", "意见已全部处理，待你确认", 0],
-    ["closed", "已截止 · 汇总中", 0],
+    ["closed", "汇总中", 0],
   ] as const)("%s 的本轮状态与通知使用同一句", (phase, text, pending) => {
     const round = { ...personalPayload.round, phase, todo: phase === "closed" ? null : text, counts: { ...personalPayload.round.counts, pending } };
     const html = renderToStaticMarkup(<RoundLine payload={{ ...personalPayload, round }} actions={[]} viewerId="ceo" pending={false} onAction={vi.fn()} onViewGoals={vi.fn()} />);
@@ -129,12 +146,12 @@ describe("本轮状态与倒计时", () => {
     renderToStaticMarkup(<RoundLine {...props} viewerId="member" />); roundUi.effects.at(-1)!();
     expect(roundUi.expanded).toHaveBeenCalledTimes(2);
   });
-  it.each([[48 * 60, "48 小时 0 分"], [31 * 60 + 24, "31 小时 24 分"], [42, "42 分"], [0.5, "不到 1 分"], [0, "已截止"], [-1, "已截止"]])("剩余 %s 分钟写作 %s", (minutes, text) => {
+  it.each([[48 * 60, "48 小时 0 分"], [31 * 60 + 24, "31 小时 24 分"], [42, "42 分"], [0.5, "不到 1 分"], [0, "审核已结束"], [-1, "审核已结束"]])("剩余 %s 分钟写作 %s", (minutes, text) => {
     const now = Date.parse(personalPayload.round.closesAt!) - Number(minutes) * 60_000;
     expect(roundClockText(personalPayload.round, now)).toBe(text);
   });
   it("未开放不显示数字，已确定不再显示倒计时；重开标明轮次", () => {
-    expect(roundClockText({ ...personalPayload.round, phase: "draft" }, 0)).toBe("讨论未开放");
+    expect(roundClockText({ ...personalPayload.round, phase: "draft" }, 0)).toBe("待下发审核");
     expect(roundClockText({ ...personalPayload.round, phase: "confirmed" }, 0)).toBe("已确定");
     const html = renderToStaticMarkup(<RoundClock round={{ ...personalPayload.round, round: 2 }} now={Date.parse(personalPayload.round.serverNow)} />);
     expect(html).not.toContain("第 2 轮");

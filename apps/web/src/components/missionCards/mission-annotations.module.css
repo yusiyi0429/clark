@@ -57,3 +57,12 @@
 @media(prefers-reduced-motion:reduce) { .menu,.composer,.activityDot { animation: none; } }
 @media(max-width:759px) { .menu button { min-height: 44px; }.composer small,.note header { font-size: 13px; }.bubble { width: 24px; height: 24px; } }
 @media(max-width:759px) { .clarification { padding: 15px; }.clarification small,.clarification header,.activity,.revisions { font-size: 13px; }.revisionDiff { grid-template-columns: 1fr; }.options button { min-height: 44px; } }
+.resolve { margin-top: 4px; font-size: 12px; color: var(--ink-faint); }
+.resolve > button { padding: 4px 0; background: transparent; color: var(--ink-muted); text-decoration: underline; text-decoration-color: var(--hairline-strong); text-underline-offset: 3px; }
+.resolveForm { display: grid; gap: 8px; margin-top: 6px; padding: 12px; border: 1px solid var(--hairline); border-radius: var(--r-bar); }
+.resolveForm textarea { width: 100%; padding: 8px 10px; min-height: 64px; border: 1px solid var(--hairline-strong); border-radius: var(--r-bar); background: var(--surface); color: var(--ink); font: inherit; line-height: 1.7; resize: vertical; }
+.resolveForm label { font-weight: 500; color: var(--ink-muted); }
+.accessReason { flex-basis: 100%; padding: 4px 8px 6px; line-height: 1.65; white-space: normal; color: var(--ink-faint); }
+.menu:has(.accessReason) { flex-wrap: wrap; }
+.menu button:disabled { opacity: .45; cursor: default; }
+@media (max-width: 959px) { .resolve { font-size: 13px; }.resolveForm small,.accessReason { font-size: 14px; } }

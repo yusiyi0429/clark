@@ -363,6 +363,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mission-cards/{cardId}/owner-confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人完成审核或取消确认；最后一人完成时自动汇总 */
+        post: operations["setMissionCardOwnerConfirmation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-cards/{cardId}/annotations/{annotationId}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 保留备注并明确终止待改意图，记录原因 */
+        post: operations["resolveMissionCardAnnotation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/mission-cards/{cardId}/annotations/{annotationId}/answer": {
         parameters: {
             query?: never;
@@ -2615,6 +2649,7 @@ export interface components {
             ownerName: string;
             roleLabel: string | null;
             missionCount: number;
+            ownerConfirmedAt: string | null;
             line: string;
             pending: number;
             firstPendingFeedbackId: string | null;
@@ -2668,6 +2703,7 @@ export interface components {
                 dependencies: number;
                 late: number;
                 corrections: number;
+                unreviewed: number;
             };
             cards: {
                 cardId: string;
@@ -2675,6 +2711,7 @@ export interface components {
                 ownerName: string;
                 roleLabel: string | null;
                 missionCount: number;
+                ownerConfirmedAt: string | null;
                 line: string;
                 pending: number;
                 firstPendingFeedbackId: string | null;
@@ -2729,6 +2766,7 @@ export interface components {
                     dependencies: number;
                     late: number;
                     corrections: number;
+                    unreviewed: number;
                 };
                 cards: {
                     cardId: string;
@@ -2736,6 +2774,7 @@ export interface components {
                     ownerName: string;
                     roleLabel: string | null;
                     missionCount: number;
+                    ownerConfirmedAt: string | null;
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
@@ -3847,6 +3886,7 @@ export interface components {
             appliedVersion: number | null;
             canAnswer: boolean;
             canRetry: boolean;
+            canResolve: boolean;
             clarifications: {
                 question: string;
                 answer: string;
@@ -3896,6 +3936,7 @@ export interface components {
                 appliedVersion: number | null;
                 canAnswer: boolean;
                 canRetry: boolean;
+                canResolve: boolean;
                 clarifications: {
                     question: string;
                     answer: string;
@@ -3926,6 +3967,7 @@ export interface components {
         CreateMissionCardAnnotationRequest: {
             /** Format: uuid */
             clientId: string;
+            sourceRound: number;
             missionId: string;
             field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
             sourceVersion: number;
@@ -3959,6 +4001,7 @@ export interface components {
                 appliedVersion: number | null;
                 canAnswer: boolean;
                 canRetry: boolean;
+                canResolve: boolean;
                 clarifications: {
                     question: string;
                     answer: string;
@@ -3974,6 +4017,16 @@ export interface components {
             answer: string;
         };
         RetryMissionCardAnnotationRequest: Record<string, never>;
+        ResolveMissionCardAnnotationRequest: {
+            reason: string;
+        };
+        SetMissionCardOwnerConfirmationRequest: {
+            confirmed: boolean;
+            round: number;
+            missionVersions: {
+                [key: string]: number;
+            };
+        };
         MissionCardRevisionsResponse: {
             revisions: {
                 id: string;
@@ -4029,6 +4082,7 @@ export interface components {
             sourceTitle: string;
             version: number;
             changedFields: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
+            selfEditedFields: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
         };
         PersonalMissionCardPayload: {
             round: {
@@ -4075,6 +4129,7 @@ export interface components {
                     dependencies: number;
                     late: number;
                     corrections: number;
+                    unreviewed: number;
                 };
                 cards: {
                     cardId: string;
@@ -4082,6 +4137,7 @@ export interface components {
                     ownerName: string;
                     roleLabel: string | null;
                     missionCount: number;
+                    ownerConfirmedAt: string | null;
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
@@ -4092,6 +4148,18 @@ export interface components {
                 }[];
             };
             draftFailure: string | null;
+            selfReview: {
+                canConfirm: boolean;
+                canCancel: boolean;
+                canEdit: boolean;
+                blockedReason: string | null;
+                pendingAnnotations: number;
+            };
+            annotationAccess: {
+                canCreate: boolean;
+                canApply: boolean;
+                closedReason: string | null;
+            };
             card: {
                 cardId: string;
                 ownerId: string;
@@ -4103,6 +4171,7 @@ export interface components {
                     title: string | null;
                 }[];
                 status: string;
+                ownerConfirmedAt: string | null;
                 shown: "draft" | "candidate" | "confirmed";
                 missions: {
                     missionId: string;
@@ -4141,6 +4210,7 @@ export interface components {
                     sourceTitle: string;
                     version: number;
                     changedFields: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
+                    selfEditedFields: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
                 }[];
             };
             feedback: {
@@ -6220,6 +6290,7 @@ export interface components {
                     dependencies: number;
                     late: number;
                     corrections: number;
+                    unreviewed: number;
                 };
                 cards: {
                     cardId: string;
@@ -6227,6 +6298,7 @@ export interface components {
                     ownerName: string;
                     roleLabel: string | null;
                     missionCount: number;
+                    ownerConfirmedAt: string | null;
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
@@ -7500,6 +7572,149 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setMissionCardOwnerConfirmation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetMissionCardOwnerConfirmationRequest"];
+            };
+        };
+        responses: {
+            /** @description 最新任务卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    resolveMissionCardAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+                annotationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveMissionCardAnnotationRequest"];
+            };
+        };
+        responses: {
+            /** @description 已保留的备注 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMissionCardAnnotationResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

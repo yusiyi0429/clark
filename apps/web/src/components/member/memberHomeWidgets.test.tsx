@@ -15,7 +15,7 @@ export const homeWork: MemberWork = {
   period: "2026-10", planStatus: "confirmed",
   battlefields: [{ id: "growth", name: "灯塔客户", isDri: true, monthTarget: "完成首批客户验证。", monthTargetState: "confirmed", monthTargetText: "完成首批客户验证。" }],
   missions: [],
-  missionCards: [{ cardId: "mine", roundId: "round-1", period: "2026-10", battlefieldId: "growth", battlefieldName: "灯塔客户", phase: "open", status: "讨论中 · 截止后汇总意见", closesAt: "2026-10-03T02:00:00.000Z", serverNow: "2026-10-01T02:00:00.000Z", missionCount: 2, placeholder: true, href: "/me/mission-cards/mine" }],
+  missionCards: [{ cardId: "mine", roundId: "round-1", period: "2026-10", battlefieldId: "growth", battlefieldName: "灯塔客户", phase: "open", status: "审核中 · 等本人完成审核", closesAt: "2026-10-03T02:00:00.000Z", serverNow: "2026-10-01T02:00:00.000Z", missionCount: 2, placeholder: true, href: "/me/mission-cards/mine" }],
 };
 
 beforeEach(() => ui.presses.clear());
@@ -42,7 +42,7 @@ describe("DRI 首页小组件", () => {
   });
   it("到达截止但新投影未返回时，与详情同一刻显示汇总中", () => {
     const html = render({ ...homeWork, missionCards: [{ ...homeWork.missionCards[0], serverNow: "2026-10-03T02:00:00.000Z" }] });
-    expect(html).toContain("已截止 · 汇总中"); expect(html).not.toContain(homeWork.missionCards[0].status);
+    expect(html).toContain("汇总中"); expect(html).not.toContain(homeWork.missionCards[0].status);
   });
   it("空态明确没有登记与没有本人卡，载入时不提前声称无卡", () => {
     const empty = render({ ...homeWork, battlefields: [], missionCards: [] });

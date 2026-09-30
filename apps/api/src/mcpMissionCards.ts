@@ -1,7 +1,7 @@
 import type { TPersonalMissionCardPayload } from "@warmap/contracts";
 import type { MemoryPerson } from "./companyMemory.js";
 import type { Query } from "./meetingStore.js";
-import { canApprove, correctionPeriodClosed, type MissionRoundPerson } from "./missionRounds.js";
+import { canApprove, missionCardWriteProblem, type MissionRoundPerson } from "./missionRounds.js";
 import { getPersonalMissionCard, visiblePersonalMissionCard } from "./personalMissionCards.js";
 import { listMissionCardAnnotations } from "./missionCardAnnotations.js";
 
@@ -15,13 +15,16 @@ export async function readMissionCardForAgent(q: Query, people: MemoryPerson[], 
   const annotations = await listMissionCardAnnotations(q, people, secret, person, cardId, now);
   // All reads recheck membership, including history; membership revoked mid-read must fail closed.
   const visible = await visiblePersonalMissionCard(q, person, cardId);
-  if (!annotations || !visible) return null;
+  if (!annotations || !visible || visible.round.window_seq !== payload.round.round) return null;
   return {
     id: cardId, title: card.title, owner: { id: payload.card.ownerId, name: payload.card.ownerName },
     battlefield: { id: payload.round.battlefieldId, name: payload.round.battlefieldName }, period: payload.round.period,
-    status: payload.card.status, goals: payload.round.goals,
+    status: payload.card.status, goals: payload.round.goals, round: visible.round.window_seq,
+    ownerConfirmedAt: visible.card.owner_confirmed_at?.toISOString() ?? null,
+    reviewContext: { phase: payload.round.phase, snapshotAt: payload.round.closesAt,
+      takenAt: payload.round.reviewAt, confirmedAt: payload.confirmation?.at ?? null },
     pendingOpinions: (summary?.pending ?? 0) + (summary?.pendingCorrections ?? 0),
-    editable: !correctionPeriodClosed(visible.round, now) && visible.round.status !== "drafting"
+    editable: payload.selfReview.canEdit && !missionCardWriteProblem(visible.round, visible.card, now)
       && (visible.card.owner_id === person.personId || canApprove(person, visible.round)),
     missions: payload.card.missions.map((mission) => ({ id: mission.missionId, version: mission.version,
       title: mission.title, outcome: mission.outcome, why: mission.why,

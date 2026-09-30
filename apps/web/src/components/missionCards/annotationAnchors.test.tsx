@@ -6,7 +6,7 @@ import { AnnotatedField, AnnotationNote, FieldAnnotationActivity, RevisionHistor
 import { personalPayload } from "./personalMissionFixture";
 
 const mission = personalPayload.card.missions[0];
-const note = { id: "note", cardId: "card", missionId: mission.missionId, field: "outcome", sourceVersion: 1, sourceText: "前文 **成功证据** 后文", quote: "成功证据", prefix: "前文 ", suffix: " 后文", startOffset: 3, body: "请明确验收口径", authorId: "owner", authorName: "白田田", status: "needs_clarification", question: "以哪种证据为准？", options: ["界面截图", "真实走查记录"], answer: null, note: null, appliedVersion: null, canAnswer: true, canRetry: false, clarifications: [], stale: false, createdAt: "2026-10-01T02:00:00.000Z" } as TMissionCardAnnotationView;
+const note = { id: "note", cardId: "card", missionId: mission.missionId, field: "outcome", sourceVersion: 1, sourceText: "前文 **成功证据** 后文", quote: "成功证据", prefix: "前文 ", suffix: " 后文", startOffset: 3, body: "请明确验收口径", authorId: "owner", authorName: "白田田", status: "needs_clarification", question: "以哪种证据为准？", options: ["界面截图", "真实走查记录"], answer: null, note: null, appliedVersion: null, canAnswer: true, canRetry: false, canResolve: false, clarifications: [], stale: false, createdAt: "2026-10-01T02:00:00.000Z" } as TMissionCardAnnotationView;
 
 describe("rendered Markdown annotation anchors", () => {
   it("retains each clarification and answer alongside the original remark", () => {
@@ -47,5 +47,16 @@ describe("rendered Markdown annotation anchors", () => {
   it("keeps both original and modified text available in revision history", () => {
     const html = renderToStaticMarkup(<RevisionHistory revisions={[{ id: "revision", cardId: "card", missionId: "mission", field: "outcome", before: "原来的结果", after: "可核对的结果", reason: "按批注明确验收证据", source: "annotation", authorId: "owner", authorName: "白田田", annotationId: "note", beforeVersion: 1, afterVersion: 2, createdAt: note.createdAt }]} />);
     expect(html).toContain("原来的结果"); expect(html).toContain("可核对的结果"); expect(html).toContain("按批注明确验收证据");
+  });
+  it("unresolved remarks offer explicit no-change resolution only with server permission", () => {
+    const controls = { notes: [note], revisions: [], onSave: vi.fn(), onAnswer: vi.fn(), onRetry: vi.fn(), onResolve: vi.fn() };
+    const allowed = renderToStaticMarkup(<FieldAnnotationActivity notes={[{ ...note, canResolve: true }]} controls={controls} />);
+    expect(allowed).toContain("保留备注，暂不修改");
+    const locked = renderToStaticMarkup(<FieldAnnotationActivity notes={[{ ...note, canResolve: false, canAnswer: false }]} controls={controls} />);
+    expect(locked).not.toContain("保留备注，暂不修改");
+    const completed = renderToStaticMarkup(<AnnotationNote note={{ ...note, status: "no_change", note: "等待依赖明确，暂时保留备注" }} />);
+    expect(completed).toContain("请明确验收口径");
+    expect(completed).toContain("等待依赖明确，暂时保留备注");
+    expect(completed).toContain("正文未修改");
   });
 });

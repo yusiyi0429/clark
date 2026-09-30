@@ -843,6 +843,8 @@ describe("mission entity contracts", () => {
     battlefieldIds: ["01-灯塔项目"],
     battlefieldNames: ["01 灯塔项目"],
     outcome: "推动 CEO Agent 形成模块边界清楚的 M1A 业务链",
+    timeBoundary: "",
+    tradeoffs: "",
     why: "当前以 Chat 为主",
     successEvidence: ["模块清单经过确认"],
     milestones: ["9/23 E2E Quality Gate"],

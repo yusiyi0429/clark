@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
-import type { TCard, TCreateMissionRequest, TMissionCardPayload, TMissionEditInput } from "@warmap/contracts";
+import type { TCard, TCreateMissionRequest, TMissionCardField, TMissionCardPayload, TMissionEditInput } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import { findUnregisteredBattlefieldId, getRegisteredBattlefieldIds } from "./battlefields.js";
 import { findUnregisteredCapabilityId, getRegisteredCapabilityIds } from "./capabilities.js";
 import type { MeetingActionOutcome, Query } from "./meetingStore.js";
 import { slugId } from "./slug.js";
+
+export const fieldText = (mission: TMissionCardPayload, field: TMissionCardField) => Array.isArray(mission[field]) ? mission[field].join("\n") : mission[field] as string;
 
 /**
  * Mission repository：第七个核心实体。只存周期结果承诺与关系；

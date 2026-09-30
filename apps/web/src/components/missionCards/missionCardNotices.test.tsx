@@ -13,8 +13,8 @@ vi.mock("@/components/HeroButton", () => ({ HeroButton: ({ children, onPress, is
 import { MissionCardNoticeGroup } from "./MissionCardNoticeGroup";
 
 const rows: TMissionRoundSummary["cards"] = [
-  { cardId: "first", ownerId: "bai", ownerName: "白田田", roleLabel: "01-1 战役 DRI", missionCount: 4, line: "已处理", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: false, placeholder: false },
-  { cardId: "mine", ownerId: "sun", ownerName: "孙铭泽", roleLabel: "01-3 战役 DRI", missionCount: 2, line: "待处理 2", pending: 2, firstPendingFeedbackId: "feedback-2", pendingCorrections: 0, firstPendingCorrectionId: null, mine: true, placeholder: false },
+  { cardId: "first", ownerId: "bai", ownerName: "白田田", roleLabel: "01-1 战役 DRI", missionCount: 4, ownerConfirmedAt: null, line: "已处理", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: false, placeholder: false },
+  { cardId: "mine", ownerId: "sun", ownerName: "孙铭泽", roleLabel: "01-3 战役 DRI", missionCount: 2, ownerConfirmedAt: null, line: "待处理 2", pending: 2, firstPendingFeedbackId: "feedback-2", pendingCorrections: 0, firstPendingCorrectionId: null, mine: true, placeholder: false },
 ];
 const summary = (overrides: Partial<TMissionRoundSummary> = {}): TMissionRoundSummary => ({ ...personalPayload.round, phase: "reviewing", approver: true, todo: "2 条意见待你处理", cards: rows, ...overrides });
 beforeEach(() => ui.presses.clear());

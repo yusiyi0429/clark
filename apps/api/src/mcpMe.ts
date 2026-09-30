@@ -33,7 +33,7 @@ const IssueInput = Type.Object({ issueId: Uuid }, { additionalProperties: false 
 const MeetingInput = Type.Object({ meetingId: Uuid }, { additionalProperties: false });
 const MissionCardInput = Type.Object({ cardId: Uuid }, { additionalProperties: false });
 const EditMissionCardInput = Type.Object({ cardId: Uuid, missionId: Type.String({ minLength: 1 }), field: MissionCardField,
-  sourceVersion: Type.Integer({ minimum: 1 }), sourceText: Type.String({ maxLength: 12000 }),
+  sourceRound: Type.Integer({ minimum: 1 }), sourceVersion: Type.Integer({ minimum: 1 }), sourceText: Type.String({ maxLength: 12000 }),
   proposed: Type.String({ minLength: 1, maxLength: 12000 }), reason: Type.String({ minLength: 1, maxLength: 1000 }),
   annotationId: Type.Optional(Uuid), clientId: Uuid,
 }, { additionalProperties: false });
@@ -52,7 +52,7 @@ const ceoDefinitions: Tool[] = [
 ];
 const missionCardDefinitions: Tool[] = [
   { name: "get_mission_card", description: "读取我可见的任务卡完整原字段、当前版本、公开批注和修改记录。", inputSchema: MissionCardInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
-  { name: "edit_mission_card", description: "改法已明确时立即修改我负责或有拍板权限的任务卡一个字段，保留修改前后记录；先读get_mission_card，必须带当前版本和完整原字段，数组用换行连接。不能签发或确认任务卡。", inputSchema: EditMissionCardInput as Tool["inputSchema"] },
+  { name: "edit_mission_card", description: "审核中且本人未完成审核时，改法已明确就立即修改有权限的任务卡一个字段，保留修改前后记录；先读get_mission_card，必须带刚读取的round作为sourceRound、当前版本和完整原字段，数组用换行连接。不能签发或确认任务卡。", inputSchema: EditMissionCardInput as Tool["inputSchema"] },
 ];
 const reviewDefinitions: Tool[] = [
   { name: "list_pending", description: "列出待我处理的个人复盘；CEO 还可查议题、会议、月度计划和任务卡。", inputSchema: EmptyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
@@ -83,7 +83,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
   const instructions = [
     ...(initialAccess.ceo ? ["公司业务只读：可以查待你处理的事、议题/会议/任务卡详情和全公司进展；拍板、签发、确认请回天枢网页操作。"] : []),
     ...(initialAccess.member ? ["可以查看自己的执行事项，记录真实进展并更新负责事项的状态。"] : []),
-    "任务卡正文是只读边界的例外：get_mission_card 只读本人可见卡；用户已经明确具体改法时，edit_mission_card 立即修改本人负责或有拍板权限的任务字段并留痕。不确定用户意思时先提问题与选项，最后一个选项为自己输入，澄清后立即改。不能自动向群聊发送私聊记录，不能签发或确认任务卡。遇到旧版本或原字段冲突必须重新读取。",
+    "任务卡正文是只读边界的例外：get_mission_card 只读本人可见卡；仅正在审核且本人未完成审核、editable=true时，用户已经明确具体改法可用edit_mission_card立即改有权限的任务字段并留痕。必须用刚读取的round填写sourceRound；本人已确认或已开始汇总时，只读正文和历史，先由本人取消确认或由拍板人重新开放审核，不能自动绕过。重新开放后需重新核对本次改法，不把旧候选直接套进新审核。不确定用户意思时先提问题与选项，最后一个选项为自己输入，澄清后立即改。不能自动向群聊发送私聊记录，不能签发或确认任务卡。遇到旧审核轮次、版本或原字段冲突必须重新读取。",
     "月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。",
   ].join("\n");
   const server = new Server({ name: "tianshu", version: "0.1.0" }, { capabilities: { tools: {} }, instructions });

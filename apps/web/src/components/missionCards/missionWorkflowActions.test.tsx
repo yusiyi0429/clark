@@ -5,11 +5,11 @@ import type { TPersonalMissionCardPayload } from "@warmap/contracts";
 import { personalPayload } from "./personalMissionFixture";
 
 const ui = vi.hoisted(() => ({ buttons: new Map<string, { onPress?: () => void; isDisabled?: boolean }>() }));
-vi.mock("ts-design/primitives", () => ({ Button: ({ children, onPress, isDisabled, ...props }: { children?: ReactNode; onPress?: () => void; isDisabled?: boolean }) => {
+vi.mock("ts-design/primitives", () => { const part = ({ children }: { children?: ReactNode }) => <>{children}</>; return { Popover: Object.assign(part, { Content: part, Dialog: part }), Button: ({ children, onPress, isDisabled, ...props }: { children?: ReactNode; onPress?: () => void; isDisabled?: boolean }) => {
   ui.buttons.set(String(children), { onPress, isDisabled });
   return <button disabled={isDisabled} {...props}>{children}</button>;
-} }));
-import { MissionWorkflowActions } from "./MissionWorkflowActions";
+} }; });
+import { MissionDraftStatus, MissionWorkflowActions } from "./MissionWorkflowActions";
 
 const retry = { actionId: "retry-signed", actionType: "mission-round.draft", label: "重试起草" };
 const open = { actionId: "open-signed", actionType: "mission-round.open", label: "开放讨论" };
@@ -20,7 +20,7 @@ const failures = [
 const failedPayload: TPersonalMissionCardPayload = { ...personalPayload, draftFailure: failures[0].message, round: { ...personalPayload.round, phase: "draft", draftFailures: failures, retryDraftAction: retry } };
 const onAction = vi.fn();
 function render(payload = failedPayload, pending = false) {
-  return renderToStaticMarkup(<MissionWorkflowActions payload={payload} actions={[open]} pending={pending} onAction={onAction} />);
+  return renderToStaticMarkup(<><MissionDraftStatus payload={payload} pending={pending} onAction={onAction} /><MissionWorkflowActions payload={payload} actions={[open]} pending={pending} onAction={onAction} inMenu /></>);
 }
 beforeEach(() => { ui.buttons.clear(); vi.clearAllMocks(); });
 
@@ -33,7 +33,7 @@ describe("正式任务起草状态", () => {
       expect(html).toContain(failure.message);
     }
     expect(html.split(failures[0].message)).toHaveLength(2);
-    expect(ui.buttons.has("开放讨论")).toBe(false);
+    expect(ui.buttons.has("下发审核")).toBe(false);
     ui.buttons.get("重试起草")!.onPress!();
     expect(onAction).toHaveBeenCalledExactlyOnceWith(retry);
     render(failedPayload, true);
@@ -51,15 +51,15 @@ describe("正式任务起草状态", () => {
     expect(html).toContain("Co-Agent 正在起草任务");
     expect(html).toContain("完成后，任务正文会在这里更新。");
     expect(ui.buttons.has("重试起草")).toBe(false);
-    expect(ui.buttons.has("开放讨论")).toBe(false);
+    expect(ui.buttons.has("下发审核")).toBe(false);
     const completed = render({ ...personalPayload, round: { ...personalPayload.round, phase: "draft" } });
     expect(completed).not.toContain("任务起草未完成");
-    expect(ui.buttons.has("开放讨论")).toBe(true);
+    expect(ui.buttons.has("下发审核")).toBe(true);
   });
   it("仅个人卡投影包含失败时也能显示原始原因", () => {
     const html = render({ ...failedPayload, round: { ...failedPayload.round, draftFailures: [] } });
     expect(html).toContain(failures[0].message);
-    expect(ui.buttons.has("开放讨论")).toBe(false);
+    expect(ui.buttons.has("下发审核")).toBe(false);
   });
   it("长质量错误收为摘要，完整原始原因保留在可展开区域；短错误不增加操作", () => {
     const message = "质量检查未通过。\n" + "成功 / 验收标准必须提供可复核的证据与明确完成条件；".repeat(12) + "最后一项：任务责任边界仍未明确。";
@@ -70,5 +70,33 @@ describe("正式任务起草状态", () => {
     expect(html).toContain(`<p>${message}</p></details>`);
     expect(html).not.toMatch(/<details[^>]*\bopen(?:=|\s|>)/);
     expect(render()).not.toContain("查看原因");
+  });
+});
+
+describe("页头集中审核操作", () => {
+  it("历史任务到期仍有未决批注时，保留服务端授予的开始汇总入口", () => {
+    const close = { actionId: "legacy-close", actionType: "mission-round.close", label: "开始汇总" };
+    const payload = { ...personalPayload, round: { ...personalPayload.round, phase: "closed" as const } };
+    renderToStaticMarkup(<MissionWorkflowActions payload={payload} actions={[close]} pending={false} onAction={onAction} inMenu />);
+    ui.buttons.get("开始汇总")!.onPress!();
+    expect(onAction).toHaveBeenCalledExactlyOnceWith(close);
+    ui.buttons.clear();
+    renderToStaticMarkup(<MissionWorkflowActions payload={payload} actions={[]} pending={false} onAction={onAction} inMenu />);
+    expect(ui.buttons.has("开始汇总")).toBe(false);
+  });
+  it("开始汇总和跳到首条意见时先收起人员菜单，让弹框与正文保持可达", () => {
+    const close = { actionId: "close-signed", actionType: "mission-round.close", label: "开始汇总" };
+    const dismiss = vi.fn(), start = vi.fn();
+    renderToStaticMarkup(<MissionWorkflowActions payload={personalPayload} actions={[close]} pending={false} onAction={onAction} inMenu onDismiss={dismiss} />);
+    ui.buttons.get("开始汇总")!.onPress!();
+    expect(dismiss).toHaveBeenCalledOnce();
+    expect(onAction).toHaveBeenCalledExactlyOnceWith(close);
+    expect(dismiss.mock.invocationCallOrder[0]).toBeLessThan(onAction.mock.invocationCallOrder[0]);
+    const reviewing = { ...personalPayload, round: { ...personalPayload.round, phase: "reviewing" as const, counts: { ...personalPayload.round.counts, pending: 2 } } };
+    renderToStaticMarkup(<MissionWorkflowActions payload={reviewing} actions={[]} pending={false} onAction={onAction} inMenu onDismiss={dismiss} onStartProcessing={start} />);
+    ui.buttons.get("从第一条开始")!.onPress!();
+    expect(dismiss).toHaveBeenCalledTimes(2);
+    expect(start).toHaveBeenCalledOnce();
+    expect(dismiss.mock.invocationCallOrder[1]).toBeLessThan(start.mock.invocationCallOrder[0]);
   });
 });

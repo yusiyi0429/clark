@@ -116,6 +116,7 @@ function ScenePrivateChat() {
       <p className={m.selectedLine}>交付 <mark className={x.mark} style={at(400)}>界面与权限证据</mark>，每条修改都可追溯。
         <SelectionMenu start={1100} tap={1900} quote />
       </p>
+      <p className={`${m.revisionNote} ${x.in}`} style={at(5000)}>完成本人审核 → 全员完成后自动汇总 → 拍板确认</p>
     </Document>
     <aside className={`${x.panel} ${x.chat} ${m.privateChat}`}>
       <p className={x.label}>与 Co-Agent 对话<span className={m.privateLabel}>仅自己可见</span></p>
@@ -132,6 +133,6 @@ export const MISSION_CARD_TOUR_STEPS = [
   { title: "从目标读到任务", body: "先看目标，再读任务。执行拆分由 Co-Agent 基于任务生成，下一版开放。", duration: 2700, Scene: SceneGoals },
   { title: "在文字上提出意见", body: "划选任务中的一段文字，选择「直接批注」或「引用并对话」。", duration: 3300, Scene: SceneSelect },
   { title: "批注就写在选中文字旁", body: "写好后保存。同卡成员可以看到批注；虚线下划线与小气泡标出位置，不写入私聊。", duration: 5200, Scene: SceneComment },
-  { title: "清楚就改，不确定先问", body: "Co-Agent 理解后立即修改；有疑问时在段落旁给出选项，也可以自己输入。批注和前后版本留给最终审核。", duration: 6300, Scene: SceneReview },
-  { title: "引用一句，继续对话", body: "「引用并对话」把选中文字带到你与 Co-Agent 的私聊，只有自己可见。", duration: 5700, Scene: ScenePrivateChat },
+  { title: "清楚就改，不确定先问", body: "审核中且未完成审核时，Co-Agent 理解后立即修改；有疑问时在段落旁给出选项，也可自己输入。暂不修改时保留备注并写明原因。", duration: 6300, Scene: SceneReview },
+  { title: "引用对话，完成本人审核", body: "引用进入仅自己可见的私聊。处理完批注后完成审核，全员完成自动汇总，再由拍板人确认；完成后取消确认可继续改，汇总后需重新开放审核。", duration: 5700, Scene: ScenePrivateChat },
 ] as const satisfies readonly TourStep[];

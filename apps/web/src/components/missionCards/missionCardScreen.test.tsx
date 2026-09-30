@@ -30,17 +30,17 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: ui.get, POST: ui.post } }));
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ close: vi.fn(), navigate: ui.navigate, quote: ui.quote, viewerId: ui.viewerId }), useRegisterDetail: ui.register }));
 vi.mock("@/lib/useSeenMarks", () => ({ useSeenMarks: () => ({ seen: null, mark: vi.fn() }) }));
-vi.mock("./MissionAnnotations", () => ({ useMissionAnnotations: () => ({ notes: [], revisions: [], error: "", refresh: vi.fn(), save: vi.fn(), answer: vi.fn(), retry: vi.fn() }) }));
-vi.mock("@/components/shell/DetailFrame", () => ({ DetailFrame: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
+vi.mock("./MissionAnnotations", () => ({ useMissionAnnotations: () => ({ notes: [], revisions: [], error: "", refresh: vi.fn(), save: vi.fn(), answer: vi.fn(), retry: vi.fn(), resolve: vi.fn() }) }));
+vi.mock("@/components/shell/DetailFrame", () => ({ DetailFrame: ({ children, actions }: { children: ReactNode; actions: ReactNode }) => <div><header>{actions}</header>{children}</div> }));
 vi.mock("@/components/shell/MaterialTabs", () => ({ InHeader: ({ children }: { children: ReactNode }) => <div data-header-tools>{children}</div>, MaterialMenu: (props: ComponentProps<typeof MaterialMenu>) => { ui.viewMenu = props; return <button data-material-menu>{props.tabs.find((tab) => tab.id === props.selected)?.label}</button>; } }));
 vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: ui.ask, dialog: null }) }));
 vi.mock("./useRoundNow", () => ({ useRoundNow: (_at: string, now: string) => Date.parse(now) }));
 vi.mock("@heroui/react", () => { const part = ({ children }: { children: ReactNode }) => <>{children}</>; return { Modal: Object.assign(() => null, { Backdrop: part, Container: part, Dialog: part }) }; });
-vi.mock("ts-design/primitives", () => ({ Button: ({ children, onPress, isDisabled, "aria-label": label }: { children: ReactNode; onPress?: () => Promise<void> | void; isDisabled?: boolean; "aria-label"?: string }) => { ui.buttons.set(String(children), { onPress, isDisabled }); if (label) ui.buttons.set(label, { onPress, isDisabled }); return <button disabled={isDisabled} aria-label={label}>{children}</button>; } }));
-vi.mock("./MissionWorkflowActions", () => ({ MissionWorkflowActions: (props: ComponentProps<typeof RoundLine>) => { ui.roundProps = props; return null; } }));
+vi.mock("ts-design/primitives", () => { const part = ({ children }: { children?: ReactNode }) => <>{children}</>; const dialog = ({ children, ...props }: { children?: ReactNode }) => <div {...props}>{children}</div>; return { Popover: Object.assign(part, { Content: part, Dialog: dialog }), Button: ({ children, onPress, isDisabled, "aria-label": label }: { children: ReactNode; onPress?: () => Promise<void> | void; isDisabled?: boolean; "aria-label"?: string }) => { ui.buttons.set(String(children), { onPress, isDisabled }); if (label) ui.buttons.set(label, { onPress, isDisabled }); return <button disabled={isDisabled} aria-label={label}>{children}</button>; } }; });
+vi.mock("./MissionWorkflowActions", () => ({ MissionDraftStatus: () => null, MissionWorkflowActions: (props: ComponentProps<typeof RoundLine>) => { ui.roundProps = props; return null; } }));
 vi.mock("./CardDocument", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./CardDocument")>();
-  return { ...actual, CardDocument: ({ controls, ownerPlan }: { controls: DocumentControls; ownerPlan?: unknown }) => { ui.controls = controls; ui.ownerPlan = ownerPlan; return <>{controls.proposalEditor?.(personalPayload.card.missions[0], "outcome")}</>; } };
+  return { ...actual, CardDocument: ({ controls, ownerPlan, payload }: { controls: DocumentControls; ownerPlan?: unknown; payload: typeof personalPayload }) => { ui.controls = controls; ui.ownerPlan = ownerPlan; return <>{controls.proposalEditor?.(payload.card.missions[0], "outcome")}</>; } };
 });
 import { MissionCardScreen } from "./MissionCardScreen";
 
@@ -86,13 +86,13 @@ describe("任务卡建议交互", () => {
     const second = { ...personalPayload.round.cards[0], cardId: "other", ownerId: "other", ownerName: "孙铭泽", line: "待处理 1", placeholder: false };
     const changed = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, cards: [personalPayload.round.cards[0], second] } } } as Card;
     const html = renderToStaticMarkup(<MissionCardScreen initialCard={changed} entry="member" />);
-    expect(html).toContain('aria-label="切换任务卡"');
+    expect(html).toContain('aria-label="任务卡审核进度与操作"');
     expect(html).toContain("孙铭泽");
-    ui.buttons.get("打开孙铭泽的 Mission Card · 待处理 1")!.onPress!();
+    ui.buttons.get("打开孙铭泽的 Mission Card · 审核中")!.onPress!();
     expect(ui.navigate).toHaveBeenCalledWith("/me/mission-cards/other");
     ui.state = []; ui.cursor = 0;
     const ordinary = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, approver: false, cards: [personalPayload.round.cards[0]] } } } as Card;
-    expect(renderToStaticMarkup(<MissionCardScreen initialCard={ordinary} entry="member" />)).not.toContain('aria-label="切换任务卡"');
+    expect(renderToStaticMarkup(<MissionCardScreen initialCard={ordinary} entry="member" />)).not.toContain('aria-label="任务卡审核进度与操作"');
   });
   it("任务卡不再加载独立月计划，批注操作供当前可见任务接入", () => {
     render();
@@ -111,6 +111,36 @@ describe("任务卡建议交互", () => {
     expect(ui.get).toHaveBeenCalled();
     expect(html).not.toContain("textarea");
     expect(html).toContain("修改建议已记录");
+  });
+  it("外部重开且正文版本不变时保留旧建议，重新核对前不能跨审核提交", async () => {
+    render(); ui.controls!.onPropose(mission, "outcome"); render(); edit("保留等待重新核对的建议");
+    const reopened = { ...card, version: 5, payload: { ...personalPayload, round: { ...personalPayload.round, round: 2 } } };
+    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [reopened] } });
+    await ui.register.mock.calls.at(-1)![0].group.onRefresh();
+    const html = render();
+    expect(html).toContain("保留等待重新核对的建议");
+    expect(html).toContain("审核已重新开放，旧建议输入已保留");
+    expect(ui.buttons.get("提交修改建议")!.isDisabled).toBe(true);
+    ui.buttons.get("提交修改建议")!.onPress!();
+    expect(ui.post).not.toHaveBeenCalled();
+    ui.buttons.get("已核对，继续建议")!.onPress!(); render();
+    expect(ui.buttons.get("提交修改建议")!.isDisabled).toBe(false);
+    ui.post.mockResolvedValue({ response: { ok: true } }); await submit();
+    expect(ui.post.mock.calls[0][1].body).toMatchObject({ round: 2, sourceVersion: 1, proposed: "保留等待重新核对的建议" });
+  });
+  it("重新核对更新到新正文版本并创建新提交编号，仍保留原建议文字", async () => {
+    ui.post.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    render(); ui.controls!.onPropose(mission, "outcome"); render(); edit("需要重新核对的改法"); await submit();
+    const firstId = ui.post.mock.calls[0][1].body.clientId;
+    const reopened = { ...card, version: 6, payload: { ...personalPayload,
+      round: { ...personalPayload.round, round: 2 }, card: { ...personalPayload.card, missions: [{ ...mission, version: 7, outcome: "重新开放后的正文" }] } } };
+    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [reopened] } });
+    await ui.register.mock.calls.at(-1)![0].group.onRefresh(); render();
+    ui.buttons.get("已核对，继续建议")!.onPress!();
+    expect(render()).toContain("需要重新核对的改法");
+    ui.post.mockResolvedValue({ response: { ok: true } }); await submit();
+    expect(ui.post.mock.calls[1][1].body).toMatchObject({ round: 2, sourceVersion: 7, proposed: "需要重新核对的改法" });
+    expect(ui.post.mock.calls[1][1].body.clientId).not.toBe(firstId);
   });
   it("网络失败保留输入，原样重试复用 clientId，编辑后成为新尝试", async () => {
     ui.post.mockRejectedValue(new Error("网络暂时断开"));
@@ -205,7 +235,7 @@ describe("拍板动作与跨卡处理", () => {
     render(); ui.roundProps!.onStartProcessing!();
     expect(ui.navigate).toHaveBeenCalledExactlyOnceWith("/me/mission-cards/other-card?feedback=first-feedback");
   });
-  it("核对草稿在失败时保留，重开弹窗写轮次、说明由拍板人结束，成功才清空", async () => {
+  it("核对草稿在失败时保留，重开说明全员重新审核，成功才清空", async () => {
     render(); ui.roundProps!.onNoteChange!("双方已核对依赖。"); render();
     expect(ui.roundProps!.note).toBe("双方已核对依赖。");
     const reopen = { actionId: "reopen", actionType: "mission-round.reopen", label: "重新开启" };
@@ -214,7 +244,7 @@ describe("拍板动作与跨卡处理", () => {
     await new Promise((resolve) => setTimeout(resolve, 0)); render();
     expect(ui.roundProps!.note).toBe("双方已核对依赖。");
     expect(ui.ask.mock.calls[0][0]).not.toContain("轮");
-    expect(ui.ask.mock.calls[0][0]).toContain("由你决定何时结束");
+    expect(ui.ask.mock.calls[0][0]).toContain("每个人都需要重新完成审核");
     ui.post.mockResolvedValueOnce({ response: { ok: true }, data: { cards: [{ ...card, payload: { ...personalPayload, round: { ...personalPayload.round, round: 2 } } }] } });
     ui.roundProps!.onAction(reopen);
     await new Promise((resolve) => setTimeout(resolve, 0)); render();
@@ -224,6 +254,124 @@ describe("拍板动作与跨卡处理", () => {
     render(); ui.roundProps!.onNoteChange!("旧轮结论"); render();
     ui.state[0] = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, round: 2 } } };
     render(); expect(ui.roundProps!.note).toBe("");
+  });
+});
+
+describe("本人审核与自动汇总", () => {
+  function own(confirmed = false, canConfirm = true) {
+    ui.viewerId = "owner";
+    ui.state[0] = { ...card, version: 3, payload: { ...personalPayload,
+      card: { ...personalPayload.card, ownerConfirmedAt: confirmed ? "2026-10-01T01:00:00Z" : null, missions: [mission, { ...mission, missionId: "mission-two", version: 7 }] },
+      selfReview: { canConfirm: !confirmed && canConfirm, canCancel: confirmed, canEdit: !confirmed, blockedReason: canConfirm ? null : "请先处理 1 条未决批注，再完成审核。", pendingAnnotations: canConfirm ? 0 : 1 },
+    } };
+    return render();
+  }
+  it("完成审核提交全部当前所见任务版本，成功后显示取消确认；不写入会话", async () => {
+    own();
+    const confirmed = { ...(ui.state[0] as Card), payload: { ...(ui.state[0] as Card).payload as typeof personalPayload, card: { ...((ui.state[0] as Card).payload as typeof personalPayload).card, ownerConfirmedAt: "2026-10-01T01:00:00Z" }, selfReview: { canConfirm: false, canCancel: true, canEdit: false, blockedReason: null, pendingAnnotations: 0 } } };
+    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [confirmed] } });
+    ui.buttons.get("完成本人审核")!.onPress!();
+    await vi.waitFor(() => expect(ui.post).toHaveBeenCalled());
+    expect(ui.post).toHaveBeenCalledExactlyOnceWith("/api/mission-cards/{cardId}/owner-confirmation", { params: { path: { cardId: "card" } }, body: { confirmed: true, round: 1, missionVersions: { mission: 1, "mission-two": 7 } } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(render()).toContain("取消确认");
+    expect(ui.quote).not.toHaveBeenCalled();
+    expect(ui.register.mock.calls.at(-1)![0].group.agentNote).toContain("取消确认后可继续修改");
+  });
+  it("取消确认重新开放本人编辑；未决批注时完成按钮禁用并解释原因", async () => {
+    expect(own(false, false)).toContain("请先处理 1 条未决批注");
+    expect(ui.buttons.get("完成本人审核")!.isDisabled).toBe(true);
+    ui.buttons.get("完成本人审核")!.onPress!();
+    expect(ui.post).not.toHaveBeenCalled();
+    own(true);
+    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [card] } });
+    ui.buttons.get("取消审核确认")!.onPress!();
+    await vi.waitFor(() => expect(ui.post).toHaveBeenCalled());
+    expect(ui.post.mock.calls[0][1].body).toEqual({ confirmed: false, round: 1, missionVersions: { mission: 1, "mission-two": 7 } });
+  });
+  it("确认期间较早发出的同版本刷新不能覆盖刚保存的完成状态", async () => {
+    own();
+    const old = ui.state[0] as Card;
+    let finish!: (value: unknown) => void;
+    ui.get.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const refresh = ui.register.mock.calls.at(-1)![0].group.onRefresh();
+    const confirmed = { ...old, payload: { ...(old.payload as typeof personalPayload), card: { ...(old.payload as typeof personalPayload).card, ownerConfirmedAt: "2026-10-01T01:00:00Z" }, selfReview: { canConfirm: false, canCancel: true, canEdit: false, blockedReason: null, pendingAnnotations: 0 } } };
+    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [confirmed] } });
+    ui.buttons.get("完成本人审核")!.onPress!();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    finish({ response: { ok: true }, data: { cards: [old] } }); await refresh;
+    expect(render()).toContain("取消确认");
+  });
+  it("版本冲突后读取新正文，保留未完成状态并显示服务端原因", async () => {
+    own();
+    ui.post.mockResolvedValue({ response: { ok: false, status: 409 }, error: { message: "任务内容刚刚变化，请重新阅读后完成审核" } });
+    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [{ ...(ui.state[0] as Card), version: 4 }] } });
+    ui.buttons.get("完成本人审核")!.onPress!();
+    await vi.waitFor(() => expect(ui.get).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const html = render();
+    expect(html).toContain("任务内容刚刚变化，请重新阅读后完成审核");
+    expect(html).toContain("完成审核");
+    expect(html).not.toContain("已完成审核，等待其他人");
+  });
+  it("提前汇总弹窗逐个列出未审核人，已完成的人不列入；拒绝后不执行", async () => {
+    ui.state[0] = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, cards: [personalPayload.round.cards[0], { ...personalPayload.round.cards[0], cardId: "two", ownerName: "孙铭泽", ownerConfirmedAt: "2026-10-01T01:00:00Z" }, { ...personalPayload.round.cards[0], cardId: "three", ownerName: "王路遥" }] } } };
+    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [{ ...(ui.state[0] as Card), actions: [{ actionId: "current-close", actionType: "mission-round.close", label: "开始汇总" }] }] } });
+    render(); ui.ask.mockResolvedValue(false);
+    ui.roundProps!.onAction({ actionId: "close", actionType: "mission-round.close", label: "开始汇总" });
+    await vi.waitFor(() => expect(ui.ask).toHaveBeenCalled());
+    expect(ui.ask.mock.calls[0][0]).toContain("尚未完成审核：白田田、王路遥");
+    expect(ui.ask.mock.calls[0][0]).not.toContain("孙铭泽");
+    expect(ui.ask.mock.calls[0][0]).toContain("汇总后正文冻结");
+    expect(ui.post).not.toHaveBeenCalled();
+  });
+  it("别人取消确认后汇总前读取同版本最新进度，提醒重新包含该人并使用最新操作", async () => {
+    const close = { actionId: "old-close", actionType: "mission-round.close", label: "开始汇总" };
+    const cards = [
+      { ...personalPayload.round.cards[0], ownerName: "测试甲", ownerConfirmedAt: null },
+      { ...personalPayload.round.cards[0], cardId: "two", ownerName: "测试乙", ownerConfirmedAt: "2026-10-01T01:00:00Z" },
+      { ...personalPayload.round.cards[0], cardId: "three", ownerName: "测试丙", ownerConfirmedAt: "2026-10-01T01:00:00Z" },
+    ];
+    ui.state[0] = { ...card, version: 4, actions: [close], payload: { ...personalPayload, round: { ...personalPayload.round, counts: { ...personalPayload.round.counts, cards: 3 }, cards } } };
+    const latest = { ...(ui.state[0] as Card), actions: [{ ...close, actionId: "latest-close" }], payload: { ...personalPayload,
+      round: { ...personalPayload.round, counts: { ...personalPayload.round.counts, cards: 3 }, cards: cards.map((row) => row.cardId === "two" ? { ...row, ownerConfirmedAt: null } : row) } } };
+    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [latest] } });
+    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [{ ...latest, payload: { ...latest.payload, round: { ...latest.payload.round, phase: "reviewing" } } }] } });
+    render(); ui.roundProps!.onAction(close); ui.roundProps!.onAction(close);
+    await vi.waitFor(() => expect(ui.post).toHaveBeenCalled());
+    expect(ui.get).toHaveBeenCalledExactlyOnceWith("/api/mission-cards/{cardId}", { params: { path: { cardId: "card" } } });
+    expect(ui.ask).toHaveBeenCalledOnce();
+    expect(ui.ask.mock.calls[0][0]).toContain("尚未完成审核：测试甲、测试乙");
+    expect(ui.ask.mock.calls[0][0]).not.toContain("测试丙");
+    expect(ui.ask.mock.calls[0][0]).toContain("3 张任务卡");
+    expect(ui.post).toHaveBeenCalledExactlyOnceWith("/api/mission-rounds/actions/execute", { body: { actionId: "latest-close", viewCardId: "card" } });
+  });
+  it.each([
+    ["已自动汇总", "reviewing", true, "审核状态已变化"],
+    ["拍板权已变化", "open", false, "拍板权限已变化"],
+  ] as const)("汇总前读到%s时更新页面并说明，不再按旧名单询问或执行", async (_name, phase, approver, message) => {
+    const latest = { ...card, version: 4, payload: { ...personalPayload, round: { ...personalPayload.round, phase, approver } } };
+    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [latest] } });
+    render(); ui.roundProps!.onAction({ actionId: "old-close", actionType: "mission-round.close", label: "开始汇总" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(render()).toContain(message);
+    expect(ui.register.mock.calls.at(-1)![0].group.phase).toBe(phase);
+    expect(ui.ask).not.toHaveBeenCalled();
+    expect(ui.post).not.toHaveBeenCalled();
+  });
+  it("读取最新审核进度失败时不询问或汇总，显示重试说明且可以重新读取", async () => {
+    const close = { actionId: "close", actionType: "mission-round.close", label: "开始汇总" };
+    ui.get.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    render(); ui.roundProps!.onAction(close);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(render()).toContain("暂时无法读取最新审核进度，请重试后再开始汇总。");
+    expect(ui.ask).not.toHaveBeenCalled(); expect(ui.post).not.toHaveBeenCalled();
+    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [{ ...card, actions: [close] }] } });
+    ui.ask.mockResolvedValue(false);
+    ui.roundProps!.onAction(close);
+    await vi.waitFor(() => expect(ui.ask).toHaveBeenCalled());
+    expect(ui.get).toHaveBeenCalledTimes(2);
+    expect(ui.post).not.toHaveBeenCalled();
   });
 });
 

@@ -80,7 +80,7 @@ describe("本月 Mission Card 的 CEO 通知入口", () => {
     roundId: "round-01", period: "2026-10", battlefieldId: "01", battlefieldName: "灯塔项目", version: 1,
     phase: "draft", round: 1, openedAt: null, closesAt: null, reviewAt: null, serverNow: "2026-10-01T02:00:00.000Z",
     approver: true, deciderName: "刘明华", todo: null, placeholder: true, draftOrigin: "placeholder", draftFailures: [], retryDraftAction: null, goals: null,
-    counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 0, late: 0, corrections: 0 }, cards: [],
+    counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 0, late: 0, corrections: 0, unreviewed: 0 }, cards: [],
   };
   const summaryCard = (overrides: Partial<TMissionRoundSummary> = {}) => card("mission-round", "round-01", "10 月 Mission Card · 灯塔项目", { ...round, ...overrides });
 
@@ -99,9 +99,9 @@ describe("本月 Mission Card 的 CEO 通知入口", () => {
 
   it.each([
     [{ phase: "drafting" }, "Co-Agent 正在起草"],
-    [{ phase: "draft" }, "草稿 · 可以统一开放讨论"],
-    [{ phase: "open", closesAt: "2026-10-02T09:24:00.000Z" }, "讨论中 · 31 小时 24 分"],
-    [{ phase: "closed" }, "已截止 · 汇总中"],
+    [{ phase: "draft" }, "草稿 · 待下发审核"],
+    [{ phase: "open", closesAt: "2026-10-02T09:24:00.000Z" }, "审核中 · 已完成 0/0"],
+    [{ phase: "closed" }, "汇总中"],
     [{ phase: "reviewing", counts: { ...round.counts, pending: 5 } }, "5 条待你处理"],
     [{ phase: "reviewing" }, "意见已全部处理，待你确认"],
   ] as const)("已建轮次按服务端阶段给出 %s", (overrides, expected) => {
@@ -109,12 +109,18 @@ describe("本月 Mission Card 的 CEO 通知入口", () => {
   });
 
   it("越过服务端截止时刻时不显示负数，确认后退出通知栏", () => {
-    expect(railGroups([summaryCard({ phase: "open", closesAt: round.serverNow })])[0].items[0].meta).toBe("已截止 · 汇总中");
+    expect(railGroups([summaryCard({ phase: "open", closesAt: round.serverNow })])[0].items[0].meta).toBe("汇总中");
     expect(railGroups([summaryCard({ phase: "confirmed" })])).toEqual([]);
+  });
+  it("审核状态来自各卡本人确认，失败草稿不会承诺可以下发", () => {
+    const row = { cardId: "own", ownerId: "sun", ownerName: "孙铭泽", roleLabel: null, missionCount: 1, ownerConfirmedAt: "2026-10-01T01:00:00Z", line: "已完成审核", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: true, placeholder: false };
+    expect(railGroups([summaryCard({ phase: "open", closesAt: null, cards: [row] })])[0].items[0].meta).toBe("审核中 · 已完成 1/1");
+    expect(railGroups([summaryCard({ phase: "open", approver: false, closesAt: null, cards: [row] })])[0].items[0].meta).toBe("已完成审核");
+    expect(railGroups([summaryCard({ phase: "draft", draftFailures: [{ ownerId: "sun", ownerName: "孙铭泽", message: "缺少验收依据" }] })])[0].items[0].meta).toBe("任务起草未完成");
   });
 
   it("已确定后，拍板人有更正申请待处理时这一轮回到通知栏（GAP-04）", () => {
-    const row = { cardId: "card-01", ownerId: "sun", ownerName: "孙铭泽", roleLabel: null, missionCount: 2, line: "2 条更正申请", pending: 0,
+    const row = { cardId: "card-01", ownerId: "sun", ownerName: "孙铭泽", roleLabel: null, missionCount: 2, ownerConfirmedAt: null, line: "2 条更正申请", pending: 0,
       firstPendingFeedbackId: null, pendingCorrections: 2, firstPendingCorrectionId: "correction-01", mine: false, placeholder: false };
     const corrections = summaryCard({ phase: "confirmed", todo: "2 条更正申请待你处理", counts: { ...round.counts, corrections: 2 }, cards: [row] });
     expect(railGroups([corrections])[0].items[0]).toMatchObject({ meta: "2 条更正申请待你处理", missionRound: corrections });

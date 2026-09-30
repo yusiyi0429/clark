@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
-import type { TCard, TCreateMissionCardFeedbackRequest, TMissionCardCorrectionView, TMissionCardFeedbackView, TMissionCardField, TMissionCardGroupView, TMissionCardPayload, TMissionRoundSummary, TPersonalMissionCardMission, TPersonalMissionCardPayload, TThreadMember } from "@warmap/contracts";
+import type { TCard, TCreateMissionCardFeedbackRequest, TMissionCardCorrectionView, TMissionCardFeedbackView, TMissionCardField, TMissionCardGroupView, TMissionCardPayload, TMissionRoundSummary, TPersonalMissionCardMission, TPersonalMissionCardPayload, TThreadMember, TSetMissionCardOwnerConfirmationRequest } from "@warmap/contracts";
 import type { MemoryPerson } from "./companyMemory.js";
 import type { Query } from "./meetingStore.js";
-import { canApprove, closeIfDue, correctionPeriodClosed, getMissionRoundRow, projectMissionRoundCard, type MissionRoundPerson, type MissionRoundRow } from "./missionRounds.js";
-import { getMissionRow, projectMissionCard } from "./missions.js";
+import { canApprove, closeIfDue, correctionPeriodClosed, getMissionRoundRow, missionCardWriteProblem, pendingMissionCardAnnotations, projectMissionRoundCard, type MissionRoundPerson, type MissionRoundRow } from "./missionRounds.js";
+import { fieldText, getMissionRow, projectMissionCard } from "./missions.js";
+export { fieldText } from "./missions.js";
 import { signActionId } from "./actionToken.js";
 
-type PersonalRow = { id: string; round_id: string; owner_id: string; role_label: string | null; member_ids: string[] };
+type PersonalRow = { id: string; round_id: string; owner_id: string; role_label: string | null; member_ids: string[]; owner_confirmed_at: Date | null };
 type FeedbackRow = {
   id: string; seq: string | number; card_id: string; mission_id: string | null; field: TMissionCardField | null;
   kind: "comment" | "quote" | "suggestion"; author_id: string; client_id: string; body: string;
@@ -15,7 +16,7 @@ type FeedbackRow = {
   basis: "draft" | "candidate"; late: boolean; window_seq: number; created_at: Date;
 };
 type Review = { id: string; feedback_ids: string[]; superseded_at: Date | null; note: string | null };
-type Discussion = { feedback: FeedbackRow[]; review: Review | null; decisions: Map<string, "accept" | "decline">; decidedAt: Map<string, Date> };
+type Discussion = { feedback: FeedbackRow[]; review: Review | null; decisions: Map<string, "accept" | "decline">; stale: Set<string> };
 export type CorrectionRow = {
   id: string; round_id: string; card_id: string; mission_id: string; field: TMissionCardField;
   original: string; proposed: string; reason: string; author_id: string; client_id: string; direct: boolean;
@@ -25,13 +26,12 @@ export type CorrectionRow = {
 type Failure = { error: { status: number; code: string; message: string } };
 const fail = (status: number, code: string, message: string): Failure => ({ error: { status, code, message } });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export const fieldText = (mission: TPersonalMissionCardMission, field: TMissionCardField) => Array.isArray(mission[field]) ? mission[field].join("\n") : mission[field] as string;
 const compact = (text: string) => text.replace(/\s+/g, " ").trim();
 
 /** Stored membership and current approval authority are both checked on every access. */
 export async function visiblePersonalMissionCard(q: Query, person: MissionRoundPerson, cardId: string): Promise<{ card: PersonalRow; round: MissionRoundRow } | null> {
   if (!UUID.test(cardId)) return null;
-  const card = (await q("SELECT id,round_id,owner_id,role_label,member_ids FROM personal_mission_cards WHERE id=$1", [cardId])).rows[0] as PersonalRow | undefined;
+  const card = (await q("SELECT id,round_id,owner_id,role_label,member_ids,owner_confirmed_at FROM personal_mission_cards WHERE id=$1", [cardId])).rows[0] as PersonalRow | undefined;
   const round = card ? await getMissionRoundRow(q, card.round_id) : null;
   return card && round && (card.member_ids.includes(person.personId) || canApprove(person, round)) ? { card, round } : null;
 }
@@ -42,8 +42,13 @@ async function discussion(q: Query, round: MissionRoundRow, cardId: string): Pro
   const feedback = (await q("SELECT * FROM mission_card_feedback WHERE card_id=$1 ORDER BY seq", [cardId])).rows as FeedbackRow[];
   // During a reopened window the previous verdicts remain visible, while the document is the draft.
   const review = (await q("SELECT id,feedback_ids,superseded_at,note FROM mission_round_reviews WHERE round_id=$1 ORDER BY window_seq DESC LIMIT 1", [round.id])).rows[0] as Review | undefined;
-  const decisions = review ? (await q("SELECT feedback_id,decision,decided_at FROM mission_review_decisions WHERE review_id=$1", [review.id])).rows as { feedback_id: string; decision: "accept" | "decline"; decided_at: Date }[] : [];
-  return { feedback, review: review ?? null, decisions: new Map(decisions.map((r) => [r.feedback_id, r.decision])), decidedAt: new Map(decisions.map((r) => [r.feedback_id, r.decided_at])) };
+  const decisions = review ? (await q("SELECT feedback_id,decision FROM mission_review_decisions WHERE review_id=$1", [review.id])).rows as { feedback_id: string; decision: "accept" | "decline" }[] : [];
+  const stale = new Set<string>();
+  for (const item of feedback) if (item.kind === "suggestion" && item.mission_id && item.field) {
+    const mission = await getMissionRow(q, item.mission_id);
+    if (!mission || fieldText(projectMissionCard(mission, "", new Map()).payload as TMissionCardPayload, item.field) !== item.original) stale.add(item.id);
+  }
+  return { feedback, review: review ?? null, decisions: new Map(decisions.map((r) => [r.feedback_id, r.decision])), stale };
 }
 function projectFeedback(item: FeedbackRow, data: Discussion, round: MissionRoundRow, people: MemoryPerson[], person: MissionRoundPerson, secret: string): TMissionCardFeedbackView {
   const decision = data.decisions.get(item.id) ?? null;
@@ -57,7 +62,7 @@ function projectFeedback(item: FeedbackRow, data: Discussion, round: MissionRoun
   else if (item.late) verdict = { text: "讨论结束后留言 · 已纳入审核", tone: "wait" };
   else verdict = { text: round.status === "open" ? "讨论中" : "待拍板人处理", tone: round.status === "open" ? "open" : "wait" };
   const actionable = round.status === "reviewing" && included && !data.review?.superseded_at && canApprove(person, round);
-  const acceptBlockedReason = item.kind === "suggestion" && included && data.feedback.some((other) => other.id !== item.id && other.kind === "suggestion"
+  const acceptBlockedReason = item.kind === "suggestion" && data.stale.has(item.id) ? "提交建议后这段正文已修改，不能直接采纳" : item.kind === "suggestion" && included && data.feedback.some((other) => other.id !== item.id && other.kind === "suggestion"
     && other.mission_id === item.mission_id && other.field === item.field && data.review?.feedback_ids.includes(other.id) && data.decisions.get(other.id) === "accept")
     ? "同一字段已采纳另一条" : null;
   return { id: item.id, seq: Number(item.seq), missionId: item.mission_id, field: item.field, kind: item.kind,
@@ -81,18 +86,17 @@ export function projectCorrection(row: CorrectionRow, missions: TPersonalMission
 async function documentMissions(q: Query, cardId: string, people: MemoryPerson[], secret: string, data: Discussion, candidate: boolean): Promise<TPersonalMissionCardMission[]> {
   const ids = (await q("SELECT id FROM missions WHERE personal_mission_card_id=$1 ORDER BY code,id", [cardId])).rows as { id: string }[];
   const names = new Map(people.map((p) => [p.personId, p.displayName]));
-  const revisions = candidate ? (await q(`SELECT DISTINCT ON (mission_id,field) mission_id,field,after_version,created_at
-    FROM mission_card_revisions WHERE card_id=$1 ORDER BY mission_id,field,after_version DESC`, [cardId])).rows as { mission_id: string; field: TMissionCardField; after_version: number; created_at: Date }[] : [];
+  const selfEdits = (await q(`SELECT DISTINCT r.mission_id,r.field FROM mission_card_revisions r JOIN personal_mission_cards c ON c.id=r.card_id
+    WHERE r.card_id=$1 AND r.author_id=c.owner_id`, [cardId])).rows as { mission_id: string; field: TMissionCardField }[];
   const result: TPersonalMissionCardMission[] = [];
   for (const { id } of ids) {
     const row = (await getMissionRow(q, id))!;
-    const mission: TPersonalMissionCardMission = { ...(projectMissionCard(row, secret, names).payload as TMissionCardPayload), version: row.version, changedFields: [] };
+    const mission: TPersonalMissionCardMission = { ...(projectMissionCard(row, secret, names).payload as TMissionCardPayload), version: row.version, changedFields: [],
+      selfEditedFields: selfEdits.filter((edit) => edit.mission_id === id).map((edit) => edit.field) };
     if (candidate && data.review && !data.review.superseded_at) for (const item of data.feedback) {
       if (item.mission_id !== id || item.kind !== "suggestion" || !item.field || data.decisions.get(item.id) !== "accept" || !data.review.feedback_ids.includes(item.id)) continue;
-      const revision = revisions.find((row) => row.mission_id === id && row.field === item.field);
-      const decidedAt = data.decidedAt.get(item.id);
-      // 接受建议后已即时修改这个字段，正文使用最新修订；人提交的建议与决定仍原样留痕。
-      if (revision && decidedAt && revision.created_at >= decidedAt && revision.after_version > (item.source_version ?? 0)) continue;
+      // 重开后正文可能变过；失效的旧建议不叠加，原文改回相同内容则仍可沿用。
+      if (data.stale.has(item.id)) continue;
       if (item.field === "successEvidence" || item.field === "milestones") mission[item.field] = item.proposed!.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       else mission[item.field] = item.proposed!;
       mission.changedFields.push(item.field);
@@ -103,7 +107,7 @@ async function documentMissions(q: Query, cardId: string, people: MemoryPerson[]
 }
 /** 已确定的卡没有候选叠加：正文就是当前 Mission，更正与页面取同一份原文。 */
 export function currentMissions(q: Query, cardId: string, people: MemoryPerson[], secret: string): Promise<TPersonalMissionCardMission[]> {
-  return documentMissions(q, cardId, people, secret, { feedback: [], review: null, decisions: new Map(), decidedAt: new Map() }, false);
+  return documentMissions(q, cardId, people, secret, { feedback: [], review: null, decisions: new Map(), stale: new Set() }, false);
 }
 
 export async function getPersonalMissionCard(q: Query, people: MemoryPerson[], secret: string, person: MissionRoundPerson, cardId: string, now: Date): Promise<TCard | null> {
@@ -127,18 +131,28 @@ export async function getPersonalMissionCard(q: Query, people: MemoryPerson[], s
   const corrections = (await q("SELECT * FROM mission_card_corrections WHERE card_id=$1 ORDER BY created_at DESC,id DESC", [cardId])).rows as CorrectionRow[];
   const corrected = corrections.filter((item) => item.status === "applied").length;
   const byName = people.find((p) => p.personId === round.confirmed_by)?.displayName ?? round.confirmed_by;
+  const pendingAnnotations = await pendingMissionCardAnnotations(q, round.id, cardId);
+  const writeProblem = missionCardWriteProblem(round, card, now);
+  const canEdit = !writeProblem && (person.personId === card.owner_id || summary.approver);
+  const draftFailure = summary.draftFailures.find((item) => item.ownerId === card.owner_id)?.message ?? null;
+  const confirmProblem = person.personId !== card.owner_id ? "请由任务卡本人完成审核" : writeProblem?.message
+    ?? (draftFailure || !missions.length ? "草稿尚未完成，请先完成起草" : pendingAnnotations ? "还有待处理的修改批注，请先处理或明确保留备注" : null);
   const status = round.status === "drafting" ? "Co-Agent 正在起草"
     : shown === "confirmed" ? `已确定 · ${byName} ${localTime(round.confirmed_at!)}${corrected ? ` · 更正 ${corrected} 处` : ""}`
     : shown === "candidate" ? `候选版本 · 相比草稿 ${changed} 处改动 · 等${summary.deciderName}拍板`
-    : `草稿${summary.phase === "open" ? " · 讨论中" : ""}${card.role_label ? ` · ${card.role_label}` : ""}`;
+    : summary.phase === "open" ? card.owner_confirmed_at ? "已完成审核" : "审核中" : `草稿${card.role_label ? ` · ${card.role_label}` : ""}`;
   const closedReason = round.status === "drafting" ? "Co-Agent 正在起草，完成后可讨论修改"
     : round.status !== "confirmed" ? "还没确定：讨论中请用修改建议"
     : correctionPeriodClosed(round, now) ? "月份已过，这张卡只读" : null;
   const payload: TPersonalMissionCardPayload = {
     round: summary,
-    draftFailure: summary.draftFailures.find((item) => item.ownerId === card.owner_id)?.message ?? null,
+    draftFailure,
+    selfReview: { canConfirm: !confirmProblem, canCancel: person.personId === card.owner_id && round.status === "open" && !!card.owner_confirmed_at
+      && (!round.closes_at || round.closes_at > now) && !correctionPeriodClosed(round, now),
+      canEdit, blockedReason: confirmProblem, pendingAnnotations },
+    annotationAccess: { canCreate: !writeProblem, canApply: canEdit, closedReason: writeProblem?.message ?? null },
     card: { cardId, ownerId: card.owner_id, ownerName: people.find((p) => p.personId === card.owner_id)?.displayName ?? card.owner_id,
-      roleLabel: card.role_label, members: members(card, people), status, shown, missions },
+      ownerConfirmedAt: card.owner_confirmed_at?.toISOString() ?? null, roleLabel: card.role_label, members: members(card, people), status, shown, missions },
     feedback: data.feedback.map((item) => projectFeedback(item, data, round, people, person, secret)),
     confirmation: round.confirmed_at && round.confirmed_by ? { by: round.confirmed_by,
       byName: people.find((p) => p.personId === round.confirmed_by)?.displayName ?? round.confirmed_by,
@@ -149,6 +163,59 @@ export async function getPersonalMissionCard(q: Query, people: MemoryPerson[], s
   return { schemaVersion: 1, id: `personal-mission-card:${cardId}`, kind: "personal-mission-card", version: round.version,
     objectRef: { type: "personal-mission-card", id: cardId, version: round.version }, title: `${payload.card.ownerName}的 ${Number(round.period.slice(5))} 月 Mission Card`,
     badge: "Mission Card", payload, conversation: { scope: `mission-card:${cardId}` }, actions: roundCard.actions };
+}
+
+/** 本人确认与最后一人触发的汇总共享一把阶段锁，不会认可未读版本或抢在批注写回前冻结。 */
+export async function setMissionCardOwnerConfirmation(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson,
+  cardId: string, input: TSetMissionCardOwnerConfirmationRequest, now: () => Date): Promise<{ card: TCard } | Failure> {
+  const client = await pool.connect(); const q: Query = (sql, params) => client.query(sql, params);
+  try {
+    await q("BEGIN");
+    let visible = await visiblePersonalMissionCard(q, person, cardId);
+    const finish = async (problem?: Failure) => {
+      await q("COMMIT");
+      if (problem) return problem;
+      const card = await getPersonalMissionCard(q, people, secret, person, cardId, now());
+      return card ? { card } : fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "任务卡不存在或不可见");
+    };
+    if (!visible) return await finish(fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "任务卡不存在或不可见"));
+    await q("SELECT id FROM mission_rounds WHERE id=$1 FOR UPDATE", [visible.round.id]);
+    visible = await visiblePersonalMissionCard(q, person, cardId);
+    if (!visible) return await finish(fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "任务卡不存在或不可见"));
+    const { card, round } = visible;
+    if (card.owner_id !== person.personId) return await finish(fail(403, "OWNER_CONFIRMATION_FORBIDDEN", "请由任务卡本人完成审核"));
+    if (round.window_seq !== input.round) return await finish(fail(409, "ROUND_CHANGED", "审核已重新开放，请刷新后再完成审核"));
+    // 保存成功后网络重试只返回既有状态，即使最后一人已触发汇总也不会再写一遍。
+    if (input.confirmed && card.owner_confirmed_at) return await finish();
+    if (round.status !== "open" || round.closes_at && round.closes_at <= now())
+      return await finish(fail(409, "ROUND_NOT_OPEN", "审核已结束；如需修改，请重新开放审核"));
+    if (correctionPeriodClosed(round, now())) return await finish(fail(409, "MISSION_CARD_PERIOD_CLOSED", "月份已过，这张卡只读"));
+    if (!input.confirmed && !card.owner_confirmed_at) return await finish();
+    if (input.confirmed) {
+      const missions = (await q("SELECT id,version FROM missions WHERE personal_mission_card_id=$1 ORDER BY id", [cardId])).rows as { id: string; version: number }[];
+      const draft = round.draft_source as { failedOwners?: { ownerId: string }[] } | null;
+      if (!missions.length || draft?.failedOwners?.some((owner) => owner.ownerId === card.owner_id))
+        return await finish(fail(409, "MISSION_CARD_NOT_READY", "草稿尚未完成，请先完成起草"));
+      if (missions.length !== Object.keys(input.missionVersions).length || missions.some((mission) => input.missionVersions[mission.id] !== mission.version))
+        return await finish(fail(409, "SOURCE_VERSION_CONFLICT", "正文已变化，请阅读最新版本后再完成审核"));
+      if (await pendingMissionCardAnnotations(q, round.id, cardId)) return await finish(fail(409, "ANNOTATIONS_PENDING", "还有待处理的修改批注，请先回答、重试或明确保留备注"));
+    }
+    const at = now();
+    await q("UPDATE personal_mission_cards SET owner_confirmed_at=$2 WHERE id=$1", [cardId, input.confirmed ? at : null]);
+    if (input.confirmed) {
+      const remaining = (await q("SELECT count(*) AS n FROM personal_mission_cards WHERE round_id=$1 AND owner_confirmed_at IS NULL", [round.id])).rows[0];
+      if (!Number(remaining.n)) {
+        if (await pendingMissionCardAnnotations(q, round.id)) {
+          await q("ROLLBACK");
+          return fail(409, "ANNOTATIONS_PENDING", "还有待处理的修改批注，请先处理后再完成审核");
+        }
+        const updated = (await q("UPDATE mission_rounds SET closes_at=$2 WHERE id=$1 RETURNING *", [round.id, at])).rows[0] as MissionRoundRow;
+        await closeIfDue(client, updated, at, true);
+      }
+    }
+    return await finish();
+  } catch (error) { await q("ROLLBACK").catch(() => undefined); throw error; }
+  finally { client.release(); }
 }
 
 /** 修改建议与确认后的更正共用：列表字段逐行 trim、去空行，其余字段整体 trim。 */
@@ -251,18 +318,18 @@ export async function getPersonalMissionCardGroup(q: Query, people: MemoryPerson
   const names = new Map(people.map((p) => [p.personId, p.displayName]));
   if (round.first_opened_at) {
     const at = round.first_opened_at.toISOString();
-    entries.push({ type: "divider", at, text: `${localTime(round.first_opened_at)} · 全战场统一开放讨论` });
+    entries.push({ type: "divider", at, text: `${localTime(round.first_opened_at)} · 全战场下发审核` });
     const countRow = (await q("SELECT count(*) AS n,bool_or(placeholder) AS placeholder FROM missions WHERE personal_mission_card_id=$1", [cardId])).rows[0];
     const count = Number(countRow.n);
     const deciderId = round.battlefield_owner_id || people.find((p) => p.roles.includes("ceo"))?.personId || "CEO";
     const previous = Number(round.period.slice(5)) === 1 ? 12 : Number(round.period.slice(5)) - 1;
     const origin = round.draft_origin === "agent" ? "Co-Agent 起草 · 待大家讨论修改。"
       : `占位 · 沿用 ${previous} 月任务卡；仍需讨论修改。`;
-    entries.push({ type: "opening", at, text: `这个群讨论${names.get(card.owner_id) ?? card.owner_id}的 ${Number(round.period.slice(5))} 月 Mission Card（${count} 项个人任务），开放到 ${localTime(new Date(round.first_opened_at.getTime() + 48 * 3600000))}：可以在字段上评论、划词引用、提修改建议。截止后 Co-Agent 汇总大家的意见，交${names.get(deciderId) ?? deciderId}拍板。${origin}${round.draft_origin === "agent" && countRow.placeholder ? "这张卡是占位，需重点核对。" : ""}` });
+    entries.push({ type: "opening", at, text: `审核${names.get(card.owner_id) ?? card.owner_id}的 ${Number(round.period.slice(5))} 月任务（${count} 项）：可以在正文上批注、划词引用并与 Co-Agent 沟通，处理待改批注后完成本人审核。全员完成审核后自动开始汇总，拍板人也可提前开始汇总，最后交${names.get(deciderId) ?? deciderId}拍板。${origin}${round.draft_origin === "agent" && countRow.placeholder ? "这张卡是占位，需重点核对。" : ""}` });
   }
-  round.reopens.forEach((reopen, i) => {
-    entries.push({ type: "divider", at: reopen.closedAt, text: `${localTime(new Date(reopen.closedAt))} · 讨论截止` });
-    entries.push({ type: "divider", at: reopen.at, text: `${names.get(reopen.by) ?? reopen.by}重新开放讨论（第 ${i + 2} 轮）` });
+  round.reopens.forEach((reopen) => {
+    entries.push({ type: "divider", at: reopen.closedAt, text: `${localTime(new Date(reopen.closedAt))} · 开始汇总` });
+    entries.push({ type: "divider", at: reopen.at, text: `${names.get(reopen.by) ?? reopen.by}重新开放审核` });
   });
   if (round.closes_at && round.closes_at <= now) entries.push({ type: "divider", at: round.closes_at.toISOString(), text: `${localTime(round.closes_at)} · 讨论已结束 · 之后的留言待后续审核` });
   if (round.confirmed_at) entries.push({ type: "divider", at: round.confirmed_at.toISOString(), text: `${names.get(round.confirmed_by!) ?? round.confirmed_by}确认了本月 Mission Card` });

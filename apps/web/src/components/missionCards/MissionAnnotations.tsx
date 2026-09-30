@@ -12,68 +12,115 @@ import { annotationMarks, normalizeAnchorText, type TextAnchor } from "./annotat
 import type { PersonalMission } from "./CardDocument";
 import a from "./mission-annotations.module.css";
 
-export type AnnotationSelection = TextAnchor & { mission: PersonalMission; field: TMissionCardField; sourceText: string; range: Range };
+export type AnnotationSelection = TextAnchor & { mission: PersonalMission; field: TMissionCardField; sourceText: string; sourceRound?: number; range: Range };
 export type AnnotationControls = {
   notes: TMissionCardAnnotationView[];
   revisions: TMissionCardRevisionView[];
   onSave: (selection: AnnotationSelection, body: string, clientId: string) => Promise<string | null>;
   onAnswer: (id: string, answer: string) => Promise<string | null>;
   onRetry: (id: string) => Promise<string | null>;
+  onResolve?: (id: string, reason: string) => Promise<string | null>;
+  closedReason?: string | null;
 };
 
-export function useMissionAnnotations(cardId: string) {
+export function useMissionAnnotations(cardId: string, round = 1) {
   const [notes, setNotes] = useState<TMissionCardAnnotationView[]>([]);
   const [revisions, setRevisions] = useState<TMissionCardRevisionView[]>([]);
   const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
   const generation = useRef(0);
+  const scope = useRef(0);
+  const live = useRef(true);
+  const activeCard = useRef(cardId);
+  const mutations = useRef(0);
+  const mutationSerial = useRef(0);
+  const latestMutation = useRef(new Map<string, number>());
+  const isCurrent = useCallback((requestScope: number, requestCard: string) => live.current && scope.current === requestScope && activeCard.current === requestCard, []);
   const refresh = useCallback(async () => {
-    const current = generation.current;
+    const requestScope = scope.current;
+    if (!isCurrent(requestScope, cardId)) return;
+    // 后发的读取优先；写入开始与完成都会使之前的读取失效。
+    const current = ++generation.current;
     try {
       const response = await fetch(`/api/mission-cards/${encodeURIComponent(cardId)}/annotations`);
       if (!response.ok) throw new Error("批注暂时无法读取，请重试。");
       const data = await response.json() as { annotations: TMissionCardAnnotationView[]; revisions: TMissionCardRevisionView[] };
-      if (current === generation.current) { setNotes(data.annotations); setRevisions(data.revisions); setError(""); }
-    } catch { if (current === generation.current) setError("批注暂时无法读取，请重试。"); }
-  }, [cardId]);
+      if (isCurrent(requestScope, cardId) && current === generation.current) { setNotes(data.annotations); setRevisions(data.revisions); setError(""); }
+    } catch { if (isCurrent(requestScope, cardId) && current === generation.current) setError("批注暂时无法读取，请重试。"); }
+  }, [cardId, isCurrent]);
   useEffect(() => {
+    scope.current++; live.current = true; activeCard.current = cardId;
     generation.current++;
+    mutations.current = 0; mutationSerial.current = 0; latestMutation.current.clear();
     setNotes([]);
     setRevisions([]);
     setError("");
+    setPending(false);
     void refresh();
     const resume = () => { if (document.visibilityState !== "hidden") void refresh(); };
     const interval = setInterval(resume, 2500);
     window.addEventListener("focus", resume);
     document.addEventListener("visibilitychange", resume);
-    return () => { generation.current++; clearInterval(interval); window.removeEventListener("focus", resume); document.removeEventListener("visibilitychange", resume); };
-  }, [refresh]);
-  const save = useCallback(async (selection: AnnotationSelection, body: string, clientId: string): Promise<string | null> => {
-    try {
-      const response = await fetch(`/api/mission-cards/${encodeURIComponent(cardId)}/annotations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ clientId, missionId: selection.mission.missionId, field: selection.field, sourceVersion: selection.mission.version, sourceText: selection.sourceText, quote: selection.quote, prefix: selection.prefix, suffix: selection.suffix, startOffset: selection.startOffset, body }) });
-      const data = await response.json() as { annotation?: TMissionCardAnnotationView; message?: string };
-      if (!response.ok || !data.annotation) return data.message ?? "批注未保存，请重试；输入已保留。";
-      const saved = data.annotation;
-      setNotes((current) => [...current.filter((note) => note.id !== saved.id), saved]);
+    return () => { live.current = false; scope.current++; generation.current++; clearInterval(interval); window.removeEventListener("focus", resume); document.removeEventListener("visibilitychange", resume); };
+  }, [cardId, refresh]);
+  const beginMutation = useCallback(() => {
+    const requestScope = scope.current;
+    if (!isCurrent(requestScope, cardId)) return null;
+    mutations.current++; setPending(true); generation.current++;
+    return { scope: requestScope, serial: ++mutationSerial.current };
+  }, [cardId, isCurrent]);
+  const finishMutation = useCallback((requestScope: number) => {
+    if (!isCurrent(requestScope, cardId)) return;
+    mutations.current--; setPending(mutations.current > 0);
+  }, [cardId, isCurrent]);
+  const acceptMutation = useCallback((request: { scope: number; serial: number }, saved: TMissionCardAnnotationView) => {
+    if (!isCurrent(request.scope, cardId)) return false;
+    // POST 期间开始的 GET 仍可能包含旧快照；成功响应之后一并作废。
+    generation.current++;
+    if ((latestMutation.current.get(saved.id) ?? 0) <= request.serial) {
+      latestMutation.current.set(saved.id, request.serial);
+      setNotes((current) => {
+        if (!isCurrent(request.scope, cardId) || (latestMutation.current.get(saved.id) ?? 0) > request.serial) return current;
+        return current.some((note) => note.id === saved.id) ? current.map((note) => note.id === saved.id ? saved : note) : [...current, saved];
+      });
       setError("");
-      return null;
-    } catch { return "暂时无法连接服务器，请重试；输入已保留。"; }
-  }, [cardId]);
-  const respond = useCallback(async (id: string, action: "answer" | "retry", body: object): Promise<string | null> => {
+    }
+    return true;
+  }, [cardId, isCurrent]);
+  const changedCard = "任务卡已关闭或切换，重新打开原任务卡可查看保存结果。";
+  const save = useCallback(async (selection: AnnotationSelection, body: string, clientId: string): Promise<string | null> => {
+    const request = beginMutation();
+    if (!request) return changedCard;
+    try {
+      const response = await fetch(`/api/mission-cards/${encodeURIComponent(cardId)}/annotations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ clientId, missionId: selection.mission.missionId, field: selection.field, sourceRound: selection.sourceRound ?? round, sourceVersion: selection.mission.version, sourceText: selection.sourceText, quote: selection.quote, prefix: selection.prefix, suffix: selection.suffix, startOffset: selection.startOffset, body }) });
+      const data = await response.json() as { annotation?: TMissionCardAnnotationView; message?: string };
+      if (!isCurrent(request.scope, cardId)) return changedCard;
+      if (!response.ok || !data.annotation) return data.message ?? "批注未保存，请重试；输入已保留。";
+      return acceptMutation(request, data.annotation) ? null : changedCard;
+    } catch { return isCurrent(request.scope, cardId) ? "暂时无法连接服务器，请重试；输入已保留。" : changedCard; }
+    finally { finishMutation(request.scope); }
+  }, [cardId, round, beginMutation, acceptMutation, finishMutation, isCurrent]);
+  const respond = useCallback(async (id: string, action: "answer" | "retry" | "resolve", body: object): Promise<string | null> => {
+    const request = beginMutation();
+    if (!request) return changedCard;
+    latestMutation.current.set(id, request.serial);
     try {
       const response = await fetch(`/api/mission-cards/${encodeURIComponent(cardId)}/annotations/${encodeURIComponent(id)}/${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json() as { annotation?: TMissionCardAnnotationView; message?: string };
+      if (!isCurrent(request.scope, cardId)) return changedCard;
       if (!response.ok || !data.annotation) return data.message ?? "没有提交成功，请重试。";
-      const saved = data.annotation;
-      setNotes((current) => current.map((note) => note.id === id ? saved : note));
+      if (!acceptMutation(request, data.annotation)) return changedCard;
       void refresh(); return null;
-    } catch { return "暂时无法连接服务器，输入已保留。"; }
-  }, [cardId, refresh]);
+    } catch { return isCurrent(request.scope, cardId) ? "暂时无法连接服务器，输入已保留。" : changedCard; }
+    finally { finishMutation(request.scope); }
+  }, [cardId, refresh, beginMutation, acceptMutation, finishMutation, isCurrent]);
   const answer = useCallback((id: string, text: string) => respond(id, "answer", { answer: text }), [respond]);
   const retry = useCallback((id: string) => respond(id, "retry", {}), [respond]);
-  return { notes, revisions, error, refresh, save, answer, retry };
+  const resolve = useCallback((id: string, reason: string) => respond(id, "resolve", { reason }), [respond]);
+  return { notes, revisions, error, pending, refresh, save, answer, retry, resolve };
 }
 
-export function AnnotatedField({ mission, field, text, markdownText = text, notes, onSelect }: { mission: PersonalMission; field: TMissionCardField; text: string; markdownText?: string; notes: TMissionCardAnnotationView[]; onSelect: (selection: AnnotationSelection | null) => void }) {
+export function AnnotatedField({ mission, field, text, markdownText = text, notes, onSelect, sourceRound }: { mission: PersonalMission; field: TMissionCardField; text: string; markdownText?: string; notes: TMissionCardAnnotationView[]; onSelect: (selection: AnnotationSelection | null) => void; sourceRound?: number }) {
   const [opened, setOpened] = useState<string | null>(null);
   const collect = (node: HTMLElement) => {
     const picked = window.getSelection();
@@ -84,7 +131,7 @@ export function AnnotatedField({ mission, field, text, markdownText = text, note
     const quote = normalizeAnchorText(picked.toString());
     if (!quote || quote.length > 2000) { onSelect(null); return; }
     const rawBefore = before.toString().replace(/\s+/g, " ").trimStart();
-    onSelect({ mission, field, sourceText: text, quote, prefix: rawBefore.slice(-200), suffix: after.toString().replace(/\s+/g, " ").slice(0, 200), startOffset: rawBefore.length, range });
+    onSelect({ mission, field, sourceText: text, sourceRound, quote, prefix: rawBefore.slice(-200), suffix: after.toString().replace(/\s+/g, " ").slice(0, 200), startOffset: rawBefore.length, range });
   };
   return <div className={a.fieldWrap}>
     <div className={a.markdown} data-mission-field={`${mission.missionId}:${field}`} onMouseUp={(event) => collect(event.currentTarget)} onKeyUp={(event) => { if (event.shiftKey) collect(event.currentTarget); }} onTouchEnd={(event) => collect(event.currentTarget)}>
@@ -106,12 +153,28 @@ export function AnnotationNote({ note, onClose }: { note: TMissionCardAnnotation
     <blockquote>{note.quote}</blockquote><p>{note.body}</p>
     {note.note ? <p className={a.reason}>{note.note}</p> : null}
     {note.clarifications?.length ? <details className={a.clarificationHistory}><summary>查看沟通记录 · {note.clarifications.length}</summary>{note.clarifications.map((item, index) => <div key={`${item.createdAt}:${index}`}><p>{item.question}</p><p><strong>{item.authorName}</strong>：{item.answer}</p><time dateTime={item.createdAt}>{monthDayTime(item.createdAt)}</time></div>)}</details> : null}
-    <small>{({ saved: "批注已保存", queued: "Co-Agent 准备处理", applying: "Co-Agent 正在修改", needs_clarification: "待明确修改意图", applied: "已按批注修改", no_change: "已审阅 · 正文无需修改", failed: "修改未完成" } as const)[note.status]}{note.stale ? " · 原文已留存" : ""}</small>
+    <small>{({ saved: "批注已保存", queued: "Co-Agent 准备处理", applying: "Co-Agent 正在修改", needs_clarification: "待明确修改意图", applied: "已按批注修改", no_change: "保留备注 · 正文未修改", failed: "修改未完成" } as const)[note.status]}{note.stale ? " · 原文已留存" : ""}</small>
   </aside>;
 }
 
 export function FieldAnnotationActivity({ notes, controls }: { notes: TMissionCardAnnotationView[]; controls: AnnotationControls }) {
-  return <>{notes.filter((note) => ["queued", "applying", "needs_clarification", "failed"].includes(note.status)).map((note) => note.status === "needs_clarification" ? <Clarification key={note.id} note={note} onAnswer={controls.onAnswer} /> : <PendingNote key={note.id} note={note} onRetry={controls.onRetry} />)}</>;
+  return <>{notes.filter((note) => ["queued", "applying", "needs_clarification", "failed"].includes(note.status)).map((note) => <div key={note.id}>{note.status === "needs_clarification" ? <Clarification note={note} onAnswer={controls.onAnswer} closedReason={controls.closedReason} /> : <PendingNote note={note} onRetry={controls.onRetry} />}{note.canResolve && controls.onResolve ? <ResolveNote id={note.id} onResolve={controls.onResolve} /> : null}</div>)}</>;
+}
+
+function ResolveNote({ id, onResolve }: { id: string; onResolve: NonNullable<AnnotationControls["onResolve"]> }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const locked = useRef(false);
+  const resolve = async () => {
+    if (!reason.trim() || locked.current) return;
+    locked.current = true; setBusy(true); setError("");
+    const failure = await onResolve(id, reason.trim());
+    locked.current = false; setBusy(false);
+    if (failure) setError(failure); else setOpen(false);
+  };
+  return <div className={a.resolve}><button type="button" aria-expanded={open} disabled={busy} onClick={() => setOpen(!open)}>保留备注，暂不修改</button>{open ? <div className={a.resolveForm}><label htmlFor={`annotation-resolve-${id}`}>暂不修改的原因</label><textarea id={`annotation-resolve-${id}`} autoFocus rows={2} maxLength={1000} value={reason} disabled={busy} onChange={(event) => setReason(event.target.value)} placeholder="说明为什么保留备注、暂不改正文…" /><small>批注与原因保留供最终审核。</small>{error ? <p role="alert" className={a.error}>{error}</p> : null}<div className={a.options}><button type="button" disabled={busy || !reason.trim()} onClick={() => void resolve()}>{busy ? "保存中…" : "确认保留备注"}</button><button type="button" disabled={busy} onClick={() => setOpen(false)}>取消</button></div></div> : null}</div>;
 }
 
 function PendingNote({ note, onRetry }: { note: TMissionCardAnnotationView; onRetry: AnnotationControls["onRetry"] }) {
@@ -125,7 +188,7 @@ function PendingNote({ note, onRetry }: { note: TMissionCardAnnotationView; onRe
   </div>;
 }
 
-function Clarification({ note, onAnswer }: { note: TMissionCardAnnotationView; onAnswer: AnnotationControls["onAnswer"] }) {
+function Clarification({ note, onAnswer, closedReason }: { note: TMissionCardAnnotationView; onAnswer: AnnotationControls["onAnswer"]; closedReason?: string | null }) {
   const [custom, setCustom] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -143,8 +206,8 @@ function Clarification({ note, onAnswer }: { note: TMissionCardAnnotationView; o
     <h4>{note.question}</h4>
     <blockquote>你的批注：{note.body}</blockquote>
     <div className={a.options}>{note.options.map((option) => <button type="button" key={option} disabled={busy || !note.canAnswer} onClick={() => void send(option)}>{option}</button>)}<button type="button" aria-expanded={custom} disabled={busy || !note.canAnswer} onClick={() => setCustom(!custom)}>自己输入</button></div>
-    {custom ? <div className={a.customAnswer}><textarea aria-label="补充你的意思" placeholder="写下你希望怎么改…" maxLength={4000} rows={2} autoFocus value={text} disabled={busy} onChange={(event) => setText(event.target.value)} /><button type="button" className={a.save} disabled={!text.trim() || busy} onClick={() => void send(text)}>确认并继续</button></div> : null}
-    {!note.canAnswer ? <small>等待批注者或拍板人明确后继续</small> : <small>{busy ? "正在提交…" : "确定后立即修改，原文和记录都会保留"}</small>}
+    {custom ? <div className={a.customAnswer}><textarea aria-label="补充你的意思" placeholder="写下你希望怎么改…" maxLength={4000} rows={2} autoFocus value={text} disabled={busy || !note.canAnswer} onChange={(event) => setText(event.target.value)} /><button type="button" className={a.save} disabled={!text.trim() || busy || !note.canAnswer} onClick={() => void send(text)}>确认并继续</button></div> : null}
+    {!note.canAnswer ? <small>{closedReason ?? "等待批注者或拍板人明确后继续"}</small> : <small>{busy ? "正在提交…" : "确定后立即修改，原文和记录都会保留"}</small>}
     {error ? <p className={a.error} role="alert">{error}</p> : null}
   </aside>;
 }
@@ -158,7 +221,7 @@ export function RevisionHistory({ revisions }: { revisions: TMissionCardRevision
   </details>)}</div>;
 }
 
-export function SelectionPopover({ selection, onSave, onQuote, onClose }: { selection: AnnotationSelection; onSave: AnnotationControls["onSave"]; onQuote: () => void; onClose: () => void }) {
+export function SelectionPopover({ selection, onSave, onQuote, onClose, canCreate = true, closedReason }: { selection: AnnotationSelection; onSave: AnnotationControls["onSave"]; onQuote: () => void; onClose: () => void; canCreate?: boolean; closedReason?: string | null }) {
   const [mode, setMode] = useState<"menu" | "write">("menu");
   const [body, setBody] = useState("");
   const [error, setError] = useState("");
@@ -193,7 +256,7 @@ export function SelectionPopover({ selection, onSave, onQuote, onClose }: { sele
     return () => { window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); viewport?.removeEventListener("resize", place); viewport?.removeEventListener("scroll", place); observer.disconnect(); document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", escape); };
   }, [mode, selection, onClose]);
   const send = async () => {
-    if (!body.trim() || busyRef.current) return;
+    if (!canCreate || !body.trim() || busyRef.current) return;
     busyRef.current = true; setBusy(true); setError("");
     if (request.current.body !== body.trim()) request.current = { body: body.trim(), id: crypto.randomUUID() };
     const failure = await onSave(selection, body.trim(), request.current.id);
@@ -201,16 +264,18 @@ export function SelectionPopover({ selection, onSave, onQuote, onClose }: { sele
     if (failure) setError(failure); else onClose();
   };
   const contents: ReactNode = mode === "menu" ? <>
-    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => setMode("write")}><MessageSquarePlus size={15} aria-hidden />直接批注</button>
+    <button type="button" disabled={!canCreate} title={closedReason ?? undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => setMode("write")}><MessageSquarePlus size={15} aria-hidden />直接批注</button>
     <span className={a.divider} aria-hidden />
     <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={onQuote}><MessageCircle size={15} aria-hidden />引用并对话</button>
+    {!canCreate && closedReason ? <small className={a.accessReason}>{closedReason}</small> : null}
   </> : <>
     <header><strong>直接批注</strong><button type="button" disabled={busy} aria-label="取消批注" onClick={onClose}><X size={15} aria-hidden /></button></header>
     <blockquote>{selection.quote}</blockquote>
-    <textarea aria-label="批注内容" autoFocus rows={3} maxLength={4000} placeholder="写下你的意见…" value={body} disabled={busy} onChange={(event) => { setBody(event.target.value); setError(""); }} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
+    <textarea aria-label="批注内容" autoFocus rows={3} maxLength={4000} placeholder="写下你的意见…" value={body} disabled={busy || !canCreate} onChange={(event) => { setBody(event.target.value); setError(""); }} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
     <small>同卡成员可见 · 批注原文始终保留</small>
+    {!canCreate && closedReason ? <p className={a.reason} role="status">{closedReason}</p> : null}
     {error ? <p className={a.error} role="alert">{error}</p> : null}
-    <footer><button type="button" className={a.cancel} disabled={busy} onClick={onClose}>取消</button><button type="button" className={a.save} disabled={busy || !body.trim()} onClick={() => void send()}>{busy ? "保存中…" : "保存批注"}</button></footer>
+    <footer><button type="button" className={a.cancel} disabled={busy} onClick={onClose}>取消</button><button type="button" className={a.save} disabled={busy || !canCreate || !body.trim()} onClick={() => void send()}>{busy ? "保存中…" : "保存批注"}</button></footer>
   </>;
   return createPortal(<TianshuPortalTheme><div ref={panel} className={mode === "menu" ? a.menu : a.composer} style={position} role={mode === "menu" ? "toolbar" : "dialog"} aria-label={mode === "menu" ? "选中文字操作" : "添加批注"}>{contents}</div></TianshuPortalTheme>, document.body);
 }

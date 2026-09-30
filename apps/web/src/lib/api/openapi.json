@@ -1001,6 +1001,190 @@
         }
       }
     },
+    "/api/mission-cards/{cardId}/owner-confirmation": {
+      "post": {
+        "operationId": "setMissionCardOwnerConfirmation",
+        "summary": "本人完成审核或取消确认；最后一人完成时自动汇总",
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetMissionCardOwnerConfirmationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "最新任务卡",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mission-cards/{cardId}/annotations/{annotationId}/resolve": {
+      "post": {
+        "operationId": "resolveMissionCardAnnotation",
+        "summary": "保留备注并明确终止待改意图，记录原因",
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "annotationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveMissionCardAnnotationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已保留的备注",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateMissionCardAnnotationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mission-cards/{cardId}/annotations/{annotationId}/answer": {
       "post": {
         "operationId": "answerMissionCardAnnotation",
@@ -10982,6 +11166,7 @@
           "ownerName",
           "roleLabel",
           "missionCount",
+          "ownerConfirmedAt",
           "line",
           "pending",
           "firstPendingFeedbackId",
@@ -11013,6 +11198,17 @@
           "missionCount": {
             "minimum": 0,
             "type": "integer"
+          },
+          "ownerConfirmedAt": {
+            "anyOf": [
+              {
+                "description": "应用时钟生成的 ISO 8601 时间",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "line": {
             "type": "string"
@@ -11320,7 +11516,8 @@
               "conflicts",
               "dependencies",
               "late",
-              "corrections"
+              "corrections",
+              "unreviewed"
             ],
             "properties": {
               "cards": {
@@ -11350,6 +11547,10 @@
               "corrections": {
                 "minimum": 0,
                 "type": "integer"
+              },
+              "unreviewed": {
+                "minimum": 0,
+                "type": "integer"
               }
             }
           },
@@ -11364,6 +11565,7 @@
                 "ownerName",
                 "roleLabel",
                 "missionCount",
+                "ownerConfirmedAt",
                 "line",
                 "pending",
                 "firstPendingFeedbackId",
@@ -11395,6 +11597,17 @@
                 "missionCount": {
                   "minimum": 0,
                   "type": "integer"
+                },
+                "ownerConfirmedAt": {
+                  "anyOf": [
+                    {
+                      "description": "应用时钟生成的 ISO 8601 时间",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "line": {
                   "type": "string"
@@ -11686,7 +11899,8 @@
                     "conflicts",
                     "dependencies",
                     "late",
-                    "corrections"
+                    "corrections",
+                    "unreviewed"
                   ],
                   "properties": {
                     "cards": {
@@ -11716,6 +11930,10 @@
                     "corrections": {
                       "minimum": 0,
                       "type": "integer"
+                    },
+                    "unreviewed": {
+                      "minimum": 0,
+                      "type": "integer"
                     }
                   }
                 },
@@ -11730,6 +11948,7 @@
                       "ownerName",
                       "roleLabel",
                       "missionCount",
+                      "ownerConfirmedAt",
                       "line",
                       "pending",
                       "firstPendingFeedbackId",
@@ -11761,6 +11980,17 @@
                       "missionCount": {
                         "minimum": 0,
                         "type": "integer"
+                      },
+                      "ownerConfirmedAt": {
+                        "anyOf": [
+                          {
+                            "description": "应用时钟生成的 ISO 8601 时间",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "line": {
                         "type": "string"
@@ -18583,6 +18813,7 @@
           "appliedVersion",
           "canAnswer",
           "canRetry",
+          "canResolve",
           "clarifications",
           "stale",
           "createdAt"
@@ -18781,6 +19012,9 @@
             "type": "boolean"
           },
           "canRetry": {
+            "type": "boolean"
+          },
+          "canResolve": {
             "type": "boolean"
           },
           "clarifications": {
@@ -19002,6 +19236,7 @@
                 "appliedVersion",
                 "canAnswer",
                 "canRetry",
+                "canResolve",
                 "clarifications",
                 "stale",
                 "createdAt"
@@ -19202,6 +19437,9 @@
                 "canRetry": {
                   "type": "boolean"
                 },
+                "canResolve": {
+                  "type": "boolean"
+                },
                 "clarifications": {
                   "type": "array",
                   "items": {
@@ -19397,6 +19635,7 @@
         "type": "object",
         "required": [
           "clientId",
+          "sourceRound",
           "missionId",
           "field",
           "sourceVersion",
@@ -19411,6 +19650,10 @@
           "clientId": {
             "format": "uuid",
             "type": "string"
+          },
+          "sourceRound": {
+            "minimum": 1,
+            "type": "integer"
           },
           "missionId": {
             "minLength": 1,
@@ -19540,6 +19783,7 @@
               "appliedVersion",
               "canAnswer",
               "canRetry",
+              "canResolve",
               "clarifications",
               "stale",
               "createdAt"
@@ -19740,6 +19984,9 @@
               "canRetry": {
                 "type": "boolean"
               },
+              "canResolve": {
+                "type": "boolean"
+              },
               "clarifications": {
                 "type": "array",
                 "items": {
@@ -19801,6 +20048,48 @@
         "additionalProperties": false,
         "type": "object",
         "properties": {}
+      },
+      "ResolveMissionCardAnnotationRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "maxLength": 1000,
+            "pattern": "\\S",
+            "type": "string"
+          }
+        }
+      },
+      "SetMissionCardOwnerConfirmationRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "confirmed",
+          "round",
+          "missionVersions"
+        ],
+        "properties": {
+          "confirmed": {
+            "type": "boolean"
+          },
+          "round": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "missionVersions": {
+            "type": "object",
+            "patternProperties": {
+              "^(.*)$": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            }
+          }
+        }
       },
       "MissionCardRevisionsResponse": {
         "additionalProperties": false,
@@ -19992,7 +20281,8 @@
           "sourceRevision",
           "sourceTitle",
           "version",
-          "changedFields"
+          "changedFields",
+          "selfEditedFields"
         ],
         "properties": {
           "missionId": {
@@ -20210,6 +20500,69 @@
                 }
               ]
             }
+          },
+          "selfEditedFields": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "const": "title",
+                  "type": "string"
+                },
+                {
+                  "const": "why",
+                  "type": "string"
+                },
+                {
+                  "const": "outcome",
+                  "type": "string"
+                },
+                {
+                  "const": "successEvidence",
+                  "type": "string"
+                },
+                {
+                  "const": "timeBoundary",
+                  "type": "string"
+                },
+                {
+                  "const": "tradeoffs",
+                  "type": "string"
+                },
+                {
+                  "const": "boundaries",
+                  "type": "string"
+                },
+                {
+                  "const": "keyPath",
+                  "type": "string"
+                },
+                {
+                  "const": "milestones",
+                  "type": "string"
+                },
+                {
+                  "const": "resources",
+                  "type": "string"
+                },
+                {
+                  "const": "dependencies",
+                  "type": "string"
+                },
+                {
+                  "const": "humanAgentSplit",
+                  "type": "string"
+                },
+                {
+                  "const": "risk",
+                  "type": "string"
+                },
+                {
+                  "const": "retrospect",
+                  "type": "string"
+                }
+              ]
+            }
           }
         }
       },
@@ -20219,6 +20572,8 @@
         "required": [
           "round",
           "draftFailure",
+          "selfReview",
+          "annotationAccess",
           "card",
           "feedback",
           "confirmation",
@@ -20465,7 +20820,8 @@
                   "conflicts",
                   "dependencies",
                   "late",
-                  "corrections"
+                  "corrections",
+                  "unreviewed"
                 ],
                 "properties": {
                   "cards": {
@@ -20495,6 +20851,10 @@
                   "corrections": {
                     "minimum": 0,
                     "type": "integer"
+                  },
+                  "unreviewed": {
+                    "minimum": 0,
+                    "type": "integer"
                   }
                 }
               },
@@ -20509,6 +20869,7 @@
                     "ownerName",
                     "roleLabel",
                     "missionCount",
+                    "ownerConfirmedAt",
                     "line",
                     "pending",
                     "firstPendingFeedbackId",
@@ -20540,6 +20901,17 @@
                     "missionCount": {
                       "minimum": 0,
                       "type": "integer"
+                    },
+                    "ownerConfirmedAt": {
+                      "anyOf": [
+                        {
+                          "description": "应用时钟生成的 ISO 8601 时间",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "line": {
                       "type": "string"
@@ -20593,6 +20965,69 @@
               }
             ]
           },
+          "selfReview": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "canConfirm",
+              "canCancel",
+              "canEdit",
+              "blockedReason",
+              "pendingAnnotations"
+            ],
+            "properties": {
+              "canConfirm": {
+                "type": "boolean"
+              },
+              "canCancel": {
+                "type": "boolean"
+              },
+              "canEdit": {
+                "type": "boolean"
+              },
+              "blockedReason": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pendingAnnotations": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            }
+          },
+          "annotationAccess": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "canCreate",
+              "canApply",
+              "closedReason"
+            ],
+            "properties": {
+              "canCreate": {
+                "type": "boolean"
+              },
+              "canApply": {
+                "type": "boolean"
+              },
+              "closedReason": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
           "card": {
             "additionalProperties": false,
             "type": "object",
@@ -20603,6 +21038,7 @@
               "roleLabel",
               "members",
               "status",
+              "ownerConfirmedAt",
               "shown",
               "missions"
             ],
@@ -20662,6 +21098,17 @@
               "status": {
                 "type": "string"
               },
+              "ownerConfirmedAt": {
+                "anyOf": [
+                  {
+                    "description": "应用时钟生成的 ISO 8601 时间",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "shown": {
                 "anyOf": [
                   {
@@ -20715,7 +21162,8 @@
                     "sourceRevision",
                     "sourceTitle",
                     "version",
-                    "changedFields"
+                    "changedFields",
+                    "selfEditedFields"
                   ],
                   "properties": {
                     "missionId": {
@@ -20872,6 +21320,69 @@
                       "type": "integer"
                     },
                     "changedFields": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "const": "title",
+                            "type": "string"
+                          },
+                          {
+                            "const": "why",
+                            "type": "string"
+                          },
+                          {
+                            "const": "outcome",
+                            "type": "string"
+                          },
+                          {
+                            "const": "successEvidence",
+                            "type": "string"
+                          },
+                          {
+                            "const": "timeBoundary",
+                            "type": "string"
+                          },
+                          {
+                            "const": "tradeoffs",
+                            "type": "string"
+                          },
+                          {
+                            "const": "boundaries",
+                            "type": "string"
+                          },
+                          {
+                            "const": "keyPath",
+                            "type": "string"
+                          },
+                          {
+                            "const": "milestones",
+                            "type": "string"
+                          },
+                          {
+                            "const": "resources",
+                            "type": "string"
+                          },
+                          {
+                            "const": "dependencies",
+                            "type": "string"
+                          },
+                          {
+                            "const": "humanAgentSplit",
+                            "type": "string"
+                          },
+                          {
+                            "const": "risk",
+                            "type": "string"
+                          },
+                          {
+                            "const": "retrospect",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "selfEditedFields": {
                       "type": "array",
                       "items": {
                         "anyOf": [
@@ -34390,7 +34901,8 @@
                       "conflicts",
                       "dependencies",
                       "late",
-                      "corrections"
+                      "corrections",
+                      "unreviewed"
                     ],
                     "properties": {
                       "cards": {
@@ -34420,6 +34932,10 @@
                       "corrections": {
                         "minimum": 0,
                         "type": "integer"
+                      },
+                      "unreviewed": {
+                        "minimum": 0,
+                        "type": "integer"
                       }
                     }
                   },
@@ -34434,6 +34950,7 @@
                         "ownerName",
                         "roleLabel",
                         "missionCount",
+                        "ownerConfirmedAt",
                         "line",
                         "pending",
                         "firstPendingFeedbackId",
@@ -34465,6 +34982,17 @@
                         "missionCount": {
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "ownerConfirmedAt": {
+                          "anyOf": [
+                            {
+                              "description": "应用时钟生成的 ISO 8601 时间",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "line": {
                           "type": "string"

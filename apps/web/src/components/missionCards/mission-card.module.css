@@ -10,17 +10,17 @@
 .peopleText { display: grid; gap: 1px; }
 .peopleText strong { font-size: 13px; font-weight: 600; }
 .peopleText small { color: var(--ink-muted); font-size: 11px; }
-.document { min-width: 0; max-width: 840px; font-size: 15px; line-height: 1.85; color: var(--ink-muted); }
+.document { min-width: 0; max-width: 840px; font-size: 15px; line-height: 1.75; color: var(--ink-muted); }
 .version { display: grid; gap: 8px; padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid var(--hairline); font-size: 14px; line-height: 1.75; }
 .versionMain, .source { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .versionMain strong { color: var(--ink); font-weight: 600; }
 .source { color: var(--ink-muted); }
 .source a { color: var(--brand-deep); text-decoration: underline; text-underline-offset: 4px; }
-.tasks { display: grid; gap: 48px; }
+.tasks { display: grid; gap: 32px; }
 .task h2, .loose h2 { margin: 0; color: var(--ink); font-size: 21px; line-height: 1.5; font-weight: 600; }
-.taskMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 8px 0 20px; color: var(--ink-faint); font-size: 13px; overflow-wrap: anywhere; }
+.taskMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 8px 0 16px; color: var(--ink-faint); font-size: 13px; overflow-wrap: anywhere; }
 .placeholder { padding: 1px 8px; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-pill-radius); color: var(--ink-muted); }
-.fields { margin: 0; display: grid; gap: 24px; }
+.fields { margin: 0; display: grid; gap: 20px; }
 .field { position: relative; display: block; min-width: 0; padding: 0; }
 .field h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; color: var(--ink); font-size: 14px; line-height: 1.6; font-weight: 600; }
 .field dd { min-width: 0; margin: 0; }
@@ -105,6 +105,16 @@
 .taskTitle p { color: var(--ink); line-height: 1.5; }
 .task + .task { padding-top: 32px; border-top: 1px solid var(--hairline); }
 .headerActions { display: flex; align-items: center; gap: 10px; }
+.screen :global(.ts-detail-header) { grid-template-columns: auto auto auto minmax(0, max-content) auto minmax(0, 1fr) auto auto auto; grid-template-areas: 'back lead eyebrow title people spacer tools actions end'; }
+.screen :global(.ts-detail-header [data-header-tools]) { display: contents; }
+.screen :global([data-mission-people]) { grid-area: people; min-width: 0; margin-left: 5px; }
+.screen :global([data-mission-view]) { grid-area: tools; margin-right: 8px; min-width: 0; }
+.headerPrimary.headerPrimary { min-height: 30px; height: 30px; min-width: 0; padding: 0 11px; border-radius: 8px; font-size: 12px; line-height: 20px; white-space: nowrap; }
+.workflowPanel { display: grid; gap: 12px; min-width: 0; }
+.workflowPopover { box-sizing: border-box; width: min(360px, calc(100vw - 32px)); padding: 16px; max-height: calc(100dvh - 80px); overflow-y: auto; }
+.workflowPanel .proposal { margin-top: 0; }
+.workflowPanel .proposal textarea { min-height: 80px; }
+.confirmationNote { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 .help.help { min-width: 32px; width: 32px; height: 32px; min-height: 32px; padding: 0; border-radius: 50%; color: var(--ink-faint); }
 .help.help:hover { color: var(--ink-muted); background: transparent; }
 .goals { display: grid; gap: 16px; margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--hairline); }
@@ -135,8 +145,8 @@
 @media (max-width:759px) { .goals { gap: 14px; margin-bottom: 22px; padding-bottom: 22px; }.goals h2 { font-size: 13px; }.notesToggle { font-size: 13px; }.field { padding-block: 0; }.fieldActions { margin-top: 2px; }.workflowRow { flex-wrap: wrap; font-size: 13px; }.taskTitle { font-size: 20px; }.headerActions { gap: 3px; } }
 /* 手机共同页头的返回键焦点环会向标题外扩；只为个人卡标题留出阅读间距。 */
 @media (max-width: 959px) {
-  /* 对话浮层开关固定在阅读页右上方，帮助入口在它左侧保留独立热区。 */
-  .screen :global(.ts-detail-header) { padding-inline-end: 60px; }
+  /* 手机的对话入口在底部输入条，页头右侧只留正常边距。 */
+  .screen :global(.ts-detail-header) { padding-inline-end: 12px; }
   .screen :global(.ts-detail-header > h1) { box-sizing: border-box; padding-inline-start: 10px; text-wrap: balance; }
   .titleWrap:has(> .fieldActions) .taskTitle { padding-inline-end: 64px; }
   .taskTitle p { text-wrap: balance; }
@@ -145,18 +155,21 @@
 @media (max-width: 400px) { .headerActions time > [aria-hidden] { display: none; } }
 /* 按阅读面实际宽度适配，手机和三折叠双屏的窄阅读栏都能放下页头。 */
 @container mission-card (max-width: 599px) {
-  .screen :global(.ts-detail) { --detail-header-height: 64px; }
-  .screen :global(.ts-detail-header) { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-rows: auto 22px; grid-template-areas: 'back title tools help' 'back clock clock help'; align-content: center; }
+  .screen :global(.ts-detail) { --detail-header-height: 48px; }
+  .screen :global(.ts-detail-header) { grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-rows: 48px; grid-template-areas: 'back title people tools actions'; padding-inline-start: 4px; }
   .screen :global(.ts-detail-header > .ts-eyebrow) { display: none; }
-  .screen :global(.ts-detail-header > h1) { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 14.5px; line-height: 18px; }
-  .headerActions { display: contents; }
-  .headerActions time { grid-area: clock; justify-self: end; align-self: start; margin: 0 6px 0 0; }
-  .headerActions time > span { line-height: 20px; }
-  .headerActions .help { grid-area: help; margin-left: 4px; }
+  .screen :global(.ts-detail-header > h1) { white-space: nowrap; display: block; font-size: 14px; line-height: 20px; padding-inline-start: 0; overflow: hidden; text-overflow: ellipsis; }
+  .screen :global([data-mission-people]) { margin-left: 0; }
+  .screen :global([data-mission-view]) { margin-right: 2px; }
+  .screen :global([data-mission-view] [data-material-menu]) { width: 30px; min-width: 30px; height: 32px; padding: 0; gap: 0; justify-content: center; }
+  .screen :global([data-mission-view] [data-material-menu] > span), .screen :global([data-mission-view] [data-material-menu] > svg:last-child) { display: none; }
+  .headerActions { gap: 2px; }
+  .headerActions time { display: none; }
+  .headerActions .help { min-width: 28px; width: 28px; }
+  .headerActions .headerPrimary { font-size: 13px; padding-inline: 8px; }
 }
 @container mission-card (max-width: 360px) {
-  /* 菜单名称与箭头已足够识别；省下图标的位置，让窄栏标题保持完整。 */
-  .screen :global([data-header-tools] > [data-material-menu] > svg:first-child) { display: none; }
+  .screen :global(.ts-detail-header > .ts-row > [data-close-view]) { margin-right: 2px; }
 }
 @media (prefers-reduced-motion: reduce) { .fieldActions, .content { transition: none; } }
 @media (prefers-reduced-transparency: reduce) { .dialog { background: var(--morning-start); backdrop-filter: none; } }

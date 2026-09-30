@@ -20,15 +20,15 @@ export async function readMemberBattlefield(q: Query, people: MemoryPerson[], se
   if (round) round.cards = round.cards.filter((card) => round.approver || card.mine);
   const missionCards: TMemberBattlefieldResponse["missionCards"] = [];
   if (row && round) {
-    const roster = await q(`SELECT c.id,c.owner_id,c.role_label,
+    const roster = await q(`SELECT c.id,c.owner_id,c.role_label,c.owner_confirmed_at,
       (SELECT count(*)::int FROM missions m WHERE m.personal_mission_card_id=c.id) AS mission_count,
       (SELECT count(*)::int FROM mission_card_feedback f WHERE f.card_id=c.id) AS feedback_count
       FROM personal_mission_cards c WHERE c.round_id=$1 ORDER BY c.sort_order,c.owner_id,c.id`, [row.id]);
-    for (const card of roster.rows as { id: string; owner_id: string; role_label: string | null; mission_count: number; feedback_count: number }[]) {
+    for (const card of roster.rows as { id: string; owner_id: string; role_label: string | null; owner_confirmed_at: Date | null; mission_count: number; feedback_count: number }[]) {
       const canOpen = round.approver || card.owner_id === person.personId;
       missionCards.push({ cardId: card.id, ownerId: card.owner_id, ownerName: names.get(card.owner_id) ?? card.owner_id,
         roleLabel: card.role_label, missionCount: card.mission_count, feedbackCount: card.feedback_count,
-        status: round.cards.find((item) => item.cardId === card.id)?.line ?? missionCardLine(round.phase, card.feedback_count, 0, 0, false),
+        status: round.cards.find((item) => item.cardId === card.id)?.line ?? missionCardLine(round.phase, card.owner_confirmed_at, 0, 0, false),
         canOpen, href: canOpen ? `/me/mission-cards/${card.id}` : null });
     }
   }
