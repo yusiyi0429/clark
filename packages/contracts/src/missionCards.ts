@@ -4,9 +4,10 @@ import { ActionDescriptor } from "./cards.js";
 import { MissionCardPayload } from "./missions.js";
 import { ThreadMember } from "./threads.js";
 
-/** 个人任务允许建议的 12 个字段；唯一责任人由任务卡归属决定。 */
+/** 个人任务允许建议的字段；唯一责任人由任务卡归属决定。 */
 export const MissionCardField = Type.Union([
   Type.Literal("title"), Type.Literal("why"), Type.Literal("outcome"), Type.Literal("successEvidence"),
+  Type.Literal("timeBoundary"), Type.Literal("tradeoffs"),
   Type.Literal("boundaries"), Type.Literal("keyPath"), Type.Literal("milestones"), Type.Literal("resources"),
   Type.Literal("dependencies"), Type.Literal("humanAgentSplit"), Type.Literal("risk"), Type.Literal("retrospect"),
 ]);
@@ -35,7 +36,7 @@ export const MissionCardRow = Type.Object({
   pendingCorrections: Count,
   firstPendingCorrectionId: Type.Union([Type.String(), Type.Null()]),
   mine: Type.Boolean(),
-  /** 这张卡是占位：Co-Agent 起草失败时沿用上个月的卡，或整轮来自占位文件。 */
+  /** 显式人工导入的历史占位来源；正式自动起草不会生成占位内容。 */
   placeholder: Type.Boolean(),
 }, { additionalProperties: false });
 
@@ -58,6 +59,10 @@ export const MissionRoundSummary = Type.Object({
   placeholder: Type.Boolean(),
   /** 草稿来源：agent 为 Co-Agent 起草，placeholder 为占位文件；还没起草为 null。 */
   draftOrigin: Type.Union([Type.Literal("agent"), Type.Literal("placeholder"), Type.Null()]),
+  /** 仅投影当前人看得见的卡的起草错误；不以旧卡或文件代替失败。 */
+  draftFailures: Type.Array(Type.Object({ ownerId: Type.String(), ownerName: Type.String(), message: Type.String() }, { additionalProperties: false })),
+  /** 拍板人可重试所有失败卡；已成功的任务不会重新起草。 */
+  retryDraftAction: Type.Union([ActionDescriptor, Type.Null()]),
   goals: Type.Union([Type.Object({
     sixMonthOutcome: Type.String(),
     monthOutcome: Type.String(),
@@ -79,7 +84,7 @@ export const MissionRoundDraftPayload = Type.Object({
   period: MonthlyPlanPeriod,
   battlefieldId: Type.String(),
   battlefieldName: Type.String(),
-  /** 整理草稿时是否只能用占位文件（Co-Agent 起草不可用）。 */
+  /** 历史兼容字段；正式起草入口始终为 false。 */
   placeholder: Type.Boolean(),
   todo: Type.String(),
   serverNow: DateTime,
@@ -135,6 +140,7 @@ export const MissionCardCorrectionAccess = Type.Object({
 }, { additionalProperties: false });
 export const PersonalMissionCardPayload = Type.Object({
   round: MissionRoundSummary,
+  draftFailure: NullableText,
   card: Type.Object({
     cardId: Type.String(), ownerId: Type.String(), ownerName: Type.String(), roleLabel: NullableText,
     members: Type.Array(ThreadMember), status: Type.String(),

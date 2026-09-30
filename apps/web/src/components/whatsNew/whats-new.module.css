@@ -1,0 +1,167 @@
+/* 更新说明卡片：左边一句话清单，右边北斗夜空。材质沿用应用内弹层（confirm-dialog），颜色取 Co-Agent 胶囊的三色光。 */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #1c20303d;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.overlay[data-entering] { animation: veil 320ms ease both; }
+.overlay[data-exiting] { animation: veil 200ms ease reverse both; }
+.modal { outline: none; }
+.modal[data-entering] { animation: arrive 520ms cubic-bezier(.22, 1, .36, 1) both; }
+.modal[data-exiting] { animation: arrive 200ms ease-in reverse both; }
+
+.card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 47fr 53fr;
+  width: min(840px, calc(100vw - 48px));
+  height: min(460px, calc(100dvh - 48px));
+  border: 0;
+  border-radius: 28px;
+  background: #fbfcfef7;
+  -webkit-backdrop-filter: blur(24px) saturate(110%);
+  backdrop-filter: blur(24px) saturate(110%);
+  box-shadow: 0 40px 100px -20px #141a3a47, 0 6px 20px #20232b14, inset 0 1px #fff;
+  color: var(--ink);
+  outline: none;
+  overflow: hidden;
+}
+.copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 44px 36px 36px 40px;
+}
+.label { margin: 0; color: var(--onboarding-blue); font-size: 13px; font-weight: 600; line-height: 1.5; }
+.title { margin: 6px 0 0; font-size: 28px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; }
+.items { margin: 26px 0 0; padding: 0; list-style: none; }
+.items li {
+  position: relative;
+  padding: 11px 0 11px 20px;
+  border-top: var(--hairline-w, 1px) solid var(--hairline);
+  color: #34363d;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.items li:first-child { border-top: 0; }
+.items li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: calc(11px + .8em - 3px);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4ee6ff, #9b7dff 55%, #ff86d2);
+}
+.primary {
+  align-self: flex-start;
+  min-width: 132px;
+  min-height: 48px;
+  margin-top: auto;
+  padding: 10px 28px;
+  border: 0;
+  border-radius: var(--onboarding-pill-radius, 999px);
+  background: var(--onboarding-blue);
+  color: #fff;
+  font: 600 16px/1.5 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--onboarding-feedback, 160ms), transform var(--onboarding-feedback, 160ms);
+}
+.primary:hover { background: var(--onboarding-pressed); }
+.primary:active { transform: scale(.985); }
+.primary:focus-visible, .close:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
+
+.close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #ffffff2e;
+  border-radius: 50%;
+  background: #ffffff1f;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  cursor: pointer;
+}
+.close:hover { background: #ffffff38; }
+
+/* —— 夜空：贴满右半边，无边框；极光与低云各自一层，只用 transform/opacity 缓慢漂移 —— */
+.art {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(80% 38% at 55% 78%, rgb(78 230 255 / 16%), transparent 70%),
+    radial-gradient(60% 26% at 30% 86%, rgb(255 134 210 / 12%), transparent 70%),
+    linear-gradient(180deg, #02040f 0%, #050b26 38%, #0a1740 72%, #101d46 100%);
+}
+.layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.auroraFar { opacity: .8; mix-blend-mode: screen; animation: swayFar 26s ease-in-out infinite alternate; }
+.auroraNear { mix-blend-mode: screen; animation: swayNear 19s -5s ease-in-out infinite alternate; }
+.clouds { animation: cloudDrift 60s ease-in-out infinite alternate; }
+.cloudLit { opacity: .8; }
+.cloudBody { opacity: .96; }
+.cloudGlow { mix-blend-mode: screen; }
+.twinkle { animation: twinkle 5.5s ease-in-out infinite; }
+.grain {
+  position: absolute;
+  inset: 0;
+  opacity: .16;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@keyframes veil { from { opacity: 0; } to { opacity: 1; } }
+@keyframes arrive { from { opacity: 0; transform: translateY(18px) scale(.975); } to { opacity: 1; transform: none; } }
+@keyframes twinkle { 50% { opacity: .15; } }
+@keyframes swayFar { to { transform: translate3d(-3%, 1.5%, 0) scaleY(1.05); opacity: .6; } }
+@keyframes swayNear { to { transform: translate3d(3.5%, -1%, 0) scaleY(1.08); } }
+@keyframes cloudDrift { to { transform: translate3d(-4%, 0, 0); } }
+
+/* 手机：从底部升起，画在上、字在下，按钮在拇指区。 */
+@media (max-width: 759px) {
+  .overlay { place-items: end center; padding: 0; }
+  .modal[data-entering] { animation-name: rise; }
+  .modal[data-exiting] { animation-name: rise; }
+  .card {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(180px, 34dvh) auto;
+    width: 100vw;
+    height: auto;
+    max-height: calc(100dvh - 24px);
+    border-radius: 26px 26px 0 0;
+  }
+  .art { order: -1; }
+  .copy { padding: 22px 24px calc(20px + env(safe-area-inset-bottom)); overflow-y: auto; }
+  .title { font-size: 24px; }
+  .items { margin-top: 16px; }
+  .items li { padding-top: 9px; padding-bottom: 9px; }
+  .items li::before { top: calc(9px + .8em - 3px); }
+  .primary { align-self: stretch; margin-top: 18px; min-height: 52px; }
+  .close { top: 16px; right: 16px; }
+}
+@keyframes rise { from { transform: translateY(100%); } to { transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay[data-entering], .overlay[data-exiting], .modal[data-entering], .modal[data-exiting],
+  .auroraFar, .auroraNear, .clouds, .twinkle { animation: none; }
+  .primary:active { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .overlay, .close { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .card { background: #fbfcfe; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (forced-colors: active) { .card { border: 1px solid CanvasText; } .primary { background: Highlight; color: HighlightText; } }

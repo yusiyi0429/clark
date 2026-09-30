@@ -1,0 +1,101 @@
+/* 任务卡演示只扩展示意内容；外层晨光舞台、翻页与动效沿用执行事项演示。 */
+.document { width: min(580px, 100%); padding: 22px 24px; }
+.document .eyebrow { margin: 0 0 9px; color: #7a7f8c; font-size: 11px; }
+.document h4 { margin-bottom: 13px; font-size: 17px; }
+.document p { margin: 0 0 12px; font-size: 13px; line-height: 1.8; }
+.document ul { margin: 16px 0 0; padding-left: 19px; color: #6a6f7c; font-size: 12px; line-height: 1.9; }
+.eyebrow { color: #7a7f8c; font-size: 11px; }
+.goalPage { width: min(610px, 100%); padding: 20px 24px; }
+.pageHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pageHeader > p { min-width: 0; }
+.viewChooser { position: relative; flex: none; }
+.viewButton { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 4px 0 4px 6px; color: #6a6f7c; font-size: 11px; white-space: nowrap; }
+.viewButton > svg { color: #969daa; }
+.viewMenu { position: absolute; z-index: 3; top: calc(100% + 6px); right: -4px; width: 164px; padding: 5px; border: 1px solid #e2e6ee; border-radius: 11px; background: #fff; box-shadow: 0 14px 38px -16px #1d2b5a55; }
+.viewChoice { display: flex; align-items: center; gap: 7px; padding: 7px 8px; color: #586477; font-size: 11px; white-space: nowrap; }
+.viewChoice > svg, .viewChoice > [aria-hidden] { flex: none; width: 12px; height: 12px; }
+.viewChoice[data-selected="true"] { color: #4a76c8; }
+.viewChoice[data-disabled="true"] { color: #a0a5b1; }
+.viewChoice small { margin-left: auto; padding: 1px 5px; border: 1px solid #e7eaf0; border-radius: 5px; color: #9ba1ad; font-size: 9px; }
+.goals { display: flex; flex-direction: column; gap: 12px; margin: 16px 0 18px; }
+.goals > div { display: grid; grid-template-columns: 62px 1fr; gap: 13px; align-items: baseline; }
+.goals span { color: #7a7f8c; font-size: 11px; }
+.goals p { margin: 0; color: #454b59; font-size: 12px; line-height: 1.6; }
+.pageBody { margin-top: 16px; padding-top: 16px; border-top: 1px solid #eef0f5; }
+.pageBody p { margin: 6px 0 0; font-size: 12px; line-height: 1.75; }
+.pageBody .soft { margin-top: 13px; color: #8a8f9b; }
+.selectedLine { position: relative; }
+.selectionTools { position: absolute; z-index: 2; left: 10px; bottom: calc(100% + 8px); display: inline-flex; align-items: center; gap: 4px; padding: 5px; border: 1px solid #e2e6ee; border-radius: 999px; background: #fff; box-shadow: 0 12px 32px -12px #1d2b5a3d; color: #6a6f7c; font-size: 11px; white-space: nowrap; }
+.selectionTools > span { position: relative; display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 999px; }
+.selectionTools > i { width: 1px; height: 15px; background: #edf0f5; }
+.selectionTools .chosen { background: #f0f5ff; color: var(--onboarding-blue); }
+.annotated { position: relative; text-decoration-line: underline; text-decoration-style: dashed; text-decoration-color: #8da6db; text-decoration-thickness: 1px; text-underline-offset: 5px; }
+.annotationBubble { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 4px; border: 1px solid #dbe6fc; border-radius: 50%; background: #f1f6ff; color: #5580ce; text-decoration: none; vertical-align: middle; }
+.inlineEditor { position: absolute; z-index: 3; top: 130px; left: 44px; width: min(320px, calc(100% - 64px)); padding: 12px 14px; border: 1px solid #e1e6ef; border-radius: 14px; background: #fff; box-shadow: 0 18px 50px -18px #1d2b5a55; }
+.inlineEditor .editorLabel { display: flex; justify-content: space-between; gap: 10px; margin: 0 0 9px; color: #6a6f7c; font-size: 11px; line-height: 1.5; }
+.editorLabel span { color: #a1a6b1; font-size: 10px; }
+.editorText { min-height: 50px; font-size: 12px; line-height: 1.75; }
+.editorActions { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 7px; font-size: 11px; color: #8a8f9b; }
+.editorActions > span:last-child { position: relative; padding: 5px 10px; border-radius: 999px; background: var(--onboarding-blue); color: #fff; }
+.document .savedNote { display: flex; align-items: center; gap: 6px; margin: 15px 0 0; color: #6b809f; font-size: 11px; }
+.clarificationStage { position: relative; display: grid; align-items: center; min-width: 0; min-height: 240px; }
+.questionPanel, .revisionReceipt { grid-area: 1 / 1; }
+.questionPanel { padding: 16px; }
+.questionPanel h5, .revisionReceipt h5 { margin: 0 0 13px; color: #2a2f3c; font-size: 13px; line-height: 1.65; font-weight: 600; }
+.questionOption { position: relative; display: block; margin-top: 7px; padding: 7px 9px; border: 1px solid #e4e8ef; border-radius: 8px; color: #6a6f7c; font-size: 11px; }
+.questionOption[data-selected="true"] { border-color: #b7cdf5; background: #f2f6ff; color: #4573c8; }
+.ownAnswer { display: block; margin-top: 11px; padding: 7px 9px; border: 1px dashed #dbe1ec; border-radius: 8px; color: #9ba1ad; font-size: 11px; }
+.revisionReceipt { padding: 20px 18px; text-align: center; }
+.receiptCheck { display: inline-grid; place-items: center; width: 34px; height: 34px; margin-bottom: 10px; border-radius: 50%; background: #eff5ff; color: #5580ce; }
+.revisionReceipt h5 { margin-bottom: 6px; }
+.revisionReceipt p { margin: 0; color: #7a7f8c; font-size: 11px; line-height: 1.8; }
+.document .revisionNote { margin-top: 16px; color: #8291a8; font-size: 10px; line-height: 1.6; }
+.privateChat { min-width: 0; }
+.privateLabel { float: right; margin-left: 7px; color: #9ba1ad; font-size: 10px; }
+.quotePreview { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; padding: 8px 10px; border-left: 2px solid #a7bce9; border-radius: 2px 7px 7px 2px; background: #f4f7fd; color: #6b7b98; font-size: 11px; }
+
+@media (max-width: 759px) {
+  .document { padding: 16px 18px; }
+  .document h4 { font-size: 15px; margin-bottom: 10px; }
+  .document p { font-size: 12px; margin-bottom: 9px; }
+  .document ul { margin-top: 10px; font-size: 11px; }
+  .goalPage { padding: 17px 18px; }
+  .goals { gap: 10px; margin: 13px 0 15px; }
+  .goals > div { grid-template-columns: 55px 1fr; gap: 9px; }
+  .pageHeader { gap: 8px; }
+  .viewButton { gap: 4px; font-size: 10px; }
+  .viewMenu { width: 152px; }
+  .pageBody { margin-top: 13px; padding-top: 13px; }
+  .pageBody .soft { margin-top: 10px; }
+  .selectionTools { left: 0; padding: 4px; gap: 2px; }
+  .selectionTools > span { padding: 4px 6px; font-size: 10px; }
+  .inlineEditor { top: 105px; left: 20px; width: calc(100% - 40px); }
+  .clarificationStage { min-height: 190px; }
+  .questionPanel { padding: 12px 15px; }
+  .questionPanel h5 { margin-bottom: 8px; font-size: 12px; }
+  .questionOption { display: inline-block; margin-right: 6px; padding: 6px 8px; font-size: 10px; }
+  .ownAnswer { margin-top: 8px; padding: 5px 9px; font-size: 10px; }
+  .revisionReceipt { padding: 13px 16px; }
+  .revisionReceipt h5 { font-size: 12px; }
+  .receiptCheck { width: 28px; height: 28px; margin-bottom: 6px; }
+  .privateLabel { font-size: 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 静止终态只保留已保存的批注；输入中的浮层不遮住文档。 */
+  .inlineEditor, .questionPanel { display: none; }
+}
+
+/* 矮屏保留选字、批注和澄清的主线，收起示意文档中的辅助说明。 */
+@media (max-width: 759px) and (max-height: 740px) {
+  .document { padding: 12px 15px; }
+  .document h4 { margin-bottom: 8px; font-size: 14px; }
+  .document p { margin-bottom: 7px; font-size: 11px; line-height: 1.65; }
+  .document .documentIntro, .document ul { display: none; }
+  .document .revisionNote { margin-top: 10px; }
+  .clarificationStage { min-height: 165px; }
+  .questionPanel h5 { margin-bottom: 5px; }
+  .questionOption { margin-top: 4px; padding: 4px 7px; }
+  .ownAnswer { margin-top: 6px; }
+  .inlineEditor { top: 72px; }
+}

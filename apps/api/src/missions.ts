@@ -21,6 +21,8 @@ export type MissionRow = {
   capability_id: string;
   battlefield_ids: string[];
   outcome: string;
+  time_boundary: string;
+  tradeoffs: string;
   why: string;
   success_evidence: string[];
   milestones: string[];
@@ -50,7 +52,7 @@ export type MissionRow = {
  * ponytail: 单条 SQL 里做两个小 join，21 条 Mission 的规模不需要额外缓存。
  */
 const MISSION_COLUMNS = `m.id, m.version, m.code, m.period, m.title, m.owner_id, m.capability_id,
-  m.battlefield_ids, m.outcome, m.why, m.success_evidence, m.milestones, m.dependencies, m.risk, m.boundaries,
+  m.battlefield_ids, m.outcome, m.time_boundary, m.tradeoffs, m.why, m.success_evidence, m.milestones, m.dependencies, m.risk, m.boundaries,
   m.key_path, m.resources, m.human_agent_split, m.retrospect, m.placeholder, m.personal_mission_card_id,
   pc.round_id AS personal_card_round_id, mr.status AS personal_card_status,
   m.source_ref, m.source_document_id, m.source_revision, m.source_title, m.action_fingerprints,
@@ -93,6 +95,8 @@ export function projectMissionCard(row: MissionRow, secret: string, ownerNames: 
     battlefieldIds: row.battlefield_ids ?? [],
     battlefieldNames: row.battlefield_names ?? [],
     outcome: row.outcome,
+    timeBoundary: row.time_boundary ?? "",
+    tradeoffs: row.tradeoffs ?? "",
     why: row.why,
     successEvidence: row.success_evidence ?? [],
     milestones: row.milestones ?? [],
@@ -155,8 +159,8 @@ export async function registerMission(q: Query, input: TCreateMissionRequest): P
     `INSERT INTO missions (id, version, code, period, title, owner_id, capability_id, battlefield_ids, outcome, why,
                            success_evidence, milestones, dependencies, risk, boundaries,
                            source_ref, source_document_id, source_revision, source_title,
-                           key_path, resources, human_agent_split, retrospect)
-     VALUES ($1, 1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+                           key_path, resources, human_agent_split, retrospect, time_boundary, tradeoffs)
+     VALUES ($1, 1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
      ON CONFLICT (id) DO NOTHING
      RETURNING id`,
     [
@@ -182,6 +186,8 @@ export async function registerMission(q: Query, input: TCreateMissionRequest): P
       input.resources ?? "",
       input.humanAgentSplit ?? "",
       input.retrospect ?? "",
+      input.timeBoundary ?? "",
+      input.tradeoffs ?? "",
     ],
   );
   if (result.rowCount !== 1) return { ok: false, status: 409, code: "MISSION_EXISTS", message: `Mission ${id} 已登记` };
@@ -268,6 +274,7 @@ export async function executeEditMission(
               risk = COALESCE($13, risk), boundaries = COALESCE($14, boundaries),
               key_path = COALESCE($16, key_path), resources = COALESCE($17, resources),
               human_agent_split = COALESCE($18, human_agent_split), retrospect = COALESCE($19, retrospect),
+              time_boundary = COALESCE($20, time_boundary), tradeoffs = COALESCE($21, tradeoffs),
               version = version + 1, action_fingerprints = $15::jsonb, updated_at = now()
         WHERE id = $1
         RETURNING id`,
@@ -291,6 +298,8 @@ export async function executeEditMission(
         input.resources ?? null,
         input.humanAgentSplit ?? null,
         input.retrospect ?? null,
+        input.timeBoundary ?? null,
+        input.tradeoffs ?? null,
       ],
     );
     if (updated.rowCount !== 1) {

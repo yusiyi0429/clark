@@ -340,7 +340,7 @@ describe("跨月工作台与任务卡起草", () => {
       await f.t.sql(`INSERT INTO monthly_plans(id,version,period,status,company_outcome,battlefields,todos,negotiation,generation,confirmed_at)
         VALUES($1,1,'2026-10','confirmed','十月公司 PO','[{"battlefieldId":"growth","outcome":"十月战场 PO"}]','[]','{}','{}',$2)`, [plan, START]);
       const seen: MissionCardDraftInput[] = [];
-      const candidate = { missions: [1, 2].map((n) => ({ capabilityCode: "01", title: `任务${n}`, why: "原因", outcome: "结果", successEvidence: ["证据"], boundaries: "边界", keyPath: "路径",
+      const candidate = { missions: [1, 2].map((n) => ({ capabilityCode: "01", title: `任务${n}`, why: "原因", outcome: "结果", timeBoundary: "10月完成验收", tradeoffs: "优先当前结果", successEvidence: ["证据"], boundaries: "边界", keyPath: "路径",
         milestones: ["10/12 验收"], resources: "资源", dependencies: "依赖", humanAgentSplit: "分工", risk: "风险", retrospect: "待复盘", basis: "上月独立 Mission 和个人复盘" })) };
       const result = await executeDraftMissionRound(f.t.pool, loadCompanyMemory(testEnv).searchPeople(undefined), testEnv.sessionSecret,
         { personId: TEST_CEO.personId, role: "ceo" }, { actionType: "mission-round.draft", objectType: "mission-round-slot", objectId: "growth:2026-10", objectVersion: 1 },

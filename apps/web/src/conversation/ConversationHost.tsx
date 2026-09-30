@@ -153,7 +153,10 @@ function RailConversation({
 }) {
   const column = useColumnMode();
   const [composerHeight, setComposerHeight] = useState(90);
-  const [channel, setChannel] = useState("agent");
+  const [selectedChannel, setChannel] = useState("agent");
+  // 新引用在这一帧就进入私聊，不能先挂载公开输入条；下方 effect 保留消费后的频道。
+  const channel = ui.prefill ? "agent" : selectedChannel;
+  const openedGroupDeepLink = useRef<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
   const taskGroup = target.group?.kind === "task" ? target.group : undefined;
   const otherThread = target.group?.kind === "thread" ? target.group : undefined;
@@ -190,10 +193,13 @@ function RailConversation({
   ];
   useEffect(() => {
     if (!target.group || new URLSearchParams(window.location.search).get("channel") !== "group") return;
-    setChannel("group");
+    if (openedGroupDeepLink.current !== target.scope) {
+      openedGroupDeepLink.current = target.scope;
+      setChannel("group");
+    } else if (channel !== "group") return;
     if (column.narrow) ui.setRailMobileOpen(true);
     else column.setMode("expanded");
-    // 只在通过通知明确打开群聊时切换。
+    // 首次通知深链选择群聊；水合或宽窄变化只展开当前群聊，不覆盖用户后来选择的私聊。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target.scope, column.narrow]);
   useEffect(() => {
@@ -229,6 +235,16 @@ function RailConversation({
   }, [missionGroup?.reference?.nonce]);
 
   useEffect(() => {
+    if (!ui.prefill) return;
+    // 「引用并对话」明确进入私聊；公开频道的输入条不会消费 Agent 的预填内容。
+    setChannel("agent");
+    if (column.narrow) ui.setRailMobileOpen(true);
+    else column.setMode("expanded");
+    // 只响应新的引用，消费预填后仍留在私聊；普通重绘不切换频道。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ui.prefill?.nonce]);
+
+  useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
   }, [data.messages, data.streaming, group.view?.entries.length, thread.view?.messages.length, channel]);
 
@@ -258,7 +274,7 @@ function RailConversation({
           </>}
           <div ref={end} />
         </div>
-        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? threadGroup && thread.left ? "你已不在这个群" : `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : missionGroup ? "仅你可见 · 只读：不改这张卡、不进集中 Review" : target.scope.startsWith("monthly-review-item:") ? "仅你可见 · Agent 只提改写建议，你点「采用」才写进左侧" : data.viewingMaterialEditable ? `仅你可见 · 可让 Agent 修改这份${viewingMaterialFormat === "html" ? " HTML" : viewingMaterialFormat === "markdown" ? " Markdown" : "材料"}；其他业务仍只读` : /^(issue|task):/.test(target.scope) ? "仅你可见 · 可让 Agent 改或新写 Markdown 材料；其他业务只读" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
+        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? threadGroup && thread.left ? "你已不在这个群" : `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : missionGroup ? "私聊仅你可见 · 改法明确后立即修改，修改记录供审核" : target.scope.startsWith("monthly-review-item:") ? "仅你可见 · Agent 只提改写建议，你点「采用」才写进左侧" : data.viewingMaterialEditable ? `仅你可见 · 可让 Agent 修改这份${viewingMaterialFormat === "html" ? " HTML" : viewingMaterialFormat === "markdown" ? " Markdown" : "材料"}；其他业务仍只读` : /^(issue|task):/.test(target.scope) ? "仅你可见 · 可让 Agent 改或新写 Markdown 材料；其他业务只读" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
       </ConversationColumn>
       {channel === "group" && target.group ? <MissionGroupComposer cardId={taskGroup?.taskId ?? otherThread?.objectId ?? missionGroup!.cardId} taskId={taskGroup?.taskId ?? otherThread?.objectId} viewerId={target.group.viewerId} phase={threadGroup ? "open" : missionGroup!.phase} channels={channels} channel={channel} onChannel={setChannel} narrow={column.narrow} mobileOpen={ui.railMobileOpen} onMobileOpen={ui.setRailMobileOpen} onHeightChange={setComposerHeight} reference={missionGroup?.reference ?? null} onRemoveReference={missionGroup?.onRemoveReference ?? (() => {})} busy={threadGroup ? thread.sending : group.sending} readOnly={thread.left} error={threadGroup ? thread.error : group.error} onSend={threadGroup ? (body) => thread.send(body) : group.send} /> : <ColumnComposer
         data={data}

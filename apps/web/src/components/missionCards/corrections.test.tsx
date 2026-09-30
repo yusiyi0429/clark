@@ -39,25 +39,25 @@ beforeEach(() => ui.buttons.clear());
 
 describe("更正入口只看服务端给的权限", () => {
   it.each([
-    ["拍板人", decider, "更正", 12],
-    ["看得到卡的其他人", open, "申请更正", 12],
+    ["拍板人", decider, "更正", 14],
+    ["看得到卡的其他人", open, "申请更正", 14],
     ["都不能更正", { ...open, canRequest: false }, "申请更正", 0],
   ] as const)("%s", (_who, access, verb, count) => {
     const html = render(payload(access));
     expect((html.match(new RegExp(`>${verb}</button>`, "g")) ?? []).length).toBe(count);
-    if (count) expect(html).toContain(`aria-label="${verb}：预期结果"`);
+    if (count) expect(html).toContain(`aria-label="${verb}：战役结果"`);
     if (verb === "申请更正") expect(html).not.toContain(">更正</button>");
   });
   it("点入口把个人任务和字段交给页面打开草稿", () => {
     const props = controls();
     render(payload(open), props);
-    ui.buttons.get("申请更正：预期结果")!.onPress!();
+    ui.buttons.get("申请更正：战役结果")!.onPress!();
     expect(props.corrections.onOpen).toHaveBeenCalledWith(mission, "outcome");
   });
   it("月份已过时正文上方写只读说明，入口消失；讨论期不写这行", () => {
     const html = render(payload(closed));
     expect(html).toContain("月份已过，这张卡只读");
-    expect(html.indexOf("月份已过，这张卡只读")).toBeLessThan(html.indexOf("已确定 · 刘明华 10/4 18:00"));
+    expect(html.indexOf("月份已过，这张卡只读")).toBeLessThan(html.indexOf("任务细节"));
     expect(html).not.toContain(">更正</button>");
     expect(html).not.toContain(">申请更正</button>");
     const discussing = renderToStaticMarkup(<CardDocument payload={personalPayload} controls={controls()} />);
@@ -71,18 +71,18 @@ describe("字段下方的内联编辑", () => {
     const props = controls({ draft });
     const html = render(payload(open), props);
     expect(html.match(/<textarea/g)).toHaveLength(1);
-    expect(html).toContain("申请更正：预期结果");
+    expect(html).toContain("申请更正：战役结果");
     expect(html).toContain(">与团队完成共同核验</textarea>");
     expect(html).toContain('<label for="correction-reason-mission-outcome">原因</label><input id="correction-reason-mission-outcome" type="text" maxLength="300" required="" value=""/>');
     expect(html).toContain("提交后等刘明华处理，正文先不变。");
-    expect(ui.buttons.get("提交申请更正：预期结果")?.isDisabled).toBe(true);
+    expect(ui.buttons.get("提交申请更正：战役结果")?.isDisabled).toBe(true);
     render(payload(open), controls({ draft: { ...draft, reason: "   " } }));
-    expect(ui.buttons.get("提交申请更正：预期结果")?.isDisabled).toBe(true);
+    expect(ui.buttons.get("提交申请更正：战役结果")?.isDisabled).toBe(true);
     const filled = controls({ draft: { ...draft, reason: "客户要求调整口径" } });
     render(payload(open), filled);
-    expect(ui.buttons.get("提交申请更正：预期结果")?.isDisabled).toBe(false);
-    ui.buttons.get("提交申请更正：预期结果")!.onPress!();
-    ui.buttons.get("取消申请更正：预期结果")!.onPress!();
+    expect(ui.buttons.get("提交申请更正：战役结果")?.isDisabled).toBe(false);
+    ui.buttons.get("提交申请更正：战役结果")!.onPress!();
+    ui.buttons.get("取消申请更正：战役结果")!.onPress!();
     expect(filled.corrections.onSubmit).toHaveBeenCalledOnce();
     expect(filled.corrections.onCancel).toHaveBeenCalledOnce();
   });
@@ -111,10 +111,10 @@ describe("已更正的小标与历史", () => {
     const props = controls();
     const html = render(payload(open, [...applied, fix({ id: "fix-other", field: "risk" })]), props);
     expect(html.match(/<span>已更正<\/span>/g)).toHaveLength(1);
-    expect(html).toContain('aria-label="已更正：预期结果，查看更正记录"');
+    expect(html).toContain('aria-label="已更正：战役结果，查看更正记录"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("的更正记录\"");
-    ui.buttons.get("已更正：预期结果，查看更正记录")!.onPress!();
+    ui.buttons.get("已更正：战役结果，查看更正记录")!.onPress!();
     expect(props.corrections.onHistory).toHaveBeenCalledWith("mission-outcome");
   });
   it("历史写改前改后、原因、谁提谁定和时间；直接更正写谁直接更正", () => {
@@ -122,13 +122,13 @@ describe("已更正的小标与历史", () => {
     const html = render(payload(open, applied), props);
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('aria-controls="correction-history-mission-outcome"');
-    expect(html).toContain('aria-label="预期结果的更正记录"');
+    expect(html).toContain('aria-label="战役结果的更正记录"');
     expect(html).toContain("刘明华 直接更正");
     expect(html).toContain("白田田 申请 · 刘明华 已采纳");
     expect(html).toContain("改前"); expect(html).toContain("改后");
     expect(html).toContain("形成可核验的经营结果"); expect(html).toContain("原因：口径写错");
     expect(html).toContain("10/6 10:00"); expect(html).toContain("10/5 16:00");
-    ui.buttons.get("已更正：预期结果，收起更正记录")!.onPress!();
+    ui.buttons.get("已更正：战役结果，收起更正记录")!.onPress!();
     expect(props.corrections.onHistory).toHaveBeenCalledWith(null);
   });
 });
@@ -140,15 +140,15 @@ describe("待处理与已处理的申请", () => {
     expect(html).toContain("原文"); expect(html).toContain("<del>形成可核验结果</del>");
     expect(html).toContain("<ins>与团队完成共同核验</ins>"); expect(html).toContain("原因：客户要求调整口径");
     expect(html).toContain('id="correction-fix-1"');
-    expect(ui.buttons.has("采纳：预期结果")).toBe(false);
+    expect(ui.buttons.has("采纳：战役结果")).toBe(false);
   });
   it("拍板人看到采纳与不采纳；不采纳先展开原因", () => {
     const props = controls();
     const html = render(payload(decider, [fix()]), props);
     expect(html).not.toContain("等刘明华处理");
-    ui.buttons.get("采纳：预期结果")!.onPress!();
+    ui.buttons.get("采纳：战役结果")!.onPress!();
     expect(props.corrections.onDecide).toHaveBeenCalledWith(fix(), "apply");
-    ui.buttons.get("不采纳：预期结果")!.onPress!();
+    ui.buttons.get("不采纳：战役结果")!.onPress!();
     expect(props.corrections.onRejecting).toHaveBeenCalledWith({ id: "fix-1", note: "" });
     expect(props.corrections.onDecide).toHaveBeenCalledOnce();
   });
@@ -156,22 +156,22 @@ describe("待处理与已处理的申请", () => {
     const html = render(payload(decider, [fix({ stale: true })]));
     expect(html).toMatch(/<span id="stale-fix-1"[^>]*>原文已变化<\/span>/);
     expect(html).toContain('aria-describedby="stale-fix-1"');
-    expect(ui.buttons.get("采纳：预期结果")?.isDisabled).toBe(true);
-    expect(ui.buttons.get("不采纳：预期结果")?.isDisabled).toBe(false);
+    expect(ui.buttons.get("采纳：战役结果")?.isDisabled).toBe(true);
+    expect(ui.buttons.get("不采纳：战役结果")?.isDisabled).toBe(false);
   });
   it("不采纳要写一句原因才能确认；失败原因显示在这条旁边", () => {
     const blank = controls({ rejecting: { id: "fix-1", note: "  " } });
     let html = render(payload(decider, [fix()]), blank);
     expect(html).toContain("不采纳的原因");
     expect(html).toContain('<input id="reject-fix-1" type="text" maxLength="300" autofocus="" value="  "/>');
-    expect(ui.buttons.get("确认不采纳：预期结果")?.isDisabled).toBe(true);
-    expect(ui.buttons.has("采纳：预期结果")).toBe(false);
+    expect(ui.buttons.get("确认不采纳：战役结果")?.isDisabled).toBe(true);
+    expect(ui.buttons.has("采纳：战役结果")).toBe(false);
     const written = controls({ rejecting: { id: "fix-1", note: "本月先不改" }, decisionError: { correctionId: "fix-1", message: "这条更正已经处理过" } });
     html = render(payload(decider, [fix()]), written);
-    expect(ui.buttons.get("确认不采纳：预期结果")?.isDisabled).toBe(false);
-    ui.buttons.get("确认不采纳：预期结果")!.onPress!();
+    expect(ui.buttons.get("确认不采纳：战役结果")?.isDisabled).toBe(false);
+    ui.buttons.get("确认不采纳：战役结果")!.onPress!();
     expect(written.corrections.onDecide).toHaveBeenCalledWith(fix(), "reject");
-    ui.buttons.get("取消不采纳：预期结果")!.onPress!();
+    ui.buttons.get("取消不采纳：战役结果")!.onPress!();
     expect(written.corrections.onRejecting).toHaveBeenCalledWith(null);
     expect(html).toContain('role="alert">这条更正已经处理过</p>');
   });
@@ -181,7 +181,7 @@ describe("待处理与已处理的申请", () => {
     const html = render(payload(closed, [fix(), rejected]));
     expect(html).toContain("未处理 · 月份已过");
     expect(html).not.toContain("等刘明华处理");
-    expect(ui.buttons.has("采纳：预期结果")).toBe(false);
+    expect(ui.buttons.has("采纳：战役结果")).toBe(false);
   });
 });
 

@@ -11,11 +11,14 @@ import { MissionCardItemsResponse } from "@warmap/contracts";
 import { canApprove } from "../missionRounds.js";
 import { listMissionItems } from "../tasks.js";
 import { personDisplayNames } from "../people.js";
+import { registerMissionCardAnnotationRoutes } from "./missionCardAnnotations.js";
+import type { MissionCardAnnotationAgent } from "../missionCardAnnotationAgent.js";
 
 const NoInput = Type.Object({}, { additionalProperties: false });
 
 /** 任务卡拍板动作使用登录人边界；具体对象权限由锁内的仓储再次判断。 */
-export function registerMissionCardRoutes(app: AppInstance, ctx: RouteContext): void {
+export function registerMissionCardRoutes(app: AppInstance, ctx: RouteContext, annotationAgent?: MissionCardAnnotationAgent): void {
+  registerMissionCardAnnotationRoutes(app, ctx, annotationAgent);
   app.get("/api/me/mission-cards", { preHandler: ctx.requirePerson, schema: { response: { 200: MyMissionRoundsResponse } } }, async (req) => {
     const at = ctx.now();
     const cards = await listMissionRoundCards(ctx.q, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, undefined, at);

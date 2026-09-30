@@ -13,6 +13,7 @@ import { ConversationHost, type ConversationUiState } from "@/conversation/Conve
 import { ReferenceProvider } from "@/conversation/references";
 import { NARROW_COLUMN_QUERY, saveColumnMode } from "@/conversation/useColumnMode";
 import { prefersReducedMotion, runRouteTransition, supportsViewTransition, type TransitionDirection } from "@/lib/viewTransition";
+import { WhatsNewCard } from "@/components/whatsNew/WhatsNewCard";
 import { LoadingMask } from "./LoadingMask";
 import { NoticeStrip } from "./NoticeStrip";
 import { WorkspaceContext, type DetailInfo, type WorkspaceApi } from "./WorkspaceContext";
@@ -499,6 +500,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             {toast}
           </div>
         ) : null}
+        <WhatsNewCard />
       </div>
       </ReferenceProvider>
     </WorkspaceContext.Provider>

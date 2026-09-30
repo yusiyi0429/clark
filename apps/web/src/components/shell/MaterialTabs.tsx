@@ -31,6 +31,9 @@ export interface MaterialTab {
   label: string;
   /** 完整名：读屏读它，内容区的 aria-label 也用它。 */
   title: string;
+  /** 尚未开放的阅读视图仍可在菜单中说明，不允许切换。 */
+  isDisabled?: boolean;
+  hint?: string;
 }
 
 /** 阅读区的选择：`current` 是此刻看的那一份；`material` 是最近看的那份材料，整场入口再按一次就回到它。 */
@@ -73,6 +76,7 @@ export function MaterialMenu({
   onSelect,
   label,
   onAdd,
+  switchLabel = "切换材料",
 }: {
   tabs: MaterialTab[];
   /** 当前那份材料；整场入口是当前时为 null，一项都不勾。 */
@@ -82,6 +86,8 @@ export function MaterialMenu({
   label: string;
   /** 有上传权限时才有：下拉单最后一项「添加材料」。 */
   onAdd?: () => void;
+  /** 复用到任务等阅读视图时使用该对象的切换名称。 */
+  switchLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const current = tabs.find((tab) => tab.id === selected);
@@ -89,7 +95,7 @@ export function MaterialMenu({
   return (
     <Popover isOpen={open} onOpenChange={setOpen}>
       <Button variant="ghost" className={t.trigger} data-material-menu
-        aria-label={`${label}：${current ? `正在看 ${current.title}` : "没有在看材料"}，切换材料`}>
+        aria-label={`${label}：${current ? `正在看 ${current.title}` : "没有在看材料"}，${switchLabel}`}>
         <FileText size={15} strokeWidth={1.8} aria-hidden />
         <span className={t.label}>{current?.label ?? "材料"}</span>
         <ChevronDown size={14} strokeWidth={2} aria-hidden className={t.chevron} />
@@ -98,10 +104,11 @@ export function MaterialMenu({
         <TianshuPortalTheme>
           <Popover.Dialog className={t.menu} aria-label={label}>
             {tabs.map((tab) => (
-              <Button key={tab.id} variant="ghost" className={t.item} aria-label={tab.title} aria-current={tab.id === selected || undefined}
-                onPress={() => pick(() => onSelect(tab.id))}>
+              <Button key={tab.id} variant="ghost" className={t.item} aria-label={tab.title} aria-current={tab.id === selected || undefined} isDisabled={tab.isDisabled}
+                onPress={() => { if (!tab.isDisabled) pick(() => onSelect(tab.id)); }}>
                 <FileText size={15} strokeWidth={1.8} aria-hidden />
                 <span className={t.label}>{tab.label}</span>
+                {tab.hint ? <span className={t.hint}>{tab.hint}</span> : null}
                 {tab.id === selected ? <Check size={15} strokeWidth={2} aria-hidden className={t.check} /> : null}
               </Button>
             ))}

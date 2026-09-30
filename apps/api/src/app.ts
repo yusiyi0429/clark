@@ -47,6 +47,7 @@ import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerMeetingRoutes } from "./routes/meetings.js";
 import { registerMaterialRoutes } from "./routes/materials.js";
 import type { MaterialAnnotationAgent } from "./materialAnnotationAgent.js";
+import type { MissionCardAnnotationAgent } from "./missionCardAnnotationAgent.js";
 import { registerActionRoutes } from "./routes/actions.js";
 import { registerDriRoutes } from "./routes/dri.js";
 import { registerSystemRoutes } from "./routes/system.js";
@@ -54,6 +55,7 @@ import { registerThreadRoutes } from "./routes/threads.js";
 import { registerRecordingRoutes } from "./routes/recordings.js";
 import { registerMeRoutes } from "./routes/me.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
+import { registerSeenMarkRoutes } from "./routes/seenMarks.js";
 import { registerMissionCardRoutes } from "./routes/missionCards.js";
 import { registerMyRadarRoutes } from "./routes/myRadar.js";
 import { registerOntologyRoutes } from "./routes/ontology.js";
@@ -84,7 +86,7 @@ export type AppEnv = {
   demoLoginId?: string;
   /** 引导中的公司名，可空；不从其他资料猜测。 */
   companyName?: string;
-  /** mission-card-drafts.v1 占位文件目录；未配置时使用仓库 seed/placeholders。 */
+  /** 旧配置兼容；正式自动起草不读取文件，人工导入须由 CLI 显式指定路径。 */
   missionCardDraftsDir?: string;
   driServiceToken: string;
   ontologyServiceToken?: string;
@@ -123,6 +125,7 @@ export async function buildApp({
   dictationDeps = realDictationDeps,
   threadIntroAgent,
   materialAnnotationAgent,
+  missionCardAnnotationAgent,
   webSearch,
   outlets,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
@@ -151,6 +154,7 @@ export async function buildApp({
   dictationDeps?: DictationDeps;
   threadIntroAgent?: ThreadIntroAgent;
   materialAnnotationAgent?: MaterialAnnotationAgent;
+  missionCardAnnotationAgent?: MissionCardAnnotationAgent;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
@@ -186,6 +190,8 @@ export async function buildApp({
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     companyMemory,
     materialPool: pool,
+    missionCardSecret: env.sessionSecret,
+    now,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.lightModel,
@@ -363,7 +369,8 @@ export async function buildApp({
   registerRecordingRoutes(app, ctx);
   registerMeRoutes(app, ctx);
   registerOnboardingRoutes(app, ctx);
-  registerMissionCardRoutes(app, ctx);
+  registerSeenMarkRoutes(app, ctx);
+  registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent);
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
 

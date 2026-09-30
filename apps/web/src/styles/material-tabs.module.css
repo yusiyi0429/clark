@@ -24,7 +24,7 @@
   transition: background-color 160ms ease, color 160ms ease;
 }
 
-.trigger.trigger { max-width: 240px; }
+.trigger.trigger { min-width: 0; max-width: 240px; }
 
 .trigger.trigger:hover,
 .trigger.trigger[aria-expanded='true'],
@@ -109,6 +109,9 @@
 .item.item[aria-current='true'] > svg { color: currentColor; }
 .item > .label { flex: 1 1 auto; }
 .check { flex: none; margin-left: 8px; }
+.hint { flex: none; margin-left: 4px; color: #8a95a5; font-size: 11px; font-weight: 400; }
+.item.item:disabled, .item.item[data-disabled='true'] { color: #8a95a5; background: transparent; cursor: default; }
+.item.item:disabled > svg, .item.item[data-disabled='true'] > svg { color: currentColor; }
 
 /* 「添加材料」：和上面那几份隔一条细线（个人菜单的 .rule），蓝字。 */
 .add.add { margin-top: 9px; color: #2f6fd6; }

@@ -191,12 +191,12 @@ describe("Mission round review and confirmation", () => {
       await f.act("decide", { decision: "accept" }, a.id); const late = await f.send("comment");
       await t.sql("UPDATE mission_round_reviews SET note='不应结转的旧核对' WHERE round_id=$1", [f.round]);
       expect((await f.act("reopen")).statusCode).toBe(200);
-      expect((await f.page()).payload.feedback.find((x: any) => x.id === a.id).verdict.text).toBe("上一轮已采纳 · 下次截止沿用");
-      expect((await f.page()).payload.feedback.find((x: any) => x.id === late.id).verdict.text).toBe("截止后留言 · 已并入这一轮");
+      expect((await f.page()).payload.feedback.find((x: any) => x.id === a.id).verdict.text).toBe("前次已采纳 · 继续讨论时沿用");
+      expect((await f.page()).payload.feedback.find((x: any) => x.id === late.id).verdict.text).toBe("讨论结束后留言 · 已纳入审核");
       await f.close(new Date(CLOSE.getTime() + 48 * 3600000)); const second = await f.page();
       expect(second.payload.card.missions[0].dependencies).toBe("甲\n乙\n丙");
       expect(second.payload.round.counts).toMatchObject({ feedback: 2, pending: 1, dependencies: 5, late: 0 });
-      expect(second.payload.feedback.find((x: any) => x.id === late.id).verdict.text).toBe("截止后留言 · 已并入这一轮");
+      expect(second.payload.feedback.find((x: any) => x.id === late.id).verdict.text).toBe("讨论结束后留言 · 已纳入审核");
       const review = (await t.sql("SELECT note FROM mission_round_reviews WHERE round_id=$1 AND window_seq=2", [f.round]))[0]; expect(review.note).toBeNull();
       expect((await t.sql("SELECT carried FROM mission_review_decisions d JOIN mission_round_reviews r ON r.id=d.review_id WHERE r.round_id=$1 AND r.window_seq=2", [f.round]))[0].carried).toBe(true);
       expect((await f.act("decide", { decision: "accept" }, late.id)).statusCode).toBe(200);

@@ -3,26 +3,33 @@
 /** 整页移植 clark mission-cards/workspace；数据、权限、意见与阶段由 API 持有。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Modal } from "@heroui/react";
+import { CircleHelp } from "lucide-react";
 import { Button } from "ts-design/primitives";
 import type { TMissionCardField, TPersonalMissionCardPayload, TTaskView } from "@warmap/contracts";
 import { browserApi, type Card, type CardAction } from "@/lib/api/client";
-import { monthDayTime } from "@/lib/companyTime";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { DetailFrame } from "@/components/shell/DetailFrame";
+import { InHeader, MaterialMenu, type MaterialTab } from "@/components/shell/MaterialTabs";
 import { useConfirm } from "@/components/ConfirmDialog";
 import type { MissionGroupReference } from "@/conversation/missionCardGroup";
 import { CardDocument, fieldNames, missionFieldText, selectedFieldQuote, type PersonalMission } from "./CardDocument";
 import type { Correction, CorrectionDraft } from "./CorrectionPanel";
-import { RoundLine } from "./RoundLine";
+import { MissionWorkflowActions } from "./MissionWorkflowActions";
 import { RoundClock } from "./RoundClock";
 import { useRoundNow } from "./useRoundNow";
 import { clearRoundNote, readRoundNote, saveRoundNote } from "./roundNoteDraft";
-import { MonthPlan, useMonthPlan } from "@/components/plan/MonthPlan";
+import { useMissionAnnotations } from "./MissionAnnotations";
+import { useSeenMarks } from "@/lib/useSeenMarks";
+import { RELEASE, releaseSeenKey } from "@/lib/releaseNotes";
+import { MissionCardTour, MISSION_CARD_TOUR_KEY } from "@/components/tours/MissionCardTour";
 import s from "./mission-card.module.css";
 
 type Proposal = { missionId: string; field: TMissionCardField; sourceVersion: number; text: string; clientId?: string };
 type RoundAction = Pick<CardAction, "actionId" | "actionType" | "label">;
+const taskViews: MaterialTab[] = [
+  { id: "details", label: "任务细节", title: "任务细节" },
+  { id: "execution", label: "执行拆分", title: "执行拆分 · 下一版本由 Co-Agent 基于当前任务生成", isDisabled: true, hint: "即将开放" },
+];
 function requestError(cause: unknown, fallback: string): string {
   if (!(cause instanceof Error) || cause instanceof TypeError || /failed to fetch|fetch failed|networkerror|network request failed|load failed/i.test(cause.message)) return fallback;
   return cause.message;
@@ -45,9 +52,6 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const [error, setError] = useState("");
   const [proposalError, setProposalError] = useState("");
   const [notice, setNotice] = useState("");
-  const [goalsOpen, setGoalsOpen] = useState(false);
-  const [planSelected, setPlanSelected] = useState(false);
-  const [planDirty, setPlanDirty] = useState(false);
   const [linkedItems, setLinkedItems] = useState<Record<string, TTaskView[]> | undefined>();
   const [noteDraft, setNoteDraft] = useState({ roundKey: "", text: "" });
   const [decisionError, setDecisionError] = useState<{ feedbackId: string; message: string } | null>(null);
@@ -61,12 +65,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const peopleTabs = useRef<HTMLElement>(null);
   const actionInFlight = useRef(false);
   const noteViewer = workspace.viewerId ?? card.ownerId;
-  const isOwner = workspace.viewerId !== null && workspace.viewerId === card.ownerId;
-  // 个人月计划属于 DRI 工作台（/api/me/plan 只对 DRI 视角开放）：CEO 视角打开自己名下的卡时不显示「本月计划」。
-  const planOwner = isOwner && entry === "member";
-  const onPlanDirtyChange = useCallback((dirty: boolean) => setPlanDirty(dirty), []);
-  const selectPlan = (selected: boolean) => { void (async () => { if (!selected && planDirty && !(await ask("本月计划有未保存的改动，确定离开？", "离开计划"))) return; setPlanSelected(selected); })(); };
-  const leaveCard = () => { void (async () => { if (planDirty && !(await ask("本月计划有未保存的改动，确定离开？", "离开任务卡"))) return; workspace.close(); })(); };
+  const leaveCard = () => workspace.close();
   const roundKey = `${noteViewer}:${round.roundId}:${round.round}`;
   const note = noteDraft.roundKey === roundKey ? noteDraft.text : "";
   const acceptView = useCallback((next: Card) => setView((current) => next.id === current.id && next.version < current.version ? current : next), []);
@@ -118,7 +117,31 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
     const timer = setInterval(() => void refresh(), 3_000);
     return () => clearInterval(timer);
   }, [effectivePhase, refresh]);
-  const { plan, setPlan, error: planError, loading: planLoading } = useMonthPlan(round.period, planOwner);
+  const annotations = useMissionAnnotations(card.cardId);
+  const revisionKey = annotations.revisions.map((revision) => revision.id).join(":");
+  useEffect(() => { if (revisionKey) void refresh(); }, [revisionKey, refresh]);
+  useEffect(() => {
+    const changed = (event: Event) => {
+      if ((event as CustomEvent<{ scope: string }>).detail?.scope !== `mission-card:${card.cardId}`) return;
+      void refresh(); void annotations.refresh();
+    };
+    window.addEventListener("mission-card-changed", changed);
+    return () => window.removeEventListener("mission-card-changed", changed);
+  }, [card.cardId, refresh, annotations.refresh]);
+  const { seen, mark } = useSeenMarks();
+  const [tourOpen, setTourOpen] = useState(false);
+  useEffect(() => {
+    if (!seen?.has(releaseSeenKey(RELEASE.id)) || seen.has(MISSION_CARD_TOUR_KEY)) return;
+    // 更新说明有退场动画；等它真正离开再开始，避免两个模态叠在一起。
+    const show = () => {
+      if (document.querySelector('[role="dialog"], dialog[open]')) return;
+      observer.disconnect(); setTourOpen(true);
+    };
+    const observer = new MutationObserver(show);
+    observer.observe(document.body, { childList: true, subtree: true });
+    show();
+    return () => observer.disconnect();
+  }, [seen]);
   const loadLinkedItems = useCallback(async () => {
     const { data } = await browserApi.GET("/api/mission-cards/{cardId}/items", { params: { path: { cardId: card.cardId } } });
     if (data) setLinkedItems(Object.fromEntries(data.missions.map((mission) => [mission.missionId, mission.items])));
@@ -127,12 +150,12 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const removeReference = useCallback(() => setReference(null), []);
   const cards = useMemo(() => [view], [view]);
   const group = useMemo(() => ({ cardId: card.cardId, viewerId: workspace.viewerId ?? card.ownerId, members: card.members, phase: effectivePhase === "drafting" ? "draft" as const : effectivePhase, round: round.round, reference, onRemoveReference: removeReference, onRefresh: refresh }), [card.cardId, card.ownerId, workspace.viewerId, card.members, effectivePhase, round.round, reference, removeReference, refresh]);
-  const title = `${card.ownerName} · ${Number(round.period.slice(5))} 月 Mission Card`;
+  const title = `${card.ownerName} · ${Number(round.period.slice(5))}月任务`;
   useRegisterDetail({ scope: `mission-card:${card.cardId}`, label: title, mark: null, cards, group });
 
   const quote = (mission: PersonalMission, field: TMissionCardField, text: string) => {
     if (text.length > 2000) { setError("这段超过 2000 字，请划选其中一段引用。"); return; }
-    setReference({ missionId: mission.missionId, field, quote: text, sourceVersion: mission.version, nonce: Date.now() });
+    workspace.quote(`${mission.title} · ${fieldNames[field]}：${text}`);
     setError("");
   };
   const select = (mission: PersonalMission, field: TMissionCardField, node: HTMLElement) => {
@@ -188,17 +211,17 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   };
   const runAction = async (action: RoundAction, input?: { decision: "accept" | "decline" } | { note: string }, feedbackId?: string) => {
     if (actionInFlight.current) return;
-    if (action.actionType === "mission-round.reopen" && !await ask(`${round.battlefieldName}的 ${round.counts.cards} 张 Mission Card 一起重新开放讨论（第 ${round.round + 1} 轮），由你决定何时结束。已有公开意见全部保留；已处理结论进入下一轮，协作核对结论需要重写；结束后留言将在下次结束时收取。不会另外通知同事。`, "重新开放讨论")) return;
-    if (action.actionType === "mission-round.close" && !await ask(`结束${round.battlefieldName}这一轮讨论？收下目前 ${round.counts.feedback} 条公开意见，进入集中 Review；之后的留言不进这一轮。`, "结束讨论")) return;
+    if (action.actionType === "mission-round.reopen" && !await ask(`继续讨论${round.battlefieldName}的 ${round.counts.cards} 张任务卡？已有公开意见与修改记录保留，由你决定何时结束。协作核对结论需要重新填写。`, "继续讨论")) return;
+    if (action.actionType === "mission-round.close" && !await ask(`结束${round.battlefieldName}的讨论？收下目前 ${round.counts.feedback} 条公开意见，进入集中审核。`, "结束讨论")) return;
     actionInFlight.current = true;
     setPending(true); setError(""); setDecisionError(null); setNotice("");
     try {
-      const { data, response, error: failure } = await browserApi.POST("/api/mission-rounds/actions/execute", { body: { actionId: action.actionId, viewCardId: card.cardId, ...(input ? { input } : {}) } });
+      const { data, response, error: failure } = await browserApi.POST("/api/mission-rounds/actions/execute", { body: { actionId: action.actionId, ...(action.actionType === "mission-round.draft" ? {} : { viewCardId: card.cardId }), ...(input ? { input } : {}) } });
       if (response.status === 401) { router.push("/access"); return; }
       if (!response.ok) {
         const latest = (failure as { latestCard?: Card } | undefined)?.latestCard;
         if (latest?.kind === "personal-mission-card") acceptView(latest);
-        throw new Error(failure?.message ?? "本轮操作未保存，请重试");
+        throw new Error(failure?.message ?? "操作未保存，请重试");
       }
       const next = data?.cards[0];
       if (next?.kind === "personal-mission-card") acceptView(next); else await refresh();
@@ -206,19 +229,22 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
       setNotice(action.actionType === "mission-round.open" ? "全战场已统一开放讨论，由你决定何时结束。" : action.actionType === "mission-round.close" ? "讨论已结束，正在集中 Review。" : action.actionType === "mission-round.reopen" ? "已重新开放讨论，已有公开意见保留。" : action.actionType === "mission-round.confirm" ? "本月 Mission Card 已确定，确认记录与公开意见保留可查。" : "");
       window.dispatchEvent(new Event("mission-round-changed"));
       router.refresh();
-    } catch (cause) { const message = requestError(cause, "暂时无法连接服务器，请稍后重试；本轮输入已保留。"); if (feedbackId) setDecisionError({ feedbackId, message }); else setError(message); }
+    } catch (cause) { const message = requestError(cause, "暂时无法连接服务器，请稍后重试；输入已保留。"); if (feedbackId) setDecisionError({ feedbackId, message }); else setError(message); }
     finally { actionInFlight.current = false; setPending(false); }
   };
   // 窄屏时人员页签横向滚动：打开谁的卡，就把谁的页签滚进视野。
   useEffect(() => { peopleTabs.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" }); }, [card.cardId]);
   return <div className={s.screen}>
-    <DetailFrame title={title} subtitle={round.battlefieldName} onBack={leaveCard} actions={<RoundClock round={shownPayload.round} now={now} />}>
+    <DetailFrame title={title} subtitle={round.battlefieldName} onBack={leaveCard} actions={<div className={s.headerActions}><RoundClock round={shownPayload.round} now={now} /><Button variant="ghost" isIconOnly className={s.help} aria-label="查看任务使用说明" onPress={() => setTourOpen(true)}><CircleHelp size={17} aria-hidden /></Button></div>}>
+      <InHeader><MaterialMenu tabs={taskViews} selected="details" onSelect={() => undefined} label="任务视图" switchLabel="切换任务视图" /></InHeader>
       <div className={s.content}>
+        <section className={s.goals} aria-label="任务目标"><div><h2>长期目标</h2><p>{round.goals?.sixMonthOutcome || "长期目标尚未提供"}</p></div><div><h2>本月目标</h2><p>{round.goals?.monthOutcome || "本月目标尚未提供"}</p></div></section>
         {round.approver && round.cards.length ? <nav ref={peopleTabs} className={s.peopleTabs} aria-label="切换任务卡">{round.cards.map((row) => <Button key={row.cardId} variant="ghost" className={s.peopleTab} aria-current={row.cardId === card.cardId ? "page" : undefined} aria-label={`打开${row.ownerName}的 Mission Card · ${row.line}`} onPress={() => workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${row.cardId}`)}><span className={s.peopleInitial} aria-hidden>{row.ownerName.slice(0, 1)}</span><span className={s.peopleText}><strong>{row.ownerName}{row.placeholder ? " · 占位" : ""}</strong><small>{row.line}</small></span></Button>)}</nav> : null}
-        <RoundLine payload={shownPayload} actions={view.actions} viewerId={workspace.viewerId} pending={pending} onAction={(action, input) => void runAction(action, input)} onViewGoals={() => setGoalsOpen(true)} onStartProcessing={startProcessing} note={note} onNoteChange={(text) => { setNoteDraft({ roundKey, text }); saveRoundNote(noteViewer, round.roundId, round.round, text); }} error={error} />
+        <MissionWorkflowActions payload={shownPayload} actions={view.actions} viewerId={workspace.viewerId} pending={pending} onAction={(action, input) => void runAction(action, input)} onStartProcessing={startProcessing} note={note} onNoteChange={(text) => { setNoteDraft({ roundKey, text }); saveRoundNote(noteViewer, round.roundId, round.round, text); }} error={error} />
         {error && !(effectivePhase === "reviewing" && round.approver && !round.counts.pending) ? <p className={s.error} role="alert">{error}</p> : null}
         {notice ? <p className={s.notice} role="status">{notice}</p> : null}
-        <CardDocument payload={shownPayload} linkedItems={linkedItems} viewerId={workspace.viewerId} ownerPlan={planOwner ? { selected: planSelected, onSelect: selectPlan, plan, error: planError, loading: planLoading, content: plan ? <MonthPlan key={plan.period} plan={plan} onSaved={(next) => { setPlan(next); void loadLinkedItems(); }} onDirtyChange={onPlanDirtyChange} /> : null } : undefined} controls={{ onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); },
+        {annotations.error ? <p className={s.annotationError} role="status">{annotations.error}<button type="button" onClick={() => void annotations.refresh()}>重新读取</button></p> : null}
+        <CardDocument payload={shownPayload} linkedItems={linkedItems} viewerId={workspace.viewerId} controls={{ annotations: { notes: annotations.notes, revisions: annotations.revisions, onSave: annotations.save, onAnswer: annotations.answer, onRetry: annotations.retry }, onQuote: quote, onPropose: propose, onSelect: select, pending, decisionError, onDecide: (item, decision) => { const action = item.actions.find((candidate) => candidate.actionType === "mission-round.decide"); if (action) void runAction(action, { decision }, item.id); },
           corrections: { draft: correction, draftError: correctionError, history: correctionHistory, rejecting, decisionError: correctionDecisionError, busy: posting || pending, onOpen: openCorrection, onEdit: (patch) => setCorrection((current) => current && { ...current, ...patch, clientId: crypto.randomUUID() }), onCancel: () => setCorrection(null), onSubmit: () => void sendCorrection(), onHistory: setCorrectionHistory, onRejecting: setRejecting, onDecide: (item, decision) => void decideCorrection(item, decision) },
           proposalEditor: (mission, field) => proposal?.missionId === mission.missionId && proposal.field === field && effectivePhase !== "confirmed" ? <div className={s.proposal}>
           <label htmlFor={`proposal-${mission.missionId}-${field}`}>建议修改：{fieldNames[field]}</label>
@@ -229,7 +255,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
         </div> : null }} />
       </div>
     </DetailFrame>
-    <Modal isOpen={goalsOpen} onOpenChange={setGoalsOpen}><Modal.Backdrop isDismissable><Modal.Container><Modal.Dialog className={s.dialog} aria-label="本轮目标依据"><h2>本轮目标依据</h2>{round.goals ? <><p>{monthDayTime(round.goals.signedAt)} 月度计划已签发。{round.phase === "draft" ? "统一开放时冻结这一轮的目标依据。" : "讨论开放后不能覆盖这一轮的目标依据。"}</p><h3>LTO · 六个月目标</h3><p>{round.goals.sixMonthOutcome}</p><h3>PO · 本月目标</h3><p>{round.goals.monthOutcome}</p></> : <p>本轮目标依据尚未冻结。</p>}<footer><Button variant="ghost" className={s.secondary} onPress={() => setGoalsOpen(false)}>关闭</Button></footer></Modal.Dialog></Modal.Container></Modal.Backdrop></Modal>
+    {tourOpen ? <MissionCardTour isOpen onExit={() => { mark(MISSION_CARD_TOUR_KEY); setTourOpen(false); }} /> : null}
     {dialog}
   </div>;
 }

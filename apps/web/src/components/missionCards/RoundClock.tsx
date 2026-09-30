@@ -8,7 +8,7 @@ import s from "./round-clock.module.css";
 /** clark countdown.tsx；截止仍以服务端为准，数字不出现负数。属于当前月度周期的轮次改显示周期总倒计时（超时标红）。 */
 export function roundClockText(round: Pick<TMissionRoundSummary, "phase" | "closesAt">, now: number): string {
   if (round.phase === "drafting") return "Co-Agent 正在起草";
-  if (round.phase === "draft") return "本轮未开放";
+  if (round.phase === "draft") return "讨论未开放";
   if (round.phase === "confirmed") return "已确定";
   // 讨论不再自动截止（CEO 手动结束）：开放中没有截止时间就是「讨论中」，倒计时看月度周期的总倒计时。
   if (round.phase === "open" && !round.closesAt) return "讨论中";
@@ -34,10 +34,9 @@ export function RoundClock({ round, now, tone = "paper" }: { round: TMissionRoun
   const left = round.closesAt ? Date.parse(round.closesAt) - now : 0;
   const opened = round.phase === "open" && left > 0;
   const at = monthDayTime(round.closesAt);
-  return <time className={s.clock} data-tone={tone} data-closed={!opened || undefined} dateTime={round.closesAt ?? undefined} aria-label={`${text}${opened ? `，截止于 ${at}` : ""}`} title={at ? `截止于 ${at}` : "本轮还未开放讨论"}>
+  return <time className={s.clock} data-tone={tone} data-closed={!opened || undefined} dateTime={round.closesAt ?? undefined} aria-label={`${text}${opened ? `，截止于 ${at}` : ""}`} title={at ? `截止于 ${at}` : "讨论尚未开放"}>
     {opened ? <span className={s.track} style={{ "--share": Math.max(0, Math.min(1, left / 172_800_000)) } as CSSProperties} aria-hidden /> : null}
     <span className={s.figure}>{text}</span>
-    {opened && round.round > 1 ? <span className={s.note}>第 {round.round} 轮</span> : null}
     {tone === "glass" ? <span className={s.note}>{opened ? `${left < 21_600_000 ? "最后 6 小时 · " : ""}${at} 截止` : round.phase === "closed" ? "汇总中" : round.phase === "reviewing" ? `等${round.approver ? "你" : round.deciderName}拍板` : ""}</span> : null}
   </time>;
 }

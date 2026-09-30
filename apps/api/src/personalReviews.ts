@@ -99,7 +99,7 @@ export async function readPersonalReviewMaterials(q: Query, row: PersonalReviewR
 
 /** 与单元复盘的周进展查询相同时间范围（允许次月首周补记），按执行事项负责人过滤。 */
 export async function personalReviewContext(q: Query, row: PersonalReviewRow) {
-  const missions = (await q(`SELECT id,code,title,outcome,why,success_evidence AS "successEvidence",milestones,boundaries,
+  const missions = (await q(`SELECT id,code,title,outcome,time_boundary AS "timeBoundary",tradeoffs,why,success_evidence AS "successEvidence",milestones,boundaries,
     key_path AS "keyPath",resources,dependencies,human_agent_split AS "humanAgentSplit",risk,retrospect
     FROM missions WHERE period=$1 AND owner_id=$2 ORDER BY code,id`, [row.period, row.person_id])).rows;
   const [year, month] = row.period.split("-").map(Number);

@@ -61,6 +61,25 @@ async function seedRelations(t: TestApp, headers: Record<string, string>): Promi
 }
 
 describe("Mission 实体", () => {
+  it("persists formal time and tradeoff fields through create, edit and API projections", async () => {
+    const t = await createTestApp();
+    try {
+      const headers = await authed(t);
+      await seedRelations(t, headers);
+      const created = await create(t, headers, missionBody("WRITING-1", {
+        timeBoundary: "9月底前完成验收", tradeoffs: "优先完成当前结果，延后新增渠道",
+      }));
+      expect(created.statusCode, created.body).toBe(201);
+      const first = created.json().cards[0];
+      expect(first.payload).toMatchObject({ timeBoundary: "9月底前完成验收", tradeoffs: "优先完成当前结果，延后新增渠道" });
+      const edited = await execute(t, headers, first.actions[0].actionId, { timeBoundary: "9月30日签收", tradeoffs: "本月专注既有渠道" });
+      expect(edited.statusCode, edited.body).toBe(200);
+      expect((await card(t, headers, first.objectRef.id)).payload).toMatchObject({ timeBoundary: "9月30日签收", tradeoffs: "本月专注既有渠道" });
+      expect(await t.sql("SELECT time_boundary,tradeoffs FROM missions WHERE id=$1", [first.objectRef.id])).toEqual([
+        { time_boundary: "9月30日签收", tradeoffs: "本月专注既有渠道" },
+      ]);
+    } finally { await t.close(); }
+  });
   it("rejects unauthenticated and cross-origin Mission writes", async () => {
     const t = await createTestApp();
     try {

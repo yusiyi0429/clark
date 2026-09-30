@@ -15,7 +15,7 @@ type FeedbackRow = {
   basis: "draft" | "candidate"; late: boolean; window_seq: number; created_at: Date;
 };
 type Review = { id: string; feedback_ids: string[]; superseded_at: Date | null; note: string | null };
-type Discussion = { feedback: FeedbackRow[]; review: Review | null; decisions: Map<string, "accept" | "decline"> };
+type Discussion = { feedback: FeedbackRow[]; review: Review | null; decisions: Map<string, "accept" | "decline">; decidedAt: Map<string, Date> };
 export type CorrectionRow = {
   id: string; round_id: string; card_id: string; mission_id: string; field: TMissionCardField;
   original: string; proposed: string; reason: string; author_id: string; client_id: string; direct: boolean;
@@ -42,19 +42,19 @@ async function discussion(q: Query, round: MissionRoundRow, cardId: string): Pro
   const feedback = (await q("SELECT * FROM mission_card_feedback WHERE card_id=$1 ORDER BY seq", [cardId])).rows as FeedbackRow[];
   // During a reopened window the previous verdicts remain visible, while the document is the draft.
   const review = (await q("SELECT id,feedback_ids,superseded_at,note FROM mission_round_reviews WHERE round_id=$1 ORDER BY window_seq DESC LIMIT 1", [round.id])).rows[0] as Review | undefined;
-  const decisions = review ? (await q("SELECT feedback_id,decision FROM mission_review_decisions WHERE review_id=$1", [review.id])).rows as { feedback_id: string; decision: "accept" | "decline" }[] : [];
-  return { feedback, review: review ?? null, decisions: new Map(decisions.map((r) => [r.feedback_id, r.decision])) };
+  const decisions = review ? (await q("SELECT feedback_id,decision,decided_at FROM mission_review_decisions WHERE review_id=$1", [review.id])).rows as { feedback_id: string; decision: "accept" | "decline"; decided_at: Date }[] : [];
+  return { feedback, review: review ?? null, decisions: new Map(decisions.map((r) => [r.feedback_id, r.decision])), decidedAt: new Map(decisions.map((r) => [r.feedback_id, r.decided_at])) };
 }
 function projectFeedback(item: FeedbackRow, data: Discussion, round: MissionRoundRow, people: MemoryPerson[], person: MissionRoundPerson, secret: string): TMissionCardFeedbackView {
   const decision = data.decisions.get(item.id) ?? null;
   const included = data.review?.feedback_ids.includes(item.id) ?? false;
   let verdict: TMissionCardFeedbackView["verdict"];
   if (round.status === "open" && data.review?.superseded_at && included && decision) {
-    verdict = { text: `上一轮${decision === "decline" ? "未采纳" : item.kind === "suggestion" ? "已采纳" : "已纳入核对"} · 下次截止沿用`, tone: decision === "decline" ? "decline" : "accept" };
-  } else if (item.late && !included && !(round.status === "open" && (!round.closes_at || item.created_at < round.closes_at))) verdict = { text: "截止后留言 · 不在这一轮", tone: "late" };
+    verdict = { text: `前次${decision === "decline" ? "未采纳" : item.kind === "suggestion" ? "已采纳" : "已纳入核对"} · 继续讨论时沿用`, tone: decision === "decline" ? "decline" : "accept" };
+  } else if (item.late && !included && !(round.status === "open" && (!round.closes_at || item.created_at < round.closes_at))) verdict = { text: "讨论结束后留言 · 待后续审核", tone: "late" };
   else if (decision === "decline") verdict = { text: "未采纳", tone: "decline" };
   else if (decision === "accept") verdict = { text: item.kind !== "suggestion" ? "已纳入核对" : round.status === "confirmed" ? "已采纳" : "已采纳 · 拍板前可能变化", tone: "accept" };
-  else if (item.late) verdict = { text: "截止后留言 · 已并入这一轮", tone: "wait" };
+  else if (item.late) verdict = { text: "讨论结束后留言 · 已纳入审核", tone: "wait" };
   else verdict = { text: round.status === "open" ? "讨论中" : "待拍板人处理", tone: round.status === "open" ? "open" : "wait" };
   const actionable = round.status === "reviewing" && included && !data.review?.superseded_at && canApprove(person, round);
   const acceptBlockedReason = item.kind === "suggestion" && included && data.feedback.some((other) => other.id !== item.id && other.kind === "suggestion"
@@ -81,12 +81,18 @@ export function projectCorrection(row: CorrectionRow, missions: TPersonalMission
 async function documentMissions(q: Query, cardId: string, people: MemoryPerson[], secret: string, data: Discussion, candidate: boolean): Promise<TPersonalMissionCardMission[]> {
   const ids = (await q("SELECT id FROM missions WHERE personal_mission_card_id=$1 ORDER BY code,id", [cardId])).rows as { id: string }[];
   const names = new Map(people.map((p) => [p.personId, p.displayName]));
+  const revisions = candidate ? (await q(`SELECT DISTINCT ON (mission_id,field) mission_id,field,after_version,created_at
+    FROM mission_card_revisions WHERE card_id=$1 ORDER BY mission_id,field,after_version DESC`, [cardId])).rows as { mission_id: string; field: TMissionCardField; after_version: number; created_at: Date }[] : [];
   const result: TPersonalMissionCardMission[] = [];
   for (const { id } of ids) {
     const row = (await getMissionRow(q, id))!;
     const mission: TPersonalMissionCardMission = { ...(projectMissionCard(row, secret, names).payload as TMissionCardPayload), version: row.version, changedFields: [] };
     if (candidate && data.review && !data.review.superseded_at) for (const item of data.feedback) {
       if (item.mission_id !== id || item.kind !== "suggestion" || !item.field || data.decisions.get(item.id) !== "accept" || !data.review.feedback_ids.includes(item.id)) continue;
+      const revision = revisions.find((row) => row.mission_id === id && row.field === item.field);
+      const decidedAt = data.decidedAt.get(item.id);
+      // 接受建议后已即时修改这个字段，正文使用最新修订；人提交的建议与决定仍原样留痕。
+      if (revision && decidedAt && revision.created_at >= decidedAt && revision.after_version > (item.source_version ?? 0)) continue;
       if (item.field === "successEvidence" || item.field === "milestones") mission[item.field] = item.proposed!.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       else mission[item.field] = item.proposed!;
       mission.changedFields.push(item.field);
@@ -97,7 +103,7 @@ async function documentMissions(q: Query, cardId: string, people: MemoryPerson[]
 }
 /** 已确定的卡没有候选叠加：正文就是当前 Mission，更正与页面取同一份原文。 */
 export function currentMissions(q: Query, cardId: string, people: MemoryPerson[], secret: string): Promise<TPersonalMissionCardMission[]> {
-  return documentMissions(q, cardId, people, secret, { feedback: [], review: null, decisions: new Map() }, false);
+  return documentMissions(q, cardId, people, secret, { feedback: [], review: null, decisions: new Map(), decidedAt: new Map() }, false);
 }
 
 export async function getPersonalMissionCard(q: Query, people: MemoryPerson[], secret: string, person: MissionRoundPerson, cardId: string, now: Date): Promise<TCard | null> {
@@ -130,6 +136,7 @@ export async function getPersonalMissionCard(q: Query, people: MemoryPerson[], s
     : correctionPeriodClosed(round, now) ? "月份已过，这张卡只读" : null;
   const payload: TPersonalMissionCardPayload = {
     round: summary,
+    draftFailure: summary.draftFailures.find((item) => item.ownerId === card.owner_id)?.message ?? null,
     card: { cardId, ownerId: card.owner_id, ownerName: people.find((p) => p.personId === card.owner_id)?.displayName ?? card.owner_id,
       roleLabel: card.role_label, members: members(card, people), status, shown, missions },
     feedback: data.feedback.map((item) => projectFeedback(item, data, round, people, person, secret)),
@@ -257,7 +264,7 @@ export async function getPersonalMissionCardGroup(q: Query, people: MemoryPerson
     entries.push({ type: "divider", at: reopen.closedAt, text: `${localTime(new Date(reopen.closedAt))} · 讨论截止` });
     entries.push({ type: "divider", at: reopen.at, text: `${names.get(reopen.by) ?? reopen.by}重新开放讨论（第 ${i + 2} 轮）` });
   });
-  if (round.closes_at && round.closes_at <= now) entries.push({ type: "divider", at: round.closes_at.toISOString(), text: `${localTime(round.closes_at)} · 讨论截止 · 之后的留言不进这一轮` });
+  if (round.closes_at && round.closes_at <= now) entries.push({ type: "divider", at: round.closes_at.toISOString(), text: `${localTime(round.closes_at)} · 讨论已结束 · 之后的留言待后续审核` });
   if (round.confirmed_at) entries.push({ type: "divider", at: round.confirmed_at.toISOString(), text: `${names.get(round.confirmed_by!) ?? round.confirmed_by}确认了本月 Mission Card` });
   for (const item of data.feedback) if (Number(item.seq) > after) entries.push({ type: "message", feedback: projectFeedback(item, data, round, people, person, secret) });
   const at = (entry: TMissionCardGroupView["entries"][number]) => entry.type === "message" ? entry.feedback.createdAt : entry.at;

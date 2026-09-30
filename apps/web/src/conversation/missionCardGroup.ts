@@ -43,7 +43,7 @@ export type DetailGroup = PersonalMissionGroup | TaskGroup | ThreadGroup;
 export function groupInputState(phase: MissionGroupPhase) {
   if (phase === "draft") return { writable: false, placeholder: "讨论还没开放" };
   if (phase === "confirmed") return { writable: false, placeholder: "本月 Mission Card 已确定" };
-  return { writable: true, placeholder: phase === "open" ? "输入你的想法…" : "截止后留言 · 不进这一轮集中 Review" };
+  return { writable: true, placeholder: phase === "open" ? "输入你的想法…" : "讨论结束后留言 · 待后续审核" };
 }
 
 export function mergeGroupEntries(previous: MissionGroupEntry[], incoming: MissionGroupEntry[]): MissionGroupEntry[] {

@@ -5,16 +5,18 @@ import type { Card } from "@/lib/api/client";
 import type { DocumentControls } from "./CardDocument";
 import type { Correction } from "./CorrectionPanel";
 import type { ComponentProps } from "react";
-import type { RoundLine } from "./RoundLine";
+import type { MissionWorkflowActions as RoundLine } from "./MissionWorkflowActions";
 import { personalPayload } from "./personalMissionFixture";
+import type { MaterialMenu } from "@/components/shell/MaterialTabs";
 
 const ui = vi.hoisted(() => ({
   state: [] as unknown[], cursor: 0, controls: null as DocumentControls | null,
   ownerPlan: null as unknown, viewerId: "viewer",
   effects: [] as (() => void | (() => void))[],
   buttons: new Map<string, { onPress?: () => Promise<void> | void; isDisabled?: boolean }>(),
-  post: vi.fn(), get: vi.fn(), register: vi.fn(), refresh: vi.fn(), ask: vi.fn(), navigate: vi.fn(), dispatch: vi.fn(),
+  post: vi.fn(), get: vi.fn(), register: vi.fn(), refresh: vi.fn(), ask: vi.fn(), navigate: vi.fn(), dispatch: vi.fn(), quote: vi.fn(),
   roundProps: null as ComponentProps<typeof RoundLine> | null,
+  viewMenu: null as ComponentProps<typeof MaterialMenu> | null,
 }));
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
@@ -26,13 +28,16 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: ui.refresh }) }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: ui.get, POST: ui.post } }));
-vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ close: vi.fn(), navigate: ui.navigate, viewerId: ui.viewerId }), useRegisterDetail: ui.register }));
+vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ close: vi.fn(), navigate: ui.navigate, quote: ui.quote, viewerId: ui.viewerId }), useRegisterDetail: ui.register }));
+vi.mock("@/lib/useSeenMarks", () => ({ useSeenMarks: () => ({ seen: null, mark: vi.fn() }) }));
+vi.mock("./MissionAnnotations", () => ({ useMissionAnnotations: () => ({ notes: [], revisions: [], error: "", refresh: vi.fn(), save: vi.fn(), answer: vi.fn(), retry: vi.fn() }) }));
 vi.mock("@/components/shell/DetailFrame", () => ({ DetailFrame: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
+vi.mock("@/components/shell/MaterialTabs", () => ({ InHeader: ({ children }: { children: ReactNode }) => <div data-header-tools>{children}</div>, MaterialMenu: (props: ComponentProps<typeof MaterialMenu>) => { ui.viewMenu = props; return <button data-material-menu>{props.tabs.find((tab) => tab.id === props.selected)?.label}</button>; } }));
 vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: ui.ask, dialog: null }) }));
 vi.mock("./useRoundNow", () => ({ useRoundNow: (_at: string, now: string) => Date.parse(now) }));
 vi.mock("@heroui/react", () => { const part = ({ children }: { children: ReactNode }) => <>{children}</>; return { Modal: Object.assign(() => null, { Backdrop: part, Container: part, Dialog: part }) }; });
 vi.mock("ts-design/primitives", () => ({ Button: ({ children, onPress, isDisabled, "aria-label": label }: { children: ReactNode; onPress?: () => Promise<void> | void; isDisabled?: boolean; "aria-label"?: string }) => { ui.buttons.set(String(children), { onPress, isDisabled }); if (label) ui.buttons.set(label, { onPress, isDisabled }); return <button disabled={isDisabled} aria-label={label}>{children}</button>; } }));
-vi.mock("./RoundLine", () => ({ RoundLine: (props: ComponentProps<typeof RoundLine>) => { ui.roundProps = props; return null; } }));
+vi.mock("./MissionWorkflowActions", () => ({ MissionWorkflowActions: (props: ComponentProps<typeof RoundLine>) => { ui.roundProps = props; return null; } }));
 vi.mock("./CardDocument", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./CardDocument")>();
   return { ...actual, CardDocument: ({ controls, ownerPlan }: { controls: DocumentControls; ownerPlan?: unknown }) => { ui.controls = controls; ui.ownerPlan = ownerPlan; return <>{controls.proposalEditor?.(personalPayload.card.missions[0], "outcome")}</>; } };
@@ -53,6 +58,30 @@ beforeEach(() => { ui.state = []; ui.cursor = 0; ui.controls = null; ui.ownerPla
 afterEach(() => vi.unstubAllGlobals());
 
 describe("任务卡建议交互", () => {
+  it("header复用会议材料下拉，任务细节为当前项，执行拆分不可切换", () => {
+    const html = render();
+    expect(html).toContain("data-header-tools");
+    expect(html).toContain("data-material-menu");
+    expect(ui.viewMenu).toMatchObject({ selected: "details", label: "任务视图", switchLabel: "切换任务视图" });
+    expect(ui.viewMenu!.tabs).toEqual([
+      { id: "details", label: "任务细节", title: "任务细节" },
+      { id: "execution", label: "执行拆分", title: "执行拆分 · 下一版本由 Co-Agent 基于当前任务生成", isDisabled: true, hint: "即将开放" },
+    ]);
+    expect(ui.viewMenu!.onAdd).toBeUndefined();
+  });
+  it("重试起草不带个人卡viewCardId，返回汇总卡后重新读取当前人的正文", async () => {
+    const retry = { actionId: "retry-signed", actionType: "mission-round.draft", label: "重试起草" };
+    const fresh = { ...card, version: 2, payload: { ...personalPayload, round: { ...personalPayload.round, phase: "drafting" } } };
+    ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [{ id: "round-card", kind: "mission-round-card", payload: fresh.payload.round }] } });
+    ui.get.mockResolvedValue({ response: { ok: true }, data: { cards: [fresh] } });
+    render();
+    ui.roundProps!.onAction(retry);
+    await vi.waitFor(() => expect(ui.get).toHaveBeenCalledWith("/api/mission-cards/{cardId}", { params: { path: { cardId: "card" } } }));
+    render();
+    expect(ui.post).toHaveBeenCalledExactlyOnceWith("/api/mission-rounds/actions/execute", { body: { actionId: "retry-signed" } });
+    expect(ui.roundProps!.payload.card.ownerId).toBe("owner");
+    expect(ui.roundProps!.payload.round.phase).toBe("drafting");
+  });
   it("拍板人可在页头切换各人的卡；普通卡主人没有人员页签", () => {
     const second = { ...personalPayload.round.cards[0], cardId: "other", ownerId: "other", ownerName: "孙铭泽", line: "待处理 1", placeholder: false };
     const changed = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, cards: [personalPayload.round.cards[0], second] } } } as Card;
@@ -65,13 +94,14 @@ describe("任务卡建议交互", () => {
     const ordinary = { ...card, payload: { ...personalPayload, round: { ...personalPayload.round, approver: false, cards: [personalPayload.round.cards[0]] } } } as Card;
     expect(renderToStaticMarkup(<MissionCardScreen initialCard={ordinary} entry="member" />)).not.toContain('aria-label="切换任务卡"');
   });
-  it("只有卡主人接入个人任务与本月计划页签", () => {
+  it("任务卡不再加载独立月计划，批注操作供当前可见任务接入", () => {
     render();
     expect(ui.ownerPlan).toBeUndefined();
     ui.viewerId = "owner";
     ui.state = [];
     render();
-    expect(ui.ownerPlan).toMatchObject({ selected: false, plan: null });
+    expect(ui.ownerPlan).toBeUndefined();
+    expect(ui.controls!.annotations).toMatchObject({ notes: [], revisions: [] });
   });
   it("建议提交带当时版本、字段与轮次，成功才清空；同时刷新左侧意见", async () => {
     ui.post.mockResolvedValue({ response: { ok: true } });
@@ -110,9 +140,11 @@ describe("任务卡建议交互", () => {
     expect(html).toContain('aria-describedby="proposal-error-mission-outcome"');
     expect(html).toContain("断网时继续保留的建议");
   });
-  it("划词交给当前任务卡群组并带源版本，超长引用给可操作提示", () => {
+  it("引用预填当前Co-Agent私聊，不向事项群发送记录，超长引用给提示", () => {
     render(); ui.controls!.onQuote(mission, "outcome", "形成可核验结果"); render();
-    expect(ui.register.mock.calls.at(-1)![0]).toMatchObject({ scope: "mission-card:card", group: { cardId: "card", viewerId: "viewer", round: 1, reference: { missionId: "mission", field: "outcome", sourceVersion: 1, quote: "形成可核验结果" } } });
+    expect(ui.quote).toHaveBeenCalledWith("完善方法闭环 · 战役结果：形成可核验结果");
+    expect(ui.register.mock.calls.at(-1)![0]).toMatchObject({ scope: "mission-card:card", group: { cardId: "card", reference: null } });
+    expect(ui.post).not.toHaveBeenCalled();
     ui.controls!.onQuote(mission, "outcome", "长".repeat(2001));
     expect(render()).toContain("请划选其中一段引用");
   });
@@ -181,7 +213,7 @@ describe("拍板动作与跨卡处理", () => {
     ui.roundProps!.onAction(reopen);
     await new Promise((resolve) => setTimeout(resolve, 0)); render();
     expect(ui.roundProps!.note).toBe("双方已核对依赖。");
-    expect(ui.ask.mock.calls[0][0]).toContain("第 2 轮");
+    expect(ui.ask.mock.calls[0][0]).not.toContain("轮");
     expect(ui.ask.mock.calls[0][0]).toContain("由你决定何时结束");
     ui.post.mockResolvedValueOnce({ response: { ok: true }, data: { cards: [{ ...card, payload: { ...personalPayload, round: { ...personalPayload.round, round: 2 } } }] } });
     ui.roundProps!.onAction(reopen);

@@ -138,7 +138,7 @@ describe("任务卡群组输入行为", () => {
       harness.submit(); await Promise.resolve();
       expect(props.onSend).toHaveBeenCalledTimes(allowed ? 1 : 0);
       group(props); expect(harness.field.value).toBe("需要保留的意见");
-      if (phase === "closed" || phase === "reviewing") expect(harness.field.placeholder).toContain("截止后留言");
+      if (phase === "closed" || phase === "reviewing") expect(harness.field.placeholder).toContain("讨论结束后留言");
     }
   });
 

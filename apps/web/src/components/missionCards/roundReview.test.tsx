@@ -22,7 +22,7 @@ beforeEach(() => { ui.buttons.clear(); vi.clearAllMocks(); });
 describe("集中 Review 的可执行边界", () => {
   it("原文建议对照和卡字段位置清楚，单个签名 token 携带明确结论", () => {
     const html = renderToStaticMarkup(<CardDocument payload={payload} controls={controls} />);
-    expect(html).toContain("白田田的卡 · 完善方法闭环 · 预期结果");
+    expect(html).toContain("白田田的卡 · 完善方法闭环 · 战役结果");
     expect(html).toContain("形成可核验结果");
     expect(html).toContain("与团队完成共同核验");
     expect(html).toContain('id="feedback-feedback-1"');

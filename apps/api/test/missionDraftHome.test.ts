@@ -6,14 +6,14 @@ import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { describe, expect, it } from "vitest";
 import { signActionId } from "../src/actionToken.js";
-import { closeDueRounds } from "../src/missionRounds.js";
+import { closeDueRounds, importMissionCardDrafts } from "../src/missionRounds.js";
 import { createTestApp, type TestApp } from "./helpers.js";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const filename = "2026-10-mission-cards.battlefield-01.json";
 
 describe("CEO Mission draft entry and October rehearsal", () => {
-  it("signs targets, drafts 5 cards/12 Missions atomically, snapshots the deadline and reopens", async () => {
+  it("signs targets, explicitly imports an isolated 5-card fixture, snapshots discussion and reopens", async () => {
     const dir = await mkdtemp(join(tmpdir(), "warmap-mission-home-"));
     let t: TestApp | undefined;
     let pool: Pool | undefined;
@@ -49,13 +49,16 @@ describe("CEO Mission draft entry and October rehearsal", () => {
       const signed = await t.app.inject({ method: "POST", url: "/api/actions/execute", headers, payload: { actionId: plan.actions.find((a: {actionType: string}) => a.actionType === "monthly-plan.sign").actionId, input: {} } });
       expect(signed.statusCode).toBe(200);
       const entry = (await home())[0];
-      expect(entry).toMatchObject({ objectRef: { type: "mission-round-slot", id: "growth:2026-10" }, payload: { placeholder: true } });
+      expect(entry).toMatchObject({ objectRef: { type: "mission-round-slot", id: "growth:2026-10" }, payload: { placeholder: false } });
       const member = await t.memberCookie();
       expect((await t.app.inject({ method: "POST", url: "/api/mission-rounds/actions/execute", headers: { cookie: member, origin: t.publicOrigin }, payload: { actionId: entry.actions[0].actionId } })).statusCode).toBe(403);
       const [one, two] = await Promise.all([execute(entry.actions[0].actionId), execute(entry.actions[0].actionId)]);
-      expect([one.statusCode, two.statusCode]).toEqual([200, 200]);
-      const round = one.json().cards[0];
-      expect(two.json().cards[0].id).toBe(round.id);
+      expect([one.statusCode, two.statusCode]).toEqual([409, 409]);
+      expect(one.json().code).toBe("NO_DRAFT_OWNERS");
+      expect(await t.sql("SELECT count(*)::int AS count FROM mission_rounds")).toEqual([{ count: 0 }]);
+      // Only an explicit human file import can load this rehearsal fixture.
+      await importMissionCardDrafts(t.pool, people.people, join(dir, filename), current);
+      const round = (await home())[0];
       expect(await t.sql("SELECT count(*)::int AS count FROM mission_rounds")).toEqual([{ count: 1 }]);
       expect(await t.sql("SELECT count(*)::int AS count FROM personal_mission_cards")).toEqual([{ count: 5 }]);
       const missions = await t.sql("SELECT id,code,version,placeholder,source_title,milestones,battlefield_ids FROM missions ORDER BY code");
@@ -93,7 +96,8 @@ describe("CEO Mission draft entry and October rehearsal", () => {
       expect(reopened.json().cards[0].payload).toMatchObject({ phase: "open", round: 2 });
       expect((await t.sql("SELECT reopens FROM mission_rounds"))[0].reopens).toEqual([{ by: "person-fixture-001", at: current.toISOString(), closedAt: closes }]);
       await writeFile(join(dir, filename), `${fileContent}\n`);
-      expect((await execute(entry.actions[0].actionId)).statusCode).toBe(409);
+      await expect(importMissionCardDrafts(t.pool, people.people, join(dir, filename), current)).rejects.toMatchObject({ code: "MISSION_DRAFT_SOURCE_CHANGED" });
+      expect((await execute(entry.actions[0].actionId)).statusCode).toBe(200);
       expect(await t.sql("SELECT count(*)::int AS count FROM missions")).toEqual([{ count: 12 }]);
     } finally {
       await pool?.end();

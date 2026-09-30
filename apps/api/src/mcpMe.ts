@@ -9,11 +9,13 @@ import type { Query } from "./meetingStore.js";
 import { authenticatePersonalToken } from "./personalTokens.js";
 import { canUseMemberView } from "./memberAccess.js";
 import type { MemoryPerson } from "./companyMemory.js";
-import { companyProgress, getIssue, getMeeting, getMissionCard, listPending } from "./mcpCeoReads.js";
+import { companyProgress, getIssue, getMeeting, listPending } from "./mcpCeoReads.js";
+import { readMissionCardForAgent } from "./mcpMissionCards.js";
+import { applyMissionCardRevision } from "./missionCardAnnotations.js";
 import { appendTaskProgress } from "./taskProgress.js";
 import { getTaskDetail, listMyTasks, updateMyTaskStatus } from "./tasks.js";
 import { logEvent } from "./observability.js";
-import { PersonalReviewUpdateInput, type TPersonalReviewUpdateInput } from "@warmap/contracts";
+import { MissionCardField, PersonalReviewUpdateInput, type TPersonalReviewUpdateInput } from "@warmap/contracts";
 import { actionFingerprint, signActionId } from "./actionToken.js";
 import { executePersonalReviewAction, getCurrentPersonalReview, getPersonalReview, personalReviewContext, personalReviewHref } from "./personalReviews.js";
 import { PERSONAL_REVIEW_WRITING_REQUIREMENTS } from "./personalReviewAgent.js";
@@ -30,6 +32,11 @@ const SaveReviewInput = Type.Object({ version: Type.Integer({ minimum: 1 }), fie
 const IssueInput = Type.Object({ issueId: Uuid }, { additionalProperties: false });
 const MeetingInput = Type.Object({ meetingId: Uuid }, { additionalProperties: false });
 const MissionCardInput = Type.Object({ cardId: Uuid }, { additionalProperties: false });
+const EditMissionCardInput = Type.Object({ cardId: Uuid, missionId: Type.String({ minLength: 1 }), field: MissionCardField,
+  sourceVersion: Type.Integer({ minimum: 1 }), sourceText: Type.String({ maxLength: 12000 }),
+  proposed: Type.String({ minLength: 1, maxLength: 12000 }), reason: Type.String({ minLength: 1, maxLength: 1000 }),
+  annotationId: Type.Optional(Uuid), clientId: Uuid,
+}, { additionalProperties: false });
 const CompanyInput = Type.Object({ week: Type.Optional(Type.String()), battlefieldId: Type.Optional(Type.String({ minLength: 1 })),
   personId: Type.Optional(Type.String({ minLength: 1 })) }, { additionalProperties: false });
 const memberDefinitions: Tool[] = [
@@ -41,8 +48,11 @@ const memberDefinitions: Tool[] = [
 const ceoDefinitions: Tool[] = [
   { name: "get_issue", description: "读取议题详情与关联会议。", inputSchema: IssueInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "get_meeting", description: "读取会议详情、预审、议程和会后条目。", inputSchema: MeetingInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
-  { name: "get_mission_card", description: "读取任务卡及其中的 Mission。", inputSchema: MissionCardInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "company_progress", description: "读取指定周的全公司执行进展和战场状态计数。", inputSchema: CompanyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
+];
+const missionCardDefinitions: Tool[] = [
+  { name: "get_mission_card", description: "读取我可见的任务卡完整原字段、当前版本、公开批注和修改记录。", inputSchema: MissionCardInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
+  { name: "edit_mission_card", description: "改法已明确时立即修改我负责或有拍板权限的任务卡一个字段，保留修改前后记录；先读get_mission_card，必须带当前版本和完整原字段，数组用换行连接。不能签发或确认任务卡。", inputSchema: EditMissionCardInput as Tool["inputSchema"] },
 ];
 const reviewDefinitions: Tool[] = [
   { name: "list_pending", description: "列出待我处理的个人复盘；CEO 还可查议题、会议、月度计划和任务卡。", inputSchema: EmptyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
@@ -73,6 +83,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
   const instructions = [
     ...(initialAccess.ceo ? ["公司业务只读：可以查待你处理的事、议题/会议/任务卡详情和全公司进展；拍板、签发、确认请回天枢网页操作。"] : []),
     ...(initialAccess.member ? ["可以查看自己的执行事项，记录真实进展并更新负责事项的状态。"] : []),
+    "任务卡正文是只读边界的例外：get_mission_card 只读本人可见卡；用户已经明确具体改法时，edit_mission_card 立即修改本人负责或有拍板权限的任务字段并留痕。不确定用户意思时先提问题与选项，最后一个选项为自己输入，澄清后立即改。不能自动向群聊发送私聊记录，不能签发或确认任务卡。遇到旧版本或原字段冲突必须重新读取。",
     "月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。",
   ].join("\n");
   const server = new Server({ name: "tianshu", version: "0.1.0" }, { capabilities: { tools: {} }, instructions });
@@ -81,7 +92,8 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     const person = identity && deps.findPerson(identity.personId);
     if (!person) return { tools: [] };
     const roles = access(person);
-    return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []), ...reviewDefinitions] };
+    return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []),
+      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...reviewDefinitions] };
   });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const tool = request.params.name, args = request.params.arguments ?? {};
@@ -90,7 +102,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     const person = deps.findPerson(identity.personId);
     if (!person) return result({ code: "UNAUTHORIZED", message: "身份已失效，请重新连接" }, true);
     const roles = access(person);
-    const write = tool === "append_progress" || tool === "update_status" || tool === "save_review_draft";
+    const write = tool === "append_progress" || tool === "update_status" || tool === "save_review_draft" || tool === "edit_mission_card";
     let itemId: string | undefined;
     let code: string | undefined;
     try {
@@ -98,6 +110,9 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       if (ceoNames.has(tool) && !roles.ceo || memberNames.has(tool) && !roles.member) {
         code = "FORBIDDEN";
         return result({ code, message: ceoNames.has(tool) ? "这个工具只对 CEO 开放" : "这个工具只对成员开放" }, true);
+      }
+      if (missionCardDefinitions.some((definition) => definition.name === tool) && !roles.member && !roles.ceo) {
+        code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员或 CEO 开放" }, true);
       }
       const names = deps.names();
       const ceoContext = () => ({ q: deps.q, secret: deps.pepper, now: deps.now(), names,
@@ -147,9 +162,18 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
         }
         case "get_mission_card": {
           if (!Value.Check(MissionCardInput, args)) break;
-          const card = await getMissionCard(ceoContext(), args.cardId as string);
+          const card = await readMissionCardForAgent(deps.q, deps.people(), deps.pepper,
+            { personId: identity.personId, role: roles.ceo ? "ceo" : "member" }, args.cardId as string, deps.now());
           if (!card) { code = "MISSION_CARD_NOT_FOUND"; return result({ code, message: "任务卡不存在" }, true); }
           return result(card);
+        }
+        case "edit_mission_card": {
+          if (!Value.Check(EditMissionCardInput, args)) break;
+          const { cardId, ...input } = args as typeof EditMissionCardInput.static;
+          const saved = await applyMissionCardRevision(deps.pool, deps.people(), deps.pepper,
+            { personId: identity.personId, role: roles.ceo ? "ceo" : "member" }, cardId, input, deps.now, "agent");
+          if ("error" in saved) { code = saved.error.code; return result(saved.error, true); }
+          return result(saved);
         }
         case "company_progress": {
           if (!Value.Check(CompanyInput, args)) break;
