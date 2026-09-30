@@ -12,7 +12,8 @@ import type { AppInstance, RouteContext } from "./shared.js";
 const NoInput = Type.Object({}, { additionalProperties: false });
 export function registerPersonalReviewRoutes(app: AppInstance, ctx: RouteContext): void {
   const secret = ctx.env.sessionSecret;
-  const agent = createPersonalReviewDraftAgent({ query: ctx.q, baseUrl: ctx.env.piBaseUrl, apiKey: ctx.env.piApiKey, modelId: ctx.env.heavyModel });
+  const agent = createPersonalReviewDraftAgent({ query: ctx.q, baseUrl: ctx.env.piBaseUrl, apiKey: ctx.env.piApiKey, modelId: ctx.env.heavyModel,
+    personName: (personId) => personDisplayNames(ctx.companyMemory).get(personId) });
   app.get("/api/monthly-cycle", { preHandler: ctx.requirePerson, schema: { response: { 200: MonthlyCycleResponse } } },
     async () => ({ cycle: await readMonthlyCycle(ctx.q, ctx.now()) }));
   app.get("/api/personal-reviews/board", { preHandler: ctx.requirePerson, schema: { response: { 200: PersonalReviewBoardResponse } } },

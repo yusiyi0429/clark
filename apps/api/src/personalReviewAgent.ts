@@ -20,10 +20,14 @@ ${PERSONAL_REVIEW_WRITING_REQUIREMENTS}
 
 ${HUMAN_WRITING_STYLE}`;
 
-export function createPersonalReviewDraftAgent(options: { query: Query; baseUrl: string; apiKey: string; modelId: string }): MonthlyReviewAgent<PersonalReviewDraftInput> {
+export function createPersonalReviewDraftAgent(options: { query: Query; baseUrl: string; apiKey: string; modelId: string;
+  /** 只用于 LangSmith run 名。 */
+  personName?: (personId: string) => string | undefined }): MonthlyReviewAgent<PersonalReviewDraftInput> {
+  const { personName, ...runtimeOptions } = options;
   return { modelSlot: "heavy", promptHash: createHash("sha256").update(PERSONAL_REVIEW_DRAFT_PROMPT).digest("hex"),
     async generate(input, signal) {
-      const result = await runCandidateAgent({ ...options, kind: "personal-review-draft", personId: input.personId, input,
+      const result = await runCandidateAgent({ ...runtimeOptions, kind: "personal-review-draft",
+        personId: input.personId, personName: personName?.(input.personId), input,
         prompt: PERSONAL_REVIEW_DRAFT_PROMPT, schema: MonthlyReviewDraftCandidate, modelSlot: "heavy", signal });
       return { candidate: result.candidate, runId: result.runId };
     } };

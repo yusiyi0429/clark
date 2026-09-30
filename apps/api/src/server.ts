@@ -27,6 +27,7 @@ import { createMonthlyReviewScheduler } from "./monthlyReviewScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
 import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
+import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
 
 function requiredEnv(name: string): string {
@@ -124,6 +125,7 @@ const personalRadarService = createPersonalRadarService({
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.lightModel,
+    personName: (personId) => personDisplayNames(companyMemory).get(personId),
   }),
   // 02b：GitHub Trending 没有订阅源、检索也限定不了站点，直接读榜单页面
   trending: createGithubTrendingReader(),
@@ -146,7 +148,7 @@ const monthlyReviewService = createMonthlyReviewService({
   pool,
   companyMemory,
   personalDraft: { storageDir: env.conversationAttachmentStorageDir ?? DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR,
-    agent: createPersonalReviewDraftAgent(reviewAgentOptions) },
+    agent: createPersonalReviewDraftAgent({ ...reviewAgentOptions, personName: (personId) => personDisplayNames(companyMemory).get(personId) }) },
   agents: {
     draft: createMonthlyReviewDraftAgent(reviewAgentOptions),
     assess: createMonthlyReviewAssessAgent(reviewAgentOptions),

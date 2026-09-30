@@ -141,6 +141,7 @@ describe("batch candidate runtime public seam", () => {
           kind: "issue-research",
           objectRef: { type: "issue", id: "fixture-001", version: 1 },
           personId: "person-fixture-002",
+          personName: "测试乙",
           input: { question: "比较供应链" },
           prompt: "只提交结构化研究候选。",
           schema: Candidate,
@@ -169,10 +170,10 @@ describe("batch candidate runtime public seam", () => {
 
         expect(payloads).toHaveLength(2);
         expect(payloads[0]).toMatchObject({
-          name: "issue-research",
+          name: "测试乙 · issue-research",
           inputs: { agentKind: "issue-research", input: { question: "比较供应链" } },
           outputs: { summary: "选择合作供应链" },
-          extra: { status: "succeeded", usage, toolEvents: [{ name: "submit_candidate", isError: false }], metadata: { user_id: "person-fixture-002" } },
+          extra: { status: "succeeded", usage, toolEvents: [{ name: "submit_candidate", isError: false }], metadata: { user_id: "person-fixture-002", user_name: "测试乙" } },
         });
         expect((payloads[0].inputs as { promptHash: string }).promptHash).toMatch(/^[a-f0-9]{64}$/);
         expect(payloads[1]).toMatchObject({
