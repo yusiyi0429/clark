@@ -1,8 +1,5 @@
-.createForm{display:grid;gap:24px;box-sizing:border-box;width:min(100%,620px);min-width:0;margin:0 auto;padding:28px 28px 150px;color:var(--ts-text,#1f2a3d)}
-.intro{margin:0;color:var(--ts-text-muted,#6b7482);font-size:14px;line-height:1.9}
 .muted{margin:0;color:var(--ts-text-muted,#6b7482);font-size:12px;line-height:1.7}
 .twoFields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;min-width:0}
-.submit{justify-self:start;display:inline-flex;align-items:center;gap:8px;min-width:140px}
 .taskPane{box-sizing:border-box;min-width:0;padding:22px 32px 130px}
 .pane{display:grid;grid-template-columns:minmax(0,1fr);gap:24px;width:min(100%,720px);min-width:0;margin:0 auto}
 .paneBlock{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-width:0;padding:0 0 28px;border-bottom:1px solid var(--ts-border,#dce3ec)}
@@ -28,6 +25,6 @@
 .dialog{padding:18px;background:#f9fbff;color:var(--ts-text,#1f2a3d)}
 .people{display:flex;flex-wrap:wrap;gap:8px}
 .people label{display:flex;align-items:center;gap:6px;padding:8px 11px;border:1px solid #dce6f4;border-radius:12px;background:#fff;font-size:13px}
-@media (max-width: 959px){.createForm{padding:24px 18px 140px}.taskPane{padding:24px 18px 140px}.twoFields{grid-template-columns:minmax(0,1fr)}}
+@media (max-width: 959px){.taskPane{padding:24px 18px 140px}.twoFields{grid-template-columns:minmax(0,1fr)}}
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
 @media(max-width:959px){.paneNote.paneNote{font-size:14px}.sourceBadge.sourceBadge,.paneRow.paneRow>span{font-size:13px}}

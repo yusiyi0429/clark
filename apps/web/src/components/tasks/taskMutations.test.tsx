@@ -37,15 +37,25 @@ function find(node: unknown, match: (node: Node) => boolean): Node | undefined {
 const render = (component: () => unknown) => { hooks.index = 0; return component(); };
 beforeEach(() => { hooks.values = []; hooks.index = 0; vi.clearAllMocks(); vi.stubGlobal("crypto", { randomUUID: () => "00000000-0000-4000-8000-000000000001" }); vi.stubGlobal("window", { dispatchEvent: vi.fn() }); });
 
-it("新建失败保留草稿，同一草稿重试复用 clientId，成功后进入详情", async () => {
+it("三步新建：回车逐步前进，最后一步才提交；失败保留草稿，重试复用 clientId，成功后进入详情", async () => {
   let tree = render(() => CreateTaskScreen());
-  (find(tree, (node) => node.props?.label === "执行事项标题")!.props!.onChange as (value: string) => void)("联系两家客户");
+  const submit = () => { tree = render(() => CreateTaskScreen()); (find(tree, (node) => node.type === "form")!.props!.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault() {} }); };
+  submit(); // 标题为空时停在第一步
   tree = render(() => CreateTaskScreen());
-  const form = find(tree, (node) => node.type === "form")!;
+  expect(find(tree, (node) => node.props?.name === "title")).toBeDefined();
+  (find(tree, (node) => node.props?.name === "title")!.props!.onChange as (event: { target: { value: string } }) => void)({ target: { value: "联系两家客户" } });
+  submit(); // 第一步 → 第二步：挂不挂 Mission
+  tree = render(() => CreateTaskScreen());
+  expect(find(tree, (node) => node.props?.role === "switch")?.props?.["aria-checked"]).toBe(false);
+  submit(); // 第二步 → 第三步：日期与完成定义
+  tree = render(() => CreateTaskScreen());
+  expect(find(tree, (node) => node.type === "input" && node.props?.type === "date")).toBeDefined();
+  expect(find(tree, (node) => node.type === "textarea")).toBeDefined();
+  expect(actions.post).not.toHaveBeenCalled();
   actions.post.mockResolvedValueOnce({ error: { message: "暂时失败" } }).mockResolvedValueOnce({ data: { id: "task-new" } });
-  (form.props!.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault() {} });
+  submit();
   await vi.waitFor(() => expect(actions.post).toHaveBeenCalledTimes(1));
-  (form.props!.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault() {} });
+  submit();
   await vi.waitFor(() => expect(actions.navigate).toHaveBeenCalledWith("/me/tasks/task-new"));
   expect(actions.post.mock.calls[0][1].body).toEqual({ clientId: "00000000-0000-4000-8000-000000000001", title: "联系两家客户", missionId: null });
   expect(actions.post.mock.calls[1][1].body.clientId).toBe(actions.post.mock.calls[0][1].body.clientId);

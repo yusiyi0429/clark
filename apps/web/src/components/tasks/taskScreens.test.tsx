@@ -78,9 +78,11 @@ describe("执行事项新建与详情", () => {
     const html = renderToStaticMarkup(<TaskScreen initialDetail={{ ...detail("collaborator"), progress: [entry] }} />);
     expect(html).toContain("Claude Code"); expect(html).toContain("完成测试"); expect(html).toContain("https://example.com/pr"); expect(html).toContain("写一条进展");
   });
-  it("新建页明确允许独立事项，保留计划开始、截止和完成定义", () => {
+  it("新建页一步一问：先问做什么，步骤点列出后面的 Mission 与时间两步", () => {
     const html = renderToStaticMarkup(<CreateTaskScreen />);
-    expect(html).toContain("不挂个人任务（独立事项）"); expect(html).toContain("计划开始日期"); expect(html).toContain("截止日期"); expect(html).toContain("完成时应该留下什么");
+    expect(html).toContain("这件事是什么？"); expect(html).toContain("执行事项标题");
+    expect(html).toContain("推进哪个 Mission"); expect(html).toContain("时间与完成标准"); expect(html).toContain("下一步");
+    expect(html).not.toContain("不挂个人任务"); expect(html).not.toContain("开启执行事项</button>");
   });
   it("推进人可编辑、邀请、报进度、删除未启动的自建事项", () => {
     const html = renderToStaticMarkup(<TaskScreen initialDetail={detail("owner")} />);
