@@ -16,7 +16,9 @@ import { resolveConfiguredOutletIds } from "./outletSources.js";
 import type { ResearchService } from "./research.js";
 import type { PreflightAgent } from "./meetingPreflight.js";
 import { createPreflightAgent } from "./preflightAgent.js";
-import { pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
+import { onOutcomeReviewed, pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
+import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
+import { createWorldMeetingService } from "./worldMeetingEvents.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import type { DriExporter } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
@@ -100,7 +102,7 @@ export type AppEnv = {
   conversationAttachmentStorageDir?: string;
   /** 会议录音卷（分片、拼好的 webm、转码后的 mp3、厂商原文）；与材料卷隔离。 */
   recordingStorageDir?: string;
-} & CompanyMemorySeedEnv;
+} & CompanyMemorySeedEnv & WorldEnv;
 
 export async function buildApp({
   pool,
@@ -233,6 +235,11 @@ export async function buildApp({
     await runtime.close?.();
   });
   const q = pool.query.bind(pool);
+  if (worldConfigured(env)) {
+    const worldMeetings = createWorldMeetingService(pool, new WorldClient(q, env), env.publicOrigin, now);
+    const unsubscribe = onOutcomeReviewed(pool, worldMeetings.schedule);
+    app.addHook("onClose", async () => { unsubscribe(); await worldMeetings.close(); });
+  }
   // 每个请求的结构化日志上下文：handler 里补充 action/run 字段，onResponse 统一落一条。
   const requestContext = new WeakMap<FastifyRequest, RequestContext>();
   app.addHook("onResponse", async (req, reply) => {

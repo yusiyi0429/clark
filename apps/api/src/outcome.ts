@@ -36,6 +36,13 @@ import { dispatchMeetingTodo } from "./tasks.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
+/** 按应用的连接池隔离订阅；监听器只排队，确认事务不等待任何 world HTTP。 */
+const reviewListeners = new WeakMap<Pool, (meetingId: string) => void>();
+export function onOutcomeReviewed(pool: Pool, listener: (meetingId: string) => void): () => void {
+  reviewListeners.set(pool, listener);
+  return () => { if (reviewListeners.get(pool) === listener) reviewListeners.delete(pool); };
+}
+
 /** 抽取输入只读取 Meeting 内嵌结构和关联 Issue，Agent 不能访问业务库。 */
 export type PostMeetingAgentInput = {
   meeting: { id: string; title: string; scheduledAt: string; ceoParticipantId: string; participants: TMeetingParticipant[] };
@@ -407,6 +414,7 @@ export async function runOutcome(
         [meetingId, assessed.summary, JSON.stringify(assessed.items), JSON.stringify(assessed.warnings), new Date().toISOString(), nextStatus],
       );
       await client.query("COMMIT");
+      if (nextStatus === "reviewed") reviewListeners.get(pool)?.(meetingId);
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw err;
@@ -678,6 +686,7 @@ export async function executeConfirmItem(
   });
   if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
   if (ontologyRequest) await applyOntologyUpdate(pool, ontologyUpdater, ontologyRequest);
+  reviewListeners.get(pool)?.(scope.objectId);
   return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
 }
 /** 提交确认后才交给本体更新；失败不改回 pending，只把请求记为 failed。 */
@@ -704,7 +713,7 @@ export async function executeDismissItem(
   fingerprint: string,
   reason?: string,
 ): Promise<MeetingActionOutcome> {
-  return withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+  const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
     if (row.status !== "held" && row.status !== "reviewed") {
       return { error: { status: 409, code: "MEETING_NOT_REVIEWABLE", message: "只有 held/reviewed Meeting 可以处理会后条目" } };
     }
@@ -735,6 +744,8 @@ export async function executeDismissItem(
 
     return commitReview(client, row, state, items, fingerprint, secret);
   });
+  if ("card" in outcome && !outcome.replayed) reviewListeners.get(pool)?.(scope.objectId);
+  return outcome;
 }
 /**
  * 撤回已确认效果：统一走 revokeEffect，同步 Outcome item、Receipt、Radar anchor、执行事项与 Meeting 状态。

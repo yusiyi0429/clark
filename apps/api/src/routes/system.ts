@@ -6,6 +6,7 @@ import { createMeMcpSession } from "../mcpMe.js";
 import { authenticatePersonalToken } from "../personalTokens.js";
 import { personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
+import { worldConfigured } from "../worldClient.js";
 
 export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void {
   const { q, env, runtime, companyMemory, radar, recordings, voiceprints, requireServiceToken } = ctx;
@@ -30,6 +31,7 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
       recording: recordings.configured(),
       // 腾讯云声纹凭据是否配全（同上，只看变量）
       voiceprint: voiceprints.configured(),
+      world: worldConfigured(env),
     };
     const status: Static<typeof HealthResponse>["status"] =
       database && dependencies.piRuntime && dependencies.modelSlots && dependencies.companyMemoryMcp ? "ok" : "degraded";
