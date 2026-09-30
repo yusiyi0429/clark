@@ -549,6 +549,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/monthly-cycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 当前月度经营周期的总倒计时（从个人复盘收集起 72 小时到签发下月任务卡）；全员可读，没有周期时 cycle 为 null */
+        get: operations["getMonthlyCycle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/personal-reviews/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 个人复盘看板：进行中的月末复盘里每人的提交状态（全员可见，不含内容）；没有进行中的复盘时 board 为 null */
+        get: operations["getPersonalReviewBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/personal-reviews/{personalReviewId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人或 CEO 读取一份个人复盘；其他人 404 */
+        get: operations["getPersonalReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/personal-reviews/actions/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 执行个人复盘动作；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT */
+        post: operations["executePersonalReviewAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/radar": {
         parameters: {
             query?: never;
@@ -2533,7 +2601,7 @@ export interface components {
                     subjectName: string;
                     ownerName: string;
                     ownerUnassigned: boolean;
-                    status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                    status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
                     lead: string | null;
                     assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
                     assessmentOverall: string | null;
@@ -2563,6 +2631,10 @@ export interface components {
                     confirmedAt: string | null;
                 };
                 ltco: {
+                    window: {
+                        start: string;
+                        end: string;
+                    };
                     current: string;
                     units: {
                         subjectType: "battlefield" | "capability";
@@ -2628,7 +2700,7 @@ export interface components {
                 ownerUnassigned: boolean;
                 target: string | null;
                 sixMonthOutcome: string;
-                status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
                 draftError: {
                     code: string;
                     message: string;
@@ -2733,7 +2805,7 @@ export interface components {
                 subjectName: string;
                 ownerName: string;
                 ownerUnassigned: boolean;
-                status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
                 lead: string | null;
                 assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
                 assessmentOverall: string | null;
@@ -2763,6 +2835,10 @@ export interface components {
                 confirmedAt: string | null;
             };
             ltco: {
+                window: {
+                    start: string;
+                    end: string;
+                };
                 current: string;
                 units: {
                     subjectType: "battlefield" | "capability";
@@ -2819,7 +2895,7 @@ export interface components {
             ownerUnassigned: boolean;
             target: string | null;
             sixMonthOutcome: string;
-            status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+            status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
             draftError: {
                 code: string;
                 message: string;
@@ -2911,7 +2987,7 @@ export interface components {
             subjectName: string;
             ownerName: string;
             ownerUnassigned: boolean;
-            status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+            status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
             lead: string | null;
             assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
             assessmentOverall: string | null;
@@ -2927,7 +3003,7 @@ export interface components {
         MyMonthlyReviewNoticesResponse: {
             notices: {
                 id: string;
-                kind: "item_todo" | "item_participant" | "items_to_review" | "summary_pending" | "ltco_pending";
+                kind: "personal_todo" | "item_todo" | "item_participant" | "items_to_review" | "summary_pending" | "ltco_pending";
                 period: string;
                 text: string;
                 href: string;
@@ -2937,7 +3013,7 @@ export interface components {
         };
         MonthlyReviewNotice: {
             id: string;
-            kind: "item_todo" | "item_participant" | "items_to_review" | "summary_pending" | "ltco_pending";
+            kind: "personal_todo" | "item_todo" | "item_participant" | "items_to_review" | "summary_pending" | "ltco_pending";
             period: string;
             text: string;
             href: string;
@@ -2963,7 +3039,7 @@ export interface components {
                 ownerUnassigned: boolean;
                 target: string | null;
                 sixMonthOutcome: string;
-                status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
                 draftError: {
                     code: string;
                     message: string;
@@ -3067,7 +3143,7 @@ export interface components {
                     subjectName: string;
                     ownerName: string;
                     ownerUnassigned: boolean;
-                    status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                    status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
                     lead: string | null;
                     assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
                     assessmentOverall: string | null;
@@ -3097,6 +3173,10 @@ export interface components {
                     confirmedAt: string | null;
                 };
                 ltco: {
+                    window: {
+                        start: string;
+                        end: string;
+                    };
                     current: string;
                     units: {
                         subjectType: "battlefield" | "capability";
@@ -3146,6 +3226,327 @@ export interface components {
                 text: string;
                 sources?: string[];
             }[];
+        };
+        PersonalReviewPayload: {
+            personalReviewId: string;
+            monthlyReviewId: string;
+            period: string;
+            version: number;
+            personId: string;
+            personName: string;
+            status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+            draftSource: "agent_tool" | "co_agent" | "manual" | null;
+            draftError: {
+                code: string;
+                message: string;
+                /** @description ISO 8601 */
+                at: string;
+            } | null;
+            selfReview: {
+                overall: {
+                    text: string;
+                    sources: string[];
+                };
+                judgments: {
+                    text: string;
+                    sources: string[];
+                };
+                nextFocus: {
+                    text: string;
+                    sources: string[];
+                };
+                escalations: {
+                    text: string;
+                    sources: string[];
+                };
+            } | null;
+            missions: {
+                id: string;
+                code: string;
+                title: string;
+                outcome: string;
+            }[];
+            toolConnected: boolean;
+            materialCount: number;
+            conversationScope: string;
+            submittedAt: string | null;
+            skipped: {
+                byName: string;
+                /** @description ISO 8601 */
+                at: string;
+            } | null;
+            viewer: {
+                isSelf: boolean;
+                isCeo: boolean;
+            };
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        PersonalReviewBoard: {
+            monthlyReviewId: string;
+            period: string;
+            counts: {
+                total: number;
+                submitted: number;
+                skipped: number;
+            };
+            complete: boolean;
+            rows: {
+                personalReviewId: string;
+                personId: string;
+                personName: string;
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+                draftSource: "agent_tool" | "co_agent" | "manual" | null;
+                submittedAt: string | null;
+                isSelf: boolean;
+                href: string | null;
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            }[];
+        };
+        PersonalReviewBoardRow: {
+            personalReviewId: string;
+            personId: string;
+            personName: string;
+            status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+            draftSource: "agent_tool" | "co_agent" | "manual" | null;
+            submittedAt: string | null;
+            isSelf: boolean;
+            href: string | null;
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        PersonalReviewBoardResponse: {
+            board: {
+                monthlyReviewId: string;
+                period: string;
+                counts: {
+                    total: number;
+                    submitted: number;
+                    skipped: number;
+                };
+                complete: boolean;
+                rows: {
+                    personalReviewId: string;
+                    personId: string;
+                    personName: string;
+                    status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+                    draftSource: "agent_tool" | "co_agent" | "manual" | null;
+                    submittedAt: string | null;
+                    isSelf: boolean;
+                    href: string | null;
+                    actions: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    }[];
+                }[];
+            } | null;
+        };
+        PersonalReviewResponse: {
+            review: {
+                personalReviewId: string;
+                monthlyReviewId: string;
+                period: string;
+                version: number;
+                personId: string;
+                personName: string;
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+                draftSource: "agent_tool" | "co_agent" | "manual" | null;
+                draftError: {
+                    code: string;
+                    message: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                selfReview: {
+                    overall: {
+                        text: string;
+                        sources: string[];
+                    };
+                    judgments: {
+                        text: string;
+                        sources: string[];
+                    };
+                    nextFocus: {
+                        text: string;
+                        sources: string[];
+                    };
+                    escalations: {
+                        text: string;
+                        sources: string[];
+                    };
+                } | null;
+                missions: {
+                    id: string;
+                    code: string;
+                    title: string;
+                    outcome: string;
+                }[];
+                toolConnected: boolean;
+                materialCount: number;
+                conversationScope: string;
+                submittedAt: string | null;
+                skipped: {
+                    byName: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                viewer: {
+                    isSelf: boolean;
+                    isCeo: boolean;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+        };
+        ExecutePersonalReviewActionRequest: {
+            actionId: string;
+            input?: unknown;
+        };
+        ExecutePersonalReviewActionResponse: {
+            review: {
+                personalReviewId: string;
+                monthlyReviewId: string;
+                period: string;
+                version: number;
+                personId: string;
+                personName: string;
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+                draftSource: "agent_tool" | "co_agent" | "manual" | null;
+                draftError: {
+                    code: string;
+                    message: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                selfReview: {
+                    overall: {
+                        text: string;
+                        sources: string[];
+                    };
+                    judgments: {
+                        text: string;
+                        sources: string[];
+                    };
+                    nextFocus: {
+                        text: string;
+                        sources: string[];
+                    };
+                    escalations: {
+                        text: string;
+                        sources: string[];
+                    };
+                } | null;
+                missions: {
+                    id: string;
+                    code: string;
+                    title: string;
+                    outcome: string;
+                }[];
+                toolConnected: boolean;
+                materialCount: number;
+                conversationScope: string;
+                submittedAt: string | null;
+                skipped: {
+                    byName: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                viewer: {
+                    isSelf: boolean;
+                    isCeo: boolean;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+            board: {
+                monthlyReviewId: string;
+                period: string;
+                counts: {
+                    total: number;
+                    submitted: number;
+                    skipped: number;
+                };
+                complete: boolean;
+                rows: {
+                    personalReviewId: string;
+                    personId: string;
+                    personName: string;
+                    status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+                    draftSource: "agent_tool" | "co_agent" | "manual" | null;
+                    submittedAt: string | null;
+                    isSelf: boolean;
+                    href: string | null;
+                    actions: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    }[];
+                }[];
+            };
+        };
+        PersonalReviewUpdateInput: {
+            fields: {
+                field: "overall" | "judgments" | "nextFocus" | "escalations";
+                text: string;
+                sources?: string[];
+            }[];
+        };
+        MonthlyCycle: {
+            reviewPeriod: string;
+            nextPeriod: string;
+            /** @description ISO 8601 */
+            startedAt: string;
+            /** @description ISO 8601 */
+            deadlineAt: string;
+            completedAt: string | null;
+            stage: "personal_reviews" | "unit_reviews" | "company_summary" | "lto_decision" | "period_plan" | "mission_cards" | "done";
+            /** @description ISO 8601 */
+            serverNow: string;
+        };
+        MonthlyCycleResponse: {
+            cycle: {
+                reviewPeriod: string;
+                nextPeriod: string;
+                /** @description ISO 8601 */
+                startedAt: string;
+                /** @description ISO 8601 */
+                deadlineAt: string;
+                completedAt: string | null;
+                stage: "personal_reviews" | "unit_reviews" | "company_summary" | "lto_decision" | "period_plan" | "mission_cards" | "done";
+                /** @description ISO 8601 */
+                serverNow: string;
+            } | null;
         };
         MonthlyReviewComment: {
             id: string;
@@ -3719,6 +4120,7 @@ export interface components {
                     asr: boolean;
                 };
                 voiceprint: boolean;
+                world: boolean;
             };
         };
         RadarScanResponse: {
@@ -6948,6 +7350,173 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExecuteMonthlyReviewActionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMonthlyCycle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 月度周期 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyCycleResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPersonalReviewBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 个人复盘看板 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalReviewBoardResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPersonalReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personalReviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 个人复盘 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalReviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    executePersonalReviewAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecutePersonalReviewActionRequest"];
+            };
+        };
+        responses: {
+            /** @description 个人复盘与看板的最新视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutePersonalReviewActionResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

@@ -68,7 +68,7 @@ export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
 /** warmap-transcript.v1 单文件上限；Web multipart 与 service API 共用。 */
 export const MAX_TRANSCRIPT_BYTES = 1024 * 1024;
 const DEFAULT_MATERIAL_STORAGE_DIR = "/tmp/warmap-meeting-materials";
-const DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR = "/tmp/warmap-conversation-attachments";
+export const DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR = "/tmp/warmap-conversation-attachments";
 
 export type AppEnv = {
   sessionSecret: string;

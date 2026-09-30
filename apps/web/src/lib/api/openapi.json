@@ -1611,6 +1611,188 @@
         }
       }
     },
+    "/api/monthly-cycle": {
+      "get": {
+        "operationId": "getMonthlyCycle",
+        "summary": "当前月度经营周期的总倒计时（从个人复盘收集起 72 小时到签发下月任务卡）；全员可读，没有周期时 cycle 为 null",
+        "responses": {
+          "200": {
+            "description": "月度周期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyCycleResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/personal-reviews/board": {
+      "get": {
+        "operationId": "getPersonalReviewBoard",
+        "summary": "个人复盘看板：进行中的月末复盘里每人的提交状态（全员可见，不含内容）；没有进行中的复盘时 board 为 null",
+        "responses": {
+          "200": {
+            "description": "个人复盘看板",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalReviewBoardResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/personal-reviews/{personalReviewId}": {
+      "get": {
+        "operationId": "getPersonalReview",
+        "summary": "本人或 CEO 读取一份个人复盘；其他人 404",
+        "parameters": [
+          {
+            "name": "personalReviewId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "个人复盘",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalReviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/personal-reviews/actions/execute": {
+      "post": {
+        "operationId": "executePersonalReviewAction",
+        "summary": "执行个人复盘动作；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutePersonalReviewActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "个人复盘与看板的最新视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutePersonalReviewActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cards/radar": {
       "get": {
         "operationId": "getRadarCard",
@@ -8470,7 +8652,7 @@
         ],
         "properties": {
           "scope": {
-            "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+            "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
             "description": "global 或稳定对象 scope",
             "type": "string"
           },
@@ -8693,7 +8875,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8727,7 +8909,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8781,7 +8963,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8830,7 +9012,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8872,7 +9054,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8909,7 +9091,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -8944,7 +9126,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -10931,6 +11113,10 @@
                         "status": {
                           "anyOf": [
                             {
+                              "const": "waiting",
+                              "type": "string"
+                            },
+                            {
                               "const": "drafting",
                               "type": "string"
                             },
@@ -11155,12 +11341,31 @@
                     "additionalProperties": false,
                     "type": "object",
                     "required": [
+                      "window",
                       "current",
                       "units",
                       "suggestion",
                       "decision"
                     ],
                     "properties": {
+                      "window": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "start",
+                          "end"
+                        ],
+                        "properties": {
+                          "start": {
+                            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                            "type": "string"
+                          },
+                          "end": {
+                            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                            "type": "string"
+                          }
+                        }
+                      },
                       "current": {
                         "type": "string"
                       },
@@ -11529,6 +11734,10 @@
               },
               "status": {
                 "anyOf": [
+                  {
+                    "const": "waiting",
+                    "type": "string"
+                  },
                   {
                     "const": "drafting",
                     "type": "string"
@@ -12177,6 +12386,10 @@
                 "status": {
                   "anyOf": [
                     {
+                      "const": "waiting",
+                      "type": "string"
+                    },
+                    {
                       "const": "drafting",
                       "type": "string"
                     },
@@ -12401,12 +12614,31 @@
             "additionalProperties": false,
             "type": "object",
             "required": [
+              "window",
               "current",
               "units",
               "suggestion",
               "decision"
             ],
             "properties": {
+              "window": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "properties": {
+                  "start": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  },
+                  "end": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  }
+                }
+              },
               "current": {
                 "type": "string"
               },
@@ -12734,6 +12966,10 @@
           },
           "status": {
             "anyOf": [
+              {
+                "const": "waiting",
+                "type": "string"
+              },
               {
                 "const": "drafting",
                 "type": "string"
@@ -13299,6 +13535,10 @@
           "status": {
             "anyOf": [
               {
+                "const": "waiting",
+                "type": "string"
+              },
+              {
                 "const": "drafting",
                 "type": "string"
               },
@@ -13432,6 +13672,10 @@
                 "kind": {
                   "anyOf": [
                     {
+                      "const": "personal_todo",
+                      "type": "string"
+                    },
+                    {
                       "const": "item_todo",
                       "type": "string"
                     },
@@ -13489,6 +13733,10 @@
           },
           "kind": {
             "anyOf": [
+              {
+                "const": "personal_todo",
+                "type": "string"
+              },
               {
                 "const": "item_todo",
                 "type": "string"
@@ -13636,6 +13884,10 @@
               },
               "status": {
                 "anyOf": [
+                  {
+                    "const": "waiting",
+                    "type": "string"
+                  },
                   {
                     "const": "drafting",
                     "type": "string"
@@ -14282,6 +14534,10 @@
                     "status": {
                       "anyOf": [
                         {
+                          "const": "waiting",
+                          "type": "string"
+                        },
+                        {
                           "const": "drafting",
                           "type": "string"
                         },
@@ -14506,12 +14762,31 @@
                 "additionalProperties": false,
                 "type": "object",
                 "required": [
+                  "window",
                   "current",
                   "units",
                   "suggestion",
                   "decision"
                 ],
                 "properties": {
+                  "window": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "properties": {
+                      "start": {
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                        "type": "string"
+                      },
+                      "end": {
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                        "type": "string"
+                      }
+                    }
+                  },
                   "current": {
                     "type": "string"
                   },
@@ -14803,6 +15078,1967 @@
                 }
               }
             }
+          }
+        }
+      },
+      "PersonalReviewPayload": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "personalReviewId",
+          "monthlyReviewId",
+          "period",
+          "version",
+          "personId",
+          "personName",
+          "status",
+          "draftSource",
+          "draftError",
+          "selfReview",
+          "missions",
+          "toolConnected",
+          "materialCount",
+          "conversationScope",
+          "submittedAt",
+          "skipped",
+          "viewer",
+          "actions"
+        ],
+        "properties": {
+          "personalReviewId": {
+            "type": "string"
+          },
+          "monthlyReviewId": {
+            "type": "string"
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "personId": {
+            "type": "string"
+          },
+          "personName": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "waiting",
+                "type": "string"
+              },
+              {
+                "const": "drafting",
+                "type": "string"
+              },
+              {
+                "const": "draft_failed",
+                "type": "string"
+              },
+              {
+                "const": "draft",
+                "type": "string"
+              },
+              {
+                "const": "submitted",
+                "type": "string"
+              },
+              {
+                "const": "skipped",
+                "type": "string"
+              }
+            ]
+          },
+          "draftSource": {
+            "anyOf": [
+              {
+                "const": "agent_tool",
+                "type": "string"
+              },
+              {
+                "const": "co_agent",
+                "type": "string"
+              },
+              {
+                "const": "manual",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "draftError": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selfReview": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "overall",
+                  "judgments",
+                  "nextFocus",
+                  "escalations"
+                ],
+                "properties": {
+                  "overall": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "sources"
+                    ],
+                    "properties": {
+                      "text": {
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "sources": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "judgments": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "sources"
+                    ],
+                    "properties": {
+                      "text": {
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "sources": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "nextFocus": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "sources"
+                    ],
+                    "properties": {
+                      "text": {
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "sources": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "escalations": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "sources"
+                    ],
+                    "properties": {
+                      "text": {
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "sources": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "code",
+                "title",
+                "outcome"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "toolConnected": {
+            "type": "boolean"
+          },
+          "materialCount": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "conversationScope": {
+            "type": "string"
+          },
+          "submittedAt": {
+            "anyOf": [
+              {
+                "description": "ISO 8601",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "skipped": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "byName",
+                  "at"
+                ],
+                "properties": {
+                  "byName": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "viewer": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "isSelf",
+              "isCeo"
+            ],
+            "properties": {
+              "isSelf": {
+                "type": "boolean"
+              },
+              "isCeo": {
+                "type": "boolean"
+              }
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "actionId",
+                "actionType",
+                "label"
+              ],
+              "properties": {
+                "actionId": {
+                  "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                  "type": "string"
+                },
+                "actionType": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PersonalReviewBoard": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "monthlyReviewId",
+          "period",
+          "counts",
+          "complete",
+          "rows"
+        ],
+        "properties": {
+          "monthlyReviewId": {
+            "type": "string"
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "counts": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "total",
+              "submitted",
+              "skipped"
+            ],
+            "properties": {
+              "total": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "submitted": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            }
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personalReviewId",
+                "personId",
+                "personName",
+                "status",
+                "draftSource",
+                "submittedAt",
+                "isSelf",
+                "href",
+                "actions"
+              ],
+              "properties": {
+                "personalReviewId": {
+                  "type": "string"
+                },
+                "personId": {
+                  "type": "string"
+                },
+                "personName": {
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "waiting",
+                      "type": "string"
+                    },
+                    {
+                      "const": "drafting",
+                      "type": "string"
+                    },
+                    {
+                      "const": "draft_failed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "draft",
+                      "type": "string"
+                    },
+                    {
+                      "const": "submitted",
+                      "type": "string"
+                    },
+                    {
+                      "const": "skipped",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "draftSource": {
+                  "anyOf": [
+                    {
+                      "const": "agent_tool",
+                      "type": "string"
+                    },
+                    {
+                      "const": "co_agent",
+                      "type": "string"
+                    },
+                    {
+                      "const": "manual",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "submittedAt": {
+                  "anyOf": [
+                    {
+                      "description": "ISO 8601",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "isSelf": {
+                  "type": "boolean"
+                },
+                "href": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "actionId",
+                      "actionType",
+                      "label"
+                    ],
+                    "properties": {
+                      "actionId": {
+                        "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                        "type": "string"
+                      },
+                      "actionType": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "itemId": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PersonalReviewBoardRow": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "personalReviewId",
+          "personId",
+          "personName",
+          "status",
+          "draftSource",
+          "submittedAt",
+          "isSelf",
+          "href",
+          "actions"
+        ],
+        "properties": {
+          "personalReviewId": {
+            "type": "string"
+          },
+          "personId": {
+            "type": "string"
+          },
+          "personName": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "waiting",
+                "type": "string"
+              },
+              {
+                "const": "drafting",
+                "type": "string"
+              },
+              {
+                "const": "draft_failed",
+                "type": "string"
+              },
+              {
+                "const": "draft",
+                "type": "string"
+              },
+              {
+                "const": "submitted",
+                "type": "string"
+              },
+              {
+                "const": "skipped",
+                "type": "string"
+              }
+            ]
+          },
+          "draftSource": {
+            "anyOf": [
+              {
+                "const": "agent_tool",
+                "type": "string"
+              },
+              {
+                "const": "co_agent",
+                "type": "string"
+              },
+              {
+                "const": "manual",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "submittedAt": {
+            "anyOf": [
+              {
+                "description": "ISO 8601",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "isSelf": {
+            "type": "boolean"
+          },
+          "href": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "actionId",
+                "actionType",
+                "label"
+              ],
+              "properties": {
+                "actionId": {
+                  "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                  "type": "string"
+                },
+                "actionType": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PersonalReviewBoardResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "board"
+        ],
+        "properties": {
+          "board": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "monthlyReviewId",
+                  "period",
+                  "counts",
+                  "complete",
+                  "rows"
+                ],
+                "properties": {
+                  "monthlyReviewId": {
+                    "type": "string"
+                  },
+                  "period": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  },
+                  "counts": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "total",
+                      "submitted",
+                      "skipped"
+                    ],
+                    "properties": {
+                      "total": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "submitted": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "skipped": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "complete": {
+                    "type": "boolean"
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personalReviewId",
+                        "personId",
+                        "personName",
+                        "status",
+                        "draftSource",
+                        "submittedAt",
+                        "isSelf",
+                        "href",
+                        "actions"
+                      ],
+                      "properties": {
+                        "personalReviewId": {
+                          "type": "string"
+                        },
+                        "personId": {
+                          "type": "string"
+                        },
+                        "personName": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "waiting",
+                              "type": "string"
+                            },
+                            {
+                              "const": "drafting",
+                              "type": "string"
+                            },
+                            {
+                              "const": "draft_failed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "draft",
+                              "type": "string"
+                            },
+                            {
+                              "const": "submitted",
+                              "type": "string"
+                            },
+                            {
+                              "const": "skipped",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "draftSource": {
+                          "anyOf": [
+                            {
+                              "const": "agent_tool",
+                              "type": "string"
+                            },
+                            {
+                              "const": "co_agent",
+                              "type": "string"
+                            },
+                            {
+                              "const": "manual",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "submittedAt": {
+                          "anyOf": [
+                            {
+                              "description": "ISO 8601",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "isSelf": {
+                          "type": "boolean"
+                        },
+                        "href": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "actions": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "actionId",
+                              "actionType",
+                              "label"
+                            ],
+                            "properties": {
+                              "actionId": {
+                                "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                                "type": "string"
+                              },
+                              "actionType": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "itemId": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PersonalReviewResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review"
+        ],
+        "properties": {
+          "review": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personalReviewId",
+              "monthlyReviewId",
+              "period",
+              "version",
+              "personId",
+              "personName",
+              "status",
+              "draftSource",
+              "draftError",
+              "selfReview",
+              "missions",
+              "toolConnected",
+              "materialCount",
+              "conversationScope",
+              "submittedAt",
+              "skipped",
+              "viewer",
+              "actions"
+            ],
+            "properties": {
+              "personalReviewId": {
+                "type": "string"
+              },
+              "monthlyReviewId": {
+                "type": "string"
+              },
+              "period": {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "personId": {
+                "type": "string"
+              },
+              "personName": {
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "waiting",
+                    "type": "string"
+                  },
+                  {
+                    "const": "drafting",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft_failed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft",
+                    "type": "string"
+                  },
+                  {
+                    "const": "submitted",
+                    "type": "string"
+                  },
+                  {
+                    "const": "skipped",
+                    "type": "string"
+                  }
+                ]
+              },
+              "draftSource": {
+                "anyOf": [
+                  {
+                    "const": "agent_tool",
+                    "type": "string"
+                  },
+                  {
+                    "const": "co_agent",
+                    "type": "string"
+                  },
+                  {
+                    "const": "manual",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "draftError": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "code",
+                      "message",
+                      "at"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "selfReview": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "overall",
+                      "judgments",
+                      "nextFocus",
+                      "escalations"
+                    ],
+                    "properties": {
+                      "overall": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "judgments": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "nextFocus": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "escalations": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "missions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "code",
+                    "title",
+                    "outcome"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "toolConnected": {
+                "type": "boolean"
+              },
+              "materialCount": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "conversationScope": {
+                "type": "string"
+              },
+              "submittedAt": {
+                "anyOf": [
+                  {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "skipped": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "byName",
+                      "at"
+                    ],
+                    "properties": {
+                      "byName": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "viewer": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "isSelf",
+                  "isCeo"
+                ],
+                "properties": {
+                  "isSelf": {
+                    "type": "boolean"
+                  },
+                  "isCeo": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "actionId",
+                    "actionType",
+                    "label"
+                  ],
+                  "properties": {
+                    "actionId": {
+                      "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                      "type": "string"
+                    },
+                    "actionType": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ExecutePersonalReviewActionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actionId"
+        ],
+        "properties": {
+          "actionId": {
+            "type": "string"
+          },
+          "input": {}
+        }
+      },
+      "ExecutePersonalReviewActionResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review",
+          "board"
+        ],
+        "properties": {
+          "review": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personalReviewId",
+              "monthlyReviewId",
+              "period",
+              "version",
+              "personId",
+              "personName",
+              "status",
+              "draftSource",
+              "draftError",
+              "selfReview",
+              "missions",
+              "toolConnected",
+              "materialCount",
+              "conversationScope",
+              "submittedAt",
+              "skipped",
+              "viewer",
+              "actions"
+            ],
+            "properties": {
+              "personalReviewId": {
+                "type": "string"
+              },
+              "monthlyReviewId": {
+                "type": "string"
+              },
+              "period": {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "personId": {
+                "type": "string"
+              },
+              "personName": {
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "waiting",
+                    "type": "string"
+                  },
+                  {
+                    "const": "drafting",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft_failed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft",
+                    "type": "string"
+                  },
+                  {
+                    "const": "submitted",
+                    "type": "string"
+                  },
+                  {
+                    "const": "skipped",
+                    "type": "string"
+                  }
+                ]
+              },
+              "draftSource": {
+                "anyOf": [
+                  {
+                    "const": "agent_tool",
+                    "type": "string"
+                  },
+                  {
+                    "const": "co_agent",
+                    "type": "string"
+                  },
+                  {
+                    "const": "manual",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "draftError": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "code",
+                      "message",
+                      "at"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "selfReview": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "overall",
+                      "judgments",
+                      "nextFocus",
+                      "escalations"
+                    ],
+                    "properties": {
+                      "overall": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "judgments": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "nextFocus": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "escalations": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "missions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "code",
+                    "title",
+                    "outcome"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "toolConnected": {
+                "type": "boolean"
+              },
+              "materialCount": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "conversationScope": {
+                "type": "string"
+              },
+              "submittedAt": {
+                "anyOf": [
+                  {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "skipped": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "byName",
+                      "at"
+                    ],
+                    "properties": {
+                      "byName": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "viewer": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "isSelf",
+                  "isCeo"
+                ],
+                "properties": {
+                  "isSelf": {
+                    "type": "boolean"
+                  },
+                  "isCeo": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "actionId",
+                    "actionType",
+                    "label"
+                  ],
+                  "properties": {
+                    "actionId": {
+                      "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                      "type": "string"
+                    },
+                    "actionType": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "board": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "monthlyReviewId",
+              "period",
+              "counts",
+              "complete",
+              "rows"
+            ],
+            "properties": {
+              "monthlyReviewId": {
+                "type": "string"
+              },
+              "period": {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              "counts": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "total",
+                  "submitted",
+                  "skipped"
+                ],
+                "properties": {
+                  "total": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "submitted": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "skipped": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                }
+              },
+              "complete": {
+                "type": "boolean"
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personalReviewId",
+                    "personId",
+                    "personName",
+                    "status",
+                    "draftSource",
+                    "submittedAt",
+                    "isSelf",
+                    "href",
+                    "actions"
+                  ],
+                  "properties": {
+                    "personalReviewId": {
+                      "type": "string"
+                    },
+                    "personId": {
+                      "type": "string"
+                    },
+                    "personName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "waiting",
+                          "type": "string"
+                        },
+                        {
+                          "const": "drafting",
+                          "type": "string"
+                        },
+                        {
+                          "const": "draft_failed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "draft",
+                          "type": "string"
+                        },
+                        {
+                          "const": "submitted",
+                          "type": "string"
+                        },
+                        {
+                          "const": "skipped",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "draftSource": {
+                      "anyOf": [
+                        {
+                          "const": "agent_tool",
+                          "type": "string"
+                        },
+                        {
+                          "const": "co_agent",
+                          "type": "string"
+                        },
+                        {
+                          "const": "manual",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "submittedAt": {
+                      "anyOf": [
+                        {
+                          "description": "ISO 8601",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "isSelf": {
+                      "type": "boolean"
+                    },
+                    "href": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "actionId",
+                          "actionType",
+                          "label"
+                        ],
+                        "properties": {
+                          "actionId": {
+                            "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                            "type": "string"
+                          },
+                          "actionType": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "itemId": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PersonalReviewUpdateInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fields"
+        ],
+        "properties": {
+          "fields": {
+            "minItems": 1,
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "field",
+                "text"
+              ],
+              "properties": {
+                "field": {
+                  "anyOf": [
+                    {
+                      "const": "overall",
+                      "type": "string"
+                    },
+                    {
+                      "const": "judgments",
+                      "type": "string"
+                    },
+                    {
+                      "const": "nextFocus",
+                      "type": "string"
+                    },
+                    {
+                      "const": "escalations",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "text": {
+                  "maxLength": 4000,
+                  "type": "string"
+                },
+                "sources": {
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthlyCycle": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reviewPeriod",
+          "nextPeriod",
+          "startedAt",
+          "deadlineAt",
+          "completedAt",
+          "stage",
+          "serverNow"
+        ],
+        "properties": {
+          "reviewPeriod": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "nextPeriod": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "startedAt": {
+            "description": "ISO 8601",
+            "type": "string"
+          },
+          "deadlineAt": {
+            "description": "ISO 8601",
+            "type": "string"
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "description": "ISO 8601",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "const": "personal_reviews",
+                "type": "string"
+              },
+              {
+                "const": "unit_reviews",
+                "type": "string"
+              },
+              {
+                "const": "company_summary",
+                "type": "string"
+              },
+              {
+                "const": "lto_decision",
+                "type": "string"
+              },
+              {
+                "const": "period_plan",
+                "type": "string"
+              },
+              {
+                "const": "mission_cards",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              }
+            ]
+          },
+          "serverNow": {
+            "description": "ISO 8601",
+            "type": "string"
+          }
+        }
+      },
+      "MonthlyCycleResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cycle"
+        ],
+        "properties": {
+          "cycle": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "reviewPeriod",
+                  "nextPeriod",
+                  "startedAt",
+                  "deadlineAt",
+                  "completedAt",
+                  "stage",
+                  "serverNow"
+                ],
+                "properties": {
+                  "reviewPeriod": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  },
+                  "nextPeriod": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  },
+                  "deadlineAt": {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  },
+                  "completedAt": {
+                    "anyOf": [
+                      {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "stage": {
+                    "anyOf": [
+                      {
+                        "const": "personal_reviews",
+                        "type": "string"
+                      },
+                      {
+                        "const": "unit_reviews",
+                        "type": "string"
+                      },
+                      {
+                        "const": "company_summary",
+                        "type": "string"
+                      },
+                      {
+                        "const": "lto_decision",
+                        "type": "string"
+                      },
+                      {
+                        "const": "period_plan",
+                        "type": "string"
+                      },
+                      {
+                        "const": "mission_cards",
+                        "type": "string"
+                      },
+                      {
+                        "const": "done",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "serverNow": {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -18698,7 +20934,8 @@
               "wechat",
               "outlets",
               "recording",
-              "voiceprint"
+              "voiceprint",
+              "world"
             ],
             "properties": {
               "piRuntime": {
@@ -18736,6 +20973,9 @@
                 }
               },
               "voiceprint": {
+                "type": "boolean"
+              },
+              "world": {
                 "type": "boolean"
               }
             }

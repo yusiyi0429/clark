@@ -40,8 +40,8 @@ async function setup() {
   };
   const close = async (at = CLOSE) => {
     now = at;
-    // Every action closes a due window under the round lock, even when its old token then conflicts.
-    const due = await page(); await execute(token("open", due.version));
+    const due = await page();
+    expect((await execute(token("close", due.version))).statusCode).toBe(200);
   };
   return { t, round, card, other, ceo, member, page, token, execute, act, send, close, setNow: (at: Date) => { now = at; } };
 }

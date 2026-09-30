@@ -66,7 +66,7 @@ describe("Mission round HTTP boundary", () => {
       expect((await t.sql("SELECT status FROM mission_rounds WHERE id=$1", [roundId]))[0].status).toBe("draft");
       const opened = await execute(t, cookie, token);
       expect(opened.statusCode).toBe(200);
-      expect(opened.json().cards[0]).toMatchObject({ version: 2, payload: { phase: "open", openedAt: start, closesAt: "2026-10-03T02:00:00.000Z", serverNow: start, approver: true } });
+      expect(opened.json().cards[0]).toMatchObject({ version: 2, payload: { phase: "open", openedAt: start, closesAt: null, serverNow: start, approver: true } });
       expect((await execute(t, cookie, token)).json().cards[0].version).toBe(2);
       expect((await execute(t, cookie, token, { viewCardId: cardId })).json().cards[0]).toMatchObject({ kind: "personal-mission-card", version: 2, payload: { card: { cardId } } });
       const duplicate = await execute(t, cookie, action(t, roundId, "mission-round.open", 2));
@@ -78,7 +78,7 @@ describe("Mission round HTTP boundary", () => {
     } finally { await t.close(); }
   });
 
-  it("keeps reads side-effect free and commits a due snapshot before returning a stale-action conflict", async () => {
+  it("keeps discussion open past 48 hours, closes immediately on request and rejects stale tokens", async () => {
     let current = new Date(start);
     const t = await createTestApp({}, undefined, { monthlyNow: () => current });
     try {
@@ -87,8 +87,12 @@ describe("Mission round HTTP boundary", () => {
       expect((await execute(t, cookie, action(t, roundId, "mission-round.open"))).statusCode).toBe(200);
       current = new Date("2026-10-03T02:00:00.000Z");
       const closed = await t.app.inject({ method: "GET", url: `/api/mission-rounds/${roundId}`, headers: { cookie } });
-      expect(closed.json().cards[0]).toMatchObject({ version: 2, payload: { phase: "closed" } });
+      expect(closed.json().cards[0]).toMatchObject({ version: 2, payload: { phase: "open", closesAt: null } });
       expect(await t.sql("SELECT id FROM mission_round_reviews")).toHaveLength(0);
+      const finished = await execute(t, cookie, action(t, roundId, "mission-round.close", 2));
+      expect(finished.statusCode).toBe(200);
+      expect(finished.json().cards[0]).toMatchObject({ version: 3, payload: { phase: "reviewing", closesAt: current.toISOString() } });
+      expect((await execute(t, cookie, action(t, roundId, "mission-round.close", 2))).statusCode).toBe(200);
       const stale = await execute(t, cookie, action(t, roundId, "mission-round.reopen", 2));
       expect(stale.statusCode).toBe(409);
       expect(stale.json().latestCard).toMatchObject({ version: 3, payload: { phase: "reviewing" } });
@@ -96,7 +100,7 @@ describe("Mission round HTTP boundary", () => {
       const reopenToken = stale.json().latestCard.actions.find((a: {actionType: string}) => a.actionType === "mission-round.reopen").actionId;
       const reopened = await execute(t, cookie, reopenToken);
       expect(reopened.statusCode).toBe(200);
-      expect(reopened.json().cards[0]).toMatchObject({ version: 4, payload: { phase: "open", round: 2, closesAt: "2026-10-05T02:00:00.000Z" } });
+      expect(reopened.json().cards[0]).toMatchObject({ version: 4, payload: { phase: "open", round: 2, closesAt: null } });
     } finally { await t.close(); }
   });
 });

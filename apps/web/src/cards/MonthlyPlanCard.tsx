@@ -231,9 +231,9 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
 
             {capabilities.map((capability) => (
               <section key={capability.capabilityId} className={s.section}>
-                <h2 className={s.sectionTitle}>{capabilityName(capability.capabilityId)} · 能力 PCO</h2>
+                <h2 className={s.sectionTitle}>{capabilityName(capability.capabilityId)} · 能力 PO</h2>
                 <textarea
-                  aria-label={`${capabilityName(capability.capabilityId)} 能力 PCO`}
+                  aria-label={`${capabilityName(capability.capabilityId)} 能力 PO`}
                   value={capability.outcome}
                   disabled={locked}
                   rows={2}
@@ -243,7 +243,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
                     )
                   }
                 />
-                {checkable(`capability:${capability.capabilityId}`, `${capabilityName(capability.capabilityId)} 能力 PCO`)}
+                {checkable(`capability:${capability.capabilityId}`, `${capabilityName(capability.capabilityId)} 能力 PO`)}
               </section>
             ))}
           </div>

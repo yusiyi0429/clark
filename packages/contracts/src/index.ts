@@ -14,6 +14,7 @@ export * from "./battlefields.js";
 export * from "./missions.js";
 export * from "./missionCards.js";
 export * from "./monthlyReviews.js";
+export * from "./personalReviews.js";
 export * from "./config.js";
 export * from "./transcript.js";
 export * from "./threads.js";

@@ -13,6 +13,10 @@ import { companyProgress, getIssue, getMeeting, getMissionCard, listPending } fr
 import { appendTaskProgress } from "./taskProgress.js";
 import { getTaskDetail, listMyTasks, updateMyTaskStatus } from "./tasks.js";
 import { logEvent } from "./observability.js";
+import { PersonalReviewUpdateInput, type TPersonalReviewUpdateInput } from "@warmap/contracts";
+import { actionFingerprint, signActionId } from "./actionToken.js";
+import { executePersonalReviewAction, getCurrentPersonalReview, getPersonalReview, personalReviewContext, personalReviewHref } from "./personalReviews.js";
+import { PERSONAL_REVIEW_WRITING_REQUIREMENTS } from "./personalReviewAgent.js";
 
 const ListInput = Type.Object({ status: Type.Optional(Type.Union([Type.Literal("open"), Type.Literal("all")])) }, { additionalProperties: false });
 const Uuid = Type.String({ pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" });
@@ -22,6 +26,7 @@ const AppendInput = Type.Object({ itemId: Uuid, body: Type.String({ minLength: 1
   links: Type.Optional(Type.Array(Link, { maxItems: 5 })), clientEventId: Type.Optional(Uuid) }, { additionalProperties: false });
 const StatusInput = Type.Object({ itemId: Uuid, status: Type.Union([Type.Literal("not_started"), Type.Literal("in_progress"), Type.Literal("done")]), version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false });
 const EmptyInput = Type.Object({}, { additionalProperties: false });
+const SaveReviewInput = Type.Object({ version: Type.Integer({ minimum: 1 }), fields: PersonalReviewUpdateInput.properties.fields }, { additionalProperties: false });
 const IssueInput = Type.Object({ issueId: Uuid }, { additionalProperties: false });
 const MeetingInput = Type.Object({ meetingId: Uuid }, { additionalProperties: false });
 const MissionCardInput = Type.Object({ cardId: Uuid }, { additionalProperties: false });
@@ -34,11 +39,15 @@ const memberDefinitions: Tool[] = [
   { name: "update_status", description: "更新我推进的事项状态，必须带当前版本。Update the status of an item I own using its current version.", inputSchema: StatusInput as Tool["inputSchema"] },
 ];
 const ceoDefinitions: Tool[] = [
-  { name: "list_pending", description: "列出待我处理的议题、会议、月度计划和任务卡。", inputSchema: EmptyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "get_issue", description: "读取议题详情与关联会议。", inputSchema: IssueInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "get_meeting", description: "读取会议详情、预审、议程和会后条目。", inputSchema: MeetingInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "get_mission_card", description: "读取任务卡及其中的 Mission。", inputSchema: MissionCardInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "company_progress", description: "读取指定周的全公司执行进展和战场状态计数。", inputSchema: CompanyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
+];
+const reviewDefinitions: Tool[] = [
+  { name: "list_pending", description: "列出待我处理的个人复盘；CEO 还可查议题、会议、月度计划和任务卡。", inputSchema: EmptyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
+  { name: "get_my_review", description: "读取本人当前个人复盘、Mission 全文、执行进展和写作要求。", inputSchema: EmptyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
+  { name: "save_review_draft", description: "按当前版本保存个人复盘草稿；不能提交，请本人到天枢确认后提交。", inputSchema: SaveReviewInput as Tool["inputSchema"] },
 ];
 const memberNames = new Set(memberDefinitions.map((tool) => tool.name));
 const ceoNames = new Set(ceoDefinitions.map((tool) => tool.name));
@@ -58,12 +67,13 @@ const result = (value: unknown, isError = false) => ({ isError, content: [{ type
 
 export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: string; now: () => Date;
   names: () => Map<string, string>; findPerson: (personId: string) => MemoryPerson | undefined;
-  people: () => MemoryPerson[]; initialPerson: MemoryPerson; draftDir?: string; authorization: string | undefined }) {
+  people: () => MemoryPerson[]; initialPerson: MemoryPerson; draftDir?: string; publicOrigin?: string; authorization: string | undefined }) {
   const auth = () => authenticatePersonalToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id));
   const initialAccess = access(deps.initialPerson);
   const instructions = [
-    ...(initialAccess.ceo ? ["只读：可以查待你处理的事、议题/会议/任务卡详情和全公司进展；拍板、签发、确认请回天枢网页操作。"] : []),
+    ...(initialAccess.ceo ? ["公司业务只读：可以查待你处理的事、议题/会议/任务卡详情和全公司进展；拍板、签发、确认请回天枢网页操作。"] : []),
     ...(initialAccess.member ? ["可以查看自己的执行事项，记录真实进展并更新负责事项的状态。"] : []),
+    "月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。",
   ].join("\n");
   const server = new Server({ name: "tianshu", version: "0.1.0" }, { capabilities: { tools: {} }, instructions });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -71,7 +81,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     const person = identity && deps.findPerson(identity.personId);
     if (!person) return { tools: [] };
     const roles = access(person);
-    return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : [])] };
+    return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []), ...reviewDefinitions] };
   });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const tool = request.params.name, args = request.params.arguments ?? {};
@@ -80,7 +90,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     const person = deps.findPerson(identity.personId);
     if (!person) return result({ code: "UNAUTHORIZED", message: "身份已失效，请重新连接" }, true);
     const roles = access(person);
-    const write = tool === "append_progress" || tool === "update_status";
+    const write = tool === "append_progress" || tool === "update_status" || tool === "save_review_draft";
     let itemId: string | undefined;
     let code: string | undefined;
     try {
@@ -95,7 +105,33 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       switch (tool) {
         case "list_pending": {
           if (!Value.Check(EmptyInput, args)) break;
-          return result(await listPending(ceoContext()));
+          const pending = roles.ceo ? await listPending(ceoContext()) : { items: [] };
+          const review = await getCurrentPersonalReview(deps.q, identity.personId);
+          return result({ items: [...pending.items, ...(review && !["submitted", "skipped"].includes(review.status) ? [{
+            kind: "personal-review", id: review.id, title: `${Number(review.period.slice(5))} 月个人复盘`, status: review.status,
+            version: review.version, href: personalReviewHref(review.id, roles.ceo),
+          }] : [])] });
+        }
+        case "get_my_review": {
+          if (!Value.Check(EmptyInput, args)) break;
+          const review = await getCurrentPersonalReview(deps.q, identity.personId);
+          if (!review) return result({ review: null, message: "当前没有进行中的个人复盘" });
+          return result({ id: review.id, status: review.status, version: review.version, selfReview: review.self_review,
+            ...await personalReviewContext(deps.q, review), writingRequirements: PERSONAL_REVIEW_WRITING_REQUIREMENTS });
+        }
+        case "save_review_draft": {
+          if (!Value.Check(SaveReviewInput, args)) break;
+          const review = await getCurrentPersonalReview(deps.q, identity.personId);
+          if (!review) { code = "PERSONAL_REVIEW_NOT_FOUND"; return result({ code, message: "当前没有进行中的个人复盘" }, true); }
+          const scope = { actionType: "personal-review.update", objectType: "personal-review", objectId: review.id, objectVersion: args.version as number };
+          const fields = args.fields as TPersonalReviewUpdateInput["fields"];
+          const saved = await executePersonalReviewAction(deps.pool, { personId: identity.personId, role: roles.ceo ? "ceo" : "member" }, scope,
+            { fields }, actionFingerprint(deps.pepper, signActionId(deps.pepper, scope), { fields, source: "agent_tool" }), deps.now(), "", "agent_tool");
+          if ("error" in saved) { code = saved.error.code; return result(saved.error, true); }
+          if ("conflict" in saved) { code = "VERSION_CONFLICT"; return result({ code, message: "个人复盘已变化，请重新读取后重试" }, true); }
+          const latest = (await getPersonalReview(deps.q, review.id))!;
+          return result({ id: latest.id, status: latest.status, version: latest.version, selfReview: latest.self_review,
+            message: "请到天枢确认后提交", href: `${(deps.publicOrigin ?? process.env.PUBLIC_ORIGIN ?? "").replace(/\/$/, "")}${personalReviewHref(latest.id, roles.ceo)}` });
         }
         case "get_issue": {
           if (!Value.Check(IssueInput, args)) break;

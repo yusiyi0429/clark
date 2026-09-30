@@ -71,8 +71,8 @@ describe("CEO Mission draft entry and October rehearsal", () => {
       expect(await t.sql("SELECT row_to_json(r) AS row FROM mission_rounds r")).toEqual(before);
       const opened = await execute(round.actions.find((a: {actionType: string}) => a.actionType === "mission-round.open").actionId);
       expect(opened.statusCode).toBe(200);
-      const closes = opened.json().cards[0].payload.closesAt;
-      expect(Date.parse(closes) - current.getTime()).toBe(48 * 60 * 60 * 1000);
+      expect(opened.json().cards[0].payload.closesAt).toBeNull();
+      const closes = new Date(current.getTime() + 72 * 60 * 60 * 1000).toISOString();
       const firstCard = round.payload.cards[0].cardId;
       const included = randomUUID(), excluded = randomUUID();
       for (const [id, time, late] of [[included, new Date(Date.parse(closes) - 1), false], [excluded, new Date(closes), true]] as const) {
@@ -82,7 +82,9 @@ describe("CEO Mission draft entry and October rehearsal", () => {
       const [{ database }] = await t.sql("SELECT current_database() AS database");
       pool = new Pool({ connectionString: (process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres").replace(/\/postgres$/, `/${database}`), max: 2 });
       current = new Date(closes);
-      expect(await closeDueRounds(pool, () => current)).toBe(1);
+      expect(await closeDueRounds(pool, () => current)).toBe(0);
+      const finish = await execute(opened.json().cards[0].actions.find((a: {actionType: string}) => a.actionType === "mission-round.close").actionId);
+      expect(finish.statusCode).toBe(200);
       expect((await t.sql("SELECT feedback_ids,mission_versions FROM mission_round_reviews"))[0]).toMatchObject({ feedback_ids: [included] });
       expect(Object.keys((await t.sql("SELECT mission_versions FROM mission_round_reviews"))[0].mission_versions as object)).toHaveLength(12);
       const reviewed = (await home())[0];

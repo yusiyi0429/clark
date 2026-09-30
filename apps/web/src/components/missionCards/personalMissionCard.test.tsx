@@ -106,9 +106,14 @@ describe("本轮状态与倒计时", () => {
     expect(html).toContain("截止于");
   });
   it.each(["draft", "open", "closed", "reviewing", "confirmed"] as const)("%s 阶段开放按钮只给草稿拍板人", (phase) => {
-    const props = { payload: { ...personalPayload, round: { ...personalPayload.round, phase } }, actions: [{ actionId: "open", actionType: "mission-round.open", label: "统一开放 48 小时讨论" }], viewerId: "ceo", pending: false, onAction: vi.fn(), onSelectCard: vi.fn(), onViewGoals: vi.fn() };
+    const props = { payload: { ...personalPayload, round: { ...personalPayload.round, phase } }, actions: [{ actionId: "open", actionType: "mission-round.open", label: "统一开放讨论" }], viewerId: "ceo", pending: false, onAction: vi.fn(), onSelectCard: vi.fn(), onViewGoals: vi.fn() };
     const html = renderToStaticMarkup(<RoundLine {...props} />);
-    expect(html.includes(">统一开放 48 小时讨论</button>")).toBe(phase === "draft");
-    expect(renderToStaticMarkup(<RoundLine {...props} payload={{ ...props.payload, round: { ...props.payload.round, approver: false } }} />)).not.toContain(">统一开放 48 小时讨论</button>");
+    expect(html.includes(">统一开放讨论</button>")).toBe(phase === "draft");
+    expect(renderToStaticMarkup(<RoundLine {...props} payload={{ ...props.payload, round: { ...props.payload.round, approver: false } }} />)).not.toContain(">统一开放讨论</button>");
+  });
+  it.each(["draft", "open", "closed", "reviewing", "confirmed"] as const)("%s 阶段「结束讨论」只在讨论中给拍板人", (phase) => {
+    const props = { payload: { ...personalPayload, round: { ...personalPayload.round, phase } }, actions: [{ actionId: "close", actionType: "mission-round.close", label: "结束讨论" }], viewerId: "ceo", pending: false, onAction: vi.fn(), onSelectCard: vi.fn(), onViewGoals: vi.fn() };
+    expect(renderToStaticMarkup(<RoundLine {...props} />).includes(">结束讨论，开始汇总</button>")).toBe(phase === "open");
+    expect(renderToStaticMarkup(<RoundLine {...props} payload={{ ...props.payload, round: { ...props.payload.round, approver: false } }} />)).not.toContain(">结束讨论，开始汇总</button>");
   });
 });

@@ -4,7 +4,7 @@ import { Pool } from "pg";
 import type { TPreflightCandidate, TWebSearchInput, TWebSearchResponse, TWebSearchResult } from "@warmap/contracts";
 import { migrate } from "../src/migrate.js";
 import { hashSecret } from "../src/session.js";
-import { buildApp, type AppEnv } from "../src/app.js";
+import { buildApp, DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR, type AppEnv } from "../src/app.js";
 import type { FastifyInstance } from "fastify";
 import type { ConversationRuntime } from "../src/conversations.js";
 import type { ResearchService } from "../src/research.js";
@@ -229,7 +229,12 @@ export async function createTestApp(
     ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;
   const monthlyReviews = monthlyReviewAgents
-    ? createMonthlyReviewService({ pool, companyMemory: loadCompanyMemory(env), agents: monthlyReviewAgents, now: monthlyNow, retryDelayMs: monthlyReviewRetryDelayMs })
+    ? createMonthlyReviewService({ pool, companyMemory: loadCompanyMemory(env), agents: monthlyReviewAgents, now: monthlyNow, retryDelayMs: monthlyReviewRetryDelayMs,
+      personalDraft: { storageDir: env.conversationAttachmentStorageDir ?? DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR,
+        agent: monthlyReviewAgents.personal ?? { async generate() { return { candidate: {
+          overall: { text: "缺少材料", sources: [] }, judgments: { text: "缺少材料", sources: [] },
+          nextFocus: { text: "缺少材料", sources: [] }, escalations: { text: "", sources: [] },
+        } }; } } } })
     : undefined;
   const recordings = recordingDeps
     ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, companyMemory: loadCompanyMemory(env), deps: recordingDeps })

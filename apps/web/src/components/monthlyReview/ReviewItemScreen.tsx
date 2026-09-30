@@ -143,12 +143,13 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
           </div> : null}
 
           <section className={r.goal} aria-label="本月目标">
-            <h2>{month} 月目标</h2>
+            <h2>{item.subjectType === "battlefield" ? "PO · " : ""}{month} 月目标</h2>
             {item.target ? <p>{item.target}</p> : <p className={r.muted}>{month} 月没有签发的目标，按实际推进情况复盘。</p>}
-            <h2>六个月目标</h2>
+            <h2>{item.subjectType === "battlefield" ? "LTO · " : ""}六个月目标</h2>
             <p className={r.muted}>{item.sixMonthOutcome || "未填写"}</p>
           </section>
 
+          {item.status === "waiting" ? <p className={r.muted} role="status">等这里的 Mission 负责人交齐个人复盘（或 CEO 选择不再等）后，Co-Agent 会以他们的复盘为材料自动起草。</p> : null}
           {item.status === "drafting" ? <div className={r.working} role="status"><span className={r.pulse} aria-hidden />Co-Agent 正在根据本月目标、反馈和 Mission 起草自评，一般一两分钟…</div> : null}
           {item.status === "draft_failed" ? <div className={s.error} role="alert">
             起草没有成功{item.draftError ? `：${item.draftError.message}` : ""}。

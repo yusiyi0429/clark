@@ -52,7 +52,7 @@ describe("战场卡正面战略上下文", () => {
     expect(html).toContain('data-testid="zone-growth"');
     expect(html).toContain('data-mode="decisions"');
     expect(html).toContain("负责人 · 待指派");
-    expect(html).toContain("六个月目标 · 真正跑通，从目标组织范式设计进入真实经营。");
+    expect(html).toContain("LTO · 真正跑通，从目标组织范式设计进入真实经营。");
     expect(html).toContain("是否追加东南亚渠道预算 40%");
   });
 
@@ -64,7 +64,7 @@ describe("战场卡正面战略上下文", () => {
 
   it("六个月目标为空时不渲染目标行", () => {
     const html = render(battlefieldCard({ sixMonthOutcome: "" }));
-    expect(html).not.toContain("六个月目标");
+    expect(html).not.toContain("LTO ·");
   });
 
   it("展开 Mission 后渲染逐条详情入口", () => {

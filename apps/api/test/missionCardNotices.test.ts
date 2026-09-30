@@ -62,7 +62,7 @@ describe("Mission Card notices and onboarding", () => {
     } finally { await t.close(); }
   });
 
-  it("keeps notices through exact cutoff and review, uses the same counts, and removes both notices only on confirmation", async () => {
+  it("keeps notices until manual close and review, uses the same counts, and removes both notices only on confirmation", async () => {
     let now = START; const t = await createTestApp({}, undefined, { monthlyNow: () => now });
     try {
       const ids = await seed(t); const ceo = await t.loginCookie(), member = await t.memberCookie();
@@ -72,11 +72,13 @@ describe("Mission Card notices and onboarding", () => {
       expect(sent.statusCode).toBe(200);
       const feedback = sent.json().feedback.id;
       const active = (await read(t, member)).rounds[0];
-      expect(active).toMatchObject({ phase: "open", closesAt: CLOSE.toISOString(), serverNow: START.toISOString() });
+      expect(active).toMatchObject({ phase: "open", closesAt: null, serverNow: START.toISOString() });
       expect(active.cards[0].line).toBe("1 条意见");
       now = CLOSE;
-      expect((await read(t, member)).rounds[0]).toMatchObject({ phase: "closed", cards: [{ line: "汇总中" }] });
+      expect((await read(t, member)).rounds[0]).toMatchObject({ phase: "open", closesAt: null, cards: [{ line: "1 条意见" }] });
       expect(await t.sql("SELECT id FROM mission_round_reviews")).toHaveLength(0);
+      expect((await execute(t, ceo, ids.round, 2, "close")).statusCode).toBe(200);
+      expect(await t.sql("SELECT id FROM mission_round_reviews")).toHaveLength(1);
       const stale = await execute(t, ceo, ids.round, 2, "reopen"); expect(stale.statusCode).toBe(409);
       const review = (await read(t, ceo)).rounds[0];
       expect(review).toMatchObject({ phase: "reviewing", counts: { pending: 1 } });
@@ -100,7 +102,7 @@ describe("Mission Card notices and onboarding", () => {
     } finally { await t.close(); }
   });
 
-  it("adds card Owners to participating battlefields without missions, shares page status, and prioritizes an open/cutoff card over tasks", async () => {
+  it("adds card Owners to participating battlefields without missions, shares page status, and prioritizes an open/manually closed card over tasks", async () => {
     let now = START; const t = await createTestApp({}, undefined, { monthlyNow: () => now });
     try {
       const ids = await seed(t); const ceo = await t.loginCookie(), member = await t.memberCookie();
@@ -114,19 +116,23 @@ describe("Mission Card notices and onboarding", () => {
       await seedMissions(t, ids);
       await execute(t, ceo, ids.round, 1, "open");
       onboarding = await read(t, member, "/api/me/onboarding");
-      expect(onboarding.next).toEqual({ text: "10 月 Mission Card 讨论开放到 10/3 00:30", action: "进入工作台", href: "/me" });
+      expect(onboarding.next).toEqual({ text: "10 月 Mission Card 讨论已开放", action: "进入工作台", href: "/me" });
       const page = (await read(t, member, `/api/mission-cards/${ids.mine}`)).cards[0];
       expect(onboarding.work.missionCards[0].status).toBe(page.payload.card.status);
       now = CLOSE;
+      expect((await read(t, member, "/api/me/onboarding")).next.text).toBe("10 月 Mission Card 讨论已开放");
+      expect((await execute(t, ceo, ids.round, 2, "close")).statusCode).toBe(200);
       expect((await read(t, member, "/api/me/onboarding")).next.text).toBe("10 月 Mission Card 已截止，等测试甲拍板");
       now = new Date("2026-11-01T02:00:00Z");
       onboarding = await read(t, member, "/api/me/onboarding");
-      expect(onboarding.work.missionCards).toEqual([]); expect(onboarding.work.battlefields).toEqual([]);
+      expect(onboarding.work.missionCards).toEqual([]);
+      expect(onboarding.work).toMatchObject({ period: "2026-10", missions: [{ id: ids.mine }],
+        battlefields: [{ id: "growth", monthTarget: "本月目标" }] });
       expect(onboarding.next.text).toBe("你有 1 件执行事项在推进");
       // 跨月不替代拍板；旧轮次仍在通知中，直到真正 confirmed。
-      expect((await read(t, member)).rounds).toMatchObject([{ roundId: ids.round, period: "2026-10", phase: "closed" }]);
+      expect((await read(t, member)).rounds).toMatchObject([{ roundId: ids.round, period: "2026-10", phase: "reviewing" }]);
       expect((await read(t, ceo, "/api/cards/home")).cards.filter((card: any) => card.kind === "mission-round")).toMatchObject([
-        { payload: { roundId: ids.round, period: "2026-10", phase: "closed" } },
+        { payload: { roundId: ids.round, period: "2026-10", phase: "reviewing" } },
       ]);
     } finally { await t.close(); }
   });

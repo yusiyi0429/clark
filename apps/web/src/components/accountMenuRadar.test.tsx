@@ -21,7 +21,8 @@ const hooks = vi.hoisted(() => {
 });
 vi.mock("react", async (original) => {
   const react = await original<typeof import("react")>();
-  return { ...react, useState: (initial?: unknown) => (hooks.active ? hooks.useState(initial) : react.useState(initial)) };
+  return { ...react, useState: (initial?: unknown) => (hooks.active ? hooks.useState(initial) : react.useState(initial)),
+    useRef: (initial?: unknown) => (hooks.active ? { current: initial } : react.useRef(initial)), useEffect: (...args: Parameters<typeof react.useEffect>) => (hooks.active ? undefined : react.useEffect(...args)) };
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 

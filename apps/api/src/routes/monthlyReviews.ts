@@ -41,6 +41,7 @@ import {
 } from "../monthlyReviews.js";
 import { personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
+import { registerPersonalReviewRoutes } from "./personalReviews.js";
 
 const NoInput = Type.Object({}, { additionalProperties: false });
 
@@ -62,6 +63,7 @@ const ACTIONS: Record<string, [string, TSchema]> = {
 
 /** 月末复盘：CEO 总览、负责人 / CEO 的复盘项、现算通知，以及独立的 Action 执行接口。 */
 export function registerMonthlyReviewRoutes(app: AppInstance, ctx: RouteContext): void {
+  registerPersonalReviewRoutes(app, ctx);
   const secret = ctx.env.sessionSecret;
   const reviewView = async (row: MonthlyReviewRow): Promise<TMonthlyReviewPayload> =>
     projectMonthlyReview(row, await listMonthlyReviewItems(ctx.q, row.id), personDisplayNames(ctx.companyMemory), await readLtco(ctx.q), secret,

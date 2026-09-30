@@ -173,7 +173,7 @@ describe("拍板动作与跨卡处理", () => {
     render(); ui.roundProps!.onStartProcessing!();
     expect(ui.navigate).toHaveBeenCalledExactlyOnceWith("/me/mission-cards/other-card?feedback=first-feedback");
   });
-  it("核对草稿在失败时保留，重开弹窗写轮次和预计截止，成功才清空", async () => {
+  it("核对草稿在失败时保留，重开弹窗写轮次、说明由拍板人结束，成功才清空", async () => {
     render(); ui.roundProps!.onNoteChange!("双方已核对依赖。"); render();
     expect(ui.roundProps!.note).toBe("双方已核对依赖。");
     const reopen = { actionId: "reopen", actionType: "mission-round.reopen", label: "重新开启" };
@@ -182,7 +182,7 @@ describe("拍板动作与跨卡处理", () => {
     await new Promise((resolve) => setTimeout(resolve, 0)); render();
     expect(ui.roundProps!.note).toBe("双方已核对依赖。");
     expect(ui.ask.mock.calls[0][0]).toContain("第 2 轮");
-    expect(ui.ask.mock.calls[0][0]).toContain("预计 10/3 08:00");
+    expect(ui.ask.mock.calls[0][0]).toContain("由你决定何时结束");
     ui.post.mockResolvedValueOnce({ response: { ok: true }, data: { cards: [{ ...card, payload: { ...personalPayload, round: { ...personalPayload.round, round: 2 } } }] } });
     ui.roundProps!.onAction(reopen);
     await new Promise((resolve) => setTimeout(resolve, 0)); render();

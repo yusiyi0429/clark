@@ -26,7 +26,7 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(initialized.statusCode).toBe(200);
       expect(initialized.json().result.serverInfo.name).toBe("tianshu");
       const tools = await send(2, "tools/list");
-      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "get_item", "append_progress", "update_status"]);
+      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "get_item", "append_progress", "update_status", "list_pending", "get_my_review", "save_review_draft"]);
       const invoke = async (id: number, name: string, args: Record<string, unknown>) => (await send(id, "tools/call", { name, arguments: args })).json().result;
       const listed = await invoke(3, "list_my_items", {});
       expect(JSON.parse(listed.content[0].text).items.some((item: { id: string }) => item.id === task.id)).toBe(true);

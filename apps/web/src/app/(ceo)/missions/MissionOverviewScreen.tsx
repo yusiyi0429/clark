@@ -116,7 +116,7 @@ export function MissionOverviewScreen({
       />
       <div className={w.expandedScroll}>
         <div className={m.content}>
-          <p className={m.intro}>查看本月 DRI 的结果承诺与讨论草稿，以及每条 Mission 与战场、能力域和月度 PCO 的关系。</p>
+          <p className={m.intro}>查看本月 DRI 的结果承诺与讨论草稿，以及每条 Mission 与战场、能力域和月度 PO 的关系。</p>
 
           <div className={m.summary} data-testid="mission-summary">
             <Stat value={stats.missions} label={statLabel} />

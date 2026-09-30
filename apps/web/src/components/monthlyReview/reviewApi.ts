@@ -30,6 +30,7 @@ export const monthOf = (period: string) => Number(period.slice(5));
 /** 复盘项状态的一句话，负责人与 CEO 各看各的。 */
 export function itemStatusText(item: Pick<TMonthlyReviewItemPayload, "status">, forOwner: boolean): string {
   switch (item.status) {
+    case "waiting": return "等大家交个人复盘";
     case "drafting": return "Co-Agent 正在起草";
     case "draft_failed": return "起草没有成功";
     case "draft": return forOwner ? "草稿 · 改好后提交" : "负责人修改中";

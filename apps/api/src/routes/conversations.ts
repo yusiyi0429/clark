@@ -44,7 +44,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
       return { visible: true, snapshot: { cardId: card.id, version: card.version, kind: card.kind, title: card.title,
         objectRef: card.objectRef, payload: card.payload } };
     }
-    return person.role === "ceo" || scope === "global" || scope.startsWith("mission-card:") || scope.startsWith("task:") || scope.startsWith("monthly-review-item:")
+    return person.role === "ceo" || scope === "global" || scope.startsWith("mission-card:") || scope.startsWith("task:") || scope.startsWith("monthly-review-item:") || scope.startsWith("personal-review:")
       ? getScopeObject(q, scope, env.sessionSecret, { person, people: companyMemory.searchPeople(undefined), now: ctx.now() })
       : { snapshot: null, visible: false };
   };

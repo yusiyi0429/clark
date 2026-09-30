@@ -127,6 +127,7 @@ const review: TMonthlyReviewPayload = {
   ],
   summary: { status: "ready", error: null, confirmedAt: null, overall: "整体按计划推进", judgments: Array.from({ length: 3 }, (_, index) => ({ title: `判断${index + 1}`, body: `内容${index + 1}` })), nextFocus: ["补齐第三个场景", "非当事人回看"] },
   ltco: {
+    window: { start: "2026-10", end: "2027-03" },
     current: "三年内成为行业标杆",
     units: [
       { subjectType: "battlefield", subjectId: "bf-01", subjectCode: "01", subjectName: "灯塔项目", current: "形成标杆案例" },
@@ -138,7 +139,7 @@ const review: TMonthlyReviewPayload = {
   actions: [act("monthly-review.update_summary"), act("monthly-review.confirm_summary"), act("monthly-review.retry_summary")],
 };
 
-describe("CEO 复盘总览与 LTCO", () => {
+describe("CEO 复盘总览与 LTO 审视", () => {
   it("没有复盘时可以手动开始", () => {
     const empty: TMonthlyReviewResponse = { period: "2026-09", review: null, actions: [act("monthly-review.open")] };
     expect(renderToStaticMarkup(<ReviewOverviewScreen initial={empty} />)).toContain("开始 9 月复盘");
@@ -158,7 +159,7 @@ describe("CEO 复盘总览与 LTCO", () => {
     expect(html).toContain("反馈给产品");
   });
 
-  it("LTCO 页默认按建议选「保持不变」，确认后去下月计划", async () => {
+  it("LTO 页默认按建议选「保持不变」，只列战场 LTO 并显示滑动窗口，确认后去下月计划", async () => {
     ui.post.mockResolvedValue({ data: { review: { ...review, status: "closed" } }, response: { ok: true, status: 200 } });
     const pendingReview = { ...review, status: "ltco_pending" as const, actions: [act("monthly-review.decide_ltco")] };
     const html = renderToStaticMarkup(<LtcoDecisionScreen review={pendingReview} />);
@@ -166,15 +167,17 @@ describe("CEO 复盘总览与 LTCO", () => {
     expect(html).toContain("Co-Agent 建议：保持不变");
     expect(html).toContain("01 灯塔项目");
     expect(html).toContain("形成标杆案例");
+    expect(html).toContain("2026 年 10 月 – 2027 年 3 月");
+    expect(html).not.toContain("交付可复用");
     expect(html).toMatch(/<input[^>]*(checked=""[^>]*value="keep"|value="keep"[^>]*checked="")/);
-    ui.buttons.get("保持不变，生成下月计划")!.onPress!();
+    ui.buttons.get("保持不变，生成下月 PO")!.onPress!();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(ui.post).toHaveBeenCalledWith("/api/monthly-reviews/actions/execute", { body: { actionId: "sig-monthly-review.decide_ltco", input: { decision: "keep" } } });
     expect(ui.navigate).toHaveBeenCalledWith("/plans/2026-10");
   });
 });
 
-describe("公司长期目标审视：单元长期目标", () => {
+describe("LTO 审视：战场 LTO", () => {
   it("有单元建议时默认选修订、预填建议；只提交改过的单元", async () => {
     ui.post.mockResolvedValue({ data: { review: { ...review, status: "closed" } }, response: { ok: true, status: 200 } });
     const suggested = { ...review, status: "ltco_pending" as const, actions: [act("monthly-review.decide_ltco")],
@@ -184,7 +187,7 @@ describe("公司长期目标审视：单元长期目标", () => {
     expect(html).toMatch(/<input[^>]*(checked=""[^>]*value="revise"|value="revise"[^>]*checked="")/);
     expect(html).toContain("聚焦两家标杆客户");
     expect(html).toContain("Co-Agent 建议修订：第三家延期");
-    ui.buttons.get("确认修订，生成下月计划")!.onPress!();
+    ui.buttons.get("确认修订，生成下月 PO")!.onPress!();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(ui.post).toHaveBeenCalledWith("/api/monthly-reviews/actions/execute", { body: { actionId: "sig-monthly-review.decide_ltco",
       input: { decision: "revise", units: [{ subjectType: "battlefield", subjectId: "bf-01", sixMonthOutcome: "聚焦两家标杆客户" }] } } });

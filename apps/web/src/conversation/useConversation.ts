@@ -110,6 +110,8 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
       const body = (await response.json()) as { attachments?: Attachment[] } | Attachment[];
       const uploaded = Array.isArray(body) ? body : body.attachments ?? [];
       setAttachments((current) => [...current, ...uploaded]);
+      // 个人复盘页按上传的材料决定能不能请 Co-Agent 起草：上传完立刻让它重读。
+      window.dispatchEvent(new CustomEvent("conversation-attachments-changed", { detail: { scope } }));
       if (rejected.length) setAttachmentError(`已上传 ${acceptable.length} 份；${rejected.length} 份不是 PDF/DOCX/MD，已忽略。`);
     } catch (cause) {
       setAttachmentError((cause as Error).message);

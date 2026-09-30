@@ -4,10 +4,12 @@ import { useState, type ReactNode } from "react";
 import { Lock } from "lucide-react";
 import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { ActionNoticeCard } from "@/components/ActionNoticeCard";
+import { CycleCountdown } from "@/components/CycleCountdown";
 import { HeroButton } from "@/components/HeroButton";
 import { RailClock } from "@/components/NotificationRail";
 import { MissionCardNoticeGroup } from "@/components/missionCards/MissionCardNoticeGroup";
 import { MonthlyReviewNotices } from "@/components/monthlyReview/MonthlyReviewNotices";
+import { PersonalReviewBoard } from "@/components/monthlyReview/PersonalReviewBoard";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
@@ -46,7 +48,9 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
             }
           />
           <div className={n.noticeList}>
+            <CycleCountdown />
             <MemberMeetingSchedule meetings={home.meetings} onNavigate={api.navigate} />
+            <PersonalReviewBoard onNavigate={api.navigate} />
             <MonthlyReviewNotices onNavigate={api.navigate} />
             {home.rounds.map((round) => <MissionCardNoticeGroup key={round.roundId} round={round} entry="member" currentHref={currentHref} onNavigate={api.navigate} onRefresh={home.refresh} />)}
             <ActionNoticeCard id="assigned" title="分给你的事与邀请" subtitle="会后分派与协作邀请" mark="meeting" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).assigned} onSettled={home.settle} />

@@ -64,6 +64,7 @@ describe("migration", () => {
       expect(names).toContain("monthly_review_comments");
       expect(names).toContain("world_sync_ledger");
       expect(names).toContain("world_meeting_events");
+      expect(names).toContain("personal_reviews");
 
       const applied = await db.query<{ id: number; filename: string }>(
         "SELECT id, filename FROM schema_migrations ORDER BY id",
@@ -115,6 +116,7 @@ describe("migration", () => {
         "044_monthly_reviews.sql",
         "045_monthly_review_comments.sql",
         "046_world_sync.sql",
+        "047_personal_reviews.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -122,7 +124,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(46);
+      expect(Number(again.rows[0].count)).toBe(47);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(

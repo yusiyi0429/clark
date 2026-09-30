@@ -36,7 +36,6 @@ type FeedbackRow = {
   kind: "comment" | "quote" | "suggestion"; proposed: string | null; late: boolean; created_at: Date;
 };
 type ReviewRow = { id: string; feedback_ids: string[]; taken_at: Date; mission_versions: Record<string, number> };
-const HOURS_48 = 48 * 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROUND_SELECT = `SELECT r.*, b.owner_id AS battlefield_owner_id, b.name AS battlefield_name,
   b.version AS battlefield_version, b.six_month_outcome
@@ -66,7 +65,7 @@ async function canRead(q: Query, person: MissionRoundPerson, row: MissionRoundRo
   return !!found.rowCount;
 }
 function roundPhase(row: MissionRoundRow, now: Date): TMissionRoundPhase {
-  return row.status === "open" && row.closes_at! <= now ? "closed" : row.status;
+  return row.status === "open" && row.closes_at !== null && row.closes_at <= now ? "closed" : row.status;
 }
 /** 已确定的卡只在轮次月份未过时可更正（GAP-04）；YYYY-MM 直接比较，月底提前确定的下月卡也算未过。 */
 export function correctionPeriodClosed(row: Pick<MissionRoundRow, "period">, now: Date): boolean {
@@ -145,8 +144,8 @@ export async function projectMissionRoundCard(
     }),
   };
   const actions: TCard["actions"] = [];
-  const actionType = approver ? (phase === "draft" ? "mission-round.open" : phase === "reviewing" ? "mission-round.reopen" : null) : null;
-  if (actionType) actions.push({ actionType, label: phase === "draft" ? "统一开放 48 小时讨论" : "重新开启 48 小时讨论",
+  const actionType = approver ? (phase === "draft" ? "mission-round.open" : phase === "open" ? "mission-round.close" : phase === "reviewing" ? "mission-round.reopen" : null) : null;
+  if (actionType) actions.push({ actionType, label: phase === "draft" ? "统一开放讨论" : phase === "open" ? "结束讨论，开始汇总" : "重新开放讨论",
     actionId: signActionId(secret, { actionType, objectType: "mission-round", objectId: row.id, objectVersion: row.version }) });
   if (approver && phase === "reviewing" && review && pending === 0) actions.push({ actionType: "mission-round.confirm", label: "确认前核对",
     actionId: signActionId(secret, { actionType: "mission-round.confirm", objectType: "mission-round", objectId: row.id, objectVersion: row.version }) });
@@ -180,7 +179,7 @@ export async function listMissionRoundCards(
 
 /** 调用者须已持轮次 FOR UPDATE。截止按窗口时刻收意见，不按调度实际运行时刻。 */
 export async function closeIfDue(client: PoolClient, row: MissionRoundRow, now: Date): Promise<MissionRoundRow> {
-  if (row.status !== "open" || row.closes_at! > now) return row;
+  if (row.status !== "open" || !row.closes_at || row.closes_at > now) return row;
   const feedback = await client.query<{ id: string }>("SELECT id FROM mission_card_feedback WHERE round_id=$1 AND created_at<$2 ORDER BY seq", [row.id, row.closes_at]);
   const missions = await client.query<{ id: string; version: number }>(`SELECT m.id,m.version FROM missions m
     JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id WHERE c.round_id=$1 ORDER BY m.id`, [row.id]);
@@ -224,7 +223,7 @@ function appendFingerprint(existing: string[], fingerprint: string): string[] {
   return [...existing.filter((value) => value !== fingerprint), fingerprint].slice(-100);
 }
 async function executeRoundAction(
-  operation: "open" | "reopen" | "decide" | "confirm", pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson,
+  operation: "open" | "close" | "reopen" | "decide" | "confirm", pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson,
   scope: ActionScope, fingerprint: string, now: () => Date, input: { decision?: "accept" | "decline"; note?: string } = {},
 ): Promise<MeetingActionOutcome> {
   if (!UUID.test(scope.objectId)) return failure(404, "ROUND_NOT_FOUND", "Mission Card 轮次不存在");
@@ -262,16 +261,21 @@ async function executeRoundAction(
       const goal: GoalSnapshot = { sixMonthOutcome: row.six_month_outcome, monthOutcome, signedAt: plan.confirmed_at.toISOString(),
         battlefieldId: row.battlefield_id, battlefieldVersion: row.battlefield_version, monthlyPlanId: plan.id, monthlyPlanVersion: plan.version };
       const updated = await client.query(`UPDATE mission_rounds SET status='open',window_seq=1,opened_at=$2,first_opened_at=$2,
-        closes_at=$3,goal_snapshot=$4::jsonb,version=version+1,action_fingerprints=$5::jsonb,updated_at=$2 WHERE id=$1 RETURNING *`,
-      [row.id, at, new Date(at.getTime() + HOURS_48), JSON.stringify(goal), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
+        closes_at=NULL,goal_snapshot=$3::jsonb,version=version+1,action_fingerprints=$4::jsonb,updated_at=$2 WHERE id=$1 RETURNING *`,
+      [row.id, at, JSON.stringify(goal), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
       row = { ...row, ...updated.rows[0] };
+    } else if (operation === "close") {
+      if (row.status !== "open") return await finish(failure(409, "ROUND_NOT_OPEN", "讨论尚未开放或已经结束"));
+      const updated = await client.query(`UPDATE mission_rounds SET closes_at=$2,action_fingerprints=$3::jsonb WHERE id=$1 RETURNING *`,
+        [row.id, at, JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
+      row = await closeIfDue(client, { ...row, ...updated.rows[0] }, at);
     } else if (operation === "reopen") {
-      if (row.status !== "reviewing") return await finish(failure(409, "ROUND_NOT_CLOSED", "讨论还没截止，倒计时不会重置"));
+      if (row.status !== "reviewing") return await finish(failure(409, "ROUND_NOT_CLOSED", "请先结束讨论并完成汇总"));
       await client.query("UPDATE mission_round_reviews SET superseded_at=$3 WHERE round_id=$1 AND window_seq=$2 AND superseded_at IS NULL", [row.id, row.window_seq, at]);
       const reopens = [...row.reopens, { by: person.personId, at: at.toISOString(), closedAt: row.closes_at!.toISOString() }];
-      const updated = await client.query(`UPDATE mission_rounds SET status='open',window_seq=window_seq+1,opened_at=$2,closes_at=$3,
-        reopens=$4::jsonb,version=version+1,action_fingerprints=$5::jsonb,updated_at=$2 WHERE id=$1 RETURNING *`,
-      [row.id, at, new Date(at.getTime() + HOURS_48), JSON.stringify(reopens), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
+      const updated = await client.query(`UPDATE mission_rounds SET status='open',window_seq=window_seq+1,opened_at=$2,closes_at=NULL,
+        reopens=$3::jsonb,version=version+1,action_fingerprints=$4::jsonb,updated_at=$2 WHERE id=$1 RETURNING *`,
+      [row.id, at, JSON.stringify(reopens), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))]);
       row = { ...row, ...updated.rows[0] };
     } else {
       if (row.status !== "reviewing") return await finish(failure(409, "ROUND_NOT_REVIEWING", "请先等待讨论截止并完成规则汇总"));
@@ -329,6 +333,9 @@ export function executeOpenMissionRound(pool: Pool, people: MemoryPerson[], secr
 }
 export function executeReopenMissionRound(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope, fingerprint: string, now: () => Date): Promise<MeetingActionOutcome> {
   return executeRoundAction("reopen", pool, people, secret, person, scope, fingerprint, now);
+}
+export function executeCloseMissionRound(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope, fingerprint: string, now: () => Date): Promise<MeetingActionOutcome> {
+  return executeRoundAction("close", pool, people, secret, person, scope, fingerprint, now);
 }
 export function executeDecideMissionRound(pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope, fingerprint: string, now: () => Date, input: TMissionRoundDecideInput): Promise<MeetingActionOutcome> {
   return executeRoundAction("decide", pool, people, secret, person, scope, fingerprint, now, input);
@@ -519,7 +526,7 @@ async function draftOwners(q: Query, people: MemoryPerson[], battlefieldId: stri
   const rows = (await q(`SELECT owner_id FROM (
     SELECT c.owner_id FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id
       WHERE r.battlefield_id=$1 AND r.period=$2
-    UNION SELECT m.owner_id FROM missions m WHERE m.period=$3 AND m.battlefield_ids @> $4::jsonb
+    UNION SELECT m.owner_id FROM missions m WHERE m.period IN ($2,$3) AND m.battlefield_ids @> $4::jsonb
   ) owners ORDER BY owner_id`, [battlefieldId, previousPeriod(period), period, JSON.stringify([battlefieldId])])).rows as { owner_id: string }[];
   const known = new Set(people.map((item) => item.personId));
   return rows.filter((item) => known.has(item.owner_id));
@@ -558,9 +565,11 @@ export async function completeMissionRoundDraft(
     const previous = (await q(`SELECT m.title,m.why,m.outcome,m.success_evidence,m.boundaries,m.key_path,m.milestones,m.resources,
       m.dependencies,m.human_agent_split,m.risk,m.retrospect,cap.code AS capability_code,
       m.source_ref,m.source_document_id,m.source_revision
-      FROM mission_rounds r JOIN personal_mission_cards c ON c.round_id=r.id
-      JOIN missions m ON m.personal_mission_card_id=c.id JOIN capability_config cap ON cap.id=m.capability_id
-      WHERE r.battlefield_id=$1 AND r.period=$2 AND c.owner_id=$3 ORDER BY m.code`,
+      FROM missions m JOIN capability_config cap ON cap.id=m.capability_id
+      WHERE m.period=$2 AND m.owner_id=$3
+        AND (m.personal_mission_card_id IN (SELECT c.id FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id WHERE r.battlefield_id=$1 AND r.period=$2 AND c.owner_id=$3)
+          OR (m.personal_mission_card_id IS NULL AND m.battlefield_ids @> jsonb_build_array($1::text) AND NOT EXISTS (SELECT 1 FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id WHERE r.battlefield_id=$1 AND r.period=$2 AND c.owner_id=$3)))
+      ORDER BY m.code`,
     [row.battlefield_id, previousPeriod(row.period), owner.owner_id])).rows as PreviousMission[];
     const matches = memory?.searchSections(`${battlefield.name} ${names.get(owner.owner_id) ?? owner.owner_id}`, 3) ?? [];
     const input: MissionCardDraftInput = {
@@ -568,7 +577,9 @@ export async function completeMissionRoundDraft(
       battlefield: { id: row.battlefield_id, code: battlefield.code, name: battlefield.name, sixMonthOutcome: battlefield.six_month_outcome, missionAnchors: battlefield.mission_anchors },
       plan: { companyOutcome: plan.company_outcome, monthOutcome: plan.battlefields.find((item) => item.battlefieldId === row.battlefield_id)?.outcome ?? "", signedAt: plan.confirmed_at.toISOString() },
       owner: { personId: owner.owner_id, displayName: names.get(owner.owner_id) ?? owner.owner_id },
-      previousCard: previous.length ? { missions: previous } : null, capabilities,
+      previousCard: previous.length ? { missions: previous } : null,
+      previousReview: (await q("SELECT self_review FROM personal_reviews WHERE person_id=$1 AND period=$2 AND status='submitted' ORDER BY submitted_at DESC LIMIT 1",
+        [owner.owner_id, previousPeriod(row.period)])).rows[0]?.self_review ?? null, capabilities,
       companyMemory: matches.map((match) => ({ title: match.title, sourceRef: match.sourceRef,
         passages: memory!.getPassages(match.id, undefined, 2).passages.map((passage) => ({ text: passage.text, sourceRef: passage.sourceRef })) })),
     };

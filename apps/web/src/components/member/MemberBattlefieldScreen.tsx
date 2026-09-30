@@ -103,8 +103,8 @@ export function MemberBattlefieldScreen({ initialData }: { initialData: TMemberB
         <div className={s.owner}>战场 DRI <strong>{view.ownerName || "没有登记"}</strong></div>
         {error ? <p className={s.error} role="status">{error}</p> : null}
         <section className={s.goals} aria-label="战场目标">
-          <div className={s.goal}><h2>六个月目标</h2><p>{view.sixMonthOutcome || "六个月目标没有登记"}</p></div>
-          <div className={s.goal}><h2>本月目标 <span>{month} 月</span></h2><p>{view.monthTargetText}</p></div>
+          <div className={s.goal}><h2>LTO · 六个月目标</h2><p>{view.sixMonthOutcome || "LTO 没有登记"}</p></div>
+          <div className={s.goal}><h2>PO · 本月目标 <span>{month} 月</span></h2><p>{view.monthTargetText}</p></div>
         </section>
 
         <section className={s.round} aria-labelledby="battlefield-round-title">

@@ -11,7 +11,7 @@ import type { MemoryPerson } from "../src/companyMemory.js";
 import { migrate } from "../src/migrate.js";
 import {
   canApprove, missionCardMembers, getMissionRoundCard, listMissionRoundCards,
-  executeOpenMissionRound, executeReopenMissionRound, closeDueRounds,
+  executeOpenMissionRound, executeCloseMissionRound, executeReopenMissionRound, closeDueRounds,
   importMissionCardDrafts, executeDraftMissionRound, listMissionRoundDraftCards,
   recoverStaleMissionDrafts,
 } from "../src/missionRounds.js";
@@ -76,6 +76,10 @@ async function open(t: TestDb, f: Fixture, person: Actor = ceo, at = START) {
   const request = action(await card(t, f, person, at), "mission-round.open");
   return executeOpenMissionRound(t.pool, people, SECRET, person, request.scope, request.fingerprint, () => at);
 }
+async function close(t: TestDb, f: Fixture, at: Date) {
+  const request = action(await card(t, f, ceo, at), "mission-round.close");
+  return executeCloseMissionRound(t.pool, people, SECRET, ceo, request.scope, request.fingerprint, () => at);
+}
 async function feedback(t: TestDb, f: Fixture, at: Date, late = false): Promise<string> {
   const id = randomUUID();
   await t.db.query(`INSERT INTO mission_card_feedback (id,round_id,card_id,kind,author_id,client_id,body,basis,window_seq,late,created_at)
@@ -117,7 +121,7 @@ describe("Mission 轮次仓储与状态机", () => {
     });
   });
 
-  it("opens exactly 48 hours, freezes versioned goals, and checks authorization before conflict/replay", async () => {
+  it("opens without a deadline, freezes versioned goals, and checks authorization before conflict/replay", async () => {
     await createTestDb(async (t) => {
       await migrate(t.db); const f = await seedDraft(t);
       const initial = await card(t, f); const request = action(initial, "mission-round.open");
@@ -131,7 +135,7 @@ describe("Mission 轮次仓储与状态机", () => {
       expect(row).toMatchObject({ status: "open", version: 2, window_seq: 1 });
       expect(row.opened_at).toEqual(START);
       expect(row.first_opened_at).toEqual(START);
-      expect(row.closes_at.getTime() - row.opened_at.getTime()).toBe(HOURS_48);
+      expect(row.closes_at).toBeNull();
       expect(row.goal_snapshot).toMatchObject({ sixMonthOutcome: "冻结的六个月目标", monthOutcome: "growth本月目标", signedAt: START.toISOString(), battlefieldVersion: 7, monthlyPlanVersion: 3, monthlyPlanId: f.planId });
       expect(await call(ceo)).toMatchObject({ replayed: true, card: { version: 2 } });
       expect(await call(ceo, request.scope, "different-input")).toMatchObject({ conflict: true, latestCard: { version: 2 } });
@@ -160,7 +164,7 @@ describe("Mission 轮次仓储与状态机", () => {
     });
   });
 
-  it("reads closed without writing and snapshots only pre-deadline feedback once under concurrent schedulers", async () => {
+  it("stays open past 48 hours and snapshots pre-close feedback once under concurrent close actions", async () => {
     await createTestDb(async (t) => {
       await migrate(t.db); const f = await seedDraft(t); await open(t, f);
       const closes = new Date(START.getTime() + HOURS_48);
@@ -168,10 +172,14 @@ describe("Mission 轮次仓储与状态机", () => {
       await feedback(t, f, closes, true);
       await feedback(t, f, new Date(closes.getTime() + 1), true);
       expect(await closeDueRounds(t.pool, () => new Date(closes.getTime() - 1))).toBe(0);
-      expect(summary(await card(t, f, ceo, closes)).phase).toBe("closed");
+      expect(summary(await card(t, f, ceo, closes)).phase).toBe("open");
       expect((await t.db.query("SELECT * FROM mission_round_reviews")).rowCount).toBe(0);
-      const results = await Promise.all([closeDueRounds(t.pool, () => closes), closeDueRounds(t.pool, () => closes)]);
-      expect(results.reduce((sum, count) => sum + count, 0)).toBe(1);
+      expect(await closeDueRounds(t.pool, closes)).toBe(0);
+      const request = action(await card(t, f, ceo, closes), "mission-round.close");
+      const call = () => executeCloseMissionRound(t.pool, people, SECRET, ceo, request.scope, request.fingerprint, () => closes);
+      expect(await executeCloseMissionRound(t.pool, people, SECRET, owner, request.scope, request.fingerprint, () => closes)).toMatchObject({ error: { code: "ROUND_FORBIDDEN" } });
+      const results = await Promise.all([call(), call()]);
+      expect(results.filter((result) => "replayed" in result && result.replayed)).toHaveLength(1);
       expect(await closeDueRounds(t.pool, closes)).toBe(0);
       const review = (await t.db.query("SELECT * FROM mission_round_reviews")).rows[0];
       expect(review.feedback_ids).toEqual([included]);
@@ -189,7 +197,7 @@ describe("Mission 轮次仓储与状态机", () => {
       const request = { actionType: "mission-round.reopen", objectType: "mission-round", objectId: f.roundId, objectVersion: 2 };
       expect(await executeReopenMissionRound(t.pool, people, SECRET, ceo, request, "early", () => START)).toMatchObject({ error: { code: "ROUND_NOT_CLOSED" } });
       const first = await feedback(t, f, new Date(closes.getTime() - 1));
-      await closeDueRounds(t.pool, closes);
+      await close(t, f, closes);
       const previous = (await t.db.query("SELECT * FROM mission_round_reviews")).rows[0];
       await t.db.query("INSERT INTO mission_review_decisions (review_id,feedback_id,decision,decided_by,decided_at) VALUES ($1,$2,'accept','dri',$3)", [previous.id, first, closes]);
       await t.db.query("UPDATE mission_round_reviews SET note='旧核对结论' WHERE id=$1", [previous.id]);
@@ -208,7 +216,8 @@ describe("Mission 轮次仓储与状态机", () => {
       expect((await t.db.query("SELECT superseded_at FROM mission_round_reviews")).rows[0].superseded_at).toEqual(nextStart);
       expect(await executeReopenMissionRound(t.pool, people, SECRET, dri, reopen.scope, reopen.fingerprint, () => nextStart)).toMatchObject({ replayed: true, card: { version: 4 } });
       const nextCloses = new Date(nextStart.getTime() + HOURS_48);
-      await closeDueRounds(t.pool, nextCloses);
+      expect(row.closes_at).toBeNull();
+      await close(t, f, nextCloses);
       const latest = (await t.db.query("SELECT * FROM mission_round_reviews ORDER BY window_seq DESC LIMIT 1")).rows[0];
       expect(latest.feedback_ids).toEqual([first, late]);
       expect(latest.note).toBeNull();
@@ -221,12 +230,13 @@ describe("Mission 轮次仓储与状态机", () => {
     });
   });
 
-  it("keeps two battlefields independent and commits automatic closure when an action token becomes stale", async () => {
+  it("keeps two battlefields independent after a manual close and rejects an older action", async () => {
     await createTestDb(async (t) => {
       await migrate(t.db); const one = await seedDraft(t); const two = await seedDraft(t, "another");
       await open(t, one); await open(t, two, ceo, new Date(START.getTime() + 1000));
       const at = new Date(START.getTime() + HOURS_48);
       const stale = { actionType: "mission-round.reopen", objectType: "mission-round", objectId: one.roundId, objectVersion: 2 };
+      await close(t, one, at);
       const result = await executeReopenMissionRound(t.pool, people, SECRET, ceo, stale, "after-close", () => at);
       expect(result).toMatchObject({ conflict: true, latestCard: { version: 3, payload: { phase: "reviewing" } } });
       expect((await t.db.query("SELECT window_seq FROM mission_round_reviews WHERE round_id=$1", [one.roundId])).rowCount).toBe(1);
@@ -258,9 +268,9 @@ describe("Mission 轮次仓储与状态机", () => {
       const closes = new Date(START.getTime() + HOURS_48);
       await t.db.query("BEGIN"); await t.db.query("SELECT id FROM mission_rounds WHERE id=$1 FOR SHARE", [f.roundId]);
       const contributed = await feedback(t, f, new Date(closes.getTime() - 1));
-      const closing = closeDueRounds(t.pool, () => closes);
+      const closing = close(t, f, closes);
       try { await waitForRoundLock(t); } finally { await t.db.query("COMMIT"); }
-      expect(await closing).toBe(1);
+      expect(await closing).toHaveProperty("card");
       expect((await t.db.query("SELECT feedback_ids FROM mission_round_reviews")).rows[0].feedback_ids).toEqual([contributed]);
     });
   });

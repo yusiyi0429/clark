@@ -109,7 +109,7 @@ describe("DRI home widgets and battlefield detail", () => {
     } finally { await t.close(); }
   });
 
-  it("retains current confirmed cards and confirmation, shares exact cutoff, and excludes the prior month", async () => {
+  it("retains confirmed cards and confirmation, and falls back to prior missions when the next month is empty", async () => {
     let now = START; const t = await createTestApp({}, undefined, { monthlyNow: () => now });
     try {
       const ids = await seed(t); const cookie = await t.memberCookie();
@@ -128,7 +128,8 @@ describe("DRI home widgets and battlefield detail", () => {
       now = new Date("2026-11-01T01:00:00Z");
       expect((await read(t, cookie)).work.missionCards).toEqual([]);
       expect((await t.app.inject({ method: "GET", url: "/api/me/battlefields/growth", headers: { cookie } })).statusCode).toBe(404);
-      expect((await read(t, cookie)).work.battlefields.map((b: any) => b.id)).toEqual(["owned"]);
+      expect((await read(t, cookie)).work).toMatchObject({ period: "2026-10", missions: [{ id: "mission-mine" }] });
+      expect((await read(t, cookie)).work.battlefields.map((b: any) => b.id)).toEqual(["owned", "mission-only"]);
     } finally { await t.close(); }
   });
 });

@@ -24,6 +24,8 @@ export const MonthlyReviewStatus = Type.Union([
 ]);
 
 export const MonthlyReviewItemStatus = Type.Union([
+  /** 本单元的个人复盘还没交齐（全部提交或被 CEO 跳过后自动起草）。 */
+  Type.Literal("waiting"),
   Type.Literal("drafting"),
   Type.Literal("draft_failed"),
   Type.Literal("draft"),
@@ -277,10 +279,16 @@ export const MonthlyReviewPayload = Type.Object(
       },
       { additionalProperties: false },
     ),
+    /** LTO（Long Term Outcome，原 LTCO）审视：先公司 LTO，后各战场 LTO；字段名沿用 ltco。 */
     ltco: Type.Object(
       {
+        /**
+         * 滑动窗口：从下月起算 6 个月（例如 2026-10 至 2027-03），每月审视时整体往后滑一个月；
+         * 公司与战场 LTO 用同一个窗口。PO（Period Outcome）是窗口第一个月的拆分。
+         */
+        window: Type.Object({ start: MonthlyPlanPeriod, end: MonthlyPlanPeriod }, { additionalProperties: false }),
         current: Type.String(),
-        /** 各战场 / 能力域当前的长期目标（六个月目标），LTO 审视时一起看、一起改。 */
+        /** 各战场当前的 LTO（六个月目标），审视时一起看、一起改；能力域不在这里审（2026-09-30 用户决定）。 */
         units: Type.Array(Type.Object(
           { ...MonthlyReviewSubjectRef.properties, subjectCode: Type.String(), subjectName: Type.String(), current: Type.String() },
           { additionalProperties: false },
@@ -334,6 +342,8 @@ export const MonthlyReviewNotice = Type.Object(
   {
     id: Type.String(),
     kind: Type.Union([
+      /** 本人：个人复盘还没提交（waiting / drafting / draft_failed / draft）。 */
+      Type.Literal("personal_todo"),
       /** 负责人：本项待完成（draft / returned / draft_failed / drafting）。 */
       Type.Literal("item_todo"),
       /** 本单元当月 Mission 负责人：复盘还没确认，可以参与讨论与补充。 */

@@ -274,7 +274,7 @@ export function BattlefieldScreen({ battlefields, issues, people }: TBattlefield
                   </select>
                 </label>
                 <label className={b.field}>
-                  <span>六个月目标</span>
+                  <span>LTO · 六个月目标</span>
                   <textarea value={draft.sixMonthOutcome} onChange={(event) => setDraft({ ...draft, sixMonthOutcome: event.target.value })} />
                 </label>
                 <label className={b.field}>

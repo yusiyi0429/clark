@@ -188,7 +188,8 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   };
   const runAction = async (action: RoundAction, input?: { decision: "accept" | "decline" } | { note: string }, feedbackId?: string) => {
     if (actionInFlight.current) return;
-    if (action.actionType === "mission-round.reopen" && !await ask(`${round.battlefieldName}的 ${round.counts.cards} 张 Mission Card 一起重新开放 48 小时（第 ${round.round + 1} 轮）。预计 ${monthDayTime(new Date(now + 48 * 3_600_000).toISOString())} 截止，实际从提交成功时起算。已有公开意见全部保留；已处理结论进入下一轮，协作核对结论需要重写；截止后留言将在下次截止时收取。不会另外通知同事。`, "重新开启 48 小时")) return;
+    if (action.actionType === "mission-round.reopen" && !await ask(`${round.battlefieldName}的 ${round.counts.cards} 张 Mission Card 一起重新开放讨论（第 ${round.round + 1} 轮），由你决定何时结束。已有公开意见全部保留；已处理结论进入下一轮，协作核对结论需要重写；结束后留言将在下次结束时收取。不会另外通知同事。`, "重新开放讨论")) return;
+    if (action.actionType === "mission-round.close" && !await ask(`结束${round.battlefieldName}这一轮讨论？收下目前 ${round.counts.feedback} 条公开意见，进入集中 Review；之后的留言不进这一轮。`, "结束讨论")) return;
     actionInFlight.current = true;
     setPending(true); setError(""); setDecisionError(null); setNotice("");
     try {
@@ -202,7 +203,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
       const next = data?.cards[0];
       if (next?.kind === "personal-mission-card") acceptView(next); else await refresh();
       if (action.actionType === "mission-round.reopen" || action.actionType === "mission-round.confirm") { clearRoundNote(noteViewer, round.roundId, round.round); setNoteDraft({ roundKey: "", text: "" }); setReference(null); setProposal(null); }
-      setNotice(action.actionType === "mission-round.open" ? "全战场已统一开放 48 小时讨论。" : action.actionType === "mission-round.reopen" ? "已重新开启 48 小时讨论，已有公开意见保留。" : action.actionType === "mission-round.confirm" ? "本月 Mission Card 已确定，确认记录与公开意见保留可查。" : "");
+      setNotice(action.actionType === "mission-round.open" ? "全战场已统一开放讨论，由你决定何时结束。" : action.actionType === "mission-round.close" ? "讨论已结束，正在集中 Review。" : action.actionType === "mission-round.reopen" ? "已重新开放讨论，已有公开意见保留。" : action.actionType === "mission-round.confirm" ? "本月 Mission Card 已确定，确认记录与公开意见保留可查。" : "");
       window.dispatchEvent(new Event("mission-round-changed"));
       router.refresh();
     } catch (cause) { const message = requestError(cause, "暂时无法连接服务器，请稍后重试；本轮输入已保留。"); if (feedbackId) setDecisionError({ feedbackId, message }); else setError(message); }
@@ -228,7 +229,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
         </div> : null }} />
       </div>
     </DetailFrame>
-    <Modal isOpen={goalsOpen} onOpenChange={setGoalsOpen}><Modal.Backdrop isDismissable><Modal.Container><Modal.Dialog className={s.dialog} aria-label="本轮目标依据"><h2>本轮目标依据</h2>{round.goals ? <><p>{monthDayTime(round.goals.signedAt)} 月度计划已签发。{round.phase === "draft" ? "统一开放时冻结这一轮的目标依据。" : "讨论开放后不能覆盖这一轮的目标依据。"}</p><h3>六个月目标</h3><p>{round.goals.sixMonthOutcome}</p><h3>本月目标</h3><p>{round.goals.monthOutcome}</p></> : <p>本轮目标依据尚未冻结。</p>}<footer><Button variant="ghost" className={s.secondary} onPress={() => setGoalsOpen(false)}>关闭</Button></footer></Modal.Dialog></Modal.Container></Modal.Backdrop></Modal>
+    <Modal isOpen={goalsOpen} onOpenChange={setGoalsOpen}><Modal.Backdrop isDismissable><Modal.Container><Modal.Dialog className={s.dialog} aria-label="本轮目标依据"><h2>本轮目标依据</h2>{round.goals ? <><p>{monthDayTime(round.goals.signedAt)} 月度计划已签发。{round.phase === "draft" ? "统一开放时冻结这一轮的目标依据。" : "讨论开放后不能覆盖这一轮的目标依据。"}</p><h3>LTO · 六个月目标</h3><p>{round.goals.sixMonthOutcome}</p><h3>PO · 本月目标</h3><p>{round.goals.monthOutcome}</p></> : <p>本轮目标依据尚未冻结。</p>}<footer><Button variant="ghost" className={s.secondary} onPress={() => setGoalsOpen(false)}>关闭</Button></footer></Modal.Dialog></Modal.Container></Modal.Backdrop></Modal>
     {dialog}
   </div>;
 }

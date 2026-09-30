@@ -164,6 +164,18 @@ async function main() {
     } },
     // 月末复盘：时间机器没有模型，三个 Agent 都给演示内容（等两三秒，好看到「正在起草 / 评估 / 汇总」）。
     monthlyReviewAgents: {
+      // 个人复盘：开启复盘时自动起草（演示内容按本人 Mission 标题拼出来）；上传材料后「按材料重新起草」也走这里。
+      personal: { async generate(input) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        const titles = (input.missions as { title: string }[]).map((mission) => mission.title);
+        const material = input.attachments.length + input.messages.length ? `参考了你上传的 ${input.attachments.length + input.messages.length} 份材料。` : "缺少材料：周复盘与验收记录，请补充。";
+        return { candidate: {
+          overall: { text: `（演示起草）本月 ${titles.length} 个 Mission：${titles.join("；") || "无"}。其中一项按期完成，其余部分达成。${material}`, sources: titles.length ? ["本月 Mission"] : [] },
+          judgments: { text: "1. 结果：核心路径跑通，但真实使用证据不足。证据：执行事项进展两条。判断：瓶颈在真实用户接入，不在功能。", sources: [] },
+          nextFocus: { text: "1. 下月把真实使用作为主要验收证据。", sources: [] },
+          escalations: { text: "", sources: [] },
+        } };
+      } },
       draft: { async generate(input) {
         await new Promise((resolve) => setTimeout(resolve, 2500));
         const goal = input.target ? `本月目标是「${input.target.slice(0, 40)}…」` : "本月没有签发的目标";

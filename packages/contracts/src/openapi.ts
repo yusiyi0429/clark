@@ -35,6 +35,8 @@ import {
   MyMonthlyReviewNoticesResponse, MonthlyReviewNotice, ExecuteMonthlyReviewActionRequest, ExecuteMonthlyReviewActionResponse,
   MonthlyReviewComment, CreateMonthlyReviewCommentRequest, CreateMonthlyReviewCommentResponse,
   MonthlyReviewItemUpdateInput, MonthlyReviewResolveSuggestionInput, MonthlyReviewReturnInput, MonthlyReviewUpdateSummaryInput, MonthlyReviewDecideLtcoInput,
+  PersonalReviewPayload, PersonalReviewBoard, PersonalReviewBoardRow, PersonalReviewBoardResponse, PersonalReviewResponse,
+  ExecutePersonalReviewActionRequest, ExecutePersonalReviewActionResponse, PersonalReviewUpdateInput, MonthlyCycle, MonthlyCycleResponse,
   MissionCardFeedbackView, PersonalMissionCardMission, PersonalMissionCardPayload,
   CreateMissionCardFeedbackRequest, CreateMissionCardFeedbackResponse, MissionCardGroupView,
   MarkMissionCardReadRequest, MarkMissionCardReadResponse,
@@ -527,6 +529,32 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           operationId: "executeMonthlyReviewAction", summary: "执行复盘动作；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT",
           requestBody: jsonBody({ $ref: "#/components/schemas/ExecuteMonthlyReviewActionRequest" }),
           responses: { "200": { description: "动作对象的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/ExecuteMonthlyReviewActionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/monthly-cycle": {
+        get: {
+          operationId: "getMonthlyCycle", summary: "当前月度经营周期的总倒计时（从个人复盘收集起 72 小时到签发下月任务卡）；全员可读，没有周期时 cycle 为 null",
+          responses: { "200": { description: "月度周期", content: { "application/json": { schema: { $ref: "#/components/schemas/MonthlyCycleResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/personal-reviews/board": {
+        get: {
+          operationId: "getPersonalReviewBoard", summary: "个人复盘看板：进行中的月末复盘里每人的提交状态（全员可见，不含内容）；没有进行中的复盘时 board 为 null",
+          responses: { "200": { description: "个人复盘看板", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalReviewBoardResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/personal-reviews/{personalReviewId}": {
+        get: {
+          operationId: "getPersonalReview", summary: "本人或 CEO 读取一份个人复盘；其他人 404",
+          parameters: [{ name: "personalReviewId", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "个人复盘", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalReviewResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/personal-reviews/actions/execute": {
+        post: {
+          operationId: "executePersonalReviewAction", summary: "执行个人复盘动作；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT",
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExecutePersonalReviewActionRequest" }),
+          responses: { "200": { description: "个人复盘与看板的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/ExecutePersonalReviewActionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/cards/radar": {
@@ -1919,6 +1947,16 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ExecuteMonthlyReviewActionRequest: ExecuteMonthlyReviewActionRequest as JsonSchema,
         ExecuteMonthlyReviewActionResponse: ExecuteMonthlyReviewActionResponse as JsonSchema,
         MonthlyReviewItemUpdateInput: MonthlyReviewItemUpdateInput as JsonSchema,
+        PersonalReviewPayload: PersonalReviewPayload as JsonSchema,
+        PersonalReviewBoard: PersonalReviewBoard as JsonSchema,
+        PersonalReviewBoardRow: PersonalReviewBoardRow as JsonSchema,
+        PersonalReviewBoardResponse: PersonalReviewBoardResponse as JsonSchema,
+        PersonalReviewResponse: PersonalReviewResponse as JsonSchema,
+        ExecutePersonalReviewActionRequest: ExecutePersonalReviewActionRequest as JsonSchema,
+        ExecutePersonalReviewActionResponse: ExecutePersonalReviewActionResponse as JsonSchema,
+        PersonalReviewUpdateInput: PersonalReviewUpdateInput as JsonSchema,
+        MonthlyCycle: MonthlyCycle as JsonSchema,
+        MonthlyCycleResponse: MonthlyCycleResponse as JsonSchema,
         MonthlyReviewComment: MonthlyReviewComment as JsonSchema,
         CreateMonthlyReviewCommentRequest: CreateMonthlyReviewCommentRequest as JsonSchema,
         CreateMonthlyReviewCommentResponse: CreateMonthlyReviewCommentResponse as JsonSchema,

@@ -5,7 +5,7 @@ import s from "./MissionFlow.module.css";
 const stages = [
   { title: "本月目标", line: ["Co-Agent 起草，", "一号位签发"] },
   { title: "任务卡草稿", line: ["Co-Agent\u00a0", "为每个人起草"] },
-  { title: "48 小时讨论", line: ["大家一起改同一张卡"] },
+  { title: "开放讨论", line: ["大家一起改同一张卡"] },
   { title: "集中处理", line: ["拍板人逐条处理意见"] },
   { title: "确定", line: ["本月任务卡定稿"] },
 ] as const;

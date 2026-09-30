@@ -27,6 +27,11 @@ async function open(t: TestApp, cookie: string, card: string) {
   const page = (await get(t, cookie, `/api/mission-cards/${card}`)).json().cards[0];
   return post(t, cookie, '/api/mission-rounds/actions/execute', { actionId: page.actions[0].actionId, viewCardId: card });
 }
+async function close(t: TestApp, cookie: string, card: string) {
+  const page = (await get(t, cookie, `/api/mission-cards/${card}`)).json().cards[0];
+  const action = page.actions.find((entry: any) => entry.actionType === 'mission-round.close');
+  expect((await post(t, cookie, '/api/mission-rounds/actions/execute', { actionId: action.actionId, viewCardId: card })).statusCode).toBe(200);
+}
 
 describe("Personal Mission Card discussion", () => {
   it("limits page/group/feedback/read/private scope to card members and current approvers", async () => {
@@ -63,6 +68,9 @@ describe("Personal Mission Card discussion", () => {
         const f = await fixture(t), ceo = await t.loginCookie(), member = await t.memberCookie();
         if (phase !== 'draft') await open(t, ceo, f.card);
         if (['closed','reviewing','confirmed'].includes(phase)) clock = new Date(CLOSE);
+        // 保留已写截止时间、尚未落快照的边界态覆盖；新开放流程不自动写截止。
+        if (phase === 'closed') await t.sql('UPDATE mission_rounds SET closes_at=$1 WHERE id=$2', [CLOSE, f.round]);
+        if (['reviewing','confirmed'].includes(phase)) await close(t, ceo, f.card);
         if (['reviewing','confirmed'].includes(phase)) await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'comment'));
         if (phase === 'confirmed') await t.sql("UPDATE mission_rounds SET status='confirmed',confirmed_at=$1,confirmed_by='person-fixture-001' WHERE id=$2", [CLOSE, f.round]);
         const res = await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, kind));
@@ -105,6 +113,7 @@ describe("Personal Mission Card discussion", () => {
       await open(t, ceo, f.card);
       const proposal = (await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'suggestion'))).json().feedback;
       clock = new Date(CLOSE);
+      await close(t, ceo, f.card);
       await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'comment'));
       const review = (await t.sql('SELECT id FROM mission_round_reviews WHERE round_id=$1', [f.round]))[0];
       await t.sql("INSERT INTO mission_review_decisions (review_id,feedback_id,decision,decided_by,decided_at) VALUES ($1,$2,'accept','person-fixture-001',$3)", [review.id, proposal.id, CLOSE]);
@@ -161,6 +170,7 @@ describe("Personal Mission Card discussion", () => {
       expect((await get(t, ceo, scope)).json().messages).toHaveLength(0);
       expect(JSON.stringify(context)).toContain('公开意见'); expect(JSON.stringify(context)).not.toContain('开放到');
       clock = new Date(CLOSE);
+      await close(t, ceo, f.card);
       await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'comment'));
       expect((await t.sql('SELECT feedback_ids FROM mission_round_reviews WHERE round_id=$1', [f.round]))[0].feedback_ids).toEqual([mine.id, theirs.id]);
     } finally { await t.close(); }

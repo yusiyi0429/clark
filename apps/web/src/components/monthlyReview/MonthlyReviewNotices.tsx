@@ -43,11 +43,12 @@ export function useMonthlyReviewNotices(ceo = false): { notices: TMonthlyReviewN
 }
 
 const DETAIL: Record<TMonthlyReviewNotice["kind"], string> = {
+  personal_todo: "对照自己的 Mission Card 写这个月的复盘",
   item_todo: "由你的 Agent 起草，改好后提交给 CEO",
   item_participant: "你负责这里的 Mission，可以补充事实、风险和修订意见",
   items_to_review: "看自评和 Co-Agent 的偏差评估，逐项确认或打回",
-  summary_pending: "公司月度复盘已汇总，确认后审视长期目标",
-  ltco_pending: "决定后开始生成下月计划",
+  summary_pending: "公司月度复盘已汇总，确认后审视 LTO",
+  ltco_pending: "决定后开始生成下月 PO",
 };
 
 /** 通知栏里的「月末复盘」一组；没有待办时不出现。 */
@@ -56,7 +57,8 @@ export function MonthlyReviewNotices({ onNavigate, ceo = false }: { onNavigate: 
   return <ActionNoticeCard id="monthly-review" title="月末复盘" subtitle="先复盘，再定下月" mark="monthly"
     notices={[
       ...(start ? [{ id: `monthly-review:start:${start.period}`, title: `开始 ${Number(start.period.slice(5))} 月复盘`, detail: "月底倒数第 3 天会自动开启；也可以现在提前开始", tone: "neutral" as const, onOpen: (from: Element | null) => onNavigate(start.href, from), buttons: [] }] : []),
-      ...notices.map((notice) => ({ id: notice.id, title: notice.text, detail: DETAIL[notice.kind], tone: "amber" as const, onOpen: (from: Element | null) => onNavigate(notice.href, from), buttons: [] })),
+      // 个人复盘的待办在「个人复盘」看板卡的卡顶处理（PersonalReviewBoard），这里不重复。
+      ...notices.filter((notice) => notice.kind !== "personal_todo").map((notice) => ({ id: notice.id, title: notice.text, detail: DETAIL[notice.kind], tone: "amber" as const, onOpen: (from: Element | null) => onNavigate(notice.href, from), buttons: [] })),
     ]}
     onSettled={() => undefined} />;
 }

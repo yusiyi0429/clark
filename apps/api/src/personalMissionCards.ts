@@ -51,7 +51,7 @@ function projectFeedback(item: FeedbackRow, data: Discussion, round: MissionRoun
   let verdict: TMissionCardFeedbackView["verdict"];
   if (round.status === "open" && data.review?.superseded_at && included && decision) {
     verdict = { text: `上一轮${decision === "decline" ? "未采纳" : item.kind === "suggestion" ? "已采纳" : "已纳入核对"} · 下次截止沿用`, tone: decision === "decline" ? "decline" : "accept" };
-  } else if (item.late && !included && !(round.status === "open" && round.closes_at && item.created_at < round.closes_at)) verdict = { text: "截止后留言 · 不在这一轮", tone: "late" };
+  } else if (item.late && !included && !(round.status === "open" && (!round.closes_at || item.created_at < round.closes_at))) verdict = { text: "截止后留言 · 不在这一轮", tone: "late" };
   else if (decision === "decline") verdict = { text: "未采纳", tone: "decline" };
   else if (decision === "accept") verdict = { text: item.kind !== "suggestion" ? "已纳入核对" : round.status === "confirmed" ? "已采纳" : "已采纳 · 拍板前可能变化", tone: "accept" };
   else if (item.late) verdict = { text: "截止后留言 · 已并入这一轮", tone: "wait" };
@@ -187,7 +187,7 @@ export async function createPersonalMissionCardFeedback(pool: Pool, people: Memo
     visible = await visiblePersonalMissionCard(q, person, cardId);
     if (!visible) { await client.query("ROLLBACK"); return fail(404, "PERSONAL_MISSION_CARD_NOT_FOUND", "任务卡不存在或不可见"); }
     let at = now();
-    if (visible.round.status === "open" && visible.round.closes_at! <= at) {
+    if (visible.round.status === "open" && visible.round.closes_at && visible.round.closes_at <= at) {
       // Release SHARE before taking UPDATE: simultaneous due writers cannot deadlock on lock upgrades.
       await client.query("COMMIT"); await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`mission-feedback:${person.personId}:${input.clientId}`]);
@@ -244,7 +244,7 @@ export async function getPersonalMissionCardGroup(q: Query, people: MemoryPerson
   const names = new Map(people.map((p) => [p.personId, p.displayName]));
   if (round.first_opened_at) {
     const at = round.first_opened_at.toISOString();
-    entries.push({ type: "divider", at, text: `${localTime(round.first_opened_at)} · 全战场统一开放 48 小时讨论` });
+    entries.push({ type: "divider", at, text: `${localTime(round.first_opened_at)} · 全战场统一开放讨论` });
     const countRow = (await q("SELECT count(*) AS n,bool_or(placeholder) AS placeholder FROM missions WHERE personal_mission_card_id=$1", [cardId])).rows[0];
     const count = Number(countRow.n);
     const deciderId = round.battlefield_owner_id || people.find((p) => p.roles.includes("ceo"))?.personId || "CEO";
@@ -255,7 +255,7 @@ export async function getPersonalMissionCardGroup(q: Query, people: MemoryPerson
   }
   round.reopens.forEach((reopen, i) => {
     entries.push({ type: "divider", at: reopen.closedAt, text: `${localTime(new Date(reopen.closedAt))} · 讨论截止` });
-    entries.push({ type: "divider", at: reopen.at, text: `${names.get(reopen.by) ?? reopen.by}重新开启 48 小时讨论（第 ${i + 2} 轮）` });
+    entries.push({ type: "divider", at: reopen.at, text: `${names.get(reopen.by) ?? reopen.by}重新开放讨论（第 ${i + 2} 轮）` });
   });
   if (round.closes_at && round.closes_at <= now) entries.push({ type: "divider", at: round.closes_at.toISOString(), text: `${localTime(round.closes_at)} · 讨论截止 · 之后的留言不进这一轮` });
   if (round.confirmed_at) entries.push({ type: "divider", at: round.confirmed_at.toISOString(), text: `${names.get(round.confirmed_by!) ?? round.confirmed_by}确认了本月 Mission Card` });

@@ -36,7 +36,8 @@ function memberCardNext(cards: WorkCard[], deciders: Map<string, string>): Next 
   const month = Number(card.period.slice(5));
   const deadline = card.closesAt && new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(card.closesAt));
   return {
-    text: card.phase === "open" ? `${month} 月 Mission Card 讨论开放到 ${deadline}` : `${month} 月 Mission Card 已截止，等${deciders.get(card.roundId)}拍板`,
+    text: card.phase === "open" ? deadline ? `${month} 月 Mission Card 讨论开放到 ${deadline}` : `${month} 月 Mission Card 讨论已开放`
+      : `${month} 月 Mission Card 已截止，等${deciders.get(card.roundId)}拍板`,
     // 引导的最后一步统一进首页；本月卡的状态留在说明里，首页左侧能直接点开。
     action: "进入工作台", href: "/me",
   };

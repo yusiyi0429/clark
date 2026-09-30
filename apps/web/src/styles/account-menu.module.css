@@ -163,3 +163,4 @@
 .dialogLink:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
 @media (max-width: 759px) { .dialog.wide { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); padding: 16px 16px 20px; } }
 @media (prefers-reduced-motion: reduce) { .dialogLink svg { transition: none; } .dialogLink:hover svg { transform: none; } }
+.version { margin: 4px 0 0; color: var(--ink-faint); font-size: 11px; line-height: 1.5; text-align: right; font-variant-numeric: tabular-nums; user-select: all; }

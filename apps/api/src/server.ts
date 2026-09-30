@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { buildApp, type AppEnv } from "./app.js";
+import { buildApp, DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR, type AppEnv } from "./app.js";
 import { migrate } from "./migrate.js";
 import { Pool } from "pg";
 import { createRadarService } from "./radar.js";
@@ -21,6 +21,7 @@ import { createMonthlyPlanService } from "./monthlyDraft.js";
 import { createMonthlyDraftAgent } from "./monthlyDraftAgent.js";
 import { createMonthlyPlanScheduler } from "./monthlyPlanScheduler.js";
 import { createMonthlyReviewService } from "./monthlyReviewService.js";
+import { createPersonalReviewDraftAgent } from "./personalReviewAgent.js";
 import { createMonthlyReviewAssessAgent, createMonthlyReviewDraftAgent, createMonthlyReviewSummaryAgent } from "./monthlyReviewAgents.js";
 import { createMonthlyReviewScheduler } from "./monthlyReviewScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
@@ -144,6 +145,8 @@ const reviewAgentOptions = { query: pool.query.bind(pool), baseUrl: env.piBaseUr
 const monthlyReviewService = createMonthlyReviewService({
   pool,
   companyMemory,
+  personalDraft: { storageDir: env.conversationAttachmentStorageDir ?? DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR,
+    agent: createPersonalReviewDraftAgent(reviewAgentOptions) },
   agents: {
     draft: createMonthlyReviewDraftAgent(reviewAgentOptions),
     assess: createMonthlyReviewAssessAgent(reviewAgentOptions),

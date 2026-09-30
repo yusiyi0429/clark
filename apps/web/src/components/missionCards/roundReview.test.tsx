@@ -78,6 +78,6 @@ describe("集中 Review 的可执行边界", () => {
     expect(html).toContain("依赖和交接已逐人核对。");
     expect(html).toContain("确认记录");
     expect(html).not.toContain("textarea");
-    expect(html).not.toContain(">重新开启 48 小时</button>");
+    expect(html).not.toContain(">重新开放讨论</button>");
   });
 });
