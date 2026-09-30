@@ -73,7 +73,7 @@ SSH_OPTS=(-i "${BACKUP_SSH_KEY_PATH:-}" -o BatchMode=yes -o StrictHostKeyCheckin
 TARGET="${BACKUP_SSH_USER:-}@${BACKUP_SSH_HOST:-}"
 SCHEMA_SQL="SELECT coalesce(max(id), 0) FROM schema_migrations"
 # 存储行清单：materials 与会话附件的 storageKey/SHA 都以 DB 为准（manifest 的校验基准）
-STORAGE_ROWS_SQL="SELECT 'meeting_material|' || m.id || '|' || value->>'storageKey' || '|' || value->>'sha256' FROM meetings m, jsonb_array_elements(m.materials) value WHERE value->>'storageKey' <> '' UNION ALL SELECT 'conversation_attachment|' || cm.id || '|' || a->>'storageKey' || '|' || a->>'sha256' FROM conversation_messages cm, jsonb_array_elements(cm.attachments) a WHERE a->>'storageKey' <> ''"
+STORAGE_ROWS_SQL="SELECT 'meeting_material|' || m.id || '|' || (value->>'storageKey') || '|' || (value->>'sha256') FROM meetings m, jsonb_array_elements(m.materials) value WHERE value->>'storageKey' <> '' UNION ALL SELECT 'conversation_attachment|' || cm.conversation_id || ':' || cm.sequence || '|' || (a->>'storageKey') || '|' || (a->>'sha256') FROM conversation_messages cm, jsonb_array_elements(cm.attachments) a WHERE a->>'storageKey' <> ''"
 
 COMPOSE_FILES=(-f "$COMPOSE_FILE")
 [ -n "$COMPOSE_OVERRIDE" ] && COMPOSE_FILES+=(-f "$COMPOSE_OVERRIDE")
