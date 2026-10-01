@@ -13,6 +13,7 @@ const cli = join(root, "apps/api/node_modules/tsx/dist/cli.mjs");
 const script = join(root, "apps/api/scripts/import-mission-card-drafts.ts");
 
 describe("Mission draft import CLI", () => {
+  // Fresh database migrations and four CLI startups need more than Vitest's default 5 seconds on CI.
   it("prints usage without a database and imports through the same idempotent repository", async () => {
     const help = spawnSync(process.execPath, [cli, script, "--help"], { cwd: root, encoding: "utf8" });
     expect(help.status).toBe(0);
@@ -51,5 +52,5 @@ describe("Mission draft import CLI", () => {
         await rm(dir, { recursive: true, force: true });
       }
     });
-  });
+  }, 30_000);
 });
