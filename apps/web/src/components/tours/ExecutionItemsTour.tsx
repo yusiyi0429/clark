@@ -14,11 +14,11 @@ function Finish({ onExit }: { onExit: (exit: TourExit) => void }) {
   </>;
 }
 
-/** 六幕与原演示保持一致：看完才可开启第一件或稍后再说。 */
+/** 六幕与原演示保持一致：看完才可开启第一件或稍后再说；跳过等于直接开启。 */
 export function ExecutionItemsTourView({ onExit }: { onExit: (exit: TourExit) => void }) {
-  return <PagedTourView label="执行事项怎么用" steps={TOUR_STEPS} finish={<Finish onExit={onExit} />} />;
+  return <PagedTourView label="执行事项怎么用" steps={TOUR_STEPS} finish={<Finish onExit={onExit} />} onSkip={() => onExit("start")} />;
 }
 
 export function ExecutionItemsTour({ isOpen, onExit }: { isOpen: boolean; onExit: (exit: TourExit) => void }) {
-  return <PagedTour isOpen={isOpen} label="执行事项怎么用" steps={TOUR_STEPS} finish={<Finish onExit={onExit} />} />;
+  return <PagedTour isOpen={isOpen} label="执行事项怎么用" steps={TOUR_STEPS} finish={<Finish onExit={onExit} />} onSkip={() => onExit("start")} />;
 }

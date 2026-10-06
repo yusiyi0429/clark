@@ -11,10 +11,10 @@ function Finish({ onExit }: { onExit: () => void }) {
 }
 
 export function MissionCardTourView({ onExit }: { onExit: () => void }) {
-  return <PagedTourView label="任务卡怎么用" steps={MISSION_CARD_TOUR_STEPS} finish={<Finish onExit={onExit} />} />;
+  return <PagedTourView label="任务卡怎么用" steps={MISSION_CARD_TOUR_STEPS} finish={<Finish onExit={onExit} />} onSkip={onExit} />;
 }
 
-/** 首次完整看完五幕才出现出口；页头问号可再次打开同一演示。 */
+/** 看完五幕才出现出口，也可以随时跳过；页头问号可再次打开同一演示。 */
 export function MissionCardTour({ isOpen, onExit }: { isOpen: boolean; onExit: () => void }) {
-  return <PagedTour isOpen={isOpen} label="任务卡怎么用" steps={MISSION_CARD_TOUR_STEPS} finish={<Finish onExit={onExit} />} />;
+  return <PagedTour isOpen={isOpen} label="任务卡怎么用" steps={MISSION_CARD_TOUR_STEPS} finish={<Finish onExit={onExit} />} onSkip={onExit} />;
 }

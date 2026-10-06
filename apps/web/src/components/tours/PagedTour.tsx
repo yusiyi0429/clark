@@ -6,10 +6,10 @@ import { RotateCcw } from "lucide-react";
 import x from "./execution-tour.module.css";
 
 export type TourStep = { title: string; body: string; duration: number; Scene: ComponentType };
-type TourContent = { label: string; steps: readonly TourStep[]; finish: ReactNode };
+type TourContent = { label: string; steps: readonly TourStep[]; finish: ReactNode; onSkip: () => void };
 
-/** 共用演示卡片：完整播放当前幕才能前进，全部看完才出现出口。 */
-export function PagedTourView({ label, steps, finish }: TourContent) {
+/** 共用演示卡片：完整播放当前幕才能前进，全部看完才出现出口；没看完前随时可以跳过直接进入。 */
+export function PagedTourView({ label, steps, finish, onSkip }: TourContent) {
   const last = steps.length - 1;
   const [step, setStep] = useState(0);
   const [replay, setReplay] = useState(0);
@@ -73,6 +73,7 @@ export function PagedTourView({ label, steps, finish }: TourContent) {
       <button type="button" className={x.replay} onClick={() => setReplay((value) => value + 1)} aria-label="重播这一步"><RotateCcw size={14} aria-hidden />重播</button>
     </div>
     <div className={x.footer}>
+      {finished ? null : <button type="button" className={x.skip} onClick={onSkip}>跳过，直接进入</button>}
       <div className={x.copy} aria-live="polite">
         <p className={x.count}>第 {step + 1} 步，共 {steps.length} 步</p>
         <Heading slot="title" className={x.title}>{title}</Heading>

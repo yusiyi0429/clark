@@ -36,10 +36,11 @@ function copy(node: ReactNode): string {
   return typeof node === "string" || typeof node === "number" ? String(node) : "";
 }
 const exit = vi.fn();
+const skip = vi.fn();
 function render() {
   ui.cleanups.forEach((cleanup) => cleanup());
   ui.index = 0; ui.effects = []; ui.cleanups = [];
-  const tree = PagedTourView({ label: "任务卡怎么用", steps: MISSION_CARD_TOUR_STEPS, finish: <button onClick={exit}>开始查看任务</button> });
+  const tree = PagedTourView({ label: "任务卡怎么用", steps: MISSION_CARD_TOUR_STEPS, finish: <button onClick={exit}>开始查看任务</button>, onSkip: skip });
   const dialogRef = elements(tree)[0].props.ref;
   if (dialogRef) dialogRef.current = {
     addEventListener: (name: string, listener: (event: { key: string; preventDefault: () => void; stopPropagation: () => void }) => void) => ui.dialogListeners.set(name, listener),
@@ -94,6 +95,23 @@ describe("任务卡演示的完整观看门禁", () => {
     }
     button(tree, "开始查看任务")?.props.onClick?.();
     expect(exit).toHaveBeenCalledOnce();
+  });
+
+  it("没放完也能跳过直接进入；看完出现出口后不再重复显示跳过", async () => {
+    pendingScene();
+    let tree = render();
+    expect(button(tree, "下一步")?.props["aria-disabled"]).toBe(true);
+    button(tree, "跳过，直接进入")?.props.onClick?.();
+    expect(skip).toHaveBeenCalledOnce();
+
+    ui.animations = []; tree = render();
+    for (let step = 0; step < MISSION_CARD_TOUR_STEPS.length - 1; step++) {
+      await settle(); tree = render();
+      button(tree, "下一步")?.props.onClick?.(); tree = render();
+    }
+    await settle(); tree = render();
+    expect(button(tree, "开始查看任务")).toBeDefined();
+    expect(button(tree, "跳过，直接进入")).toBeUndefined();
   });
 
   it("可以回看和重播已看过的幕；触屏前进同样遵守观看门禁", async () => {

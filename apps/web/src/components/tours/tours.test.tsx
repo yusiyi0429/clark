@@ -22,10 +22,11 @@ describe("更新说明卡片", () => {
 });
 
 describe("执行事项演示", () => {
-  it("第一幕没放完时「下一步」不可用，也没有关闭或跳过的入口", () => {
+  it("第一幕没放完时「下一步」不可用，看完前的出口只有「跳过，直接进入」", () => {
     const html = renderToStaticMarkup(<ExecutionItemsTourView onExit={vi.fn()} />);
     expect(html).toContain("第 1 步，共 6 步");
     expect(html).toMatch(/data-ready="false" aria-disabled="true"/);
+    expect(html).toContain("跳过，直接进入");
     for (const exit of ["稍后再说", "开启我的第一件", "关闭"]) expect(html).not.toContain(exit);
   });
 });
@@ -34,7 +35,7 @@ describe("任务卡演示", () => {
   it("新流程使用独立已读版本，旧导览记录不能跳过本人确认说明", () => {
     expect(MISSION_CARD_TOUR_KEY).toBe("tour:mission-card:owner-confirmation-v2");
   });
-  it("先解释目标与任务，首次看完前没有退出或跳过入口", () => {
+  it("先解释目标与任务，看完前只能跳过直接进入", () => {
     const html = renderToStaticMarkup(<MissionCardTourView onExit={vi.fn()} />);
     expect(html).toContain("第 1 步，共 5 步");
     expect(html).toContain("长期目标");
@@ -42,6 +43,7 @@ describe("任务卡演示", () => {
     expect(html).toContain("执行拆分");
     expect(html).toContain("下一版开放");
     expect(html).toMatch(/data-ready="false" aria-disabled="true"/);
+    expect(html).toContain("跳过，直接进入");
     expect(html).not.toContain("开始查看任务");
     expect(html).not.toContain("关闭");
   });
