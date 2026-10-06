@@ -73,6 +73,9 @@ services:
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
+      args:
+        NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org/}
+        ALPINE_MIRROR: ${ALPINE_MIRROR:-}
     environment:
       DATABASE_URL: postgres://warmap:${POSTGRES_PASSWORD}@postgres:5432/warmap
       PUBLIC_ORIGIN: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN required}
@@ -138,6 +141,8 @@ services:
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
+      args:
+        NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org/}
     environment:
       API_SERVER_URL: http://api:4000
       PUBLIC_ORIGIN: https://${PUBLIC_DOMAIN}
