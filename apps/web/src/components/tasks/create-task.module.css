@@ -52,8 +52,51 @@ textarea.input { resize: vertical; min-height: 76px; }
 .input::placeholder { color: #a3a9b4; }
 .input:hover { border-color: #cfd6e2; }
 .input:focus { border-color: var(--onboarding-blue, #3e82f7); background: #fff; box-shadow: 0 0 0 3px color-mix(in oklab, var(--onboarding-blue, #3e82f7) 12%, transparent); }
-.input[type="date"] { font-variant-numeric: tabular-nums; }
+.optional { margin-left: 8px; color: #a3a9b4; font-size: 12px; }
 .twoFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; }
+
+/* 日期：两枚胶囊，选中的那枚边框换品牌蓝、浅蓝底。 */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; margin: 0; padding: 0 14px;
+  border: 1px solid #dfe4ee; border-radius: 999px; background: #fafbfd; color: #4a505c;
+  font: inherit; font-size: 13px; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+.chip svg { flex: none; color: #8a909b; }
+.chip:hover { border-color: #cfd6e2; color: var(--ink, #1c2030); }
+.chip[data-on] { border-color: var(--onboarding-blue, #3e82f7); background: color-mix(in oklab, var(--onboarding-blue, #3e82f7) 8%, #fff); color: var(--onboarding-blue, #3e82f7); font-weight: 560; }
+.chip[data-on] svg { color: inherit; }
+
+/* 月历浮层：和输入框同一套细边框、圆角、品牌蓝；里面套主题层（TianshuPortalTheme）拿到同一套字体和聚焦框，它自带的底色去掉。 */
+.popover {
+  box-sizing: border-box; width: 296px; padding: 14px 14px 10px;
+  border: 1px solid #e6eaf1; border-radius: 16px; background: #fff; color: var(--ink, #1c2030); outline: none;
+  box-shadow: 0 18px 48px -14px rgb(20 30 50 / 24%), 0 2px 6px rgb(20 30 50 / 5%);
+}
+.popover[data-entering] { animation: pop 160ms cubic-bezier(.22, 1, .36, 1); }
+.popover[data-exiting] { animation: pop 110ms ease reverse; }
+@keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+.popover > * { background: transparent; }
+.dialog { outline: none; }
+.calHead { display: flex; align-items: center; gap: 2px; margin: 0 0 8px; padding-left: 6px; }
+.calTitle { flex: 1; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.4; }
+.calNav { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: none; color: #6a6f7c; cursor: pointer; }
+.calNav[data-hovered] { background: rgb(38 61 92 / 6%); color: var(--ink, #1c2030); }
+.calNav[data-disabled] { opacity: .35; cursor: default; }
+.calGrid { width: 100%; border-collapse: collapse; }
+.calGrid td { padding: 1px 0; }
+.calWeekday { padding: 0 0 6px; color: #a3a9b4; font-size: 11px; font-weight: 500; text-align: center; }
+.calDay {
+  display: grid; place-items: center; width: 34px; height: 34px; margin: 0 auto; border-radius: 50%;
+  color: var(--ink, #1c2030); font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.calDay[data-hovered] { background: rgb(38 61 92 / 6%); }
+.calDay[data-today] { color: var(--onboarding-blue, #3e82f7); font-weight: 600; }
+.calDay[data-selected] { background: var(--onboarding-blue, #3e82f7); color: #fff; font-weight: 600; }
+.calDay[data-disabled], .calDay[data-unavailable] { background: none; color: #c8cdd5; font-weight: 400; cursor: default; }
+.calDay[data-outside-month] { visibility: hidden; }
 
 /* 第二步：一行开关；打开后下面点选 Mission。 */
 .link { display: grid; gap: 10px; min-width: 0; margin-top: 4px; padding: 12px 14px; border: 1px solid #e6eaf1; border-radius: 12px; background: #fafbfd; }
@@ -81,6 +124,9 @@ textarea.input { resize: vertical; min-height: 76px; }
 .back:hover { color: var(--ink, #1c2030); }
 .back:focus-visible { outline: 2px solid var(--onboarding-blue, #3e82f7); outline-offset: 2px; }
 .primary.primary { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 18px; font-size: 14px; }
+/* 页头右上角的问号：回看「执行事项怎么用」，和任务卡页同款。 */
+.help.help { min-width: 32px; width: 32px; height: 32px; min-height: 32px; padding: 0; border-radius: 50%; color: var(--ink-faint); }
+.help.help:hover { color: var(--ink-muted); background: transparent; }
 
 @media (max-width: 959px) {
   .flow { padding: 28px 18px 140px; }
@@ -89,8 +135,9 @@ textarea.input { resize: vertical; min-height: 76px; }
   .twoFields { grid-template-columns: minmax(0, 1fr); }
   .input, .titleInput { font-size: 16px; } /* iOS 聚焦时不放大页面 */
   .titleInput { font-size: 18px; }
+  .chip { min-height: 38px; font-size: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .stage { animation: none; }
-  .switch, .switch > span, .input, .titleInput, .mission { transition: none; }
+  .stage, .popover[data-entering], .popover[data-exiting] { animation: none; }
+  .switch, .switch > span, .input, .titleInput, .mission, .chip, .calDay { transition: none; }
 }

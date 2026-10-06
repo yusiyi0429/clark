@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check } from "lucide-react";
+import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
+import { ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp } from "lucide-react";
+import { Button as AriaButton, Calendar, CalendarCell, CalendarGrid, CalendarGridBody, CalendarGridHeader, CalendarHeaderCell, Dialog, DialogTrigger, Heading, I18nProvider, Popover } from "react-aria-components";
+import { TianshuPortalTheme } from "ts-design";
 import { Button } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
+import { ExecutionItemsTour } from "@/components/tours/ExecutionItemsTour";
 import c from "./create-task.module.css";
 
 type Plan = components["schemas"]["MonthPlanResponse"];
@@ -14,10 +18,52 @@ type Step = "what" | "mission" | "when";
 const cards: [] = [];
 const STEP_LABEL: Record<Step, string> = { what: "做什么", mission: "推进哪个 Mission", when: "时间与完成标准" };
 const READ_FAILED = "暂时读不到你的 Mission，可以先作为独立事项开启。请稍后重试。";
+const todayIso = () => today(getLocalTimeZone()).toString();
+const WEEKDAY = "日一二三四五六";
+/** 10月12日 周一；不在今年才带年份。 */
+const dayLabel = (iso: string) => {
+  const date = parseDate(iso);
+  const year = date.year === today(getLocalTimeZone()).year ? "" : `${date.year}年`;
+  return `${year}${date.month}月${date.day}日 周${WEEKDAY[date.toDate("UTC").getUTCDay()]}`;
+};
+
+/** 一个日期：一枚快捷项（开始是「今天」，截止是「还没想好」），一枚「选日期」点开同款样式的月历。 */
+function DateChoice({ label, value, quick, min, max, onChange }: {
+  label: string; value: string; quick: { value: string; label: string }; min?: string; max?: string; onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const custom = value !== quick.value;
+  return <div className={c.field} role="group" aria-label={label}>
+    <span className={c.label}>{label}</span>
+    <div className={c.chips}>
+      <button type="button" className={c.chip} data-on={!custom || undefined} aria-pressed={!custom} onClick={() => onChange(quick.value)}>{quick.label}</button>
+      <DialogTrigger isOpen={open} onOpenChange={setOpen}>
+        <AriaButton className={c.chip} data-on={custom || undefined}><CalendarDays size={14} aria-hidden />{custom ? dayLabel(value) : "选日期"}</AriaButton>
+        <Popover className={c.popover} placement="bottom start" offset={8}>
+          <TianshuPortalTheme><Dialog className={c.dialog} aria-label={`选择${label}日期`}>
+            <I18nProvider locale="zh-CN">
+              <Calendar value={value ? parseDate(value) : null} minValue={min ? parseDate(min) : undefined} maxValue={max ? parseDate(max) : undefined} onChange={(date) => { onChange(date.toString()); setOpen(false); }}>
+                <header className={c.calHead}>
+                  <Heading className={c.calTitle} />
+                  <AriaButton slot="previous" className={c.calNav}><ChevronLeft size={16} aria-hidden /></AriaButton>
+                  <AriaButton slot="next" className={c.calNav}><ChevronRight size={16} aria-hidden /></AriaButton>
+                </header>
+                <CalendarGrid className={c.calGrid}>
+                  <CalendarGridHeader>{(day) => <CalendarHeaderCell className={c.calWeekday}>{day}</CalendarHeaderCell>}</CalendarGridHeader>
+                  <CalendarGridBody>{(date) => <CalendarCell date={date} className={c.calDay}>{date.day}</CalendarCell>}</CalendarGridBody>
+                </CalendarGrid>
+              </Calendar>
+            </I18nProvider>
+          </Dialog></TianshuPortalTheme>
+        </Popover>
+      </DialogTrigger>
+    </div>
+  </div>;
+}
 
 /**
  * 新建执行事项：一步一问，整个左侧是这一步的舞台（样式跟首次引导的演示动画一致）。
- * ① 做什么 → ② 推进哪个 Mission（本月没有 Mission 时跳过）→ ③ 什么时候、做到什么程度（都可以不填）。
+ * ① 做什么 → ② 推进哪个 Mission（本月没有 Mission 时跳过）→ ③ 什么时候做（不选就是今天开始、截止还没想好）。
  */
 export function CreateTaskScreen() {
   const workspace = useWorkspace();
@@ -28,11 +74,12 @@ export function CreateTaskScreen() {
   const [title, setTitle] = useState("");
   const [linked, setLinked] = useState(false);
   const [missionId, setMissionId] = useState("");
-  const [startDate, setStartDate] = useState("");
+  const [startDate, setStartDate] = useState(todayIso);
   const [dueDate, setDueDate] = useState("");
   const [doneDefinition, setDoneDefinition] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const clientId = useRef<string | null>(null);
   const change = (set: (value: string) => void, value: string) => { set(value); setError(""); clientId.current = null; };
 
@@ -67,8 +114,8 @@ export function CreateTaskScreen() {
     clientId.current ??= crypto.randomUUID();
     try {
       const { data, error: failure } = await browserApi.POST("/api/me/tasks", { body: {
-        clientId: clientId.current, title: title.trim(), missionId: chosen?.id ?? null,
-        ...(startDate ? { startDate } : {}), ...(dueDate ? { dueDate } : {}),
+        clientId: clientId.current, title: title.trim(), missionId: chosen?.id ?? null, startDate,
+        ...(dueDate ? { dueDate } : {}),
         ...(doneDefinition.trim() ? { doneDefinition: doneDefinition.trim() } : {}),
       } });
       if (data) { window.dispatchEvent(new Event("member-tasks-changed")); workspace.navigate(`/me/tasks/${encodeURIComponent(data.id)}`); }
@@ -84,7 +131,7 @@ export function CreateTaskScreen() {
     void create();
   };
 
-  return <DetailFrame title="开启执行事项" subtitle="我的工作台" onBack={workspace.close}>
+  return <DetailFrame title="开启执行事项" subtitle="我的工作台" onBack={workspace.close} actions={<Button variant="ghost" isIconOnly className={c.help} aria-label="查看执行事项使用说明" onPress={() => setTourOpen(true)}><CircleHelp size={17} aria-hidden /></Button>}>
     <form className={c.flow} onSubmit={submit} noValidate>
       <ol className={c.steps} aria-label={`第 ${index + 1} 步，共 ${steps.length} 步`}>
         {steps.map((item, position) => <li key={item} data-state={position < index ? "done" : position === index ? "current" : "next"}>
@@ -130,14 +177,13 @@ export function CreateTaskScreen() {
         </> : null}
 
         {current === "when" ? <>
-          <h2 className={c.question}>什么时候、做到什么程度？</h2>
-          <p className={c.hint}>都可以不填，之后在事项里随时补。</p>
+          <h2 className={c.question}>什么时候做？</h2>
           <div className={c.twoFields}>
-            <label className={c.field}><span className={c.label}>计划开始日期</span><input className={c.input} type="date" value={startDate} onChange={(event) => change(setStartDate, event.target.value)} /></label>
-            <label className={c.field}><span className={c.label}>截止日期</span><input className={c.input} type="date" value={dueDate} onChange={(event) => change(setDueDate, event.target.value)} /></label>
+            <DateChoice label="开始" value={startDate} quick={{ value: todayIso(), label: "今天" }} max={dueDate || undefined} onChange={(value) => change(setStartDate, value)} />
+            <DateChoice label="截止" value={dueDate} quick={{ value: "", label: "还没想好" }} min={startDate} onChange={(value) => change(setDueDate, value)} />
           </div>
           <label className={c.field}>
-            <span className={c.label}>完成时应该留下什么</span>
+            <span className={c.label}>完成时应该留下什么<small className={c.optional}>可不填</small></span>
             <textarea className={c.input} rows={3} value={doneDefinition} onChange={(event) => change(setDoneDefinition, event.target.value)} placeholder="例如：一页结论，以及支撑它的依据。" maxLength={500} />
           </label>
         </> : null}
@@ -151,5 +197,6 @@ export function CreateTaskScreen() {
           : <Button variant="primary" type="submit" isDisabled={!title.trim()} className={c.primary}>下一步<ArrowRight size={15} aria-hidden /></Button>}
       </div>
     </form>
+    {tourOpen ? <ExecutionItemsTour isOpen onExit={() => setTourOpen(false)} /> : null}
   </DetailFrame>;
 }

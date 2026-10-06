@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { getLocalTimeZone, today } from "@internationalized/date";
 
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0 }));
 const actions = vi.hoisted(() => ({ post: vi.fn(), patch: vi.fn(), put: vi.fn(), get: vi.fn(), navigate: vi.fn(), ask: vi.fn() }));
@@ -49,7 +50,9 @@ it("三步新建：回车逐步前进，最后一步才提交；失败保留草�
   expect(find(tree, (node) => node.props?.role === "switch")?.props?.["aria-checked"]).toBe(false);
   submit(); // 第二步 → 第三步：日期与完成定义
   tree = render(() => CreateTaskScreen());
-  expect(find(tree, (node) => node.type === "input" && node.props?.type === "date")).toBeDefined();
+  // 不选日期：开始默认今天，截止还没想好。
+  expect(find(tree, (node) => node.props?.label === "开始")?.props?.value).toBe(today(getLocalTimeZone()).toString());
+  expect(find(tree, (node) => node.props?.label === "截止")?.props?.value).toBe("");
   expect(find(tree, (node) => node.type === "textarea")).toBeDefined();
   expect(actions.post).not.toHaveBeenCalled();
   actions.post.mockResolvedValueOnce({ error: { message: "暂时失败" } }).mockResolvedValueOnce({ data: { id: "task-new" } });
@@ -57,7 +60,7 @@ it("三步新建：回车逐步前进，最后一步才提交；失败保留草�
   await vi.waitFor(() => expect(actions.post).toHaveBeenCalledTimes(1));
   submit();
   await vi.waitFor(() => expect(actions.navigate).toHaveBeenCalledWith("/me/tasks/task-new"));
-  expect(actions.post.mock.calls[0][1].body).toEqual({ clientId: "00000000-0000-4000-8000-000000000001", title: "联系两家客户", missionId: null });
+  expect(actions.post.mock.calls[0][1].body).toEqual({ clientId: "00000000-0000-4000-8000-000000000001", title: "联系两家客户", missionId: null, startDate: today(getLocalTimeZone()).toString() });
   expect(actions.post.mock.calls[1][1].body.clientId).toBe(actions.post.mock.calls[0][1].body.clientId);
 });
 
