@@ -9,6 +9,11 @@
     reverse_proxy api:4000
   }
 
+  @oauth path /.well-known/oauth-*
+  handle @oauth {
+    reverse_proxy api:4000
+  }
+
   handle {
     reverse_proxy web:3000
   }
