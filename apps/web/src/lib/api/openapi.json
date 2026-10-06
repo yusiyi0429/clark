@@ -5090,6 +5090,132 @@
         }
       }
     },
+    "/api/mcp-oauth/requests/{id}": {
+      "get": {
+        "operationId": "readOAuthConsent",
+        "summary": "读取本人浏览器中的 MCP 授权请求",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "授权信息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthConsentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "decideOAuthConsent",
+        "summary": "允许或拒绝 MCP 连接授权",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthConsentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "返回工具的回调地址",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthConsentDecisionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/tokens": {
       "get": {
         "operationId": "listPersonalTokens",
@@ -29978,6 +30104,18 @@
               }
             ]
           },
+          "authType": {
+            "anyOf": [
+              {
+                "const": "personal",
+                "type": "string"
+              },
+              {
+                "const": "oauth",
+                "type": "string"
+              }
+            ]
+          },
           "createdAt": {
             "minLength": 1,
             "type": "string"
@@ -30014,6 +30152,68 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "OAuthConsentRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "allow",
+          "csrfToken",
+          "name"
+        ],
+        "properties": {
+          "allow": {
+            "type": "boolean"
+          },
+          "csrfToken": {
+            "minLength": 64,
+            "maxLength": 64,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 40,
+            "type": "string"
+          }
+        }
+      },
+      "OAuthConsentResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientName",
+          "callbackHost",
+          "scopes",
+          "csrfToken"
+        ],
+        "properties": {
+          "clientName": {
+            "type": "string"
+          },
+          "callbackHost": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "csrfToken": {
+            "type": "string"
+          }
+        }
+      },
+      "OAuthConsentDecisionResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "redirect"
+        ],
+        "properties": {
+          "redirect": {
+            "type": "string"
           }
         }
       },
@@ -32618,6 +32818,18 @@
                     }
                   ]
                 },
+                "authType": {
+                  "anyOf": [
+                    {
+                      "const": "personal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "oauth",
+                      "type": "string"
+                    }
+                  ]
+                },
                 "createdAt": {
                   "minLength": 1,
                   "type": "string"
@@ -32660,6 +32872,10 @@
           },
           "mcpPath": {
             "const": "/mcp/me",
+            "type": "string"
+          },
+          "mcpUrl": {
+            "minLength": 1,
             "type": "string"
           }
         }
@@ -32757,6 +32973,18 @@
                   },
                   {
                     "const": "other",
+                    "type": "string"
+                  }
+                ]
+              },
+              "authType": {
+                "anyOf": [
+                  {
+                    "const": "personal",
+                    "type": "string"
+                  },
+                  {
+                    "const": "oauth",
                     "type": "string"
                   }
                 ]

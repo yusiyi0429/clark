@@ -13,7 +13,8 @@ vi.mock("react", async (original) => {
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: ui.get, POST: ui.post, DELETE: ui.del } }));
 vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: ui.ask, dialog: null }) }));
 import { ConnectionDialog } from "./ConnectionDialog";
-import { ConnectAgentForm, connectionState, watchFirstUse } from "./ConnectAgentForm";
+import { ConnectAgentForm, PersonalTokenForm, connectionState, watchFirstUse } from "./ConnectAgentForm";
+import { OAuthConnectForm } from "./OAuthConnectForm";
 
 type Node = ReactElement<Record<string, unknown>>;
 function nodes(value: ReactNode): Node[] {
@@ -21,7 +22,8 @@ function nodes(value: ReactNode): Node[] {
   if (!isValidElement(value)) return [];
   const node = value as Node;
   // 连接表单是共用组件：展开它，按钮和输入框就在同一棵树里（hooks 按调用顺序接着计数）。
-  if (node.type === ConnectAgentForm) return [node, ...nodes(ConnectAgentForm(node.props as Parameters<typeof ConnectAgentForm>[0]))];
+  // These existing cases exercise the PAT fallback explicitly.
+  if (node.type === ConnectAgentForm) return [node, ...nodes(PersonalTokenForm(node.props as Parameters<typeof PersonalTokenForm>[0]))];
   return [node, ...nodes(node.props.children as ReactNode)];
 }
 const render = (role: "ceo" | "member" = "member") => { ui.cursor = 0; return nodes(ConnectionDialog({ role })); };
@@ -29,6 +31,18 @@ const named = (all: Node[], label: string) => all.find((node) => node.props.chil
 beforeEach(() => { ui.values = []; ui.cursor = 0; vi.clearAllMocks(); vi.stubGlobal("window", { location: { origin: "https://tianshu.example" } }); });
 
 describe("个人连接对话框", () => {
+  it("默认使用浏览器授权，个人令牌必须显式切换到备用方式", () => {
+    ui.cursor = 0;
+    let tree = ConnectAgentForm({ role: "member" }) as Node;
+    let children = tree.props.children as Node[];
+    expect(children[0].type).toBe(OAuthConnectForm);
+    expect(children[1].props.children).toBe("使用个人令牌连接（备用）");
+    (children[1].props.onClick as () => void)();
+    ui.cursor = 0;
+    tree = ConnectAgentForm({ role: "member" }) as Node;
+    children = tree.props.children as Node[];
+    expect(children[0].type).toBe(PersonalTokenForm);
+  });
   it("CEO 版只介绍只读查询，不显示自动同步或每周同步", () => {
     const tree = render("ceo");
     const content = JSON.stringify(tree);
@@ -100,17 +114,17 @@ describe("个人连接对话框", () => {
     expect(JSON.stringify(render())).not.toContain(secret);
   });
 
-  it("成员默认不过期；关掉每周同步回到 30 天，再打开又回到不过期", () => {
+  it("个人令牌默认 90 天；切换每周同步不会改动有效期", () => {
     const selected = (tree: Node[]) => tree.find((node) => node.props["aria-labelledby"] === "connection-expiry")!.props.selectedKeys;
     let tree = render();
-    expect(selected(tree)).toEqual(["never"]);
+    expect(selected(tree)).toEqual(["90"]);
     (tree.find((node) => node.props.role === "switch")!.props.onClick as () => void)();
     tree = render();
-    expect(selected(tree)).toEqual(["30"]);
+    expect(selected(tree)).toEqual(["90"]);
     (tree.find((node) => node.props.role === "switch")!.props.onClick as () => void)();
-    expect(selected(render())).toEqual(["never"]);
+    expect(selected(render())).toEqual(["90"]);
     ui.values = [];
-    expect(selected(render("ceo"))).toEqual(["30"]);
+    expect(selected(render("ceo"))).toEqual(["90"]);
   });
 
   it("连接列表按状态显示：等待连接、已连上、最近同步", () => {

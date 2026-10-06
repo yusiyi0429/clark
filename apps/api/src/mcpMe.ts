@@ -6,7 +6,7 @@ import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import type { Pool } from "pg";
 import type { Query } from "./meetingStore.js";
-import { authenticatePersonalToken } from "./personalTokens.js";
+import { authenticateMcpToken, MCP_WRITE_TOOLS, oauthUrls } from "./mcpOAuth.js";
 import { canUseMemberView } from "./memberAccess.js";
 import type { MemoryPerson } from "./companyMemory.js";
 import { companyProgress, getIssue, getMeeting, listPending } from "./mcpCeoReads.js";
@@ -78,7 +78,7 @@ const result = (value: unknown, isError = false) => ({ isError, content: [{ type
 export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: string; now: () => Date;
   names: () => Map<string, string>; findPerson: (personId: string) => MemoryPerson | undefined;
   people: () => MemoryPerson[]; initialPerson: MemoryPerson; draftDir?: string; publicOrigin?: string; authorization: string | undefined }) {
-  const auth = () => authenticatePersonalToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id));
+  const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   const initialAccess = access(deps.initialPerson);
   const instructions = [
     ...(initialAccess.ceo ? ["公司业务只读：可以查待你处理的事、议题/会议/任务卡详情和全公司进展；拍板、签发、确认请回天枢网页操作。"] : []),
@@ -93,7 +93,8 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     if (!person) return { tools: [] };
     const roles = access(person);
     return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []),
-      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...reviewDefinitions] };
+      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...reviewDefinitions]
+      .filter((tool) => !identity?.scopes || identity.scopes.includes("tianshu:write") || !MCP_WRITE_TOOLS.has(tool.name)) };
   });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const tool = request.params.name, args = request.params.arguments ?? {};
@@ -103,6 +104,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     if (!person) return result({ code: "UNAUTHORIZED", message: "身份已失效，请重新连接" }, true);
     const roles = access(person);
     const write = tool === "append_progress" || tool === "update_status" || tool === "save_review_draft" || tool === "edit_mission_card";
+    if (write && identity.scopes && !identity.scopes.includes("tianshu:write")) return result({ code: "FORBIDDEN", message: "这次连接没有写入权限，请重新授权" }, true);
     let itemId: string | undefined;
     let code: string | undefined;
     try {

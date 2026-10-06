@@ -189,7 +189,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "publicOrigin">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
@@ -255,8 +255,8 @@ export async function createTestApp(
     monthlyPlans,
     monthlyReviews,
     recordings,
-    publicOrigin: testEnv.publicOrigin,
-    env: testEnv,
+    publicOrigin: env.publicOrigin,
+    env,
     loginCookie: () => loginAs(app, TEST_CEO),
     memberCookie: () => loginAs(app, TEST_MEMBER),
     /** 真实 DRI 导入的 pending Issue：目标路由只消费持久对象，测试不再依赖 fixture 表。 */

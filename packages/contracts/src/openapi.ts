@@ -121,6 +121,9 @@ import {
   ListPersonalTokensResponse,
   CreatePersonalTokenRequest,
   CreatePersonalTokenResponse,
+  OAuthConsentRequest,
+  OAuthConsentResponse,
+  OAuthConsentDecisionResponse,
   MeHomeResponse,
   WeeklySyncReminder,
   MemberWork,
@@ -1173,6 +1176,19 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/mcp-oauth/requests/{id}": {
+        get: {
+          operationId: "readOAuthConsent", summary: "读取本人浏览器中的 MCP 授权请求",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { "200": { description: "授权信息", content: { "application/json": { schema: { $ref: "#/components/schemas/OAuthConsentResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+        post: {
+          operationId: "decideOAuthConsent", summary: "允许或拒绝 MCP 连接授权",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/OAuthConsentRequest" }),
+          responses: { "200": { description: "返回工具的回调地址", content: { "application/json": { schema: { $ref: "#/components/schemas/OAuthConsentDecisionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "409": errorResponse },
+        },
+      },
       "/api/me/tokens": {
         get: {
           operationId: "listPersonalTokens", summary: "列出本人未撤销的个人 MCP 令牌",
@@ -2169,6 +2185,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MissionCardItemsResponse: MissionCardItemsResponse as JsonSchema,
         PersonalTokenClient: PersonalTokenClient as JsonSchema,
         PersonalTokenView: PersonalTokenView as JsonSchema,
+        OAuthConsentRequest: OAuthConsentRequest as JsonSchema,
+        OAuthConsentResponse: OAuthConsentResponse as JsonSchema,
+        OAuthConsentDecisionResponse: OAuthConsentDecisionResponse as JsonSchema,
         MaterialView: MaterialView as JsonSchema,
         MaterialListResponse: MaterialListResponse as JsonSchema,
         MaterialRevisionView: MaterialRevisionView as JsonSchema,

@@ -9,7 +9,9 @@
 .commandBlock{display:grid;gap:5px;min-width:0}.commandBlock>strong{font-size:12px;color:#51637b}
 .command{display:flex;align-items:start;gap:8px;min-width:0;padding:8px;border:1px solid #dce6f4;border-radius:10px;background:#f4f8ff}
 .command code{flex:1;min-width:0;overflow-wrap:anywhere;white-space:pre-wrap;font-size:11px;line-height:1.55}
-.command button{flex:none;border:0;border-radius:7px;background:#e4efff;color:#2369d4;min-height:30px;padding:0 8px;font-size:11px;cursor:pointer}
+.command button{flex:none;display:inline-flex;align-items:center;gap:4px;border:0;border-radius:7px;background:#e4efff;color:#2369d4;min-height:30px;padding:0 8px;font-size:11px;cursor:pointer}
+.launch{justify-self:start;display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 14px;border:1px solid #d6e4fb;border-radius:999px;background:#fff;color:#2369d4;font-size:13px;font-weight:500;text-decoration:none;transition:background-color 140ms ease,border-color 140ms ease}
+.launch:hover{border-color:#b9d1f7;background:#f3f8ff}
 @media(max-width:520px){.list li{align-items:start}.command{flex-wrap:wrap}.command button{margin-left:auto}}
 .lead{margin:0;color:#3d4c62;font-size:13.5px;line-height:1.7}
 /* 生成后：一张淡蓝卡片，主动作是下载说明文件。 */
@@ -43,3 +45,7 @@
 @media(prefers-reduced-motion:reduce){.segmented button{transition:none}}
 /* 共用的连接表单（components/ConnectAgentForm）：设置弹窗和首次引导都用。 */
 .form{display:grid;gap:12px;min-width:0}
+.modeSwitch{justify-self:start;border:0;background:transparent;padding:6px 0;color:#69788d;font:inherit;font-size:12px;text-decoration:underline;cursor:pointer;min-height:32px}
+.modeSwitch:focus-visible{outline:2px solid #3a83f788;outline-offset:3px}
+.connected{display:grid;justify-items:center;gap:6px;padding:22px 16px;border:1px solid #e7e9ee;border-radius:16px;background:#fff;text-align:center}
+.connected>strong{margin-top:12px;font-size:15px;color:#17191e}.connected>span{color:#6f747d;font-size:12.5px}

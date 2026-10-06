@@ -11,6 +11,7 @@ import { monthDayTime } from "@/lib/companyTime";
 import { GUIDE_FILE_NAME, clientName, connectCommands, connectionGuide } from "@/lib/connectionGuide";
 import f from "@/components/onboarding/foundation.module.css";
 import s from "@/styles/connection-dialog.module.css";
+import { OAuthConnectForm } from "./OAuthConnectForm";
 
 type TokenView = components["schemas"]["PersonalTokenView"];
 type Created = components["schemas"]["CreatePersonalTokenResponse"];
@@ -38,7 +39,7 @@ export function watchFirstUse(id: string, onView: (view: TokenView) => void, int
 
 /** 连接一个外部工具：填名字、选工具与有效期（成员还有每周同步开关）→ 生成 → 下载说明文件发给自己的 Agent。
  *  设置里的「连接到外部工具」和首次引导共用这一份。 */
-export function ConnectAgentForm({ role, defaultName = "", activeCount = 0, revokedIds = [], actionsTarget, onCreated, onUpdated, onDownloaded }: {
+export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, revokedIds = [], actionsTarget, onCreated, onUpdated, onDownloaded }: {
   role: "ceo" | "member";
   /** 首次引导：主按钮（生成 → 下载）放进引导底栏的这个位置，和其他步骤的主按钮同一处，不会被挤出可视区。 */
   actionsTarget?: HTMLElement | null;
@@ -56,11 +57,10 @@ export function ConnectAgentForm({ role, defaultName = "", activeCount = 0, revo
   const created = createdRaw && !revokedIds.includes(createdRaw.view.id) ? createdRaw : null;
   const [name, setName] = useState(defaultName);
   const [client, setClient] = useState<TokenView["client"]>("codex");
-  /** 打开每周同步时默认不过期，免得第 5 周令牌过期、同步静默失败；仍可手动改。 */
-  const [expiresInDays, setExpiresInDays] = useState<30 | 90 | null>(role === "member" ? null : 30);
+  const [expiresInDays, setExpiresInDays] = useState<30 | 90 | null>(90);
   /** 默认每周五自动同步：写进说明文件，由 Agent 连接时一并设好定时任务。 */
-  const [weeklySync, setWeeklySync] = useState(true);
-  const [createdWeekly, setCreatedWeekly] = useState(true);
+  const [weeklySync, setWeeklySync] = useState(false);
+  const [createdWeekly, setCreatedWeekly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
@@ -116,7 +116,8 @@ export function ConnectAgentForm({ role, defaultName = "", activeCount = 0, revo
         <ToggleButton id="30">30 天</ToggleButton><ToggleButton id="90">90 天</ToggleButton><ToggleButton id="never">不过期</ToggleButton>
       </ToggleButtonGroup>
     </div>
-    {role === "member" ? <button type="button" role="switch" aria-checked={weeklySync} className={s.switchRow} onClick={() => { setExpiresInDays(weeklySync ? 30 : null); setWeeklySync(!weeklySync); }}>
+    <p className={s.muted}>个人令牌到期后需要重新生成并更新工具设置；开启同步不会延长有效期。</p>
+    {role === "member" ? <button type="button" role="switch" aria-checked={weeklySync} className={s.switchRow} onClick={() => setWeeklySync(!weeklySync)}>
       <span className={s.switchText}><strong>每周五 18:00 自动同步进展</strong><span>连接时让 Agent 一并设好定时任务，每周把你的进展写进天枢。</span></span>
       <span className={f.switch} data-on={weeklySync} aria-hidden="true"><span /></span>
     </button> : null}
@@ -143,5 +144,13 @@ export function ConnectAgentForm({ role, defaultName = "", activeCount = 0, revo
     </div> : null}
     {copied ? <p role="status" className={s.muted}>已复制：{copied}</p> : null}
     {error ? <p role="alert" className={s.error}>{error}</p> : null}
+  </div>;
+}
+
+export function ConnectAgentForm(props: Parameters<typeof PersonalTokenForm>[0]) {
+  const [personal, setPersonal] = useState(false);
+  return <div className={s.form}>
+    {personal ? <PersonalTokenForm {...props} /> : <OAuthConnectForm {...props} />}
+    <button type="button" className={s.modeSwitch} onClick={() => setPersonal(!personal)}>{personal ? "使用浏览器授权连接" : "使用个人令牌连接（备用）"}</button>
   </div>;
 }

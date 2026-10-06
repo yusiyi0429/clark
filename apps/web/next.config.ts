@@ -11,7 +11,8 @@ const nextConfig: NextConfig = {
   async rewrites() {
     if (process.env.NODE_ENV === "production") return [];
     const api = process.env.API_SERVER_URL ?? "http://localhost:4000";
-    return [{ source: "/api/:path*", destination: `${api}/api/:path*` }, { source: "/mcp/:path*", destination: `${api}/mcp/:path*` }];
+    return [{ source: "/api/:path*", destination: `${api}/api/:path*` }, { source: "/mcp/:path*", destination: `${api}/mcp/:path*` },
+      { source: "/.well-known/:path*", destination: `${api}/.well-known/:path*` }];
   },
 };
 

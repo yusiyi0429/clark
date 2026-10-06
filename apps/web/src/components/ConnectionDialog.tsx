@@ -12,7 +12,7 @@ import s from "@/styles/connection-dialog.module.css";
 
 type TokenView = components["schemas"]["PersonalTokenView"];
 
-/** 连接到外部工具：主路径是下载一份说明文件发给自己的 Codex、Claude Code 或其他 AI 工具，由它完成设置；命令行步骤收在「手动设置」里。 */
+/** 浏览器授权为默认连接方式；个人令牌作为备用，每周同步另行设置。 */
 export function ConnectionDialog({ role }: { role: "ceo" | "member" }) {
   const [tokens, setTokens] = useState<TokenView[]>([]);
   /** 本次撤销掉的连接；刚生成的那个被撤销时，表单不再给已失效的说明。 */
@@ -57,7 +57,7 @@ export function ConnectionDialog({ role }: { role: "ceo" | "member" }) {
         onUpdated={(view) => setTokens((current) => current.map((item) => item.id === view.id ? view : item))} />
     </section>
     {role === "member" ? <section className={s.section} aria-label="每周同步进展"><h3>每周同步进展</h3>
-      <p className={s.muted}>连上以后，随时对你的 Agent 说「同步本周进展」就行；生成连接说明时打开「每周五自动同步」，它会一并设好定时任务。天枢每周汇总后同步给本体。</p>
+      <p className={s.muted}>连上以后，随时对你的 Agent 说「同步本周进展」。需要每周五自动运行时，再让 Agent 设置系统定时任务；连接授权本身不会创建任务。</p>
       <details className={s.manual}><summary>同步指令和定时命令</summary>
         <div className={s.manualBody}>
           <div className={s.commandBlock}><strong>同步指令</strong><div className={s.command}><code>{SYNC_INSTRUCTION}</code><button type="button" onClick={() => void copy("同步指令", SYNC_INSTRUCTION)}>复制指令</button></div></div>
@@ -69,7 +69,7 @@ export function ConnectionDialog({ role }: { role: "ceo" | "member" }) {
     </section> : null}
     <section className={s.section}><h3>已连接</h3>
       {tokens.length ? <ul className={s.list}>{tokens.map((token) => <li key={token.id}>
-        <div><strong>{token.name}</strong><span>{clientName(token.client)} · 创建 {monthDayTime(token.createdAt)}</span><span>到期 {expiryText(token.expiresAt)} · {connectionState(token)}</span></div>
+        <div><strong>{token.name}</strong><span>{clientName(token.client)} · {token.authType === "oauth" ? "浏览器授权" : "个人令牌"} · 创建 {monthDayTime(token.createdAt)}</span><span>到期 {expiryText(token.expiresAt)} · {connectionState(token)}</span></div>
         <Button variant="ghost" isDisabled={busy} onPress={() => void revoke(token)}>撤销</Button>
       </li>)}</ul> : <p className={s.muted}>还没有连接。</p>}
     </section>

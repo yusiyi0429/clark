@@ -40,6 +40,7 @@ import {
   type RouteContext,
 } from "./routes/shared.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerMcpOAuthRoutes } from "./routes/mcpOAuth.js";
 import { registerCardRoutes } from "./routes/cards.js";
 import { registerConfigRoutes } from "./routes/config.js";
 import { registerRadarRoutes } from "./routes/radar.js";
@@ -358,6 +359,7 @@ export async function buildApp({
   };
 
   registerAuthRoutes(app, ctx);
+  await registerMcpOAuthRoutes(app, ctx);
   registerCardRoutes(app, ctx);
   registerConfigRoutes(app, ctx);
   registerRadarRoutes(app, ctx);

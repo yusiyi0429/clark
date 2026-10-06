@@ -1374,6 +1374,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mcp-oauth/requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取本人浏览器中的 MCP 授权请求 */
+        get: operations["readOAuthConsent"];
+        put?: never;
+        /** 允许或拒绝 MCP 连接授权 */
+        post: operations["decideOAuthConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/tokens": {
         parameters: {
             query?: never;
@@ -5476,10 +5494,25 @@ export interface components {
             id: string;
             name: string;
             client: "codex" | "claude" | "other";
+            authType?: "personal" | "oauth";
             createdAt: string;
             expiresAt: string | null;
             lastUsedAt: string | null;
             lastProgressAt: string | null;
+        };
+        OAuthConsentRequest: {
+            allow: boolean;
+            csrfToken: string;
+            name: string;
+        };
+        OAuthConsentResponse: {
+            clientName: string;
+            callbackHost: string;
+            scopes: string[];
+            csrfToken: string;
+        };
+        OAuthConsentDecisionResponse: {
+            redirect: string;
         };
         MaterialView: {
             id: string;
@@ -5908,6 +5941,7 @@ export interface components {
                 id: string;
                 name: string;
                 client: "codex" | "claude" | "other";
+                authType?: "personal" | "oauth";
                 createdAt: string;
                 expiresAt: string | null;
                 lastUsedAt: string | null;
@@ -5915,6 +5949,7 @@ export interface components {
             }[];
             /** @constant */
             mcpPath: "/mcp/me";
+            mcpUrl?: string;
         };
         CreatePersonalTokenRequest: {
             name: string;
@@ -5928,6 +5963,7 @@ export interface components {
                 id: string;
                 name: string;
                 client: "codex" | "claude" | "other";
+                authType?: "personal" | "oauth";
                 createdAt: string;
                 expiresAt: string | null;
                 lastUsedAt: string | null;
@@ -11024,6 +11060,108 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readOAuthConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 授权信息 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthConsentResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decideOAuthConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthConsentRequest"];
+            };
+        };
+        responses: {
+            /** @description 返回工具的回调地址 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthConsentDecisionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

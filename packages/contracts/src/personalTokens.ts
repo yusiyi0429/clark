@@ -6,6 +6,7 @@ export const PersonalTokenView = Type.Object({
   id: Type.String({ format: "uuid" }),
   name: Type.String({ minLength: 1, maxLength: 40 }),
   client: PersonalTokenClient,
+  authType: Type.Optional(Type.Union([Type.Literal("personal"), Type.Literal("oauth")])),
   createdAt: Type.String({ minLength: 1 }),
   expiresAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
   lastUsedAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
@@ -15,6 +16,8 @@ export const PersonalTokenView = Type.Object({
 export const ListPersonalTokensResponse = Type.Object({
   tokens: Type.Array(PersonalTokenView),
   mcpPath: Type.Literal("/mcp/me"),
+  /** Canonical resource URL: OAuth discovery and resource binding must use the same origin. */
+  mcpUrl: Type.Optional(Type.String({ minLength: 1 })),
 }, { additionalProperties: false });
 export const CreatePersonalTokenRequest = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 40 }),
@@ -31,3 +34,11 @@ export type TPersonalTokenView = Static<typeof PersonalTokenView>;
 export type TListPersonalTokensResponse = Static<typeof ListPersonalTokensResponse>;
 export type TCreatePersonalTokenRequest = Static<typeof CreatePersonalTokenRequest>;
 export type TCreatePersonalTokenResponse = Static<typeof CreatePersonalTokenResponse>;
+
+export const OAuthConsentResponse = Type.Object({
+  clientName: Type.String(), callbackHost: Type.String(), scopes: Type.Array(Type.String()), csrfToken: Type.String(),
+}, { additionalProperties: false });
+export const OAuthConsentRequest = Type.Object({
+  allow: Type.Boolean(), csrfToken: Type.String({ minLength: 64, maxLength: 64 }), name: Type.String({ maxLength: 40 }),
+}, { additionalProperties: false });
+export const OAuthConsentDecisionResponse = Type.Object({ redirect: Type.String() }, { additionalProperties: false });

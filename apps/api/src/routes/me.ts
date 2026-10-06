@@ -50,7 +50,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   });
 
   app.get("/api/me/tokens", { preHandler: requirePerson, schema: { response: { 200: ListPersonalTokensResponse } } }, async (req) => ({
-    tokens: await listPersonalTokens(q, req.person!.personId), mcpPath: "/mcp/me" as const,
+    tokens: await listPersonalTokens(q, req.person!.personId), mcpPath: "/mcp/me" as const, mcpUrl: `${ctx.env.publicOrigin.replace(/\/$/, "")}/mcp/me`,
   }));
   app.post("/api/me/tokens", { preHandler: requirePerson, schema: { body: CreatePersonalTokenRequest, response: { 200: CreatePersonalTokenResponse } } }, async (req, reply) => {
     if (!req.body.name.trim()) return fail(reply, 400, "INVALID_INPUT", "请填写令牌名称");

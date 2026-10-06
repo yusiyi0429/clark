@@ -211,7 +211,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
             {/* 「这里改的是公司雷达。」由编辑器顶部那一行说，同一屏不重复。 */}
             {step === "radar" && data.role === "ceo" ? <p className={s.description}>我会按你签发的本月目标自动关注；你还可以补充方向和来源。</p> : null}
             {step === "voiceprint" ? <p className={s.description}>录一段 15–30 秒的朗读，帮我在会后建议哪些发言可能来自你——最后仍由人核对。</p> : null}
-            {step === "connect" ? <p className={s.description}>{data.role === "ceo" ? "Codex、Claude Code 这类工具连上天枢后，可以直接问它今天有什么要你拍板、这周各战场怎么样。它只能看，拍板仍在天枢里做。" : "Codex、Claude Code 这类工具连上天枢后，能读你的执行事项、帮你写进展，每周五把进展同步进来。"}</p> : null}
+            {step === "connect" ? <p className={s.description}>{data.role === "ceo" ? "Codex、Claude Code 这类工具连上天枢后，可以直接问它今天有什么要你拍板、这周各战场怎么样。它只能看，拍板仍在天枢里做。" : "Codex、Claude Code 这类工具连上天枢后，能读你的执行事项、帮你写进展。需要每周自动同步时，可以再设置定时任务。"}</p> : null}
             {step === "start" && !returnPath ? <p className={s.description}>{data.next.text}</p> : null}
           </div>
           <div className={s.details}>
@@ -253,7 +253,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
             {step === "start" ? <p className={s.summary}>
               <span className={s.summaryItem}>{radarSummaryLine(data.role, radarSaved ?? data.radar)}</span>
               {data.voiceprint.configured ? <span className={s.summaryItem}>声纹 · {voice.status?.enrolled ? "已录好" : "稍后在个人菜单里录"}</span> : null}
-              <span className={s.summaryItem}>外部工具 · {connectDownloaded ? "连接说明已下载" : "稍后在个人菜单里连"}</span>
+              <span className={s.summaryItem}>外部工具 · {connectDownloaded ? "连接步骤已准备" : "稍后在个人菜单里连"}</span>
               <span>都可以在个人菜单里改</span>
             </p> : null}
           </div>

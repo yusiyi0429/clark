@@ -4,9 +4,9 @@ import type { TCreatePersonalTokenRequest, TPersonalTokenClient, TPersonalTokenV
 import type { Query } from "./meetingStore.js";
 
 type Row = { id: string; person_id: string; name: string; client: TPersonalTokenClient; secret_hash: string;
-  created_at: Date; expires_at: Date | null; last_used_at: Date | null; revoked_at: Date | null; last_progress_at?: Date | null };
+  created_at: Date; expires_at: Date | null; last_used_at: Date | null; revoked_at: Date | null; last_progress_at?: Date | null; auth_type?: "personal" | "oauth" };
 const view = (row: Row): TPersonalTokenView => ({ id: row.id, name: row.name, client: row.client,
-  createdAt: row.created_at.toISOString(), expiresAt: row.expires_at?.toISOString() ?? null,
+  authType: row.auth_type ?? "personal", createdAt: row.created_at.toISOString(), expiresAt: row.expires_at?.toISOString() ?? null,
   lastUsedAt: row.last_used_at?.toISOString() ?? null, lastProgressAt: row.last_progress_at?.toISOString() ?? null });
 const hash = (random: string, pepper: string) => createHash("sha256").update(random).update(pepper).digest();
 const TOKEN = /^tsm_([0-9a-f]{32})_([A-Za-z0-9_-]{43})$/;
@@ -46,7 +46,7 @@ export async function authenticatePersonalToken(q: Query, authorization: string 
   if (!parsed) return null;
   const id = parsed[1].replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, "$1-$2-$3-$4-$5");
   const row = (await q("SELECT * FROM personal_tokens WHERE id=$1", [id])).rows[0] as Row | undefined;
-  if (!row || row.revoked_at || row.expires_at && row.expires_at <= now || !personExists(row.person_id)) return null;
+  if (!row || row.auth_type === "oauth" || row.revoked_at || row.expires_at && row.expires_at <= now || !personExists(row.person_id)) return null;
   const actual = hash(parsed[2], pepper);
   const expected = Buffer.from(row.secret_hash, "hex");
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;

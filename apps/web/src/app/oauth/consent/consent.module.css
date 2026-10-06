@@ -1,0 +1,38 @@
+/* 授权页：中性黑白灰，颜色只来自两端的品牌标识。 */
+.page{--ink:#17191e;--muted:#6f747d;--line:#e7e9ee;min-height:100dvh;display:grid;place-items:center;padding:40px 20px;box-sizing:border-box;background:#f5f6f8;color:var(--ink)}
+.sheet{display:grid;gap:28px;width:min(100%,400px);box-sizing:border-box;padding:40px 36px 32px;border:1px solid var(--line);border-radius:22px;background:#fff;box-shadow:0 1px 2px #17191e08,0 24px 48px -28px #17191e1f}
+.sheet h1{margin:0;font-family:var(--font-douyin),var(--font-sans);font-size:22px;font-weight:600;line-height:1.4;letter-spacing:-.01em;overflow-wrap:anywhere;text-wrap:balance}
+.sheet p{margin:0}
+.head{display:grid;gap:6px;text-align:center}
+.sub{color:var(--muted);font-size:14px;line-height:1.6}
+
+.scopes{display:grid;gap:12px;margin:0;padding:20px 0;border-block:1px solid var(--line);list-style:none;font-size:14px;line-height:1.55}
+.scopes li{position:relative;padding-left:20px}
+.scopes li::before{content:"";position:absolute;left:3px;top:.62em;width:5px;height:5px;border-radius:50%;background:var(--ink)}
+.scopes .limit{color:var(--muted)}
+.scopes .limit::before{background:none;box-shadow:inset 0 0 0 1px var(--muted)}
+
+.field{display:grid;gap:8px;font-size:13px;color:var(--muted)}
+.field input{box-sizing:border-box;width:100%;min-width:0;min-height:44px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-size:14px}
+.field input:focus-visible{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px #17191e14}
+.field small{font-size:12px}
+
+.actions{display:grid;gap:4px}
+.allow,.cancel{min-height:46px;border:0;border-radius:12px;font:inherit;font-size:15px;cursor:pointer}
+.allow{background:var(--ink);color:#fff;font-weight:600}
+.allow:hover:not(:disabled){background:#2b2e35}
+.cancel{background:none;color:var(--muted)}
+.cancel:hover:not(:disabled){color:var(--ink)}
+.allow:disabled,.cancel:disabled{cursor:default;opacity:.45}
+.allow:focus-visible,.cancel:focus-visible,.quiet:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+.foot{color:var(--muted);font-size:12px;text-align:center}
+.error{color:#a3402f;font-size:13px;text-align:center}
+.done{justify-items:center;gap:14px;text-align:center;padding-block:48px 40px}
+.done h1{margin-top:14px}
+.quiet{color:var(--muted);font-size:12px;text-decoration:underline;text-underline-offset:3px}
+
+@media(max-width:520px){
+  .page{place-items:start stretch;padding:0;background:#fff}
+  .sheet{width:100%;min-height:100dvh;align-content:center;padding:48px 24px 32px;border:0;border-radius:0;box-shadow:none}
+}

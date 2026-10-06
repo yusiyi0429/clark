@@ -13,5 +13,6 @@
 		flush_interval -1
 	}
 	reverse_proxy /mcp/* api:4000
+	reverse_proxy /.well-known/oauth-* api:4000
 	reverse_proxy /* web:3000
 }
