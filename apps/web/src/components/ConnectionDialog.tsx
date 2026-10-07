@@ -50,7 +50,7 @@ export function ConnectionDialog({ role }: { role: "ceo" | "member" }) {
   return <div className={s.root}>
     <p className={s.lead}>{role === "ceo"
       ? "让你自己用的 AI 工具（Codex、Claude Code 等）连上天枢，随时问它：今天有什么要我拍板、某个议题进展如何、这周各战场怎么样。它只能看，拍板、签发、确认仍在天枢里做。"
-      : "让你自己用的 AI 工具（Codex、Claude Code、OpenCode 等）连上天枢：它能读你的执行事项、帮你写进展。"}</p>
+      : "让你自己用的 AI 工具（Codex、Claude Code、OpenCode 等）连上天枢：它能读你的执行事项、帮你写进展、放进做出来的东西，做完提交给你验收。"}</p>
     <section className={s.section} aria-label="连接一个 Agent"><h3>连接一个 Agent</h3>
       <ConnectAgentForm role={role} activeCount={activeCount} revokedIds={revokedIds}
         onCreated={(view) => setTokens((current) => [view, ...current])}

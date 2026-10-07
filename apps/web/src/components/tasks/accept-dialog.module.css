@@ -1,0 +1,57 @@
+/*
+ * 验收弹窗（design-12 §4；画布「验收」）。外框是个人菜单那个 MenuDialog（宽 560，和「连接到外部工具」同一套），
+ * 这里只排里面：对照完成标准、交付结果、一句结论、两颗按钮。复选框用 HeroUI 原版（天枢主题里已是品牌蓝）。
+ */
+.body { display: grid; gap: 0; min-width: 0; }
+.lead { margin: -6px 0 0; color: #4d5a6c; font-size: 14px; line-height: 1.75; }
+.thinking { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; color: #8a94a6; font-size: 13px; line-height: 1.6; }
+.pulse { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #8a94a6; animation: accept-pulse 1.2s ease-in-out infinite; }
+.block { display: grid; min-width: 0; margin-top: 18px; }
+.head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.head h3 { flex: 1; min-width: 0; margin: 0; color: #1f2a3d; font-size: 14px; font-weight: 600; line-height: 1.6; }
+.count { flex: none; color: #6b7482; font-size: 12px; font-variant-numeric: tabular-nums; }
+.count[data-all='true'] { color: var(--ts-confirmed, #0f766e); font-weight: 600; }
+.note { flex: none; color: #6b7482; font-size: 12px; }
+.muted { margin: 6px 0 0; color: #6b7482; font-size: 13px; line-height: 1.7; }
+
+/* 每条完成标准一个复选框，下面一行灰字依据（指向材料的可点，点了关弹窗、打开那份）。 */
+.checks { display: grid; margin-top: 4px; }
+.check { display: grid; gap: 2px; min-width: 0; padding: 10px 0; }
+.check + .check { border-top: 1px solid #eef1f5; }
+/* HeroUI 的 Checkbox.Content 是可点的那一行（复选框 + 文字）；依据那行灰字在它下面，缩进到和文字对齐。 */
+.checkbox.checkbox { gap: 0; min-width: 0; }
+.checkContent.checkContent { align-items: flex-start; gap: 11px; min-width: 0; }
+.checkContent.checkContent > [data-slot='checkbox-control'] { margin-top: 3px; }
+.checkLabel.checkLabel { color: #1f2a3d; font-size: 14px; font-weight: 400; line-height: 1.6; overflow-wrap: anywhere; cursor: pointer; }
+.evidence { margin: 0 0 0 29px; color: #6b7482; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.evidence button { padding: 0; border: 0; background: none; color: #2f6fd6; font: inherit; cursor: pointer; }
+.evidence button:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* 交付结果：全部材料两列，选中的淡蓝底、蓝圈。 */
+.deliverables { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.deliverable.deliverable { gap: 0; min-width: 0; }
+.deliverableText.deliverableText {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; height: 40px; box-sizing: border-box; padding: 0 12px;
+  border-radius: 12px; box-shadow: inset 0 0 0 1px #dce7f6; cursor: pointer; transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+.deliverable[data-selected='true'] .deliverableText { background: #ebf3ff; box-shadow: inset 0 0 0 1px #a9c7f8; }
+.deliverableName.deliverableName { flex: 1; min-width: 0; overflow: hidden; color: #1f2a3d; font-size: 13.5px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.deliverable[data-selected='true'] .deliverableName { font-weight: 600; }
+.kind { flex: none; color: #6b7482; font-size: 12px; }
+
+.verdict { display: grid; gap: 10px; min-width: 0; margin-top: 18px; }
+.verdictLabel.verdictLabel { flex: 1; color: #1f2a3d; font-size: 14px; font-weight: 600; }
+.verdict textarea { font-size: 14px; line-height: 1.75; }
+.error { margin: 12px 0 0; color: #a44d3e; font-size: 13px; line-height: 1.6; }
+.actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.actions > button { gap: 6px; }
+
+@keyframes accept-pulse { 50% { opacity: .35; transform: scale(.8); } }
+@media (max-width: 480px) { .deliverables { grid-template-columns: minmax(0, 1fr); } }
+/* 手持字号下限：标签、角标 13px，说明性的辅助字 14px。 */
+@media (max-width: 959px) {
+  .count, .note, .kind { font-size: 13px; }
+  .evidence, .muted, .thinking { font-size: 14px; }
+  .evidence { margin-left: 29px; }
+}
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } .deliverableText.deliverableText { transition: none; } }

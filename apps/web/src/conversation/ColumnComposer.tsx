@@ -13,7 +13,7 @@ import { DictationControls } from "./DictationControls";
 import { useDictation, withDictation } from "./useDictation";
 import type { ConversationData } from "./useConversation";
 import { QuoteChips } from "./QuoteChips";
-import { quotedMessage, type QuotePrefill, type TextQuote } from "./quotes";
+import { quotedMessage, storedDraft, type QuotePrefill, type TextQuote } from "./quotes";
 import d from "@/styles/conversation-dock.module.css";
 import ds from "@/styles/dictation.module.css";
 
@@ -95,6 +95,8 @@ export function ColumnComposer({
   useEffect(() => {
     if (!prefill) return;
     onPrefillUsed?.(prefill.nonce);
+    // 输入条里已有草稿就不覆盖（刚换到这个频道时，存着的草稿可能还没渲染进 input）。
+    if (prefill.draft && !input.trim() && !storedDraft(draftKey)) updateInput(prefill.draft);
     requestAnimationFrame(() => {
       const element = inputElement.current;
       element?.focus({ preventScroll: true });

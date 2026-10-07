@@ -6,8 +6,11 @@ import { Type, type Static } from "@sinclair/typebox";
  */
 /** meeting：工单 14，会议页也有群组材料区，规则同议题、执行事项。 */
 export const MaterialObjectType = Type.Union([Type.Literal("issue"), Type.Literal("task"), Type.Literal("meeting")]);
-/** html：工单 12，在沙箱里原样显示；和 Markdown 一样只能让 Agent 改源码。 */
-export const MaterialFormat = Type.Union([Type.Literal("markdown"), Type.Literal("pdf"), Type.Literal("docx"), Type.Literal("html")]);
+/**
+ * html：工单 12，在沙箱里原样显示；和 Markdown 一样只能让 Agent 改源码。
+ * link：执行事项里放进来的外部链接（design-12）。没有原件、不抓外部页面、不能批注、Agent 不能改。
+ */
+export const MaterialFormat = Type.Union([Type.Literal("markdown"), Type.Literal("pdf"), Type.Literal("docx"), Type.Literal("html"), Type.Literal("link")]);
 
 const MaterialPerson = Type.Object(
   { personId: Type.String({ minLength: 1 }), displayName: Type.String({ minLength: 1 }) },
@@ -45,7 +48,9 @@ export const MaterialView = Type.Object(
     format: MaterialFormat,
     sizeBytes: Type.Integer({ minimum: 0 }),
     pageCount: Type.Optional(Type.Integer({ minimum: 1 })),
-    /** upload：有人上传；agent：Agent 按 owner 的要求新写的。 */
+    /** 链接的地址；只有 link 有。 */
+    url: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
+    /** upload：有人放进来（上传文件或贴链接）；agent：Agent 按 owner 的要求新写的。 */
     origin: Type.Union([Type.Literal("upload"), Type.Literal("agent")]),
     /** 上传者；Agent 新写的是让它写的人。只有 owner 能删。 */
     owner: MaterialPerson,
@@ -64,6 +69,17 @@ export const MaterialView = Type.Object(
     canDelete: Type.Boolean(),
     /** 最近一次 Agent 修改；只有第 1 版时为 null。 */
     lastRevision: Type.Union([MaterialRevisionView, Type.Null()]),
+    /** Co-Agent 正在按批注改这一份（有排队中或正在改的批注）。 */
+    working: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+/** 执行事项里贴一条外部链接：只收 http / https；没给标题时用「域名 + 路径最后一段」。不抓外部页面。 */
+export const AddMaterialLinkRequest = Type.Object(
+  {
+    url: Type.String({ minLength: 1, maxLength: 2000, pattern: "^[Hh][Tt][Tt][Pp][Ss]?://" }),
+    title: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
   },
   { additionalProperties: false },
 );
@@ -242,6 +258,7 @@ export type TMaterialFormat = Static<typeof MaterialFormat>;
 export type TMaterialRevisionView = Static<typeof MaterialRevisionView>;
 export type TMaterialView = Static<typeof MaterialView>;
 export type TMaterialListResponse = Static<typeof MaterialListResponse>;
+export type TAddMaterialLinkRequest = Static<typeof AddMaterialLinkRequest>;
 export type TMaterialChangeSpan = Static<typeof MaterialChangeSpan>;
 export type TMaterialBlockChange = Static<typeof MaterialBlockChange>;
 export type TMaterialBlock = Static<typeof MaterialBlock>;

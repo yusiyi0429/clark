@@ -12,6 +12,7 @@ export function WorkspaceTestProvider({ children, api }: { children: ReactNode; 
     showToast: () => {},
     homeCards: [],
     quote: () => {},
+    compose: () => {},
     viewerId: null,
     ...api,
   };

@@ -21,6 +21,7 @@ import type { DictationDeps } from "../src/dictation.js";
 import type { RadarService } from "../src/radar.js";
 import type { PersonalRadarService } from "../src/personalRadar.js";
 import type { ThreadIntroAgent } from "../src/threadIntro.js";
+import type { TaskAcceptanceAgent } from "../src/taskAcceptanceDraft.js";
 import type { MaterialAnnotationAgent } from "../src/materialAnnotationAgent.js";
 import type { MissionCardAnnotationAgent } from "../src/missionCardAnnotationAgent.js";
 import type { MissionCardReviewAgent } from "../src/missionCardReview.js";
@@ -197,6 +198,8 @@ export async function createTestApp(
     preflightAgent?: PreflightAgent;
     outcomeAgent?: PostMeetingAgent;
     threadIntroAgent?: ThreadIntroAgent;
+    /** 验收草稿的假 Agent；不注入时起草失败（接口 503，手填照样能验收）。 */
+    taskAcceptanceAgent?: TaskAcceptanceAgent;
     materialAnnotationAgent?: MaterialAnnotationAgent;
     missionCardAnnotationAgent?: MissionCardAnnotationAgent;
     missionCardReviewAgent?: MissionCardReviewAgent;
@@ -249,6 +252,7 @@ export async function createTestApp(
     : undefined;
   const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, recordingService: recordings, now: monthlyNow,
     threadIntroAgent: { async generate(input) { return { message: `${input.inviter}邀请${input.newcomers.join("、")}加入「${input.title}」，请查看对象进展。` }; } },
+    taskAcceptanceAgent: { async draft() { throw new Error("测试里没有模型"); } },
     ...appRuntimeOptions });
   const apps = [app];
   return {

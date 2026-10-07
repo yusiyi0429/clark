@@ -1,7 +1,8 @@
 /**
  * 成员通知栏的两组（clark DRI 通知栏「推动」那一组的处理方式）：
  * - 新的执行事项：会后分给我的事 —— 「接下」（看过，事已经在我的执行事项里），或「退回」（写原因，告诉主持人）。
- * - 回复与结果：我主持的会里有人退回、CEO 不同意战略议题 —— 「知道了」。
+ * - 回复与结果：我主持的会里有人退回、CEO 不同意战略议题 —— 「知道了」；外部工具替我提交了验收（design-12）——
+ *   点开直接弹出验收。打开不等于处理：验收完或点「还要继续做」，服务端才把它标为已读。
  * 只列没看过的；看过的从通知栏退掉（通知只指向对象，文案按对象此刻的状态写，C-05）。
  */
 
@@ -14,7 +15,7 @@ type Result = { ok: true } | { ok: false; error: string };
 
 export function memberNoticeGroups(
   notifications: MemberNotification[],
-  handlers: { markSeen: (ids: string[]) => Promise<Result>; returnTask: (taskId: string, reason: string) => Promise<Result>; openTask?: (id: string, from: Element | null) => void; openGroup?: (type: "issue" | "meeting", id: string, from: Element | null) => void },
+  handlers: { markSeen: (ids: string[]) => Promise<Result>; returnTask: (taskId: string, reason: string) => Promise<Result>; openTask?: (id: string, from: Element | null) => void; openAcceptance?: (id: string, from: Element | null) => void; openGroup?: (type: "issue" | "meeting", id: string, from: Element | null) => void },
 ): { assigned: ActionNotice[]; results: ActionNotice[] } {
   const unread = notifications.filter((item) => !item.readAt);
   const seen = async (id: string, settled?: string): Promise<NoticeOutcome> => {
@@ -54,8 +55,15 @@ export function memberNoticeGroups(
       },
     }));
   const results = unread
-    .filter((item) => item.kind === "task_returned" || item.kind === "strategic_rejected")
-    .map<ActionNotice>((item) => ({
+    .filter((item) => item.kind === "task_returned" || item.kind === "strategic_rejected" || item.kind === "task_submitted")
+    .map<ActionNotice>((item) => item.kind === "task_submitted" ? ({
+      id: item.id,
+      title: item.text,
+      detail: `外部工具提交 · ${monthDayTime(item.createdAt)}`,
+      tone: "neutral",
+      onOpen: (from) => handlers.openAcceptance?.(item.objectId, from),
+      buttons: [],
+    }) : ({
       id: item.id,
       title: item.text,
       detail: `${item.kind === "task_returned" ? "有人退回" : "CEO 表态"} · ${monthDayTime(item.createdAt)}`,

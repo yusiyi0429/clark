@@ -27,3 +27,34 @@
 .document.document .meta :is(a,button),.document.document .revision button{color:#6484b4}
 /* 以前改过、这一版没动的段落：左边一道浅线，悬停看批注和修改历史（MaterialAnnotations 的 HistoryCard）。 */
 .hadChange{margin-left:-12px;padding-left:10px;border-left:2px solid rgb(58 131 247 / 18%);cursor:default}.hadChange:hover,.hadChange:focus-visible{border-left-color:rgb(58 131 247 / 55%);outline:none}
+
+/*
+ * 链接（design-12）：阅读区不嵌 iframe，不抓外部页面。画一个小浏览器框写上域名，下面是标题、谁放的、「打开」。
+ * 颜色、圆角和封面上的链接卡同一套（task-cover.module.css）。
+ */
+.linkPage{display:grid;justify-items:start;gap:0;max-width:560px;margin:28px auto 0}
+.linkFrame{display:flex;flex-direction:column;width:min(100%,260px);height:132px;border-radius:12px;background:#fff;box-shadow:0 0 0 1px rgb(31 53 86/7%),0 8px 22px rgb(31 53 86/8%);overflow:hidden}
+.linkBar{display:flex;align-items:center;gap:4px;flex:none;height:24px;padding:0 10px;background:#f1f4f8;box-shadow:inset 0 -1px 0 #e3e8ef}
+.linkBar i{flex:none;width:6px;height:6px;border-radius:50%;background:#c9d1dd}
+.linkBar b{min-width:0;margin-left:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7482;font-size:11px;font-weight:500}
+.linkBody{display:flex;gap:10px;flex:1;padding:12px}
+.linkBody>i{flex:none;width:52px;border-radius:6px;background:#eef2f7}
+.linkBody>span{display:flex;flex-direction:column;gap:7px;flex:1}
+.linkBody>span>i:first-child{height:26px;border-radius:6px;background:#e7eefb}
+.linkBody>span>i:last-child{width:72%;height:5px;border-radius:3px;background:#e4e9f0}
+.linkTitle{margin:22px 0 0;color:#1f2a3d;font-size:20px;font-weight:600;line-height:1.45;overflow-wrap:anywhere}
+.linkMeta{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:6px 0 0;color:#6b7482;font-size:12.5px;line-height:1.7}
+.linkMeta button{padding:0;border:0;background:transparent;color:#6484b4;font:inherit;cursor:pointer}
+.linkOpen{display:inline-flex;align-items:center;gap:6px;height:36px;margin-top:18px;padding:0 16px 0 18px;border-radius:18px;background:#3a83f7;color:#fff;font-size:14px;font-weight:600;text-decoration:none}
+.linkOpen:hover{background:#2f74e6}
+.linkOpen:focus-visible{outline:2px solid #3a83f7;outline-offset:2px}
+.linkUrl{max-width:100%;margin:12px 0 0;color:#8a95a5;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+/* 「粘贴链接」小窗。 */
+.linkForm{display:grid;gap:14px}
+.linkField{display:grid;gap:6px}
+.linkError{margin:0;color:#a44d3e;font-size:13px;line-height:1.6}
+.linkActions{display:flex;justify-content:flex-end}
+/* 下拉单「起草文档」前面的天枢标志：和别的图标一样 15px。 */
+.menuMark{flex:none;width:15px;height:15px}
+/* 执行事项整页拖文件进来：阅读区描一圈浅蓝虚线，松手就上传。 */
+.area[data-dragging]{outline:2px dashed #a9c7f8;outline-offset:-8px;border-radius:18px;background:#f5f9ff}

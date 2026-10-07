@@ -277,21 +277,22 @@ describe("成员的执行事项", () => {
       expect(thread.json()).toMatchObject({ unread: 0, members: [{ personId: LEAD }] });
 
       // 别人的执行事项一律 404
-      const others = await me(t, lead, "PATCH", `/api/me/tasks/${taskIdOf(items[0])}`, { version: 1, status: "done" });
+      const others = await me(t, lead, "PATCH", `/api/me/tasks/${taskIdOf(items[0])}`, { version: 1, status: "in_progress" });
       expect(others.statusCode).toBe(404);
       expect(others.json().code).toBe("TASK_NOT_FOUND");
-      expect((await me(t, lead, "PATCH", "/api/me/tasks/not-a-uuid", { version: 1, status: "done" })).statusCode).toBe(404);
+      expect((await me(t, lead, "PATCH", "/api/me/tasks/not-a-uuid", { version: 1, status: "in_progress" })).statusCode).toBe(404);
 
       const started = await me(t, lead, "PATCH", `/api/me/tasks/${taskIdOf(items[1])}`, { version: 1, status: "in_progress" });
       expect(started.statusCode).toBe(200);
       expect(started.json()).toMatchObject({ id: taskIdOf(items[1]), version: 2, status: "in_progress" });
 
-      const stale = await me(t, lead, "PATCH", `/api/me/tasks/${taskIdOf(items[1])}`, { version: 1, status: "done" });
+      const stale = await me(t, lead, "PATCH", `/api/me/tasks/${taskIdOf(items[1])}`, { version: 1, status: "not_started" });
       expect(stale.statusCode).toBe(409);
       expect(stale.json()).toMatchObject({ code: "VERSION_CONFLICT", latestTask: { version: 2, status: "in_progress" } });
 
-      // 退回只能走退回接口
+      // 退回只能走退回接口，完成只能走验收
       expect((await me(t, lead, "PATCH", `/api/me/tasks/${taskIdOf(items[1])}`, { version: 2, status: "returned" })).statusCode).toBe(400);
+      expect((await me(t, lead, "PATCH", `/api/me/tasks/${taskIdOf(items[1])}`, { version: 2, status: "done" })).statusCode).toBe(400);
       expect((await me(t, await t.loginCookie(), "GET", "/api/me/home")).statusCode).toBe(403);
       expect((await t.app.inject({ method: "GET", url: "/api/me/home" })).statusCode).toBe(401);
     } finally {

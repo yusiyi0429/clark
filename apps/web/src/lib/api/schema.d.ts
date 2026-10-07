@@ -1271,6 +1271,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/{objectType}/{objectId}/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 执行事项里贴一条外部链接（只收 http/https，不抓外部页面）；会议、议题 400；计入 30 份上限 */
+        post: operations["addMaterialLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/{objectType}/{objectId}/{materialId}": {
         parameters: {
             query?: never;
@@ -1545,8 +1562,76 @@ export interface paths {
         delete: operations["deleteMyTask"];
         options?: never;
         head?: never;
-        /** 推进人改状态、标题、日期、完成定义、判断或所属个人任务；不是推进人 404 TASK_NOT_FOUND，version 不一致 409 带 latestTask */
+        /** 推进人改标题、日期、完成标准、判断或所属个人任务（状态只能改未启动/进行中，完成走验收）；不是推进人 404 TASK_NOT_FOUND，version 不一致 409 带 latestTask */
         patch: operations["patchMyTask"];
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 推进人验收：对照完成标准逐条记下是否达到和依据、选交付结果、写一句结论；状态变完成，清掉待验收的提交 */
+        post: operations["acceptMyTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/acceptance-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 推进人打开验收时，请我的 Agent 对照完成标准、材料和进展起草（只读，最多 30 秒）；起草不出来 503，手填照样能验收 */
+        post: operations["draftMyTaskAcceptance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/submission": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 推进人看过外部工具提交的验收后「还要继续做」：清掉这次提交，状态不变 */
+        delete: operations["clearMyTaskSubmission"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 推进人重新打开已完成的事项：状态回进行中，清掉验收记录 */
+        post: operations["reopenMyTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/me/tasks/{id}/return": {
@@ -2349,6 +2434,7 @@ export interface components {
                     meetingTitle: string;
                     quote: string | null;
                 } | null;
+                awaitingAcceptance: boolean;
                 createdAt: string;
                 updatedAt: string;
             };
@@ -5410,6 +5496,7 @@ export interface components {
                 meetingTitle: string;
                 quote: string | null;
             } | null;
+            awaitingAcceptance: boolean;
             createdAt: string;
             updatedAt: string;
         };
@@ -5503,6 +5590,7 @@ export interface components {
                         meetingTitle: string;
                         quote: string | null;
                     } | null;
+                    awaitingAcceptance: boolean;
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -5539,9 +5627,10 @@ export interface components {
             objectType: "issue" | "task" | "meeting";
             objectId: string;
             fileName: string;
-            format: "markdown" | "pdf" | "docx" | "html";
+            format: "markdown" | "pdf" | "docx" | "html" | "link";
             sizeBytes: number;
             pageCount?: number;
+            url?: string;
             origin: "upload" | "agent";
             owner: {
                 personId: string;
@@ -5572,6 +5661,7 @@ export interface components {
                     };
                 } | null;
             } | null;
+            working: boolean;
         };
         MaterialListResponse: {
             materials: {
@@ -5579,9 +5669,10 @@ export interface components {
                 objectType: "issue" | "task" | "meeting";
                 objectId: string;
                 fileName: string;
-                format: "markdown" | "pdf" | "docx" | "html";
+                format: "markdown" | "pdf" | "docx" | "html" | "link";
                 sizeBytes: number;
                 pageCount?: number;
+                url?: string;
                 origin: "upload" | "agent";
                 owner: {
                     personId: string;
@@ -5612,8 +5703,13 @@ export interface components {
                         };
                     } | null;
                 } | null;
+                working: boolean;
             }[];
             canUpload: boolean;
+        };
+        AddMaterialLinkRequest: {
+            url: string;
+            title?: string;
         };
         MaterialRevisionView: {
             version: number;
@@ -5677,9 +5773,10 @@ export interface components {
                 objectType: "issue" | "task" | "meeting";
                 objectId: string;
                 fileName: string;
-                format: "markdown" | "pdf" | "docx" | "html";
+                format: "markdown" | "pdf" | "docx" | "html" | "link";
                 sizeBytes: number;
                 pageCount?: number;
+                url?: string;
                 origin: "upload" | "agent";
                 owner: {
                     personId: string;
@@ -5710,6 +5807,7 @@ export interface components {
                         };
                     } | null;
                 } | null;
+                working: boolean;
             };
             version: number;
             latest: boolean;
@@ -6100,6 +6198,7 @@ export interface components {
                     meetingTitle: string;
                     quote: string | null;
                 } | null;
+                awaitingAcceptance: boolean;
                 createdAt: string;
                 updatedAt: string;
             };
@@ -6135,6 +6234,38 @@ export interface components {
                 }[];
                 createdAt: string;
             }[];
+            standards: string[];
+            submission: {
+                by: {
+                    personId: string;
+                    name: string;
+                };
+                via: "web" | "codex" | "claude" | "github" | "other";
+                at: string;
+                verdict: string | null;
+                standards: {
+                    index: number;
+                    met: boolean;
+                    evidence: string | null;
+                    materialId: string | null;
+                }[];
+                deliverableMaterialIds: string[];
+            } | null;
+            acceptance: {
+                by: {
+                    personId: string;
+                    name: string;
+                };
+                at: string;
+                verdict: string | null;
+                standards: {
+                    text: string;
+                    met: boolean;
+                    evidence: string | null;
+                    materialId: string | null;
+                }[];
+                deliverableMaterialIds: string[];
+            } | null;
         };
         PutMyTaskNoteRequest: {
             note: string | null;
@@ -6201,6 +6332,7 @@ export interface components {
                     meetingTitle: string;
                     quote: string | null;
                 } | null;
+                awaitingAcceptance: boolean;
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -6268,6 +6400,7 @@ export interface components {
                         meetingTitle: string;
                         quote: string | null;
                     } | null;
+                    awaitingAcceptance: boolean;
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -6335,6 +6468,7 @@ export interface components {
                     meetingTitle: string;
                     quote: string | null;
                 } | null;
+                awaitingAcceptance: boolean;
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -6854,7 +6988,7 @@ export interface components {
         };
         PatchMyTaskRequest: {
             version: number;
-            status?: "not_started" | "in_progress" | "done";
+            status?: "not_started" | "in_progress";
             title?: string;
             startDate?: string | null;
             dueDate?: string | null;
@@ -6866,10 +7000,71 @@ export interface components {
             version: number;
             reason: string;
         };
+        TaskStandardCheck: {
+            index: number;
+            met: boolean;
+            evidence: string | null;
+            materialId: string | null;
+        };
+        TaskSubmission: {
+            by: {
+                personId: string;
+                name: string;
+            };
+            via: "web" | "codex" | "claude" | "github" | "other";
+            at: string;
+            verdict: string | null;
+            standards: {
+                index: number;
+                met: boolean;
+                evidence: string | null;
+                materialId: string | null;
+            }[];
+            deliverableMaterialIds: string[];
+        };
+        TaskAcceptance: {
+            by: {
+                personId: string;
+                name: string;
+            };
+            at: string;
+            verdict: string | null;
+            standards: {
+                text: string;
+                met: boolean;
+                evidence: string | null;
+                materialId: string | null;
+            }[];
+            deliverableMaterialIds: string[];
+        };
+        AcceptMyTaskRequest: {
+            version: number;
+            verdict: string | null;
+            standards: {
+                index: number;
+                met: boolean;
+                evidence: string | null;
+                materialId: string | null;
+            }[];
+            deliverableMaterialIds: string[];
+        };
+        ReopenMyTaskRequest: {
+            version: number;
+        };
+        TaskAcceptanceDraft: {
+            verdict: string | null;
+            standards: {
+                index: number;
+                met: boolean;
+                evidence: string | null;
+                materialId: string | null;
+            }[];
+            deliverableMaterialIds: string[];
+        };
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted";
                 text: string;
                 objectType: "task" | "meeting" | "issue";
                 objectId: string;
@@ -10764,6 +10959,69 @@ export interface operations {
             };
         };
     };
+    addMaterialLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task" | "meeting";
+                objectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddMaterialLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description 新链接材料 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getMaterial: {
         parameters: {
             query?: {
@@ -11881,6 +12139,275 @@ export interface operations {
         };
         responses: {
             /** @description 更新后的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    acceptMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptMyTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 已完成的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    draftMyTaskAcceptance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 验收草稿 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAcceptanceDraft"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    clearMyTaskSubmission: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 更新后的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    reopenMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReopenMyTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 重新打开的执行事项 */
             200: {
                 headers: {
                     [name: string]: unknown;

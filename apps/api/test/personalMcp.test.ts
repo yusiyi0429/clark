@@ -27,7 +27,7 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(initialized.statusCode).toBe(200);
       expect(initialized.json().result.serverInfo.name).toBe("tianshu");
       const tools = await send(2, "tools/list");
-      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "get_item", "append_progress", "update_status", "get_mission_card", "edit_mission_card", "list_pending", "get_my_review", "save_review_draft"]);
+      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "get_mission_card", "edit_mission_card", "list_pending", "get_my_review", "save_review_draft"]);
       const invoke = async (id: number, name: string, args: Record<string, unknown>) => (await send(id, "tools/call", { name, arguments: args })).json().result;
       const listed = await invoke(3, "list_my_items", {});
       expect(JSON.parse(listed.content[0].text).items.some((item: { id: string }) => item.id === task.id)).toBe(true);
@@ -43,11 +43,14 @@ describe("个人令牌与执行事项 MCP", () => {
       const usedToken = (await call(f, f.member, "GET", "/api/me/tokens")).json().tokens.find((item: { id: string }) => item.id === view.id);
       expect(usedToken.lastUsedAt).not.toBeNull();
       expect(usedToken.lastProgressAt).not.toBeNull();
-      expect((await call(f, f.member, "GET", `/api/me/tasks/${task.id}`)).json().progress[0].source).toBe("codex");
-      const updated = await invoke(8, "update_status", { itemId: task.id, status: "in_progress", version: 1 });
-      expect(JSON.parse(updated.content[0].text).version).toBe(2);
-      const stale = await invoke(9, "update_status", { itemId: task.id, status: "done", version: 1 });
-      expect(JSON.parse(stale.content[0].text).currentVersion).toBe(2);
+      // 推进人自己的工具写进展，未启动的事项随之进行中（进度只认推进人自报，推进人的工具就是他本人）。
+      const started = (await call(f, f.member, "GET", `/api/me/tasks/${task.id}`)).json();
+      expect(started.progress[0].source).toBe("codex");
+      expect(started.task).toMatchObject({ status: "in_progress", version: 2 });
+      const updated = await invoke(8, "update_status", { itemId: task.id, status: "not_started", version: 2 });
+      expect(JSON.parse(updated.content[0].text).version).toBe(3);
+      const stale = await invoke(9, "update_status", { itemId: task.id, status: "done", version: 2 });
+      expect(JSON.parse(stale.content[0].text).currentVersion).toBe(3);
       expect((await f.t.app.inject({ method: "GET", url: "/api/me/tokens", headers: { authorization: `Bearer ${token}` } })).statusCode).toBe(401);
       expect((await f.t.app.inject({ method: "POST", url: "/mcp/company-memory", headers: { authorization: `Bearer ${token}` }, payload: rpc(10, "tools/list") })).statusCode).toBe(401);
       expect((await call(f, f.member, "DELETE", `/api/me/tokens/${view.id}`)).statusCode).toBe(204);
@@ -66,7 +69,9 @@ describe("个人令牌与执行事项 MCP", () => {
       const written = await call(f, f.third, "POST", url, { clientEventId: event, body: "协作完成验证" });
       expect(written.statusCode).toBe(200);
       expect((await call(f, f.third, "POST", url, { clientEventId: event, body: "协作完成验证" })).json().id).toBe(written.json().id);
-      expect((await call(f, f.third, "PATCH", `/api/me/tasks/${task.id}`, { version: 1, status: "done" })).statusCode).toBe(404);
+      // 协作者写进展不改状态：进度只认推进人自报。
+      expect((await call(f, f.member, "GET", `/api/me/tasks/${task.id}`)).json().task).toMatchObject({ status: "not_started", version: 2 });
+      expect((await call(f, f.third, "PATCH", `/api/me/tasks/${task.id}`, { version: 2, status: "in_progress" })).statusCode).toBe(404);
       // 其他工具（OpenCode 等）的令牌同样可用，写的进展来源记为 other。
       const collaboratorToken = (await call(f, f.third, "POST", "/api/me/tokens", { name: "协作端", client: "other", expiresInDays: 30 })).json();
       const sendCollaborator = (id: number, name: string, args: Record<string, unknown>) => f.t.app.inject({ method: "POST", url: "/mcp/me",

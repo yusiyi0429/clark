@@ -29,6 +29,8 @@ export type WorkspaceApi = {
   homeCards: Card[];
   /** 引用正文追问：进入当前对象私聊，以独立引用块保留选文和来源，不改用户输入。 */
   quote: (text: string, source?: QuoteSource) => void;
+  /** 打开当前对象的私聊，在输入条里预填一句并聚焦（执行事项的「起草文档」）；输入条里已有草稿就不覆盖。 */
+  compose: (draft: string) => void;
   /** 当前登录 CEO 的 personId（战场卡据此判断「CEO 本人负责」）；测试桩默认 null。 */
   viewerId: string | null;
 };

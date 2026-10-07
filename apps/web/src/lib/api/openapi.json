@@ -4492,6 +4492,97 @@
         }
       }
     },
+    "/api/materials/{objectType}/{objectId}/links": {
+      "post": {
+        "operationId": "addMaterialLink",
+        "summary": "执行事项里贴一条外部链接（只收 http/https，不抓外部页面）；会议、议题 400；计入 30 份上限",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMaterialLinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "新链接材料",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/materials/{objectType}/{objectId}/{materialId}": {
       "get": {
         "operationId": "getMaterial",
@@ -5994,7 +6085,7 @@
       },
       "patch": {
         "operationId": "patchMyTask",
-        "summary": "推进人改状态、标题、日期、完成定义、判断或所属个人任务；不是推进人 404 TASK_NOT_FOUND，version 不一致 409 带 latestTask",
+        "summary": "推进人改标题、日期、完成标准、判断或所属个人任务（状态只能改未启动/进行中，完成走验收）；不是推进人 404 TASK_NOT_FOUND，version 不一致 409 带 latestTask",
         "parameters": [
           {
             "name": "id",
@@ -6018,6 +6109,337 @@
         "responses": {
           "200": {
             "description": "更新后的执行事项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{id}/accept": {
+      "post": {
+        "operationId": "acceptMyTask",
+        "summary": "推进人验收：对照完成标准逐条记下是否达到和依据、选交付结果、写一句结论；状态变完成，清掉待验收的提交",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptMyTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已完成的执行事项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{id}/acceptance-draft": {
+      "post": {
+        "operationId": "draftMyTaskAcceptance",
+        "summary": "推进人打开验收时，请我的 Agent 对照完成标准、材料和进展起草（只读，最多 30 秒）；起草不出来 503，手填照样能验收",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "验收草稿",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAcceptanceDraft"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{id}/submission": {
+      "delete": {
+        "operationId": "clearMyTaskSubmission",
+        "summary": "推进人看过外部工具提交的验收后「还要继续做」：清掉这次提交，状态不变",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "更新后的执行事项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{id}/reopen": {
+      "post": {
+        "operationId": "reopenMyTask",
+        "summary": "推进人重新打开已完成的事项：状态回进行中，清掉验收记录",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReopenMyTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "重新打开的执行事项",
             "content": {
               "application/json": {
                 "schema": {
@@ -9439,6 +9861,7 @@
               "latestProgress",
               "returnReason",
               "origin",
+              "awaitingAcceptance",
               "createdAt",
               "updatedAt"
             ],
@@ -9761,6 +10184,9 @@
                     "type": "null"
                   }
                 ]
+              },
+              "awaitingAcceptance": {
+                "type": "boolean"
               },
               "createdAt": {
                 "minLength": 1,
@@ -29363,6 +29789,7 @@
           "latestProgress",
           "returnReason",
           "origin",
+          "awaitingAcceptance",
           "createdAt",
           "updatedAt"
         ],
@@ -29686,6 +30113,9 @@
               }
             ]
           },
+          "awaitingAcceptance": {
+            "type": "boolean"
+          },
           "createdAt": {
             "minLength": 1,
             "type": "string"
@@ -29980,6 +30410,7 @@
                       "latestProgress",
                       "returnReason",
                       "origin",
+                      "awaitingAcceptance",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -30303,6 +30734,9 @@
                           }
                         ]
                       },
+                      "awaitingAcceptance": {
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "minLength": 1,
                         "type": "string"
@@ -30505,7 +30939,8 @@
           "canEdit",
           "pending",
           "canDelete",
-          "lastRevision"
+          "lastRevision",
+          "working"
         ],
         "properties": {
           "id": {
@@ -30554,6 +30989,10 @@
               {
                 "const": "html",
                 "type": "string"
+              },
+              {
+                "const": "link",
+                "type": "string"
               }
             ]
           },
@@ -30564,6 +31003,11 @@
           "pageCount": {
             "minimum": 1,
             "type": "integer"
+          },
+          "url": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
           },
           "origin": {
             "anyOf": [
@@ -30731,6 +31175,9 @@
                 "type": "null"
               }
             ]
+          },
+          "working": {
+            "type": "boolean"
           }
         }
       },
@@ -30764,7 +31211,8 @@
                 "canEdit",
                 "pending",
                 "canDelete",
-                "lastRevision"
+                "lastRevision",
+                "working"
               ],
               "properties": {
                 "id": {
@@ -30813,6 +31261,10 @@
                     {
                       "const": "html",
                       "type": "string"
+                    },
+                    {
+                      "const": "link",
+                      "type": "string"
                     }
                   ]
                 },
@@ -30823,6 +31275,11 @@
                 "pageCount": {
                   "minimum": 1,
                   "type": "integer"
+                },
+                "url": {
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "type": "string"
                 },
                 "origin": {
                   "anyOf": [
@@ -30990,12 +31447,35 @@
                       "type": "null"
                     }
                   ]
+                },
+                "working": {
+                  "type": "boolean"
                 }
               }
             }
           },
           "canUpload": {
             "type": "boolean"
+          }
+        }
+      },
+      "AddMaterialLinkRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "maxLength": 240,
+            "type": "string"
           }
         }
       },
@@ -31339,7 +31819,8 @@
               "canEdit",
               "pending",
               "canDelete",
-              "lastRevision"
+              "lastRevision",
+              "working"
             ],
             "properties": {
               "id": {
@@ -31388,6 +31869,10 @@
                   {
                     "const": "html",
                     "type": "string"
+                  },
+                  {
+                    "const": "link",
+                    "type": "string"
                   }
                 ]
               },
@@ -31398,6 +31883,11 @@
               "pageCount": {
                 "minimum": 1,
                 "type": "integer"
+              },
+              "url": {
+                "minLength": 1,
+                "maxLength": 2000,
+                "type": "string"
               },
               "origin": {
                 "anyOf": [
@@ -31565,6 +32055,9 @@
                     "type": "null"
                   }
                 ]
+              },
+              "working": {
+                "type": "boolean"
               }
             }
           },
@@ -33643,7 +34136,10 @@
           "role",
           "missionOptions",
           "collaboratorOptions",
-          "progress"
+          "progress",
+          "standards",
+          "submission",
+          "acceptance"
         ],
         "properties": {
           "task": {
@@ -33665,6 +34161,7 @@
               "latestProgress",
               "returnReason",
               "origin",
+              "awaitingAcceptance",
               "createdAt",
               "updatedAt"
             ],
@@ -33988,6 +34485,9 @@
                   }
                 ]
               },
+              "awaitingAcceptance": {
+                "type": "boolean"
+              },
               "createdAt": {
                 "minLength": 1,
                 "type": "string"
@@ -34206,6 +34706,258 @@
                 }
               }
             }
+          },
+          "standards": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 500,
+              "type": "string"
+            }
+          },
+          "submission": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "by",
+                  "via",
+                  "at",
+                  "verdict",
+                  "standards",
+                  "deliverableMaterialIds"
+                ],
+                "properties": {
+                  "by": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "name"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "via": {
+                    "anyOf": [
+                      {
+                        "const": "web",
+                        "type": "string"
+                      },
+                      {
+                        "const": "codex",
+                        "type": "string"
+                      },
+                      {
+                        "const": "claude",
+                        "type": "string"
+                      },
+                      {
+                        "const": "github",
+                        "type": "string"
+                      },
+                      {
+                        "const": "other",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "verdict": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "standards": {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "index",
+                        "met",
+                        "evidence",
+                        "materialId"
+                      ],
+                      "properties": {
+                        "index": {
+                          "minimum": 0,
+                          "maximum": 49,
+                          "type": "integer"
+                        },
+                        "met": {
+                          "type": "boolean"
+                        },
+                        "evidence": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "materialId": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "deliverableMaterialIds": {
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "acceptance": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "by",
+                  "at",
+                  "verdict",
+                  "standards",
+                  "deliverableMaterialIds"
+                ],
+                "properties": {
+                  "by": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "name"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "verdict": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "standards": {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "text",
+                        "met",
+                        "evidence",
+                        "materialId"
+                      ],
+                      "properties": {
+                        "text": {
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "type": "string"
+                        },
+                        "met": {
+                          "type": "boolean"
+                        },
+                        "evidence": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "materialId": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "deliverableMaterialIds": {
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -34367,6 +35119,7 @@
                 "latestProgress",
                 "returnReason",
                 "origin",
+                "awaitingAcceptance",
                 "createdAt",
                 "updatedAt"
               ],
@@ -34690,6 +35443,9 @@
                     }
                   ]
                 },
+                "awaitingAcceptance": {
+                  "type": "boolean"
+                },
                 "createdAt": {
                   "minLength": 1,
                   "type": "string"
@@ -34845,6 +35601,7 @@
                       "latestProgress",
                       "returnReason",
                       "origin",
+                      "awaitingAcceptance",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -35168,6 +35925,9 @@
                           }
                         ]
                       },
+                      "awaitingAcceptance": {
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "minLength": 1,
                         "type": "string"
@@ -35299,6 +36059,7 @@
                 "latestProgress",
                 "returnReason",
                 "origin",
+                "awaitingAcceptance",
                 "createdAt",
                 "updatedAt"
               ],
@@ -35621,6 +36382,9 @@
                       "type": "null"
                     }
                   ]
+                },
+                "awaitingAcceptance": {
+                  "type": "boolean"
                 },
                 "createdAt": {
                   "minLength": 1,
@@ -38997,10 +39761,6 @@
               {
                 "const": "in_progress",
                 "type": "string"
-              },
-              {
-                "const": "done",
-                "type": "string"
               }
             ]
           },
@@ -39087,6 +39847,452 @@
           }
         }
       },
+      "TaskStandardCheck": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "index",
+          "met",
+          "evidence",
+          "materialId"
+        ],
+        "properties": {
+          "index": {
+            "minimum": 0,
+            "maximum": 49,
+            "type": "integer"
+          },
+          "met": {
+            "type": "boolean"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "materialId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "TaskSubmission": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "by",
+          "via",
+          "at",
+          "verdict",
+          "standards",
+          "deliverableMaterialIds"
+        ],
+        "properties": {
+          "by": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "name"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "via": {
+            "anyOf": [
+              {
+                "const": "web",
+                "type": "string"
+              },
+              {
+                "const": "codex",
+                "type": "string"
+              },
+              {
+                "const": "claude",
+                "type": "string"
+              },
+              {
+                "const": "github",
+                "type": "string"
+              },
+              {
+                "const": "other",
+                "type": "string"
+              }
+            ]
+          },
+          "at": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "standards": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "index",
+                "met",
+                "evidence",
+                "materialId"
+              ],
+              "properties": {
+                "index": {
+                  "minimum": 0,
+                  "maximum": 49,
+                  "type": "integer"
+                },
+                "met": {
+                  "type": "boolean"
+                },
+                "evidence": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "materialId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "deliverableMaterialIds": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TaskAcceptance": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "by",
+          "at",
+          "verdict",
+          "standards",
+          "deliverableMaterialIds"
+        ],
+        "properties": {
+          "by": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "name"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "at": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "standards": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "text",
+                "met",
+                "evidence",
+                "materialId"
+              ],
+              "properties": {
+                "text": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "met": {
+                  "type": "boolean"
+                },
+                "evidence": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "materialId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "deliverableMaterialIds": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AcceptMyTaskRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "verdict",
+          "standards",
+          "deliverableMaterialIds"
+        ],
+        "properties": {
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "standards": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "index",
+                "met",
+                "evidence",
+                "materialId"
+              ],
+              "properties": {
+                "index": {
+                  "minimum": 0,
+                  "maximum": 49,
+                  "type": "integer"
+                },
+                "met": {
+                  "type": "boolean"
+                },
+                "evidence": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "materialId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "deliverableMaterialIds": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ReopenMyTaskRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        }
+      },
+      "TaskAcceptanceDraft": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "verdict",
+          "standards",
+          "deliverableMaterialIds"
+        ],
+        "properties": {
+          "verdict": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "standards": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "index",
+                "met",
+                "evidence",
+                "materialId"
+              ],
+              "properties": {
+                "index": {
+                  "minimum": 0,
+                  "maximum": 49,
+                  "type": "integer"
+                },
+                "met": {
+                  "type": "boolean"
+                },
+                "evidence": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "materialId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "deliverableMaterialIds": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
       "NotificationList": {
         "additionalProperties": false,
         "type": "object",
@@ -39134,6 +40340,10 @@
                     },
                     {
                       "const": "thread_member_added",
+                      "type": "string"
+                    },
+                    {
+                      "const": "task_submitted",
                       "type": "string"
                     }
                   ]

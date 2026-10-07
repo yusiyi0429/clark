@@ -154,7 +154,7 @@ describe("真实数据的首次引导", () => {
     expect(text(tree)).toContain("往下是你的工作");
     expect(elements(tree).find((element) => element.type === WorkspaceSchematic)?.props).toMatchObject({ role: "member", focus: "board" });
     const diagram = renderToStaticMarkup(<WorkspaceSchematic role="member" focus="board" />);
-    for (const label of ["新的执行事项", "执行事项", "+", "等上一步", "我的 Agent"]) expect(diagram).toContain(label);
+    for (const label of ["新的执行事项", "执行事项", "+", "等你验收", "我的 Agent"]) expect(diagram).toContain(label);
   });
   it("Mission 六步按顺序呈现，之后才能看本月工作，也能返回", () => {
     let tree = renderFlow(member);

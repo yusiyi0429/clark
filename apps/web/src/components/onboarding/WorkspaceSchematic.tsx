@@ -37,8 +37,8 @@ export function WorkspaceSchematic({ role, focus, mobile }: Props) {
           </div>
           <div className={s.memberTaskHeading}><strong>执行事项</strong><span className={s.addButton}>+</span></div>
           <div className={s.memberTasks}>
-            <div className={s.memberTask}><span className={s.activeTaskDot} />第 1 步，共 3 步<span className={s.taskRule} /></div>
-            <div className={`${s.memberTask} ${s.waitingTask}`}>第 2 步，共 3 步 · 等上一步<span className={s.taskRule} /></div>
+            <div className={s.memberTask}><span className={s.activeTaskDot} />进行中<span className={s.taskRule} /></div>
+            <div className={s.memberTask}><span className={s.activeTaskDot} />等你验收<span className={s.taskRule} /></div>
             <div className={s.memberTask}>独立事项<span className={s.taskRule} /></div>
           </div>
           <div className={s.agent}><span className={s.agentSpark}>✦</span><span>我的 Agent</span><span className={s.agentSend}>↑</span></div>

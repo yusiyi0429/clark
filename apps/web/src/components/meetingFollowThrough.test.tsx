@@ -102,6 +102,7 @@ describe("成员首页的执行事项", () => {
     doneDefinition: null,
     mission: null,
     waitingOn: null,
+    awaitingAcceptance: false,
     owner: { personId: "p1", name: "孙铭泽" },
     collaborators: [],
     latestProgress: null,
@@ -116,16 +117,22 @@ describe("成员首页的执行事项", () => {
     expect(tasksByDue([task("a", null), task("b", "2026-10-02"), task("c", "2026-09-30"), task("d", null)]).map((item) => item.id)).toEqual(["c", "b", "a", "d"]);
   });
 
-  it("卡上写状态、会后来源；退回的写原因、不给状态切换", () => {
+  it("卡上写状态、会后来源；退回的写原因；卡上没有状态按钮（状态跟着推进人的动作走）", () => {
     const html = renderToStaticMarkup(
-      <MemberTasks tasks={[task("a", "2026-09-30"), task("b", null, { status: "returned", returnReason: "不归我，归白田田" })]} onStatus={noop} />,
+      <MemberTasks tasks={[task("a", "2026-09-30"), task("b", null, { status: "returned", returnReason: "不归我，归白田田" })]} />,
     );
     expect(html).toContain("未启动");
     expect(html).toContain("9 月 30 日前");
     expect(html).toContain("会后分派 · 灯塔项目：产品交互对齐会议");
-    expect(html).toContain("进行中");
     expect(html).toContain("已退回：不归我，归白田田");
-    expect(html.split("完成")).toHaveLength(2);
+    expect(html).not.toContain("进行中");
+    expect(html).not.toContain("完成");
+  });
+
+  it("外部工具提交了验收的，状态写「等你验收」", () => {
+    const html = renderToStaticMarkup(<MemberTasks tasks={[task("a", null, { status: "in_progress", awaitingAcceptance: true })]} />);
+    expect(html).toContain("等你验收");
+    expect(html).not.toContain("进行中");
   });
 
   it("通知栏分两组：新的执行事项能接下或退回，回复与结果只要知道了；看过的不再列", () => {
@@ -142,5 +149,18 @@ describe("成员首页的执行事项", () => {
     expect(groups.assigned[0].reason?.label).toBe("退回");
     expect(groups.results.map((notice) => notice.id)).toEqual(["n2"]);
     expect(groups.results[0].buttons.map((button) => button.label)).toEqual(["知道了"]);
+  });
+
+  it("「等你验收」在回复与结果里：点开直接弹出验收；没有「知道了」，验收完或「还要继续做」才算处理", () => {
+    const opened: string[] = [];
+    const groups = memberNoticeGroups(
+      [{ id: "n4", kind: "task_submitted", text: "「Y」等你验收", objectType: "task", objectId: "t4", createdAt: "2026-10-08T08:00:00.000Z", readAt: null }],
+      { markSeen: async () => ({ ok: true }), returnTask: async () => ({ ok: true }), openTask: (id) => opened.push(`task:${id}`), openAcceptance: (id) => opened.push(`accept:${id}`) },
+    );
+    expect(groups.assigned).toEqual([]);
+    expect(groups.results.map((notice) => [notice.id, notice.title])).toEqual([["n4", "「Y」等你验收"]]);
+    expect(groups.results[0].buttons).toEqual([]);
+    groups.results[0].onOpen?.(null);
+    expect(opened).toEqual(["accept:t4"]);
   });
 });

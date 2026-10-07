@@ -1,8 +1,9 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
-import { addTaskCollaborators, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
+import { acceptMyTask, addTaskCollaborators, clearMyTaskSubmission, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
+import { draftTaskAcceptance } from "../taskAcceptanceDraft.js";
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
 import { companyPeriod } from "../monthlyPlans.js";
 import { personDisplayNames } from "../people.js";
@@ -76,6 +77,27 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     "/api/me/tasks/:id/return",
     { preHandler: requireMember, schema: { params: idParams, body: ReturnMyTaskRequest } },
     async (req, reply) => respondTask(reply, await returnMyTask(pool, req.person!.personId, req.params.id, req.body, names())),
+  );
+
+  // 完成只能经推进人验收（design-12）；外部工具的提交走 MCP。
+  app.post(
+    "/api/me/tasks/:id/accept",
+    { preHandler: requireMember, schema: { params: idParams, body: AcceptMyTaskRequest } },
+    async (req, reply) => respondTask(reply, await acceptMyTask(pool, req.person!.personId, req.params.id, req.body, names(), ctx.now())),
+  );
+  app.post("/api/me/tasks/:id/acceptance-draft", { preHandler: requireMember, schema: { params: idParams, response: { 200: TaskAcceptanceDraft } } }, async (req, reply) => {
+    const draft = await draftTaskAcceptance(pool, ctx.taskAcceptanceAgent, req.params.id, req.person!.personId, names());
+    if (draft === "not_found") return fail(reply, 404, "TASK_NOT_FOUND", "执行事项不存在");
+    if (draft === "closed") return fail(reply, 409, "TASK_NOT_ACCEPTABLE", "这件事已经完成或已退回");
+    return draft ?? fail(reply, 503, "ACCEPTANCE_DRAFT_UNAVAILABLE", "我的 Agent 这次没起草出来，可以直接手填");
+  });
+  app.delete("/api/me/tasks/:id/submission", { preHandler: requireMember, schema: { params: idParams,
+    querystring: Type.Object({ version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false }) } }, async (req, reply) =>
+    respondTask(reply, await clearMyTaskSubmission(pool, req.person!.personId, req.params.id, req.query.version, names())));
+  app.post(
+    "/api/me/tasks/:id/reopen",
+    { preHandler: requireMember, schema: { params: idParams, body: ReopenMyTaskRequest } },
+    async (req, reply) => respondTask(reply, await reopenMyTask(pool, req.person!.personId, req.params.id, req.body.version, names())),
   );
 
   app.get("/api/me/tasks/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: TaskDetailResponse } } }, async (req, reply) =>

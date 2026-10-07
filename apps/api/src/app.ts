@@ -67,6 +67,7 @@ import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type Meet
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
 import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js";
+import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAcceptanceDraft.js";
 
 type ValidationItem = { instancePath?: string; dataPath?: string; message?: string };
 
@@ -129,6 +130,7 @@ export async function buildApp({
   voiceprintDeps = realVoiceprintDeps,
   dictationDeps = realDictationDeps,
   threadIntroAgent,
+  taskAcceptanceAgent,
   materialAnnotationAgent,
   missionCardAnnotationAgent,
   missionCardReviewAgent,
@@ -160,6 +162,7 @@ export async function buildApp({
   /** 输入框语音转文字用的 ffmpeg 与火山极速版；缺省为真实实现（测试注入假实现）。 */
   dictationDeps?: DictationDeps;
   threadIntroAgent?: ThreadIntroAgent;
+  taskAcceptanceAgent?: TaskAcceptanceAgent;
   materialAnnotationAgent?: MaterialAnnotationAgent;
   missionCardAnnotationAgent?: MissionCardAnnotationAgent;
   missionCardReviewAgent?: MissionCardReviewAgent;
@@ -348,6 +351,7 @@ export async function buildApp({
     dictation: dictationDeps,
     threadIntroAgent: threadIntroAgent ?? createThreadIntroAgent(pool, env),
     missionCardDraftAgent: missionCardDraftAgent ?? createMissionCardDraftAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.heavyModel }),
+    taskAcceptanceAgent: taskAcceptanceAgent ?? createTaskAcceptanceAgent(pool, env),
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,

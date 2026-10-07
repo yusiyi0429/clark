@@ -27,11 +27,13 @@ export function dueLabel(date: string): string {
   return `${month} 月 ${day} 日前`;
 }
 
-export function MemberTasks({ tasks, busyId, error, onStatus, onNavigate }: {
+/**
+ * 首页「执行事项」：状态跟着推进人的动作自动走，完成只能在封面里验收（design-12），所以卡上没有状态按钮，也不再写「第 n 步」。
+ * 外部工具替推进人提交了验收的，状态写「等你验收」。
+ */
+export function MemberTasks({ tasks, error, onNavigate }: {
   tasks: MemberTask[];
-  busyId?: string | null;
   error?: string | null;
-  onStatus: (task: MemberTask, status: TaskStatus) => void;
   onNavigate?: (href: string, origin?: Element | null) => void;
 }) {
   const [showDone, setShowDone] = useState(false);
@@ -45,15 +47,13 @@ export function MemberTasks({ tasks, busyId, error, onStatus, onNavigate }: {
     {error ? <p className={s.error} role="alert">{error}</p> : null}
     {active.length ? <div className={s.taskGrid}>{active.map((task) => {
       const href = `/me/tasks/${encodeURIComponent(task.id)}`;
-      return <Card key={task.id} className={s.taskCard} data-task={task.id} data-origin={href} data-waiting={!!task.waitingOn} onClick={(event) => { if (!(event.target as Element).closest("button,a")) onNavigate?.(href, event.currentTarget); }}>
-        <div className={s.taskTop}><span className={s.status} data-status={task.status}><span className={s.statusDot} aria-hidden />{TASK_STATUS[task.status]}</span>{task.status === "not_started" && task.startDate ? <span>计划 {dueLabel(task.startDate).replace("前", "开始")}</span> : task.dueDate ? <span>{dueLabel(task.dueDate)}</span> : null}</div>
+      return <Card key={task.id} className={s.taskCard} data-task={task.id} data-origin={href} onClick={(event) => { if (!(event.target as Element).closest("button,a")) onNavigate?.(href, event.currentTarget); }}>
+        <div className={s.taskTop}><span className={s.status} data-status={task.status}><span className={s.statusDot} aria-hidden />{task.awaitingAcceptance ? "等你验收" : TASK_STATUS[task.status]}</span>{task.status === "not_started" && task.startDate ? <span>计划 {dueLabel(task.startDate).replace("前", "开始")}</span> : task.dueDate ? <span>{dueLabel(task.dueDate)}</span> : null}</div>
         <h3><Button variant="ghost" className={s.taskTitle} aria-label={`查看详情：${task.title}`} onPress={(event) => onNavigate?.(href, event.target)}><span>{task.title}</span><ChevronRight size={17} aria-hidden /></Button></h3>
-        {task.mission ? <><Button variant="ghost" className={s.taskMission} aria-label={`横向切到个人任务：${task.mission.title}`} onPress={(event) => onNavigate?.(`/me/mission-cards/${encodeURIComponent(task.mission!.cardId)}`, event.target)}><span>{task.mission.title}</span><ArrowUpRight size={13} aria-hidden /></Button><span className={s.assignment}>第 {task.mission.step} 步，共 {task.mission.steps} 步</span></> : <span className={s.assignment}>{task.source === "meeting" && task.origin ? `会后分派 · ${task.origin.meetingTitle}` : "独立事项"}</span>}
-        {task.waitingOn ? <p className={s.waiting}>等上一步：{task.waitingOn.title}</p> : null}
+        {task.mission ? <Button variant="ghost" className={s.taskMission} aria-label={`横向切到个人任务：${task.mission.title}`} onPress={(event) => onNavigate?.(`/me/mission-cards/${encodeURIComponent(task.mission!.cardId)}`, event.target)}><span>{task.mission.title}</span><ArrowUpRight size={13} aria-hidden /></Button> : <span className={s.assignment}>{task.source === "meeting" && task.origin ? `会后分派 · ${task.origin.meetingTitle}` : "独立事项"}</span>}
         {task.startDate || task.dueDate ? <p className={s.dates}>{task.startDate ? `计划开始 ${task.startDate}` : ""}{task.startDate && task.dueDate ? " · " : ""}{task.dueDate ? `截止 ${task.dueDate}` : ""}</p> : null}
         {task.collaborators.length ? <p className={s.connections}>协作 · {task.collaborators.map((person) => person.name).join("、")}</p> : null}
         {task.status === "returned" && task.returnReason ? <p className={s.returned}>已退回：{task.returnReason}</p> : null}
-        {task.status !== "returned" ? <div className={s.taskActions} role="group" aria-label={`${task.title}的状态`}>{(["not_started", "in_progress", "done"] as const).map((status) => <Button key={status} variant="ghost" size="sm" aria-pressed={task.status === status} isDisabled={busyId === task.id || task.status === status} onPress={() => onStatus(task, status)}>{TASK_STATUS[status]}</Button>)}</div> : null}
         {task.latestProgress ? <p className={s.latestProgress} title={task.latestProgress.body.slice(0, 60)} aria-label={`最新进展：${task.latestProgress.body.slice(0, 60)}`}>
           最新进展 · {({ web: "网页", codex: "Codex", claude: "Claude Code", github: "GitHub", other: "外部工具" })[task.latestProgress.source]} · {monthDayTime(task.latestProgress.createdAt)}
         </p> : null}
@@ -67,10 +67,8 @@ export function MemberTasks({ tasks, busyId, error, onStatus, onNavigate }: {
         const href = `/me/tasks/${encodeURIComponent(task.id)}`;
         return <li key={task.id} className={s.doneItem}><button type="button" className={s.doneRow} data-origin={href} aria-label={`查看详情：${task.title}（已完成）`} onClick={(event) => onNavigate?.(href, event.currentTarget)}>
           <Check size={14} aria-hidden /><span className={s.doneTitle}>{task.title}</span>
-          <span className={s.doneMeta}>{task.mission ? `${task.mission.title} · 第 ${task.mission.step} 步` : task.source === "meeting" && task.origin ? `会后分派 · ${task.origin.meetingTitle}` : "独立事项"}</span>
-        </button>
-        {/* 点错了「完成」可以直接改回来。 */}
-        <button type="button" className={s.reopen} disabled={busyId === task.id} aria-label={`把「${task.title}」改回进行中`} onClick={() => onStatus(task, "in_progress")}>改回进行中</button></li>;
+          <span className={s.doneMeta}>{task.mission ? task.mission.title : task.source === "meeting" && task.origin ? `会后分派 · ${task.origin.meetingTitle}` : "独立事项"}</span>
+        </button></li>;
       })}</ul> : null}
     </div> : null}
   </section>;

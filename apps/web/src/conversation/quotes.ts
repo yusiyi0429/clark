@@ -10,7 +10,13 @@ export type QuoteSource = {
   sourceVersion?: number;
 };
 export type TextQuote = { id: string; text: string; source?: QuoteSource };
-export type QuotePrefill = { text: string; nonce: number; source?: QuoteSource };
+/** 本地存着的输入条草稿（去掉首尾空白）；存储不可用时当作没有。 */
+export function storedDraft(key: string): string {
+  try { return localStorage.getItem(key)?.trim() ?? ""; } catch { return ""; }
+}
+
+/** draft：「起草文档」这类入口预填进输入条的一句话；输入条里已有草稿时不覆盖。 */
+export type QuotePrefill = { text: string; nonce: number; source?: QuoteSource; draft?: string };
 
 const PREFIX = "[天枢引用上下文 v1]\n";
 

@@ -12,11 +12,11 @@
  * 只换左侧看哪一份：不跳页、不改地址。
  */
 
-import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, Fragment, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { TianshuPortalTheme } from "ts-design";
 import { Button, Popover, ToggleButton } from "ts-design/primitives";
-import { Check, ChevronDown, FileText, NotebookPen, Plus } from "lucide-react";
+import { Check, ChevronDown, FileText, Link2, NotebookPen, Plus } from "lucide-react";
 import t from "@/styles/material-tabs.module.css";
 
 /**
@@ -36,6 +36,20 @@ export interface MaterialTab {
   hint?: string;
   /** 等本人采用 / 不采用的批注条数（只给能改这份材料的人），下拉钮上显示合计。 */
   count?: number;
+  /** link：外部链接，图标换成链环。 */
+  kind?: "document" | "link";
+  /** Co-Agent 正在按批注改这一份：右侧写「在改」带脉冲点（盖过 hint）。 */
+  working?: boolean;
+  /** 这一项前面隔一条细线，线下写一小段字（执行事项完成后的「参考材料」）。 */
+  ruleBefore?: string;
+}
+
+/** 下拉单最后的添加项：执行事项拆成上传文件 / 粘贴链接 / 起草文档三项（design-12），其余对象仍是一项「添加材料」。 */
+export interface MaterialAddAction {
+  id: string;
+  label: string;
+  icon: ReactNode;
+  onPress: () => void;
 }
 
 /** 阅读区的选择：`current` 是此刻看的那一份；`material` 是最近看的那份材料，整场入口再按一次就回到它。 */
@@ -78,6 +92,7 @@ export function MaterialMenu({
   onSelect,
   label,
   onAdd,
+  addActions,
   switchLabel = "切换材料",
 }: {
   tabs: MaterialTab[];
@@ -88,6 +103,8 @@ export function MaterialMenu({
   label: string;
   /** 有上传权限时才有：下拉单最后一项「添加材料」。 */
   onAdd?: () => void;
+  /** 有它时代替「添加材料」，在细线下面列出这几项。 */
+  addActions?: MaterialAddAction[];
   /** 复用到任务等阅读视图时使用该对象的切换名称。 */
   switchLabel?: string;
 }) {
@@ -99,7 +116,7 @@ export function MaterialMenu({
     <Popover isOpen={open} onOpenChange={setOpen}>
       <Button variant="ghost" className={t.trigger} data-material-menu
         aria-label={`${label}：${current ? `正在看 ${current.title}` : "没有在看材料"}${pending ? `，${pending} 条待处理` : ""}，${switchLabel}`}>
-        <FileText size={15} strokeWidth={1.8} aria-hidden />
+        {current?.kind === "link" ? <Link2 size={15} strokeWidth={1.8} aria-hidden /> : <FileText size={15} strokeWidth={1.8} aria-hidden />}
         <span className={t.label}>{current?.label ?? "材料"}</span>
         {pending ? <span className={t.count} aria-hidden>{pending}</span> : null}
         <ChevronDown size={14} strokeWidth={2} aria-hidden className={t.chevron} />
@@ -108,16 +125,27 @@ export function MaterialMenu({
         <TianshuPortalTheme>
           <Popover.Dialog className={t.menu} aria-label={label}>
             {tabs.map((tab) => (
-              <Button key={tab.id} variant="ghost" className={t.item} aria-label={tab.count ? `${tab.title}，${tab.count} 条待处理` : tab.title} aria-current={tab.id === selected || undefined} isDisabled={tab.isDisabled}
-                onPress={() => { if (!tab.isDisabled) pick(() => onSelect(tab.id)); }}>
-                <FileText size={15} strokeWidth={1.8} aria-hidden />
-                <span className={t.label}>{tab.label}</span>
-                {tab.hint ? <span className={t.hint}>{tab.hint}</span> : null}
-                {tab.count ? <span className={t.count} aria-hidden>{tab.count}</span> : null}
-                {tab.id === selected ? <Check size={15} strokeWidth={2} aria-hidden className={t.check} /> : null}
-              </Button>
+              <Fragment key={tab.id}>
+                {tab.ruleBefore ? <p className={t.section}>{tab.ruleBefore}</p> : null}
+                <Button variant="ghost" className={t.item}
+                  aria-label={`${tab.title}${tab.working ? "（Co-Agent 正在改）" : ""}${tab.count ? `，${tab.count} 条待处理` : ""}`}
+                  aria-current={tab.id === selected || undefined} isDisabled={tab.isDisabled}
+                  onPress={() => { if (!tab.isDisabled) pick(() => onSelect(tab.id)); }}>
+                  {tab.kind === "link" ? <Link2 size={15} strokeWidth={1.8} aria-hidden /> : <FileText size={15} strokeWidth={1.8} aria-hidden />}
+                  <span className={t.label}>{tab.label}</span>
+                  {tab.working ? <span className={`${t.hint} ${t.working}`}><span className={t.pulse} aria-hidden />在改</span>
+                    : tab.hint ? <span className={t.hint}>{tab.hint}</span> : null}
+                  {tab.count ? <span className={t.count} aria-hidden>{tab.count}</span> : null}
+                  {tab.id === selected ? <Check size={15} strokeWidth={2} aria-hidden className={t.check} /> : null}
+                </Button>
+              </Fragment>
             ))}
-            {onAdd ? (
+            {addActions?.length ? addActions.map((action, index) => (
+              <Button key={action.id} variant="ghost" className={`${t.item} ${t.add}${index ? ` ${t.addNext}` : ""}`} onPress={() => pick(action.onPress)}>
+                {action.icon}
+                <span className={t.label}>{action.label}</span>
+              </Button>
+            )) : onAdd ? (
               <Button variant="ghost" className={`${t.item} ${t.add}`} onPress={() => pick(onAdd)}>
                 <Plus size={15} strokeWidth={2} aria-hidden />
                 <span className={t.label}>添加材料</span>

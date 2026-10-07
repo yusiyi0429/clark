@@ -40,6 +40,7 @@ export function annotationView(row: AnnotationRow, names: Map<string, string>, v
 export async function createMaterialAnnotation(q: Query, ref: ThreadRef, id: string, viewer: MaterialViewer,
   input: TCreateMaterialAnnotationRequest, names: Map<string, string>) {
   const material = await readObjectMaterial(q, ref, id, viewer, input.version);
+  if (material.format === "link") throw new ObjectMaterialError(400, "MATERIAL_LINK_NOT_ANNOTATABLE", "链接不能写批注");
   const editable = material.format === "markdown" || material.format === "html";
   const canEdit = editable && (await materialEditor(q, ref, viewer))(material.ownerId);
   const existing = (await q("SELECT * FROM material_annotations WHERE author_id=$1 AND client_id=$2",

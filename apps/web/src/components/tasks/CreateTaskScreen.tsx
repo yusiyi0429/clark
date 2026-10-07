@@ -183,8 +183,8 @@ export function CreateTaskScreen() {
             <DateChoice label="截止" value={dueDate} quick={{ value: "", label: "还没想好" }} min={startDate} onChange={(value) => change(setDueDate, value)} />
           </div>
           <label className={c.field}>
-            <span className={c.label}>完成时应该留下什么<small className={c.optional}>可不填</small></span>
-            <textarea className={c.input} rows={3} value={doneDefinition} onChange={(event) => change(setDoneDefinition, event.target.value)} placeholder="例如：一页结论，以及支撑它的依据。" maxLength={500} />
+            <span className={c.label}>完成标准<small className={c.optional}>可不填 · 一行一条，验收时逐条对照</small></span>
+            <textarea className={c.input} rows={3} value={doneDefinition} onChange={(event) => change(setDoneDefinition, event.target.value)} placeholder={"例如：一页结论\n支撑结论的依据"} maxLength={500} />
           </label>
         </> : null}
       </div>

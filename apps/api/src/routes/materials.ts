@@ -1,10 +1,10 @@
 import { Type } from "@sinclair/typebox";
-import { CreateMaterialAnnotationRequest, DecideMaterialAnnotationRequest, DecideMaterialEditProposalRequest, MaterialObjectType,
+import { AddMaterialLinkRequest, CreateMaterialAnnotationRequest, DecideMaterialAnnotationRequest, DecideMaterialEditProposalRequest, MaterialObjectType,
   RestoreMaterialRemovedRequest, ThreadObjectId } from "@warmap/contracts";
 import { MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch, readStoredMaterial, type ObjectParsedMaterial } from "../materialParser.js";
 import { renderMaterialPreview } from "../materialPreview.js";
 import { personDisplayNames } from "../people.js";
-import { ObjectMaterialError, deleteObjectMaterial, getObjectMaterialDetail, listObjectMaterials, readObjectMaterial,
+import { ObjectMaterialError, addObjectMaterialLink, deleteObjectMaterial, getObjectMaterialDetail, listObjectMaterials, readObjectMaterial,
   uploadObjectMaterial, type MaterialViewer } from "../objectMaterials.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
 import { createMaterialAnnotation, decideMaterialAnnotation, decideMaterialProposal, restoreMaterialRemoved } from "../materialFeedback.js";
@@ -66,6 +66,13 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, anno
       return error(reply, cause);
     } finally { if (parsed) await cleanupMaterialTemp(parsed.directory); }
   });
+  app.post("/api/materials/:objectType/:objectId/links", { preHandler: requirePerson,
+    schema: { params, body: AddMaterialLinkRequest } }, async (req, reply) => {
+    try {
+      const { material, created } = await addObjectMaterialLink(pool, req.params, viewer(req.person!), req.body, names);
+      return reply.status(created ? 201 : 200).send(material);
+    } catch (cause) { return error(reply, cause); }
+  });
   app.get("/api/materials/:objectType/:objectId/:materialId", { preHandler: requirePerson,
     schema: { params: itemParams, querystring: versionQuery } }, async (req, reply) => {
     try { return await getObjectMaterialDetail(q, req.params, req.params.materialId, viewer(req.person!), names, req.query.version); }
@@ -106,6 +113,7 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, anno
     schema: { params: itemParams } }, async (req, reply) => {
     try {
       const material = await readObjectMaterial(q, req.params, req.params.materialId, viewer(req.person!));
+      if (material.format === "link") return fail(reply, 404, "MATERIAL_NO_FILE", "链接没有原件，请直接打开链接");
       let data: Buffer;
       try { data = material.format === "html" || !material.storageKey ? Buffer.from(material.body)
         : await readStoredMaterial(materialStorageDir, material.storageKey); }
@@ -124,6 +132,7 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, anno
     schema: { params: itemParams, querystring: versionQuery } }, async (req, reply) => {
     try {
       const material = await readObjectMaterial(q, req.params, req.params.materialId, viewer(req.person!), req.query.version);
+      if (material.format === "link") return fail(reply, 404, "MATERIAL_NO_FILE", "链接没有原件，请直接打开链接");
       if (material.format === "html") return reply.type("text/html; charset=utf-8").header("content-disposition", "inline")
         .header("x-content-type-options", "nosniff")
         .header("content-security-policy", "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' https:; style-src 'unsafe-inline' https:; img-src https: data: blob:; font-src https: data:; media-src https: data: blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'")

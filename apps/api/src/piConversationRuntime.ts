@@ -508,13 +508,16 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             parameters: Type.Object({}, { additionalProperties: false }),
             execute: async () => result(async () => {
               const list = await listObjectMaterials(q, ref, viewer, names);
-              return { materials: list.materials.map((m) => ({ id: m.id, fileName: m.fileName, format: m.format,
+              return { materials: list.materials.map((m) => ({ id: m.id, fileName: m.fileName, format: m.format, ...(m.url ? { url: m.url } : {}),
                 editable: m.editable, canEdit: m.canEdit, version: m.version, owner: m.owner })) };
             }) }),
           defineTool({ name: "read_material", label: "阅读材料", description: "读取当前对象一份材料及版本；修改前必须调用。HTML 只返回最多 100,000 字符的源码，不返回去标签全文；截断时须用能唯一匹配的原文片段修改，或在文末追加",
             parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), version: Type.Optional(Type.Integer({ minimum: 1 })) }, { additionalProperties: false }),
             execute: async (_id, args) => result(async () => {
               const material = await readObjectMaterial(q, ref, args.materialId, viewer, args.version);
+              // 链接只有地址：天枢不抓外部页面，Agent 也不该假装读过里面的内容。
+              if (material.format === "link") return { id: args.materialId, title: material.fileName, url: material.url,
+                note: "这是一条外部链接，天枢不读取链接里的内容", editable: false };
               return { id: args.materialId, body: material.format === "html" ? material.body.slice(0, 100_000) : material.body,
                 ...(material.format === "html" && material.body.length > 100_000 ? { truncated: true,
                   note: "材料太长只给了前 100,000 字符；改动请用能唯一匹配的原文片段，或在文末追加" } : {}), version: material.version,

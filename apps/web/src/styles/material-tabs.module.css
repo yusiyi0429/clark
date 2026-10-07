@@ -145,3 +145,16 @@
 @media (prefers-reduced-motion: reduce) {
   .trigger.trigger, .whole.whole { transition: none; }
 }
+
+/*
+ * 执行事项（design-12）：添加项拆成三项时只有第一项上面画细线；完成后「参考材料」那一小段字也隔一条细线。
+ * 「在改」：Co-Agent 正在按批注改这一份，蓝字带脉冲点（和材料区批注条同一种）。
+ */
+.add.addNext { margin-top: 0; }
+.add.addNext::before { content: none; }
+.section { position: relative; margin: 9px 0 0; padding: 6px 10px 2px; color: #8a95a5; font-size: 11.5px; font-weight: 500; line-height: 16px; }
+.section::before { content: ''; position: absolute; top: -5px; left: 8px; right: 8px; height: 1px; background: rgb(31 53 86 / 10%); }
+.working { display: inline-flex; align-items: center; gap: 5px; color: #2f64b8; }
+.pulse { flex: none; width: 6px; height: 6px; border-radius: 50%; background: #3a83f7; animation: material-menu-pulse 1.2s ease-in-out infinite; }
+@keyframes material-menu-pulse { 50% { opacity: .35; transform: scale(.8); } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }

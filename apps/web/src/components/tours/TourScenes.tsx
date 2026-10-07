@@ -53,7 +53,7 @@ function SceneCreate() {
     <section className={`${x.panel} ${x.form} ${x.leave}`} style={at(4100)}>
       <h4 className={x.heading}>开启执行事项</h4>
       <div className={x.field}><span className={x.label}>执行事项标题</span><span className={x.input}><Typed text="整理 Q3 流失客户名单" start={400} caret /></span></div>
-      <div className={x.field}><span className={x.label}>所属个人任务</span><span className={x.input}><span className={x.show} style={at(2100)}>客户续约率提到 90% · 第 2 步</span><Tap start={1900} /></span></div>
+      <div className={x.field}><span className={x.label}>所属个人任务</span><span className={x.input}><span className={x.show} style={at(2100)}>客户续约率提到 90%</span><Tap start={1900} /></span></div>
       <div className={x.twoFields}>
         <div className={x.field}><span className={x.label}>计划开始</span><span className={x.input}><span className={x.show} style={at(2700)}>10 月 8 日</span></span></div>
         <div className={x.field}><span className={x.label}>截止日期</span><span className={x.input}><span className={x.show} style={at(3000)}>10 月 15 日</span></span></div>
@@ -66,7 +66,6 @@ function SceneCreate() {
       <div className={x.taskTop}><span className={x.status}><i />未启动</span><span>10 月 15 日前</span></div>
       <h4 className={x.heading}>整理 Q3 流失客户名单</h4>
       <p className={x.link}>客户续约率提到 90% ↗</p>
-      <p className={x.meta}>第 2 步，共 3 步</p>
       </article>
     </div>
   </div>;
@@ -142,22 +141,18 @@ function SceneAgent() {
   </div>;
 }
 
-function SceneProgress() {
+/** 验收：Agent 已对照完成标准逐条打勾，人写一句结论、点「验收完成」，任务卡上这一步随之打勾。 */
+function SceneAccept() {
   return <div className={`${x.scene} ${x.split}`}>
-    <section className={x.panel}>
-      <p className={x.meta}>执行事项</p>
-      <h4 className={x.heading}>整理 Q3 流失客户名单</h4>
-      <p className={x.label}>报进度</p>
-      <div className={x.segmented}>
-        <span className={x.thumb} style={at(900)} />
-        <span>未启动</span><span>进行中</span><span>完成<Tap start={750} /></span>
-      </div>
-      <div className={`${x.progressNote} ${x.in}`} style={at(1500)}>
-        <p className={x.meta}>最新进展 · 网页 · 刚刚</p>
-        <p>名单 58 家已整理，华东区数据已补齐。</p>
-      </div>
+    <section className={`${x.panel} ${x.form}`}>
+      <h4 className={x.heading}>验收「整理 Q3 流失客户名单」</h4>
+      <ol className={x.steps}>
+        {([["58 家流失客户的名单", 600], ["补齐华东区数据", 900]] as const).map(([text, check]) => <li key={text}><span className={x.box} style={at(check)}><span className={x.pop}>✓</span></span>{text}</li>)}
+      </ol>
+      <div className={x.field}><span className={x.label}>一句结论</span><span className={x.input}><Typed text="名单已整理，华东区数据已补齐。" start={1400} speed={55} /></span></div>
+      <span className={x.primaryButton}>验收完成<Tap start={2800} /></span>
     </section>
-    <MissionCard checkAt={2500} />
+    <MissionCard checkAt={3300} />
   </div>;
 }
 
@@ -167,5 +162,5 @@ export const TOUR_STEPS = [
   { title: "拉同事一起做", body: "邀请协作后，同事能看到这件事，和你一起推进。", duration: 4400, Scene: SceneInvite },
   { title: "在文档上写批注", body: "协作的人划出一段，直接写下自己的意见。", duration: 4800, Scene: SceneAnnotate },
   { title: "让 Agent 动手改", body: "在对话里说一句，Agent 按批注改好文档，改了哪里一眼能看到。", duration: 6200, Scene: SceneAgent },
-  { title: "同步进展", body: "做完报一下进度，任务卡上的这一步随之打勾。", duration: 3800, Scene: SceneProgress },
+  { title: "验收完成", body: "对照完成标准逐条确认，点「验收完成」这件事才算完成，任务卡上的这一步随之打勾。", duration: 4300, Scene: SceneAccept },
 ] as const;

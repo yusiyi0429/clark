@@ -24,7 +24,7 @@ const note = (status: TMaterialAnnotationView["status"], extra: Partial<TMateria
 /** 默认是协作者在看王创峰上传的 Markdown：不能改。 */
 const material = (extra: Partial<TMaterialView> = {}): TMaterialView => ({ id: "m1", objectType: "task", objectId: "t1", fileName: "方案.md",
   format: "markdown", sizeBytes: 10, origin: "upload", owner: uploader, createdAt: "2026-10-05T06:00:00Z", updatedAt: "2026-10-05T06:20:00Z",
-  version: 2, editable: true, canEdit: false, pending: 0, canDelete: false, lastRevision: null, ...extra });
+  version: 2, editable: true, canEdit: false, pending: 0, canDelete: false, lastRevision: null, working: false, ...extra });
 const detail = (annotations: TMaterialAnnotationView[], removedCount = 0, viewing = material()) => ({
   material: viewing, annotations, proposals: [],
   removed: Array.from({ length: removedCount }, (_, index) => ({ id: `v2-${index}`, version: 2, text: `删掉的第 ${index + 1} 段`, requestedBy: person, at: "2026-10-05T06:20:00Z", annotation: null, restorable: true })),

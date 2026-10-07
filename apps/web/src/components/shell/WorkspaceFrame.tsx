@@ -110,6 +110,16 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
       items: appendQuote(current?.key === quoteKey ? current.items : [], { id: `quote-${nonce}`, text, source: resolvedSource }),
       prefill: { text, nonce, source: resolvedSource } }));
   }, [detail?.label, detail?.scope, quoteKey]);
+  const compose = useCallback((draft: string) => {
+    setHistoryOpen(false);
+    setGlobalView(false);
+    setKeyboard(true);
+    if (window.matchMedia(NARROW_COLUMN_QUERY).matches) setRailMobileOpen(true);
+    else saveColumnMode("expanded");
+    const nonce = ++quoteNonce.current;
+    setQuoteDraft((current) => ({ key: quoteKey, items: current?.key === quoteKey ? current.items : [],
+      prefill: { text: "", draft, nonce, source: { label: detail?.label, scope: detail?.scope ?? "global" } } }));
+  }, [detail?.label, detail?.scope, quoteKey]);
   const consumePrefill = useCallback((nonce?: number) => setQuoteDraft((current) =>
     current && (nonce === undefined || current.prefill?.nonce === nonce) ? { ...current, prefill: null } : current), []);
   const removeQuotes = useCallback((ids: string[]) => setQuoteDraft((current) => current
@@ -428,8 +438,8 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   );
 
   const api: WorkspaceApi = useMemo(
-    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, viewerId }),
-    [homeCards, close, closing, detailOpen, navigate, quote, registerDetail, showToast, viewerId],
+    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, compose, viewerId }),
+    [homeCards, close, closing, compose, detailOpen, navigate, quote, registerDetail, showToast, viewerId],
   );
 
   const conversationUi: ConversationUiState = {

@@ -4,9 +4,9 @@ export type AgentClient = "codex" | "claude" | "other";
 
 export const clientName = (client: AgentClient) => client === "codex" ? "Codex" : client === "claude" ? "Claude Code" : "AI 工具";
 
-export const SYNC_INSTRUCTION = "用天枢 MCP 同步我本周的工作进展：先调用 tianshu 的 list_my_items（status=all）看我负责的执行事项；我已知的协作事项用 get_item 核对。再根据我这周实际做过的事（当前目录及其下各仓库的提交、文档，以及我们的对话），为每件有进展的事项调用一次 append_progress，写清做了什么、证据链接和下一步；我推进的事项状态有变化时用 update_status 更新。没有进展的事项不要写，不要编造。最后列出你写了哪几条。";
+export const SYNC_INSTRUCTION = "用天枢 MCP 同步我本周的工作进展：先调用 tianshu 的 list_my_items（status=all）看我负责的执行事项；我已知的协作事项用 get_item 核对。再根据我这周实际做过的事（当前目录及其下各仓库的提交、文档，以及我们的对话），为每件有进展的事项调用一次 append_progress，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 add_link 放进对应事项。我推进的事项已经做完的，用 submit_for_acceptance 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条。";
 
-const TOOLS = "mcp__tianshu__list_my_items,mcp__tianshu__get_item,mcp__tianshu__append_progress,mcp__tianshu__update_status";
+const TOOLS = "mcp__tianshu__list_my_items,mcp__tianshu__get_item,mcp__tianshu__append_progress,mcp__tianshu__add_link,mcp__tianshu__submit_for_acceptance";
 
 /** 手动运行或放进定时任务的同步命令；其他工具没有统一的命令行，用各自的非交互模式。Codex 默认只在 git 仓库里运行，工作目录常是装着多个仓库的上级目录。 */
 export const syncCommand = (client: "codex" | "claude") => client === "codex"
@@ -115,7 +115,7 @@ export function connectionGuide({ role, client, endpoint, token, expires, weekly
       "- 用户问「这周各战场进展怎样？」时，调用 `company_progress`；可以按周、战场或人筛选。",
       `- 这些工具只读。要拍板、签发、确认，把结果里的 \`href\` 拼成完整链接给用户（天枢网址是 \`${endpoint.replace(/\/mcp\/me$/, "")}\`，例如 \`${endpoint.replace(/\/mcp\/me$/, "")}/issues/<id>\`），让用户回天枢网页处理。`,
     ] : [
-      "- 推进天枢里的执行事项时：开始前用 `list_my_items` 找到对应事项；收尾时用 `append_progress` 写一条进展（做了什么、证据链接、下一步或阻塞）；做完用 `update_status` 标完成。只写真实做过的事。",
+      "- 推进天枢里的执行事项时：开始前用 `list_my_items` 找到对应事项；收尾时用 `append_progress` 写一条进展（做了什么、证据链接、下一步或阻塞）；做出来的文档、设计稿、PR 用 `add_link` 放进这件事；做完用 `submit_for_acceptance` 提交验收（对照完成标准逐条写明是否达到和依据），由用户在天枢确认完成。只写真实做过的事。",
       `- 用户说「同步本周进展」时，照这段做：${SYNC_INSTRUCTION}`,
       "- 月末天枢会请每人对照自己的 Mission Card 做个人复盘，Co-Agent 会先起草一版。用户说「改写我的月度复盘」时：调用 `get_my_review` 看状态、Mission、现有草稿和写作要求，结合用户手边的周复盘、文档和提交记录补充改写四部分，用 `save_review_draft` 保存；不能替用户提交，写完请用户回天枢确认提交。`list_pending` 里出现待提交的个人复盘时，主动提醒用户。",
       "- 可以问用户要不要把上面两条写进常用项目的 AGENTS.md 或 CLAUDE.md（不要写令牌）。",
