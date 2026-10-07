@@ -1,5 +1,7 @@
 # Design 11：新建执行事项后的详情页
 
+> **2026-10-08：已被 [design-12-task-cover.md](design-12-task-cover.md)（执行事项「封面」）取代，本文不再实施。** 下面保留原文备查。
+>
 > 2026-10-04 · 状态：待拍板 · 只是设计，还没改代码
 > 骨架用方案「一张下一步卡」(next-step)，嫁接「一页简报」(calm-brief) 和「Agent 接手的开工页」(agent-led) 里各自做得好的几处，两轮评审（taste-clarity、mvp-domain）提出的必改项都已改进去。
 > 涉及文件：`apps/web/src/components/tasks/TaskScreen.tsx`、`task-detail.module.css`、`CreateTaskScreen.tsx`、`apps/web/src/components/shell/WorkspaceFrame.tsx` / `WorkspaceContext.tsx`
