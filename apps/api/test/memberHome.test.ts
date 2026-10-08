@@ -36,6 +36,42 @@ async function seed(t: TestApp) {
 }
 
 describe("DRI home widgets and battlefield detail", () => {
+  it("shows an explicitly assigned battlefield without a personal Mission or card, while keeping others' drafts private and withdrawing access when removed", async () => {
+    const t = await createTestApp({}, undefined, { monthlyNow: () => START });
+    try {
+      const ids = await seed(t); const cookie = await t.memberCookie();
+      await t.sql("DELETE FROM personal_mission_cards WHERE owner_id=$1", [TEST_MEMBER.personId]);
+      await t.sql("DELETE FROM missions WHERE owner_id=$1", [TEST_MEMBER.personId]);
+      await t.sql("UPDATE battlefield_config SET participant_ids=$1::jsonb WHERE id='growth'", [JSON.stringify([TEST_MEMBER.personId])]);
+      const home = await read(t, cookie), onboarding = await read(t, cookie, "/api/me/onboarding");
+      expect(home.work.battlefields.map((b: any) => b.id)).toEqual(["growth", "owned"]);
+      expect(home.work.battlefields.map(({ id, name, monthTarget }: any) => ({ id, name, monthTarget }))).toEqual(onboarding.work.battlefields);
+      expect(home.work.missions).toEqual([]); expect(home.work.missionCards).toEqual([]);
+      const detail = await read(t, cookie, "/api/me/battlefields/growth");
+      expect(detail).toMatchObject({ id: "growth", isDri: false, sixMonthOutcome: "半年原文", monthTargetText: "growth 本月原文", myMissions: [] });
+      expect(detail.missionCards).toMatchObject([{ cardId: ids.other, canOpen: false, href: null }]);
+      expect(detail.round.cards).toEqual([]);
+      expect((await t.app.inject({ method: "GET", url: `/api/mission-cards/${ids.other}`, headers: { cookie } })).statusCode).toBe(404);
+      await t.sql("UPDATE battlefield_config SET participant_ids=$1::jsonb WHERE id='growth'", [JSON.stringify([TEST_CEO.personId])]);
+      expect((await read(t, cookie)).work.battlefields.map((b: any) => b.id)).toEqual(["owned"]);
+      expect((await t.app.inject({ method: "GET", url: "/api/me/battlefields/growth", headers: { cookie } })).statusCode).toBe(404);
+    } finally { await t.close(); }
+  });
+
+  it.each([{ label: "NULL", participants: null }, { label: "[]", participants: [] }])("keeps existing Owner, Mission and card access without adding historical card membership when participants are $label", async ({ participants }) => {
+    let now = START; const t = await createTestApp({}, undefined, { monthlyNow: () => now });
+    try {
+      await seed(t); const cookie = await t.memberCookie();
+      await t.sql("UPDATE battlefield_config SET participant_ids=$1::jsonb", [participants === null ? null : JSON.stringify(participants)]);
+      expect((await read(t, cookie)).work.battlefields.map((b: any) => b.id)).toEqual(["growth", "owned", "mission-only"]);
+      expect((await t.app.inject({ method: "GET", url: "/api/me/battlefields/private", headers: { cookie } })).statusCode).toBe(404);
+      now = new Date("2026-11-01T01:00:00Z");
+      expect((await read(t, cookie)).work).toMatchObject({ period: "2026-10", missions: [{ id: "mission-mine" }] });
+      expect((await read(t, cookie)).work.battlefields.map((b: any) => b.id)).toEqual(["owned", "mission-only"]);
+      expect((await t.app.inject({ method: "GET", url: "/api/me/battlefields/growth", headers: { cookie } })).statusCode).toBe(404);
+    } finally { await t.close(); }
+  });
+
   it("uses current DRI, current card Owner without missions, and current mission participation, sharing onboarding work", async () => {
     const t = await createTestApp({}, undefined, { monthlyNow: () => START });
     try {
