@@ -289,7 +289,7 @@ export function MaterialReader({ material, detail, base, onRemove, onVersion, on
   const host = useRef<HTMLElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const body = useRef<HTMLDivElement>(null);
-  const { selection, clear, onMouseUp } = useMaterialSelection(host, frame);
+  const { selection, clear, onMouseUp } = useMaterialSelection(host, frame, body);
   useEffect(() => { setChanges(false); clear(); }, [material.id, detail?.version, clear]);
   useEffect(() => {
     if (material.format !== "docx") return;

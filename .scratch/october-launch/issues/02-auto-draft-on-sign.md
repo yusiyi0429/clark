@@ -90,3 +90,20 @@ Blocked by: —（与 01 并行；联调时需要 01 的个人复盘数据）
 - 用 `WorldClient` 只读 `GET /v1/world/objects?type=Mission` + `GET /v1/world/objects/{id}` 从当前 world-02 实例（scope `a92430fd…`，eo 域 `88674067…`，即 10/1 按 Content Pact 重建的 v0.6.x 实例）取到 3 个 Mission，标题与负责人都对得上：renhao-202610-b = `f3f9bbd7…@2`、renhao-202610-c = `82c852a2…@2`、siyi-202610-1 = `7885a696…@2`。三个都还没有 `mission:<编号>` 外部引用。
 - 本体上只有「战役定义」块有内容（outcome + acceptance_criterion）；「Mission 计划」「Task 全景」块都是空的。导出的 markdown 按「战役定义 / Mission 计划」写，计划写明「本体上暂无」，填进 `seed/imports/2026-10-known-missions.json` 两条 `kind: world-02`（同时补了 `title`、`sourceRef`）。原始对象存档 `.scratch/october-launch/evidence/world-02-missions-2026-10-08.json`。
 - 发现：`apps/api/config/world-instance.json` 仍是 9/29 实例的 id（scope `1e8552e2…`、eo `280fb9c9…`），按它列 eo 域对象返回 404，`world:link-missions` 会失败。需换成 `.scratch/tkos-world-02/ids-v0.6.0.json` 的 id 后才能关联（待 Sean 定）。
+
+### 2026-10-08 浏览器验收（时间机器，一次性测试库，合成身份，不连模型）
+
+时间机器加了 `TM_PLAN_STAGE=negotiating`（`bce8fab`）：签发即起草后，原 fixture 启动时签发会与自动建的轮次撞唯一约束。
+
+通过：
+- 勾「我确认签发」后按战场列名单：灯塔项目 孙铭泽；团队协作 何望舒、孙铭泽；产品战场「名单为空」标橙。「改参与者」打开 `/config/battlefields?battlefieldId=product`，直接展开该战场编辑框，参与者注明「按上月 Mission 推算」。
+- 签发后：灯塔项目、团队协作各建一轮（留痕「CEO 签发后系统起草」），产品战场名单为空没有建轮。
+- 起草失败（时间机器没有模型）：CEO 通知栏两张进度卡「未交给本人确认」，每人「起草未完成」；团队协作（DRI = 验收 CEO）气泡里有「重试起草」，点了产生新的 attempt（又因无模型失败，符合预期）；灯塔项目（DRI = 林知行）气泡里 CEO 没有重试按钮。
+- 390 宽：战场编辑框贴卡片两侧，参与者多选排得下；签发名单区可读。
+
+发现（未改）：
+- CEO 卡片列表里非本人负责战场那一行仍写「起草未完成，**可重试**」，CEO 实际不能重试。
+- 390 宽：计划页签发区（`.commitArea`）不换行，「我确认签发…」被挤成一字一行，说明文字与卡片左侧被裁约 13px。签发区布局为原有问题，非本工单引入。
+- 战场编辑框「保存」按钮无样式（`battlefield-management.module.css` 的 `.cancel,.danger` 共用规则漏了 `.save`，9/22 起就有）。
+
+未验：起草全部成功后自动交给本人、成员收到卡（需要真实模型）。

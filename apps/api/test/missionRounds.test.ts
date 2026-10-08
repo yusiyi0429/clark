@@ -682,6 +682,9 @@ describe("签发后系统起草任务卡", () => {
       const asCeo = (await read(ceo))!;
       expect(summary(asCeo).draftFailures).toEqual([{ ownerId: "sun-mingze", ownerName: "sun-mingze", message: "model timeout" }]);
       expect(asCeo.actions).toEqual([]);
+      // CEO 不是这个战场的 DRI，不能重试：写等谁重试，不写「可重试」。
+      expect(summary(asCeo).todo).toBe(`1 张任务卡起草未完成 · 等${summary(asCeo).deciderName}重试`);
+      expect(summary(asCeo).cards.find((row) => row.ownerId === "sun-mingze")?.line).toBe(`起草未完成 · 等${summary(asCeo).deciderName}重试`);
       const retry = action(asDri, "mission-round.draft");
       await executeDraftMissionRound(t.pool, draftPeople, SECRET, dri, retry.scope, retry.fingerprint, () => START, undefined, agent);
       expect(await settledDraft(t, round.id)).toMatchObject({ status: "open" });

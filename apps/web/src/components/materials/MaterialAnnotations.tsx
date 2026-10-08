@@ -5,7 +5,8 @@
  * 可以「立即修改」，排队让 Co-Agent 按批注改（同一份一条条改）；其他人的批注先保存，等能改的人「采用 / 不采用」；PDF / Word 只留批注。
  * 改过的地方悬停看批注和修改历史；删掉的内容正文里不显示，进「垃圾篓」可恢复；对话里的修改提议显示在材料上方，能改的人点了才改。
  */
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { Check, MessageSquarePlus, RotateCcw, Trash2, X } from "lucide-react";
 import type {
   TMaterialAnnotationView, TMaterialBlockHistoryEntry, TMaterialDetailResponse, TMaterialEditProposalView, TMaterialRemovedView, TMaterialView,
@@ -17,10 +18,15 @@ const date = (iso: string) => new Date(iso).toLocaleString("zh-CN", { timeZone: 
 const MESSAGE = "tianshu-material-selection";
 
 /** 给 Word 预览（srcDoc）用的选区脚本；HTML 预览由 API 注入同样的脚本。 */
-export const SELECTION_SCRIPT = `<script>(function(){function t(n){return (n||"").replace(/\\s+/g," ")}document.addEventListener("mouseup",function(){setTimeout(function(){var s=getSelection();if(!s||s.isCollapsed||!t(s.toString()).trim()){parent.postMessage({type:"${MESSAGE}",text:""},"*");return}var r=s.getRangeAt(0),b=r.getBoundingClientRect(),a=document.createRange();a.selectNodeContents(document.body);a.setEnd(r.startContainer,r.startOffset);var z=document.createRange();z.selectNodeContents(document.body);z.setStart(r.endContainer,r.endOffset);parent.postMessage({type:"${MESSAGE}",text:t(s.toString()).trim(),prefix:t(a.toString()).slice(-200),suffix:t(z.toString()).slice(0,200),rect:{top:b.top,left:b.left,width:b.width,height:b.height}},"*")},0)})})();</script>`;
+export const SELECTION_SCRIPT = `<script>(function(){function t(n){return (n||"").replace(/\\s+/g," ")}function p(){var s=getSelection();if(!s||s.isCollapsed||!t(s.toString()).trim()){parent.postMessage({type:"${MESSAGE}",text:""},"*");return}var r=s.getRangeAt(0),b=r.getBoundingClientRect(),a=document.createRange();a.selectNodeContents(document.body);a.setEnd(r.startContainer,r.startOffset);var z=document.createRange();z.selectNodeContents(document.body);z.setStart(r.endContainer,r.endOffset);parent.postMessage({type:"${MESSAGE}",text:t(s.toString()).trim(),prefix:t(a.toString()).slice(-200),suffix:t(z.toString()).slice(0,200),rect:{top:b.top,left:b.left,width:b.width,height:b.height}},"*")}document.addEventListener("mouseup",function(){setTimeout(p,0)});if(matchMedia("(pointer: coarse)").matches){var w;document.addEventListener("selectionchange",function(){clearTimeout(w);w=setTimeout(function(){if(t(String(getSelection())).trim())p()},300)})}})();</script>`;
 
-/** 选区：正文（Markdown）用 mouseup；HTML / Word 预览在 iframe 里，靠 postMessage 传出来。坐标都相对 host（article）。 */
-export function useMaterialSelection(hostRef: RefObject<HTMLElement | null>, frameRef: RefObject<HTMLIFrameElement | null>) {
+/** 触屏：长按选字不触发 mouseup，改听 selectionchange；「写批注」由 CSS 固定在屏幕底部，不用选区坐标。 */
+const touchSelection = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+
+/**
+ * 选区：正文（Markdown）用 mouseup（触屏用 selectionchange）；HTML / Word 预览在 iframe 里，靠 postMessage 传出来。坐标都相对 host（article）。
+ */
+export function useMaterialSelection(hostRef: RefObject<HTMLElement | null>, frameRef: RefObject<HTMLIFrameElement | null>, scopeRef?: RefObject<HTMLElement | null>) {
   const [selection, setSelection] = useState<MaterialSelection | null>(null);
   const clear = useCallback(() => { setSelection(null); window.getSelection()?.removeAllRanges(); }, []);
   const onMouseUp = useCallback((scope: HTMLElement | null) => {
@@ -51,6 +57,17 @@ export function useMaterialSelection(hostRef: RefObject<HTMLElement | null>, fra
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
   }, [frameRef, hostRef]);
+  useEffect(() => {
+    if (!scopeRef || !touchSelection()) return;
+    let timer: number | undefined;
+    const changed = () => {
+      window.clearTimeout(timer);
+      // 停手 300ms 再取，拖动选区手柄时不跟着闪。选区收起时不清：输入框获得焦点、点「写批注」都会收起选区，关掉靠「取消」。
+      timer = window.setTimeout(() => onMouseUp(scopeRef.current), 300);
+    };
+    document.addEventListener("selectionchange", changed);
+    return () => { window.clearTimeout(timer); document.removeEventListener("selectionchange", changed); };
+  }, [onMouseUp, scopeRef]);
   return { selection, clear, onMouseUp };
 }
 
@@ -65,7 +82,10 @@ export function AnnotationComposer({ selection, canEdit, onSubmit, onClose }: {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState<"note" | "edit" | null>(null);
   const [error, setError] = useState("");
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => { setOpen(false); setBody(""); setError(""); }, [selection.text, selection.top]);
+  // 材料区是可滚动的盒子：选中末尾的字时输入框会落到盒子外面，打开时滚到整个能看见。
+  useEffect(() => { if (open) box.current?.scrollIntoView({ block: "nearest" }); }, [open]);
   const send = async (intent: "note" | "edit") => {
     if (!body.trim() || sending) return;
     setSending(intent); setError("");
@@ -73,9 +93,16 @@ export function AnnotationComposer({ selection, canEdit, onSubmit, onClose }: {
     setSending(null);
     if (failure) setError(failure); else onClose();
   };
-  if (!open) return <button type="button" className={s.pill} style={{ top: selection.top, left: selection.left }}
-    onMouseDown={(event) => event.preventDefault()} onClick={() => setOpen(true)}><MessageSquarePlus size={14} aria-hidden />写批注</button>;
-  return <div className={s.composer} style={{ top: selection.top, left: selection.left }} role="dialog" aria-label="写批注">
+  // 触屏：挂到 body 上固定在屏幕底部（面板有布局隔离，fixed 会跟着面板走、还压不过对话输入条）；选区收起后也还在，所以带一个关掉的按钮。
+  const docked = touchSelection();
+  const place = (node: ReactNode) => docked ? createPortal(node, document.body) : node;
+  const at = docked ? undefined : { top: selection.top, left: selection.left };
+  if (!open) {
+    const pill = <button type="button" className={s.pill} style={at}
+      onMouseDown={(event) => event.preventDefault()} onClick={() => setOpen(true)}><MessageSquarePlus size={14} aria-hidden />写批注</button>;
+    return docked ? place(<div className={s.dock}>{pill}<button type="button" className={s.dockClose} aria-label="不写批注" onClick={onClose}><X size={16} aria-hidden /></button></div>) : pill;
+  }
+  return place(<div ref={box} className={s.composer} style={at} role="dialog" aria-label="写批注">
     <p className={s.quote}>「{selection.text}」</p>
     <textarea autoFocus rows={3} maxLength={2000} value={body} disabled={sending !== null} placeholder="写下修改意见"
       onChange={(event) => { setBody(event.target.value); setError(""); }}
@@ -86,7 +113,7 @@ export function AnnotationComposer({ selection, canEdit, onSubmit, onClose }: {
       <button type="button" className={canEdit ? s.keep : s.apply} disabled={!body.trim() || sending !== null} onClick={() => void send("note")}>{sending === "note" ? "保存中…" : "保存"}</button>
       {canEdit ? <button type="button" className={s.apply} disabled={!body.trim() || sending !== null} onClick={() => void send("edit")}>{sending === "edit" ? "修改中…" : "立即修改"}</button> : null}
     </footer>
-  </div>;
+  </div>);
 }
 
 const STATUS: Record<TMaterialAnnotationView["status"], string> = {

@@ -42,7 +42,7 @@
 .confirmTitle{margin:0;font-size:13.5px;font-weight:600;color:#1d1d1f}
 .confirmBody{margin:0;font-size:12px;line-height:19px;color:#4f5866}
 .confirmActions{display:flex;gap:8px}
-.cancel,.danger{border:0;border-radius:9px;padding:8px 13px;font:inherit;font-size:12.5px;cursor:pointer}
+.cancel,.danger,.save{border:0;border-radius:9px;padding:8px 13px;font:inherit;font-size:12.5px;cursor:pointer}
 .cancel{background:#fff;outline:1px solid #d9dde5;color:#4f5866}
 .danger{background:#a1443c;font-weight:500;color:#fff}
 .danger:disabled{opacity:.5;cursor:default}

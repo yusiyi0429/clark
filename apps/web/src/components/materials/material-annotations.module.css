@@ -2,7 +2,7 @@
 .pill { position: absolute; z-index: 6; display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 12px; border: 1px solid #dce5f1; border-radius: 999px; background: #fff; color: #2f4f7f; font: inherit; font-size: 12.5px; font-weight: 560; box-shadow: 0 6px 18px rgb(24 42 70 / 12%); cursor: pointer; }
 .pill:hover { background: #f5f8fd; }
 
-.composer { position: absolute; z-index: 6; display: grid; gap: 8px; width: min(320px, 100%); padding: 12px; border: 1px solid #dce5f1; border-radius: 12px; background: #fff; box-shadow: 0 10px 28px rgb(24 42 70 / 14%); }
+.composer { position: absolute; z-index: 6; scroll-margin: 12px; display: grid; gap: 8px; width: min(320px, 100%); padding: 12px; border: 1px solid #dce5f1; border-radius: 12px; background: #fff; box-shadow: 0 10px 28px rgb(24 42 70 / 14%); }
 .composer textarea { box-sizing: border-box; width: 100%; min-height: 64px; margin: 0; padding: 8px 10px; border: 1px solid #dfe4ee; border-radius: 9px; background: #fafbfd; color: #243247; font: inherit; font-size: 13.5px; line-height: 1.6; resize: vertical; outline: none; }
 .composer textarea:focus { border-color: var(--onboarding-blue, #3a83f7); background: #fff; box-shadow: 0 0 0 3px color-mix(in oklab, var(--onboarding-blue, #3a83f7) 12%, transparent); }
 .composer textarea:focus-visible { outline: none; }
@@ -71,5 +71,14 @@
 .note strong { color: #243247; font-weight: 600; }
 .before { color: #6a778a; }
 .entry small { color: #9aa4b2; font-size: 11px; }
+
+/* 触屏：长按选字有系统菜单、选区坐标也不可靠，「写批注」和输入框固定在屏幕底部，盖在对话输入条上面。 */
+.dock { position: fixed; z-index: 1100; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: 12px; display: flex; gap: 8px; }
+.dock .pill { position: static; flex: 1; justify-content: center; height: 46px; font-size: 15px; }
+.dockClose { display: grid; place-items: center; width: 46px; height: 46px; border: 1px solid #dce5f1; border-radius: 999px; background: #fff; color: #5b6878; box-shadow: 0 6px 18px rgb(24 42 70 / 12%); cursor: pointer; }
+@media (pointer: coarse) {
+  .composer { position: fixed; z-index: 1100; inset: auto 12px calc(12px + env(safe-area-inset-bottom, 0px)) 12px; width: auto; }
+  .composer textarea { font-size: 16px; }
+}
 
 @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }

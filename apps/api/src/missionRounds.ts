@@ -137,7 +137,10 @@ export async function projectMissionRoundCard(
   const correctable = !correctionPeriodClosed(row, now);
   const names = new Map(people.map((item) => [item.personId, item.displayName]));
   const deciderId = row.battlefield_owner_id;
-  const visible = cards.filter((item) => approver || person.role === "ceo" || item.owner_id === person.personId);
+  const deciderName = (deciderId && names.get(deciderId)) || deciderId || "CEO";
+  // 只有战场 DRI 能重试起草；其他人（含 CEO）看到等谁重试。
+  const retryHint = approver ? "，可重试" : ` · 等${deciderName}重试`;
+  const visible =cards.filter((item) => approver || person.role === "ceo" || item.owner_id === person.personId);
   const failures = draftFailures(row);
   const visibleFailures = failures.filter((failure) => visible.some((card) => card.owner_id === failure.ownerId));
   const retryDraftAction = approver && phase === "draft" && failures.length ? {
@@ -149,9 +152,9 @@ export async function projectMissionRoundCard(
     roundId: row.id, period: row.period, battlefieldId: row.battlefield_id, battlefieldName: row.battlefield_name,
     version: row.version, phase, round: Math.max(1, row.window_seq), openedAt: row.opened_at?.toISOString() ?? null,
     closesAt: row.closes_at?.toISOString() ?? null, reviewAt: review?.taken_at.toISOString() ?? null,
-    serverNow: now.toISOString(), approver, deciderName: (deciderId && names.get(deciderId)) || deciderId || "CEO",
+    serverNow: now.toISOString(), approver, deciderName,
     todo: !supervisor ? null : phase === "drafting" ? "Co-Agent 正在起草" : phase === "draft" ? failures.length
-      ? `${failures.length} 张任务卡起草未完成，可重试` : openProblem(row) ?? "任务卡草稿已就绪，可以交给本人确认"
+      ? `${failures.length} 张任务卡起草未完成${retryHint}` : openProblem(row) ?? "任务卡草稿已就绪，可以交给本人确认"
       : ["open", "closed"].includes(phase) ? `${cards.filter((card) => !!card.owner_confirmed_at).length}/${cards.length} 人已确认${phase === "closed" ? " · 本人确认时间已到，请 DRI 延长" : ""}；待确认：${cards.filter((card) => !card.owner_confirmed_at).map((card) => names.get(card.owner_id) ?? card.owner_id).join("、") || "无"}`
       : phase === "reviewing" ? review?.agent_status === "completed" ? "Co-Agent Review 已完成，待战场 DRI 确认组合" : review?.agent_status === "failed" ? "Co-Agent Review 未完成，可重试" : "Co-Agent 正在审阅任务组合"
       : phase === "confirmed" && corrections.length > 0 && correctable ? `${corrections.length} 条更正申请待你处理` : null,
@@ -180,7 +183,7 @@ export async function projectMissionRoundCard(
         roleLabel: item.role_label, missionCount: missions.filter((mission) => mission.personal_mission_card_id === item.id).length,
         ownerConfirmedAt: item.owner_confirmed_at?.toISOString() ?? null,
         contentVisible: item.owner_id === person.personId || (phase === "confirmed" || !!item.owner_confirmed_at) && (approver || person.role === "ceo"),
-        line: failures.some((failure) => failure.ownerId === item.owner_id) && phase === "draft" ? "起草未完成，可重试"
+        line: failures.some((failure) => failure.ownerId === item.owner_id) && phase === "draft" ? `起草未完成${retryHint}`
           : missionCardLine(phase, item.owner_confirmed_at, 0, 0, approver, correctable ? waiting.length : 0), pending: annotationCounts.find((entry)=>entry.card_id===item.id)?.pending ?? 0,
         firstPendingFeedbackId: null,
         pendingCorrections: waiting.length, firstPendingCorrectionId: waiting[0]?.id ?? null, mine: item.owner_id === person.personId,
