@@ -117,6 +117,8 @@ export function registerMonthlyReviewRoutes(app: AppInstance, ctx: RouteContext)
       if (effect.type === "summary") service?.startSummary(effect.reviewId, effect.runId).catch(logFailure);
       // 下月计划沿用现有创建与生成流程；已存在时 createForPeriod 不重复创建
       if (effect.type === "next_plan") await ctx.monthlyPlanService?.createForPeriod(effect.period).catch((err) => console.error("next monthly plan failed", err));
+      // 已有计划按复盘重新生成：与「重新生成草案」同一个执行入口
+      if (effect.type === "plan_draft") ctx.monthlyPlanService?.executeRun(effect.planId, effect.runId).catch((err) => console.error("monthly draft run failed", err));
     }
   };
 

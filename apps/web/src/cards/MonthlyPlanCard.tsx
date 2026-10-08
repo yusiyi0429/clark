@@ -198,6 +198,16 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
                 {payload.generation.error.message}
               </p>
             ) : null}
+            {payload.status !== "confirmed" && payload.generation.beforeReview ? (
+              <div className={s.stale} role="note">
+                <span>草案生成于复盘之前</span>
+                {actionOf("monthly-plan.retry_draft") ? (
+                  <button type="button" className={s.reviewButton} disabled={pending || locked} onClick={() => void regenerateDraft()}>
+                    重新生成
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
 
             <section className={s.section}>
               <h2 className={s.sectionTitle}>公司结果</h2>

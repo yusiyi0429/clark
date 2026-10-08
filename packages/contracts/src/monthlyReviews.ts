@@ -36,6 +36,9 @@ export const MonthlyReviewItemStatus = Type.Union([
 
 export const MonthlyReviewSubjectType = Type.Union([Type.Literal("battlefield"), Type.Literal("capability")]);
 
+/** 已确认项的确认来源：ceo 是 CEO 在天枢逐项确认；import 是导入的复盘（没有确认人，不算 CEO 确认过）。未确认为 null。 */
+export const MonthlyReviewConfirmationSource = Type.Union([Type.Literal("ceo"), Type.Literal("import"), Type.Null()]);
+
 /**
  * 战场 / 能力域月度复盘的四部分（与 Co-Agent Design 的 BR 一致）：本周期总体结果、关键经营判断、下周期经营重点、
  * 待上层决策事项。关键经营判断要把结果、证据、对照目标的差距与原因、判断变化和不确定性串起来；待上层决策事项可以写「无」。
@@ -221,6 +224,7 @@ export const MonthlyReviewItemPayload = Type.Object(
     participantNames: Type.Array(Type.String()),
     submittedAt: NullableDateTime,
     confirmedAt: NullableDateTime,
+    confirmationSource: MonthlyReviewConfirmationSource,
     /** isParticipant：本单元当月 Mission 负责人；canComment：确认前负责人、CEO、参与者都能评论。 */
     viewer: Type.Object({ isOwner: Type.Boolean(), isCeo: Type.Boolean(), isParticipant: Type.Boolean(), canComment: Type.Boolean() }, { additionalProperties: false }),
     conversationScope: Type.String(),
@@ -244,6 +248,7 @@ export const MonthlyReviewItemRow = Type.Object(
     ownerName: Type.String(),
     ownerUnassigned: Type.Boolean(),
     status: MonthlyReviewItemStatus,
+    confirmationSource: MonthlyReviewConfirmationSource,
     /** 本周期总体结果的第一句；还没有自评时为 null。 */
     lead: NullableText,
     assessmentStatus: Type.Union([MonthlyReviewGenerationStatus, Type.Literal("none")]),
@@ -429,6 +434,7 @@ export const MonthlyReviewDecideLtcoInput = Type.Union([
 export type TMonthlyReviewStatus = Static<typeof MonthlyReviewStatus>;
 export type TMonthlyReviewItemStatus = Static<typeof MonthlyReviewItemStatus>;
 export type TMonthlyReviewSubjectType = Static<typeof MonthlyReviewSubjectType>;
+export type TMonthlyReviewConfirmationSource = Static<typeof MonthlyReviewConfirmationSource>;
 export type TMonthlyReviewField = Static<typeof MonthlyReviewField>;
 export type TMonthlyReviewSelfReview = Static<typeof MonthlyReviewSelfReview>;
 export type TMonthlyReviewAssessment = Static<typeof MonthlyReviewAssessment>;

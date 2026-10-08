@@ -13429,6 +13429,7 @@
                         "ownerName",
                         "ownerUnassigned",
                         "status",
+                        "confirmationSource",
                         "lead",
                         "assessmentStatus",
                         "assessmentOverall",
@@ -13495,6 +13496,21 @@
                             {
                               "const": "confirmed",
                               "type": "string"
+                            }
+                          ]
+                        },
+                        "confirmationSource": {
+                          "anyOf": [
+                            {
+                              "const": "ceo",
+                              "type": "string"
+                            },
+                            {
+                              "const": "import",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
                             }
                           ]
                         },
@@ -14026,6 +14042,7 @@
               "participantNames",
               "submittedAt",
               "confirmedAt",
+              "confirmationSource",
               "viewer",
               "conversationScope",
               "actions"
@@ -14551,6 +14568,21 @@
                   }
                 ]
               },
+              "confirmationSource": {
+                "anyOf": [
+                  {
+                    "const": "ceo",
+                    "type": "string"
+                  },
+                  {
+                    "const": "import",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "viewer": {
                 "additionalProperties": false,
                 "type": "object",
@@ -14702,6 +14734,7 @@
                 "ownerName",
                 "ownerUnassigned",
                 "status",
+                "confirmationSource",
                 "lead",
                 "assessmentStatus",
                 "assessmentOverall",
@@ -14768,6 +14801,21 @@
                     {
                       "const": "confirmed",
                       "type": "string"
+                    }
+                  ]
+                },
+                "confirmationSource": {
+                  "anyOf": [
+                    {
+                      "const": "ceo",
+                      "type": "string"
+                    },
+                    {
+                      "const": "import",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
                     }
                   ]
                 },
@@ -15258,6 +15306,7 @@
           "participantNames",
           "submittedAt",
           "confirmedAt",
+          "confirmationSource",
           "viewer",
           "conversationScope",
           "actions"
@@ -15783,6 +15832,21 @@
               }
             ]
           },
+          "confirmationSource": {
+            "anyOf": [
+              {
+                "const": "ceo",
+                "type": "string"
+              },
+              {
+                "const": "import",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "viewer": {
             "additionalProperties": false,
             "type": "object",
@@ -15851,6 +15915,7 @@
           "ownerName",
           "ownerUnassigned",
           "status",
+          "confirmationSource",
           "lead",
           "assessmentStatus",
           "assessmentOverall",
@@ -15917,6 +15982,21 @@
               {
                 "const": "confirmed",
                 "type": "string"
+              }
+            ]
+          },
+          "confirmationSource": {
+            "anyOf": [
+              {
+                "const": "ceo",
+                "type": "string"
+              },
+              {
+                "const": "import",
+                "type": "string"
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16176,6 +16256,7 @@
               "participantNames",
               "submittedAt",
               "confirmedAt",
+              "confirmationSource",
               "viewer",
               "conversationScope",
               "actions"
@@ -16701,6 +16782,21 @@
                   }
                 ]
               },
+              "confirmationSource": {
+                "anyOf": [
+                  {
+                    "const": "ceo",
+                    "type": "string"
+                  },
+                  {
+                    "const": "import",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "viewer": {
                 "additionalProperties": false,
                 "type": "object",
@@ -16850,6 +16946,7 @@
                     "ownerName",
                     "ownerUnassigned",
                     "status",
+                    "confirmationSource",
                     "lead",
                     "assessmentStatus",
                     "assessmentOverall",
@@ -16916,6 +17013,21 @@
                         {
                           "const": "confirmed",
                           "type": "string"
+                        }
+                      ]
+                    },
+                    "confirmationSource": {
+                      "anyOf": [
+                        {
+                          "const": "ceo",
+                          "type": "string"
+                        },
+                        {
+                          "const": "import",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
                         }
                       ]
                     },
@@ -17524,6 +17636,10 @@
                 "type": "string"
               },
               {
+                "const": "import",
+                "type": "string"
+              },
+              {
                 "type": "null"
               }
             ]
@@ -17897,6 +18013,10 @@
                       "type": "string"
                     },
                     {
+                      "const": "import",
+                      "type": "string"
+                    },
+                    {
                       "type": "null"
                     }
                   ]
@@ -18021,6 +18141,10 @@
               },
               {
                 "const": "manual",
+                "type": "string"
+              },
+              {
+                "const": "import",
                 "type": "string"
               },
               {
@@ -18203,6 +18327,10 @@
                               "type": "string"
                             },
                             {
+                              "const": "import",
+                              "type": "string"
+                            },
+                            {
                               "type": "null"
                             }
                           ]
@@ -18361,6 +18489,10 @@
                   },
                   {
                     "const": "manual",
+                    "type": "string"
+                  },
+                  {
+                    "const": "import",
                     "type": "string"
                   },
                   {
@@ -18734,6 +18866,10 @@
                     "type": "string"
                   },
                   {
+                    "const": "import",
+                    "type": "string"
+                  },
+                  {
                     "type": "null"
                   }
                 ]
@@ -19104,6 +19240,10 @@
                         },
                         {
                           "const": "manual",
+                          "type": "string"
+                        },
+                        {
+                          "const": "import",
                           "type": "string"
                         },
                         {
@@ -26635,6 +26775,10 @@
                     "type": "null"
                   }
                 ]
+              },
+              "beforeReview": {
+                "const": true,
+                "type": "boolean"
               }
             }
           },

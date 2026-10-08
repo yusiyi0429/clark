@@ -16,6 +16,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { FIELD_HINTS, FIELD_LABELS, FIELDS, OPTIONAL_FIELDS, itemStatusText, monthOf, requestError, runReviewAction, ReviewActionError, type ReviewAction } from "./reviewApi";
 import { ReviewDiscussion } from "./ReviewDiscussion";
 import { FeedbackLink } from "./FeedbackLink";
+import { Sources } from "./Sources";
 import s from "@/components/missionCards/mission-card.module.css";
 import r from "./monthly-review.module.css";
 
@@ -171,7 +172,7 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
                         placeholder={FIELD_HINTS[field]} onChange={(event) => setDrafts((current) => ({ ...current, [field]: event.target.value }))} />
                     : <p id={`review-${field}`}>{saved.text || <span className={s.missing}>{OPTIONAL_FIELDS.includes(field) ? "无" : "未填写"}</span>}</p>}
                   {fieldErrors[field] ? <p id={`review-${field}-error`} className={s.proposalError}>这一栏还没写，提交前要写上</p> : null}
-                  {saved.sources.length ? <p className={r.sources}>依据：{saved.sources.join("；")}</p> : null}
+                  <Sources sources={saved.sources} />
                   {suggestion && isOwner && editable ? <div className={r.suggestion} role="group" aria-label={`${FIELD_LABELS[field]}的改写建议`}>
                     <header>Agent 建议改写 · {monthDayTime(suggestion.createdAt)}</header>
                     <p>{suggestion.text}</p>

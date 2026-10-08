@@ -580,20 +580,55 @@ describe("MonthlyReview company summary and LTCO", () => {
     }
   });
 
-  it("revises the LTCO in strategy config and does not recreate an existing next-month plan", async () => {
+  it("revises the LTCO in strategy config and redrafts an untouched existing next-month plan with the review", async () => {
     const c = await setup();
     try {
       await toLtcoPending(c);
       await c.t.monthlyPlans!.createForPeriod("2026-10");
       await c.t.monthlyPlans!.idle();
       expect(c.planAgent.calls).toHaveLength(1);
+      expect(c.planAgent.calls[0].previousReview).toBeNull();
       const review = (await overview(c)).json().review;
       const decided = await execute(c, c.ceo, actionId(review, "monthly-review.decide_ltco"), { decision: "revise", ltco: "两年成为行业第一" });
-      expect(decided.json().review.ltco).toMatchObject({ current: "两年成为行业第一", decision: { decision: "revise", ltcoBefore: "三年成为行业第一", ltcoAfter: "两年成为行业第一", planExisted: true } });
+      expect(decided.json().review.ltco).toMatchObject({ current: "两年成为行业第一", decision: { decision: "revise", ltcoBefore: "三年成为行业第一", ltcoAfter: "两年成为行业第一", planExisted: false } });
       await c.t.monthlyPlans!.idle();
       expect(await c.t.sql("SELECT ltco, version FROM company_strategy_config")).toEqual([{ ltco: "两年成为行业第一", version: 2 }]);
-      expect(await c.t.sql("SELECT id FROM monthly_plans WHERE period = '2026-10'")).toHaveLength(1);
+      const plans = await c.t.sql("SELECT generation FROM monthly_plans WHERE period = '2026-10'");
+      expect(plans).toHaveLength(1);
+      expect(plans[0].generation).toMatchObject({ status: "ready", previousRunIds: [expect.any(String)] });
+      expect(plans[0].generation).not.toHaveProperty("beforeReview");
+      expect(c.planAgent.calls).toHaveLength(2);
+      expect(c.planAgent.calls[1].previousReview?.period).toBe(PERIOD);
+      expect(c.planAgent.calls[1].ltco).toBe("两年成为行业第一");
+    } finally {
+      await c.t.close();
+    }
+  });
+
+  it("keeps a next-month plan the CEO already checked, flags it as drafted before the review, and redrafts on request", async () => {
+    const c = await setup();
+    try {
+      await toLtcoPending(c);
+      await c.t.monthlyPlans!.createForPeriod("2026-10");
+      await c.t.monthlyPlans!.idle();
+      const planId = (await c.t.sql("SELECT id FROM monthly_plans WHERE period = '2026-10'"))[0].id as string;
+      const planCard = async () => (await c.t.app.inject({ method: "GET", url: `/api/cards/monthly-plans/${planId}`, headers: { cookie: c.ceo } })).json().cards[0];
+      const planAction = async (input: unknown, actionType: string) => c.t.app.inject({ method: "POST", url: "/api/actions/execute", headers: { cookie: c.ceo, origin: c.t.publicOrigin },
+        payload: { actionId: actionId(await planCard(), actionType), input } });
+      expect((await planAction({ checkedItemIds: ["company"] }, "monthly-plan.update_draft")).statusCode).toBe(200);
+
+      const decided = await execute(c, c.ceo, actionId((await overview(c)).json().review, "monthly-review.decide_ltco"), { decision: "keep" });
+      expect(decided.json().review.ltco.decision).toMatchObject({ decision: "keep", planExisted: true });
+      await c.t.monthlyPlans!.idle();
       expect(c.planAgent.calls).toHaveLength(1);
+      const kept = await planCard();
+      expect(kept.payload).toMatchObject({ negotiation: { checkedItemIds: ["company"] }, generation: { status: "ready", beforeReview: true } });
+
+      expect((await planAction({}, "monthly-plan.retry_draft")).statusCode).toBe(200);
+      await c.t.monthlyPlans!.idle();
+      expect(c.planAgent.calls).toHaveLength(2);
+      expect(c.planAgent.calls[1].previousReview?.period).toBe(PERIOD);
+      expect((await planCard()).payload.generation).not.toHaveProperty("beforeReview");
     } finally {
       await c.t.close();
     }

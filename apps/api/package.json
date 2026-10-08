@@ -12,7 +12,8 @@
     "access:issue": "tsx scripts/issue-access.ts",
     "world:link-missions": "tsx scripts/world-link-missions.ts",
     "mission-cards:import": "tsx scripts/import-mission-card-drafts.ts",
-    "missions:import": "tsx scripts/import-missions.ts"
+    "missions:import": "tsx scripts/import-missions.ts",
+    "reviews:import": "tsx scripts/import-reviews.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",

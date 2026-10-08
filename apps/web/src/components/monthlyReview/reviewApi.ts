@@ -27,8 +27,8 @@ export const FEEDBACK_URL = process.env.NEXT_PUBLIC_FEEDBACK_URL || "https://tok
 
 export const monthOf = (period: string) => Number(period.slice(5));
 
-/** 复盘项状态的一句话，负责人与 CEO 各看各的。 */
-export function itemStatusText(item: Pick<TMonthlyReviewItemPayload, "status">, forOwner: boolean): string {
+/** 复盘项状态的一句话，负责人与 CEO 各看各的；导入的复盘不显示成 CEO 确认过。 */
+export function itemStatusText(item: Pick<TMonthlyReviewItemPayload, "status"> & Partial<Pick<TMonthlyReviewItemPayload, "confirmationSource">>, forOwner: boolean): string {
   switch (item.status) {
     case "waiting": return "等大家交个人复盘";
     case "drafting": return "Co-Agent 正在起草";
@@ -36,7 +36,7 @@ export function itemStatusText(item: Pick<TMonthlyReviewItemPayload, "status">, 
     case "draft": return forOwner ? "草稿 · 改好后提交" : "负责人修改中";
     case "returned": return forOwner ? "被打回 · 改好后重新提交" : "已打回 · 等负责人修改";
     case "submitted": return forOwner ? "已提交 · 等 CEO 确认" : "已提交 · 待你确认";
-    case "confirmed": return "已确认";
+    case "confirmed": return item.confirmationSource === "import" ? "飞书导入 · 未在天枢逐项确认" : "已确认";
   }
 }
 

@@ -27,11 +27,12 @@ export const PersonalReviewStatus = Type.Union([
   Type.Literal("skipped"),
 ]);
 
-/** agent_tool：本人的 AI 工具经 MCP 写入；co_agent：上传材料后 Co-Agent 起草；manual：本人在天枢里手写。 */
+/** agent_tool：本人的 AI 工具经 MCP 写入；co_agent：上传材料后 Co-Agent 起草；manual：本人在天枢里手写；import：飞书原文导入。 */
 export const PersonalReviewDraftSource = Type.Union([
   Type.Literal("agent_tool"),
   Type.Literal("co_agent"),
   Type.Literal("manual"),
+  Type.Literal("import"),
   Type.Null(),
 ]);
 

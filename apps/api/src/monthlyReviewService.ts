@@ -18,6 +18,7 @@ import { ensurePersonalReviews, getPersonalReview, personalReviewContext, readPe
 import { listConfirmedDirections, type MonthlyDraftAgentInput } from "./monthlyDraft.js";
 import { companyPeriod, projectMonthlyFeedback, type StoredMonthlyFeedback } from "./monthlyPlans.js";
 import {
+  confirmImportedDraft,
   createMonthlyReview,
   getMonthlyReviewItem,
   getMonthlyReviewRow,
@@ -75,7 +76,10 @@ export type MonthlyReviewAgents = {
 };
 
 export type MonthlyReviewService = {
-  /** 公司日到了当月倒数第 3 天（Asia/Shanghai）才为当月创建复盘；重复触发只创建一次。 */
+  /**
+   * 公司日到了当月倒数第 3 天（Asia/Shanghai）才为当月创建复盘；重复触发只创建一次。
+   * 每次还接手别的进程（导入复盘的 CLI）只写下状态、本进程还没在跑的起草。
+   */
   runScheduled(at?: Date): Promise<{ period: string; status: "created" | "skipped" | "not_due"; reviewId?: string }>;
   /** 创建（或返回已有的）复盘，并为新建的项启动起草。 */
   open(period: string): Promise<{ created: boolean; reviewId: string }>;
@@ -128,6 +132,7 @@ export function createMonthlyReviewService({
 }): MonthlyReviewService {
   const q: Query = pool.query.bind(pool);
   const inflight = new Set<Promise<void>>();
+  const running = new Map<string, Promise<void>>();
 
   function track(promise: Promise<void>): Promise<void> {
     inflight.add(promise);
@@ -135,6 +140,21 @@ export function createMonthlyReviewService({
     promise.then(settle, settle);
     return promise;
   }
+
+  /** 同一个 run 在本进程只跑一份：动作后立即启动的和调度器接手的按 key 去重。 */
+  function runOnce(key: string, run: () => Promise<void>): Promise<void> {
+    const existing = running.get(key);
+    if (existing) return existing;
+    const promise = track(run());
+    running.set(key, promise);
+    const settle = () => running.delete(key);
+    promise.then(settle, settle);
+    return promise;
+  }
+  const startDraft = (itemId: string, runId: string) => runOnce(`draft:${itemId}:${runId}`, () => runDraft(itemId, runId));
+  const startSummary = (reviewId: string, runId: string) => track(runSummary(reviewId, runId));
+  const startPersonalDraft = (reviewId: string, version: number, storageDir = personalDraft.storageDir, agent = personalDraft.agent) =>
+    runOnce(`personal:${reviewId}:${version}`, () => runPersonalDraft(reviewId, version, storageDir, agent));
 
   async function comments(itemId: string): Promise<MonthlyReviewMaterials["comments"]> {
     return (await q(`SELECT author_id AS author, body, created_at AS "createdAt" FROM monthly_review_comments
@@ -229,6 +249,11 @@ export function createMonthlyReviewService({
         await q(`UPDATE monthly_review_items SET suggestions=$3::jsonb,draft_run=jsonb_build_object('runId',NULL,'error',NULL),
           version=version+1,updated_at=$4 WHERE id=$1 AND status IN ('draft','returned') AND draft_run->>'runId'=$2`,
         [itemId, runId, JSON.stringify(suggestions), now()]);
+        return;
+      }
+      if ((await q("SELECT origin FROM monthly_reviews WHERE id = $1", [item.review_id])).rows[0]?.origin === "import") {
+        const effects = await confirmImportedDraft(pool, item.review_id, itemId, runId, candidate as TMonthlyReviewSelfReview, now());
+        for (const effect of effects) if (effect.type === "summary") void startSummary(effect.reviewId, effect.runId).catch((err) => console.error("monthly review summary failed", err));
         return;
       }
       await q(
@@ -342,9 +367,20 @@ export function createMonthlyReviewService({
     startPersonalRuns(creation.personalRuns);
     // 每项独立起草，失败互不影响
     for (const run of creation.itemRuns) {
-      void track(runDraft(run.itemId, run.runId)).catch((err) => console.error("monthly review draft failed", err));
+      void startDraft(run.itemId, run.runId).catch((err) => console.error("monthly review draft failed", err));
     }
     return { created: creation.created, reviewId: creation.reviewId };
+  }
+
+  /** 导入 CLI 等别的进程只在事务里写下 drafting：收集中的这些起草由本进程启动，已在跑的按 key 跳过。 */
+  async function resumeDrafts(): Promise<void> {
+    const failed = (err: unknown) => console.error("monthly review draft failed", err);
+    const items = await q(`SELECT i.id, i.draft_run->>'runId' AS "runId" FROM monthly_review_items i JOIN monthly_reviews r ON r.id = i.review_id
+      WHERE r.status = 'collecting' AND i.status = 'drafting' AND i.draft_run->>'runId' IS NOT NULL`);
+    for (const row of items.rows) void startDraft(row.id, row.runId).catch(failed);
+    const personal = await q(`SELECT p.id, p.version FROM personal_reviews p JOIN monthly_reviews r ON r.id = p.monthly_review_id
+      WHERE r.status = 'collecting' AND p.status = 'drafting'`);
+    for (const row of personal.rows) void startPersonalDraft(row.id, row.version).catch(failed);
   }
 
   async function runPersonalDraft(reviewId: string, version: number, storageDir: string, agent: MonthlyReviewAgent<PersonalReviewDraftInput>): Promise<void> {
@@ -364,7 +400,7 @@ export function createMonthlyReviewService({
   }
 
   function startPersonalRuns(runs: PersonalReviewDraftRun[]): void {
-    for (const run of runs) void track(runPersonalDraft(run.personalReviewId, run.version, personalDraft.storageDir, personalDraft.agent))
+    for (const run of runs) void startPersonalDraft(run.personalReviewId, run.version)
       .catch((err) => console.error("personal review draft failed", err));
   }
 
@@ -374,6 +410,7 @@ export function createMonthlyReviewService({
       await recoverStalePersonalReviewDrafts(q, current);
       const collecting = (await q("SELECT id FROM monthly_reviews WHERE status='collecting' ORDER BY period")).rows;
       for (const review of collecting) startPersonalRuns(await ensurePersonalReviews(pool, review.id, companyMemory.searchPeople(undefined), current));
+      await resumeDrafts();
       const period = companyPeriod(current);
       const { day, lastDay } = companyDay(current);
       if (day < lastDay - 2) return { period, status: "not_due" as const };
@@ -381,10 +418,10 @@ export function createMonthlyReviewService({
       return { period, status: opened.created ? ("created" as const) : ("skipped" as const), reviewId: opened.reviewId };
     },
     open,
-    startDraft: (itemId, runId) => track(runDraft(itemId, runId)),
+    startDraft,
     startAssessment: (itemId, runId) => track(runAssessment(itemId, runId)),
-    startSummary: (reviewId, runId) => track(runSummary(reviewId, runId)),
-    startPersonalDraft: (reviewId, version, storageDir, agent) => track(runPersonalDraft(reviewId, version, storageDir, agent)),
+    startSummary,
+    startPersonalDraft,
     async recoverInterrupted(): Promise<number> {
       const params = [INTERRUPTED, "生成在进程重启前未完成，请重试", now().toISOString()];
       const error = "jsonb_build_object('code', $1::text, 'message', $2::text, 'at', $3::text)";

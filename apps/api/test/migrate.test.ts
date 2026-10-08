@@ -141,6 +141,7 @@ describe("migration", () => {
         "053_mission_card_owner_review.sql",
         "054_mission_card_preparation_review.sql",
         "055_mcp_oauth.sql",
+        "056_review_import.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -148,7 +149,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(55);
+      expect(Number(again.rows[0].count)).toBe(56);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(

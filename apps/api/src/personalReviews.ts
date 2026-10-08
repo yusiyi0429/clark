@@ -10,11 +10,14 @@ import { listConversationAttachments } from "./conversations.js";
 import type { Query } from "./meetingStore.js";
 import { advanceMonthlyReviewIfReady, type MonthlyReviewActionError, type MonthlyReviewEffect, type ReviewViewer } from "./monthlyReviews.js";
 
+/** 导入的起草材料：没有月度复盘的人，飞书里的周复盘与任务卡原文。 */
+export type ImportedReviewMaterial = { title: string; sourceRef: string; markdown: string };
 export type PersonalReviewRow = {
   id: string; version: number; monthly_review_id: string; period: string; person_id: string;
   status: TPersonalReviewStatus; draft_source: TPersonalReviewDraftSource;
   draft_error: TPersonalReviewPayload["draftError"]; self_review: TMonthlyReviewSelfReview | null;
   submitted_at: Date | null; skipped_by: string | null; skipped_at: Date | null;
+  imported_materials: ImportedReviewMaterial[];
   action_fingerprints: string[]; created_at: Date; updated_at: Date;
 };
 export const PERSONAL_REVIEW_FIELDS: TMonthlyReviewField[] = ["overall", "judgments", "nextFocus", "escalations"];
@@ -85,7 +88,7 @@ export async function readPersonalReviewBoard(q: Query, viewer: ReviewViewer, na
   };
 }
 
-/** 对话按本人 × scope 隔离；上传未发送的附件和用户消息各计一次，助手回复不算材料。 */
+/** 对话按本人 × scope 隔离；上传未发送的附件、用户消息和导入的材料各计一次，助手回复不算材料。 */
 export async function readPersonalReviewMaterials(q: Query, row: PersonalReviewRow, storageDir: string) {
   const conversations = (await q("SELECT id FROM conversations WHERE owner_id=$1 AND scope=$2 AND deleted_at IS NULL ORDER BY created_at,id",
     [row.person_id, `personal-review:${row.id}`])).rows as { id: string }[];
@@ -94,7 +97,8 @@ export async function readPersonalReviewMaterials(q: Query, row: PersonalReviewR
   const messages = conversations.length ? (await q(`SELECT conversation_id AS "conversationId", sequence, content, created_at AS "createdAt"
     FROM conversation_messages WHERE conversation_id=ANY($1::uuid[]) AND role='user' ORDER BY created_at,sequence`,
   [conversations.map(({ id }) => id)])).rows as { conversationId: string; sequence: number; content: string; createdAt: Date }[] : [];
-  return { attachments, messages: messages.map((message) => ({ ...message, createdAt: message.createdAt.toISOString() })) };
+  return { attachments, messages: messages.map((message) => ({ ...message, createdAt: message.createdAt.toISOString() })),
+    importedMaterials: row.imported_materials };
 }
 
 /** 与单元复盘的周进展查询相同时间范围（允许次月首周补记），按执行事项负责人过滤。 */
@@ -116,7 +120,7 @@ export type PersonalReviewDraftInput = Awaited<ReturnType<typeof personalReviewC
 export async function projectPersonalReview(q: Query, row: PersonalReviewRow, viewer: ReviewViewer, names: Map<string, string>,
   secret: string, storageDir: string, now: Date): Promise<TPersonalReviewPayload> {
   const materials = await readPersonalReviewMaterials(q, row, storageDir);
-  const materialCount = materials.attachments.length + materials.messages.length;
+  const materialCount = materials.attachments.length + materials.messages.length + materials.importedMaterials.length;
   const isSelf = row.person_id === viewer.personId, isCeo = viewer.role === "ceo";
   const actions: TActionDescriptor[] = [];
   if (isSelf && EDITABLE.includes(row.status)) {
@@ -181,29 +185,37 @@ export async function executePersonalReviewAction(pool: Pool, viewer: ReviewView
         break;
       case "personal-review.draft_with_co_agent": {
         const materials = await readPersonalReviewMaterials(q, row, storageDir);
-        if (!materials.attachments.length && !materials.messages.length) return await finish(error(400, "PERSONAL_REVIEW_MATERIAL_REQUIRED", "请先上传材料或粘贴草稿"));
+        if (!materials.attachments.length && !materials.messages.length && !materials.importedMaterials.length) return await finish(error(400, "PERSONAL_REVIEW_MATERIAL_REQUIRED", "请先上传材料或粘贴草稿"));
         await write("status='drafting',draft_error=NULL");
         effects.push({ type: "personal_draft", personalReviewId: row.id, version: row.version + 1 });
         break;
       }
       default: return await finish(error(404, "UNKNOWN_ACTION", "无效 actionId"));
     }
-    if (skip || scope.actionType === "personal-review.submit") {
-      const remaining = await q("SELECT 1 FROM personal_reviews WHERE monthly_review_id=$1 AND status NOT IN ('submitted','skipped') LIMIT 1", [row.monthly_review_id]);
-      if (!remaining.rowCount) {
-        const items = (await q("SELECT id,status FROM monthly_review_items WHERE review_id=$1 AND subject_type='battlefield' AND status IN ('waiting','draft','returned') ORDER BY id FOR UPDATE", [row.monthly_review_id])).rows;
-        for (const item of items) {
-          const runId = randomUUID();
-          await q(`UPDATE monthly_review_items SET status=CASE WHEN status='waiting' THEN 'drafting' ELSE status END,
-            draft_run=$2::jsonb,version=version+1,updated_at=$3 WHERE id=$1`, [item.id, JSON.stringify({ runId, error: null, suggestions: item.status !== "waiting" }), now]);
-          effects.push({ type: "draft", itemId: item.id, runId });
-        }
-        effects.push(...await advanceMonthlyReviewIfReady(q, row.monthly_review_id, now));
-      }
-    }
+    if (skip || scope.actionType === "personal-review.submit") effects.push(...await startUnitReviewsIfComplete(q, row.monthly_review_id, now));
     return await finish({ ok: true, effects });
   } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }
   finally { client.release(); }
+}
+
+/**
+ * 个人复盘交齐（全部提交或跳过）后起草复盘项，再看能否汇总；调用方事务内已锁月度复盘。
+ * 最后一份提交 / 跳过和导入 CLI 共用。导入的复盘里，等交齐的能力域项也在这时起草。
+ */
+export async function startUnitReviewsIfComplete(q: Query, reviewId: string, now: Date): Promise<MonthlyReviewEffect[]> {
+  const remaining = await q("SELECT 1 FROM personal_reviews WHERE monthly_review_id=$1 AND status NOT IN ('submitted','skipped') LIMIT 1", [reviewId]);
+  if (remaining.rowCount) return [];
+  const items = (await q(`SELECT i.id,i.status FROM monthly_review_items i JOIN monthly_reviews r ON r.id=i.review_id
+    WHERE i.review_id=$1 AND (i.subject_type='battlefield' AND i.status IN ('waiting','draft','returned') OR r.origin='import' AND i.status='waiting')
+    ORDER BY i.id FOR UPDATE OF i`, [reviewId])).rows;
+  const effects: MonthlyReviewEffect[] = [];
+  for (const item of items) {
+    const runId = randomUUID();
+    await q(`UPDATE monthly_review_items SET status=CASE WHEN status='waiting' THEN 'drafting' ELSE status END,
+      draft_run=$2::jsonb,version=version+1,updated_at=$3 WHERE id=$1`, [item.id, JSON.stringify({ runId, error: null, suggestions: item.status !== "waiting" }), now]);
+    effects.push({ type: "draft", itemId: item.id, runId });
+  }
+  return [...effects, ...await advanceMonthlyReviewIfReady(q, reviewId, now)];
 }
 
 export async function recoverStalePersonalReviewDrafts(q: Query, now: Date): Promise<number> {

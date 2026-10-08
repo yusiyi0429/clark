@@ -2983,6 +2983,7 @@ export interface components {
                     ownerName: string;
                     ownerUnassigned: boolean;
                     status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                    confirmationSource: "ceo" | "import" | null;
                     lead: string | null;
                     assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
                     assessmentOverall: string | null;
@@ -3150,6 +3151,7 @@ export interface components {
                 participantNames: string[];
                 submittedAt: string | null;
                 confirmedAt: string | null;
+                confirmationSource: "ceo" | "import" | null;
                 viewer: {
                     isOwner: boolean;
                     isCeo: boolean;
@@ -3187,6 +3189,7 @@ export interface components {
                 ownerName: string;
                 ownerUnassigned: boolean;
                 status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                confirmationSource: "ceo" | "import" | null;
                 lead: string | null;
                 assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
                 assessmentOverall: string | null;
@@ -3345,6 +3348,7 @@ export interface components {
             participantNames: string[];
             submittedAt: string | null;
             confirmedAt: string | null;
+            confirmationSource: "ceo" | "import" | null;
             viewer: {
                 isOwner: boolean;
                 isCeo: boolean;
@@ -3369,6 +3373,7 @@ export interface components {
             ownerName: string;
             ownerUnassigned: boolean;
             status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+            confirmationSource: "ceo" | "import" | null;
             lead: string | null;
             assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
             assessmentOverall: string | null;
@@ -3489,6 +3494,7 @@ export interface components {
                 participantNames: string[];
                 submittedAt: string | null;
                 confirmedAt: string | null;
+                confirmationSource: "ceo" | "import" | null;
                 viewer: {
                     isOwner: boolean;
                     isCeo: boolean;
@@ -3525,6 +3531,7 @@ export interface components {
                     ownerName: string;
                     ownerUnassigned: boolean;
                     status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                    confirmationSource: "ceo" | "import" | null;
                     lead: string | null;
                     assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
                     assessmentOverall: string | null;
@@ -3616,7 +3623,7 @@ export interface components {
             personId: string;
             personName: string;
             status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
-            draftSource: "agent_tool" | "co_agent" | "manual" | null;
+            draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
             draftError: {
                 code: string;
                 message: string;
@@ -3682,7 +3689,7 @@ export interface components {
                 personId: string;
                 personName: string;
                 status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
-                draftSource: "agent_tool" | "co_agent" | "manual" | null;
+                draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
                 submittedAt: string | null;
                 isSelf: boolean;
                 href: string | null;
@@ -3700,7 +3707,7 @@ export interface components {
             personId: string;
             personName: string;
             status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
-            draftSource: "agent_tool" | "co_agent" | "manual" | null;
+            draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
             submittedAt: string | null;
             isSelf: boolean;
             href: string | null;
@@ -3727,7 +3734,7 @@ export interface components {
                     personId: string;
                     personName: string;
                     status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
-                    draftSource: "agent_tool" | "co_agent" | "manual" | null;
+                    draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
                     submittedAt: string | null;
                     isSelf: boolean;
                     href: string | null;
@@ -3750,7 +3757,7 @@ export interface components {
                 personId: string;
                 personName: string;
                 status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
-                draftSource: "agent_tool" | "co_agent" | "manual" | null;
+                draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
                 draftError: {
                     code: string;
                     message: string;
@@ -3816,7 +3823,7 @@ export interface components {
                 personId: string;
                 personName: string;
                 status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
-                draftSource: "agent_tool" | "co_agent" | "manual" | null;
+                draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
                 draftError: {
                     code: string;
                     message: string;
@@ -3882,7 +3889,7 @@ export interface components {
                     personId: string;
                     personName: string;
                     status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
-                    draftSource: "agent_tool" | "co_agent" | "manual" | null;
+                    draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
                     submittedAt: string | null;
                     isSelf: boolean;
                     href: string | null;
@@ -4956,6 +4963,8 @@ export interface components {
                     at: string;
                 } | null;
                 generatedAt: string | null;
+                /** @constant */
+                beforeReview?: true;
             };
             confirmedAt: string | null;
         };

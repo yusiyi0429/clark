@@ -83,6 +83,15 @@ describe("月度计划 · 重新生成草案", () => {
     expect(html).not.toContain("DRAFT_FAILED：");
     expect(html).toContain("重新生成草案");
   });
+
+  it("草案早于复盘的 LTO 决定时提示一行并给出重新生成；签发后不提示", () => {
+    const stale = { status: "negotiating", confirmedAt: null, generation: { status: "ready", error: null, beforeReview: true } };
+    const html = render(planCard(stale, action));
+    expect(html).toContain("草案生成于复盘之前");
+    expect(html).toMatch(/role="note"><span>草案生成于复盘之前<\/span><button[^>]*>重新生成<\/button>/);
+    expect(render(planCard({ ...stale, generation: { status: "ready", error: null } }, action))).not.toContain("草案生成于复盘之前");
+    expect(render(planCard({ generation: { status: "ready", error: null, beforeReview: true } }))).not.toContain("草案生成于复盘之前");
+  });
 });
 
 describe("月度计划 · 正文两列", () => {

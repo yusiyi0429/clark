@@ -17,6 +17,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { FIELD_HINTS, FIELD_LABELS, FIELDS, OPTIONAL_FIELDS, monthOf, requestError, ReviewActionError, type ReviewAction } from "./reviewApi";
 import { REVIEW_INSTRUCTION, openConnectionDialog, personalStatusText, runPersonalReviewAction } from "./personalReviewApi";
 import { FeedbackLink } from "./FeedbackLink";
+import { Sources } from "./Sources";
 import s from "@/components/missionCards/mission-card.module.css";
 import r from "./monthly-review.module.css";
 
@@ -128,7 +129,7 @@ export function PersonalReviewScreen({ initialReview }: { initialReview: TPerson
   const open = review.status !== "submitted" && review.status !== "skipped";
 
   return <div className={s.screen}>
-    <DetailFrame title={title} subtitle={`个人月度复盘 · 对照自己的 ${month} 月 Mission Card${review.draftSource ? ` · 草稿：${SOURCE_TEXT[review.draftSource]}` : ""}`} onBack={() => workspace.close()}
+    <DetailFrame title={title} subtitle={`个人月度复盘 · 对照自己的 ${month} 月 Mission Card${review.draftSource === "import" ? " · 从飞书导入" : review.draftSource ? ` · 草稿：${SOURCE_TEXT[review.draftSource]}` : ""}`} onBack={() => workspace.close()}
       actions={<span className={r.chip} data-tone={tone(review.status)}>{personalStatusText(review.status, isSelf)}</span>}>
       <div className={s.content}>
         <div className={s.document}>
@@ -189,7 +190,7 @@ export function PersonalReviewScreen({ initialReview }: { initialReview: TPerson
                         placeholder={FIELD_HINTS[field]} onChange={(event) => setDrafts((current) => ({ ...current, [field]: event.target.value }))} />
                     : <p id={`personal-${field}`}>{saved.text || <span className={s.missing}>{OPTIONAL_FIELDS.includes(field) ? "无" : "未填写"}</span>}</p>}
                   {fieldErrors[field] ? <p id={`personal-${field}-error`} className={s.proposalError}>这一栏还没写，提交前要写上</p> : null}
-                  {saved.sources.length ? <p className={r.sources}>依据：{saved.sources.join("；")}</p> : null}
+                  <Sources sources={saved.sources} />
                 </dd>
               </div>;
             })}

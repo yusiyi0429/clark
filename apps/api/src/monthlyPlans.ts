@@ -160,6 +160,7 @@ export function projectMonthlyPlanCard(row: MonthlyPlanRow, secret: string): TCa
         previousRunIds: row.generation.previousRunIds,
         error: row.generation.error,
         generatedAt: row.generation.generatedAt,
+        ...(row.generation.beforeReview ? { beforeReview: true as const } : {}),
       },
       confirmedAt: row.confirmed_at?.toISOString() ?? null,
     },
@@ -360,25 +361,40 @@ export async function executeRetryMonthlyPlanDraft(
       return planError(409, "MONTHLY_PLAN_DRAFT_RUNNING", "草案正在生成，请等待本轮结束后再重新生成");
     }
     const runId = randomUUID();
-    const startedAt = new Date().toISOString();
-    const previousRunIds = [...row.generation.previousRunIds];
-    if (row.generation.runId && !previousRunIds.includes(row.generation.runId)) previousRunIds.push(row.generation.runId);
-    const generation: TMonthlyPlanGeneration = {
-      status: "running",
-      pendingSince: startedAt,
-      runId,
-      previousRunIds,
-      error: null,
-      generatedAt: null,
-    };
     const updated = await updatePlan(
       client,
       row.id,
       "generation = $2::jsonb, version = version + 1, action_fingerprints = $3::jsonb",
-      [JSON.stringify(generation), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+      [JSON.stringify(rerunGeneration(row.generation, runId, new Date().toISOString())), JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
     );
     return { ...(await commit(client, updated, secret)), startDraft: { planId: row.id, runId } };
   });
+}
+
+/** 新一轮草案生成（重新生成草案与 LTO 决定后重新生成共用）：上一轮 runId 记进 previousRunIds。 */
+function rerunGeneration(current: TMonthlyPlanGeneration, runId: string, startedAt: string): TMonthlyPlanGeneration {
+  const previousRunIds = [...current.previousRunIds];
+  if (current.runId && !previousRunIds.includes(current.runId)) previousRunIds.push(current.runId);
+  return { status: "running", pendingSince: startedAt, runId, previousRunIds, error: null, generatedAt: null };
+}
+
+/**
+ * LTO 决定后的下月计划（调用方在事务内）。未签发、CEO 没改过草案也没核对过任何项、生成已结束时，转入重新生成，
+ * 调用方提交后执行 runId；否则不覆盖，标记「草案生成于复盘之前」，由 CEO 在计划页重新生成。还没有计划时返回 null。
+ */
+export async function redraftPlanAfterReview(q: Query, period: string, at: string): Promise<{ planId: string; runId: string | null } | null> {
+  const row = (await q(`SELECT ${monthlyPlanColumns()} FROM monthly_plans WHERE period = $1 FOR UPDATE`, [period])).rows[0] as MonthlyPlanRow | undefined;
+  if (!row) return null;
+  if (row.status === "confirmed") return { planId: row.id, runId: null };
+  const untouched = row.negotiation.edits.length === 0 && row.negotiation.checkedItemIds.length === 0;
+  if (untouched && (row.generation.status === "ready" || row.generation.status === "failed")) {
+    const runId = randomUUID();
+    await q("UPDATE monthly_plans SET generation = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1",
+      [row.id, JSON.stringify(rerunGeneration(row.generation, runId, at))]);
+    return { planId: row.id, runId };
+  }
+  await q(`UPDATE monthly_plans SET generation = generation || '{"beforeReview": true}'::jsonb, version = version + 1, updated_at = now() WHERE id = $1`, [row.id]);
+  return { planId: row.id, runId: null };
 }
 
 type DriMonthlyFeedbackResult =
