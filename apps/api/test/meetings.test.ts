@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { Pool } from "pg";
+import { Client } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import { Card, MeetingCardPayload, type TPreflightCandidate } from "@warmap/contracts";
 import { buildApp } from "../src/app.js";
@@ -87,15 +87,16 @@ async function execute(t: TestApp, cookie: string, actionId: string, input?: unk
 async function expectNoIdleInTransaction(t: TestApp): Promise<void> {
   const dbName = (await t.sql("SELECT current_database() AS db"))[0].db as string;
   const base = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
-  const probePool = new Pool({ connectionString: base.replace(/\/postgres$/, `/${dbName}`), max: 1 });
+  const probe = new Client({ connectionString: base.replace(/\/postgres$/, `/${dbName}`) });
   try {
-    const idle = await probePool.query(
+    await probe.connect();
+    const idle = await probe.query(
       "SELECT count(*)::int AS count FROM pg_stat_activity WHERE state LIKE 'idle in transaction%' AND datname = $1",
       [dbName],
     );
     expect(Number(idle.rows[0].count)).toBe(0);
   } finally {
-    await probePool.end();
+    await probe.end();
   }
 }
 
