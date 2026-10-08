@@ -234,7 +234,7 @@
       "code": "08-1",
       "title": "明确tokenhub第一期需求",
       "ownerId": "wang-chuangfeng",
-      "capabilityCode": "08",
+      "capabilityCode": "07",
       "battlefieldCodes": [
         "02"
       ],
@@ -258,7 +258,7 @@
       "code": "08-2",
       "title": "完成tokenhub第一期系统设计",
       "ownerId": "wang-chuangfeng",
-      "capabilityCode": "08",
+      "capabilityCode": "07",
       "battlefieldCodes": [
         "02"
       ],
@@ -282,7 +282,7 @@
       "code": "08-3",
       "title": "开发环境依赖项就绪",
       "ownerId": "wang-chuangfeng",
-      "capabilityCode": "08",
+      "capabilityCode": "07",
       "battlefieldCodes": [
         "02"
       ],
@@ -306,7 +306,7 @@
       "code": "07-1",
       "title": "识别组织能力 Gap 并形成补位决策",
       "ownerId": "qin-mengyi",
-      "capabilityCode": "07",
+      "capabilityCode": "08",
       "battlefieldCodes": [
         "01",
         "02",
@@ -343,7 +343,7 @@
       "code": "07-2",
       "title": "推动核心人才到岗",
       "ownerId": "qin-mengyi",
-      "capabilityCode": "07",
+      "capabilityCode": "08",
       "battlefieldCodes": [
         "01",
         "02",
@@ -379,7 +379,7 @@
       "code": "07-3",
       "title": "推动人才评价机制进入运行",
       "ownerId": "qin-mengyi",
-      "capabilityCode": "07",
+      "capabilityCode": "08",
       "battlefieldCodes": [
         "01",
         "02",
@@ -414,7 +414,7 @@
       "code": "07-4",
       "title": "推动长期激励机制进入运行",
       "ownerId": "qin-mengyi",
-      "capabilityCode": "07",
+      "capabilityCode": "08",
       "battlefieldCodes": [
         "01",
         "02",
@@ -449,7 +449,7 @@
       "code": "07-5",
       "title": "建立新人加入与融入机制",
       "ownerId": "qin-mengyi",
-      "capabilityCode": "07",
+      "capabilityCode": "08",
       "battlefieldCodes": [
         "01",
         "02",
