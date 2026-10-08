@@ -48,7 +48,7 @@ export async function readMemberWork(q: Query, people: MemoryPerson[], secret: s
   for (const card of missionCards) participating.add(card.battlefieldId);
   return { deciders, work: {
     period, planStatus: plan?.status ?? "none", missions, missionCards,
-    battlefields: battlefields.filter((field) => field.owner_id === person.personId || participating.has(field.id))
+    battlefields: battlefields.filter((field) => field.owner_id === person.personId || participating.has(field.id) || field.participant_ids?.includes(person.personId))
       .map(({ id, name, owner_id }) => {
         const monthTarget = plan?.status === "confirmed" ? plan.battlefields.find((field) => field.battlefieldId === id)?.outcome ?? null : null;
         const monthTargetState = !plan ? "none" : plan.status === "confirmed" ? "confirmed" : "negotiating";

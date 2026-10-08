@@ -25,6 +25,7 @@ export type BattlefieldRow = {
   sort_order: number;
   name: string;
   owner_id: string;
+  participant_ids: string[] | null;
   six_month_outcome: string;
   missionAnchors: TMissionAnchor[];
 };
@@ -42,7 +43,7 @@ type ConfirmedPlanRow = {
 
 export async function listBattlefieldRows(q: Query): Promise<BattlefieldRow[]> {
   const result = await q(
-    "SELECT id, version, code, sort_order, name, owner_id, six_month_outcome, mission_anchors AS \"missionAnchors\" FROM battlefield_config ORDER BY sort_order, code, id",
+    "SELECT id, version, code, sort_order, name, owner_id, participant_ids, six_month_outcome, mission_anchors AS \"missionAnchors\" FROM battlefield_config ORDER BY sort_order, code, id",
   );
   return result.rows as BattlefieldRow[];
 }
