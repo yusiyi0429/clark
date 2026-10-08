@@ -54,3 +54,33 @@ Blocked by: —（与 01 并行；联调时需要 01 的个人复盘数据）
 - 契约改动后重新生成客户端；API / Web 类型检查与相关测试通过；新增 ADR，改口径文档。
 
 ## Comments
+
+### 2026-10-08 · 实现（分支 feat/october-launch-02，待合并与浏览器验收）
+
+做了什么
+
+- 迁移 057：`battlefield_config.participant_ids jsonb NULL`。起草名单 `missionCardParticipants`：NULL 时按原 `draftOwners` 规则推算（上月本战场的任务卡 Owner + 上月/本月本战场的 Mission Owner），存过以名单为准（空数组 = 没人拿卡），去掉角色含 `ceo` 的人和人员目录外的人。`GET /api/config/battlefields` 每个战场返回 `participantIds`、`participantsDerived`（推算按最新一份月度计划的月份，月底签下月计划时与起草一致）；`PATCH` 接受 `participantIds`，必须在人员目录里（`INVALID_PARTICIPANT`）。
+- 签发即起草：`monthly-plan.sign` 提交成功且不是重放时，路由调用 `startSignedMissionDrafts`：逐战场锁战场行，已有轮次跳过、名单为空跳过，建 `drafting` 轮次（`action_fingerprints` 为空，`draft_source.trail` 记 `{ by: "system", text: "CEO 签发后系统起草" }`），后台起草；起草没能开始只记日志，不影响签发结果。`executeSignMonthlyPlan` 本身未改。
+- 起草完成：本轮没有失败 → 同一事务里用与 DRI「交给本人确认」共用的 `openForOwners`（已签发目标、每卡至少一项任务、冻结目标快照）交给本人，留痕「起草完成后自动交给本人」；检查不过（如战场缺六个月目标）→ 停在草稿，原因写进 `draft_source.openProblem` 并作为 CEO/DRI 的待办句，补齐后战场 DRI 用原交付动作手动交给本人。有人失败 → 停在草稿，准备进度里标「起草未完成」，战场 DRI 点「重试起草」（沿用 `mission-round.draft` 重试），重试全部成功后同样自动交给本人。卡的群组时间线按留痕原文显示这两步，不记成任何人的操作。
+- 删除入口：首页与 CEO 只读 MCP 待办里的 slot（`listMissionRoundDraftCards`、`mergeMissionRoundCards`）、引导「可以整理任务卡草稿」、通知栏的整理流程与 `missionRoundDraft` 深链、契约 `MissionRoundDraftPayload`。正常流程里 DRI 看不到「交给本人确认」；它只在自动交付被检查拦下或人工导入占位草稿时出现。
+- 起草依据：`MISSION_CARD_KNOWN_MISSIONS_FILE`（`.env.example`、compose 只读 seed 挂载、`server.ts`），只取月份与轮次一致、有 markdown 的条目，按 personId 进起草输入 `knownMissions`；提示词加「以它为底，沿用拆分和标题……不要另起一套」。王创峰的飞书条目会进入 10 月起草输入。
+- Web：签发确认框（勾选「我确认签发」后）按战场列名单，月份取计划月份，名单为空标出来，签发不拦，「改参与者」打开战场配置并直接展开该战场的编辑；签发成功后刷新首页，通知栏随即出现起草进度。战场编辑弹层加「参与者」多选（不列 CEO，没保存过时注明「按上月 Mission 推算」，没动过不保存），≤599px 时弹层贴卡片两侧。草稿阶段的状态句、计时标签与成员战场页不再写「下发 / 整理」。
+- 文档：新增 ADR-0026；ADR-0022 开头加更新说明；`docs/contracts/mission-card-preparation-review.v0.1.md` 改「状态与权限」口径；`CONTEXT.md` 战场配置与轮次条目。
+
+验证（本机 Postgres 16，`TEST_PG_URL=postgres://postgres:postgres@localhost:54329/postgres npx vitest run …`）
+
+- API 24 个文件 202/202：missionRounds 25、missionDraftHome 2、missionCardNotices 4、personalReviews 10、config 23、monthlyPlanSign 10、migrate 6、missionCardDraftAgent 7、ceoMcp 3、personalMcp 3、onboarding 7、missionRoundRoutes 3、missionCardPreparation 12、personalMissionCards 21、journey 9、missionCardOwnerReview 13、missionRoundReview 8、missionCardAnnotations 12、missionCardCorrections 10、memberHome 5、personalMissionCardContext 2、missionCardAgentTools 3、missionRoundScheduler 2、missionRoundGuards 2。新增用例覆盖：签发后各战场按参与者起草并自动交给本人、重复启动/签发重放不再起草（HTTP 重放与函数重入两种）、部分失败停草稿且 CEO/DRI 都看得到、DRI 重试成功后自动交付、自动交付检查不过停草稿并给原因、名单推算/保存/CEO 排除、`knownMissions` 进输入且缺文件照常起草、首页与引导没有整理入口、DRI 动作里没有交给本人。
+- Web 51 个文件 491/491（config、cards、lib、missionCards、member、onboarding、shell、通知栏相关）；contracts 8 个文件 74/74。
+- 类型检查：contracts / api / web 通过；`pnpm --filter @warmap/web gen:client` 已重新生成客户端。
+
+没验证
+
+- world-02 导出：本沙箱没有 world-02 凭据和网络，renhao-202610-b、renhao-202610-c、siyi-202610-1 三条的 markdown 仍为 null；起草照常进行，这两人按签发目标、上月任务卡与复盘起草。需在本体重建前另行导出填入文件。
+- 真实模型跑战场 01：沙箱没有模型凭据，只用假 Agent 跑通流程，起草耗时与质量未记录。
+- 浏览器（CEO 签发 → 起草进度 → 成员收到卡；390 宽签发确认框与参与者编辑）：未做，由合并后验收。
+
+后续
+
+- 签发后才补参与者的战场不会自动起草，产品内也没有补起入口；签发提交到建轮次之间若进程中断同样不会补起（ADR-0026 限制）。
+- 三个战场同时起草，模型并发约等于参与者总数（10 月约 12 人）。
+- `MISSION_CARD_DRAFTS_DIR` 现已无代码读取，可另行删除。
