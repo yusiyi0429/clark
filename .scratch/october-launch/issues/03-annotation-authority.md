@@ -39,3 +39,30 @@ Blocked by: —（基于 7c1480f 的材料批注；尚未上线，不需要迁�
 - API / Web 类型检查与相关测试通过。
 
 ## Comments
+
+### 2026-10-08 · 实现完成，待浏览器验收（分支 feat/october-launch-03，4e42486）
+
+做了什么
+- 规则只在一处：`objectMaterials.materialEditor` = 上传者 + 对象负责人（执行事项 `tasks.owner_id`、会议 `meetings.lead_dri_id`、议题看 CEO 角色）。立即修改、采用 / 不采用、修改提议的收件与处理、恢复删掉的段落、对话里 `edit_material` 都调它；`editObjectMaterial` 落版前统一把关（403 `MATERIAL_FORBIDDEN`）。
+- 迁移 058：status 新增 `noted` / `declined`，`kept` 并入 `noted`；`material_annotations.decided_by`（采用或不采用的人，立即修改时是作者本人；CHECK：noted 当且仅当 decided_by 为空）；`material_edit_proposals.proposed_by`。
+- API：`POST …/annotations` 加 `intent: note | edit`（省略为 note；edit 只给能改的人，其他人 403，PDF / Word 400）；新增 `POST …/annotations/:annotationId/decide { decision: adopt | decline, reason? }`（只给能改的人；adopt → queued 并入队；已处理 409 `MATERIAL_ANNOTATION_DECIDED`）。
+- 契约：`MaterialView` 加 `canEdit`、`pending`；`MaterialAnnotationView` 加 `decidedBy`、`stale`、`canDecide`、`canApply`；`MaterialEditProposalView` 加 `proposedBy`；新增 `DecideMaterialAnnotationRequest`；已重新生成 Web 客户端。
+- 队列：按采用人的权限改，这一版 `requested_by` 记采用人，提出人经 `annotation_id` 取批注作者；别人提的批注摘要写「按某某的批注：…」。
+- 对话：本人能改这里至少一份材料才有 `edit_material`；不能改的人只有 `propose_material_edit`，收件人是上传者，对象负责人也能看到并处理；`list_materials` 与 `viewingMaterial` 带 `canEdit`；CEO / DRI 提示词共用同一段。
+- Web：选区「保存 / 立即修改」（任务卡同款按钮和文案），其他人只有「保存」；批注列表里其他人看到「待{上传者}处理」，能改的人在别人的批注上「采用 / 不采用」（原因可不填）、在自己保存的上「立即修改」；不采用的收起成一行，悬停或点一下展开；「原文已改」；材料下拉显示待处理条数；修订悬停写「某某采用」；别人提的修改提议写「某某在对话里提议修改」。
+
+验证
+- API：`TEST_PG_URL=postgres://postgres:postgres@localhost:54329/postgres npx vitest run test/materialAnnotations.test.ts test/piConversationRuntime.test.ts test/objectMaterials.test.ts test/migrate.test.ts`，4 个文件 44 条通过（新增「材料批注按谁写的区分」3 条、对话门 1 条）。
+- 变异检查：放开立即修改的门、提议收件人改回本人、总给 `edit_material`、去掉落版把关，对应 3 条用例都失败；还原后通过。
+- Web：`npx vitest run src/components/materials src/components/shell/materialMenu.test.tsx`，4 个文件 19 条通过；会议、议题、对话相关 6 个文件 97 条回归通过。
+- `pnpm --filter @warmap/contracts typecheck`、`@warmap/api`、`@warmap/web` 均通过。
+
+未验证
+- 浏览器：上传者、推进人、普通协作者三种身份在执行事项材料上各走一遍、手机 390 宽，按约定由 lead 合并后做。
+- 真实模型下采用后的改写效果（测试用桩 Agent）。
+
+判断与后续
+- 「修订表记录 adopted_by」没有给 `material_revisions` 加列：采用人存在 `material_annotations.decided_by`（排队时就要用，no_change / failed 没有修订也要显示），落版时 `requested_by` 即采用人，提出人经 `annotation_id` 关联，不重复存。
+- 恢复删掉的段落也只给能改的人（同一道门，落版把关已覆盖）。
+- 下拉待处理条数只数别人保存、等本人采用 / 不采用的批注，不数修改提议；不能改的人提的修改提议没有通知，能改的人打开那份材料才看到，后续可补群消息或计数。
+- 「原文已改」：批注写在旧版，且选中的文字在最新版里找不到（去掉标签、实体、链接地址和列表序号后只比字母和数字）。
