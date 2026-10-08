@@ -1,0 +1,1064 @@
+{
+  "renhao-202610-b": [
+    {
+      "object_id": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2",
+      "business": {
+        "object_id": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2",
+        "object_type": "Mission",
+        "type_display_name": "Mission",
+        "category": {
+          "id": "business_object",
+          "display_name": "业务对象"
+        },
+        "candidate": false,
+        "version": 2,
+        "revision_id": "4639bb05-08fd-412a-af70-e8628dc801d3",
+        "object_version": 2,
+        "title": "Ontology & Data Grounding",
+        "attributes": {
+          "core_battle": false,
+          "responsible": "35d64f99-c846-4ae3-a2ca-ae6444be88f0",
+          "external_refs": []
+        },
+        "relations": [
+          {
+            "field": "goal_ref",
+            "relation": "serves",
+            "value": {
+              "block": null,
+              "component": null,
+              "object_id": "f5e7cf4f-b13a-490e-a4a6-34bfbf3d14ae",
+              "revision_id": "53b1e5d5-2011-438d-bf34-9280bc4663a1",
+              "object_version": 1,
+              "ref": "f5e7cf4f-b13a-490e-a4a6-34bfbf3d14ae@1"
+            }
+          },
+          {
+            "field": "depends_on",
+            "relation": "depends_on",
+            "value": []
+          },
+          {
+            "field": "contributes_to",
+            "relation": "contributes_to",
+            "value": []
+          }
+        ],
+        "referenced_by": [],
+        "supersedes": {
+          "object_id": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2",
+          "object_version": 1,
+          "revision_id": "972dcd56-7fa5-4712-9d21-9b8aafe8b138",
+          "block": null,
+          "component": null,
+          "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@1"
+        },
+        "blocks": [
+          {
+            "id": "definition",
+            "display_name": "战役定义",
+            "kind": "definition",
+            "class": "formal",
+            "value": {
+              "refs": [],
+              "text": "",
+              "artifacts": [],
+              "components": [
+                {
+                  "id": "outcome",
+                  "refs": [],
+                  "text": "用 M1A / CEO Agent 跑通真实数据读取、必要蒸馏、候选写入、人工确认、正式写回及更新后再次调用；数据有来源、业务确认人、维护责任和实际使用证据。",
+                  "type": "outcome",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#definition/outcome"
+                },
+                {
+                  "id": "ac-1",
+                  "refs": [],
+                  "text": "M1A 必需数据有来源、状态、更新方式和消费模块记录",
+                  "type": "acceptance_criterion",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#definition/ac-1"
+                },
+                {
+                  "id": "ac-2",
+                  "refs": [],
+                  "text": "读取与蒸馏服务接入真实产品，未经确认的候选不得进入正式事实",
+                  "type": "acceptance_criterion",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#definition/ac-2"
+                },
+                {
+                  "id": "ac-3",
+                  "refs": [],
+                  "text": "至少一条完整确认写回及数据更新后再次调用记录",
+                  "type": "acceptance_criterion",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#definition/ac-3"
+                },
+                {
+                  "id": "ac-4",
+                  "refs": [],
+                  "text": "检查缺失、过期、写入失败等情况并明确处理人，仅有 Schema、接口或方案不算达成",
+                  "type": "acceptance_criterion",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#definition/ac-4"
+                }
+              ]
+            },
+            "empty": false,
+            "text": "",
+            "components": [
+              {
+                "id": "outcome",
+                "refs": [],
+                "text": "用 M1A / CEO Agent 跑通真实数据读取、必要蒸馏、候选写入、人工确认、正式写回及更新后再次调用；数据有来源、业务确认人、维护责任和实际使用证据。",
+                "type": "outcome",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#definition/outcome"
+              },
+              {
+                "id": "ac-1",
+                "refs": [],
+                "text": "M1A 必需数据有来源、状态、更新方式和消费模块记录",
+                "type": "acceptance_criterion",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#definition/ac-1"
+              },
+              {
+                "id": "ac-2",
+                "refs": [],
+                "text": "读取与蒸馏服务接入真实产品，未经确认的候选不得进入正式事实",
+                "type": "acceptance_criterion",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#definition/ac-2"
+              },
+              {
+                "id": "ac-3",
+                "refs": [],
+                "text": "至少一条完整确认写回及数据更新后再次调用记录",
+                "type": "acceptance_criterion",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#definition/ac-3"
+              },
+              {
+                "id": "ac-4",
+                "refs": [],
+                "text": "检查缺失、过期、写入失败等情况并明确处理人，仅有 Schema、接口或方案不算达成",
+                "type": "acceptance_criterion",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#definition/ac-4"
+              }
+            ],
+            "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#definition"
+          },
+          {
+            "id": "mission_plan",
+            "display_name": "Mission 计划",
+            "kind": "definition",
+            "class": "formal",
+            "value": null,
+            "empty": true,
+            "text": "Mission 计划：暂无",
+            "components": [],
+            "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#mission_plan"
+          },
+          {
+            "id": "execution_plan",
+            "display_name": "Task 全景",
+            "kind": "plan",
+            "class": "activity",
+            "value": null,
+            "empty": true,
+            "text": "Task 全景：暂无",
+            "components": [],
+            "ref": "f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2#execution_plan"
+          }
+        ],
+        "component_ledger": [
+          {
+            "id": "outcome",
+            "type": "outcome",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          },
+          {
+            "id": "ac-1",
+            "type": "acceptance_criterion",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          },
+          {
+            "id": "ac-2",
+            "type": "acceptance_criterion",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          },
+          {
+            "id": "ac-3",
+            "type": "acceptance_criterion",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          },
+          {
+            "id": "ac-4",
+            "type": "acceptance_criterion",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          }
+        ],
+        "projection": {
+          "id": "task_expectations",
+          "display_name": "Task 预期结果与质量标准",
+          "items": []
+        },
+        "formal": {
+          "lifecycle_status": "draft",
+          "effective_revision_id": null
+        },
+        "round": null
+      },
+      "identity": {
+        "responsible": {
+          "roles": {
+            "human": "OWNER"
+          },
+          "source": "attribute",
+          "principals": [
+            {
+              "principal_id": "35d64f99-c846-4ae3-a2ca-ae6444be88f0",
+              "principal_type": "human",
+              "display_name": "刘人豪"
+            }
+          ]
+        },
+        "delegations": [
+          {
+            "event_id": "1bc680df-0b40-4574-91c2-29186396217a",
+            "ref": "event:1bc680df-0b40-4574-91c2-29186396217a",
+            "grantor": {
+              "principal_id": "f7788d18-a7a0-454f-a835-504d3c56280d",
+              "principal_type": "human",
+              "display_name": "刘明华"
+            },
+            "delegate": {
+              "principal_id": "9cb5da83-d5df-4a05-9f41-afe44e3f4c4a",
+              "principal_type": "agent",
+              "display_name": "天枢服务主体"
+            },
+            "families": [
+              "gate",
+              "assign",
+              "lifecycle",
+              "issue"
+            ],
+            "domain_ids": [
+              "fc9e6f1e-0bec-4076-8d0d-2686c8ea26fa",
+              "88674067-189b-4457-ba20-7de2df9f3768"
+            ],
+            "valid_until": "2026-10-31T15:59:59Z",
+            "granted_at": "2026-09-30T12:01:11.739926Z"
+          },
+          {
+            "event_id": "b71a2319-78b6-4af5-92f6-92cca1196bf0",
+            "ref": "event:b71a2319-78b6-4af5-92f6-92cca1196bf0",
+            "grantor": {
+              "principal_id": "41b0a17f-a6eb-4fb2-9fb2-97e471a673ae",
+              "principal_type": "human",
+              "display_name": "于斯一"
+            },
+            "delegate": {
+              "principal_id": "9cb5da83-d5df-4a05-9f41-afe44e3f4c4a",
+              "principal_type": "agent",
+              "display_name": "天枢服务主体"
+            },
+            "families": [
+              "gate",
+              "assign",
+              "lifecycle",
+              "issue"
+            ],
+            "domain_ids": [
+              "88674067-189b-4457-ba20-7de2df9f3768"
+            ],
+            "valid_until": "2026-10-31T15:59:59Z",
+            "granted_at": "2026-09-30T12:01:13.300297Z"
+          },
+          {
+            "event_id": "62547934-b46a-4074-8118-30f16729f90a",
+            "ref": "event:62547934-b46a-4074-8118-30f16729f90a",
+            "grantor": {
+              "principal_id": "35d64f99-c846-4ae3-a2ca-ae6444be88f0",
+              "principal_type": "human",
+              "display_name": "刘人豪"
+            },
+            "delegate": {
+              "principal_id": "9cb5da83-d5df-4a05-9f41-afe44e3f4c4a",
+              "principal_type": "agent",
+              "display_name": "天枢服务主体"
+            },
+            "families": [
+              "gate",
+              "assign",
+              "lifecycle",
+              "issue"
+            ],
+            "domain_ids": [
+              "88674067-189b-4457-ba20-7de2df9f3768"
+            ],
+            "valid_until": "2026-10-31T15:59:59Z",
+            "granted_at": "2026-09-30T12:01:13.458945Z"
+          }
+        ]
+      },
+      "records": {
+        "lifecycle": {
+          "status": "draft",
+          "display_name": "草稿",
+          "event_id": "d5892163-a66c-4617-8816-fe87a75a0efd"
+        },
+        "latest_state": null,
+        "confirmed_review": null,
+        "open_issues": []
+      },
+      "protocol": {
+        "registration_status": "registered",
+        "interpretation_status": "world_v0_2",
+        "protocol_id": "tkos.world",
+        "contract_version": "tkos.world/0.2",
+        "method_profile_ref": {
+          "profile_id": "urn:tkos:world",
+          "revision": "0.2.0",
+          "canonical_hash": "a0ab401d435353bc21748ba955cc5c1629e119b3533cb3494eaaa6dc0f9a57b6"
+        },
+        "binding_version": 1,
+        "record_origin": "synthetic",
+        "note": "World 0.2 draft; objects read in three groups (business objects, identity projection, time records) with an append-only event log."
+      }
+    }
+  ],
+  "renhao-202610-c": [
+    {
+      "object_id": "82c852a2-41d9-49c5-b475-d730ec70128f",
+      "business": {
+        "object_id": "82c852a2-41d9-49c5-b475-d730ec70128f",
+        "object_type": "Mission",
+        "type_display_name": "Mission",
+        "category": {
+          "id": "business_object",
+          "display_name": "业务对象"
+        },
+        "candidate": false,
+        "version": 2,
+        "revision_id": "2b7eef95-45db-45d2-8b1b-680216e8990e",
+        "object_version": 2,
+        "title": "ENO / Engine Blueprint",
+        "attributes": {
+          "core_battle": false,
+          "responsible": "35d64f99-c846-4ae3-a2ca-ae6444be88f0",
+          "external_refs": []
+        },
+        "relations": [
+          {
+            "field": "goal_ref",
+            "relation": "serves",
+            "value": {
+              "block": null,
+              "component": null,
+              "object_id": "f5e7cf4f-b13a-490e-a4a6-34bfbf3d14ae",
+              "revision_id": "53b1e5d5-2011-438d-bf34-9280bc4663a1",
+              "object_version": 1,
+              "ref": "f5e7cf4f-b13a-490e-a4a6-34bfbf3d14ae@1"
+            }
+          },
+          {
+            "field": "depends_on",
+            "relation": "depends_on",
+            "value": []
+          },
+          {
+            "field": "contributes_to",
+            "relation": "contributes_to",
+            "value": []
+          }
+        ],
+        "referenced_by": [],
+        "supersedes": {
+          "object_id": "82c852a2-41d9-49c5-b475-d730ec70128f",
+          "object_version": 1,
+          "revision_id": "42aab2dd-7a5f-4cd8-8007-7d188c102ea7",
+          "block": null,
+          "component": null,
+          "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@1"
+        },
+        "blocks": [
+          {
+            "id": "definition",
+            "display_name": "战役定义",
+            "kind": "definition",
+            "class": "formal",
+            "value": {
+              "refs": [],
+              "text": "",
+              "artifacts": [],
+              "components": [
+                {
+                  "id": "outcome",
+                  "refs": [],
+                  "text": "形成 ENO / Engine Blueprint，说明 ENO 在 TKOS 中的角色，以及 Ontology、Context、Memory、Runtime、Harness、Eval 的边界与关系。",
+                  "type": "outcome",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@2#definition/outcome"
+                },
+                {
+                  "id": "ac-1",
+                  "refs": [],
+                  "text": "解释本月模块与记忆服务的位置、共用能力和产品专属能力",
+                  "type": "acceptance_criterion",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@2#definition/ac-1"
+                },
+                {
+                  "id": "ac-2",
+                  "refs": [],
+                  "text": "给出做与不做的决定及理由，经产品、E&O DRI 及 CEO 评审边界与取舍",
+                  "type": "acceptance_criterion",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@2#definition/ac-2"
+                },
+                {
+                  "id": "ac-3",
+                  "refs": [],
+                  "text": "与运行实际一致，区分已实现、已验证、本月必做和后续演进",
+                  "type": "acceptance_criterion",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@2#definition/ac-3"
+                }
+              ]
+            },
+            "empty": false,
+            "text": "",
+            "components": [
+              {
+                "id": "outcome",
+                "refs": [],
+                "text": "形成 ENO / Engine Blueprint，说明 ENO 在 TKOS 中的角色，以及 Ontology、Context、Memory、Runtime、Harness、Eval 的边界与关系。",
+                "type": "outcome",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@2#definition/outcome"
+              },
+              {
+                "id": "ac-1",
+                "refs": [],
+                "text": "解释本月模块与记忆服务的位置、共用能力和产品专属能力",
+                "type": "acceptance_criterion",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@2#definition/ac-1"
+              },
+              {
+                "id": "ac-2",
+                "refs": [],
+                "text": "给出做与不做的决定及理由，经产品、E&O DRI 及 CEO 评审边界与取舍",
+                "type": "acceptance_criterion",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@2#definition/ac-2"
+              },
+              {
+                "id": "ac-3",
+                "refs": [],
+                "text": "与运行实际一致，区分已实现、已验证、本月必做和后续演进",
+                "type": "acceptance_criterion",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@2#definition/ac-3"
+              }
+            ],
+            "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@2#definition"
+          },
+          {
+            "id": "mission_plan",
+            "display_name": "Mission 计划",
+            "kind": "definition",
+            "class": "formal",
+            "value": null,
+            "empty": true,
+            "text": "Mission 计划：暂无",
+            "components": [],
+            "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@2#mission_plan"
+          },
+          {
+            "id": "execution_plan",
+            "display_name": "Task 全景",
+            "kind": "plan",
+            "class": "activity",
+            "value": null,
+            "empty": true,
+            "text": "Task 全景：暂无",
+            "components": [],
+            "ref": "82c852a2-41d9-49c5-b475-d730ec70128f@2#execution_plan"
+          }
+        ],
+        "component_ledger": [
+          {
+            "id": "outcome",
+            "type": "outcome",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          },
+          {
+            "id": "ac-1",
+            "type": "acceptance_criterion",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          },
+          {
+            "id": "ac-2",
+            "type": "acceptance_criterion",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          },
+          {
+            "id": "ac-3",
+            "type": "acceptance_criterion",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          }
+        ],
+        "projection": {
+          "id": "task_expectations",
+          "display_name": "Task 预期结果与质量标准",
+          "items": []
+        },
+        "formal": {
+          "lifecycle_status": "draft",
+          "effective_revision_id": null
+        },
+        "round": null
+      },
+      "identity": {
+        "responsible": {
+          "roles": {
+            "human": "OWNER"
+          },
+          "source": "attribute",
+          "principals": [
+            {
+              "principal_id": "35d64f99-c846-4ae3-a2ca-ae6444be88f0",
+              "principal_type": "human",
+              "display_name": "刘人豪"
+            }
+          ]
+        },
+        "delegations": [
+          {
+            "event_id": "1bc680df-0b40-4574-91c2-29186396217a",
+            "ref": "event:1bc680df-0b40-4574-91c2-29186396217a",
+            "grantor": {
+              "principal_id": "f7788d18-a7a0-454f-a835-504d3c56280d",
+              "principal_type": "human",
+              "display_name": "刘明华"
+            },
+            "delegate": {
+              "principal_id": "9cb5da83-d5df-4a05-9f41-afe44e3f4c4a",
+              "principal_type": "agent",
+              "display_name": "天枢服务主体"
+            },
+            "families": [
+              "gate",
+              "assign",
+              "lifecycle",
+              "issue"
+            ],
+            "domain_ids": [
+              "fc9e6f1e-0bec-4076-8d0d-2686c8ea26fa",
+              "88674067-189b-4457-ba20-7de2df9f3768"
+            ],
+            "valid_until": "2026-10-31T15:59:59Z",
+            "granted_at": "2026-09-30T12:01:11.739926Z"
+          },
+          {
+            "event_id": "b71a2319-78b6-4af5-92f6-92cca1196bf0",
+            "ref": "event:b71a2319-78b6-4af5-92f6-92cca1196bf0",
+            "grantor": {
+              "principal_id": "41b0a17f-a6eb-4fb2-9fb2-97e471a673ae",
+              "principal_type": "human",
+              "display_name": "于斯一"
+            },
+            "delegate": {
+              "principal_id": "9cb5da83-d5df-4a05-9f41-afe44e3f4c4a",
+              "principal_type": "agent",
+              "display_name": "天枢服务主体"
+            },
+            "families": [
+              "gate",
+              "assign",
+              "lifecycle",
+              "issue"
+            ],
+            "domain_ids": [
+              "88674067-189b-4457-ba20-7de2df9f3768"
+            ],
+            "valid_until": "2026-10-31T15:59:59Z",
+            "granted_at": "2026-09-30T12:01:13.300297Z"
+          },
+          {
+            "event_id": "62547934-b46a-4074-8118-30f16729f90a",
+            "ref": "event:62547934-b46a-4074-8118-30f16729f90a",
+            "grantor": {
+              "principal_id": "35d64f99-c846-4ae3-a2ca-ae6444be88f0",
+              "principal_type": "human",
+              "display_name": "刘人豪"
+            },
+            "delegate": {
+              "principal_id": "9cb5da83-d5df-4a05-9f41-afe44e3f4c4a",
+              "principal_type": "agent",
+              "display_name": "天枢服务主体"
+            },
+            "families": [
+              "gate",
+              "assign",
+              "lifecycle",
+              "issue"
+            ],
+            "domain_ids": [
+              "88674067-189b-4457-ba20-7de2df9f3768"
+            ],
+            "valid_until": "2026-10-31T15:59:59Z",
+            "granted_at": "2026-09-30T12:01:13.458945Z"
+          }
+        ]
+      },
+      "records": {
+        "lifecycle": {
+          "status": "draft",
+          "display_name": "草稿",
+          "event_id": "681057a3-5900-4a29-9f15-f4e36c579bb3"
+        },
+        "latest_state": null,
+        "confirmed_review": null,
+        "open_issues": []
+      },
+      "protocol": {
+        "registration_status": "registered",
+        "interpretation_status": "world_v0_2",
+        "protocol_id": "tkos.world",
+        "contract_version": "tkos.world/0.2",
+        "method_profile_ref": {
+          "profile_id": "urn:tkos:world",
+          "revision": "0.2.0",
+          "canonical_hash": "a0ab401d435353bc21748ba955cc5c1629e119b3533cb3494eaaa6dc0f9a57b6"
+        },
+        "binding_version": 1,
+        "record_origin": "synthetic",
+        "note": "World 0.2 draft; objects read in three groups (business objects, identity projection, time records) with an append-only event log."
+      }
+    }
+  ],
+  "siyi-202610-1": [
+    {
+      "object_id": "7885a696-3b68-41af-b346-7f71f6a4a9b4",
+      "business": {
+        "object_id": "7885a696-3b68-41af-b346-7f71f6a4a9b4",
+        "object_type": "Mission",
+        "type_display_name": "Mission",
+        "category": {
+          "id": "business_object",
+          "display_name": "业务对象"
+        },
+        "candidate": false,
+        "version": 2,
+        "revision_id": "cab81f08-1658-4081-945f-15f42aa9df21",
+        "object_version": 2,
+        "title": "可信 Context / Memory 与真实 Agent 读写闭环",
+        "attributes": {
+          "core_battle": false,
+          "responsible": "41b0a17f-a6eb-4fb2-9fb2-97e471a673ae",
+          "external_refs": []
+        },
+        "relations": [
+          {
+            "field": "goal_ref",
+            "relation": "serves",
+            "value": {
+              "block": null,
+              "component": null,
+              "object_id": "f5e7cf4f-b13a-490e-a4a6-34bfbf3d14ae",
+              "revision_id": "53b1e5d5-2011-438d-bf34-9280bc4663a1",
+              "object_version": 1,
+              "ref": "f5e7cf4f-b13a-490e-a4a6-34bfbf3d14ae@1"
+            }
+          },
+          {
+            "field": "depends_on",
+            "relation": "depends_on",
+            "value": []
+          },
+          {
+            "field": "contributes_to",
+            "relation": "contributes_to",
+            "value": []
+          }
+        ],
+        "referenced_by": [],
+        "supersedes": {
+          "object_id": "7885a696-3b68-41af-b346-7f71f6a4a9b4",
+          "object_version": 1,
+          "revision_id": "d61c00a6-9055-410b-952d-db87370118db",
+          "block": null,
+          "component": null,
+          "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@1"
+        },
+        "blocks": [
+          {
+            "id": "definition",
+            "display_name": "战役定义",
+            "kind": "definition",
+            "class": "formal",
+            "value": {
+              "refs": [],
+              "text": "",
+              "artifacts": [],
+              "components": [
+                {
+                  "id": "outcome",
+                  "refs": [],
+                  "text": "月底形成战略层与经营层 Ontology v0.1，将 8–9 月真实数据纳入统一 Context / Memory，跑通至少一条授权可追溯的真实 Agent 读写闭环，并完成最小部署与缺口报告。",
+                  "type": "outcome",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#definition/outcome"
+                },
+                {
+                  "id": "ac-1",
+                  "refs": [],
+                  "text": "两层 Ontology 承载真实业务，完成 Design Pack、Action Catalog、Evidence Policy 评审",
+                  "type": "acceptance_criterion",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#definition/ac-1"
+                },
+                {
+                  "id": "ac-2",
+                  "refs": [],
+                  "text": "约定范围内的 8–9 月真实数据进入统一 Context / Memory，来源、责任人、时间、版本、权限可追溯",
+                  "type": "acceptance_criterion",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#definition/ac-2"
+                },
+                {
+                  "id": "ac-3",
+                  "refs": [],
+                  "text": "至少一条「真实输入 → 授权 Context → Agent 提案 → 人工确认 → 版本写回 → Receipt / Audit」的完整闭环",
+                  "type": "acceptance_criterion",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#definition/ac-3"
+                },
+                {
+                  "id": "ac-4",
+                  "refs": [],
+                  "text": "治理边界验证",
+                  "type": "acceptance_criterion",
+                  "scope": null,
+                  "artifacts": [],
+                  "attributes": {},
+                  "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#definition/ac-4"
+                }
+              ]
+            },
+            "empty": false,
+            "text": "",
+            "components": [
+              {
+                "id": "outcome",
+                "refs": [],
+                "text": "月底形成战略层与经营层 Ontology v0.1，将 8–9 月真实数据纳入统一 Context / Memory，跑通至少一条授权可追溯的真实 Agent 读写闭环，并完成最小部署与缺口报告。",
+                "type": "outcome",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#definition/outcome"
+              },
+              {
+                "id": "ac-1",
+                "refs": [],
+                "text": "两层 Ontology 承载真实业务，完成 Design Pack、Action Catalog、Evidence Policy 评审",
+                "type": "acceptance_criterion",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#definition/ac-1"
+              },
+              {
+                "id": "ac-2",
+                "refs": [],
+                "text": "约定范围内的 8–9 月真实数据进入统一 Context / Memory，来源、责任人、时间、版本、权限可追溯",
+                "type": "acceptance_criterion",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#definition/ac-2"
+              },
+              {
+                "id": "ac-3",
+                "refs": [],
+                "text": "至少一条「真实输入 → 授权 Context → Agent 提案 → 人工确认 → 版本写回 → Receipt / Audit」的完整闭环",
+                "type": "acceptance_criterion",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#definition/ac-3"
+              },
+              {
+                "id": "ac-4",
+                "refs": [],
+                "text": "治理边界验证",
+                "type": "acceptance_criterion",
+                "scope": null,
+                "artifacts": [],
+                "attributes": {},
+                "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#definition/ac-4"
+              }
+            ],
+            "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#definition"
+          },
+          {
+            "id": "mission_plan",
+            "display_name": "Mission 计划",
+            "kind": "definition",
+            "class": "formal",
+            "value": null,
+            "empty": true,
+            "text": "Mission 计划：暂无",
+            "components": [],
+            "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#mission_plan"
+          },
+          {
+            "id": "execution_plan",
+            "display_name": "Task 全景",
+            "kind": "plan",
+            "class": "activity",
+            "value": null,
+            "empty": true,
+            "text": "Task 全景：暂无",
+            "components": [],
+            "ref": "7885a696-3b68-41af-b346-7f71f6a4a9b4@2#execution_plan"
+          }
+        ],
+        "component_ledger": [
+          {
+            "id": "outcome",
+            "type": "outcome",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          },
+          {
+            "id": "ac-1",
+            "type": "acceptance_criterion",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          },
+          {
+            "id": "ac-2",
+            "type": "acceptance_criterion",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          },
+          {
+            "id": "ac-3",
+            "type": "acceptance_criterion",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          },
+          {
+            "id": "ac-4",
+            "type": "acceptance_criterion",
+            "block": "definition",
+            "added_in_version": 1,
+            "removed_in_version": null
+          }
+        ],
+        "projection": {
+          "id": "task_expectations",
+          "display_name": "Task 预期结果与质量标准",
+          "items": []
+        },
+        "formal": {
+          "lifecycle_status": "draft",
+          "effective_revision_id": null
+        },
+        "round": null
+      },
+      "identity": {
+        "responsible": {
+          "roles": {
+            "human": "OWNER"
+          },
+          "source": "attribute",
+          "principals": [
+            {
+              "principal_id": "41b0a17f-a6eb-4fb2-9fb2-97e471a673ae",
+              "principal_type": "human",
+              "display_name": "于斯一"
+            }
+          ]
+        },
+        "delegations": [
+          {
+            "event_id": "1bc680df-0b40-4574-91c2-29186396217a",
+            "ref": "event:1bc680df-0b40-4574-91c2-29186396217a",
+            "grantor": {
+              "principal_id": "f7788d18-a7a0-454f-a835-504d3c56280d",
+              "principal_type": "human",
+              "display_name": "刘明华"
+            },
+            "delegate": {
+              "principal_id": "9cb5da83-d5df-4a05-9f41-afe44e3f4c4a",
+              "principal_type": "agent",
+              "display_name": "天枢服务主体"
+            },
+            "families": [
+              "gate",
+              "assign",
+              "lifecycle",
+              "issue"
+            ],
+            "domain_ids": [
+              "fc9e6f1e-0bec-4076-8d0d-2686c8ea26fa",
+              "88674067-189b-4457-ba20-7de2df9f3768"
+            ],
+            "valid_until": "2026-10-31T15:59:59Z",
+            "granted_at": "2026-09-30T12:01:11.739926Z"
+          },
+          {
+            "event_id": "b71a2319-78b6-4af5-92f6-92cca1196bf0",
+            "ref": "event:b71a2319-78b6-4af5-92f6-92cca1196bf0",
+            "grantor": {
+              "principal_id": "41b0a17f-a6eb-4fb2-9fb2-97e471a673ae",
+              "principal_type": "human",
+              "display_name": "于斯一"
+            },
+            "delegate": {
+              "principal_id": "9cb5da83-d5df-4a05-9f41-afe44e3f4c4a",
+              "principal_type": "agent",
+              "display_name": "天枢服务主体"
+            },
+            "families": [
+              "gate",
+              "assign",
+              "lifecycle",
+              "issue"
+            ],
+            "domain_ids": [
+              "88674067-189b-4457-ba20-7de2df9f3768"
+            ],
+            "valid_until": "2026-10-31T15:59:59Z",
+            "granted_at": "2026-09-30T12:01:13.300297Z"
+          },
+          {
+            "event_id": "62547934-b46a-4074-8118-30f16729f90a",
+            "ref": "event:62547934-b46a-4074-8118-30f16729f90a",
+            "grantor": {
+              "principal_id": "35d64f99-c846-4ae3-a2ca-ae6444be88f0",
+              "principal_type": "human",
+              "display_name": "刘人豪"
+            },
+            "delegate": {
+              "principal_id": "9cb5da83-d5df-4a05-9f41-afe44e3f4c4a",
+              "principal_type": "agent",
+              "display_name": "天枢服务主体"
+            },
+            "families": [
+              "gate",
+              "assign",
+              "lifecycle",
+              "issue"
+            ],
+            "domain_ids": [
+              "88674067-189b-4457-ba20-7de2df9f3768"
+            ],
+            "valid_until": "2026-10-31T15:59:59Z",
+            "granted_at": "2026-09-30T12:01:13.458945Z"
+          }
+        ]
+      },
+      "records": {
+        "lifecycle": {
+          "status": "draft",
+          "display_name": "草稿",
+          "event_id": "f2f1212a-8fab-45d2-8883-a4a505536fdf"
+        },
+        "latest_state": null,
+        "confirmed_review": null,
+        "open_issues": []
+      },
+      "protocol": {
+        "registration_status": "registered",
+        "interpretation_status": "world_v0_2",
+        "protocol_id": "tkos.world",
+        "contract_version": "tkos.world/0.2",
+        "method_profile_ref": {
+          "profile_id": "urn:tkos:world",
+          "revision": "0.2.0",
+          "canonical_hash": "a0ab401d435353bc21748ba955cc5c1629e119b3533cb3494eaaa6dc0f9a57b6"
+        },
+        "binding_version": 1,
+        "record_origin": "synthetic",
+        "note": "World 0.2 draft; objects read in three groups (business objects, identity projection, time records) with an append-only event log."
+      }
+    }
+  ]
+}

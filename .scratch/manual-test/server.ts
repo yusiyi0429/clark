@@ -285,7 +285,9 @@ async function main() {
     await app.sql("INSERT INTO tasks (id,title,status,owner_id,created_by,due_date) VALUES ($1,$2,$3,$4,'meeting','2026-10-07')", [id, title, status, personId]);
     await app.sql("INSERT INTO task_members (task_id,person_id,role,added_by) VALUES ($1,$2,'owner','meeting')", [id, personId]);
   }
-  await setPlanStage("issued");
+  // TM_PLAN_STAGE=negotiating：停在未签发，好在界面上亲手签发（签发后系统自动起草，见 ADR-0026）。
+  const initialStage = process.env.TM_PLAN_STAGE === "negotiating" ? "negotiating" : "issued";
+  await setPlanStage(initialStage);
   async function roundAction(actionType: string, input: Record<string, unknown> = {}) {
     const { value, headers } = await projectAs("browserceo", "/api/cards/home");
     const round = value.cards.find((card: { kind: string; objectRef?: { type?: string }; payload?: { battlefieldId?: string } }) => card.kind === "mission-round" && card.objectRef?.type === (actionType === "draft" ? "mission-round-slot" : "mission-round") && card.payload?.battlefieldId === "growth");
@@ -308,7 +310,7 @@ async function main() {
   process.once("SIGINT", stop); process.once("SIGTERM", stop);
   await app.app.listen({ port: API_PORT, host: "127.0.0.1" });
   metadata = { fixtureId, ready: true, port: API_PORT, webPort: WEB_PORT, pid: process.pid, database, fixtureDirectory: fixtureDir,
-    now: now.toISOString(), planStage: "issued", planSigned: true, rounds: 0, memberId: "sun-mingze", driId: "browser-dri", noCardId: "browser-no-card", emptyId: "browser-empty", planId, lanOrigins };
+    now: now.toISOString(), planStage: initialStage, planSigned: initialStage === "issued", rounds: 0, memberId: "sun-mingze", driId: "browser-dri", noCardId: "browser-no-card", emptyId: "browser-empty", planId, lanOrigins };
   await writeJson(metadataFile, metadata);
   /** 时间机器没有模型：用 Agent 同一个修改函数，按上传者的要求改最近一份 Markdown，好看到修改标注和群里的说明。 */
   async function simulateMaterialEdit() {
