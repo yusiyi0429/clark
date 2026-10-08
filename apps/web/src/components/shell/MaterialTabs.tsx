@@ -34,6 +34,8 @@ export interface MaterialTab {
   /** 尚未开放的阅读视图仍可在菜单中说明，不允许切换。 */
   isDisabled?: boolean;
   hint?: string;
+  /** 等本人采用 / 不采用的批注条数（只给能改这份材料的人），下拉钮上显示合计。 */
+  count?: number;
 }
 
 /** 阅读区的选择：`current` 是此刻看的那一份；`material` 是最近看的那份材料，整场入口再按一次就回到它。 */
@@ -91,24 +93,27 @@ export function MaterialMenu({
 }) {
   const [open, setOpen] = useState(false);
   const current = tabs.find((tab) => tab.id === selected);
+  const pending = tabs.reduce((sum, tab) => sum + (tab.count ?? 0), 0);
   const pick = (run: () => void) => { setOpen(false); run(); };
   return (
     <Popover isOpen={open} onOpenChange={setOpen}>
       <Button variant="ghost" className={t.trigger} data-material-menu
-        aria-label={`${label}：${current ? `正在看 ${current.title}` : "没有在看材料"}，${switchLabel}`}>
+        aria-label={`${label}：${current ? `正在看 ${current.title}` : "没有在看材料"}${pending ? `，${pending} 条待处理` : ""}，${switchLabel}`}>
         <FileText size={15} strokeWidth={1.8} aria-hidden />
         <span className={t.label}>{current?.label ?? "材料"}</span>
+        {pending ? <span className={t.count} aria-hidden>{pending}</span> : null}
         <ChevronDown size={14} strokeWidth={2} aria-hidden className={t.chevron} />
       </Button>
       <Popover.Content placement="bottom end" offset={6} className={t.popover}>
         <TianshuPortalTheme>
           <Popover.Dialog className={t.menu} aria-label={label}>
             {tabs.map((tab) => (
-              <Button key={tab.id} variant="ghost" className={t.item} aria-label={tab.title} aria-current={tab.id === selected || undefined} isDisabled={tab.isDisabled}
+              <Button key={tab.id} variant="ghost" className={t.item} aria-label={tab.count ? `${tab.title}，${tab.count} 条待处理` : tab.title} aria-current={tab.id === selected || undefined} isDisabled={tab.isDisabled}
                 onPress={() => { if (!tab.isDisabled) pick(() => onSelect(tab.id)); }}>
                 <FileText size={15} strokeWidth={1.8} aria-hidden />
                 <span className={t.label}>{tab.label}</span>
                 {tab.hint ? <span className={t.hint}>{tab.hint}</span> : null}
+                {tab.count ? <span className={t.count} aria-hidden>{tab.count}</span> : null}
                 {tab.id === selected ? <Check size={15} strokeWidth={2} aria-hidden className={t.check} /> : null}
               </Button>
             ))}

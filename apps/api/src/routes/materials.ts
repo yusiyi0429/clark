@@ -1,12 +1,13 @@
 import { Type } from "@sinclair/typebox";
-import { CreateMaterialAnnotationRequest, DecideMaterialEditProposalRequest, MaterialObjectType, RestoreMaterialRemovedRequest, ThreadObjectId } from "@warmap/contracts";
+import { CreateMaterialAnnotationRequest, DecideMaterialAnnotationRequest, DecideMaterialEditProposalRequest, MaterialObjectType,
+  RestoreMaterialRemovedRequest, ThreadObjectId } from "@warmap/contracts";
 import { MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch, readStoredMaterial, type ObjectParsedMaterial } from "../materialParser.js";
 import { renderMaterialPreview } from "../materialPreview.js";
 import { personDisplayNames } from "../people.js";
 import { ObjectMaterialError, deleteObjectMaterial, getObjectMaterialDetail, listObjectMaterials, readObjectMaterial,
   uploadObjectMaterial, type MaterialViewer } from "../objectMaterials.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
-import { createMaterialAnnotation, decideMaterialProposal, restoreMaterialRemoved } from "../materialFeedback.js";
+import { createMaterialAnnotation, decideMaterialAnnotation, decideMaterialProposal, restoreMaterialRemoved } from "../materialFeedback.js";
 import { createMaterialAnnotationAgent, type MaterialAnnotationAgent } from "../materialAnnotationAgent.js";
 import { createMaterialAnnotationQueue } from "../materialAnnotationQueue.js";
 import { injectMaterialSelection } from "../materialSelection.js";
@@ -74,6 +75,14 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, anno
     schema: { params: itemParams, body: CreateMaterialAnnotationRequest } }, async (req, reply) => {
     try {
       const annotation = await createMaterialAnnotation(q, req.params, req.params.materialId, viewer(req.person!), req.body, names);
+      if (annotation.status === "queued") void queue.enqueue(req.params.materialId);
+      return { annotation };
+    } catch (cause) { return error(reply, cause); }
+  });
+  app.post("/api/materials/:objectType/:objectId/:materialId/annotations/:annotationId/decide", { preHandler: requirePerson,
+    schema: { params: Type.Composite([itemParams, Type.Object({ annotationId: Type.String({ format: "uuid" }) })]), body: DecideMaterialAnnotationRequest } }, async (req, reply) => {
+    try {
+      const annotation = await decideMaterialAnnotation(q, req.params, req.params.materialId, req.params.annotationId, viewer(req.person!), req.body, names);
       if (annotation.status === "queued") void queue.enqueue(req.params.materialId);
       return { annotation };
     } catch (cause) { return error(reply, cause); }

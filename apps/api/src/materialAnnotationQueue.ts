@@ -41,15 +41,17 @@ export function createMaterialAnnotationQueue(options: { pool: Pool; agent: Mate
         await q("UPDATE material_annotations SET attempts=$2,updated_at=now() WHERE id=$1", [claimed.id, attempt + 1]);
         await q("SAVEPOINT annotation_attempt");
         try {
-          const viewer = options.viewer(claimed.author_id);
-          const material = await readObjectMaterial(q, ref, id, viewer);
+          // 提出人是批注作者；按采用人（能改的人，自己「立即修改」时就是作者）的权限改，这一版记在采用人名下。
+          const author = options.viewer(claimed.author_id);
+          const adopter = claimed.decided_by === claimed.author_id ? author : options.viewer(claimed.decided_by!);
+          const material = await readObjectMaterial(q, ref, id, adopter);
           if (material.format !== "markdown" && material.format !== "html") throw new ObjectMaterialError(400, "MATERIAL_READ_ONLY", "材料只读");
           const table = ref.objectType === "issue" ? "issues" : ref.objectType === "task" ? "tasks" : "meetings";
           const title = (await q(`SELECT title FROM ${table} WHERE id::text=$1`, [ref.objectId])).rows[0]?.title as string;
           const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(5 * 60_000)]);
           const generated = await agent.generate({ materialId: id, objectType: ref.objectType, objectId: ref.objectId,
             title, format: material.format, source: material.body, version: material.version, quote: claimed.quote,
-            prefix: claimed.prefix, suffix: claimed.suffix, body: claimed.body, author: viewer, previousError: note }, signal, q);
+            prefix: claimed.prefix, suffix: claimed.suffix, body: claimed.body, author, previousError: note }, signal, q);
           if (signal.aborted) throw signal.reason;
           if (!Value.Check(MaterialAnnotationCandidate, generated.candidate)) throw new Error("invalid annotation candidate");
           const candidate = generated.candidate;
@@ -58,8 +60,9 @@ export function createMaterialAnnotationQueue(options: { pool: Pool; agent: Mate
             await q("UPDATE material_annotations SET status='no_change',note=$2,updated_at=now() WHERE id=$1", [claimed.id, candidate.noChange]);
           } else {
             validateMaterialReplacements(material.body, candidate.edits);
-            const edited = await editObjectMaterial(pool, ref, id, viewer, material.version, candidate.edits,
-              `按批注：${Array.from(claimed.body).slice(0, 40).join("")}`, generated.runId ?? null, { query: q, annotationId: claimed.id });
+            const edited = await editObjectMaterial(pool, ref, id, adopter, material.version, candidate.edits,
+              `按${adopter === author ? "" : `${author.displayName}的`}批注：${Array.from(claimed.body).slice(0, 40).join("")}`,
+              generated.runId ?? null, { query: q, annotationId: claimed.id });
             await q("UPDATE material_annotations SET status='applied',applied_version=$2,note=NULL,updated_at=now() WHERE id=$1", [claimed.id, edited.version]);
           }
           await q("RELEASE SAVEPOINT annotation_attempt");

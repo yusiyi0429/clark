@@ -84,7 +84,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           const material = await getObjectMaterial(q, { objectType, objectId }, req.body.viewingMaterialId,
             { personId: owner, role: person.role, displayName: names.get(owner) ?? owner }, names);
           if (object.snapshot) Object.assign(object.snapshot, { viewingMaterial: {
-            id: material.id, fileName: material.fileName, version: material.version, editable: material.editable } });
+            id: material.id, fileName: material.fileName, version: material.version, editable: material.editable, canEdit: material.canEdit } });
         } catch { return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在"); }
       }
       // 成员在 2a 看不到任何 Card，也不能借显式引用把 Card 带进自己的 Agent。

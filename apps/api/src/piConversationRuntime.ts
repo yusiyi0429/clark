@@ -45,6 +45,9 @@ import { applyMissionCardRevision, createMissionCardClarification } from "./miss
 import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { MISSION_CARD_WRITING_RULES } from "./missionCardWritingRules.js";
 
+/** CEO 与 DRI Agent 共用的材料改写规则；能不能直接改按 canEdit（上传者和对象负责人），与 edit_material 是否开放一致。 */
+const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 currentObject.viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
+
 const SYSTEM_PROMPT = `# 角色
 
 你是天枢里 CEO 的 Agent，负责只读决策对话。用 CEO 所用的语言回复，避免空话。
@@ -69,7 +72,7 @@ const SYSTEM_PROMPT = `# 角色
 
 你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
 
-材料是上述只读边界的例外。对方明确要求「改」「写进去」或新写当前议题、执行事项、会议的群组材料时，用 edit_material、create_material 直接执行。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由本人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
+${MATERIAL_EDITING_RULES}
 
 需要 CEO 做决定时，直接说明该决定什么、代价是什么，由 CEO 自己执行。CEO 的要求超出只读权限时，说明边界并给出可执行的下一步。
 
@@ -125,7 +128,7 @@ function driSystemPrompt(displayName: string, personalCard = false): string {
 
 你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，不形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
 
-材料是上述只读边界的例外。对方明确要求「改」「写进去」或新写当前议题、执行事项、会议的群组材料时，用 edit_material、create_material 直接执行。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由本人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。
+${MATERIAL_EDITING_RULES}
 
 ${personalCard ? "当前任务卡正文也是上述边界的例外：审核中且卡的本人未完成审核，服务器返回 editable=true 时，可以按清楚的用户意图用 edit_mission_card 立即改有权限的当前字段。改写或提问前必须 read_mission_card，带其 round 作为 sourceRound；本人已确认或已开始汇总时只读，不自行取消确认或重新开放审核。具体规则见当前任务卡协作改写说明。\n\n" : ""}你看不到 CEO 的决策面，包括战场总览和待 CEO 决策的议题。被问到这些时直接说明看不到，不要推测。要求超出只读权限时，说明边界并给出可执行的下一步。
 
@@ -481,12 +484,15 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         ];
       })() : [];
       const materialScope = /^(issue|task|meeting):(.+)$/.exec(input.scope);
-      const materialTools = materialScope && options.materialPool ? (() => {
+      const materialTools = materialScope && options.materialPool ? await (async () => {
         const ref = { objectType: materialScope[1] as "issue" | "task" | "meeting", objectId: materialScope[2] };
         const pool = options.materialPool!;
         const q = pool.query.bind(pool);
         const names = personDisplayNames(options.companyMemory);
         const viewer = input.viewer;
+        // 对话守同一道门：能改这里至少一份材料的人才有 edit_material；不能改的人只能提议，提议交给能改的人。
+        const canEditSome = await listObjectMaterials(q, ref, viewer, names).then((list) => list.materials.some((m) => m.canEdit),
+          (cause) => { if (cause instanceof ObjectMaterialError) return false; throw cause; });
         const result = async (work: () => Promise<unknown>) => {
           try {
             const value = await work();
@@ -498,12 +504,12 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           }
         };
         return [
-          defineTool({ name: "list_materials", label: "列出材料", description: "列出当前议题、执行事项或会议的群组材料",
+          defineTool({ name: "list_materials", label: "列出材料", description: "列出当前议题、执行事项或会议的群组材料；canEdit=true 的才能直接改",
             parameters: Type.Object({}, { additionalProperties: false }),
             execute: async () => result(async () => {
               const list = await listObjectMaterials(q, ref, viewer, names);
               return { materials: list.materials.map((m) => ({ id: m.id, fileName: m.fileName, format: m.format,
-                editable: m.editable, version: m.version, owner: m.owner })) };
+                editable: m.editable, canEdit: m.canEdit, version: m.version, owner: m.owner })) };
             }) }),
           defineTool({ name: "read_material", label: "阅读材料", description: "读取当前对象一份材料及版本；修改前必须调用。HTML 只返回最多 100,000 字符的源码，不返回去标签全文；截断时须用能唯一匹配的原文片段修改，或在文末追加",
             parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), version: Type.Optional(Type.Integer({ minimum: 1 })) }, { additionalProperties: false }),
@@ -514,23 +520,23 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
                   note: "材料太长只给了前 100,000 字符；改动请用能唯一匹配的原文片段，或在文末追加" } : {}), version: material.version,
                 currentVersion: material.currentVersion, editable: material.format === "markdown" || material.format === "html" };
             }) }),
-          defineTool({ name: "edit_material", label: "修改材料", description: "按当前版本修改 Markdown 或 HTML 材料；只在用户明确要求时使用。HTML 可能只读到前 100,000 字符；find 必须在完整源码中唯一匹配，append 会插在最后一个 </body> 前（没有时追加到文末）",
+          ...(canEditSome ? [defineTool({ name: "edit_material", label: "修改材料", description: "按当前版本修改 Markdown 或 HTML 材料；只在用户明确要求、且这份材料 canEdit=true 时使用。HTML 可能只读到前 100,000 字符；find 必须在完整源码中唯一匹配，append 会插在最后一个 </body> 前（没有时追加到文末）",
             parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), baseVersion: Type.Integer({ minimum: 1 }),
               edits: Type.Array(Type.Union([
                 Type.Object({ find: Type.String({ minLength: 1 }), replace: Type.String() }, { additionalProperties: false }),
                 Type.Object({ append: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
               ]), { minItems: 1, maxItems: 20 }), summary: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
             execute: async (_id, args) => result(() => editObjectMaterial(pool, ref, args.materialId, viewer,
-              args.baseVersion, args.edits, args.summary, input.runId ?? null)) }),
+              args.baseVersion, args.edits, args.summary, input.runId ?? null)) })] : []),
           defineTool({ name: "create_material", label: "新写材料", description: "在当前对象中新写 Markdown 材料；只在用户明确要求时使用",
             parameters: Type.Object({ title: Type.String({ minLength: 1, maxLength: 237 }), body: Type.String({ minLength: 1, maxLength: 100000 }),
               summary: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
             execute: async (_id, args) => result(() => createObjectMaterial(pool, ref, viewer,
               args.title, args.body, args.summary, input.runId ?? null)) }),
-          defineTool({ name: "propose_material_edit", label: "提议修改材料", description: "双方就当前材料的具体改法达成明确共识时提议；本人点『按这个改』才生效。先读最新版，find 必须唯一",
+          defineTool({ name: "propose_material_edit", label: "提议修改材料", description: "双方就当前材料的具体改法达成明确共识时提议，或对方要改一份 canEdit=false 的材料时把改法交给能改的人；能改的人点『按这个改』才生效。先读最新版，find 必须唯一",
             parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), summary: Type.String({ minLength: 1, maxLength: 200 }),
               edits: Type.Array(Type.Object({ find: Type.String({ minLength: 1 }), replace: Type.String() }, { additionalProperties: false }), { minItems: 1, maxItems: 20 }) }, { additionalProperties: false }),
-            execute: async (_id, args) => result(() => proposeMaterialEdit(pool, ref, args.materialId, viewer, args.summary, args.edits)) }),
+            execute: async (_id, args) => result(() => proposeMaterialEdit(pool, ref, args.materialId, viewer, args.summary, args.edits, names)) }),
         ];
       })() : [];
       // 复盘项对话：agent 只能给某一栏提改写建议，负责人点「采用」才写入；不经过 Action 签名，仓储函数锁内校验

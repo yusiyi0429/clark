@@ -4643,7 +4643,7 @@
     "/api/materials/{objectType}/{objectId}/{materialId}/annotations": {
       "post": {
         "operationId": "createMaterialAnnotation",
-        "summary": "选中材料里的一段文字写批注；Markdown / HTML 写完即排队让 Co-Agent 按批注改（同一份材料按顺序一条条改），PDF / Word 只留批注；按 clientId 幂等",
+        "summary": "选中材料里的一段文字写批注；默认只保存（noted），intent=edit「立即修改」只给上传者和对象负责人、只限 Markdown / HTML，排队让 Co-Agent 按批注改（同一份材料按顺序一条条改），其他人 403；按 clientId 幂等",
         "parameters": [
           {
             "name": "objectType",
@@ -4716,7 +4716,134 @@
               }
             }
           },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/materials/{objectType}/{objectId}/{materialId}/annotations/{annotationId}/decide": {
+      "post": {
+        "operationId": "decideMaterialAnnotation",
+        "summary": "上传者或对象负责人处理一条保存着的批注：采用（进原队列让 Co-Agent 按批注改，记下采用人）或不采用（原因可不填）；PDF / Word 400，其他人 403，已处理 409",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "task",
+                "meeting"
+              ]
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "annotationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideMaterialAnnotationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "处理后的批注",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateMaterialAnnotationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -4732,7 +4859,7 @@
     "/api/materials/{objectType}/{objectId}/{materialId}/restore": {
       "post": {
         "operationId": "restoreMaterialRemoved",
-        "summary": "把垃圾篓里的一段插回原位，存成新的一版；version 不是最新 409",
+        "summary": "把垃圾篓里的一段插回原位，存成新的一版；只有上传者和对象负责人，其他人 403；version 不是最新 409",
         "parameters": [
           {
             "name": "objectType",
@@ -4805,6 +4932,16 @@
               }
             }
           },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "ApiError 统一错误",
             "content": {
@@ -4831,7 +4968,7 @@
     "/api/materials/{objectType}/{objectId}/{materialId}/proposals/{proposalId}": {
       "post": {
         "operationId": "decideMaterialEditProposal",
-        "summary": "对 Co-Agent 的修改提议点「按这个改」或「忽略」；只有提议对象本人能处理；材料已被改过则 409（提议变 stale）",
+        "summary": "对 Co-Agent 的修改提议点「按这个改」或「忽略」；提议对象本人处理，不能改的人提的建议上传者和对象负责人都能处理；材料已被改过则 409（提议变 stale）",
         "parameters": [
           {
             "name": "objectType",
@@ -30365,6 +30502,8 @@
           "updatedAt",
           "version",
           "editable",
+          "canEdit",
+          "pending",
           "canDelete",
           "lastRevision"
         ],
@@ -30470,6 +30609,13 @@
           },
           "editable": {
             "type": "boolean"
+          },
+          "canEdit": {
+            "type": "boolean"
+          },
+          "pending": {
+            "minimum": 0,
+            "type": "integer"
           },
           "canDelete": {
             "type": "boolean"
@@ -30615,6 +30761,8 @@
                 "updatedAt",
                 "version",
                 "editable",
+                "canEdit",
+                "pending",
                 "canDelete",
                 "lastRevision"
               ],
@@ -30720,6 +30868,13 @@
                 },
                 "editable": {
                   "type": "boolean"
+                },
+                "canEdit": {
+                  "type": "boolean"
+                },
+                "pending": {
+                  "minimum": 0,
+                  "type": "integer"
                 },
                 "canDelete": {
                   "type": "boolean"
@@ -31181,6 +31336,8 @@
               "updatedAt",
               "version",
               "editable",
+              "canEdit",
+              "pending",
               "canDelete",
               "lastRevision"
             ],
@@ -31286,6 +31443,13 @@
               },
               "editable": {
                 "type": "boolean"
+              },
+              "canEdit": {
+                "type": "boolean"
+              },
+              "pending": {
+                "minimum": 0,
+                "type": "integer"
               },
               "canDelete": {
                 "type": "boolean"
@@ -31850,6 +32014,10 @@
                 "status",
                 "appliedVersion",
                 "note",
+                "decidedBy",
+                "stale",
+                "canDecide",
+                "canApply",
                 "createdAt"
               ],
               "properties": {
@@ -31892,6 +32060,10 @@
                 "status": {
                   "anyOf": [
                     {
+                      "const": "noted",
+                      "type": "string"
+                    },
+                    {
                       "const": "queued",
                       "type": "string"
                     },
@@ -31912,7 +32084,7 @@
                       "type": "string"
                     },
                     {
-                      "const": "kept",
+                      "const": "declined",
                       "type": "string"
                     }
                   ]
@@ -31937,6 +32109,40 @@
                       "type": "null"
                     }
                   ]
+                },
+                "decidedBy": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "displayName"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "stale": {
+                  "type": "boolean"
+                },
+                "canDecide": {
+                  "type": "boolean"
+                },
+                "canApply": {
+                  "type": "boolean"
                 },
                 "createdAt": {
                   "minLength": 1,
@@ -32064,6 +32270,7 @@
                 "version",
                 "summary",
                 "changes",
+                "proposedBy",
                 "proposedFor",
                 "status",
                 "createdAt"
@@ -32103,6 +32310,24 @@
                       "after": {
                         "type": "string"
                       }
+                    }
+                  }
+                },
+                "proposedBy": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
                     }
                   }
                 },
@@ -32166,6 +32391,10 @@
           "status",
           "appliedVersion",
           "note",
+          "decidedBy",
+          "stale",
+          "canDecide",
+          "canApply",
           "createdAt"
         ],
         "properties": {
@@ -32208,6 +32437,10 @@
           "status": {
             "anyOf": [
               {
+                "const": "noted",
+                "type": "string"
+              },
+              {
                 "const": "queued",
                 "type": "string"
               },
@@ -32228,7 +32461,7 @@
                 "type": "string"
               },
               {
-                "const": "kept",
+                "const": "declined",
                 "type": "string"
               }
             ]
@@ -32253,6 +32486,40 @@
                 "type": "null"
               }
             ]
+          },
+          "decidedBy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "displayName"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "canDecide": {
+            "type": "boolean"
+          },
+          "canApply": {
+            "type": "boolean"
           },
           "createdAt": {
             "minLength": 1,
@@ -32298,6 +32565,18 @@
             "maxLength": 2000,
             "pattern": "\\S",
             "type": "string"
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "const": "note",
+                "type": "string"
+              },
+              {
+                "const": "edit",
+                "type": "string"
+              }
+            ]
           }
         }
       },
@@ -32321,6 +32600,10 @@
               "status",
               "appliedVersion",
               "note",
+              "decidedBy",
+              "stale",
+              "canDecide",
+              "canApply",
               "createdAt"
             ],
             "properties": {
@@ -32363,6 +32646,10 @@
               "status": {
                 "anyOf": [
                   {
+                    "const": "noted",
+                    "type": "string"
+                  },
+                  {
                     "const": "queued",
                     "type": "string"
                   },
@@ -32383,7 +32670,7 @@
                     "type": "string"
                   },
                   {
-                    "const": "kept",
+                    "const": "declined",
                     "type": "string"
                   }
                 ]
@@ -32408,6 +32695,40 @@
                     "type": "null"
                   }
                 ]
+              },
+              "decidedBy": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "displayName"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "stale": {
+                "type": "boolean"
+              },
+              "canDecide": {
+                "type": "boolean"
+              },
+              "canApply": {
+                "type": "boolean"
               },
               "createdAt": {
                 "minLength": 1,
@@ -32549,6 +32870,7 @@
           "version",
           "summary",
           "changes",
+          "proposedBy",
           "proposedFor",
           "status",
           "createdAt"
@@ -32588,6 +32910,24 @@
                 "after": {
                   "type": "string"
                 }
+              }
+            }
+          },
+          "proposedBy": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "displayName"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "displayName": {
+                "minLength": 1,
+                "type": "string"
               }
             }
           },
@@ -32653,6 +32993,31 @@
                 "type": "string"
               }
             ]
+          }
+        }
+      },
+      "DecideMaterialAnnotationRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "const": "adopt",
+                "type": "string"
+              },
+              {
+                "const": "decline",
+                "type": "string"
+              }
+            ]
+          },
+          "reason": {
+            "maxLength": 1000,
+            "type": "string"
           }
         }
       },

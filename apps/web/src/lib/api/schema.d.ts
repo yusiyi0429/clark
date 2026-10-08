@@ -1298,8 +1298,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 选中材料里的一段文字写批注；Markdown / HTML 写完即排队让 Co-Agent 按批注改（同一份材料按顺序一条条改），PDF / Word 只留批注；按 clientId 幂等 */
+        /** 选中材料里的一段文字写批注；默认只保存（noted），intent=edit「立即修改」只给上传者和对象负责人、只限 Markdown / HTML，排队让 Co-Agent 按批注改（同一份材料按顺序一条条改），其他人 403；按 clientId 幂等 */
         post: operations["createMaterialAnnotation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{objectType}/{objectId}/{materialId}/annotations/{annotationId}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 上传者或对象负责人处理一条保存着的批注：采用（进原队列让 Co-Agent 按批注改，记下采用人）或不采用（原因可不填）；PDF / Word 400，其他人 403，已处理 409 */
+        post: operations["decideMaterialAnnotation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1315,7 +1332,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 把垃圾篓里的一段插回原位，存成新的一版；version 不是最新 409 */
+        /** 把垃圾篓里的一段插回原位，存成新的一版；只有上传者和对象负责人，其他人 403；version 不是最新 409 */
         post: operations["restoreMaterialRemoved"];
         delete?: never;
         options?: never;
@@ -1332,7 +1349,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 对 Co-Agent 的修改提议点「按这个改」或「忽略」；只有提议对象本人能处理；材料已被改过则 409（提议变 stale） */
+        /** 对 Co-Agent 的修改提议点「按这个改」或「忽略」；提议对象本人处理，不能改的人提的建议上传者和对象负责人都能处理；材料已被改过则 409（提议变 stale） */
         post: operations["decideMaterialEditProposal"];
         delete?: never;
         options?: never;
@@ -5534,6 +5551,8 @@ export interface components {
             updatedAt: string;
             version: number;
             editable: boolean;
+            canEdit: boolean;
+            pending: number;
             canDelete: boolean;
             lastRevision: {
                 version: number;
@@ -5572,6 +5591,8 @@ export interface components {
                 updatedAt: string;
                 version: number;
                 editable: boolean;
+                canEdit: boolean;
+                pending: number;
                 canDelete: boolean;
                 lastRevision: {
                     version: number;
@@ -5668,6 +5689,8 @@ export interface components {
                 updatedAt: string;
                 version: number;
                 editable: boolean;
+                canEdit: boolean;
+                pending: number;
                 canDelete: boolean;
                 lastRevision: {
                     version: number;
@@ -5774,9 +5797,16 @@ export interface components {
                     personId: string;
                     displayName: string;
                 };
-                status: "queued" | "applying" | "applied" | "no_change" | "failed" | "kept";
+                status: "noted" | "queued" | "applying" | "applied" | "no_change" | "failed" | "declined";
                 appliedVersion: number | null;
                 note: string | null;
+                decidedBy: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                stale: boolean;
+                canDecide: boolean;
+                canApply: boolean;
                 createdAt: string;
             }[];
             removed: {
@@ -5808,6 +5838,10 @@ export interface components {
                     before: string;
                     after: string;
                 }[];
+                proposedBy: {
+                    personId: string;
+                    displayName: string;
+                };
                 proposedFor: {
                     personId: string;
                     displayName: string;
@@ -5826,9 +5860,16 @@ export interface components {
                 personId: string;
                 displayName: string;
             };
-            status: "queued" | "applying" | "applied" | "no_change" | "failed" | "kept";
+            status: "noted" | "queued" | "applying" | "applied" | "no_change" | "failed" | "declined";
             appliedVersion: number | null;
             note: string | null;
+            decidedBy: {
+                personId: string;
+                displayName: string;
+            } | null;
+            stale: boolean;
+            canDecide: boolean;
+            canApply: boolean;
             createdAt: string;
         };
         CreateMaterialAnnotationRequest: {
@@ -5839,6 +5880,7 @@ export interface components {
             prefix: string;
             suffix: string;
             body: string;
+            intent?: "note" | "edit";
         };
         CreateMaterialAnnotationResponse: {
             annotation: {
@@ -5851,9 +5893,16 @@ export interface components {
                     personId: string;
                     displayName: string;
                 };
-                status: "queued" | "applying" | "applied" | "no_change" | "failed" | "kept";
+                status: "noted" | "queued" | "applying" | "applied" | "no_change" | "failed" | "declined";
                 appliedVersion: number | null;
                 note: string | null;
+                decidedBy: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                stale: boolean;
+                canDecide: boolean;
+                canApply: boolean;
                 createdAt: string;
             };
         };
@@ -5890,6 +5939,10 @@ export interface components {
                 before: string;
                 after: string;
             }[];
+            proposedBy: {
+                personId: string;
+                displayName: string;
+            };
             proposedFor: {
                 personId: string;
                 displayName: string;
@@ -5899,6 +5952,10 @@ export interface components {
         };
         DecideMaterialEditProposalRequest: {
             decision: "apply" | "dismiss";
+        };
+        DecideMaterialAnnotationRequest: {
+            decision: "adopt" | "decline";
+            reason?: string;
         };
         WeeklyProgressResponse: {
             week: string;
@@ -10845,7 +10902,90 @@ export interface operations {
                 };
             };
             /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decideMaterialAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task" | "meeting";
+                objectId: string;
+                materialId: string;
+                annotationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideMaterialAnnotationRequest"];
+            };
+        };
+        responses: {
+            /** @description 处理后的批注 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMaterialAnnotationResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10892,6 +11032,15 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

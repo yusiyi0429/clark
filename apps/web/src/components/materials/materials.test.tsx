@@ -5,7 +5,7 @@ import { MaterialReader } from "./ObjectMaterialArea";
 
 const material: TMaterialView = { id: "11111111-1111-4111-8111-111111111111", objectType: "issue", objectId: "issue-1",
   fileName: "版本规划.md", format: "markdown", sizeBytes: 40, origin: "upload", owner: { personId: "p1", displayName: "孙铭泽" },
-  createdAt: "2026-10-05T06:00:00Z", updatedAt: "2026-10-05T06:20:00Z", version: 2, editable: true, canDelete: true,
+  createdAt: "2026-10-05T06:00:00Z", updatedAt: "2026-10-05T06:20:00Z", version: 2, editable: true, canEdit: true, pending: 0, canDelete: true,
   lastRevision: { version: 2, requestedBy: { personId: "p1", displayName: "孙铭泽" }, summary: "调整时间", at: "2026-10-05T06:20:00Z", annotation: null } };
 const detail: TMaterialDetailResponse = { material, version: 2, latest: true, revision: material.lastRevision!,
   revisions: [material.lastRevision!, { version: 1, requestedBy: null, summary: null, at: material.createdAt, annotation: null }],

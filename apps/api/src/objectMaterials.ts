@@ -9,7 +9,7 @@ import { MAX_MATERIAL_HTML_CHARS, MAX_MATERIAL_TEXT_CHARS } from "./materialPars
 import { moveStagedFile } from "./meetingMaterials.js";
 import { diffHtmlMaterialLines, diffMaterialBlocks, splitMaterialBlocks } from "./materialDiff.js";
 import { isActiveMember, postCoAgentMessage, type ThreadRef } from "./threads.js";
-import { annotationRef, annotationView, listMaterialProposals, type AnnotationRow } from "./materialFeedback.js";
+import { annotationRef, annotationView, listMaterialProposals, plainLetters, type AnnotationRow } from "./materialFeedback.js";
 import { materialHistory, type MaterialHistoryRevision } from "./materialHistory.js";
 
 export class ObjectMaterialError extends Error {
@@ -47,17 +47,37 @@ export async function requireMaterialAccess(q: Query, ref: ThreadRef, viewer: Ma
   if (!await canAccessObjectMaterials(q, ref, viewer)) throw new ObjectMaterialError(404, "MATERIAL_NOT_FOUND", "材料不存在");
 }
 
+/**
+ * 能改材料的人（决定记录 2026-10-06 第 6 条）= 上传者 + 对象负责人：执行事项是推进人，会议是主持人，议题是 CEO。
+ * 返回「这个人能不能改某位上传的材料」。立即修改、采用 / 不采用、修改提议、恢复和对话里直接改都只按它判断。
+ */
+export async function materialEditor(q: Query, ref: ThreadRef, viewer: MaterialViewer): Promise<(uploaderId: string) => boolean> {
+  const ownsObject = ref.objectType === "issue" ? viewer.role === "ceo"
+    : (await q(ref.objectType === "task" ? "SELECT owner_id AS owner FROM tasks WHERE id::text=$1"
+      : "SELECT lead_dri_id AS owner FROM meetings WHERE id::text=$1", [ref.objectId])).rows[0]?.owner === viewer.personId;
+  return (uploaderId) => ownsObject || uploaderId === viewer.personId;
+}
+type ViewerAccess = { editor: (uploaderId: string) => boolean; pending: Map<string, number> };
+/** 每份材料等本人采用 / 不采用的批注条数（别人保存的；只对能改的人有意义）。 */
+async function viewerAccess(q: Query, ref: ThreadRef, viewer: MaterialViewer): Promise<ViewerAccess> {
+  const rows = await q(`SELECT material_id, count(*)::int AS n FROM material_annotations
+    WHERE object_type=$1 AND object_id=$2 AND status='noted' AND author_id<>$3 GROUP BY material_id`, [ref.objectType, ref.objectId, viewer.personId]);
+  return { editor: await materialEditor(q, ref, viewer), pending: new Map(rows.rows.map((row) => [row.material_id as string, row.n as number])) };
+}
+
 function person(id: string, names: Map<string, string>) { return { personId: id, displayName: names.get(id) ?? id }; }
 function revision(row: RevisionRow, names: Map<string, string>) {
   return { version: row.version, requestedBy: row.requested_by ? person(row.requested_by, names) : null,
     summary: row.summary, at: row.created_at.toISOString(), annotation: annotationRef(row, names) };
 }
-function view(row: MaterialRow, viewer: MaterialViewer, names: Map<string, string>): TMaterialView {
+function view(row: MaterialRow, viewer: MaterialViewer, names: Map<string, string>, access: ViewerAccess): TMaterialView {
+  const editable = row.format === "markdown" || row.format === "html";
+  const canEdit = editable && access.editor(row.owner_id);
   return { id: row.id, objectType: row.object_type, objectId: row.object_id, fileName: row.file_name,
     format: row.format, sizeBytes: row.size_bytes, ...(row.page_count ? { pageCount: row.page_count } : {}),
     origin: row.origin, owner: person(row.owner_id, names), createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(), version: row.current_version,
-    editable: row.format === "markdown" || row.format === "html", canDelete: row.owner_id === viewer.personId,
+    editable, canEdit, pending: canEdit ? access.pending.get(row.id) ?? 0 : 0, canDelete: row.owner_id === viewer.personId,
     lastRevision: (row.current_version > 1 || row.origin === "agent") && row.revision_at ? {
       version: row.revision_version!, requestedBy: person(row.revision_by!, names),
       summary: row.revision_summary!, at: row.revision_at.toISOString(), annotation: annotationRef(row, names),
@@ -73,11 +93,12 @@ export async function listObjectMaterials(q: Query, ref: ThreadRef, viewer: Mate
   await requireMaterialAccess(q, ref, viewer);
   const rows = await q(`SELECT ${COLUMNS} FROM object_materials m ${JOIN}
     WHERE m.object_type=$1 AND m.object_id=$2 AND m.deleted_at IS NULL ORDER BY m.created_at,m.id`, [ref.objectType, ref.objectId]);
-  return { materials: (rows.rows as MaterialRow[]).map((row) => view(row, viewer, names)), canUpload: rows.rows.length < 30 };
+  const access = await viewerAccess(q, ref, viewer);
+  return { materials: (rows.rows as MaterialRow[]).map((row) => view(row, viewer, names, access)), canUpload: rows.rows.length < 30 };
 }
 export async function getObjectMaterial(q: Query, ref: ThreadRef, id: string, viewer: MaterialViewer, names: Map<string, string>) {
   await requireMaterialAccess(q, ref, viewer);
-  return view(await rowFor(q, ref, id), viewer, names);
+  return view(await rowFor(q, ref, id), viewer, names, await viewerAccess(q, ref, viewer));
 }
 export async function readObjectMaterial(q: Query, ref: ThreadRef, id: string, viewer: MaterialViewer, version?: number) {
   await requireMaterialAccess(q, ref, viewer);
@@ -86,7 +107,7 @@ export async function readObjectMaterial(q: Query, ref: ThreadRef, id: string, v
   const result = await q("SELECT body FROM material_revisions WHERE material_id=$1 AND version=$2", [id, selectedVersion]);
   if (!result.rows[0]) throw new ObjectMaterialError(404, "MATERIAL_REVISION_NOT_FOUND", "材料版本不存在");
   return { body: result.rows[0].body as string, version: selectedVersion, currentVersion: row.current_version,
-    fileName: row.file_name, format: row.format, storageKey: row.storage_key };
+    fileName: row.file_name, format: row.format, storageKey: row.storage_key, ownerId: row.owner_id };
 }
 export async function materialRevisionHistory(q: Query, id: string, names: Map<string, string>): Promise<MaterialHistoryRevision[]> {
   const result = await q(`SELECT r.*, a.quote, a.body AS annotation_body, a.author_id FROM material_revisions r
@@ -111,13 +132,17 @@ export async function getObjectMaterialDetail(q: Query, ref: ThreadRef, id: stri
         : splitMaterialBlocks(currentBody).map((text) => ({ text, change: null }));
   const annotations = await q("SELECT * FROM material_annotations WHERE material_id=$1 ORDER BY created_at DESC,id DESC", [id]);
   const views = revisions.map(({ body: _body, ...item }) => item).reverse();
+  const material = view(row, viewer, names, await viewerAccess(q, ref, viewer));
+  // 原文已改：和最新版比，不和正在看的旧版比。
+  const source = plainLetters(revisions.at(-1)!.body);
   let blockIndex = 0;
-  return { material: view(row, viewer, names), version: selected.version, latest,
+  return { material, version: selected.version, latest,
     revision: views.find((item) => item.version === selected.version)!, revisions: views,
     blocks: blocks?.map((block) => ({ ...block, history: block.change?.kind === "removed" ? [] : history?.histories[blockIndex++] ?? [] })) ?? null,
-    annotations: (annotations.rows as AnnotationRow[]).map((item) => annotationView(item, names)),
-    removed: history?.removed.map(({ previous: _previous, index: _index, ...item }) => item) ?? [],
-    proposals: latest ? await listMaterialProposals(q, id, viewer.personId, names) : [] };
+    annotations: (annotations.rows as AnnotationRow[]).map((item) => annotationView(item, names, viewer.personId, material.canEdit,
+      item.status === "noted" && item.version < row.current_version && !source.includes(plainLetters(item.quote)))),
+    removed: history?.removed.map(({ previous: _previous, index: _index, ...item }) => ({ ...item, restorable: material.canEdit })) ?? [],
+    proposals: latest ? await listMaterialProposals(q, id, viewer.personId, material.canEdit, names) : [] };
 }
 
 export async function uploadObjectMaterial(pool: Pool, ref: ThreadRef, viewer: MaterialViewer,
@@ -146,8 +171,9 @@ export async function uploadObjectMaterial(pool: Pool, ref: ThreadRef, viewer: M
     await q("INSERT INTO material_revisions(material_id,version,body,created_at) VALUES($1,1,$2,$3)", [id, parsed.source ?? parsed.extractedText, now]);
     const row = await rowFor(q, ref, id);
     if (ref.objectType === "meeting") await postCoAgentMessage(q, ref, `${viewer.displayName}上传了《${parsed.fileName}》`, [viewer.personId]);
+    const material = view(row, viewer, names, await viewerAccess(q, ref, viewer));
     await client.query("COMMIT");
-    return view(row, viewer, names);
+    return material;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     if (moved) await rm(destination, { force: true });
@@ -174,6 +200,8 @@ export async function editObjectMaterial(pool: Pool, ref: ThreadRef, id: string,
     await q("SELECT id FROM object_materials WHERE id=$1 FOR UPDATE", [id]);
     const current = await rowFor(q, ref, id);
     const fail = (code: string, message: string) => { throw new ObjectMaterialError(409, code, message, current.current_version); };
+    if (!(await materialEditor(q, ref, viewer))(current.owner_id))
+      throw new ObjectMaterialError(403, "MATERIAL_FORBIDDEN", "只有上传者和负责人能改这份材料");
     if (baseVersion !== current.current_version) fail("MATERIAL_VERSION_CONFLICT", "版本已变化，请重新读取材料");
     if (current.format !== "markdown" && current.format !== "html") fail("MATERIAL_READ_ONLY", "只有 Markdown 和 HTML 材料能修改");
     if (!summary.trim() || summary.length > 200 || edits.length < 1 || edits.length > 20) fail("INVALID_MATERIAL_EDIT", "修改说明或修改条数不合法");

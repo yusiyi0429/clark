@@ -15,6 +15,22 @@
 .send:disabled { opacity: .45; cursor: not-allowed; }
 .error { margin: 0; color: #a44e46; font-size: 12px; line-height: 1.6; }
 
+/* 「保存」「立即修改」：和任务卡批注的两个按钮同一套样式（mission-annotations.module.css 的 .cancel / .save）；「取消」退到左边。 */
+.composer footer { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.composer footer button { min-height: 36px; padding: 7px 14px; border: 0; border-radius: 999px; font: inherit; font-size: 14px; cursor: pointer; }
+.composer footer .ghost { margin-right: auto; }
+.keep { background: var(--morning-start); color: var(--ink-muted); }
+.apply { background: var(--onboarding-blue); color: #fff; }
+:is(.keep, .apply):disabled { opacity: .45; cursor: default; }
+
+/* 批注列表里能改的人的「采用 / 不采用」「立即修改」；不采用先填原因（可不填）再确认。 */
+.decide, .decline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.decide button, .decline button { min-height: 32px; padding: 5px 13px; border: 0; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer; }
+.decline input { flex: 1 1 160px; min-width: 0; box-sizing: border-box; height: 32px; padding: 0 10px; border: 1px solid #dfe4ee; border-radius: 9px; background: #fff; color: #243247; font: inherit; font-size: 13px; outline: none; }
+.decline input:focus { border-color: var(--onboarding-blue, #3a83f7); box-shadow: 0 0 0 3px color-mix(in oklab, var(--onboarding-blue, #3a83f7) 12%, transparent); }
+/* 成员工作台外壳给输入框加了 focus 外框（.shell input:focus-visible，0,2,1），这里已有蓝框，不再叠一层。 */
+.decline.decline input:focus-visible { outline: none; }
+
 /* 材料上方一行：正在改 / 批注 N / 已删除 N 段。 */
 .bar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 10px; font-size: 11.5px; line-height: 1.8; color: #8a95a5; }
 .bar > button { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: #6484b4; font: inherit; cursor: pointer; }
@@ -31,6 +47,8 @@
 .status[data-status="queued"], .status[data-status="applying"] { color: #2f64b8; }
 .status[data-status="applied"] { color: #26805e; }
 .status[data-status="failed"] { color: #a44e46; }
+/* 不采用的收起成一行（谁不采用、原因），悬停或点一下（触屏）才展开原文和意见。 */
+.panel > li[data-status="declined"]:not(:hover, :focus-within) > p { display: none; }
 .removedText { display: -webkit-box; overflow: hidden; color: #4a586c; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 .restore { justify-self: start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 3px 9px; border: 1px solid #d6e0ee; border-radius: 7px; background: #fff; color: #2f4f7f; font: inherit; font-size: 12px; cursor: pointer; }
 .restore:disabled { opacity: .5; cursor: not-allowed; }

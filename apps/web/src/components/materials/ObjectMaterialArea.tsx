@@ -6,7 +6,8 @@ import remarkGfm from "remark-gfm";
 import type { TMaterialDetailResponse, TMaterialRemovedView, TMaterialView } from "@warmap/contracts";
 import { InHeader, MaterialMenu, useRememberedScroll, type MaterialTab } from "@/components/shell/MaterialTabs";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { AnnotationBar, AnnotationComposer, HistoryCard, ProposalBanner, SELECTION_SCRIPT, usePollWhileWorking, useMaterialSelection, type MaterialSelection } from "./MaterialAnnotations";
+import { AnnotationBar, AnnotationComposer, HistoryCard, ProposalBanner, SELECTION_SCRIPT, usePollWhileWorking, useMaterialSelection,
+  type DecideAnnotation, type MaterialSelection } from "./MaterialAnnotations";
 import s from "./materials.module.css";
 
 type ObjectType = "issue" | "task" | "meeting";
@@ -65,18 +66,19 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, s
       const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       if (response.status === 401) { window.location.assign("/access"); return "登录已过期"; }
       const value = await response.json().catch(() => ({})) as { message?: string; code?: string };
-      if (!response.ok) return response.status === 409 ? "材料刚被改过，已刷新到最新，请再试一次。" : value.message ?? "没有成功，请重试";
+      if (!response.ok) return response.status === 409 && value.code !== "MATERIAL_ANNOTATION_DECIDED" ? "材料刚被改过，已刷新到最新，请再试一次。" : value.message ?? "没有成功，请重试";
       return null;
     } catch { return "网络断了，请重试"; }
     finally { reloadDetail(); }
   }, [reloadDetail]);
+  // 对话里能不能直接让 Agent 改这份：只看本人能不能改（上传者、对象负责人），不能改的只能提议。
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("viewing-material-changed", { detail: {
-      scope: `${objectType}:${objectId}`, id: material?.id ?? null, editable: material?.editable ?? false, format: material?.format,
+      scope: `${objectType}:${objectId}`, id: material?.id ?? null, editable: material?.canEdit ?? false, format: material?.format,
     } }));
     return () => { window.dispatchEvent(new CustomEvent("viewing-material-changed", { detail: { scope: `${objectType}:${objectId}`, id: null, editable: false } })); };
-  }, [objectType, objectId, material?.id, material?.editable, material?.format]);
-  const tabs = [...baseTabs, ...(groupTab ? [groupTab] : []), ...materials.map((item) => ({ id: item.id, label: item.fileName.replace(/\.[^.]+$/, ""), title: item.fileName }))];
+  }, [objectType, objectId, material?.id, material?.canEdit, material?.format]);
+  const tabs = [...baseTabs, ...(groupTab ? [groupTab] : []), ...materials.map((item) => ({ id: item.id, label: item.fileName.replace(/\.[^.]+$/, ""), title: item.fileName, count: item.pending }))];
   const choose = (id: string) => { setVersion(undefined); onSelect(id); };
   const upload = async (picked?: File) => {
     if (!picked) return;
@@ -102,7 +104,7 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, s
     await refresh();
   };
   return <div className={s.area} data-material-scope={`${objectType}:${objectId}`}
-    data-viewing-material-id={material?.id ?? ""} data-viewing-material-editable={material?.editable ? "true" : "false"}
+    data-viewing-material-id={material?.id ?? ""} data-viewing-material-editable={material?.canEdit ? "true" : "false"}
     data-viewing-material-format={material?.format ?? ""}>
     {(objectType === "issue" || objectType === "meeting" || materials.length > 0 || canUpload) ? <div className={s.toolbar}>
       <InHeader><MaterialMenu tabs={tabs} selected={selectedTab === undefined ? selected : selectedTab} onSelect={choose}
@@ -113,7 +115,8 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, s
     </div> : null}
     {material ? <div className={s.reader} data-material-scroll><MaterialReader material={material} detail={detail}
       base={base} onRemove={remove} onVersion={setVersion}
-      onAnnotate={(selection, body) => post(`${base}/${material.id}/annotations`, { clientId: crypto.randomUUID(), version: detail?.version ?? material.version, quote: selection.text, prefix: selection.prefix, suffix: selection.suffix, body })}
+      onAnnotate={(selection, body, intent) => post(`${base}/${material.id}/annotations`, { clientId: crypto.randomUUID(), version: detail?.version ?? material.version, quote: selection.text, prefix: selection.prefix, suffix: selection.suffix, body, intent })}
+      onDecideAnnotation={(id, decision, reason) => post(`${base}/${material.id}/annotations/${encodeURIComponent(id)}/decide`, { decision, ...(reason ? { reason } : {}) })}
       onRestore={(removed) => post(`${base}/${material.id}/restore`, { removedId: removed.id, version: detail?.version ?? material.version })}
       onDecide={(proposalId, decision) => post(`${base}/${material.id}/proposals/${encodeURIComponent(proposalId)}`, { decision })} />{dialog}</div>
       : groupTab && selected === groupTab.id ? <div className={s.groupList}>
@@ -123,9 +126,10 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, s
   </div>;
 }
 
-export function MaterialReader({ material, detail, base, onRemove, onVersion, onAnnotate, onRestore, onDecide }:
+export function MaterialReader({ material, detail, base, onRemove, onVersion, onAnnotate, onDecideAnnotation, onRestore, onDecide }:
   { material: TMaterialView; detail: TMaterialDetailResponse | null; base: string; onRemove: () => void; onVersion: (version?: number) => void;
-    onAnnotate?: (selection: MaterialSelection, body: string) => Promise<string | null>;
+    onAnnotate?: (selection: MaterialSelection, body: string, intent: "note" | "edit") => Promise<string | null>;
+    onDecideAnnotation?: DecideAnnotation;
     onRestore?: (removed: TMaterialRemovedView) => Promise<string | null>;
     onDecide?: (proposalId: string, decision: "apply" | "dismiss") => Promise<string | null> }) {
   const [history, setHistory] = useState(false);
@@ -163,7 +167,7 @@ export function MaterialReader({ material, detail, base, onRemove, onVersion, on
       {!detail.latest ? <button type="button" onClick={() => onVersion(undefined)}>回到最新</button> : null}
     </div> : null}
     {detail?.latest && onDecide ? detail.proposals.filter((item) => item.status === "pending").map((item) => <ProposalBanner key={item.id} proposal={item} onDecide={(decision) => onDecide(item.id, decision)} />) : null}
-    {detail?.latest && onRestore ? <AnnotationBar detail={detail} onRestore={onRestore} /> : null}
+    {detail?.latest && onRestore ? <AnnotationBar detail={detail} onRestore={onRestore} onDecide={onDecideAnnotation} /> : null}
     {history && detail ? <ol className={s.history}>{detail.revisions.map((item) => <li key={item.version}>
       <button type="button" onClick={() => { onVersion(item.version); setHistory(false); }}>第 {item.version} 版 · {item.requestedBy?.displayName ?? material.owner.displayName} · {date(item.at)} · {item.summary ?? "上传原件"}</button>
     </li>)}</ol> : null}
@@ -205,8 +209,8 @@ export function MaterialReader({ material, detail, base, onRemove, onVersion, on
           <Markdown remarkPlugins={[remarkGfm]}>{block.text}</Markdown>{popup}</div>;
         return <div key={index} className={s.block}><Markdown remarkPlugins={[remarkGfm]}>{block.text}</Markdown></div>;
       })}</div>}
-    {selection && annotatable && onAnnotate ? <AnnotationComposer selection={selection} editable={material.editable} onClose={clear}
-      onSubmit={(text) => onAnnotate(selection, text)} /> : null}
+    {selection && annotatable && onAnnotate ? <AnnotationComposer selection={selection} canEdit={material.canEdit} onClose={clear}
+      onSubmit={(text, intent) => onAnnotate(selection, text, intent)} /> : null}
   </article>;
 }
 function ChangePopup({ before, detail }: { before: string; detail: TMaterialDetailResponse }) {

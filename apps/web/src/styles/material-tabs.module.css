@@ -110,6 +110,8 @@
 .item > .label { flex: 1 1 auto; }
 .check { flex: none; margin-left: 8px; }
 .hint { flex: none; margin-left: 4px; color: #8a95a5; font-size: 11px; font-weight: 400; }
+/* 等本人采用 / 不采用的批注：蓝底白字的小圆角数字，下拉钮上是合计。 */
+.count { flex: none; display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: #2f6fd6; color: #fff; font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
 .item.item:disabled, .item.item[data-disabled='true'] { color: #8a95a5; background: transparent; cursor: default; }
 .item.item:disabled > svg, .item.item[data-disabled='true'] > svg { color: currentColor; }
 

@@ -58,6 +58,15 @@ describe("材料区操作", () => {
     expect(menu?.props?.onAdd).toBeUndefined();
   });
 
+  it("下拉单带上每份等本人处理的条数；对话只在本人能改这份时当作可改", () => {
+    hooks.values[0] = [{ ...material, canEdit: false, pending: 2 }];
+    const menu = nodes(render()).find((node) => Array.isArray(node.props?.tabs));
+    expect((menu?.props?.tabs as { id: string; count?: number }[]).find((tab) => tab.id === id)?.count).toBe(2);
+    expect((render(id) as Node).props?.["data-viewing-material-editable"]).toBe("false");
+    hooks.values[0] = [{ ...material, canEdit: true, pending: 0 }];
+    expect((render(id) as Node).props?.["data-viewing-material-editable"]).toBe("true");
+  });
+
   it("显示原有材料和添加入口；上传中显示占位，成功后选中新材料", async () => {
     hooks.values[1] = true;
     const fetch = vi.fn().mockResolvedValueOnce(response(material)).mockResolvedValueOnce(response({ materials: [material], canUpload: true }));

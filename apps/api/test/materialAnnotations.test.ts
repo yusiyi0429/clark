@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
@@ -7,11 +8,13 @@ import { createObjectMaterial, editObjectMaterial, readObjectMaterial } from "..
 import { createMaterialAnnotation, proposeMaterialEdit } from "../src/materialFeedback.js";
 import { createMaterialAnnotationQueue } from "../src/materialAnnotationQueue.js";
 import type { MaterialAnnotationAgent } from "../src/materialAnnotationAgent.js";
+import { hashSecret } from "../src/session.js";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 
 const viewer = { personId: TEST_CEO.personId, role: "ceo" as const, displayName: "测试甲" };
 const names = new Map([[TEST_CEO.personId, "测试甲"], [TEST_MEMBER.personId, "测试乙"]]);
-const request = (body = "改为明天") => ({ clientId: randomUUID(), version: 1, quote: "今天开会。", prefix: "", suffix: "", body });
+/** 默认是能改的人「立即修改」；保存传 note。 */
+const request = (body = "改为明天", intent: "note" | "edit" = "edit") => ({ clientId: randomUUID(), version: 1, quote: "今天开会。", prefix: "", suffix: "", body, intent });
 const noChange: MaterialAnnotationAgent = { async generate() { return { candidate: { edits: [], summary: "保持原文", noChange: "原文已满足意见" } }; } };
 function gate() {
   let release!: () => void;
@@ -68,12 +71,16 @@ describe("材料批注队列", () => {
     } finally { finish.release(); await t.close(); }
   }, 20_000);
 
-  it.each(["pdf", "docx"])("%s 只留 kept 批注，禁止恢复", async (format) => {
+  it.each(["pdf", "docx"])("%s 只能保存批注：没有立即修改和采用，禁止恢复", async (format) => {
     const t = await fixture({ async generate() { throw new Error("read-only must not call agent"); } });
     try {
       await t.sql("UPDATE object_materials SET format=$2,origin='upload',storage_key='test-placeholder' WHERE id=$1", [t.id, format]);
-      const response = await t.post("/annotations", request());
-      expect(response.json().annotation).toMatchObject({ status: "kept", appliedVersion: null });
+      expect((await t.post("/annotations", request())).json().code).toBe("MATERIAL_READ_ONLY");
+      const response = await t.post("/annotations", request("改为明天", "note"));
+      expect(response.json().annotation).toMatchObject({ status: "noted", appliedVersion: null, canDecide: false, canApply: false });
+      const decided = await t.post(`/annotations/${response.json().annotation.id}/decide`, { decision: "adopt" });
+      expect(decided.statusCode).toBe(400);
+      expect((await t.detail()).material).toMatchObject({ canEdit: false, pending: 0 });
       expect(await t.detail()).toMatchObject({ blocks: null, removed: [], proposals: [] });
       expect((await t.post("/restore", { version: 1, removedId: "v2-0" })).statusCode).toBe(400);
     } finally { await t.close(); }
@@ -267,7 +274,7 @@ describe("材料历史、垃圾篓和提议", () => {
     try {
       await t.sql("INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('issue',$1,$2,$2),('issue',$1,$3,$2)",
         [t.ref.objectId, TEST_CEO.personId, TEST_MEMBER.personId]);
-      const propose = () => proposeMaterialEdit(t.pool, t.ref, t.id, viewer, "改日期", [{ find: "今天", replace: "明天" }]);
+      const propose = () => proposeMaterialEdit(t.pool, t.ref, t.id, viewer, "改日期", [{ find: "今天", replace: "明天" }], names);
       const first = await propose(), second = await propose();
       expect((await t.detail()).proposals).toHaveLength(2);
       const memberHeaders = { cookie: await t.memberCookie(), origin: t.publicOrigin };
@@ -278,15 +285,116 @@ describe("材料历史、垃圾篓和提议", () => {
       await t.edit("# 计划", "# 新计划");
       expect((await t.post(`/proposals/${first.id}`, { decision: "apply" })).json()).toMatchObject({ version: 3, proposals: [], revision: { summary: "改日期" } });
       expect((await t.read()).body).toContain("明天开会。");
-      const stale = await proposeMaterialEdit(t.pool, t.ref, t.id, viewer, "再改", [{ find: "明天", replace: "后天" }]);
+      const stale = await proposeMaterialEdit(t.pool, t.ref, t.id, viewer, "再改", [{ find: "明天", replace: "后天" }], names);
       await t.edit("明天", "下周");
       expect((await t.post(`/proposals/${stale.id}`, { decision: "apply" })).statusCode).toBe(409);
       expect((await t.sql("SELECT status FROM material_edit_proposals WHERE id=$1", [stale.id]))[0].status).toBe("stale");
-      const staleOnRead = await proposeMaterialEdit(t.pool, t.ref, t.id, viewer, "再改", [{ find: "下周", replace: "后天" }]);
+      const staleOnRead = await proposeMaterialEdit(t.pool, t.ref, t.id, viewer, "再改", [{ find: "下周", replace: "后天" }], names);
       await t.edit("下周", "下周和下周");
       expect((await t.detail()).proposals).toEqual([]);
       expect((await t.sql("SELECT status FROM material_edit_proposals WHERE id=$1", [staleOnRead.id]))[0].status).toBe("stale");
-      await expect(proposeMaterialEdit(t.pool, t.ref, t.id, viewer, "重复", [{ find: "下周", replace: "后天" }])).rejects.toMatchObject({ code: "MATERIAL_FIND_NOT_UNIQUE" });
+      await expect(proposeMaterialEdit(t.pool, t.ref, t.id, viewer, "重复", [{ find: "下周", replace: "后天" }], names)).rejects.toMatchObject({ code: "MATERIAL_FIND_NOT_UNIQUE" });
+    } finally { await t.close(); }
+  }, 20_000);
+});
+
+/** 执行事项：测试乙是推进人，测试丙是协作者；测试乙、测试丙各上传一份材料。 */
+const PEOPLE = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
+const THIRD = { personId: "person-fixture-003", loginId: "ceshib", passcode: "3579" } as const;
+const OWNER = { personId: TEST_MEMBER.personId, role: "member" as const, displayName: "测试乙" };
+const COLLABORATOR = { personId: THIRD.personId, role: "member" as const, displayName: "测试丙" };
+type Note = { id: string; status: string; stale: boolean; canDecide: boolean; canApply: boolean };
+type Listed = { canEdit: boolean; pending: number };
+async function taskFixture(agent: MaterialAnnotationAgent = noChange) {
+  const t = await createTestApp({ companyPeopleSeed: PEOPLE }, undefined, { materialAnnotationAgent: agent });
+  const ref = { objectType: "task" as const, objectId: randomUUID() };
+  await t.sql("INSERT INTO tasks(id,title,status,owner_id,created_by) VALUES($1,'材料走查','not_started',$2,$2)", [ref.objectId, OWNER.personId]);
+  await t.sql("INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('task',$1,$2,$2),('task',$1,$3,$2)",
+    [ref.objectId, OWNER.personId, THIRD.personId]);
+  await t.sql("INSERT INTO member_access (person_id, login_id, passcode_hash, must_change) VALUES ($1, $2, $3, FALSE)",
+    [THIRD.personId, THIRD.loginId, hashSecret(THIRD.passcode)]);
+  const login = await t.app.inject({ method: "POST", url: "/api/auth/login", headers: { origin: t.publicOrigin }, payload: { loginId: THIRD.loginId, passcode: THIRD.passcode } });
+  const cookies = { owner: await t.memberCookie(), collaborator: (login.headers["set-cookie"] as string).split(";")[0], ceo: await t.loginCookie() };
+  const ownerDoc = (await createObjectMaterial(t.pool, ref, OWNER, "方案", "# 方案\n\n今天开会。", "起草", null)).id;
+  const collaboratorDoc = (await createObjectMaterial(t.pool, ref, COLLABORATOR, "补充", "# 补充\n\n周三交付。", "起草", null)).id;
+  const base = `/api/materials/task/${ref.objectId}`;
+  const as = (cookie: string) => ({
+    list: async () => ((await t.app.inject({ method: "GET", url: base, headers: { cookie } })).json().materials as Listed[]).map((item) => [item.canEdit, item.pending]),
+    detail: async (id: string) => (await t.app.inject({ method: "GET", url: `${base}/${id}`, headers: { cookie } })).json(),
+    post: (id: string, path: string, payload: unknown) => t.app.inject({ method: "POST", url: `${base}/${id}${path}`, headers: { cookie, origin: t.publicOrigin }, payload }),
+  });
+  return { ...t, ref, ownerDoc, collaboratorDoc, owner: as(cookies.owner), collaborator: as(cookies.collaborator), ceo: as(cookies.ceo) };
+}
+
+describe("材料批注按谁写的区分", () => {
+  it("协作者只能保存、正文不动；推进人采用后排队按批注改，修订记采用人和提出人；原文已改的批注标出来", async () => {
+    const seen: string[] = [];
+    const t = await taskFixture({ async generate(input) {
+      seen.push(input.body);
+      return { candidate: { edits: [{ find: "今天", replace: "明天" }], summary: "改日期", noChange: null } };
+    } });
+    try {
+      expect((await t.collaborator.post(t.ownerDoc, "/annotations", request())).json().code).toBe("MATERIAL_FORBIDDEN");
+      const saved: Note = (await t.collaborator.post(t.ownerDoc, "/annotations", request("改为明天", "note"))).json().annotation;
+      expect(saved).toMatchObject({ status: "noted", decidedBy: null, canDecide: false, canApply: false });
+      const later: Note = (await t.collaborator.post(t.ownerDoc, "/annotations", request("加上地点", "note"))).json().annotation;
+      const title: Note = (await t.collaborator.post(t.ownerDoc, "/annotations", { ...request("标题改短", "note"), quote: "方案" })).json().annotation;
+      expect((await t.collaborator.detail(t.ownerDoc)).version).toBe(1);
+      expect(await t.collaborator.list()).toEqual([[false, 0], [true, 0]]);
+      expect((await t.collaborator.post(t.ownerDoc, `/annotations/${saved.id}/decide`, { decision: "adopt" })).statusCode).toBe(403);
+      expect(await t.owner.list()).toEqual([[true, 3], [true, 0]]);
+      expect((await t.owner.detail(t.ownerDoc)).annotations.find((note: Note) => note.id === saved.id)).toMatchObject({ canDecide: true, canApply: false });
+      const adopted = await t.owner.post(t.ownerDoc, `/annotations/${saved.id}/decide`, { decision: "adopt" });
+      expect(adopted.json().annotation).toMatchObject({ status: "queued", decidedBy: { personId: OWNER.personId } });
+      await vi.waitFor(async () => expect((await t.owner.detail(t.ownerDoc)).annotations.find((note: Note) => note.id === saved.id).status).toBe("applied"));
+      const detail = await t.owner.detail(t.ownerDoc);
+      expect(Value.Check(MaterialDetailResponse, detail)).toBe(true);
+      expect(detail.revision).toMatchObject({ version: 2, summary: "按测试丙的批注：改为明天", requestedBy: { personId: OWNER.personId },
+        annotation: { id: saved.id, author: { personId: THIRD.personId } } });
+      expect(detail.annotations.map((note: Note) => [note.id, note.status, note.stale])).toEqual([
+        [title.id, "noted", false], [later.id, "noted", true], [saved.id, "applied", false]]);
+      expect(await t.owner.list()).toEqual([[true, 2], [true, 0]]);
+      expect((await t.owner.post(t.ownerDoc, `/annotations/${saved.id}/decide`, { decision: "decline" })).json().code).toBe("MATERIAL_ANNOTATION_DECIDED");
+      expect(seen).toEqual(["改为明天"]);
+    } finally { await t.close(); }
+  }, 20_000);
+
+  it("上传者「立即修改」直接排队；推进人也能处理协作者材料上的批注；不采用记原因；自己保存的能改成立即修改", async () => {
+    const t = await taskFixture();
+    try {
+      const edit: Note = (await t.collaborator.post(t.collaboratorDoc, "/annotations", request("周三改周五"))).json().annotation;
+      expect(edit).toMatchObject({ status: "queued", decidedBy: { personId: THIRD.personId } });
+      const kept: Note = (await t.collaborator.post(t.collaboratorDoc, "/annotations", request("先记下", "note"))).json().annotation;
+      const mine: Note = (await t.owner.post(t.collaboratorDoc, "/annotations", request("推进人的意见", "note"))).json().annotation;
+      expect((await t.owner.detail(t.collaboratorDoc)).annotations.filter((note: Note) => note.status === "noted")
+        .map((note: Note) => [note.id, note.canDecide, note.canApply])).toEqual([[mine.id, false, true], [kept.id, true, false]]);
+      const declined = await t.owner.post(t.collaboratorDoc, `/annotations/${kept.id}/decide`, { decision: "decline", reason: " 已经改过了 " });
+      expect(declined.json().annotation).toMatchObject({ status: "declined", note: "已经改过了", decidedBy: { personId: OWNER.personId } });
+      const applied = await t.owner.post(t.collaboratorDoc, `/annotations/${mine.id}/decide`, { decision: "adopt" });
+      expect(applied.json().annotation).toMatchObject({ status: "queued", decidedBy: { personId: OWNER.personId } });
+      await vi.waitFor(async () => expect((await t.owner.detail(t.collaboratorDoc)).annotations.map((note: Note) => note.status))
+        .toEqual(["no_change", "declined", "no_change"]));
+    } finally { await t.close(); }
+  }, 20_000);
+
+  it("不能改的人提的修改建议交给上传者，对象负责人也能处理；恢复删掉的段落也只给能改的人", async () => {
+    const t = await taskFixture();
+    try {
+      await t.sql("INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('task',$1,$2,$3)", [t.ref.objectId, TEST_CEO.personId, OWNER.personId]);
+      const proposal = await proposeMaterialEdit(t.pool, t.ref, t.collaboratorDoc, viewer, "改交付日", [{ find: "周三", replace: "周五" }],
+        new Map([[THIRD.personId, "测试丙"]]));
+      expect(proposal.message).toBe("已交给测试丙，测试丙在材料上方点『按这个改』才生效");
+      expect((await t.collaborator.detail(t.collaboratorDoc)).proposals).toMatchObject([{ id: proposal.id,
+        proposedBy: { personId: TEST_CEO.personId }, proposedFor: { personId: THIRD.personId } }]);
+      expect((await t.ceo.detail(t.collaboratorDoc)).proposals).toEqual([]);
+      expect((await t.ceo.post(t.collaboratorDoc, `/proposals/${proposal.id}`, { decision: "apply" })).statusCode).toBe(403);
+      const applied = await t.owner.post(t.collaboratorDoc, `/proposals/${proposal.id}`, { decision: "apply" });
+      expect(applied.json()).toMatchObject({ version: 2, proposals: [], revision: { summary: "改交付日", requestedBy: { personId: OWNER.personId } } });
+      await editObjectMaterial(t.pool, t.ref, t.ownerDoc, OWNER, 1, [{ find: "\n\n今天开会。", replace: "" }], "删掉一段", null);
+      const removed = (await t.collaborator.detail(t.ownerDoc)).removed[0];
+      expect(removed).toMatchObject({ text: "今天开会。", restorable: false });
+      expect((await t.collaborator.post(t.ownerDoc, "/restore", { version: 2, removedId: removed.id })).statusCode).toBe(403);
+      expect((await t.owner.detail(t.ownerDoc)).removed[0].restorable).toBe(true);
     } finally { await t.close(); }
   }, 20_000);
 });

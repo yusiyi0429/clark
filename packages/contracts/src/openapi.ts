@@ -165,7 +165,7 @@ import {
   MaterialBlock,
   MaterialDetailResponse,
   MaterialAnnotationView, CreateMaterialAnnotationRequest, CreateMaterialAnnotationResponse, MaterialRemovedView,
-  RestoreMaterialRemovedRequest, MaterialEditProposalView, DecideMaterialEditProposalRequest,
+  RestoreMaterialRemovedRequest, MaterialEditProposalView, DecideMaterialEditProposalRequest, DecideMaterialAnnotationRequest,
   WeeklyProgressResponse,
 } from "./index.js";
 
@@ -1099,33 +1099,47 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/materials/{objectType}/{objectId}/{materialId}/annotations": {
         post: {
           operationId: "createMaterialAnnotation",
-          summary: "选中材料里的一段文字写批注；Markdown / HTML 写完即排队让 Co-Agent 按批注改（同一份材料按顺序一条条改），PDF / Word 只留批注；按 clientId 幂等",
+          summary: "选中材料里的一段文字写批注；默认只保存（noted），intent=edit「立即修改」只给上传者和对象负责人、只限 Markdown / HTML，排队让 Co-Agent 按批注改（同一份材料按顺序一条条改），其他人 403；按 clientId 幂等",
           parameters: [
             { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
             { name: "materialId", in: "path", required: true, schema: { type: "string" } },
           ],
           requestBody: jsonBody({ $ref: "#/components/schemas/CreateMaterialAnnotationRequest" }),
-          responses: { "200": { description: "批注", content: { "application/json": { schema: { $ref: "#/components/schemas/CreateMaterialAnnotationResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
+          responses: { "200": { description: "批注", content: { "application/json": { schema: { $ref: "#/components/schemas/CreateMaterialAnnotationResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/materials/{objectType}/{objectId}/{materialId}/annotations/{annotationId}/decide": {
+        post: {
+          operationId: "decideMaterialAnnotation",
+          summary: "上传者或对象负责人处理一条保存着的批注：采用（进原队列让 Co-Agent 按批注改，记下采用人）或不采用（原因可不填）；PDF / Word 400，其他人 403，已处理 409",
+          parameters: [
+            { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
+            { name: "objectId", in: "path", required: true, schema: { type: "string" } },
+            { name: "materialId", in: "path", required: true, schema: { type: "string" } },
+            { name: "annotationId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: jsonBody({ $ref: "#/components/schemas/DecideMaterialAnnotationRequest" }),
+          responses: { "200": { description: "处理后的批注", content: { "application/json": { schema: { $ref: "#/components/schemas/CreateMaterialAnnotationResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/materials/{objectType}/{objectId}/{materialId}/restore": {
         post: {
           operationId: "restoreMaterialRemoved",
-          summary: "把垃圾篓里的一段插回原位，存成新的一版；version 不是最新 409",
+          summary: "把垃圾篓里的一段插回原位，存成新的一版；只有上传者和对象负责人，其他人 403；version 不是最新 409",
           parameters: [
             { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
             { name: "materialId", in: "path", required: true, schema: { type: "string" } },
           ],
           requestBody: jsonBody({ $ref: "#/components/schemas/RestoreMaterialRemovedRequest" }),
-          responses: { "200": { description: "恢复后的最新详情", content: { "application/json": { schema: { $ref: "#/components/schemas/MaterialDetailResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+          responses: { "200": { description: "恢复后的最新详情", content: { "application/json": { schema: { $ref: "#/components/schemas/MaterialDetailResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/materials/{objectType}/{objectId}/{materialId}/proposals/{proposalId}": {
         post: {
           operationId: "decideMaterialEditProposal",
-          summary: "对 Co-Agent 的修改提议点「按这个改」或「忽略」；只有提议对象本人能处理；材料已被改过则 409（提议变 stale）",
+          summary: "对 Co-Agent 的修改提议点「按这个改」或「忽略」；提议对象本人处理，不能改的人提的建议上传者和对象负责人都能处理；材料已被改过则 409（提议变 stale）",
           parameters: [
             { name: "objectType", in: "path", required: true, schema: { type: "string", enum: ["issue", "task", "meeting"] } },
             { name: "objectId", in: "path", required: true, schema: { type: "string" } },
@@ -2198,6 +2212,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         RestoreMaterialRemovedRequest: RestoreMaterialRemovedRequest as JsonSchema,
         MaterialEditProposalView: MaterialEditProposalView as JsonSchema,
         DecideMaterialEditProposalRequest: DecideMaterialEditProposalRequest as JsonSchema,
+        DecideMaterialAnnotationRequest: DecideMaterialAnnotationRequest as JsonSchema,
         WeeklyProgressResponse: WeeklyProgressResponse as JsonSchema,
         ListPersonalTokensResponse: ListPersonalTokensResponse as JsonSchema,
         CreatePersonalTokenRequest: CreatePersonalTokenRequest as JsonSchema,
