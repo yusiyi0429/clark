@@ -84,3 +84,9 @@ Blocked by: —（与 01 并行；联调时需要 01 的个人复盘数据）
 - 签发后才补参与者的战场不会自动起草，产品内也没有补起入口；签发提交到建轮次之间若进程中断同样不会补起（ADR-0026 限制）。
 - 三个战场同时起草，模型并发约等于参与者总数（10 月约 12 人）。
 - `MISSION_CARD_DRAFTS_DIR` 现已无代码读取，可另行删除。
+
+### 2026-10-08 world-02 导出（本机）
+
+- 用 `WorldClient` 只读 `GET /v1/world/objects?type=Mission` + `GET /v1/world/objects/{id}` 从当前 world-02 实例（scope `a92430fd…`，eo 域 `88674067…`，即 10/1 按 Content Pact 重建的 v0.6.x 实例）取到 3 个 Mission，标题与负责人都对得上：renhao-202610-b = `f3f9bbd7…@2`、renhao-202610-c = `82c852a2…@2`、siyi-202610-1 = `7885a696…@2`。三个都还没有 `mission:<编号>` 外部引用。
+- 本体上只有「战役定义」块有内容（outcome + acceptance_criterion）；「Mission 计划」「Task 全景」块都是空的。导出的 markdown 按「战役定义 / Mission 计划」写，计划写明「本体上暂无」，填进 `seed/imports/2026-10-known-missions.json` 两条 `kind: world-02`（同时补了 `title`、`sourceRef`）。原始对象存档 `.scratch/october-launch/evidence/world-02-missions-2026-10-08.json`。
+- 发现：`apps/api/config/world-instance.json` 仍是 9/29 实例的 id（scope `1e8552e2…`、eo `280fb9c9…`），按它列 eo 域对象返回 404，`world:link-missions` 会失败。需换成 `.scratch/tkos-world-02/ids-v0.6.0.json` 的 id 后才能关联（待 Sean 定）。

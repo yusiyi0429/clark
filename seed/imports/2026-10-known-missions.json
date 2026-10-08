@@ -15,7 +15,9 @@
         "renhao-202610-b",
         "renhao-202610-c"
       ],
-      "markdown": null
+      "markdown": "# Ontology & Data Grounding（renhao-202610-b）\n\n## 战役定义\n\n**Outcome：**用 M1A / CEO Agent 跑通真实数据读取、必要蒸馏、候选写入、人工确认、正式写回及更新后再次调用；数据有来源、业务确认人、维护责任和实际使用证据。\n\n**验收标准：**\n- M1A 必需数据有来源、状态、更新方式和消费模块记录\n- 读取与蒸馏服务接入真实产品，未经确认的候选不得进入正式事实\n- 至少一条完整确认写回及数据更新后再次调用记录\n- 检查缺失、过期、写入失败等情况并明确处理人，仅有 Schema、接口或方案不算达成\n\n## Mission 计划\n\n本体上暂无（未填 core_path / milestone / constraint_dependency / key_trade_off）。\n\n# ENO / Engine Blueprint（renhao-202610-c）\n\n## 战役定义\n\n**Outcome：**形成 ENO / Engine Blueprint，说明 ENO 在 TKOS 中的角色，以及 Ontology、Context、Memory、Runtime、Harness、Eval 的边界与关系。\n\n**验收标准：**\n- 解释本月模块与记忆服务的位置、共用能力和产品专属能力\n- 给出做与不做的决定及理由，经产品、E&O DRI 及 CEO 评审边界与取舍\n- 与运行实际一致，区分已实现、已验证、本月必做和后续演进\n\n## Mission 计划\n\n本体上暂无（未填 core_path / milestone / constraint_dependency / key_trade_off）。",
+      "title": "Ontology & Data Grounding / ENO / Engine Blueprint",
+      "sourceRef": "world-02 本体 Mission，2026-10-08 导出：renhao-202610-b = f3f9bbd7-f636-44f5-befe-a2d80db99ca2@2；renhao-202610-c = 82c852a2-41d9-49c5-b475-d730ec70128f@2"
     },
     {
       "personId": "yu-siyi",
@@ -23,7 +25,9 @@
       "missionIds": [
         "siyi-202610-1"
       ],
-      "markdown": null
+      "markdown": "# 可信 Context / Memory 与真实 Agent 读写闭环（siyi-202610-1）\n\n## 战役定义\n\n**Outcome：**月底形成战略层与经营层 Ontology v0.1，将 8–9 月真实数据纳入统一 Context / Memory，跑通至少一条授权可追溯的真实 Agent 读写闭环，并完成最小部署与缺口报告。\n\n**验收标准：**\n- 两层 Ontology 承载真实业务，完成 Design Pack、Action Catalog、Evidence Policy 评审\n- 约定范围内的 8–9 月真实数据进入统一 Context / Memory，来源、责任人、时间、版本、权限可追溯\n- 至少一条「真实输入 → 授权 Context → Agent 提案 → 人工确认 → 版本写回 → Receipt / Audit」的完整闭环\n- 治理边界验证\n\n## Mission 计划\n\n本体上暂无（未填 core_path / milestone / constraint_dependency / key_trade_off）。",
+      "title": "可信 Context / Memory 与真实 Agent 读写闭环",
+      "sourceRef": "world-02 本体 Mission，2026-10-08 导出：siyi-202610-1 = 7885a696-3b68-41af-b346-7f71f6a4a9b4@2"
     }
   ]
 }
