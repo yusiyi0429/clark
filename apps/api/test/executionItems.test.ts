@@ -27,13 +27,13 @@ describe("执行事项",()=>{
       const judged=(await call(f,f.member,"GET",`/api/me/tasks/${first.json().id}`)).json();
       expect(judged.judgment).toBe("先验证"); expect(judged.judgmentAt).toEqual(expect.any(String));
       expect((await call(f,f.member,"GET",`/api/me/tasks/${second.id}`)).json().task.mission).toMatchObject({step:1,steps:1});
-      const stale=await call(f,f.member,"PATCH",`/api/me/tasks/${first.json().id}`,{version:1,status:"done"});
+      const stale=await call(f,f.member,"PATCH",`/api/me/tasks/${first.json().id}`,{version:1,status:"in_progress"});
       expect(stale.statusCode).toBe(409); expect(stale.json().latestTask.version).toBe(2);
       const context=await getScopeObject(async(sql,params)=>{ const rows=await f.t.sql(sql,params); return {rows,rowCount:rows.length} as never; },
         `task:${first.json().id}`,f.t.env.sessionSecret,{person:{personId:"person-fixture-002",role:"member"},
           people:loadCompanyMemory(f.t.env).searchPeople(undefined),now:new Date("2026-10-10T02:00:00Z")});
       expect(context.snapshot?.payload).toMatchObject({task:{id:first.json().id},mission:{title:"验证",battlefield_name:"增长战场"},monthOutcome:"本月目标"});
-      expect((await call(f,f.ceo,"PATCH",`/api/me/tasks/${second.id}`,{version:1,status:"done"})).statusCode).toBe(403);
+      expect((await call(f,f.ceo,"PATCH",`/api/me/tasks/${second.id}`,{version:1,status:"in_progress"})).statusCode).toBe(403);
     } finally { await f.t.close(); }
   });
 

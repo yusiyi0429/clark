@@ -1,5 +1,5 @@
 /* clark workspace / card-document：同一阅读面、版本行、字段列和行内意见；材质统一为晨光冷白。 */
-.screen { display: flex; flex: 1; min-width: 0; min-height: 0; --glass-light-fill: var(--onboarding-glass); --glass-blur: blur(var(--onboarding-blur)) saturate(var(--onboarding-sat)); --glass-light-shadow: var(--onboarding-shadow); }
+.screen { display: flex; flex: 1; min-width: 0; min-height: 0; container: mission-card / inline-size; --glass-light-fill: var(--onboarding-glass); --glass-blur: blur(var(--onboarding-blur)) saturate(var(--onboarding-sat)); --glass-light-shadow: var(--onboarding-shadow); }
 .screen :global(.ts-detail) { background: var(--surface); overflow-y: auto; overscroll-behavior: contain; }
 .content { box-sizing: border-box; width: 100%; min-width: 0; padding: 24px calc(32px + var(--conversation-lane, 0px)) 128px 32px; color: var(--ink-muted); transition: padding-right var(--dur-slow) var(--ease-brand); }
 .content > * { max-width: 840px; margin-inline: auto; }
@@ -10,25 +10,24 @@
 .peopleText { display: grid; gap: 1px; }
 .peopleText strong { font-size: 13px; font-weight: 600; }
 .peopleText small { color: var(--ink-muted); font-size: 11px; }
-.document { min-width: 0; max-width: 100%; font-size: 15px; line-height: 1.85; color: var(--ink-muted); }
+.document { min-width: 0; max-width: 840px; font-size: 15px; line-height: 1.75; color: var(--ink-muted); }
 .version { display: grid; gap: 8px; padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid var(--hairline); font-size: 14px; line-height: 1.75; }
 .versionMain, .source { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .versionMain strong { color: var(--ink); font-weight: 600; }
 .source { color: var(--ink-muted); }
 .source a { color: var(--brand-deep); text-decoration: underline; text-underline-offset: 4px; }
-.tasks { display: grid; gap: 40px; }
+.tasks { display: grid; gap: 32px; }
 .task h2, .loose h2 { margin: 0; color: var(--ink); font-size: 21px; line-height: 1.5; font-weight: 600; }
-.taskMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 8px 0 20px; color: var(--ink-faint); font-size: 13px; overflow-wrap: anywhere; }
+.taskMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 8px 0 16px; color: var(--ink-faint); font-size: 13px; overflow-wrap: anywhere; }
 .placeholder { padding: 1px 8px; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-pill-radius); color: var(--ink-muted); }
-.fields { margin: 0; display: grid; }
-.field { display: grid; grid-template-columns: 104px minmax(0,1fr); gap: 16px; border-top: 1px solid var(--hairline); padding: 16px 0; }
-.field dt { display: grid; align-content: start; gap: 8px; color: var(--ink-muted); font-size: 14px; font-weight: 600; }
+.fields { margin: 0; display: grid; gap: 17px; }
+.field { position: relative; display: block; min-width: 0; padding: 0; }
+.field h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 6px; color: var(--ink); font-size: 14px; line-height: 1.6; font-weight: 600; }
 .field dd { min-width: 0; margin: 0; }
-.field p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.field p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .field ul { margin: 0; padding-left: 22px; list-style: disc; }
 .field li { margin: 2px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .fieldText { outline-offset: 4px; }
-.field[data-changed] { border-left: 2px solid var(--onboarding-blue); padding-left: 12px; }
 .changed { color: var(--brand-deep); font-size: 12px; font-weight: 400; }
 /* 「已更正」与「占位」同一族小标，点开这个字段的更正记录；按钮只留热区，不另画底色。 */
 .corrected.corrected { --button-bg-hover: transparent; --button-bg-pressed: transparent; justify-self: start; height: auto; min-height: 32px; margin-block: -6px; padding: 0; color: var(--brand-deep); font-size: 12px; font-weight: 400; }
@@ -47,9 +46,9 @@
 .proposal input:focus-visible, .rejectNote input:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
 .missing { color: var(--ink-faint); }
 .owner { color: var(--ink); font-weight: 600; }
-.fieldActions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; opacity: 0; transition: opacity 160ms ease; }
+.fieldActions { position: absolute; top: -5px; right: 0; display: flex; flex-wrap: wrap; gap: 4px; margin: 0; opacity: 0; transition: opacity 160ms ease; }
 .field:hover .fieldActions, .field:focus-within .fieldActions { opacity: 1; }
-.textAction.textAction { min-height: 44px; height: 44px; padding: 0 8px; border-radius: var(--onboarding-inset-radius); font-size: 13px; color: var(--brand-deep); }
+.textAction.textAction { min-height: 30px; height: 30px; padding: 0 8px; border-radius: var(--onboarding-inset-radius); font-size: 12px; color: var(--brand-deep); }
 .proposal { display: grid; gap: 12px; margin-top: 12px; padding: 16px; border: 1px solid color-mix(in oklab, var(--onboarding-blue) 20%, var(--surface)); border-radius: var(--onboarding-inset-radius); background: color-mix(in oklab, var(--onboarding-blue) 5%, var(--surface)); }
 .proposal label { color: var(--ink); font-size: 14px; font-weight: 600; }
 .proposal textarea { width: 100%; min-height: 112px; resize: vertical; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-control-radius); padding: 12px; background: var(--surface); color: var(--ink); font: inherit; line-height: 1.7; outline: none; }
@@ -91,9 +90,50 @@
 .dialog h3 { margin: 24px 0 8px; color: var(--ink); font-size: 16px; font-weight: 600; }
 .dialog p { margin: 0; white-space: pre-wrap; line-height: 1.8; }
 .dialog footer { display: flex; justify-content: flex-end; margin-top: 24px; }
-.tabs { display: flex; gap: 8px; margin-bottom: 24px; }
-.tabs button { min-height: 44px; border-radius: var(--onboarding-pill-radius); padding: 8px 16px; }
+.tabs { display: flex; align-items: center; gap: 8px; margin: 0; }
+.tabs button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; border-radius: var(--onboarding-pill-radius); padding: 7px 18px; font-size: 14px; line-height: 1.6; }
 .tabs [aria-selected='true'] { background: var(--onboarding-blue); color: var(--solid-fg); }
+.tabs button:disabled { color: var(--ink-faint); cursor: default; }
+.tabs button:focus-visible,.notesToggle:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
+.documentTools { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin: 0 0 20px; }
+.notesToggle { display: inline-flex; align-items: center; gap: 7px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-faint); font-size: 12px; white-space: nowrap; cursor: pointer; }
+.notesToggle span { color: var(--brand-deep); }
+.annotationList { display: grid; gap: 8px; margin-bottom: 28px; }
+.legacyFeedback { font-size: 13px; color: var(--ink-faint); }
+.legacyFeedback summary { cursor: pointer; width: fit-content; }
+.feedbackHistory { display: grid; gap: 8px; }
+.feedbackHistory p { display: grid; gap: 3px; margin: 0; }
+.feedbackHistory small { color: var(--ink-faint); font-size: 11px; }
+.taskTitle { margin: 0; color: var(--ink); font-size: 21px; line-height: 1.5; font-weight: 600; }
+.titleWrap { position: relative; }.titleWrap:hover .fieldActions,.titleWrap:focus-within .fieldActions { opacity: 1; }
+.taskTitle p { color: var(--ink); line-height: 1.5; }
+.task + .task { padding-top: 32px; border-top: 1px solid var(--hairline); }
+.headerActions { display: flex; align-items: center; gap: 10px; }
+.screen :global(.ts-detail-header) { grid-template-columns: auto auto auto minmax(0, max-content) auto minmax(0, 1fr) auto auto auto; grid-template-areas: 'back lead eyebrow title people spacer tools actions end'; }
+.screen :global(.ts-detail-header [data-header-tools]) { display: contents; }
+.screen :global([data-mission-people]) { grid-area: people; min-width: 0; margin-left: 5px; }
+.screen :global([data-mission-view]) { grid-area: tools; margin-right: 8px; min-width: 0; }
+.headerPrimary.headerPrimary { min-height: 30px; height: 30px; min-width: 0; padding: 0 11px; border-radius: 8px; font-size: 12px; line-height: 20px; white-space: nowrap; }
+.help.help { min-width: 32px; width: 32px; height: 32px; min-height: 32px; padding: 0; border-radius: 50%; color: var(--ink-faint); }
+.help.help:hover { color: var(--ink-muted); background: transparent; }
+.goals { display: grid; gap: 16px; margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--hairline); }
+.goals h2 { margin: 0 0 4px; color: var(--ink-faint); font-size: 12px; font-weight: 500; line-height: 1.6; }
+.goals p { margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 1.85; max-width: 58em; white-space: pre-wrap; }
+.workflow { margin: 0 0 16px; }
+.draftStatus { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); background: var(--morning-start); color: var(--ink-muted); font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
+.draftStatus p { margin: 0; white-space: pre-wrap; }
+.draftStatusTop { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+.draftStatusTitle { color: var(--ink); font-weight: 600; }
+.draftFailure { display: grid; gap: 2px; }
+.draftFailureOwner { color: var(--ink-faint); font-size: 12px; }
+.draftFailureSummary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.draftFailureDetails { margin-top: 2px; }
+.draftFailureDetails summary { width: fit-content; color: var(--brand-deep); font-size: 13px; cursor: pointer; }
+.draftFailureDetails summary:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; border-radius: 2px; }
+.draftFailureDetails[open] > p { margin-top: 8px; padding-left: 10px; border-left: 1px solid var(--hairline-strong); }
+.workflowRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--ink-faint); font-size: 12px; }
+.workflowRow p { margin: 0; }.workflowRow .textAction { font-size: 12px; }
+.annotationError { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; color: var(--ink-faint); font-size: 12px; }.annotationError button { color: var(--brand-deep); }
 .artifact { overflow-wrap: anywhere; }
 .artifact table { display: block; max-width: 100%; overflow-x: auto; }
 @media (hover: none) { .fieldActions { opacity: 1; } }
@@ -101,10 +141,37 @@
 /* ≤959 输入条浮在底部（手机与三折叠双屏）：正文底部让出它。 */
 @media (max-width: 959px) { .content { padding-bottom: 152px; } }
 @media (max-width: 759px) { .content { padding: 16px 16px 152px; } .document { font-size: 15px; } .task h2 { font-size: 20px; } .field { grid-template-columns: 1fr; gap: 8px; padding-block: 16px; } .field dt { font-size: 14px; } .fieldActions { opacity: 1; } .taskMeta { margin-bottom: 16px; } .primary.primary { width: 100%; } .proposal { padding: 12px; } .remark { padding: 12px; } .verdict { margin-left: 0; } }
+@media (max-width:759px) { .goals { gap: 14px; margin-bottom: 22px; padding-bottom: 22px; }.goals h2 { font-size: 13px; }.notesToggle { font-size: 13px; }.field { padding-block: 0; }.fieldActions { margin-top: 2px; }.workflowRow { flex-wrap: wrap; font-size: 13px; }.taskTitle { font-size: 20px; }.headerActions { gap: 3px; } }
 /* 手机共同页头的返回键焦点环会向标题外扩；只为个人卡标题留出阅读间距。 */
-@media (max-width: 959px) { .screen :global(.ts-detail-header > h1) { box-sizing: border-box; padding-inline-start: 10px; } }
+@media (max-width: 959px) {
+  /* 手机的对话入口在底部输入条，页头右侧只留正常边距。 */
+  .screen :global(.ts-detail-header) { padding-inline-end: 12px; }
+  .screen :global(.ts-detail-header > h1) { box-sizing: border-box; padding-inline-start: 10px; text-wrap: balance; }
+  .titleWrap:has(> .fieldActions) .taskTitle { padding-inline-end: 64px; }
+  .taskTitle p { text-wrap: balance; }
+}
+/* 最窄手持屏保留完整倒计时文字，把辅助进度线的空间交给标题和两个入口。 */
+@media (max-width: 400px) { .headerActions time > [aria-hidden] { display: none; } }
+/* 按阅读面实际宽度适配，手机和三折叠双屏的窄阅读栏都能放下页头。 */
+@container mission-card (max-width: 599px) {
+  .screen :global(.ts-detail) { --detail-header-height: 48px; }
+  .screen :global(.ts-detail-header) { grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-rows: 48px; grid-template-areas: 'back title people tools actions'; padding-inline-start: 4px; }
+  .screen :global(.ts-detail-header > .ts-eyebrow) { display: none; }
+  .screen :global(.ts-detail-header > h1) { white-space: nowrap; display: block; font-size: 14px; line-height: 20px; padding-inline-start: 0; overflow: hidden; text-overflow: ellipsis; }
+  .screen :global([data-mission-people]) { margin-left: 0; }
+  .screen :global([data-mission-view]) { margin-right: 2px; }
+  .screen :global([data-mission-view] [data-material-menu]) { width: 30px; min-width: 30px; height: 32px; padding: 0; gap: 0; justify-content: center; }
+  .screen :global([data-mission-view] [data-material-menu] > span), .screen :global([data-mission-view] [data-material-menu] > svg:last-child) { display: none; }
+  .headerActions { gap: 2px; }
+  .headerActions time { display: none; }
+  .headerActions .help { min-width: 28px; width: 28px; }
+  .headerActions .headerPrimary { font-size: 13px; padding-inline: 8px; }
+}
+@container mission-card (max-width: 360px) {
+  .screen :global(.ts-detail-header > .ts-row > [data-close-view]) { margin-right: 2px; }
+}
 @media (prefers-reduced-motion: reduce) { .fieldActions, .content { transition: none; } }
 @media (prefers-reduced-transparency: reduce) { .dialog { background: var(--morning-start); backdrop-filter: none; } }
 @media (prefers-contrast: more) { .field, .version, .remark, .readonly, .corrected > span { border-color: var(--ink-muted); } }
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
-@media(max-width:959px){.peopleText.peopleText>small,.diff.diff>p>span{font-size:13px}.basis.basis,.location.location{font-size:14px}}
+@media(max-width:959px){.peopleText.peopleText>small,.diff.diff>p>span,.draftFailureOwner{font-size:13px}.basis.basis,.location.location,.draftStatus .hint,.draftFailureDetails summary{font-size:14px}}

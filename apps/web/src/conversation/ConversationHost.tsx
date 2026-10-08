@@ -21,6 +21,7 @@ import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
 import { useListening } from "@/components/coagent/presence";
 import { useCoAgentSkin } from "@/components/coagent/skin";
 import type { DetailGroup } from "./missionCardGroup";
+import type { QuotePrefill, TextQuote } from "./quotes";
 import groupStyles from "@/styles/mission-group.module.css";
 import w from "@/styles/app-shell.module.css";
 
@@ -37,9 +38,11 @@ export type ConversationUiState = {
   setGlobalView: (global: boolean) => void;
   railMobileOpen: boolean;
   setRailMobileOpen: (open: boolean) => void;
-  /** 待放进输入条的引用追问；输入条用过后清掉，换对象时也清掉。 */
-  prefill: { text: string; nonce: number } | null;
-  consumePrefill: () => void;
+  /** New selection focuses private input; independent references remain until sent/removed. */
+  prefill: QuotePrefill | null;
+  consumePrefill: (nonce?: number) => void;
+  quotes: TextQuote[];
+  removeQuotes: (ids: string[]) => void;
 };
 
 /**
@@ -124,6 +127,8 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { targ
         onDiscussGlobal={discussGlobal}
         prefill={ui.prefill}
         onPrefillUsed={ui.consumePrefill}
+        textQuotes={ui.quotes.filter((item) => item.source?.scope === target.scope)}
+        onRemoveQuotes={ui.removeQuotes}
       />
     </>
   );
@@ -153,12 +158,17 @@ function RailConversation({
 }) {
   const column = useColumnMode();
   const [composerHeight, setComposerHeight] = useState(90);
-  const [channel, setChannel] = useState("agent");
+  const [selectedChannel, setChannel] = useState("agent");
+  // 新引用在这一帧就进入私聊，不能先挂载公开输入条；下方 effect 保留消费后的频道。
+  const openedGroupDeepLink = useRef<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
   const taskGroup = target.group?.kind === "task" ? target.group : undefined;
   const otherThread = target.group?.kind === "thread" ? target.group : undefined;
   const threadGroup = taskGroup || otherThread;
-  const missionGroup = target.group && target.group.kind !== "task" && target.group.kind !== "thread" ? target.group : undefined;
+  const personalContext = target.group && target.group.kind !== "task" && target.group.kind !== "thread" ? target.group : undefined;
+  const missionGroup = personalContext?.canDiscuss !== false ? personalContext : undefined;
+  const hasGroup = !!(threadGroup || missionGroup);
+  const channel = ui.prefill || !hasGroup ? "agent" : selectedChannel;
   const groupVisible = channel === "group" && (column.narrow ? ui.railMobileOpen : column.mode === "expanded");
   const group = useMissionGroup(missionGroup, groupVisible);
   const thread = useThreadGroup(otherThread?.objectType ?? "task", taskGroup?.taskId ?? otherThread?.objectId, groupVisible);
@@ -184,18 +194,21 @@ function RailConversation({
   const groupLabel = otherThread?.objectType === "issue" ? "议题群聊" : otherThread?.objectType === "meeting" ? "会议群聊" : "事项群组";
   const channels: ConversationChannel[] = [
     { id: "agent", kind: "agent", label: "我的 Agent", title: agentTitle, unread: 0 },
-    ...(target.group ? [{ id: "group", kind: "group" as const, label: `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
+    ...(hasGroup ? [{ id: "group", kind: "group" as const, label: `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
       title: otherThread ? `${target.label} · ${members.length} 人` : `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
       unread: threadGroup ? (thread.view?.unread ?? 0) : (group.view?.unread ?? 0) }] : []),
   ];
   useEffect(() => {
-    if (!target.group || new URLSearchParams(window.location.search).get("channel") !== "group") return;
-    setChannel("group");
+    if (!hasGroup || new URLSearchParams(window.location.search).get("channel") !== "group") return;
+    if (openedGroupDeepLink.current !== target.scope) {
+      openedGroupDeepLink.current = target.scope;
+      setChannel("group");
+    } else if (channel !== "group") return;
     if (column.narrow) ui.setRailMobileOpen(true);
     else column.setMode("expanded");
-    // 只在通过通知明确打开群聊时切换。
+    // 首次通知深链选择群聊；水合或宽窄变化只展开当前群聊，不覆盖用户后来选择的私聊。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.scope, column.narrow]);
+  }, [target.scope, column.narrow, hasGroup]);
   useEffect(() => {
     if (!threadGroup) return;
     const open = (event: Event) => {
@@ -229,6 +242,16 @@ function RailConversation({
   }, [missionGroup?.reference?.nonce]);
 
   useEffect(() => {
+    if (!ui.prefill) return;
+    // 「引用并对话」明确进入私聊；公开频道的输入条不会消费 Agent 的预填内容。
+    setChannel("agent");
+    if (column.narrow) ui.setRailMobileOpen(true);
+    else column.setMode("expanded");
+    // 只响应新的引用，消费预填后仍留在私聊；普通重绘不切换频道。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ui.prefill?.nonce]);
+
+  useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
   }, [data.messages, data.streaming, group.view?.entries.length, thread.view?.messages.length, channel]);
 
@@ -258,7 +281,7 @@ function RailConversation({
           </>}
           <div ref={end} />
         </div>
-        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? threadGroup && thread.left ? "你已不在这个群" : `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : missionGroup ? "仅你可见 · 只读：不改这张卡、不进集中 Review" : target.scope.startsWith("monthly-review-item:") ? "仅你可见 · Agent 只提改写建议，你点「采用」才写进左侧" : data.viewingMaterialEditable ? `仅你可见 · 可让 Agent 修改这份${viewingMaterialFormat === "html" ? " HTML" : viewingMaterialFormat === "markdown" ? " Markdown" : "材料"}；其他业务仍只读` : /^(issue|task):/.test(target.scope) ? "仅你可见 · 可让 Agent 改或新写 Markdown 材料；其他业务只读" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
+        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? threadGroup && thread.left ? "你已不在这个群" : `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : personalContext ? personalContext.agentNote ?? "仅你可见 · 当前可讨论，修改权限以任务状态为准" : target.scope.startsWith("monthly-review-item:") ? "仅你可见 · Agent 只提改写建议，你点「采用」才写进左侧" : data.viewingMaterialEditable ? `仅你可见 · 可让 Agent 修改这份${viewingMaterialFormat === "html" ? " HTML" : viewingMaterialFormat === "markdown" ? " Markdown" : "材料"}；其他业务仍只读` : /^(issue|task):/.test(target.scope) ? "仅你可见 · 可让 Agent 改或新写 Markdown 材料；其他业务只读" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
       </ConversationColumn>
       {channel === "group" && target.group ? <MissionGroupComposer cardId={taskGroup?.taskId ?? otherThread?.objectId ?? missionGroup!.cardId} taskId={taskGroup?.taskId ?? otherThread?.objectId} viewerId={target.group.viewerId} phase={threadGroup ? "open" : missionGroup!.phase} channels={channels} channel={channel} onChannel={setChannel} narrow={column.narrow} mobileOpen={ui.railMobileOpen} onMobileOpen={ui.setRailMobileOpen} onHeightChange={setComposerHeight} reference={missionGroup?.reference ?? null} onRemoveReference={missionGroup?.onRemoveReference ?? (() => {})} busy={threadGroup ? thread.sending : group.sending} readOnly={thread.left} error={threadGroup ? thread.error : group.error} onSend={threadGroup ? (body) => thread.send(body) : group.send} /> : <ColumnComposer
         data={data}
@@ -274,6 +297,8 @@ function RailConversation({
         onHeightChange={setComposerHeight}
         prefill={ui.prefill}
         onPrefillUsed={ui.consumePrefill}
+        textQuotes={ui.quotes.filter((item) => item.source?.scope === target.scope)}
+        onRemoveQuotes={ui.removeQuotes}
         draftOwnerId={target.group?.viewerId}
         allowAttachments={!target.group}
       />}

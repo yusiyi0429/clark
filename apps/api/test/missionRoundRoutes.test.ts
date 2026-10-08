@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { signActionId } from "../src/actionToken.js";
 import { createTestApp, type TestApp } from "./helpers.js";
 
@@ -66,7 +66,7 @@ describe("Mission round HTTP boundary", () => {
       expect((await t.sql("SELECT status FROM mission_rounds WHERE id=$1", [roundId]))[0].status).toBe("draft");
       const opened = await execute(t, cookie, token);
       expect(opened.statusCode).toBe(200);
-      expect(opened.json().cards[0]).toMatchObject({ version: 2, payload: { phase: "open", openedAt: start, closesAt: "2026-10-03T02:00:00.000Z", serverNow: start, approver: true } });
+      expect(opened.json().cards[0]).toMatchObject({ version: 2, payload: { phase: "open", openedAt: start, closesAt: null, serverNow: start, approver: true } });
       expect((await execute(t, cookie, token)).json().cards[0].version).toBe(2);
       expect((await execute(t, cookie, token, { viewCardId: cardId })).json().cards[0]).toMatchObject({ kind: "personal-mission-card", version: 2, payload: { card: { cardId } } });
       const duplicate = await execute(t, cookie, action(t, roundId, "mission-round.open", 2));
@@ -78,25 +78,41 @@ describe("Mission round HTTP boundary", () => {
     } finally { await t.close(); }
   });
 
-  it("keeps reads side-effect free and commits a due snapshot before returning a stale-action conflict", async () => {
+  it("keeps preparation open past 48 hours, refuses early close, and closes exactly once after owner confirmation", async () => {
     let current = new Date(start);
-    const t = await createTestApp({}, undefined, { monthlyNow: () => current });
+    const t = await createTestApp({}, undefined, { monthlyNow: () => current, missionCardReviewAgent: { async generate() { return { candidate: { summary: "任务与目标一致", findings: [] } }; } } });
     try {
-      const { roundId } = await seed(t);
+      const { roundId, cardId } = await seed(t);
       const cookie = await t.loginCookie();
       expect((await execute(t, cookie, action(t, roundId, "mission-round.open"))).statusCode).toBe(200);
       current = new Date("2026-10-03T02:00:00.000Z");
       const closed = await t.app.inject({ method: "GET", url: `/api/mission-rounds/${roundId}`, headers: { cookie } });
-      expect(closed.json().cards[0]).toMatchObject({ version: 2, payload: { phase: "closed" } });
+      expect(closed.json().cards[0]).toMatchObject({ version: 2, payload: { phase: "open", closesAt: null } });
       expect(await t.sql("SELECT id FROM mission_round_reviews")).toHaveLength(0);
+      const finished = await execute(t, cookie, action(t, roundId, "mission-round.close", 2));
+      expect(finished.statusCode).toBe(409);
+      expect(finished.json().code).toBe("OWNERS_NOT_CONFIRMED");
+      expect(await t.sql("SELECT id FROM mission_round_reviews")).toHaveLength(0);
+      expect((await t.app.inject({ method: "GET", url: `/api/mission-cards/${cardId}`, headers: { cookie } })).statusCode).toBe(404);
+      const member = await t.memberCookie();
+      const confirm = () => t.app.inject({ method: "POST", url: `/api/mission-cards/${cardId}/owner-confirmation`, headers: { cookie: member, origin: t.publicOrigin }, payload: { confirmed: true, round: 1, missionVersions: { "route-mission": 1 } } });
+      const [one, replay] = await Promise.all([confirm(), confirm()]);
+      expect([one.statusCode, replay.statusCode]).toEqual([200, 200]);
+      await vi.waitFor(async () => expect((await t.app.inject({ method: "GET", url: `/api/mission-rounds/${roundId}`, headers: { cookie } })).json().cards[0].payload.coAgentReview.status).toBe("completed"));
       const stale = await execute(t, cookie, action(t, roundId, "mission-round.reopen", 2));
       expect(stale.statusCode).toBe(409);
-      expect(stale.json().latestCard).toMatchObject({ version: 3, payload: { phase: "reviewing" } });
+      expect(stale.json().latestCard).toMatchObject({ payload: { phase: "reviewing" } });
       expect(await t.sql("SELECT id FROM mission_round_reviews")).toHaveLength(1);
-      const reopenToken = stale.json().latestCard.actions.find((a: {actionType: string}) => a.actionType === "mission-round.reopen").actionId;
-      const reopened = await execute(t, cookie, reopenToken);
-      expect(reopened.statusCode).toBe(200);
-      expect(reopened.json().cards[0]).toMatchObject({ version: 4, payload: { phase: "open", round: 2, closesAt: "2026-10-05T02:00:00.000Z" } });
+      const latest = stale.json().latestCard;
+      expect(latest.actions.some((a: {actionType: string}) => a.actionType === "mission-round.reopen")).toBe(false);
+      expect((await execute(t, cookie, action(t, roundId, "mission-round.reopen", latest.version))).json().code).toBe("SELECT_AFFECTED_CARDS");
+      const returned = () => t.app.inject({ method: "POST", url: `/api/mission-rounds/${roundId}/return-cards`, headers: { cookie, origin: t.publicOrigin }, payload: { cardIds: [cardId], reason: "请明确验收证据", version: latest.version } });
+      const responses = await Promise.all([returned(), returned()]);
+      expect(responses.map((response) => response.statusCode).sort()).toEqual([200, 409]);
+      const reopened = responses.find((response) => response.statusCode === 200)!;
+      expect(responses.find((response) => response.statusCode === 409)!.json().code).toBe("VERSION_CONFLICT");
+      expect(reopened.json().cards[0]).toMatchObject({ payload: { phase: "open", round: 2, closesAt: null, counts: { unreviewed: 1 } } });
+      expect((await t.sql("SELECT owner_confirmed_at,return_reason FROM personal_mission_cards WHERE id=$1", [cardId]))[0]).toEqual({ owner_confirmed_at: null, return_reason: "请明确验收证据" });
     } finally { await t.close(); }
   });
 });

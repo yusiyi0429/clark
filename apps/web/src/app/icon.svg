@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="72 72 368 368" role="img" aria-labelledby="title desc">
   <title id="title">天枢 TKOS 流光枢纽标志</title>
-  <desc id="desc">三条圆润的渐变光带穿过同一个中央枢纽，形成六向星光。</desc>
+  <desc id="desc">六枚圆润光梭围绕中央枢纽，每瓣由内侧深蓝 #275AC4 渐变至外端亮蓝 #3E82F7。</desc>
 
   <defs>
     <!--
@@ -9,9 +9,9 @@
     -->
     <path id="flow-ray" d="M305 247C339 239 371 222 404 204"/>
     <linearGradient id="ray-flow" x1="305" y1="247" x2="404" y2="204" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#075CCB"/>
-      <stop offset=".52" stop-color="#1684FF"/>
-      <stop offset="1" stop-color="#5BD8F6"/>
+      <stop offset="0" stop-color="#275AC4"/>
+      <stop offset=".52" stop-color="#336FDF"/>
+      <stop offset="1" stop-color="#3E82F7"/>
     </linearGradient>
   </defs>
 

@@ -10,12 +10,13 @@ import type { TMissionRoundSummary } from "@warmap/contracts";
 import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { RADAR_SETTINGS_CHANGED, type MemberRadarBrief } from "@/components/radar/personalRadar";
-import type { MemberTask, TaskStatus } from "./MemberTasks";
+import type { MemberTask } from "./MemberTasks";
 import type { MemberWork } from "./MemberHomeWidgets";
+import type { WeeklySyncReminder } from "./weeklySyncNotice";
 
 export interface MemberNotification {
   id: string;
-  kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added";
+  kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted";
   text: string;
   objectType: "task" | "meeting" | "issue";
   objectId: string;
@@ -40,8 +41,9 @@ export function useMemberHome() {
   const [work, setWork] = useState<MemberWork | null>(null);
   /** 雷达关着时为 null，首页整块不出现。 */
   const [radar, setRadar] = useState<MemberRadarBrief | null>(null);
+  /** 周五 18:00 到周日本周还没同步时由服务端给出；其余时间为 null。 */
+  const [weeklySync, setWeeklySync] = useState<WeeklySyncReminder | null>(null);
   const [homeError, setHomeError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
   const loadInFlight = useRef<Promise<void> | null>(null);
 
@@ -53,7 +55,7 @@ export function useMemberHome() {
         window.location.assign("/access?next=%2Fme");
         return;
       }
-      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setWork(home.data.work); setRadar(home.data.radar ?? null); }
+      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setWork(home.data.work); setRadar(home.data.radar ?? null); setWeeklySync(home.data.weeklySync ?? null); }
       setHomeError(home.data ? null : REFRESH_ERROR);
       if (list.data) setNotifications(list.data.notifications as MemberNotification[]);
       if (meetingList.data) setMeetings(meetingList.data.meetings);
@@ -90,25 +92,13 @@ export function useMemberHome() {
     window.addEventListener("focus", resume);
     window.addEventListener("mission-round-changed", roundChanged);
     window.addEventListener("member-tasks-changed", roundChanged);
+    window.addEventListener("meeting-changed", roundChanged);
     window.addEventListener(RADAR_SETTINGS_CHANGED, roundChanged);
     document.addEventListener("visibilitychange", resume);
-    return () => { window.clearInterval(timer); window.removeEventListener("focus", resume); window.removeEventListener("mission-round-changed", roundChanged); window.removeEventListener("member-tasks-changed", roundChanged); window.removeEventListener(RADAR_SETTINGS_CHANGED, roundChanged); document.removeEventListener("visibilitychange", resume); };
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", resume); window.removeEventListener("mission-round-changed", roundChanged); window.removeEventListener("member-tasks-changed", roundChanged); window.removeEventListener("meeting-changed", roundChanged); window.removeEventListener(RADAR_SETTINGS_CHANGED, roundChanged); document.removeEventListener("visibilitychange", resume); };
   }, [load]);
 
   const replaceTask = (task: MemberTask) => setTasks((current) => current.map((item) => (item.id === task.id ? task : item)));
-
-  /** 卡底的「开始推进」「标记完成」。版本过期时换成服务端最新的那一张，并写明原因。 */
-  const setStatus = useCallback(async (task: MemberTask, status: TaskStatus) => {
-    if (status === "returned") return;
-    setBusyId(task.id);
-    setTaskError(null);
-    const { data, error, response } = await browserApi.PATCH("/api/me/tasks/{id}", { params: { path: { id: task.id } }, body: { version: task.version, status } });
-    setBusyId(null);
-    if (data) return replaceTask(data as MemberTask);
-    const latest = (error as { latestTask?: MemberTask } | undefined)?.latestTask;
-    if (response.status === 409 && latest) replaceTask(latest);
-    setTaskError(response.status === 409 ? "这件事刚被改过，已换成最新的样子，请再按一次。" : "没改成，请重试。");
-  }, []);
 
   /** 通知卡上的「退回」：要写原因，主持人会收到提醒。 */
   const returnTask = useCallback(
@@ -164,5 +154,5 @@ export function useMemberHome() {
     [load],
   );
 
-  return { tasks, notifications, meetings, unreadThreads, unreadMissionGroups, rounds, work, radar, homeError, refresh: load, busyId, taskError, setStatus, returnTask, markSeen, readRadarNotice, settle };
+  return { tasks, notifications, meetings, unreadThreads, unreadMissionGroups, rounds, work, radar, weeklySync, homeError, refresh: load, taskError, returnTask, markSeen, readRadarNotice, settle };
 }

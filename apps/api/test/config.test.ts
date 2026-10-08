@@ -470,10 +470,12 @@ describe("CEO 配置页 create 路由", () => {
         {
           id: "growth", version: 1, code: "", sortOrder: 0, name: "增长战场", ownerId: "", ownerDisplayName: "",
           sixMonthOutcome: "验证渠道结构与交付节奏，形成可复制的增长路径。", missionAnchors: [], pendingIssueCount: 2,
+          participantIds: [], participantsDerived: true,
         },
         {
           id: "渠道战场", version: 1, code: "02", sortOrder: 20, name: "渠道战场", ownerId: "person-fixture-002",
           ownerDisplayName: "测试乙", sixMonthOutcome: "渠道战场六个月目标", missionAnchors: [], pendingIssueCount: 1,
+          participantIds: [], participantsDerived: true,
         },
       ]);
       const byId = new Map(body.issues.map((issue: { id: string }) => [issue.id, issue]));
@@ -693,6 +695,8 @@ describe("CEO 配置页编辑路由", () => {
         sixMonthOutcome: "锁定关键器件",
         missionAnchors: [{ code: "05-1", title: "关键器件寻源" }],
         pendingIssueCount: 0,
+        participantIds: [],
+        participantsDerived: true,
       });
 
       const missing = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/不存在", headers, payload: { name: "新名" } });
@@ -701,6 +705,32 @@ describe("CEO 配置页编辑路由", () => {
       expect(empty.statusCode).toBe(400);
       const anonymous = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/供应战场", headers: { origin: t.publicOrigin }, payload: { name: "新名" } });
       expect(anonymous.statusCode).toBe(401);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("saves battlefield participants: names must be in the directory, the CEO never gets a card", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { headers } = await authed(t);
+      const participants = async () => (await t.app.inject({ method: "GET", url: "/api/config/battlefields", headers: { cookie: headers.cookie! } }))
+        .json().battlefields.find((item: { id: string }) => item.id === "growth");
+      // 推算按最新一份月度计划的上月：6 月计划 → 5 月 Mission。
+      await t.sql(`INSERT INTO monthly_plans (id,version,period,status,company_outcome,battlefields,todos,negotiation,generation)
+        VALUES (gen_random_uuid(),1,'2026-06','negotiating','公司结果','[]','[]','{}','{}')`);
+      await t.sql(`INSERT INTO missions (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,source_ref,source_document_id,source_revision,source_title)
+        VALUES ('m-prev',1,'m-prev','2026-05','上月任务','person-fixture-002','cap-delivery','["growth"]','结果','fixture://m','m',1,'已登记')`);
+      expect(await participants()).toMatchObject({ participantIds: ["person-fixture-002"], participantsDerived: true });
+      const unknown = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/growth", headers, payload: { participantIds: ["person-unknown"] } });
+      expect(unknown.statusCode).toBe(400);
+      expect(unknown.json().code).toBe("INVALID_PARTICIPANT");
+      const saved = await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/growth", headers, payload: { participantIds: ["person-fixture-001", "person-fixture-002"] } });
+      expect(saved.statusCode).toBe(200);
+      expect(await t.sql("SELECT participant_ids FROM battlefield_config WHERE id='growth'")).toEqual([{ participant_ids: ["person-fixture-001", "person-fixture-002"] }]);
+      expect(await participants()).toMatchObject({ participantIds: ["person-fixture-002"], participantsDerived: false });
+      expect((await t.app.inject({ method: "PATCH", url: "/api/config/battlefields/growth", headers, payload: { participantIds: [] } })).statusCode).toBe(200);
+      expect(await participants()).toMatchObject({ participantIds: [], participantsDerived: false });
     } finally {
       await t.close();
     }

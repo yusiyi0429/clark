@@ -6,10 +6,10 @@ import { MissionGroupComposer } from "./MissionGroupComposer";
 
 describe("任务卡群组的阶段和公开记录", () => {
   it.each([
-    ["draft", false, "讨论还没开放"],
+    ["draft", false, "审核尚未下发"],
     ["open", true, "输入你的想法…"],
-    ["closed", true, "截止后留言 · 不进这一轮集中 Review"],
-    ["reviewing", true, "截止后留言 · 不进这一轮集中 Review"],
+    ["closed", true, "汇总后留言 · 待拍板人处理"],
+    ["reviewing", true, "汇总后留言 · 待拍板人处理"],
     ["confirmed", false, "本月 Mission Card 已确定"],
   ] as const)("%s 的输入和说明", (phase, writable, placeholder) => {
     expect(groupInputState(phase)).toEqual({ writable, placeholder });
@@ -28,7 +28,7 @@ describe("任务卡群组的阶段和公开记录", () => {
     const old = { type: "message", feedback: { id: "a", seq: 1, createdAt: opening.at, body: "旧" } } as never;
     const next = { type: "message", feedback: { id: "a", seq: 1, createdAt: opening.at, body: "新" } } as never;
     expect(mergeGroupEntries([old, opening], [opening, next])).toEqual([opening, next]);
-    const cutoff = { type: "divider", at: opening.at, text: "讨论截止 · 之后的留言不进这一轮" } as const;
+    const cutoff = { type: "divider", at: opening.at, text: "讨论已结束 · 之后的留言待后续审核" } as const;
     const reopened = { ...cutoff, text: "讨论截止" };
     expect(mergeGroupEntries([cutoff, old], [reopened])).toEqual([reopened, old]);
   });

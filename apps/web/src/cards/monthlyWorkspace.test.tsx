@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
 import type { MonthlyPlanPayload } from "./payloads";
 import { WorkspaceTestProvider } from "@/components/shell/testing";
-import { MonthlyPlanCard, monthlyDraftPatch, type MonthlyDraftState } from "./MonthlyPlanCard";
+import { MonthlyPlanCard, SignRecipients, monthlyDraftPatch, type MonthlyDraftState } from "./MonthlyPlanCard";
 
 // useCardAction 需要 Next 路由上下文；这里只渲染静态标记。
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
@@ -83,6 +83,15 @@ describe("月度计划 · 重新生成草案", () => {
     expect(html).not.toContain("DRAFT_FAILED：");
     expect(html).toContain("重新生成草案");
   });
+
+  it("草案早于复盘的 LTO 决定时提示一行并给出重新生成；签发后不提示", () => {
+    const stale = { status: "negotiating", confirmedAt: null, generation: { status: "ready", error: null, beforeReview: true } };
+    const html = render(planCard(stale, action));
+    expect(html).toContain("草案生成于复盘之前");
+    expect(html).toMatch(/role="note"><span>草案生成于复盘之前<\/span><button[^>]*>重新生成<\/button>/);
+    expect(render(planCard({ ...stale, generation: { status: "ready", error: null } }, action))).not.toContain("草案生成于复盘之前");
+    expect(render(planCard({ generation: { status: "ready", error: null, beforeReview: true } }))).not.toContain("草案生成于复盘之前");
+  });
 });
 
 describe("月度计划 · 正文两列", () => {
@@ -122,7 +131,7 @@ describe("月度计划 · 正文两列", () => {
     expect(html).not.toContain("签发计划");
   });
 
-  it("能力 PCO 与公司/战场结果同构：按 capabilityId 渲染编辑区与核对项", () => {
+  it("能力 PO 与公司/战场结果同构：按 capabilityId 渲染编辑区与核对项", () => {
     const html = render(
       planCard(
         {
@@ -134,9 +143,9 @@ describe("月度计划 · 正文两列", () => {
         [{ actionId: "a1", actionType: "monthly-plan.update_draft", label: "保存计划" }],
       ),
     );
-    expect(html).toContain("Re-architecture · 能力 PCO");
+    expect(html).toContain("Re-architecture · 能力 PO");
     expect(html).toContain("九月跑通第一个客户交付");
-    expect(html).toContain("已核对 Re-architecture 能力 PCO");
+    expect(html).toContain("已核对 Re-architecture 能力 PO");
     expect(html).toContain("能力结果");
   });
 });
@@ -174,7 +183,7 @@ describe("月度计划 · 保存只提交真正改动的字段", () => {
     expect(monthlyDraftPatch(payload, draftOf(payload))).toEqual({});
   });
 
-  it("只改一个能力 PCO 时只提交 capabilities，核对项仍由 checkbox Action 单独提交", () => {
+  it("只改一个能力 PO 时只提交 capabilities，核对项仍由 checkbox Action 单独提交", () => {
     const payload = planPayload();
     const patch = monthlyDraftPatch(payload, {
       ...draftOf(payload),
@@ -187,5 +196,24 @@ describe("月度计划 · 保存只提交真正改动的字段", () => {
   it("备注改动也只提交 note", () => {
     const payload = planPayload();
     expect(Object.keys(monthlyDraftPatch(payload, { ...draftOf(payload), note: "新增一句" }))).toEqual(["note"]);
+  });
+});
+
+describe("月度计划 · 签发确认名单", () => {
+  it("按战场一行列出会拿到任务卡的人，月份取计划月份；名单为空的战场标出来，每行都能改参与者", () => {
+    const html = renderToStaticMarkup(<SignRecipients month={10} onEdit={() => undefined} rows={[
+      { battlefieldId: "01", name: "灯塔项目", people: ["白田田", "于斯一"] },
+      { battlefieldId: "03", name: "002 客户", people: [] },
+    ]} />);
+    expect(html).toContain("签发后为这些人起草 10 月任务卡并直接发给本人");
+    expect(html).toContain("灯塔项目");
+    expect(html).toContain("白田田、于斯一");
+    expect(html).toContain('data-empty="true">名单为空');
+    expect(html.match(/改参与者/g)).toHaveLength(2);
+  });
+
+  it("读取中与读取失败照实说明，不拦签发", () => {
+    expect(renderToStaticMarkup(<SignRecipients month={11} rows="loading" onEdit={() => undefined} />)).toContain("正在读取名单…");
+    expect(renderToStaticMarkup(<SignRecipients month={11} rows="error" onEdit={() => undefined} />)).toContain("名单暂时读取失败");
   });
 });

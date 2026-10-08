@@ -17,7 +17,7 @@ const invoke = async (app: Awaited<ReturnType<typeof createTestApp>>["app"], tok
 const value = (result: { content: { text: string }[] }) => JSON.parse(result.content[0].text);
 
 describe("CEO 个人 MCP", () => {
-  it("CEO 令牌只给五个只读工具；详情、待办和周进展不含动作凭据", async () => {
+  it("CEO 有公司只读工具与个人复盘工具；详情、待办和周进展不含动作凭据", async () => {
     const f = await executionFixture("open");
     try {
       const created = await call(f, f.ceo, "POST", "/api/me/tokens", { name: "CEO 工具", client: "codex", expiresInDays: 30 });
@@ -28,10 +28,10 @@ describe("CEO 个人 MCP", () => {
       const initialized = (await send(f.t.app, token, 1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } })).json();
       expect(initialized.result.instructions).toContain("拍板、签发、确认请回天枢网页操作");
       const ceoTools = (await send(f.t.app, token, 2, "tools/list")).json().result.tools;
-      expect(ceoTools.map((tool: { name: string }) => tool.name)).toEqual(["list_pending", "get_issue", "get_meeting", "get_mission_card", "company_progress"]);
-      expect(ceoTools.every((tool: { annotations?: { readOnlyHint?: boolean } }) => tool.annotations?.readOnlyHint === true)).toBe(true);
+      expect(ceoTools.map((tool: { name: string }) => tool.name)).toEqual(["get_issue", "get_meeting", "company_progress", "get_mission_card", "edit_mission_card", "list_pending", "get_my_review", "save_review_draft"]);
+      expect(ceoTools.filter((tool: { name: string }) => !["save_review_draft", "edit_mission_card"].includes(tool.name)).every((tool: { annotations?: { readOnlyHint?: boolean } }) => tool.annotations?.readOnlyHint === true)).toBe(true);
       expect((await send(f.t.app, memberToken, 3, "tools/list")).json().result.tools.map((tool: { name: string }) => tool.name))
-        .toEqual(["list_my_items", "get_item", "append_progress", "update_status"]);
+        .toEqual(["list_my_items", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "get_mission_card", "edit_mission_card", "list_pending", "get_my_review", "save_review_draft"]);
       expect(value(await invoke(f.t.app, memberToken, 4, "get_issue", { issueId: randomUUID() })))
         .toMatchObject({ code: "FORBIDDEN", message: "这个工具只对 CEO 开放" });
       expect(value(await invoke(f.t.app, token, 5, "append_progress", { itemId: randomUUID(), body: "test" })))
@@ -53,6 +53,8 @@ describe("CEO 个人 MCP", () => {
         JSON.stringify([issueId]), JSON.stringify(preflight), JSON.stringify(emptyDraft()), "2026-10-11T03:00:00Z"]);
       // executionFixture 的简版已签发计划没有首页投影需要的协商数组。
       await f.t.sql("UPDATE monthly_plans SET negotiation=$1::jsonb", [JSON.stringify({ edits: [], checkedItemIds: [], feedback: [], note: "" })]);
+      // 上级只在本人确认后能读取个人卡正文；前面的待办测试仅使用进度。
+      await f.t.sql("UPDATE personal_mission_cards SET owner_confirmed_at=$2 WHERE id=$1",[f.card,"2026-10-10T02:00:00Z"]);
       const results = [
         await invoke(f.t.app, token, 6, "list_pending"),
         await invoke(f.t.app, token, 7, "get_issue", { issueId }),
@@ -113,7 +115,7 @@ describe("CEO 个人 MCP", () => {
         payload: { name: "双身份", client: "codex", expiresInDays: null } })).json();
       const tools = (await send(t.app, token, 1, "tools/list")).json().result.tools;
       expect(tools.map((tool: { name: string }) => tool.name)).toEqual([
-        "list_my_items", "get_item", "append_progress", "update_status", "list_pending", "get_issue", "get_meeting", "get_mission_card", "company_progress",
+        "list_my_items", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "get_issue", "get_meeting", "company_progress", "get_mission_card", "edit_mission_card", "list_pending", "get_my_review", "save_review_draft",
       ]);
     } finally { await t?.close(); await rm(dir, { recursive: true, force: true }); }
   });

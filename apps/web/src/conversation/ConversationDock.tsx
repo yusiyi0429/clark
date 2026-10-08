@@ -11,6 +11,8 @@ import { STAGE_COPY } from "./Transcript";
 import { DictationControls } from "./DictationControls";
 import { useDictation, withDictation } from "./useDictation";
 import type { ConversationData } from "./useConversation";
+import { QuoteChips } from "./QuoteChips";
+import { quotedMessage, storedDraft, type QuotePrefill, type TextQuote } from "./quotes";
 import d from "@/styles/conversation-dock.module.css";
 
 /**
@@ -37,6 +39,8 @@ export function ConversationDock({
   onHeightChange,
   prefill,
   onPrefillUsed,
+  textQuotes = [],
+  onRemoveQuotes,
 }: {
   data: ConversationData;
   label: string;
@@ -57,9 +61,11 @@ export function ConversationDock({
   onDiscussGlobal?: () => void;
   /** 输入条占用的高度（对话列据此给日志留出底部空间）。 */
   onHeightChange?: (height: number) => void;
-  /** 引用追问（clark onQuote → setInput(`关于“…”，`)）：替换输入并聚焦。 */
-  prefill?: { text: string; nonce: number } | null;
-  onPrefillUsed?: () => void;
+  /** New references remain outside the editable text. */
+  prefill?: QuotePrefill | null;
+  onPrefillUsed?: (nonce?: number) => void;
+  textQuotes?: TextQuote[];
+  onRemoveQuotes?: (ids: string[]) => void;
 }) {
   const draftKey = `tianshu-conversation-draft-v1:${data.scope}`;
   const [input, setInput] = useState("");
@@ -70,6 +76,8 @@ export function ConversationDock({
   const inputElement = useRef<HTMLTextAreaElement>(null);
   const modeButton = useRef<HTMLButtonElement>(null);
   const composing = useRef(false);
+  const inputVersion = useRef(0);
+  const sending = useRef(false);
   const wasKeyboard = useRef(keyboard);
   /** 键盘面收起时输入框的单行宽度：展开后输入框变宽，仍按它判断，避免展开 ⇄ 收起来回跳。 */
   const lineWidth = useRef(0);
@@ -93,6 +101,7 @@ export function ConversationDock({
     }
   }, [draftKey]);
   const updateInput = (value: string) => {
+    inputVersion.current++;
     setInput(value);
     try {
       if (value) localStorage.setItem(draftKey, value);
@@ -122,13 +131,14 @@ export function ConversationDock({
 
   useEffect(() => {
     if (!prefill) return;
-    updateInput(prefill.text);
     // 用过即清（清掉会让本 effect 再跑一次，所以聚焦这一帧不能在清理里取消）。
-    onPrefillUsed?.();
+    onPrefillUsed?.(prefill.nonce);
+    // 输入条里已有草稿就不覆盖（刚换到这个频道时，存着的草稿可能还没渲染进 input）。
+    if (prefill.draft && !input.trim() && !storedDraft(draftKey)) updateInput(prefill.draft);
     requestAnimationFrame(() => {
       const element = inputElement.current;
       element?.focus({ preventScroll: true });
-      element?.setSelectionRange(prefill.text.length, prefill.text.length);
+      if (element) element.setSelectionRange(element.value.length, element.value.length);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只响应新的引用
   }, [prefill?.nonce]);
@@ -205,21 +215,26 @@ export function ConversationDock({
   /** 发送；返回服务端是否接下了。 */
   async function submit(value = input): Promise<boolean> {
     const text = value.trim();
-    if (!text || busy) return false;
+    if (!text || busy || sending.current) return false;
+    sending.current = true;
     const sentReferences = activeReferences.map((card) => ({ cardId: card.id, version: card.version }));
     const keptInput = value;
     const keptReferences = activeReferences;
+    const sentQuotes = textQuotes;
     setCaption(text);
     setCaptionDismissed(false);
     updateInput("");
+    const clearedVersion = inputVersion.current;
     if (keptReferences.length) onClearReferences();
-    const accepted = await data.send(text, sentReferences);
-    // C-04：服务端还没接收就失败时，把输入与引用放回去，不先清空后提示失败。
-    if (!accepted) {
-      updateInput(keptInput);
-      if (keptReferences.length) onRestoreReferences(keptReferences);
-    }
-    return accepted;
+    try {
+      const accepted = await data.send(quotedMessage(text, sentQuotes), sentReferences);
+      // C-04: retain failed references; never overwrite a newer draft or clear a new selection.
+      if (!accepted) {
+        if (inputVersion.current === clearedVersion) updateInput(keptInput);
+        if (keptReferences.length) onRestoreReferences(keptReferences);
+      } else onRemoveQuotes?.(sentQuotes.map((quote) => quote.id));
+      return accepted;
+    } finally { sending.current = false; }
   }
 
   useEffect(() => {
@@ -268,6 +283,7 @@ export function ConversationDock({
           </HeroButton>
         </div>
       ) : null}
+      {textQuotes.length ? <div className={d.textQuoteTray}><QuoteChips quotes={textQuotes} onRemove={onRemoveQuotes} /></div> : null}
       <div
         className={clsx(d.dock, keyboard && d.typing, keyboard && composerExpanded && d.composerExpanded, busy && d.thinking)}
         data-testid="conversation-dock"

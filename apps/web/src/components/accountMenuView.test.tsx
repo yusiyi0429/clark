@@ -17,7 +17,7 @@ const hooks = vi.hoisted(() => {
 const api = vi.hoisted(() => ({ GET: vi.fn(), POST: vi.fn(), DELETE: vi.fn() }));
 vi.mock("react", async (original) => {
   const react = await original<typeof import("react")>();
-  return { ...react, useState: (initial: unknown) => hooks.useState(initial) };
+  return { ...react, useState: (initial: unknown) => hooks.useState(initial), useRef: (initial: unknown) => ({ current: initial }), useEffect: () => undefined };
 });
 vi.mock("@/lib/api/client", () => ({ browserApi: api }));
 

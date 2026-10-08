@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
-  ConversationScope, CreateMyTaskRequest, MonthPlanResponse, NotificationKind, PatchMyTaskRequest, SaveMonthPlanRequest, TaskDetailResponse, TaskView,
+  AcceptMyTaskRequest, AddMaterialLinkRequest, ConversationScope, CreateMyTaskRequest, MaterialFormat, MonthPlanResponse, NotificationKind, PatchMyTaskRequest,
+  SaveMonthPlanRequest, TaskDetailResponse, TaskView,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -13,7 +15,7 @@ const step = {
   mission: { missionId: "sun-202610-1", title: "CEO Agent 核心体验", cardId: "card-1", period: "2026-10", battlefieldName: "灯塔项目", step: 2, steps: 4 },
   waitingOn: { taskId: "7b0c3c1e-0000-4000-8000-000000000000", title: "对齐验收口径" },
   owner: person, collaborators: [{ personId: "bai-tiantian", name: "白田田" }], latestProgress: null,
-  returnReason: null, origin: null, createdAt: now, updatedAt: now,
+  returnReason: null, origin: null, awaitingAcceptance: false, createdAt: now, updatedAt: now,
 };
 /** uuid 格式由 Fastify 校验；这里只查字段与范围。 */
 const withoutFormat = (schema: typeof CreateMyTaskRequest) => ({ ...schema, properties: { ...schema.properties, clientId: { ...schema.properties.clientId, format: undefined } } });
@@ -43,10 +45,29 @@ describe("执行事项契约（工单 05）", () => {
     expect(Value.Check(PatchMyTaskRequest, { version: 3, missionId: null, dueDate: null, judgment: "先做数据口径" })).toBe(true);
     expect(Value.Check(PatchMyTaskRequest, { version: 3, status: "returned" })).toBe(false);
     expect(Value.Check(PatchMyTaskRequest, { status: "done" })).toBe(false);
+    // 完成只能走验收（design-12）。
+    expect(Value.Check(PatchMyTaskRequest, { version: 3, status: "done" })).toBe(false);
+  });
+
+  it("验收只带判断，完成标准的文字由服务端拆；链接只收 http/https；通知多了「等你验收」", () => {
+    /** uuid 格式由 Fastify 校验；这里只查字段与范围。 */
+    const check = { ...AcceptMyTaskRequest, properties: { ...AcceptMyTaskRequest.properties, standards: Type.Array(Type.Object({ index: Type.Integer({ minimum: 0, maximum: 49 }), met: Type.Boolean(),
+      evidence: Type.Union([Type.String({ minLength: 1, maxLength: 300 }), Type.Null()]), materialId: Type.Union([Type.String(), Type.Null()]) }, { additionalProperties: false })),
+      deliverableMaterialIds: Type.Array(Type.String()) } };
+    const accept = { version: 4, verdict: "路线图定稿", standards: [{ index: 0, met: true, evidence: "见路线图 v4", materialId: null }], deliverableMaterialIds: [] };
+    expect(Value.Check(check, accept)).toBe(true);
+    for (const invalid of [{ verdict: "字".repeat(201) }, { standards: [{ index: 50, met: true, evidence: null, materialId: null }] }, { standards: [{ index: 0, met: true, evidence: null, materialId: null, text: "不收文字" }] }]) {
+      expect(Value.Check(check, { ...accept, ...invalid })).toBe(false);
+    }
+    expect(Value.Check(AddMaterialLinkRequest, { url: "https://claude.ai/artifact/x" })).toBe(true);
+    expect(Value.Check(AddMaterialLinkRequest, { url: "javascript:alert(1)" })).toBe(false);
+    expect(Value.Check(MaterialFormat, "link")).toBe(true);
+    expect(Value.Check(NotificationKind, "task_submitted")).toBe(true);
   });
 
   it("详情区分推进人与协作者，批注只属于本人", () => {
-    const detail = { task: step, judgment: null, judgmentAt: null, myNote: "我这边周三能给数据", myNoteAt: now, role: "collaborator", missionOptions: [], collaboratorOptions: [], progress: [] };
+    const detail = { task: step, judgment: null, judgmentAt: null, myNote: "我这边周三能给数据", myNoteAt: now, role: "collaborator", missionOptions: [], collaboratorOptions: [], progress: [],
+      standards: ["路线图定稿", "明华确认"], submission: null, acceptance: null };
     expect(Value.Check(TaskDetailResponse, detail)).toBe(true);
     expect(Value.Check(TaskDetailResponse, { ...detail, role: "ceo" })).toBe(false);
   });
@@ -83,5 +104,10 @@ describe("执行事项契约（工单 05）", () => {
     expect(doc.paths["/api/me/plan"]?.get).toBeDefined();
     expect(doc.paths["/api/me/plan"]?.put?.responses?.["409"]).toBeDefined();
     expect(doc.components.schemas.MonthPlanResponse).toBeDefined();
+    expect(doc.paths["/api/me/tasks/{id}/accept"]?.post).toBeDefined();
+    expect(doc.paths["/api/me/tasks/{id}/acceptance-draft"]?.post?.responses?.["503"]).toBeDefined();
+    expect(doc.paths["/api/me/tasks/{id}/submission"]?.delete).toBeDefined();
+    expect(doc.paths["/api/me/tasks/{id}/reopen"]?.post).toBeDefined();
+    expect(doc.paths["/api/materials/{objectType}/{objectId}/links"]?.post).toBeDefined();
   });
 });

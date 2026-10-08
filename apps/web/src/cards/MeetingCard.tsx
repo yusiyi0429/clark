@@ -442,6 +442,8 @@ export function meetingNow(payload: MeetingPayload, ended: boolean): string {
  */
 export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: memberReadOnly = false }: CardRenderProps & { readOnly?: boolean }) {
   const source = payloadOf<MeetingPayload & { purpose?: string | null }>(card);
+  const workspace = useWorkspace();
+  const isHost = source.leadDriId === workspace.viewerId;
   // 成员响应只带可见事实；组件内部补空值以复用 CEO 的页头、材料和预审排版。
   const payload: MeetingPayload & { purpose?: string | null } = memberReadOnly ? {
     ...source,
@@ -451,12 +453,15 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       ...(source.preflight.readiness ? { readiness: source.preflight.readiness } : {}),
       ...(source.preflight.summary ? { summary: source.preflight.summary } : {}) },
     draft: { readIssueIds: [], carriedIssueIds: [], checkedEntryIds: [], editsByEntryId: {}, supplementRequests: [], note: "" },
-    transcript: null, transcriptCandidate: null, recording: null,
+    transcript: null, transcriptCandidate: isHost ? source.transcriptCandidate ?? null : null, recording: null,
   } : source;
-  const workspace = useWorkspace();
   const { homeCards } = workspace;
   const { ask, dialog: confirmDialog } = useConfirm();
-  const { state, run, retry, pending } = useCardAction(onCard);
+  const updateCard = (updated: CardRenderProps["card"]) => {
+    onCard(updated);
+    window.dispatchEvent(new Event("meeting-changed"));
+  };
+  const { state, run, retry, pending } = useCardAction(updateCard);
   const [note, setNote] = useState(payload.draft.note);
   const [supplementText, setSupplementText] = useState("");
   const [supplementEntry, setSupplementEntry] = useState("");
@@ -471,6 +476,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const [activeSection, setActiveSection] = useState("core");
   // 编辑会议弹层：只提交改动字段，写入走 opaque action meeting.edit_details。
   const [editOpen, setEditOpen] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
   const detailsForm = () => ({ title: card.title, scheduledAt: toCompanyInput(payload.scheduledAt), endsAt: toCompanyInput(payload.endsAt), leadDriId: payload.leadDriId });
   const [editForm, setEditForm] = useState(detailsForm);
   const [driOptions, setDriOptions] = useState<DirectoryOption[]>([]);
@@ -482,7 +488,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   // 左侧阅读区看哪一份：会前默认 AI 预审；会开完了、有待确认的会议记录或已在复核，默认会议记录（那是下一步要做的事）。
   const [view, setView] = useState<MaterialView>(() => ({
     current:
-      payload.status === "held" || payload.status === "reviewed" || (payload.status === "scheduled" && (payload.endedAt || payload.transcriptCandidate))
+      payload.status === "held" || payload.status === "reviewed" || (payload.status === "scheduled" && (payload.hasEnded || payload.endedAt || payload.transcriptCandidate))
         ? RECORD_TAB.id
         : PREFLIGHT_TAB.id,
     material: PREFLIGHT_TAB.id,
@@ -498,8 +504,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const materialRef = useRef<HTMLInputElement>(null);
   const candidateDialog = useRef<HTMLDialogElement>(null);
 
-  const isHost = memberReadOnly && payload.leadDriId === workspace.viewerId;
-  const actions = memberReadOnly ? card.actions.filter((action) => action.actionType === "meeting.end") : card.actions;
+  const actions = memberReadOnly ? card.actions.filter((action) => isHost && ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(action.actionType)) : card.actions;
   const actionOf = (type: string) => actions.find((action) => action.actionType === type);
   const itemAction = (type: string, itemId: string) =>
     actions.find((action) => action.actionType === type && action.itemId === itemId);
@@ -580,32 +585,46 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     const dialog = candidateDialog.current;
     if (!dialog) return;
     if (!dialog.open) dialog.showModal();
-    const onClose = () => setCandidateOpen(false);
+    const onClose = () => { if (!dialog.open) setCandidateOpen(false); };
     dialog.addEventListener("close", onClose);
     return () => {
       dialog.removeEventListener("close", onClose);
       if (dialog.open) dialog.close();
     };
-  }, [candidateOpen]);
+  }, [candidateOpen, candidateKey]);
 
   // 映射下拉需要完整人员目录（不限 DRI）；加载失败时确认保持不可用。
   useEffect(() => {
     if (!candidateKey) return;
     let cancelled = false;
     void (async () => {
-      const { data, response } = await browserApi.GET("/api/people");
-      if (cancelled) return;
-      if (!response.ok) {
-        setDirectoryError("人员目录加载失败，无法完成说话人映射");
-        return;
+      try {
+        let options: DirectoryOption[];
+        if (memberReadOnly) {
+          const params = { params: { path: { objectType: "meeting" as const, objectId: card.objectRef.id } } };
+          const [candidates, thread] = await Promise.all([
+            browserApi.GET("/api/threads/{objectType}/{objectId}/candidates", params),
+            browserApi.GET("/api/threads/{objectType}/{objectId}", params),
+          ]);
+          if (!candidates.response.ok || !thread.response.ok) throw new Error("directory unavailable");
+          options = [...source.participants, ...(candidates.data?.people ?? []), ...(thread.data?.members ?? [])]
+            .map((person) => ({ personId: person.personId, displayName: person.displayName, roles: [] }));
+        } else {
+          const result = await browserApi.GET("/api/people");
+          if (!result.response.ok) throw new Error("directory unavailable");
+          options = result.data?.people ?? [];
+        }
+        if (cancelled) return;
+        setDirectoryError(null);
+        setDirectory([...new Map(options.map((person) => [person.personId, person])).values()]);
+      } catch {
+        if (!cancelled) setDirectoryError("人员目录加载失败，无法完成说话人映射");
       }
-      setDirectoryError(null);
-      setDirectory((data as { people?: DirectoryOption[] } | undefined)?.people ?? []);
     })();
     return () => {
       cancelled = true;
     };
-  }, [candidateKey]);
+  }, [candidateKey, memberReadOnly, card.objectRef.id, source.participants]);
 
   function toggle(field: "readIssueIds" | "checkedEntryIds" | "carriedIssueIds", id: string) {
     const current = payload.draft[field];
@@ -615,10 +634,18 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   }
 
   /** 编辑弹层回填当前 Card 事实；主持 DRI 只列人员目录里的 DRI，目录不可用时保留当前值。 */
-  async function openEditDetails() {
-    setEditForm(detailsForm());
+  async function openEditDetails(reschedule = false) {
+    const next = detailsForm();
+    if (reschedule && Date.parse(payload.scheduledAt) <= Date.now()) {
+      const start = new Date(Date.now() + 86_400_000);
+      next.scheduledAt = toCompanyInput(start.toISOString());
+      next.endsAt = toCompanyInput(new Date(start.getTime() + Date.parse(payload.endsAt) - Date.parse(payload.scheduledAt)).toISOString());
+    }
+    setEditForm(next);
     setDriError(null);
     setEditOpen(true);
+    setRescheduling(reschedule);
+    if (reschedule) return;
     const { data, response } = await browserApi.GET("/api/people");
     if (!response.ok) {
       setDriError("人员目录加载失败，暂时只能保留当前主持 DRI");
@@ -627,17 +654,28 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     setDriOptions((((data as { people?: DirectoryOption[] } | undefined)?.people ?? []).filter((person) => person.roles.includes("dri"))));
   }
 
+  const requestedMeetingAction = useRef<string | null>(null);
+  useEffect(() => {
+    const request = new URLSearchParams(window.location.search).get("meetingAction");
+    const key = request ? `${card.objectRef.id}:${request}` : null;
+    if (!key || requestedMeetingAction.current === key) return;
+    requestedMeetingAction.current = key;
+    if (request === "reschedule" && actionOf("meeting.reschedule")) void openEditDetails(true);
+    if (request === "transcript" || (request === "reschedule" && payload.transcriptCandidate))
+      setView((current) => ({ ...current, current: RECORD_TAB.id }));
+  });
+
   /** 只提交真正改动的字段：未改的时间不重写。时间按公司时区提交。 */
   async function saveMeetingDetails() {
-    const action = actionOf("meeting.edit_details");
+    const action = actionOf(rescheduling ? "meeting.reschedule" : "meeting.edit_details");
     if (!action) return;
     const initial = detailsForm();
     const patch: { title?: string; scheduledAt?: string; endsAt?: string; leadDriId?: string } = {};
     const title = editForm.title.trim();
-    if (title && title !== card.title) patch.title = title;
-    if (editForm.scheduledAt && editForm.scheduledAt !== initial.scheduledAt) patch.scheduledAt = fromCompanyInput(editForm.scheduledAt);
+    if (!rescheduling && title && title !== card.title) patch.title = title;
+    if (editForm.scheduledAt && (rescheduling || editForm.scheduledAt !== initial.scheduledAt)) patch.scheduledAt = fromCompanyInput(editForm.scheduledAt);
     if (editForm.endsAt && editForm.endsAt !== initial.endsAt) patch.endsAt = fromCompanyInput(editForm.endsAt);
-    if (editForm.leadDriId && editForm.leadDriId !== payload.leadDriId) patch.leadDriId = editForm.leadDriId;
+    if (!rescheduling && editForm.leadDriId && editForm.leadDriId !== payload.leadDriId) patch.leadDriId = editForm.leadDriId;
     if (!Object.keys(patch).length) {
       setEditOpen(false);
       return;
@@ -659,7 +697,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     }
     const body = (await response.json().catch(() => ({}))) as { message?: string; cards?: typeof collection };
     if (response.ok && body.cards?.[0]) {
-      onCard(body.cards[0]);
+      updateCard(body.cards[0]);
       return;
     }
     setUploadError(body.message ?? "Transcript 整份被拒绝");
@@ -679,7 +717,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       return;
     }
     const body = (await response.json().catch(() => ({}))) as { message?: string; cards?: typeof collection };
-    if (response.ok && body.cards?.[0]) return onCard(body.cards[0]);
+    if (response.ok && body.cards?.[0]) return updateCard(body.cards[0]);
     setUploadError(body.message ?? "妙记 Markdown 整份被拒绝");
   }
 
@@ -846,7 +884,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   );
 
   /* 页头：计划时段、会议记录入口、开始会议／计时（这一版不放；已取消的会也没有计时）。 */
-  const ended = Boolean(payload.endedAt) || payload.status === "held" || payload.status === "reviewed";
+  const ended = Boolean(payload.hasEnded || payload.endedAt) || payload.status === "held" || payload.status === "reviewed";
   const phase = meetingPhase(startedAt, ended);
   const endAction = actionOf("meeting.end");
   const clock =
@@ -882,8 +920,10 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     return request ? ` · 回应「${truncateText(request.text, 24)}」` : "";
   };
 
-  const preflightToolbar = readOnly ? null : (
+  const preflightToolbar = readOnly && !isHost ? null : (
     <div className={s.toolbar}>
+      {actionOf("meeting.reschedule") ? <button type="button" disabled={pending} onClick={() => void openEditDetails(true)}>重新安排会议</button> : null}
+      {endAction && isHost && !ended ? <button type="button" disabled={pending} onClick={() => void run(endAction, {})}>这场会开完了</button> : null}
       {actionOf("meeting.edit_details") ? (
         <button type="button" disabled={pending} onClick={() => void openEditDetails()}>
           <Pencil size={13} aria-hidden="true" />
@@ -917,21 +957,26 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         </button>
       ) : null}
       {editOpen ? (
-        <div className={s.editPopover} role="dialog" aria-label="编辑会议">
-          <p className={s.editTitle}>编辑会议</p>
-          <label className={s.editField}>
+        <div className={s.editPopover} role="dialog" aria-label={rescheduling ? "重新安排会议" : "编辑会议"}>
+          <p className={s.editTitle}>{rescheduling ? "重新安排会议" : "编辑会议"}</p>
+          {!rescheduling ? <label className={s.editField}>
             <span>会议标题</span>
             <input value={editForm.title} onChange={(event) => setEditForm({ ...editForm, title: event.target.value })} />
-          </label>
+          </label> : null}
           <label className={s.editField}>
             <span>开始</span>
-            <input type="datetime-local" value={editForm.scheduledAt} onChange={(event) => setEditForm({ ...editForm, scheduledAt: event.target.value })} />
+            <input type="datetime-local" value={editForm.scheduledAt} onChange={(event) => {
+              const start = event.target.value;
+              setEditForm((current) => ({ ...current, scheduledAt: start,
+                endsAt: rescheduling && start && current.scheduledAt && current.endsAt
+                  ? toCompanyInput(new Date(Date.parse(fromCompanyInput(start)) + Date.parse(fromCompanyInput(current.endsAt)) - Date.parse(fromCompanyInput(current.scheduledAt))).toISOString()) : current.endsAt }));
+            }} />
           </label>
           <label className={s.editField}>
             <span>结束</span>
             <input type="datetime-local" value={editForm.endsAt} onChange={(event) => setEditForm({ ...editForm, endsAt: event.target.value })} />
           </label>
-          <label className={s.editField}>
+          {!rescheduling ? <label className={s.editField}>
             <span>主持 DRI</span>
             <span className={s.editSelectWrap}>
               <select value={editForm.leadDriId} onChange={(event) => setEditForm({ ...editForm, leadDriId: event.target.value })}>
@@ -943,7 +988,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
               </select>
               <ChevronDown size={13} aria-hidden="true" className={s.editChevron} />
             </span>
-          </label>
+          </label> : null}
           {editForm.scheduledAt && editForm.endsAt && editForm.endsAt <= editForm.scheduledAt ? <p className={s.editHint}>结束时间要晚于开始时间</p> : null}
           {driError ? <p className={s.editHint}>{driError}</p> : null}
           <div className={s.editActions}>
@@ -1267,7 +1312,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   };
 
   const recordView =
-    memberReadOnly ? (
+    memberReadOnly && !(isHost && payload.status === "scheduled") ? (
       <section className={s.review}>
         <section className={s.reviewSection}>
           <header><h3>会后结论</h3></header>
@@ -1436,7 +1481,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       </section>
     );
 
-  const recordTab = memberReadOnly ? { ...RECORD_TAB, title: "会议记录：已确认的决定与待办" } : RECORD_TAB;
+  const recordTab = memberReadOnly && !isHost ? { ...RECORD_TAB, title: "会议记录：已确认的决定与待办" } : RECORD_TAB;
   const showing = view.current === RECORD_TAB.id ? recordTab : viewedMaterial ? materialTab(viewedMaterial) : PREFLIGHT_TAB;
 
   return (
@@ -1460,6 +1505,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             <MeetingStatus phase={phase} facts={facts} now={statusNow} endedAt={payload.endedAt} />
             {(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose) ?
               <p className={s.agenda}>{memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose}</p> : null}
+            {preflightToolbar}
             <section className={s.material} aria-label={showing.title}>
               {view.current === RECORD_TAB.id ? (
                 recordView
@@ -1467,7 +1513,6 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
                 <MaterialPane meetingId={card.objectRef.id} material={viewedMaterial} preview={preview} provenance={provenance(viewedMaterial)} />
               ) : (
                 <>
-                  {preflightToolbar}
                   {preflightView}
                 </>
               )}
@@ -1477,7 +1522,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           </div>
         </div>
       </DetailFrame>
-      {!memberReadOnly && payload.transcriptCandidate && candidateOpen ? (
+      {(!memberReadOnly || isHost) && payload.transcriptCandidate && candidateOpen ? (
         <TranscriptCandidateDialog
           key={payload.transcriptCandidate.createdAt}
           dialogRef={candidateDialog}

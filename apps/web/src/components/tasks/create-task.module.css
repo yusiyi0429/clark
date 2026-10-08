@@ -1,0 +1,143 @@
+/*
+ * 新建执行事项：一步一问，整个左侧是这一步的舞台。比例与色彩照首次引导的演示动画（execution-tour.module.css）：
+ * 小号灰标签、细边框、浅底输入框；选中只把边框换成品牌蓝，外加一圈很淡的光晕，不用设计库默认的粗光圈。
+ */
+.flow { display: flex; flex-direction: column; box-sizing: border-box; width: min(100%, 520px); min-width: 0; min-height: 100%; margin: 0 auto; padding: clamp(28px, 9vh, 88px) 24px 150px; color: var(--ink, #1c2030); }
+
+/* 步骤点：做完的可以点回去改。 */
+.steps { display: flex; align-items: center; gap: 10px; margin: 0 0 36px; padding: 0; list-style: none; min-width: 0; }
+.steps li { display: flex; align-items: center; gap: 10px; min-width: 0; color: #a3a9b4; font-size: 12px; line-height: 1.4; }
+.steps li + li::before { content: ""; flex: none; width: 22px; height: 1px; background: #dfe4ee; }
+.steps li[data-state="current"] { color: var(--ink, #1c2030); font-weight: 560; }
+.steps li[data-state="done"] { color: #6a6f7c; }
+.steps li > button, .stepLabel { display: inline-flex; align-items: center; gap: 7px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; white-space: nowrap; }
+.steps li > button { cursor: pointer; border-radius: 6px; }
+.steps li > button:hover { color: var(--ink, #1c2030); }
+.steps li > button:focus-visible { outline: 2px solid var(--onboarding-blue, #3e82f7); outline-offset: 3px; }
+.dot { display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1px solid #dfe4ee; background: #fff; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.steps li[data-state="current"] .dot { border-color: var(--onboarding-blue, #3e82f7); background: var(--onboarding-blue, #3e82f7); color: #fff; }
+.steps li[data-state="done"] .dot { border-color: color-mix(in oklab, var(--onboarding-blue, #3e82f7) 30%, #fff); background: color-mix(in oklab, var(--onboarding-blue, #3e82f7) 10%, #fff); color: var(--onboarding-blue, #3e82f7); }
+
+/* 前面答过的：一行小字，点它回第一步改标题。 */
+.recap { display: grid; justify-items: start; gap: 2px; align-self: flex-start; max-width: 100%; margin: -18px 0 22px; padding: 0; border: 0; background: none; color: #6a6f7c; font: inherit; font-size: 13px; line-height: 1.5; text-align: left; cursor: pointer; }
+.recap > span { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; }
+.recap small { color: #a3a9b4; font-size: 12px; }
+.recap:hover > span { color: var(--ink, #1c2030); text-decoration: underline; text-decoration-color: #cfd6e2; text-underline-offset: 3px; }
+.recap:focus-visible { outline: 2px solid var(--onboarding-blue, #3e82f7); outline-offset: 3px; border-radius: 4px; }
+
+.stage { display: grid; gap: 14px; min-width: 0; animation: enter 280ms cubic-bezier(.22, 1, .36, 1) both; }
+@keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.question { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.4; letter-spacing: -.01em; color: var(--ink, #1c2030); }
+.hint { margin: 0; color: #8a909b; font-size: 13px; line-height: 1.6; }
+.srOnly { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* 第一步：大字号下划线输入，像在纸上写一句话。 */
+.titleField { display: block; min-width: 0; margin-top: 6px; }
+.titleInput { box-sizing: border-box; width: 100%; min-width: 0; margin: 0; padding: 6px 0 10px; border: 0; border-bottom: 1.5px solid #dfe4ee; border-radius: 0; background: none; color: var(--ink, #1c2030); font: inherit; font-size: 20px; line-height: 1.5; outline: none; transition: border-color 160ms ease; }
+.titleInput::placeholder { color: #c3c8d1; }
+.titleInput:focus { border-bottom-color: var(--onboarding-blue, #3e82f7); }
+/* 外壳对所有输入框的聚焦粗外框（app-shell `.shell input:focus-visible`）在这里不用：只靠边框变蓝 + 淡光晕。 */
+.flow .titleInput:focus-visible, .flow .input:focus-visible { outline: none; }
+
+/* 第三步的普通字段。 */
+.field { display: grid; gap: 6px; min-width: 0; }
+.label { color: #6a6f7c; font-size: 12px; line-height: 1.5; }
+.input {
+  box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px; margin: 0; padding: 8px 12px;
+  border: 1px solid #dfe4ee; border-radius: 10px; background: #fafbfd; color: var(--ink, #1c2030);
+  font: inherit; font-size: 14px; line-height: 1.55; outline: none; box-shadow: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+textarea.input { resize: vertical; min-height: 76px; }
+.input::placeholder { color: #a3a9b4; }
+.input:hover { border-color: #cfd6e2; }
+.input:focus { border-color: var(--onboarding-blue, #3e82f7); background: #fff; box-shadow: 0 0 0 3px color-mix(in oklab, var(--onboarding-blue, #3e82f7) 12%, transparent); }
+.optional { margin-left: 8px; color: #a3a9b4; font-size: 12px; }
+.twoFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; }
+
+/* 日期：两枚胶囊，选中的那枚边框换品牌蓝、浅蓝底。 */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; margin: 0; padding: 0 14px;
+  border: 1px solid #dfe4ee; border-radius: 999px; background: #fafbfd; color: #4a505c;
+  font: inherit; font-size: 13px; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+.chip svg { flex: none; color: #8a909b; }
+.chip:hover { border-color: #cfd6e2; color: var(--ink, #1c2030); }
+.chip[data-on] { border-color: var(--onboarding-blue, #3e82f7); background: color-mix(in oklab, var(--onboarding-blue, #3e82f7) 8%, #fff); color: var(--onboarding-blue, #3e82f7); font-weight: 560; }
+.chip[data-on] svg { color: inherit; }
+
+/* 月历浮层：和输入框同一套细边框、圆角、品牌蓝；里面套主题层（TianshuPortalTheme）拿到同一套字体和聚焦框，它自带的底色去掉。 */
+.popover {
+  box-sizing: border-box; width: 296px; padding: 14px 14px 10px;
+  border: 1px solid #e6eaf1; border-radius: 16px; background: #fff; color: var(--ink, #1c2030); outline: none;
+  box-shadow: 0 18px 48px -14px rgb(20 30 50 / 24%), 0 2px 6px rgb(20 30 50 / 5%);
+}
+.popover[data-entering] { animation: pop 160ms cubic-bezier(.22, 1, .36, 1); }
+.popover[data-exiting] { animation: pop 110ms ease reverse; }
+@keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+.popover > * { background: transparent; }
+.dialog { outline: none; }
+.calHead { display: flex; align-items: center; gap: 2px; margin: 0 0 8px; padding-left: 6px; }
+.calTitle { flex: 1; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.4; }
+.calNav { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: none; color: #6a6f7c; cursor: pointer; }
+.calNav[data-hovered] { background: rgb(38 61 92 / 6%); color: var(--ink, #1c2030); }
+.calNav[data-disabled] { opacity: .35; cursor: default; }
+.calGrid { width: 100%; border-collapse: collapse; }
+.calGrid td { padding: 1px 0; }
+.calWeekday { padding: 0 0 6px; color: #a3a9b4; font-size: 11px; font-weight: 500; text-align: center; }
+.calDay {
+  display: grid; place-items: center; width: 34px; height: 34px; margin: 0 auto; border-radius: 50%;
+  color: var(--ink, #1c2030); font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.calDay[data-hovered] { background: rgb(38 61 92 / 6%); }
+.calDay[data-today] { color: var(--onboarding-blue, #3e82f7); font-weight: 600; }
+.calDay[data-selected] { background: var(--onboarding-blue, #3e82f7); color: #fff; font-weight: 600; }
+.calDay[data-disabled], .calDay[data-unavailable] { background: none; color: #c8cdd5; font-weight: 400; cursor: default; }
+.calDay[data-outside-month] { visibility: hidden; }
+
+/* 第二步：一行开关；打开后下面点选 Mission。 */
+.link { display: grid; gap: 10px; min-width: 0; margin-top: 4px; padding: 12px 14px; border: 1px solid #e6eaf1; border-radius: 12px; background: #fafbfd; }
+.switchRow { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; }
+.switchText { display: grid; gap: 2px; min-width: 0; font-size: 14px; line-height: 1.5; color: var(--ink, #1c2030); }
+.switchText small { color: #8a909b; font-size: 12px; line-height: 1.5; }
+.switch { position: relative; flex: none; width: 38px; height: 22px; padding: 0; border: 0; border-radius: 999px; background: #d9dee7; cursor: pointer; transition: background-color 180ms ease; }
+.switch > span { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(20 30 50 / 22%); transition: transform 200ms cubic-bezier(.22, 1, .36, 1); }
+.switch[aria-checked="true"] { background: var(--onboarding-blue, #3e82f7); }
+.switch[aria-checked="true"] > span { transform: translateX(16px); }
+.switch:disabled { cursor: not-allowed; opacity: .45; }
+.switch:focus-visible { outline: 2px solid var(--onboarding-blue, #3e82f7); outline-offset: 2px; }
+.missions { display: grid; gap: 2px; min-width: 0; margin: 0 -6px; }
+.mission { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 8px 6px; border-radius: 9px; cursor: pointer; transition: background-color 140ms ease; }
+.mission:hover { background: rgb(38 61 92 / 5%); }
+.mission input { flex: none; width: 15px; height: 15px; margin: 3px 0 0; accent-color: var(--onboarding-blue, #3e82f7); cursor: pointer; }
+.missionText { display: grid; gap: 1px; min-width: 0; font-size: 14px; line-height: 1.5; color: var(--ink, #1c2030); }
+.missionText small, .only small { color: #8a909b; font-size: 12px; }
+.mission[data-selected] .missionText > span { font-weight: 560; }
+.only { display: grid; gap: 1px; margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink, #1c2030); }
+
+.error { margin: 16px 0 0; color: #a44e46; font-size: 13px; line-height: 1.6; }
+.actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 32px; }
+.back { display: inline-flex; align-items: center; gap: 6px; padding: 6px 4px; border: 0; border-radius: 8px; background: none; color: #6a6f7c; font: inherit; font-size: 13px; cursor: pointer; }
+.back:hover { color: var(--ink, #1c2030); }
+.back:focus-visible { outline: 2px solid var(--onboarding-blue, #3e82f7); outline-offset: 2px; }
+.primary.primary { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 18px; font-size: 14px; }
+/* 页头右上角的问号：回看「执行事项怎么用」，和任务卡页同款。 */
+.help.help { min-width: 32px; width: 32px; height: 32px; min-height: 32px; padding: 0; border-radius: 50%; color: var(--ink-faint); }
+.help.help:hover { color: var(--ink-muted); background: transparent; }
+
+@media (max-width: 959px) {
+  .flow { padding: 28px 18px 140px; }
+  .steps li > button > span:last-child, .stepLabel > span:last-child { display: none; }
+  .steps li[data-state="current"] .stepLabel > span:last-child { display: inline; }
+  .twoFields { grid-template-columns: minmax(0, 1fr); }
+  .input, .titleInput { font-size: 16px; } /* iOS 聚焦时不放大页面 */
+  .titleInput { font-size: 18px; }
+  .chip { min-height: 38px; font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage, .popover[data-entering], .popover[data-exiting] { animation: none; }
+  .switch, .switch > span, .input, .titleInput, .mission, .chip, .calDay { transition: none; }
+}

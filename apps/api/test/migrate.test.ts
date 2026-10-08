@@ -8,6 +8,22 @@ import { createTestDb, type TestDb } from "./helpers.js";
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 
 describe("migration", () => {
+  it("adds writing fields without rewriting existing Mission content or provenance", async () => {
+    await createTestDb(async ({ db }) => {
+      const files = (await readdir(MIGRATIONS_DIR)).filter((file) => file.endsWith(".sql") && Number(file.split("_")[0]) <= 51).sort();
+      await db.query("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+      for (const file of files) {
+        await db.query(await readFile(join(MIGRATIONS_DIR, file), "utf8"));
+        await db.query("INSERT INTO schema_migrations(id,filename) VALUES($1,$2)", [Number(file.split("_")[0]), file]);
+      }
+      await db.query(`INSERT INTO missions(id,version,code,period,title,owner_id,capability_id,outcome,why,source_ref,source_document_id,source_revision,source_title)
+        VALUES('existing-writing',1,'existing-writing','2026-09','真实既有名称','owner','capability','真实结果','真实背景','real://source','doc',7,'真实来源')`);
+      await migrate(db);
+      expect((await db.query("SELECT version,title,outcome,why,time_boundary,tradeoffs,source_ref,source_revision FROM missions WHERE id='existing-writing'")).rows[0]).toEqual({
+        version: 1, title: "真实既有名称", outcome: "真实结果", why: "真实背景", time_boundary: "", tradeoffs: "", source_ref: "real://source", source_revision: 7,
+      });
+    });
+  });
   it("adds task thread membership for existing 026 execution items", async () => {
     await createTestDb(async ({ db }) => {
       const files = (await readdir(MIGRATIONS_DIR)).filter((file) => file.endsWith(".sql") && Number(file.split("_")[0]) <= 35).sort();
@@ -62,6 +78,9 @@ describe("migration", () => {
       expect(names).toContain("person_radar");
       expect(names).toContain("person_radar_signals");
       expect(names).toContain("monthly_review_comments");
+      expect(names).toContain("world_sync_ledger");
+      expect(names).toContain("world_meeting_events");
+      expect(names).toContain("personal_reviews");
 
       const applied = await db.query<{ id: number; filename: string }>(
         "SELECT id, filename FROM schema_migrations ORDER BY id",
@@ -112,6 +131,20 @@ describe("migration", () => {
         "043_object_materials_meeting.sql",
         "044_monthly_reviews.sql",
         "045_monthly_review_comments.sql",
+        "046_world_sync.sql",
+        "047_personal_reviews.sql",
+        "048_person_seen_marks.sql",
+        "049_material_annotations.sql",
+        "050_mission_card_annotations.sql",
+        "051_mission_card_clarification_history.sql",
+        "052_mission_card_writing_fields.sql",
+        "053_mission_card_owner_review.sql",
+        "054_mission_card_preparation_review.sql",
+        "055_mcp_oauth.sql",
+        "056_review_import.sql",
+        "057_battlefield_participants.sql",
+        "058_material_annotation_authority.sql",
+        "059_task_cover.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -119,7 +152,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(45);
+      expect(Number(again.rows[0].count)).toBe(59);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(

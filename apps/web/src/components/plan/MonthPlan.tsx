@@ -41,7 +41,7 @@ export function LinkedTaskRows({ tasks, viewerId }: { tasks: TTaskView[]; viewer
   const row = (task: TTaskView) => <div key={task.id} className={s.taskRow} data-done={task.status === "done" || undefined}>
     <div className={s.taskMain}>{viewerId === undefined || viewerId === task.owner.personId || task.collaborators.some(person => person.personId === viewerId) ?
       <button type="button" className={s.taskLink} data-target={`/me/tasks/${encodeURIComponent(task.id)}`} onClick={event => workspace?.navigate(`/me/tasks/${encodeURIComponent(task.id)}`, event.currentTarget)}>{task.title}<ArrowUpRight size={15} aria-hidden="true" /></button> : <strong className={s.taskLink}>{task.title}</strong>}
-      <p>{task.mission ? `第 ${task.mission.step} 步，共 ${task.mission.steps} 步` : "独立事项"} · {task.dueDate ? `${short(task.dueDate)} 前` : "未定截止日期"} · {[task.owner, ...task.collaborators].map(person => person.name).join("、")}</p>
+      <p>{task.mission ? "" : "独立事项 · "}{task.dueDate ? `${short(task.dueDate)} 前` : "未定截止日期"} · {[task.owner, ...task.collaborators].map(person => person.name).join("、")}</p>
       {task.latestProgress ? <p className={s.latestProgress} title={task.latestProgress.body.slice(0, 60)}>最新进展 · {({ web: "网页", codex: "Codex", claude: "Claude Code", github: "GitHub", other: "外部工具" })[task.latestProgress.source]} · {short(task.latestProgress.createdAt.slice(0, 10))} · {task.latestProgress.body.slice(0, 60)}</p> : null}</div>
     <span className={s.taskStatus}>{statusText[task.status]}</span>
   </div>;
@@ -228,7 +228,7 @@ export function MonthPlan({ plan, onSaved, onDirtyChange }: { plan: TMonthPlanRe
               {group.items.map((item, index) => <div className={s.row} key={item.taskId ?? item.clientId} data-done={item.status === "done" || undefined} data-edit-row={`${g}-${index}`}>
                 <div className={s.label}><button type="button" className={s.labelLink} aria-expanded={plan.editable ? active?.group === g && active.index === index : undefined}
                   onClick={event => plan.editable ? setActive(active?.group === g && active.index === index ? null : { group: g, index }) : item.taskId && workspace.navigate(`/me/tasks/${encodeURIComponent(item.taskId)}`, event.currentTarget)}
-                  onKeyDown={event => { if (event.key === "Escape") { setActive(null); event.currentTarget.blur(); } }}>{group.missionId ? `第 ${index + 1} 步 · ` : ""}{item.title}</button><small>{statusText[item.status]}</small></div>
+                  onKeyDown={event => { if (event.key === "Escape") { setActive(null); event.currentTarget.blur(); } }}>{item.title}</button><small>{statusText[item.status]}</small></div>
                 <div className={s.track} role="group" aria-label={`${item.title}：${item.startDate || "未选开始"} 至 ${item.dueDate || "未选截止"}`}
                   onPointerDown={event => startDrag(event, g, index, item)} onPointerMove={moveDrag}
                   onPointerUp={event => { drag.current = null; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}

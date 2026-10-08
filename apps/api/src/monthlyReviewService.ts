@@ -12,9 +12,13 @@ import {
   type TMonthlyReviewSummaryCandidate,
 } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
+import { ltoWindow } from "./monthlyCycle.js";
+import { ensurePersonalReviews, getPersonalReview, personalReviewContext, readPersonalReviewMaterials, recoverStalePersonalReviewDrafts,
+  PERSONAL_REVIEW_FIELDS, type PersonalReviewDraftInput, type PersonalReviewDraftRun } from "./personalReviews.js";
 import { listConfirmedDirections, type MonthlyDraftAgentInput } from "./monthlyDraft.js";
 import { companyPeriod, projectMonthlyFeedback, type StoredMonthlyFeedback } from "./monthlyPlans.js";
 import {
+  confirmImportedDraft,
   createMonthlyReview,
   getMonthlyReviewItem,
   getMonthlyReviewRow,
@@ -38,6 +42,7 @@ export type MonthlyReviewMaterials = {
   driFeedback: TMonthlyPlanFeedback[];
   missions: { missionId: string; code: string; title: string; outcome: string; retrospect: string }[];
   weeklyProgress: { date: string; missionTitle: string; taskTitle: string; author: string; body: string }[];
+  personalReviews: { personId: string; status: string; selfReview: TMonthlyReviewSelfReview | null; note: string | null }[];
   comments: { author: string; body: string; createdAt: string }[];
   companyMemory: { sectionId: string; title: string; passageId: string; text: string; sourceRef: string }[];
 };
@@ -50,6 +55,7 @@ export type MonthlyReviewAssessInput = MonthlyReviewDraftInput & {
 export type MonthlyReviewSummaryInput = {
   period: string;
   ltco: string;
+  ltoWindow: { start: string; end: string };
   items: { subjectType: TMonthlyReviewSubjectType; subjectId: string; subjectName: string; target: string | null; selfReview: TMonthlyReviewSelfReview | null; comments: MonthlyReviewMaterials["comments"] }[];
   battlefields: { battlefieldId: string; name: string; sixMonthOutcome: string }[];
   capabilities: { capabilityId: string; name: string; sixMonthOutcome: string }[];
@@ -66,16 +72,21 @@ export type MonthlyReviewAgents = {
   draft: MonthlyReviewAgent<MonthlyReviewDraftInput>;
   assess: MonthlyReviewAgent<MonthlyReviewAssessInput>;
   summarize: MonthlyReviewAgent<MonthlyReviewSummaryInput>;
+  personal?: MonthlyReviewAgent<PersonalReviewDraftInput>;
 };
 
 export type MonthlyReviewService = {
-  /** 公司日到了当月倒数第 3 天（Asia/Shanghai）才为当月创建复盘；重复触发只创建一次。 */
+  /**
+   * 公司日到了当月倒数第 3 天（Asia/Shanghai）才为当月创建复盘；重复触发只创建一次。
+   * 每次还接手别的进程（导入复盘的 CLI）只写下状态、本进程还没在跑的起草。
+   */
   runScheduled(at?: Date): Promise<{ period: string; status: "created" | "skipped" | "not_due"; reviewId?: string }>;
   /** 创建（或返回已有的）复盘，并为新建的项启动起草。 */
   open(period: string): Promise<{ created: boolean; reviewId: string }>;
   startDraft(itemId: string, runId: string): Promise<void>;
   startAssessment(itemId: string, runId: string): Promise<void>;
   startSummary(reviewId: string, runId: string): Promise<void>;
+  startPersonalDraft(reviewId: string, version: number, storageDir: string, agent: MonthlyReviewAgent<PersonalReviewDraftInput>): Promise<void>;
   /** 启动恢复：进程重启前没跑完的起草、评估、汇总标为可见 failed，等待手动重试。 */
   recoverInterrupted(): Promise<number>;
   idle(): Promise<void>;
@@ -110,15 +121,18 @@ export function createMonthlyReviewService({
   companyMemory,
   now = () => new Date(),
   retryDelayMs = 1500,
+  personalDraft,
 }: {
   pool: Pool;
   agents: MonthlyReviewAgents;
   companyMemory: CompanyMemoryRepository;
   now?: () => Date;
   retryDelayMs?: number;
+  personalDraft: { storageDir: string; agent: MonthlyReviewAgent<PersonalReviewDraftInput> };
 }): MonthlyReviewService {
   const q: Query = pool.query.bind(pool);
   const inflight = new Set<Promise<void>>();
+  const running = new Map<string, Promise<void>>();
 
   function track(promise: Promise<void>): Promise<void> {
     inflight.add(promise);
@@ -126,6 +140,21 @@ export function createMonthlyReviewService({
     promise.then(settle, settle);
     return promise;
   }
+
+  /** 同一个 run 在本进程只跑一份：动作后立即启动的和调度器接手的按 key 去重。 */
+  function runOnce(key: string, run: () => Promise<void>): Promise<void> {
+    const existing = running.get(key);
+    if (existing) return existing;
+    const promise = track(run());
+    running.set(key, promise);
+    const settle = () => running.delete(key);
+    promise.then(settle, settle);
+    return promise;
+  }
+  const startDraft = (itemId: string, runId: string) => runOnce(`draft:${itemId}:${runId}`, () => runDraft(itemId, runId));
+  const startSummary = (reviewId: string, runId: string) => track(runSummary(reviewId, runId));
+  const startPersonalDraft = (reviewId: string, version: number, storageDir = personalDraft.storageDir, agent = personalDraft.agent) =>
+    runOnce(`personal:${reviewId}:${version}`, () => runPersonalDraft(reviewId, version, storageDir, agent));
 
   async function comments(itemId: string): Promise<MonthlyReviewMaterials["comments"]> {
     return (await q(`SELECT author_id AS author, body, created_at AS "createdAt" FROM monthly_review_comments
@@ -193,6 +222,12 @@ export function createMonthlyReviewService({
       driFeedback,
       missions,
       weeklyProgress,
+      personalReviews: (await q(`SELECT p.person_id AS "personId",p.status,p.self_review AS "selfReview",
+        CASE WHEN p.status='skipped' THEN '未提交' ELSE NULL END AS note FROM personal_reviews p
+        WHERE p.monthly_review_id=$1 AND p.status IN ('submitted','skipped') AND EXISTS (
+          SELECT 1 FROM missions m WHERE m.owner_id=p.person_id AND m.period=p.period AND
+          ${battlefield ? "m.battlefield_ids @> jsonb_build_array($2::text)" : "m.capability_id=$2"}) ORDER BY p.person_id`,
+      [item.review_id, item.subject_id])).rows.map((row) => ({ ...row, selfReview: row.status === "submitted" ? row.selfReview : null })) as MonthlyReviewMaterials["personalReviews"],
       comments: await comments(item.id),
       companyMemory: memory,
     };
@@ -200,11 +235,27 @@ export function createMonthlyReviewService({
 
   async function runDraft(itemId: string, runId: string): Promise<void> {
     const item = await getMonthlyReviewItem(q, itemId);
-    if (!item || item.status !== "drafting" || item.draft_run.runId !== runId) return;
+    if (!item || !["drafting", "draft", "returned"].includes(item.status) || item.draft_run.runId !== runId) return;
+    const suggest = item.draft_run.suggestions === true;
+    if (item.status !== "drafting" && !suggest) return;
     try {
       const candidate = await generateWithRetry(agents.draft, await materials(item), MonthlyReviewDraftCandidate,
-        async () => { const current = await getMonthlyReviewItem(q, itemId); return current?.status === "drafting" && current.draft_run.runId === runId; }, "复盘起草");
+        async () => { const current = await getMonthlyReviewItem(q, itemId); return !!current && (suggest ? ["draft", "returned"].includes(current.status) : current.status === "drafting") && current.draft_run.runId === runId; }, "复盘起草");
       if (candidate === null) return;
+      if (suggest) {
+        const selfReview = candidate as TMonthlyReviewSelfReview;
+        const suggestions = PERSONAL_REVIEW_FIELDS.map((field) => ({ field, text: selfReview[field].text,
+          rationale: "个人复盘已交齐，根据新增材料建议改写", createdAt: now().toISOString() }));
+        await q(`UPDATE monthly_review_items SET suggestions=$3::jsonb,draft_run=jsonb_build_object('runId',NULL,'error',NULL),
+          version=version+1,updated_at=$4 WHERE id=$1 AND status IN ('draft','returned') AND draft_run->>'runId'=$2`,
+        [itemId, runId, JSON.stringify(suggestions), now()]);
+        return;
+      }
+      if ((await q("SELECT origin FROM monthly_reviews WHERE id = $1", [item.review_id])).rows[0]?.origin === "import") {
+        const effects = await confirmImportedDraft(pool, item.review_id, itemId, runId, candidate as TMonthlyReviewSelfReview, now());
+        for (const effect of effects) if (effect.type === "summary") void startSummary(effect.reviewId, effect.runId).catch((err) => console.error("monthly review summary failed", err));
+        return;
+      }
       await q(
         `UPDATE monthly_review_items
             SET status = 'draft', self_review = $2::jsonb, draft_run = jsonb_build_object('runId', $3::text, 'error', NULL),
@@ -215,6 +266,12 @@ export function createMonthlyReviewService({
     } catch (cause) {
       const error = failure(cause, "复盘起草失败");
       const at = now().toISOString();
+      if (suggest) {
+        await q(`UPDATE monthly_review_items SET draft_run=draft_run || jsonb_build_object('error',$3::jsonb),
+          version=version+1,updated_at=$4 WHERE id=$1 AND status IN ('draft','returned') AND draft_run->>'runId'=$2`,
+        [itemId, runId, JSON.stringify({ ...error, at }), at]).catch(() => undefined);
+        return;
+      }
       await q(
         `UPDATE monthly_review_items
             SET status = 'draft_failed',
@@ -265,6 +322,7 @@ export function createMonthlyReviewService({
       const input: MonthlyReviewSummaryInput = {
         period: review.period,
         ltco: await readLtco(q),
+        ltoWindow: ltoWindow(review.period),
         items: await Promise.all(items.map(async (item) => ({
           subjectType: item.subject_type, subjectId: item.subject_id, subjectName: item.subject_name, target: item.target, selfReview: item.self_review,
           comments: await comments(item.id),
@@ -275,8 +333,7 @@ export function createMonthlyReviewService({
           .rows as MonthlyReviewSummaryInput["capabilities"],
         confirmedDirections: await listConfirmedDirections(q),
       };
-      const subjects = new Set([...input.battlefields.map((unit) => `battlefield:${unit.battlefieldId}`),
-        ...input.capabilities.map((unit) => `capability:${unit.capabilityId}`)]);
+      const subjects = new Set(input.battlefields.map((unit) => `battlefield:${unit.battlefieldId}`));
       const generated = await generateWithRetry(agents.summarize, input, MonthlyReviewSummaryCandidate,
         async () => { const current = await getMonthlyReviewRow(q, reviewId); return current?.summary.status === "running" && current.summary.runId === runId; }, "公司复盘汇总",
         (output) => {
@@ -307,16 +364,53 @@ export function createMonthlyReviewService({
 
   async function open(period: string): Promise<{ created: boolean; reviewId: string }> {
     const creation = await createMonthlyReview(pool, period, now(), companyMemory.searchPeople(undefined));
+    startPersonalRuns(creation.personalRuns);
     // 每项独立起草，失败互不影响
     for (const run of creation.itemRuns) {
-      void track(runDraft(run.itemId, run.runId)).catch((err) => console.error("monthly review draft failed", err));
+      void startDraft(run.itemId, run.runId).catch((err) => console.error("monthly review draft failed", err));
     }
     return { created: creation.created, reviewId: creation.reviewId };
+  }
+
+  /** 导入 CLI 等别的进程只在事务里写下 drafting：收集中的这些起草由本进程启动，已在跑的按 key 跳过。 */
+  async function resumeDrafts(): Promise<void> {
+    const failed = (err: unknown) => console.error("monthly review draft failed", err);
+    const items = await q(`SELECT i.id, i.draft_run->>'runId' AS "runId" FROM monthly_review_items i JOIN monthly_reviews r ON r.id = i.review_id
+      WHERE r.status = 'collecting' AND i.status = 'drafting' AND i.draft_run->>'runId' IS NOT NULL`);
+    for (const row of items.rows) void startDraft(row.id, row.runId).catch(failed);
+    const personal = await q(`SELECT p.id, p.version FROM personal_reviews p JOIN monthly_reviews r ON r.id = p.monthly_review_id
+      WHERE r.status = 'collecting' AND p.status = 'drafting'`);
+    for (const row of personal.rows) void startPersonalDraft(row.id, row.version).catch(failed);
+  }
+
+  async function runPersonalDraft(reviewId: string, version: number, storageDir: string, agent: MonthlyReviewAgent<PersonalReviewDraftInput>): Promise<void> {
+    const row = await getPersonalReview(q, reviewId);
+    if (!row || row.status !== "drafting" || row.version !== version) return;
+    try {
+      const input = { ...await personalReviewContext(q, row), ...await readPersonalReviewMaterials(q, row, storageDir) };
+      const candidate = await generateWithRetry(agents.personal ?? agent, input, MonthlyReviewDraftCandidate,
+        async () => { const current = await getPersonalReview(q, reviewId); return current?.status === "drafting" && current.version === version; }, "个人复盘起草");
+      if (candidate === null) return;
+      await q(`UPDATE personal_reviews SET status='draft',self_review=$3::jsonb,draft_source='co_agent',draft_error=NULL,
+        version=version+1,updated_at=$4 WHERE id=$1 AND version=$2 AND status='drafting'`, [reviewId, version, JSON.stringify(candidate), now()]);
+    } catch (cause) {
+      await q(`UPDATE personal_reviews SET status='draft_failed',draft_error=$3::jsonb,version=version+1,updated_at=$4
+        WHERE id=$1 AND version=$2 AND status='drafting'`, [reviewId, version, JSON.stringify({ ...failure(cause, "个人复盘起草失败"), at: now().toISOString() }), now()]);
+    }
+  }
+
+  function startPersonalRuns(runs: PersonalReviewDraftRun[]): void {
+    for (const run of runs) void startPersonalDraft(run.personalReviewId, run.version)
+      .catch((err) => console.error("personal review draft failed", err));
   }
 
   return {
     async runScheduled(at?: Date) {
       const current = at ?? now();
+      await recoverStalePersonalReviewDrafts(q, current);
+      const collecting = (await q("SELECT id FROM monthly_reviews WHERE status='collecting' ORDER BY period")).rows;
+      for (const review of collecting) startPersonalRuns(await ensurePersonalReviews(pool, review.id, companyMemory.searchPeople(undefined), current));
+      await resumeDrafts();
       const period = companyPeriod(current);
       const { day, lastDay } = companyDay(current);
       if (day < lastDay - 2) return { period, status: "not_due" as const };
@@ -324,9 +418,10 @@ export function createMonthlyReviewService({
       return { period, status: opened.created ? ("created" as const) : ("skipped" as const), reviewId: opened.reviewId };
     },
     open,
-    startDraft: (itemId, runId) => track(runDraft(itemId, runId)),
+    startDraft,
     startAssessment: (itemId, runId) => track(runAssessment(itemId, runId)),
-    startSummary: (reviewId, runId) => track(runSummary(reviewId, runId)),
+    startSummary,
+    startPersonalDraft,
     async recoverInterrupted(): Promise<number> {
       const params = [INTERRUPTED, "生成在进程重启前未完成，请重试", now().toISOString()];
       const error = "jsonb_build_object('code', $1::text, 'message', $2::text, 'at', $3::text)";
@@ -351,7 +446,7 @@ export function createMonthlyReviewService({
           WHERE summary->>'status' IN ('pending', 'running')`,
         params,
       );
-      return (drafts.rowCount ?? 0) + (assessments.rowCount ?? 0) + (summaries.rowCount ?? 0);
+      return (drafts.rowCount ?? 0) + (assessments.rowCount ?? 0) + (summaries.rowCount ?? 0) + await recoverStalePersonalReviewDrafts(q, now());
     },
     async idle(): Promise<void> {
       while (inflight.size > 0) await Promise.allSettled([...inflight]);

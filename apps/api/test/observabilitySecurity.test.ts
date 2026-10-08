@@ -173,7 +173,7 @@ describe("health", () => {
         api: true,
         database: true,
         buildSha: "test-sha",
-        dependencies: { piRuntime: true, modelSlots: true, companyMemoryMcp: true, search: false, wechat: false, outlets: false, recording: { tos: false, asr: false }, voiceprint: false },
+        dependencies: { piRuntime: true, modelSlots: true, companyMemoryMcp: true, search: false, wechat: false, outlets: false, recording: { tos: false, asr: false }, voiceprint: false, world: false },
       });
 
       const gets = [
@@ -297,7 +297,7 @@ describe("LangSmith optional adapter", () => {
       expect(payloads).toHaveLength(1);
       expect(payloads[0].url).toBe("https://langsmith.test/runs");
       expect(payloads[0].body).toMatchObject({
-        name: "conversation",
+        name: "测试甲 · 对话·全局",
         session_name: "warmap-test",
         inputs: { agentKind: "conversation", promptHash: "c".repeat(64), input: { message: "总结当前决策面" } },
         outputs: { assistantMessage: "answer" },
@@ -305,9 +305,27 @@ describe("LangSmith optional adapter", () => {
           status: "succeeded",
           toolEvents: [{ name: "web_search", isError: false }],
           usage: { input: 3, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 5 },
+          metadata: { user_id: TEST_CEO.personId, user_name: "测试甲", section: "global", scope: "global" },
         },
       });
-      expect(JSON.stringify(payloads[0].body)).not.toContain("ls-secret-key");
+      const threadId = (payloads[0].body.extra as { metadata: { thread_id: string } }).metadata.thread_id;
+      expect(threadId).toBe((await t.pool.query("SELECT id FROM conversations WHERE owner_id = $1 AND scope = 'global'", [TEST_CEO.personId])).rows[0].id);
+
+      // 对象页上的对话：run 名带部分，metadata 带对象标题
+      const issue = await t.createIssue();
+      await t.app.inject({
+        method: "POST",
+        url: `/api/conversations/issue:${issue.objectRef.id}/messages`,
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" },
+        payload: { message: "这个议题怎么看" },
+      });
+      await flush();
+      expect(payloads[1].body).toMatchObject({
+        name: "测试甲 · 对话·议题",
+        extra: { metadata: { section: "issue", scope: `issue:${issue.objectRef.id}`, object_title: "测试议题：是否调整渠道投入" } },
+      });
+      expect(JSON.stringify(payloads)).not.toContain("ls-secret-key");
+      payloads.length = 0;
 
       await recordAgentTrace({
         runId: "r-redact",
@@ -319,7 +337,7 @@ describe("LangSmith optional adapter", () => {
         startedAt: Date.now(),
         durationMs: 2,
       });
-      const redactedInput = (payloads[1].body.inputs as { input: Record<string, unknown> }).input;
+      const redactedInput = (payloads[0].body.inputs as { input: Record<string, unknown> }).input;
       expect(redactedInput).toEqual({
         password: "[REDACTED]",
         token: "[REDACTED]",

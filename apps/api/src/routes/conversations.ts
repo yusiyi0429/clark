@@ -28,6 +28,12 @@ import { isActiveMember } from "../threads.js";
 import { getObjectMaterial } from "../objectMaterials.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
 
+/** LangSmith run 名里的部分名称，按 scope 前缀取。 */
+const SECTION_LABELS: Record<string, string> = {
+  global: "全局", issue: "议题", signal: "信号", meeting: "会议", "monthly-plan": "月度计划", mission: "Mission",
+  "mission-card": "Mission Card", "monthly-review-item": "复盘项", "personal-review": "个人复盘", task: "执行事项",
+};
+
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
   const { pool, q, env, fail, requirePerson, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs } = ctx;
 
@@ -44,7 +50,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
       return { visible: true, snapshot: { cardId: card.id, version: card.version, kind: card.kind, title: card.title,
         objectRef: card.objectRef, payload: card.payload } };
     }
-    return person.role === "ceo" || scope === "global" || scope.startsWith("mission-card:") || scope.startsWith("task:") || scope.startsWith("monthly-review-item:")
+    return person.role === "ceo" || scope === "global" || scope.startsWith("mission-card:") || scope.startsWith("task:") || scope.startsWith("monthly-review-item:") || scope.startsWith("personal-review:")
       ? getScopeObject(q, scope, env.sessionSecret, { person, people: companyMemory.searchPeople(undefined), now: ctx.now() })
       : { snapshot: null, visible: false };
   };
@@ -78,12 +84,13 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           const material = await getObjectMaterial(q, { objectType, objectId }, req.body.viewingMaterialId,
             { personId: owner, role: person.role, displayName: names.get(owner) ?? owner }, names);
           if (object.snapshot) Object.assign(object.snapshot, { viewingMaterial: {
-            id: material.id, fileName: material.fileName, version: material.version, editable: material.editable } });
+            id: material.id, fileName: material.fileName, version: material.version, editable: material.editable, canEdit: material.canEdit,
+            ...(material.url ? { url: material.url } : {}) } });
         } catch { return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在"); }
       }
       // 成员在 2a 看不到任何 Card，也不能借显式引用把 Card 带进自己的 Agent。
       if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
-      const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret);
+      const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret, person);
       if (!("snapshots" in references)) {
         return fail(reply, references.status, references.code, references.message);
       }
@@ -320,12 +327,17 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           errorCode: runError ? (runStatus === "aborted" ? "ABORTED" : "RUNTIME_FAILED") : undefined,
           error: runError,
         });
+        const section = req.params.scope.split(":", 1)[0];
         void recordAgentTrace({
           runId,
-          name: "conversation",
+          name: `对话·${SECTION_LABELS[section] ?? section}`,
           agentKind: "conversation",
           promptHash: runtime.promptHash,
           objectRef: object.snapshot?.objectRef ?? { type: "global", id: "global" },
+          personId: owner,
+          personName: personDisplayNames(companyMemory).get(owner),
+          threadId: row.id,
+          metadata: { section, scope: req.params.scope, object_title: object.snapshot?.title },
           inputs: { message: req.body.message, currentObject: object.snapshot, references: references.snapshots },
           outputs: runOutput,
           toolEvents: runToolEvents,

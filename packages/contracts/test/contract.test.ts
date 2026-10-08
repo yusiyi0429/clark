@@ -772,9 +772,12 @@ describe("strategy map config contracts", () => {
       battlefields: [{
         id: "growth", version: 1, code: "01", sortOrder: 10, name: "灯塔项目",
         ownerId: "", ownerDisplayName: "待指派", sixMonthOutcome: "目标", missionAnchors: [], pendingIssueCount: 0,
+        participantIds: ["bai-tiantian"], participantsDerived: true,
       }],
       issues: [],
     })).toBe(true);
+    expect(Value.Check(PatchBattlefieldRequest, { participantIds: [] })).toBe(true);
+    expect(Value.Check(PatchBattlefieldRequest, { participantIds: ["a", "a"] })).toBe(false);
   });
 });
 
@@ -843,6 +846,8 @@ describe("mission entity contracts", () => {
     battlefieldIds: ["01-灯塔项目"],
     battlefieldNames: ["01 灯塔项目"],
     outcome: "推动 CEO Agent 形成模块边界清楚的 M1A 业务链",
+    timeBoundary: "",
+    tradeoffs: "",
     why: "当前以 Chat 为主",
     successEvidence: ["模块清单经过确认"],
     milestones: ["9/23 E2E Quality Gate"],

@@ -80,3 +80,6 @@
 }
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
 @media(max-width:959px){.heading .tag.tag,.count.count,.mine.mine{font-size:13px}}
+.line[data-review] { display: inline-flex; align-items: center; gap: 4px; }
+.line[data-review='wait'] { color: #2f6fd6; }
+.line[data-review='done'] { color: #2f7a44; }

@@ -147,10 +147,18 @@ function actionId(payload: { actions: { actionType: string; actionId: string }[]
   return found!.actionId;
 }
 
-/** 开启 9 月复盘并等起草结束，返回两项 id。 */
+/** 开启 9 月复盘；补入部署前的能力域项，以覆盖旧项仍可读写的行为。 */
 async function openReview(c: Ctx): Promise<{ reviewId: string; growthId: string; capId: string }> {
   const opened = await execute(c, c.ceo, actionId((await overview(c)).json(), "monthly-review.open"));
   expect(opened.statusCode).toBe(200);
+  await c.t.monthlyReviews!.idle();
+  const capId = randomUUID(), runId = randomUUID();
+  await c.t.sql(`INSERT INTO monthly_review_items
+    (id,review_id,version,subject_type,subject_id,owner_id,owner_unassigned,target,status,draft_run,assessment,created_at,updated_at)
+    SELECT $1,review_id,1,'capability',$2,$3,true,NULL,'drafting',$4::jsonb,assessment,created_at,updated_at
+    FROM monthly_review_items WHERE subject_type='battlefield'`,
+  [capId, CAPABILITY_ID, TEST_CEO.personId, JSON.stringify({ runId, error: null })]);
+  await c.t.monthlyReviews!.startDraft(capId, runId);
   await c.t.monthlyReviews!.idle();
   const rows = await c.t.sql("SELECT id, subject_id, review_id FROM monthly_review_items ORDER BY subject_type");
   return {
@@ -193,7 +201,7 @@ async function toLtcoPending(c: Ctx) {
 }
 
 describe("MonthlyReview open", () => {
-  it("creates one item per battlefield and capability, assigns owners, snapshots targets and is idempotent", async () => {
+  it("只建战场项，指派 DRI、快照目标且重复开启幂等", async () => {
     const c = await setup();
     try {
       expect((await overview(c, c.member)).statusCode).toBe(403);
@@ -212,29 +220,27 @@ describe("MonthlyReview open", () => {
       expect(Value.Check(MonthlyReviewPayload, opened.json().review)).toBe(true);
       await c.t.monthlyReviews!.idle();
       const review = (await overview(c)).json().review;
-      expect(review).toMatchObject({ period: PERIOD, nextPeriod: "2026-10", status: "collecting", counts: { total: 2, submitted: 0 } });
+      expect(review).toMatchObject({ period: PERIOD, nextPeriod: "2026-10", status: "collecting", counts: { total: 1, submitted: 0 } });
       expect(review.items.map((row: any) => [row.subjectId, row.ownerName, row.ownerUnassigned, row.status])).toEqual([
         ["growth", "测试乙", false, "draft"],
-        [CAPABILITY_ID, "测试甲", true, "draft"],
       ]);
       expect(review.items[0].lead).toBe("灯塔项目完成了渠道切换");
 
       const rows = await c.t.sql("SELECT subject_id, owner_id, target FROM monthly_review_items ORDER BY subject_type");
       expect(rows).toEqual([
         { subject_id: "growth", owner_id: TEST_MEMBER.personId, target: "灯塔客户完成切换" },
-        { subject_id: CAPABILITY_ID, owner_id: TEST_CEO.personId, target: null },
       ]);
       // 起草输入：战场按 battlefieldId 过滤计划待办
       const growthInput = c.agents.calls.draft.find((input) => input.subject.id === "growth")!;
       expect(growthInput.target).toBe("灯塔客户完成切换");
       expect(growthInput.planTodos.map((todo) => todo.id)).toEqual(["todo-1"]);
-      expect(c.agents.calls.draft.find((input) => input.subject.id === CAPABILITY_ID)!.planTodos).toEqual([]);
+      expect(c.agents.calls.draft.find((input) => input.subject.id === CAPABILITY_ID)).toBeUndefined();
 
       const again = await execute(c, c.ceo, openId);
       expect(again.statusCode).toBe(200);
       expect(again.json().review.reviewId).toBe(review.reviewId);
-      expect(await c.t.sql("SELECT id FROM monthly_review_items")).toHaveLength(2);
-      expect(c.agents.calls.draft).toHaveLength(2);
+      expect(await c.t.sql("SELECT id FROM monthly_review_items")).toHaveLength(1);
+      expect(c.agents.calls.draft).toHaveLength(1);
     } finally {
       await c.t.close();
     }
@@ -252,7 +258,7 @@ describe("MonthlyReview scheduler", () => {
       expect((await c.t.monthlyReviews!.runScheduled()).status).toBe("skipped");
       await c.t.monthlyReviews!.idle();
       expect(await c.t.sql("SELECT period FROM monthly_reviews")).toEqual([{ period: PERIOD }]);
-      expect(await c.t.sql("SELECT id FROM monthly_review_items")).toHaveLength(2);
+      expect(await c.t.sql("SELECT id FROM monthly_review_items")).toHaveLength(1);
     } finally {
       await c.t.close();
     }
@@ -288,6 +294,12 @@ describe("MonthlyReview drafting", () => {
       await progress("weekly-other", "2026-09-15T02:00:00Z", "其他单元");
       await progress("weekly-august", "2026-09-15T02:00:00Z", "其他月份 Mission");
       const { growthId } = await openReview(c);
+      const personal = (await c.t.sql("SELECT id,version FROM personal_reviews WHERE person_id=$1", [TEST_MEMBER.personId]))[0];
+      const skipped = await c.t.app.inject({ method: "POST", url: "/api/personal-reviews/actions/execute", headers: { cookie: c.ceo, origin: c.t.publicOrigin }, payload: {
+        actionId: signActionId(testEnv.sessionSecret, { actionType: "personal-review.skip", objectType: "personal-review", objectId: personal.id as string, objectVersion: personal.version as number }),
+      } });
+      expect(skipped.statusCode).toBe(200);
+      await c.t.monthlyReviews!.idle();
       expect((await item(c, growthId, c.member)).status).toBe("draft");
       expect(growthCalls).toBe(3);
       expect(c.agents.calls.draft.filter((input) => input.subject.id === "growth")[0].weeklyProgress).toEqual([
@@ -503,11 +515,12 @@ describe("MonthlyReview company summary and LTCO", () => {
     c.agents.behave.summarize = () => {
       calls += 1;
       return calls < 3 ? { ...SUMMARY, ltcoSuggestion: { ...SUMMARY.ltcoSuggestion,
-        units: [{ subjectType: "battlefield", subjectId: "missing", proposedOutcome: "虚构目标", rationale: "虚构" }] } } : SUMMARY;
+        units: [{ subjectType: calls === 1 ? "capability" : "battlefield", subjectId: calls === 1 ? CAPABILITY_ID : "missing", proposedOutcome: "虚构目标", rationale: "虚构" }] } } : SUMMARY;
     };
     try {
       await allConfirmed(c);
       expect(calls).toBe(3);
+      expect(c.agents.calls.summarize[0].ltoWindow).toEqual({ start: "2026-10", end: "2027-03" });
       expect((await overview(c)).json().review.summary).toMatchObject({ status: "ready", overall: SUMMARY.overall, nextFocus: SUMMARY.nextFocus });
     } finally { await c.t.close(); }
   });
@@ -515,19 +528,13 @@ describe("MonthlyReview company summary and LTCO", () => {
   it("summarizes after the last confirmation, lets the CEO edit and confirm it, then asks for the LTCO decision", async () => {
     const c = await setup();
     try {
-      const { growthId } = await openReview(c);
+      const { growthId, capId } = await openReview(c);
       await submit(c, growthId, c.member);
       await confirm(c, growthId);
-      expect((await overview(c)).json().review.status).toBe("collecting");
-      expect(c.agents.calls.summarize).toHaveLength(0);
-
-      const { capId } = await c.t.sql("SELECT id AS \"capId\" FROM monthly_review_items WHERE subject_id = $1", [CAPABILITY_ID]).then((rows) => rows[0] as { capId: string });
-      await submit(c, capId, c.ceo);
-      const last = await confirm(c, capId);
-      expect(last.json().item.status).toBe("confirmed");
+      expect((await item(c, capId, c.ceo)).status).toBe("draft");
       let review = (await overview(c)).json().review;
       expect(review).toMatchObject({ status: "summarizing", summary: { status: "ready", judgments: SUMMARY.judgments }, ltco: { current: "三年成为行业第一", suggestion: SUMMARY.ltcoSuggestion } });
-      expect(c.agents.calls.summarize[0].items).toHaveLength(2);
+      expect(c.agents.calls.summarize[0].items).toHaveLength(1);
       expect(c.agents.calls.summarize[0].ltco).toBe("三年成为行业第一");
       const notices = (await c.t.app.inject({ method: "GET", url: "/api/me/monthly-reviews", headers: { cookie: c.ceo } })).json().notices;
       expect(notices.map((notice: any) => notice.kind)).toEqual(["summary_pending"]);
@@ -541,7 +548,7 @@ describe("MonthlyReview company summary and LTCO", () => {
       expect(review.summary.confirmedAt).toBe(SEPT_15.toISOString());
       expect(review.actions.map((action: any) => action.actionType)).toEqual(["monthly-review.decide_ltco"]);
       const ltcoNotice = (await c.t.app.inject({ method: "GET", url: "/api/me/monthly-reviews", headers: { cookie: c.ceo } })).json().notices;
-      expect(ltcoNotice).toEqual([expect.objectContaining({ kind: "ltco_pending", text: "9 月复盘已完成 · 待决定 LTCO", href: "/reviews/2026-09/ltco" })]);
+      expect(ltcoNotice).toEqual([expect.objectContaining({ kind: "ltco_pending", text: "9 月复盘已完成 · 待决定 LTO", href: "/reviews/2026-09/ltco" })]);
     } finally {
       await c.t.close();
     }
@@ -556,7 +563,9 @@ describe("MonthlyReview company summary and LTCO", () => {
       expect(decided.statusCode).toBe(200);
       expect(decided.json().review).toMatchObject({ status: "closed", ltco: { current: "三年成为行业第一", decision: { decision: "keep", ltcoBefore: "三年成为行业第一", ltcoAfter: "三年成为行业第一", planExisted: false } } });
       await c.t.monthlyPlans!.idle();
-      expect(await c.t.sql("SELECT ltco, version FROM company_strategy_config")).toEqual([{ ltco: "三年成为行业第一", version: 1 }]);
+      expect(await c.t.sql("SELECT ltco, version, lto_window_start FROM company_strategy_config")).toEqual([{ ltco: "三年成为行业第一", version: 2, lto_window_start: "2026-10" }]);
+      expect(await c.t.sql("SELECT lto_window_start FROM battlefield_config")).toEqual([{ lto_window_start: "2026-10" }]);
+      expect(decided.json().review.ltco.window).toEqual({ start: "2026-10", end: "2027-03" });
       expect((await c.t.sql("SELECT period FROM monthly_plans ORDER BY period")).map((row) => row.period)).toEqual([PERIOD, "2026-10"]);
       expect(c.planAgent.calls).toHaveLength(1);
       const previous = c.planAgent.calls[0].previousReview!;
@@ -571,20 +580,55 @@ describe("MonthlyReview company summary and LTCO", () => {
     }
   });
 
-  it("revises the LTCO in strategy config and does not recreate an existing next-month plan", async () => {
+  it("revises the LTCO in strategy config and redrafts an untouched existing next-month plan with the review", async () => {
     const c = await setup();
     try {
       await toLtcoPending(c);
       await c.t.monthlyPlans!.createForPeriod("2026-10");
       await c.t.monthlyPlans!.idle();
       expect(c.planAgent.calls).toHaveLength(1);
+      expect(c.planAgent.calls[0].previousReview).toBeNull();
       const review = (await overview(c)).json().review;
       const decided = await execute(c, c.ceo, actionId(review, "monthly-review.decide_ltco"), { decision: "revise", ltco: "两年成为行业第一" });
-      expect(decided.json().review.ltco).toMatchObject({ current: "两年成为行业第一", decision: { decision: "revise", ltcoBefore: "三年成为行业第一", ltcoAfter: "两年成为行业第一", planExisted: true } });
+      expect(decided.json().review.ltco).toMatchObject({ current: "两年成为行业第一", decision: { decision: "revise", ltcoBefore: "三年成为行业第一", ltcoAfter: "两年成为行业第一", planExisted: false } });
       await c.t.monthlyPlans!.idle();
       expect(await c.t.sql("SELECT ltco, version FROM company_strategy_config")).toEqual([{ ltco: "两年成为行业第一", version: 2 }]);
-      expect(await c.t.sql("SELECT id FROM monthly_plans WHERE period = '2026-10'")).toHaveLength(1);
+      const plans = await c.t.sql("SELECT generation FROM monthly_plans WHERE period = '2026-10'");
+      expect(plans).toHaveLength(1);
+      expect(plans[0].generation).toMatchObject({ status: "ready", previousRunIds: [expect.any(String)] });
+      expect(plans[0].generation).not.toHaveProperty("beforeReview");
+      expect(c.planAgent.calls).toHaveLength(2);
+      expect(c.planAgent.calls[1].previousReview?.period).toBe(PERIOD);
+      expect(c.planAgent.calls[1].ltco).toBe("两年成为行业第一");
+    } finally {
+      await c.t.close();
+    }
+  });
+
+  it("keeps a next-month plan the CEO already checked, flags it as drafted before the review, and redrafts on request", async () => {
+    const c = await setup();
+    try {
+      await toLtcoPending(c);
+      await c.t.monthlyPlans!.createForPeriod("2026-10");
+      await c.t.monthlyPlans!.idle();
+      const planId = (await c.t.sql("SELECT id FROM monthly_plans WHERE period = '2026-10'"))[0].id as string;
+      const planCard = async () => (await c.t.app.inject({ method: "GET", url: `/api/cards/monthly-plans/${planId}`, headers: { cookie: c.ceo } })).json().cards[0];
+      const planAction = async (input: unknown, actionType: string) => c.t.app.inject({ method: "POST", url: "/api/actions/execute", headers: { cookie: c.ceo, origin: c.t.publicOrigin },
+        payload: { actionId: actionId(await planCard(), actionType), input } });
+      expect((await planAction({ checkedItemIds: ["company"] }, "monthly-plan.update_draft")).statusCode).toBe(200);
+
+      const decided = await execute(c, c.ceo, actionId((await overview(c)).json().review, "monthly-review.decide_ltco"), { decision: "keep" });
+      expect(decided.json().review.ltco.decision).toMatchObject({ decision: "keep", planExisted: true });
+      await c.t.monthlyPlans!.idle();
       expect(c.planAgent.calls).toHaveLength(1);
+      const kept = await planCard();
+      expect(kept.payload).toMatchObject({ negotiation: { checkedItemIds: ["company"] }, generation: { status: "ready", beforeReview: true } });
+
+      expect((await planAction({}, "monthly-plan.retry_draft")).statusCode).toBe(200);
+      await c.t.monthlyPlans!.idle();
+      expect(c.planAgent.calls).toHaveLength(2);
+      expect(c.planAgent.calls[1].previousReview?.period).toBe(PERIOD);
+      expect((await planCard()).payload.generation).not.toHaveProperty("beforeReview");
     } finally {
       await c.t.close();
     }
@@ -596,7 +640,7 @@ describe("MonthlyReview company summary and LTCO", () => {
       await toLtcoPending(c);
       let review = (await overview(c)).json().review;
       expect(review.ltco.units.map((unit: any) => [unit.subjectType, unit.subjectId])).toEqual([
-        ["battlefield", "growth"], ["capability", CAPABILITY_ID],
+        ["battlefield", "growth"],
       ]);
       const decide = actionId(review, "monthly-review.decide_ltco");
       const unchanged = await execute(c, c.ceo, decide, { decision: "revise", ltco: "三年成为行业第一" });
@@ -605,24 +649,24 @@ describe("MonthlyReview company summary and LTCO", () => {
       const unknown = await execute(c, c.ceo, decide, { decision: "revise", units: [{ subjectType: "capability", subjectId: "missing", sixMonthOutcome: "新目标" }] });
       expect(unknown.statusCode).toBe(400);
       expect(unknown.json().code).toBe("INVALID_SUBJECT");
+      const capability = await execute(c, c.ceo, decide, { decision: "revise", units: [{ subjectType: "capability", subjectId: CAPABILITY_ID, sixMonthOutcome: "不可改" }] });
+      expect(capability.statusCode).toBe(400);
       const decided = await execute(c, c.ceo, decide, { decision: "revise", units: [
         { subjectType: "battlefield", subjectId: "growth", sixMonthOutcome: "灯塔项目新长期目标" },
-        { subjectType: "capability", subjectId: CAPABILITY_ID, sixMonthOutcome: "交付能力新长期目标" },
       ] });
       expect(decided.statusCode).toBe(200);
       review = decided.json().review;
       expect(review.ltco.current).toBe("三年成为行业第一");
       expect(review.ltco.decision.units).toEqual([
         expect.objectContaining({ subjectType: "battlefield", subjectId: "growth", after: "灯塔项目新长期目标" }),
-        { subjectType: "capability", subjectId: CAPABILITY_ID, before: "端到端交付六个月目标", after: "交付能力新长期目标" },
       ]);
       expect(await c.t.sql("SELECT six_month_outcome, version FROM battlefield_config WHERE id = 'growth'")).toEqual([
         expect.objectContaining({ six_month_outcome: "灯塔项目新长期目标", version: 2 }),
       ]);
       expect(await c.t.sql("SELECT six_month_outcome, version FROM capability_config WHERE id = $1", [CAPABILITY_ID])).toEqual([
-        { six_month_outcome: "交付能力新长期目标", version: 2 },
+        { six_month_outcome: "端到端交付六个月目标", version: 1 },
       ]);
-      expect((await c.t.sql("SELECT ltco, version FROM company_strategy_config"))[0]).toEqual({ ltco: "三年成为行业第一", version: 1 });
+      expect((await c.t.sql("SELECT ltco, version, lto_window_start FROM company_strategy_config"))[0]).toEqual({ ltco: "三年成为行业第一", version: 2, lto_window_start: "2026-10" });
     } finally { await c.t.close(); }
   });
 });
@@ -671,8 +715,7 @@ describe("MonthlyReview reads and notices", () => {
       expect(await proposeMonthlyReviewSuggestion(c.t.pool, capId, MEMBER_VIEWER,
         { field: "overall", text: "不能编辑", rationale: "" }, SEPT_15)).toMatchObject({ error: "FORBIDDEN" });
       const notices = (await c.t.app.inject({ method: "GET", url: "/api/me/monthly-reviews", headers: { cookie: c.member } })).json().notices;
-      expect(notices).toContainEqual(expect.objectContaining({ kind: "item_participant",
-        text: "9 月复盘 · 07 交付能力 · 邀请你讨论补充", href: `/me/reviews/items/${capId}` }));
+      expect(notices.every((notice: any) => notice.kind !== "item_participant")).toBe(true);
       const clientId = randomUUID();
       const first = await comment("补充交付证据", clientId);
       expect(first.statusCode).toBe(200);
@@ -683,10 +726,10 @@ describe("MonthlyReview reads and notices", () => {
       expect(c.agents.calls.assess.find((input) => input.subject.id === CAPABILITY_ID)?.comments).toEqual([
         expect.objectContaining({ author: TEST_MEMBER.personId, body: "补充交付证据" }),
       ]);
-      await submit(c, growthId, c.member);
       await confirm(c, capId);
       expect((await comment("确认后", randomUUID())).statusCode).toBe(409);
       expect((await item(c, capId, c.member)).viewer.canComment).toBe(false);
+      await submit(c, growthId, c.member);
       await confirm(c, growthId);
       expect(c.agents.calls.summarize[0].items.find((entry) => entry.subjectId === CAPABILITY_ID)?.comments).toEqual([
         expect.objectContaining({ body: "补充交付证据" }),
@@ -714,15 +757,12 @@ describe("MonthlyReview reads and notices", () => {
         id: `monthly-review-item:${growthId}:todo`, kind: "item_todo", period: PERIOD,
         text: "9 月复盘待你完成 · 01 灯塔项目", href: `/me/reviews/items/${growthId}`,
       })]);
-      expect(await notices(c.ceo)).toEqual([expect.objectContaining({
-        kind: "item_todo", text: "9 月复盘待你完成 · 07 交付能力", href: `/reviews/items/${capId}`,
-      })]);
+      expect(await notices(c.ceo)).toEqual([]);
 
       await submit(c, growthId, c.member);
       expect(await notices(c.member)).toEqual([]);
       const ceoNotices = await notices(c.ceo);
       expect(ceoNotices.map((notice: any) => [notice.kind, notice.text, notice.href])).toEqual([
-        ["item_todo", "9 月复盘待你完成 · 07 交付能力", `/reviews/items/${capId}`],
         ["items_to_review", "9 月复盘：1 项待你处理", "/reviews/2026-09"],
       ]);
       await execute(c, c.ceo, actionId(await item(c, growthId, c.ceo), "monthly-review-item.return"), { reason: "再补证据" });

@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { TAddTaskCollaboratorsRequest, TCreateMyTaskRequest, TMeetingOutcomeItem, TPatchMyTaskRequest, TReturnMyTaskRequest, TTaskDetailResponse, TTaskView } from "@warmap/contracts";
+import type { TAcceptMyTaskRequest, TAddTaskCollaboratorsRequest, TCreateMyTaskRequest, TMeetingOutcomeItem, TPatchMyTaskRequest, TReturnMyTaskRequest,
+  TTaskAcceptance, TTaskDetailResponse, TTaskProgressSource, TTaskStandardCheck, TTaskSubmission, TTaskView } from "@warmap/contracts";
 import { companyPeriod } from "./monthlyPlans.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { insertNotification } from "./notifications.js";
 import { listTaskProgress } from "./taskProgress.js";
 import { postThreadIntro, type ThreadIntroAgent } from "./threadIntro.js";
-import { postCoAgentMessage, threadIntroInput } from "./threads.js";
+import { postCoAgentMessage, threadIntroInput, type ThreadRef } from "./threads.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 
 type TaskRow = {
@@ -19,17 +20,21 @@ type TaskRow = {
   collaborators: string[]; created_at: Date; updated_at: Date;
   latest_progress_body: string | null; latest_progress_source: "web" | "codex" | "claude" | "github" | "other" | null;
   latest_progress_author_id: string | null; latest_progress_created_at: Date | null;
+  submission: StoredSubmission | null; acceptance: StoredAcceptance | null;
 };
+/** tasks.submission / tasks.acceptance 里存的是人的 id，读的时候换成名字。 */
+type StoredSubmission = Omit<TTaskSubmission, "by"> & { by: string };
+type StoredAcceptance = Omit<TTaskAcceptance, "by"> & { by: string };
 
 const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t.start_date::text AS start_date,
  t.due_date::text AS due_date,t.done_definition,t.judgment,t.judgment_at,t.return_reason,t.origin_meeting_id::text,
  t.source_quote,mt.title AS meeting_title,mt.lead_dri_id,t.owner_id,t.mission_id,t.step_order,
- m.title AS mission_title,c.id::text AS card_id,r.period,b.name AS battlefield_name,
+ CASE WHEN r.status='confirmed' THEN m.title ELSE NULL END AS mission_title,c.id::text AS card_id,r.period,b.name AS battlefield_name,
  (SELECT count(*)::int FROM tasks s WHERE s.mission_id=t.mission_id) AS steps,
  prev.id::text AS previous_id,prev.title AS previous_title,prev.status AS previous_status,
  ARRAY(SELECT tm.person_id FROM task_members tm WHERE tm.task_id=t.id AND tm.role='collaborator' AND tm.left_at IS NULL ORDER BY tm.added_at,tm.person_id) AS collaborators,
  t.created_at,t.updated_at,lp.body AS latest_progress_body,lp.source AS latest_progress_source,
- lp.author_id AS latest_progress_author_id,lp.created_at AS latest_progress_created_at
+ lp.author_id AS latest_progress_author_id,lp.created_at AS latest_progress_created_at,t.submission,t.acceptance
  FROM tasks t
  LEFT JOIN meetings mt ON mt.id=t.origin_meeting_id
  LEFT JOIN missions m ON m.id=t.mission_id
@@ -55,8 +60,30 @@ function projectTask(row: TaskRow, names: Map<string, string>): TTaskView {
     returnReason: row.return_reason,
     origin: row.origin_meeting_id ? { type: "meeting", meetingId: row.origin_meeting_id,
       meetingTitle: row.meeting_title ?? "", quote: row.source_quote } : null,
+    awaitingAcceptance: row.submission !== null && (row.status === "not_started" || row.status === "in_progress"),
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
   };
+}
+
+/** 完成标准：doneDefinition 按行拆开，去掉空行和行首的列表记号（- * · • [ ] 1. 1、 (1) ①）。 */
+export function taskStandards(doneDefinition: string | null): string[] {
+  if (!doneDefinition) return [];
+  return doneDefinition.split(/\r?\n/)
+    .map((line) => line.trim()
+      .replace(/^(?:[-*·•]\s*)?(?:\[[ xX]\]\s*)?/u, "")
+      .replace(/^(?:\d{1,2}[.、)）](?!\d)|[(（]\d{1,2}[)）]|[①-⑳])\s*/u, "")
+      .trim())
+    .filter(Boolean).slice(0, 50);
+}
+
+/**
+ * 推进人本人第一次动手（放材料、写进展、提交验收、让 Agent 改材料）时，未启动的执行事项自动进行中。
+ * 协作者做同样的事不改状态：进度只认推进人自报，推进人的动作就是自报。和动作在同一个事务里调用。
+ */
+export async function startTaskByOwner(q: Query, ref: ThreadRef, personId: string): Promise<void> {
+  if (ref.objectType !== "task" || !UUID_PATTERN.test(ref.objectId)) return;
+  await q(`UPDATE tasks SET status='in_progress',version=version+1,updated_at=now()
+    WHERE id=$1 AND owner_id=$2 AND status='not_started'`, [ref.objectId, personId]);
 }
 async function getTaskRow(q: Query, id: string): Promise<TaskRow | null> {
   if (!UUID_PATTERN.test(id)) return null;
@@ -178,6 +205,7 @@ async function ownerMutation(pool: Pool, ownerId: string, taskId: string, versio
 }
 export function updateMyTaskStatus(pool: Pool, ownerId: string, taskId: string, input: TPatchMyTaskRequest, names: Map<string,string>, now: Date): Promise<TaskResult> {
   return ownerMutation(pool,ownerId,taskId,input.version,names,async(client,row)=>{
+    if (input.status && row.status === "done") return error(409,"TASK_ALREADY_DONE","这件事已经验收完成；要继续做，请推进人在天枢里重新打开");
     const start = input.startDate === undefined ? row.start_date : input.startDate;
     const due = input.dueDate === undefined ? row.due_date : input.dueDate;
     if (!validDates(start,due)) return error(400,"TASK_DATES_INVALID","计划开始不能晚于截止");
@@ -196,9 +224,92 @@ export function updateMyTaskStatus(pool: Pool, ownerId: string, taskId: string, 
 export function returnMyTask(pool: Pool, ownerId: string, taskId: string, input: TReturnMyTaskRequest, names: Map<string,string>): Promise<TaskResult> {
   return ownerMutation(pool,ownerId,taskId,input.version,names,async(client,row)=>{
     if (row.created_by !== "meeting") return error(409,"TASK_NOT_RETURNABLE","只有会后分派的执行事项可以退回");
-    await client.query("UPDATE tasks SET status='returned',return_reason=$2,version=version+1,updated_at=now() WHERE id=$1",[taskId,input.reason]);
+    // 退回了就不再等验收：外部工具先前的提交一并清掉，「等你验收」的通知标为已读。
+    await client.query("UPDATE tasks SET status='returned',return_reason=$2,submission=NULL,version=version+1,updated_at=now() WHERE id=$1",[taskId,input.reason]);
+    await settleSubmissionNotices(client,taskId);
     if (row.lead_dri_id && row.lead_dri_id !== ownerId)
       await insertNotification(client,{personId:row.lead_dri_id,kind:"task_returned",objectType:"task",objectId:taskId,actorId:ownerId});
+  });
+}
+type CheckInput = Pick<TTaskStandardCheck, "index" | "met"> & { evidence?: string | null; materialId?: string | null };
+const TOOL_NAME: Record<TTaskProgressSource, string> = { web: "网页", codex: " Codex ", claude: " Claude Code ", github: " GitHub ", other: "外部工具" };
+
+/** 判断只能对现有的完成标准；交付结果和依据只能指向这件事现有的材料。 */
+async function checkAcceptanceInput(client: PoolClient, taskId: string, standards: string[], checks: CheckInput[], deliverables: string[]): Promise<TaskResult | void> {
+  if (checks.some((check) => check.index >= standards.length) || new Set(checks.map((check) => check.index)).size !== checks.length)
+    return error(400,"ACCEPTANCE_STANDARD_INVALID","完成标准刚改过，请刷新后再验收");
+  const materials = new Set((await client.query<{ id: string }>(
+    "SELECT id::text FROM object_materials WHERE object_type='task' AND object_id=$1 AND deleted_at IS NULL",[taskId])).rows.map((item) => item.id));
+  const referenced = [...deliverables, ...checks.flatMap((check) => check.materialId ? [check.materialId] : [])];
+  if (referenced.some((id) => !materials.has(id))) return error(400,"ACCEPTANCE_MATERIAL_INVALID","选的材料已经不在这件事里，请刷新后再验收");
+}
+const settleSubmissionNotices = (client: PoolClient, taskId: string) => client.query(
+  "UPDATE notifications SET read_at=now() WHERE kind='task_submitted' AND object_type='task' AND object_id=$1 AND read_at IS NULL",[taskId]);
+/** 验收、重新打开、提交验收不写进进展（进展只放人和工具写的真实进展，本体每周拉它），由 Co-Agent 在事项群组里说一句。 */
+const tellGroup = (client: PoolClient, taskId: string, ownerId: string, text: string) =>
+  postCoAgentMessage(queryOf(client), { objectType: "task", objectId: taskId }, text, [ownerId]);
+
+/** 推进人验收：存完成标准的文字快照和逐条判断、交付结果、一句结论；清掉待验收的提交。 */
+export function acceptMyTask(pool: Pool, ownerId: string, taskId: string, input: TAcceptMyTaskRequest, names: Map<string,string>, now: Date): Promise<TaskResult> {
+  return ownerMutation(pool,ownerId,taskId,input.version,names,async(client,row)=>{
+    if (row.status === "done") return error(409,"TASK_ALREADY_DONE","这件事已经验收过了");
+    if (row.status === "returned") return error(409,"TASK_RETURNED","已退回的事项不能验收");
+    const standards = taskStandards(row.done_definition);
+    const deliverables = [...new Set(input.deliverableMaterialIds)];
+    const failed = await checkAcceptanceInput(client,taskId,standards,input.standards,deliverables);
+    if (failed) return failed;
+    const checks = new Map(input.standards.map((check) => [check.index, check]));
+    const verdict = input.verdict?.trim() || null;
+    const acceptance: StoredAcceptance = { by: ownerId, at: now.toISOString(), verdict, deliverableMaterialIds: deliverables,
+      standards: standards.map((text, index) => {
+        const check = checks.get(index);
+        return { text, met: check?.met ?? false, evidence: check?.evidence?.trim() || null, materialId: check?.materialId ?? null };
+      }) };
+    await client.query("UPDATE tasks SET status='done',acceptance=$2,submission=NULL,version=version+1,updated_at=now() WHERE id=$1",
+      [taskId,JSON.stringify(acceptance)]);
+    await settleSubmissionNotices(client,taskId);
+    await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}验收了这件事${verdict ? `：${verdict}` : "。"}`);
+  });
+}
+/** 「还要继续做」：清掉外部工具提交的验收，状态不变。 */
+export function clearMyTaskSubmission(pool: Pool, ownerId: string, taskId: string, version: number, names: Map<string,string>): Promise<TaskResult> {
+  return ownerMutation(pool,ownerId,taskId,version,names,async(client,row)=>{
+    if (!row.submission || row.status === "done") return error(409,"TASK_NO_SUBMISSION","这件事现在没有待验收的提交");
+    await client.query("UPDATE tasks SET submission=NULL,version=version+1,updated_at=now() WHERE id=$1",[taskId]);
+    await settleSubmissionNotices(client,taskId);
+  });
+}
+/** 重新打开：状态回进行中，清掉验收记录（不留历史，群里那句就是记录）。 */
+export function reopenMyTask(pool: Pool, ownerId: string, taskId: string, version: number, names: Map<string,string>): Promise<TaskResult> {
+  return ownerMutation(pool,ownerId,taskId,version,names,async(client,row)=>{
+    if (row.status !== "done") return error(409,"TASK_NOT_DONE","只有已完成的事项能重新打开");
+    await client.query("UPDATE tasks SET status='in_progress',acceptance=NULL,version=version+1,updated_at=now() WHERE id=$1",[taskId]);
+    await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}重新打开了这件事。`);
+  });
+}
+/**
+ * 外部工具替推进人提交验收（可带草稿）：完成仍只能由推进人在天枢里验收。未启动的同时变进行中（这是推进人自己的工具）；
+ * 推进人收到「等你验收」，同一件事只留最新一条未读。
+ */
+export function submitMyTaskForAcceptance(pool: Pool, ownerId: string, taskId: string,
+  input: { version: number; verdict?: string | null; standards?: CheckInput[]; deliverables?: string[] },
+  via: TTaskProgressSource, names: Map<string,string>, now: Date): Promise<TaskResult> {
+  return ownerMutation(pool,ownerId,taskId,input.version,names,async(client,row)=>{
+    if (row.status === "done") return error(409,"TASK_ALREADY_DONE","这件事已经验收完成");
+    if (row.status === "returned") return error(409,"TASK_RETURNED","已退回的事项不能提交验收");
+    const standards = taskStandards(row.done_definition);
+    const checks = input.standards ?? [];
+    const deliverables = [...new Set(input.deliverables ?? [])];
+    const failed = await checkAcceptanceInput(client,taskId,standards,checks,deliverables);
+    if (failed) return failed;
+    const submission: StoredSubmission = { by: ownerId, via, at: now.toISOString(), verdict: input.verdict?.trim() || null,
+      standards: checks.map((check) => ({ index: check.index, met: check.met, evidence: check.evidence?.trim() || null, materialId: check.materialId ?? null })),
+      deliverableMaterialIds: deliverables };
+    await client.query(`UPDATE tasks SET submission=$2,status=CASE WHEN status='not_started' THEN 'in_progress' ELSE status END,
+      version=version+1,updated_at=now() WHERE id=$1`,[taskId,JSON.stringify(submission)]);
+    await client.query("DELETE FROM notifications WHERE kind='task_submitted' AND object_type='task' AND object_id=$1 AND read_at IS NULL",[taskId]);
+    await insertNotification(client,{personId:ownerId,kind:"task_submitted",objectType:"task",objectId:taskId,actorId:ownerId});
+    await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}用${TOOL_NAME[via]}提交了验收。`);
   });
 }
 export async function deleteMyTask(pool: Pool, ownerId: string, taskId: string, version: number, names: Map<string,string>): Promise<TaskResult | { deleted:true }> {
@@ -232,7 +343,9 @@ export async function getTaskDetail(q: Query, taskId: string, viewerId: string, 
   const collaboratorOptions = owner ? [...names].filter(([id])=>!excluded.has(id) && invitable.has(id)).map(([id])=>person(id,names)) : [];
   return { task:projectTask(row,names),judgment:row.judgment,judgmentAt:row.judgment_at?.toISOString() ?? null,
     myNote:note?.note ?? null,myNoteAt:note?.updated_at.toISOString() ?? null,role:owner?"owner":"collaborator",missionOptions,collaboratorOptions,
-    progress: await listTaskProgress(q,taskId,names) };
+    progress: await listTaskProgress(q,taskId,names), standards: taskStandards(row.done_definition),
+    submission: row.submission && row.status !== "done" ? { ...row.submission, by: person(row.submission.by,names) } : null,
+    acceptance: row.acceptance && row.status === "done" ? { ...row.acceptance, by: person(row.acceptance.by,names) } : null };
 }
 export async function putMyTaskNote(pool: Pool, viewerId: string, taskId: string, note: string | null): Promise<{ myNote:string | null } | { notFound:true }> {
   const q: Query = (sql,params)=>pool.query(sql,params);

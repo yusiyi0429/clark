@@ -1,8 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { signActionId } from "../src/actionToken.js";
 import { createTestApp, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
 
@@ -52,7 +49,7 @@ describe("Mission Card notices and onboarding", () => {
       expect(notices.rounds[0].cards[0]).toMatchObject({ line: "未开放", mine: true });
       const all = await read(t, ceo);
       expect(all.rounds[0].cards.map((c: any) => c.cardId)).toEqual([ids.other, ids.mine]);
-      expect(all.rounds[0].todo).toBe("任务卡草稿已就绪，可以统一开放讨论");
+      expect(all.rounds[0].todo).toBe("任务卡草稿已就绪，可以交给本人确认");
       await t.sql("UPDATE battlefield_config SET owner_id=$1 WHERE id='growth'", [TEST_MEMBER.personId]);
       notices = await read(t, member); expect(notices.rounds[0].cards).toHaveLength(2); expect(notices.rounds[0].approver).toBe(true);
       await t.sql("UPDATE battlefield_config SET owner_id=$1 WHERE id='growth'", [TEST_CEO.personId]);
@@ -62,91 +59,80 @@ describe("Mission Card notices and onboarding", () => {
     } finally { await t.close(); }
   });
 
-  it("keeps notices through exact cutoff and review, uses the same counts, and removes both notices only on confirmation", async () => {
-    let now = START; const t = await createTestApp({}, undefined, { monthlyNow: () => now });
+  it("进度通知随本人确认与自动核对更新，DRI确认组合后退出通知，保留正式任务入口", async () => {
+    const t = await createTestApp({}, undefined, { monthlyNow: () => START, missionCardReviewAgent: { async generate() { return { candidate: {summary:"本月任务与责任已核对",findings:[]}}; } } });
     try {
-      const ids = await seed(t); const ceo = await t.loginCookie(), member = await t.memberCookie();
-      await seedMissions(t, ids);
-      expect((await execute(t, ceo, ids.round, 1, "open")).statusCode).toBe(200);
-      const sent = await t.app.inject({ method: "POST", url: `/api/mission-cards/${ids.mine}/feedback`, headers: { cookie: member, origin: t.publicOrigin }, payload: { clientId: randomUUID(), kind: "comment", round: 1, body: "需要一起核对边界" } });
-      expect(sent.statusCode).toBe(200);
-      const feedback = sent.json().feedback.id;
-      const active = (await read(t, member)).rounds[0];
-      expect(active).toMatchObject({ phase: "open", closesAt: CLOSE.toISOString(), serverNow: START.toISOString() });
-      expect(active.cards[0].line).toBe("1 条意见");
-      now = CLOSE;
-      expect((await read(t, member)).rounds[0]).toMatchObject({ phase: "closed", cards: [{ line: "汇总中" }] });
-      expect(await t.sql("SELECT id FROM mission_round_reviews")).toHaveLength(0);
-      const stale = await execute(t, ceo, ids.round, 2, "reopen"); expect(stale.statusCode).toBe(409);
-      const review = (await read(t, ceo)).rounds[0];
-      expect(review).toMatchObject({ phase: "reviewing", counts: { pending: 1 } });
-      expect(review.cards[1]).toMatchObject({ line: "待处理 1", pending: 1, firstPendingFeedbackId: feedback });
-      expect((await read(t, member)).rounds[0].cards[0].line).toBe("已处理 0/1");
-      const home = (await read(t, ceo, "/api/cards/home")).cards.find((c: any) => c.kind === "mission-round");
-      expect(home.payload).toEqual(review);
-      expect(home.navigation[0].href).toBe(`/mission-cards/${ids.other}`);
-      const next = (await read(t, ceo, "/api/me/onboarding")).next;
-      expect(next).toEqual({ text: "10 月 Mission Card 有 1 条意见待你处理", action: "进入工作台", href: "/" });
-      const decided = await execute(t, ceo, ids.round, review.version, "decide", { decision: "decline" }, feedback);
-      expect(decided.statusCode).toBe(200);
-      expect((await read(t, ceo, "/api/me/onboarding")).next.text).toBe("意见已全部处理，待你确认");
-      const ready = (await read(t, ceo)).rounds[0]; expect(ready.todo).toBe("意见已全部处理，待你确认");
-      expect((await execute(t, ceo, ids.round, ready.version, "confirm", { note: "已经核对团队边界" })).statusCode).toBe(200);
-      expect((await read(t, member)).rounds).toEqual([]);
-      expect((await read(t, ceo, "/api/cards/home")).cards.filter((c: any) => c.kind === "mission-round")).toEqual([]);
-      const work = (await read(t, member, "/api/me/onboarding")).work;
-      expect(work.missionCards[0]).toMatchObject({ cardId: ids.mine, phase: "confirmed", href: `/me/mission-cards/${ids.mine}` });
-      expect(work.missionCards[0].status).toMatch(/^已确定 · 测试甲/);
+      const ids=await seed(t),ceo=await t.loginCookie(),member=await t.memberCookie();
+      await seedMissions(t,ids);
+      expect((await execute(t,ceo,ids.round,1,"open")).statusCode).toBe(200);
+      const active=(await read(t,member)).rounds[0];
+      expect(active).toMatchObject({phase:"open",closesAt:null,counts:{unreviewed:2},cards:[{line:"待本人确认",contentVisible:true}]});
+      expect((await read(t,ceo)).rounds[0].cards[1].contentVisible).toBe(false);
+      const confirm=(id:string,cookie:string)=>t.app.inject({method:"POST",url:`/api/mission-cards/${id}/owner-confirmation`,headers:{cookie,origin:t.publicOrigin},payload:{confirmed:true,round:1,missionVersions:{[id]:1}}});
+      expect((await confirm(ids.mine,member)).statusCode).toBe(200);
+      const partly=(await read(t,ceo)).rounds[0];
+      expect(partly.version).toBeGreaterThan(active.version);
+      expect(partly.cards[1]).toMatchObject({line:"本人已确认",contentVisible:true});
+      expect(partly.counts.unreviewed).toBe(1); expect(partly.todo).toContain("1/2 人已确认");
+      expect((await confirm(ids.other,ceo)).statusCode).toBe(200);
+      await vi.waitFor(async()=>expect((await read(t,ceo)).rounds[0].coAgentReview.status).toBe("completed"));
+      const reviewed=(await read(t,ceo)).rounds[0];
+      expect(reviewed).toMatchObject({phase:"reviewing",counts:{unreviewed:0,pending:0},coAgentReview:{summary:"本月任务与责任已核对"}});
+      expect((await read(t,member)).rounds[0].cards[0].line).toBe("本人已确认");
+      const home=(await read(t,ceo,"/api/cards/home")).cards.find((c:any)=>c.kind==="mission-round");
+      expect(home.payload).toEqual(reviewed); expect(home.navigation[0].href).toBe(`/mission-cards/${ids.other}`);
+      expect((await read(t,ceo,"/api/me/onboarding")).next.text).toContain("待战场 DRI 确认组合");
+      expect((await execute(t,ceo,ids.round,reviewed.version,"confirm",{note:"责任组合符合目标"})).statusCode).toBe(200);
+      expect((await read(t,member)).rounds).toEqual([]);
+      expect((await read(t,ceo,"/api/cards/home")).cards.filter((c:any)=>c.kind==="mission-round")).toEqual([]);
+      expect((await read(t,member,"/api/me/onboarding")).work.missionCards[0]).toMatchObject({cardId:ids.mine,phase:"confirmed",href:`/me/mission-cards/${ids.mine}`});
     } finally { await t.close(); }
   });
 
-  it("adds card Owners to participating battlefields without missions, shares page status, and prioritizes an open/cutoff card over tasks", async () => {
+  it("adds card Owners to participating battlefields without missions, shares page status, and prioritizes an open/manually closed card over tasks", async () => {
     let now = START; const t = await createTestApp({}, undefined, { monthlyNow: () => now });
     try {
       const ids = await seed(t); const ceo = await t.loginCookie(), member = await t.memberCookie();
       await t.sql("INSERT INTO tasks (id,title,status,owner_id,created_by) VALUES ($1,'执行事项','in_progress',$2,'meeting')", [randomUUID(), TEST_MEMBER.personId]);
       let onboarding = await read(t, member, "/api/me/onboarding");
-      expect(onboarding.work.battlefields).toEqual([{ id: "growth", name: "增长战场", monthTarget: "本月目标" }]);
+      expect(onboarding.work.battlefields).toMatchObject([{ id: "growth", name: "增长战场", monthTarget: "本月目标" }]);
       expect(onboarding.work.missions).toEqual([]);
       expect(onboarding.work.missionCards).toHaveLength(1);
       expect(onboarding.work.missionCards[0]).toMatchObject({ cardId: ids.mine, roundId: ids.round, period: "2026-10", phase: "draft", closesAt: null, placeholder: true, missionCount: 0 });
-      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月任务卡草稿已就绪，可以统一开放讨论", action: "进入工作台", href: "/" });
+      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月任务 · 任务卡草稿已就绪，可以交给本人确认", action: "进入工作台", href: "/" });
       await seedMissions(t, ids);
       await execute(t, ceo, ids.round, 1, "open");
       onboarding = await read(t, member, "/api/me/onboarding");
-      expect(onboarding.next).toEqual({ text: "10 月 Mission Card 讨论开放到 10/3 00:30", action: "进入工作台", href: "/me" });
+      expect(onboarding.next).toEqual({ text: "10 月任务待你确认", action: "进入工作台", href: "/me" });
       const page = (await read(t, member, `/api/mission-cards/${ids.mine}`)).cards[0];
       expect(onboarding.work.missionCards[0].status).toBe(page.payload.card.status);
       now = CLOSE;
-      expect((await read(t, member, "/api/me/onboarding")).next.text).toBe("10 月 Mission Card 已截止，等测试甲拍板");
+      expect((await read(t, member, "/api/me/onboarding")).next.text).toBe("10 月任务待你确认");
+      expect((await execute(t, ceo, ids.round, 2, "close")).json().code).toBe("OWNERS_NOT_CONFIRMED");
+      expect((await read(t, member, "/api/me/onboarding")).next.text).toBe("10 月任务待你确认");
       now = new Date("2026-11-01T02:00:00Z");
       onboarding = await read(t, member, "/api/me/onboarding");
-      expect(onboarding.work.missionCards).toEqual([]); expect(onboarding.work.battlefields).toEqual([]);
+      expect(onboarding.work.missionCards).toEqual([]);
+      expect(onboarding.work).toMatchObject({ period: "2026-10", missions: [{ id: ids.mine }],
+        battlefields: [{ id: "growth", monthTarget: "本月目标" }] });
       expect(onboarding.next.text).toBe("你有 1 件执行事项在推进");
       // 跨月不替代拍板；旧轮次仍在通知中，直到真正 confirmed。
-      expect((await read(t, member)).rounds).toMatchObject([{ roundId: ids.round, period: "2026-10", phase: "closed" }]);
+      expect((await read(t, member)).rounds).toMatchObject([{ roundId: ids.round, period: "2026-10", phase: "open" }]);
       expect((await read(t, ceo, "/api/cards/home")).cards.filter((card: any) => card.kind === "mission-round")).toMatchObject([
-        { payload: { roundId: ids.round, period: "2026-10", phase: "closed" } },
+        { payload: { roundId: ids.round, period: "2026-10", phase: "open" } },
       ]);
     } finally { await t.close(); }
   });
 
-  it("签发后提供整理入口；没有人和占位文件时由动作返回具体提示", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "warmap-04d-drafts-"));
-    const t = await createTestApp({ missionCardDraftsDir: directory }, undefined, { monthlyNow: () => START });
+  it("签发后没有整理任务卡的入口：首页与引导都不提供", async () => {
+    const t = await createTestApp({}, undefined, { monthlyNow: () => START });
     try {
       const ids = await seed(t); const ceo = await t.loginCookie();
       await t.sql("DELETE FROM personal_mission_cards"); await t.sql("DELETE FROM mission_rounds");
-      await t.sql("UPDATE battlefield_config SET code='01' WHERE id='growth'");
-      expect((await read(t, ceo, "/api/me/onboarding")).next.href).toBe("/");
-      await writeFile(join(directory, "2026-10-mission-cards.battlefield-01.json"), "{}", "utf8");
-      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月目标已签发，可以整理任务卡草稿", action: "进入工作台", href: "/" });
+      expect((await read(t, ceo, "/api/cards/home")).cards.filter((card: any) => card.kind === "mission-round")).toEqual([]);
+      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "首页上暂时没有要你马上处理的事", action: "进入工作台", href: "/" });
       await t.sql("UPDATE monthly_plans SET status='negotiating',confirmed_at=NULL WHERE id=$1", [ids.plan]);
       expect((await read(t, ceo, "/api/me/onboarding")).next).toMatchObject({ text: "10 月的目标等你核对和签发", href: "/" });
-    } finally {
-      await t.close();
-      await rm(join(directory, "2026-10-mission-cards.battlefield-01.json"), { force: true });
-      await rmdir(directory);
-    }
+    } finally { await t.close(); }
   });
 });

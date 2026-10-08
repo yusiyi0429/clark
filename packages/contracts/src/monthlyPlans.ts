@@ -89,6 +89,8 @@ export const MonthlyPlanGeneration = Type.Object(
     previousRunIds: Type.Array(Type.String()),
     error: Type.Union([MonthlyPlanError, Type.Null()]),
     generatedAt: Type.Union([Type.String(), Type.Null()]),
+    /** 草案生成于上月复盘的 LTO 决定之前、CEO 已改过所以没有自动重新生成；重新生成后消失。 */
+    beforeReview: Type.Optional(Type.Literal(true)),
   },
   { additionalProperties: false },
 );

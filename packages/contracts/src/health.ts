@@ -13,6 +13,8 @@ export const HealthDependencies = Type.Object(
     recording: Type.Object({ tos: Type.Boolean(), asr: Type.Boolean() }, { additionalProperties: false }),
     /** 腾讯云声纹（说话人注册 / 1:N）凭据是否配全；只看变量在不在，不发起外部调用。 */
     voiceprint: Type.Boolean(),
+    /** world 推送凭据是否配全；false 表示未配置，不发起外部调用。 */
+    world: Type.Boolean(),
   },
   { additionalProperties: false },
 );

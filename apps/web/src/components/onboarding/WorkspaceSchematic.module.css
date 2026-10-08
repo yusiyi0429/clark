@@ -67,7 +67,6 @@
 .root[data-focus="board"] .memberTaskHeading .addButton { animation: addGlow 560ms 300ms var(--onboarding-ease-brand) both; }
 .memberTasks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; flex: 1; min-height: 0; }
 .memberTask { min-width: 0; padding: 10px; border: 1px solid #dce4ef; border-radius: 13px; background: #fff; color: #4e607a; box-shadow: 0 2px 7px #29334c0a; font-size: 10px; font-weight: 600; white-space: nowrap; }
-.waitingTask { opacity: .55; }
 .activeTaskDot { display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: #3a83f7; }
 .taskRule { display: block; width: 70%; height: 3px; margin-top: 10px; border-radius: 9px; background: #e0e9f5; }
 .root[data-role="member"] .agent { flex: none; }

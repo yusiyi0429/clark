@@ -36,6 +36,13 @@ import { dispatchMeetingTodo } from "./tasks.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
+/** 按应用的连接池隔离订阅；监听器只排队，确认事务不等待任何 world HTTP。 */
+const reviewListeners = new WeakMap<Pool, (meetingId: string) => void>();
+export function onOutcomeReviewed(pool: Pool, listener: (meetingId: string) => void): () => void {
+  reviewListeners.set(pool, listener);
+  return () => { if (reviewListeners.get(pool) === listener) reviewListeners.delete(pool); };
+}
+
 /** 抽取输入只读取 Meeting 内嵌结构和关联 Issue，Agent 不能访问业务库。 */
 export type PostMeetingAgentInput = {
   meeting: { id: string; title: string; scheduledAt: string; ceoParticipantId: string; participants: TMeetingParticipant[] };
@@ -407,6 +414,7 @@ export async function runOutcome(
         [meetingId, assessed.summary, JSON.stringify(assessed.items), JSON.stringify(assessed.warnings), new Date().toISOString(), nextStatus],
       );
       await client.query("COMMIT");
+      if (nextStatus === "reviewed") reviewListeners.get(pool)?.(meetingId);
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw err;
@@ -456,9 +464,10 @@ export async function importTranscript(
   secret: string,
   meetingId: string,
   raw: unknown,
+  hostId?: string,
 ): Promise<TranscriptImportResult> {
   const meeting = await getMeetingRow(pool.query.bind(pool), meetingId);
-  if (!meeting) return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
+  if (!meeting || (hostId !== undefined && meeting.lead_dri_id !== hostId)) return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
   const validated = validateTranscript(raw, meeting);
   if (!validated.ok) return { status: 400, code: validated.code, message: validated.message, fieldErrors: validated.fieldErrors };
 
@@ -472,6 +481,10 @@ export async function importTranscript(
       return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
     }
     const row = locked.rows[0];
+    if (hostId !== undefined && row.lead_dri_id !== hostId) {
+      await client.query("ROLLBACK");
+      return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
+    }
     if (row.transcript) {
       await client.query("ROLLBACK");
       return { status: 409, code: "TRANSCRIPT_ALREADY_IMPORTED", message: "Transcript 已存在，替换必须走危险 Action" };
@@ -483,7 +496,7 @@ export async function importTranscript(
     const transcript: TStoredTranscript = { ...validated.value, importedAt: now };
     await client.query(
       `UPDATE meetings
-          SET transcript = $2::jsonb, outcome = $3::jsonb, status = 'held', version = version + 1, updated_at = now()
+          SET transcript = $2::jsonb, transcript_candidate = NULL, outcome = $3::jsonb, status = 'held', version = version + 1, updated_at = now()
         WHERE id = $1`,
       [meetingId, JSON.stringify(transcript), JSON.stringify(pendingOutcome(new Date(now)))],
     );
@@ -678,6 +691,7 @@ export async function executeConfirmItem(
   });
   if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
   if (ontologyRequest) await applyOntologyUpdate(pool, ontologyUpdater, ontologyRequest);
+  reviewListeners.get(pool)?.(scope.objectId);
   return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
 }
 /** 提交确认后才交给本体更新；失败不改回 pending，只把请求记为 failed。 */
@@ -704,7 +718,7 @@ export async function executeDismissItem(
   fingerprint: string,
   reason?: string,
 ): Promise<MeetingActionOutcome> {
-  return withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
+  const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
     if (row.status !== "held" && row.status !== "reviewed") {
       return { error: { status: 409, code: "MEETING_NOT_REVIEWABLE", message: "只有 held/reviewed Meeting 可以处理会后条目" } };
     }
@@ -735,6 +749,8 @@ export async function executeDismissItem(
 
     return commitReview(client, row, state, items, fingerprint, secret);
   });
+  if ("card" in outcome && !outcome.replayed) reviewListeners.get(pool)?.(scope.objectId);
+  return outcome;
 }
 /**
  * 撤回已确认效果：统一走 revokeEffect，同步 Outcome item、Receipt、Radar anchor、执行事项与 Meeting 状态。

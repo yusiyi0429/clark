@@ -1,0 +1,75 @@
+/* 材料批注：选中后的小按钮与输入框、材料上方的状态条（批注 / 垃圾篓）、Co-Agent 的修改提议、悬停历史卡。色板沿用材料区（materials.module.css）。 */
+.pill { position: absolute; z-index: 6; display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 12px; border: 1px solid #dce5f1; border-radius: 999px; background: #fff; color: #2f4f7f; font: inherit; font-size: 12.5px; font-weight: 560; box-shadow: 0 6px 18px rgb(24 42 70 / 12%); cursor: pointer; }
+.pill:hover { background: #f5f8fd; }
+
+.composer { position: absolute; z-index: 6; display: grid; gap: 8px; width: min(320px, 100%); padding: 12px; border: 1px solid #dce5f1; border-radius: 12px; background: #fff; box-shadow: 0 10px 28px rgb(24 42 70 / 14%); }
+.composer textarea { box-sizing: border-box; width: 100%; min-height: 64px; margin: 0; padding: 8px 10px; border: 1px solid #dfe4ee; border-radius: 9px; background: #fafbfd; color: #243247; font: inherit; font-size: 13.5px; line-height: 1.6; resize: vertical; outline: none; }
+.composer textarea:focus { border-color: var(--onboarding-blue, #3a83f7); background: #fff; box-shadow: 0 0 0 3px color-mix(in oklab, var(--onboarding-blue, #3a83f7) 12%, transparent); }
+.composer textarea:focus-visible { outline: none; }
+.quote { display: -webkit-box; margin: 0; overflow: hidden; color: #6a778a; font-size: 12px; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.composerActions { display: flex; justify-content: flex-end; gap: 6px; }
+.ghost, .send { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 11px; border: 0; border-radius: 8px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.ghost { background: transparent; color: #6a778a; }
+.ghost:hover { background: #f1f4f9; color: #243247; }
+.send { background: var(--onboarding-blue, #3a83f7); color: #fff; font-weight: 560; }
+.send:disabled { opacity: .45; cursor: not-allowed; }
+.error { margin: 0; color: #a44e46; font-size: 12px; line-height: 1.6; }
+
+/* 「保存」「立即修改」：和任务卡批注的两个按钮同一套样式（mission-annotations.module.css 的 .cancel / .save）；「取消」退到左边。 */
+.composer footer { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.composer footer button { min-height: 36px; padding: 7px 14px; border: 0; border-radius: 999px; font: inherit; font-size: 14px; cursor: pointer; }
+.composer footer .ghost { margin-right: auto; }
+.keep { background: var(--morning-start); color: var(--ink-muted); }
+.apply { background: var(--onboarding-blue); color: #fff; }
+:is(.keep, .apply):disabled { opacity: .45; cursor: default; }
+
+/* 批注列表里能改的人的「采用 / 不采用」「立即修改」；不采用先填原因（可不填）再确认。 */
+.decide, .decline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.decide button, .decline button { min-height: 32px; padding: 5px 13px; border: 0; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer; }
+.decline input { flex: 1 1 160px; min-width: 0; box-sizing: border-box; height: 32px; padding: 0 10px; border: 1px solid #dfe4ee; border-radius: 9px; background: #fff; color: #243247; font: inherit; font-size: 13px; outline: none; }
+.decline input:focus { border-color: var(--onboarding-blue, #3a83f7); box-shadow: 0 0 0 3px color-mix(in oklab, var(--onboarding-blue, #3a83f7) 12%, transparent); }
+/* 成员工作台外壳给输入框加了 focus 外框（.shell input:focus-visible，0,2,1），这里已有蓝框，不再叠一层。 */
+.decline.decline input:focus-visible { outline: none; }
+
+/* 材料上方一行：正在改 / 批注 N / 已删除 N 段。 */
+.bar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 10px; font-size: 11.5px; line-height: 1.8; color: #8a95a5; }
+.bar > button { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: #6484b4; font: inherit; cursor: pointer; }
+.bar > button[aria-expanded="true"] { color: #2f4f7f; font-weight: 560; }
+.spacer { flex: 1; }
+.working { display: inline-flex; align-items: center; gap: 6px; color: #2f64b8; }
+.pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--onboarding-blue, #3a83f7); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; transform: scale(.8); } }
+.panel { flex-basis: 100%; display: grid; gap: 0; margin: 4px 0 8px; padding: 4px 14px; border-radius: 12px; background: #f5f8fd; list-style: none; }
+.panel > li { display: grid; gap: 3px; padding: 10px 0; color: #4a586c; font-size: 13px; line-height: 1.65; }
+.panel > li + li { border-top: 1px solid #e3eaf4; }
+.panel p { margin: 0; }
+.panel small { color: #8a95a5; font-size: 11.5px; }
+.status[data-status="queued"], .status[data-status="applying"] { color: #2f64b8; }
+.status[data-status="applied"] { color: #26805e; }
+.status[data-status="failed"] { color: #a44e46; }
+/* 不采用的收起成一行（谁不采用、原因），悬停或点一下（触屏）才展开原文和意见。 */
+.panel > li[data-status="declined"]:not(:hover, :focus-within) > p { display: none; }
+.removedText { display: -webkit-box; overflow: hidden; color: #4a586c; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.restore { justify-self: start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 3px 9px; border: 1px solid #d6e0ee; border-radius: 7px; background: #fff; color: #2f4f7f; font: inherit; font-size: 12px; cursor: pointer; }
+.restore:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Co-Agent 的修改提议。 */
+.proposal { display: grid; gap: 8px; margin: 0 0 14px; padding: 12px 14px; border: 1px solid color-mix(in oklab, var(--onboarding-blue, #3a83f7) 24%, #fff); border-radius: 12px; background: color-mix(in oklab, var(--onboarding-blue, #3a83f7) 5%, #fff); font-size: 13px; line-height: 1.65; }
+.proposal header { color: #2f64b8; font-size: 12px; font-weight: 600; }
+.summary { margin: 0; color: #243247; }
+.changes { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.changes li { display: grid; gap: 2px; padding: 6px 10px; border-radius: 8px; background: #fff; }
+.changes del { color: #8a95a5; text-decoration-color: #c3cbd6; }
+.changes ins { color: #243247; text-decoration: none; }
+.proposal .ghost { justify-self: start; }
+
+/* 悬停历史卡。 */
+.history { position: absolute; left: 0; top: 100%; z-index: 5; display: grid; gap: 0; width: min(440px, 100%); margin-top: 6px; padding: 4px 12px; border: 1px solid #dce5f1; border-radius: 10px; background: #fff; box-shadow: 0 8px 24px rgb(24 42 70 / 12%); font-size: 12.5px; line-height: 1.65; color: #4a586c; white-space: normal; }
+.entry { display: grid; gap: 2px; padding: 8px 0; }
+.entry + .entry { border-top: 1px solid #edf1f6; }
+.entry p { margin: 0; }
+.note strong { color: #243247; font-weight: 600; }
+.before { color: #6a778a; }
+.entry small { color: #9aa4b2; font-size: 11px; }
+
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }

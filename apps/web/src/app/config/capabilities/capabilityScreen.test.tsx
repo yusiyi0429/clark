@@ -22,6 +22,8 @@ const battlefields: TBattlefieldManagementResponse["battlefields"] = [
     sixMonthOutcome: "",
     missionAnchors: [{ code: "01-1", title: "未来组织范式设计与确认" }],
     pendingIssueCount: 0,
+    participantIds: [],
+    participantsDerived: true,
   },
 ];
 

@@ -5,9 +5,9 @@ import s from "./MissionFlow.module.css";
 const stages = [
   { title: "本月目标", line: ["Co-Agent 起草，", "一号位签发"] },
   { title: "任务卡草稿", line: ["Co-Agent\u00a0", "为每个人起草"] },
-  { title: "48 小时讨论", line: ["大家一起改同一张卡"] },
-  { title: "集中处理", line: ["拍板人逐条处理意见"] },
-  { title: "确定", line: ["本月任务卡定稿"] },
+  { title: "本人确认", line: ["核对自己的任务，", "明确改法或保留备注"] },
+  { title: "统一核对", line: ["全员确认后，", "Co-Agent 核对任务组合"] },
+  { title: "DRI 确认", line: ["战场负责人确定任务组合"] },
 ] as const;
 const phrases = (parts: readonly string[]) => parts.map((part) => <span key={part} className={s.phrase}>{part}</span>);
 

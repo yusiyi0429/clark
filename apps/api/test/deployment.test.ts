@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -11,6 +11,18 @@ const COMPOSE_FILE = join(REPO, "infra/docker-compose.yml");
 const BACKUP_SH = join(REPO, "infra/backup/backup.sh");
 const RESTORE_SH = join(REPO, "infra/backup/restore.sh");
 const SMOKE_SH = join(REPO, "infra/staging/smoke.sh");
+const WINDOWS = process.platform === "win32";
+const BASH = WINDOWS
+  ? [join(process.env.ProgramFiles ?? "C:/Program Files", "Git/bin/bash.exe"), join(process.env.LOCALAPPDATA ?? "", "Programs/Git/bin/bash.exe")].find((path) => existsSync(path))
+  : ["/bin/bash", "/usr/bin/bash"].find((path) => existsSync(path));
+if (!BASH) throw new Error("Deployment script tests require Bash (Git Bash on Windows).");
+
+/** Bash consumes POSIX paths even when Vitest and its fixture files use native Windows paths. */
+function shellPath(path: string): string {
+  return WINDOWS && /^[a-z]:[\\/]/i.test(path) ? path.replace(/\\/g, "/").replace(/^([a-z]):/i, (_match, drive: string) => `/${drive.toLowerCase()}`) : path;
+}
+const shellQuote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
+const stubSearchPath = (bin: string) => shellPath(bin);
 
 const tempDirs: string[] = [];
 function tempDir(): string {
@@ -19,14 +31,35 @@ function tempDir(): string {
   return dir;
 }
 afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs) {
+    const contained = relative(resolve(tmpdir()), resolve(dir));
+    if (!contained || contained.startsWith("..") || !basename(dir).startsWith("warmap-deploy-")) throw new Error("Unexpected deployment fixture path");
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 function run(script: string, args: string[], env: Record<string, string> = {}) {
-  return spawnSync("bash", [script, ...args], {
-    cwd: REPO,
+  if (![BACKUP_SH, RESTORE_SH, SMOKE_SH].includes(script)) throw new Error("Unknown deployment test script");
+  const sandbox = tempDir(), guard = join(sandbox, "guard-bin");
+  mkdirSync(guard, { recursive: true });
+  // Missing test shims must fail closed instead of finding a real database, Docker or SSH client.
+  for (const command of ["docker", "psql", "pg_dump", "pg_restore", "age", "ssh", "scp", "curl"]) {
+    writeFileSync(join(guard, command), "#!/usr/bin/env bash\nprintf 'deployment test: unexpected external command %s\\n' \"$0\" >&2\nexit 97\n", { mode: 0o755 });
+  }
+  const source = join(sandbox, relative(REPO, script));
+  mkdirSync(dirname(source), { recursive: true });
+  // Execute the actual repository source, normalized only for Windows checkout line endings.
+  // Keeping its relative layout inside this sandbox also isolates default configuration paths.
+  writeFileSync(source, readFileSync(script, "utf8").replace(/\r\n/g, "\n"), { mode: 0o755 });
+  const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    !/^(?:BACKUP_|WARMAP_|DATABASE_URL$|AGE_BIN$|SSH_BIN$|SCP_BIN$|DOCKER_BIN$|PSQL_BIN$|PG_DUMP_BIN$|PG_RESTORE_BIN$|BASH_ENV$|ENV$|PATH$)/i.test(key)));
+  const provided = Object.fromEntries(Object.entries(env).filter(([key]) => key !== "PATH").map(([key, value]) => [key, shellPath(value)]));
+  const searchPath = `${env.PATH ?? ""}${env.PATH ? ":" : ""}${shellPath(guard)}:/usr/bin:/bin`;
+  return spawnSync(BASH, ["--noprofile", "--norc", "-c", 'export PATH="$WARMAP_TEST_PATH"; exec bash "$@"', "deployment-sandbox", shellPath(source), ...args.map(shellPath)], {
+    cwd: sandbox,
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: { ...inherited, BACKUP_LOCAL_DIR: shellPath(join(sandbox, "local")), TMPDIR: shellPath(sandbox), ...provided,
+      WARMAP_TEST_PATH: searchPath, MSYS2_ARG_CONV_EXCL: "*", MSYS_NO_PATHCONV: "1" },
   });
 }
 
@@ -172,9 +205,9 @@ describe("backup.sh safety boundaries", () => {
 
 function stubPath(dir: string, psqlOutput: string): string {
   const bin = join(dir, "bin");
-  execFileSync("mkdir", ["-p", bin]);
-  writeFileSync(join(bin, "psql"), `#!/usr/bin/env bash\nprintf '%s\\n' "${psqlOutput}"\n`, { mode: 0o755 });
-  return `${bin}:${process.env.PATH ?? ""}`;
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, "psql"), `#!/usr/bin/env bash\nprintf '%s\\n' ${shellQuote(psqlOutput)}\n`, { mode: 0o755 });
+  return stubSearchPath(bin);
 }
 
 const SECRET_PASSWORD = "postgres-super-secret-DO-NOT-PRINT";
@@ -189,7 +222,7 @@ function createBackupStubs(dir: string): { bin: string; dockerLog: string; offsi
   mkdirSync(offsite, { recursive: true });
   writeFileSync(join(bin, "docker"), [
     "#!/usr/bin/env bash",
-    `printf '%s\\n' "$*" >> ${dockerLog}`,
+    `printf '%s\\n' "$*" >> ${shellQuote(shellPath(dockerLog))}`,
     'case "$*" in',
     '  *"ps -q"*) if [ "${WARMAP_TEST_API_RUNNING:-1}" = "1" ]; then echo "container-running-1"; fi ;;',
     '  *pg_dump*) printf "DUMPBYTES" ;;',
@@ -243,6 +276,32 @@ function backupEnv(dir: string, extras: Record<string, string>): Record<string, 
   };
 }
 
+describe("deployment script test sandbox", () => {
+  it("fails closed if a required external command shim is missing", () => {
+    const dir = tempDir(), composeFile = join(dir, "docker-compose.yml");
+    writeFileSync(composeFile, "services: {}\n");
+    const result = run(BACKUP_SH, [], backupEnv(dir, {
+      BACKUP_TARGET: "local", WARMAP_COMPOSE_FILE: composeFile, BACKUP_LOCAL_DIR: join(dir, "local"),
+    }));
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("deployment test: unexpected external command");
+    expect(result.stderr).toContain("guard-bin/docker");
+    expect(readdirSync(join(dir, "local"))).toEqual([]);
+  });
+  it("executes real backup safety checks when fixture paths contain spaces and an apostrophe", () => {
+    const parent = tempDir(), dir = join(parent, "data with ' apostrophe");
+    mkdirSync(dir, { recursive: true });
+    const { bin, dockerLog, offsite } = createBackupStubs(dir), composeFile = join(dir, "docker-compose.yml");
+    writeFileSync(composeFile, "services: {}\n");
+    const result = run(BACKUP_SH, [], backupEnv(dir, {
+      PATH: stubSearchPath(bin), WARMAP_COMPOSE_FILE: composeFile, WARMAP_TEST_OFFSITE: offsite, BACKUP_LOCAL_DIR: join(dir, "local"),
+    }));
+    expect(result.stderr).toBe(""); expect(result.status).toBe(0);
+    expect(readFileSync(dockerLog, "utf8")).toContain(`-f ${shellPath(composeFile)}`);
+    expect(readdirSync(join(dir, "local"))).toHaveLength(12); expect(readdirSync(offsite)).toHaveLength(12);
+  });
+});
+
 describe("backup.sh source modes", () => {
   it("defaults to compose mode: dumps inside the postgres container without DATABASE_URL or password", () => {
     const dir = tempDir();
@@ -252,7 +311,7 @@ describe("backup.sh source modes", () => {
     const composeEnv = join(dir, "infra.env");
     writeFileSync(composeEnv, `POSTGRES_PASSWORD=${SECRET_PASSWORD}\n`);
     const result = run(BACKUP_SH, [], backupEnv(dir, {
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      PATH: stubSearchPath(bin),
       WARMAP_COMPOSE_FILE: composeFile,
       WARMAP_ENV_FILE: composeEnv,
       WARMAP_TEST_OFFSITE: offsite,
@@ -287,7 +346,7 @@ describe("backup.sh source modes", () => {
     const composeFile = join(dir, "docker-compose.yml");
     writeFileSync(composeFile, "services: {}\n");
     const result = run(BACKUP_SH, [], backupEnv(dir, {
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      PATH: stubSearchPath(bin),
       WARMAP_COMPOSE_FILE: composeFile,
       WARMAP_TEST_OFFSITE: offsite,
       BACKUP_LOCAL_DIR: join(dir, "local"),
@@ -322,7 +381,7 @@ describe("backup.sh source modes", () => {
     const composeFile = join(dir, "docker-compose.yml");
     writeFileSync(composeFile, "services: {}\n");
     const result = run(BACKUP_SH, [], backupEnv(dir, {
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      PATH: stubSearchPath(bin),
       WARMAP_COMPOSE_FILE: composeFile,
       WARMAP_TEST_OFFSITE: join(dir, "offsite"),
       BACKUP_LOCAL_DIR: join(dir, "local"),
@@ -334,11 +393,46 @@ describe("backup.sh source modes", () => {
     expect(calls).not.toMatch(/ start api$/);
   });
 
+  it("target=local keeps encrypted artifacts on this host without SSH settings and passes the compose override", () => {
+    const dir = tempDir();
+    const { bin, dockerLog, offsite } = createBackupStubs(dir);
+    const composeFile = join(dir, "docker-compose.yml");
+    writeFileSync(composeFile, "services: {}\n");
+    const override = join(dir, "volcano.override.yml");
+    writeFileSync(override, "services: {}\n");
+    const composeEnv = join(dir, "compose.env");
+    writeFileSync(composeEnv, "POSTGRES_PASSWORD=test-only\n");
+    const result = run(BACKUP_SH, [], {
+      PATH: stubSearchPath(bin),
+      BACKUP_TARGET: "local",
+      BACKUP_AGE_RECIPIENT: "age1dummy",
+      BACKUP_LOCAL_DIR: join(dir, "local"),
+      BACKUP_RETENTION_DAYS: "14",
+      WARMAP_COMPOSE_FILE: composeFile,
+      WARMAP_COMPOSE_OVERRIDE: override,
+      WARMAP_ENV_FILE: composeEnv,
+      WARMAP_TEST_OFFSITE: offsite,
+    });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("不是异地备份");
+    expect(readdirSync(join(dir, "local")).length).toBe(12);
+    expect(readdirSync(offsite).length).toBe(0);
+    expect(readFileSync(dockerLog, "utf8")).toContain(`-f ${shellPath(composeFile)} -f ${shellPath(override)}`);
+  });
+
+  it("rejects an unknown backup target", () => {
+    const dir = tempDir();
+    const result = run(BACKUP_SH, ["--dry-run"], backupEnv(dir, { BACKUP_TARGET: "s3" }));
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("只支持 ssh 或 local");
+  });
+
   it("url mode is database-only and explicitly declares volumes unsupported", () => {
     const dir = tempDir();
     const { bin, dockerLog, offsite } = createBackupStubs(dir);
     const result = run(BACKUP_SH, [], backupEnv(dir, {
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      PATH: stubSearchPath(bin),
       BACKUP_SOURCE_MODE: "url",
       DATABASE_URL: "postgres://user:url-secret@db.internal:5432/warmap",
       WARMAP_TEST_OFFSITE: offsite,
@@ -365,7 +459,7 @@ describe("backup.sh source modes", () => {
     const dir = tempDir();
     const { bin, dockerLog, offsite } = createBackupStubs(dir);
     const result = run(BACKUP_SH, [], backupEnv(dir, {
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      PATH: stubSearchPath(bin),
       BACKUP_SOURCE_MODE: "url",
       DATABASE_URL: "postgres://user:url-secret@db.internal:5432/warmap",
       WARMAP_TEST_OFFSITE: offsite,
@@ -472,7 +566,7 @@ function volumeFixture(dir: string, opts: { volumeEmpty: boolean; rows: string; 
   ].join("\n"), { mode: 0o755 });
   writeFileSync(join(bin, "pg_restore"), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o755 });
   return { env: {
-    PATH: `${bin}:${process.env.PATH ?? ""}`,
+    PATH: stubSearchPath(bin),
     WARMAP_TEST_VOLUME_EMPTY: opts.volumeEmpty ? "1" : "0",
     WARMAP_TEST_ROWS: opts.rows,
     WARMAP_TEST_VOLUME_SHA: opts.volumeSha,
@@ -490,7 +584,7 @@ function volumeBackupFixture(dir: string): { meetingArchive: string; attachmentA
   const wechatArchive = join(dir, "warmap-x.wechat_data.tar.gz.age");
   for (const [file, content] of [[meetingArchive, "mm-bytes"], [attachmentArchive, "att-bytes"], [recordingArchive, "rec-bytes"], [wechatArchive, "wx-bytes"]] as const) {
     writeFileSync(file, content);
-    writeFileSync(`${file}.sha256`, `${createHash("sha256").update(content).digest("hex")}  ${file.split("/").pop()}\n`);
+    writeFileSync(`${file}.sha256`, `${createHash("sha256").update(content).digest("hex")}  ${basename(file)}\n`);
   }
   const manifest = join(dir, "warmap-x.manifest.json");
   writeFileSync(manifest, JSON.stringify({ batch: "warmap-x", storageRows: [] }));

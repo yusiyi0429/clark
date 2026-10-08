@@ -49,6 +49,8 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}邀请你协作「${row.task_title ?? ""}」`;
     case "thread_member_added":
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"} 拉你进${row.object_type === "issue" ? "议题" : "会议"}「${row.object_type === "issue" ? row.issue_title ?? "" : row.meeting_title ?? ""}」`;
+    case "task_submitted":
+      return `「${row.task_title ?? ""}」等你验收`;
   }
 }
 

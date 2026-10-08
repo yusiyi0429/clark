@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
-import type { TMonthlyReviewItemPayload, TMonthlyReviewPayload, TMonthlyReviewResponse } from "@warmap/contracts";
+import type { TMonthlyReviewItemPayload, TMonthlyReviewPayload, TMonthlyReviewResponse, TPersonalReviewPayload } from "@warmap/contracts";
 
 const ui = vi.hoisted(() => ({
   post: vi.fn(), get: vi.fn(), navigate: vi.fn(), ask: vi.fn(),
@@ -17,6 +17,7 @@ vi.mock("ts-design/primitives", () => ({ Button: ({ children, onPress, isDisable
 import { ReviewItemScreen } from "./ReviewItemScreen";
 import { ReviewOverviewScreen } from "./ReviewOverviewScreen";
 import { LtcoDecisionScreen } from "./LtcoDecisionScreen";
+import { PersonalReviewScreen } from "./PersonalReviewScreen";
 import { itemStatusText } from "./reviewApi";
 
 const act = (actionType: string) => ({ actionId: `sig-${actionType}`, actionType, label: actionType });
@@ -32,7 +33,7 @@ const item: TMonthlyReviewItemPayload = {
   returnReason: null,
   assessment: { status: "none", result: null, error: null },
   history: [], comments: [{ id: "c1", authorId: "mo", authorName: "孙铭泽", body: "第三家的接口人上周才定", createdAt: "2026-09-28T07:00:00.000Z" }],
-  participantNames: ["孙铭泽"], submittedAt: null, confirmedAt: null,
+  participantNames: ["孙铭泽"], submittedAt: null, confirmedAt: null, confirmationSource: null,
   viewer: { isOwner: true, isCeo: false, isParticipant: false, canComment: true },
   conversationScope: "monthly-review-item:item-1",
   actions: [act("monthly-review-item.update"), act("monthly-review-item.submit"), act("monthly-review-item.resolve_suggestion")],
@@ -116,17 +117,54 @@ describe("复盘项页", () => {
     expect(itemStatusText({ status: "submitted" }, true)).toBe("已提交 · 等 CEO 确认");
     expect(itemStatusText({ status: "returned" }, false)).toBe("已打回 · 等负责人修改");
   });
+
+  it("导入确认的项不显示成 CEO 确认过，飞书来源可以点开", () => {
+    const feishu = "https://tokenking.feishu.cn/wiki/K5sSwooRJikOpykGFfgcY4kHnOg";
+    const imported: TMonthlyReviewItemPayload = { ...item, subjectType: "capability", subjectCode: "03", subjectName: "Method", status: "confirmed",
+      confirmationSource: "import", confirmedAt: "2026-10-08T02:00:00.000Z", suggestions: [], selfReview: { ...item.selfReview!, overall: field("部分达成", [feishu]) },
+      viewer: { isOwner: false, isCeo: true, isParticipant: false, canComment: false }, actions: [] };
+    const html = renderToStaticMarkup(<ReviewItemScreen initialItem={imported} />);
+    expect(html).toContain("飞书导入 · 未在天枢逐项确认");
+    expect(html).not.toContain(">已确认<");
+    expect(html).toContain(`依据：<a href="${feishu}" target="_blank" rel="noreferrer">${feishu}</a>`);
+    expect(itemStatusText({ status: "confirmed", confirmationSource: "ceo" }, false)).toBe("已确认");
+  });
+});
+
+describe("个人复盘页", () => {
+  const feishu = "https://tokenking.feishu.cn/wiki/HboRwE9ppiUHMPk56fUcZw3XnL4";
+  const personal: TPersonalReviewPayload = {
+    personalReviewId: "pr-1", monthlyReviewId: "review-1", period: "2026-09", version: 2, personId: "sun-mingze", personName: "孙铭泽",
+    status: "submitted", draftSource: "import", draftError: null,
+    selfReview: { overall: field("CEO Agent 已上线", [feishu]), judgments: field("1. 体验优先"), nextFocus: field("真实使用"), escalations: field("") },
+    missions: [{ id: "04-1", code: "04-1", title: "CEO Agent 核心体验", outcome: "可持续使用" }],
+    toolConnected: false, materialCount: 0, conversationScope: "personal-review:pr-1", submittedAt: "2026-10-08T02:00:00.000Z", skipped: null,
+    viewer: { isSelf: false, isCeo: true }, actions: [],
+  };
+
+  it("从飞书导入的复盘：标明来源，四栏下的飞书链接可以点开", () => {
+    const html = renderToStaticMarkup(<PersonalReviewScreen initialReview={personal} />);
+    expect(html).toContain("个人月度复盘 · 对照自己的 9 月 Mission Card · 从飞书导入");
+    expect(html).not.toContain("草稿：");
+    expect(html).toContain(`依据：<a href="${feishu}" target="_blank" rel="noreferrer">${feishu}</a>`);
+  });
+
+  it("Co-Agent 起草的草稿仍写草稿来源", () => {
+    const html = renderToStaticMarkup(<PersonalReviewScreen initialReview={{ ...personal, status: "draft", draftSource: "co_agent", submittedAt: null }} />);
+    expect(html).toContain("· 草稿：Co-Agent");
+  });
 });
 
 const review: TMonthlyReviewPayload = {
   reviewId: "review-1", period: "2026-09", nextPeriod: "2026-10", version: 5, status: "summarizing",
   counts: { total: 2, submitted: 0, confirmed: 2, returned: 0 },
   items: [
-    { itemId: "item-1", subjectType: "battlefield", subjectId: "bf-01", subjectCode: "01", subjectName: "灯塔项目", ownerName: "白田田", ownerUnassigned: false, status: "confirmed", lead: "两家已验收", assessmentStatus: "ready", assessmentOverall: "整体偏乐观", deviationCount: 1, actions: [] },
-    { itemId: "item-2", subjectType: "capability", subjectId: "cap-1", subjectCode: "02", subjectName: "交付能力", ownerName: "王路遥", ownerUnassigned: true, status: "confirmed", lead: null, assessmentStatus: "none", assessmentOverall: null, deviationCount: 0, actions: [] },
+    { itemId: "item-1", subjectType: "battlefield", subjectId: "bf-01", subjectCode: "01", subjectName: "灯塔项目", ownerName: "白田田", ownerUnassigned: false, status: "confirmed", confirmationSource: "ceo", lead: "两家已验收", assessmentStatus: "ready", assessmentOverall: "整体偏乐观", deviationCount: 1, actions: [] },
+    { itemId: "item-2", subjectType: "capability", subjectId: "cap-1", subjectCode: "02", subjectName: "交付能力", ownerName: "王路遥", ownerUnassigned: true, status: "confirmed", confirmationSource: "import", lead: null, assessmentStatus: "none", assessmentOverall: null, deviationCount: 0, actions: [] },
   ],
   summary: { status: "ready", error: null, confirmedAt: null, overall: "整体按计划推进", judgments: Array.from({ length: 3 }, (_, index) => ({ title: `判断${index + 1}`, body: `内容${index + 1}` })), nextFocus: ["补齐第三个场景", "非当事人回看"] },
   ltco: {
+    window: { start: "2026-10", end: "2027-03" },
     current: "三年内成为行业标杆",
     units: [
       { subjectType: "battlefield", subjectId: "bf-01", subjectCode: "01", subjectName: "灯塔项目", current: "形成标杆案例" },
@@ -138,7 +176,7 @@ const review: TMonthlyReviewPayload = {
   actions: [act("monthly-review.update_summary"), act("monthly-review.confirm_summary"), act("monthly-review.retry_summary")],
 };
 
-describe("CEO 复盘总览与 LTCO", () => {
+describe("CEO 复盘总览与 LTO 审视", () => {
   it("没有复盘时可以手动开始", () => {
     const empty: TMonthlyReviewResponse = { period: "2026-09", review: null, actions: [act("monthly-review.open")] };
     expect(renderToStaticMarkup(<ReviewOverviewScreen initial={empty} />)).toContain("开始 9 月复盘");
@@ -158,7 +196,13 @@ describe("CEO 复盘总览与 LTCO", () => {
     expect(html).toContain("反馈给产品");
   });
 
-  it("LTCO 页默认按建议选「保持不变」，确认后去下月计划", async () => {
+  it("总览里导入确认的项写「飞书导入 · 未在天枢逐项确认」，CEO 确认的写「已确认」", () => {
+    const html = renderToStaticMarkup(<ReviewOverviewScreen initial={{ period: "2026-09", review, actions: [] }} />);
+    expect(html.match(/飞书导入 · 未在天枢逐项确认/g)).toHaveLength(1);
+    expect(html).toContain(">已确认<");
+  });
+
+  it("LTO 页默认按建议选「保持不变」，只列战场 LTO 并显示滑动窗口，确认后去下月计划", async () => {
     ui.post.mockResolvedValue({ data: { review: { ...review, status: "closed" } }, response: { ok: true, status: 200 } });
     const pendingReview = { ...review, status: "ltco_pending" as const, actions: [act("monthly-review.decide_ltco")] };
     const html = renderToStaticMarkup(<LtcoDecisionScreen review={pendingReview} />);
@@ -166,15 +210,17 @@ describe("CEO 复盘总览与 LTCO", () => {
     expect(html).toContain("Co-Agent 建议：保持不变");
     expect(html).toContain("01 灯塔项目");
     expect(html).toContain("形成标杆案例");
+    expect(html).toContain("2026 年 10 月 – 2027 年 3 月");
+    expect(html).not.toContain("交付可复用");
     expect(html).toMatch(/<input[^>]*(checked=""[^>]*value="keep"|value="keep"[^>]*checked="")/);
-    ui.buttons.get("保持不变，生成下月计划")!.onPress!();
+    ui.buttons.get("保持不变，生成下月 PO")!.onPress!();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(ui.post).toHaveBeenCalledWith("/api/monthly-reviews/actions/execute", { body: { actionId: "sig-monthly-review.decide_ltco", input: { decision: "keep" } } });
     expect(ui.navigate).toHaveBeenCalledWith("/plans/2026-10");
   });
 });
 
-describe("公司长期目标审视：单元长期目标", () => {
+describe("LTO 审视：战场 LTO", () => {
   it("有单元建议时默认选修订、预填建议；只提交改过的单元", async () => {
     ui.post.mockResolvedValue({ data: { review: { ...review, status: "closed" } }, response: { ok: true, status: 200 } });
     const suggested = { ...review, status: "ltco_pending" as const, actions: [act("monthly-review.decide_ltco")],
@@ -184,7 +230,7 @@ describe("公司长期目标审视：单元长期目标", () => {
     expect(html).toMatch(/<input[^>]*(checked=""[^>]*value="revise"|value="revise"[^>]*checked="")/);
     expect(html).toContain("聚焦两家标杆客户");
     expect(html).toContain("Co-Agent 建议修订：第三家延期");
-    ui.buttons.get("确认修订，生成下月计划")!.onPress!();
+    ui.buttons.get("确认修订，生成下月 PO")!.onPress!();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(ui.post).toHaveBeenCalledWith("/api/monthly-reviews/actions/execute", { body: { actionId: "sig-monthly-review.decide_ltco",
       input: { decision: "revise", units: [{ subjectType: "battlefield", subjectId: "bf-01", sixMonthOutcome: "聚焦两家标杆客户" }] } } });

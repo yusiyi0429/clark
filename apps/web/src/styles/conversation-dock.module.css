@@ -31,6 +31,8 @@
 }
 
 .typing { position:relative; }
+.textQuoteTray { position:absolute;right:0;bottom:calc(100% + 8px);box-sizing:border-box;max-width:var(--composer-width);padding:5px 7px;border:1px solid #e2e6ee;border-radius:12px;background:#fffffff2;box-shadow:0 3px 12px #2632470a;pointer-events:auto; }
+.layer:has(.textQuoteTray) .caption { bottom:calc(100% + 49px); }
 /* 右边缘固定：打字 / 听写时只向左展开到 --composer-width，不横移（用户 2026-09-28）。 */
 .layer .dock.typing { width:var(--composer-width); }
 .composerExpanded { display:block; }
@@ -333,4 +335,3 @@
 @media(min-width:1800px){.layer[data-history-open=true]{--composer-width:min(620px,100%)}}
 /* 三折叠双屏：输入条在右页底部，和右页同宽（--main-start 是右页左缘，外壳给）。 */
 @media(min-width:600px) and (max-width:959px){.layer,.layer[data-issue-context=true]{right:16px;width:calc(100vw - var(--main-start,16px) - 24px)}}
-

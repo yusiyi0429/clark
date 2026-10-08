@@ -26,7 +26,7 @@ describe("配置页渲染", () => {
   });
 
   it("按设计顺序渲染 LTCO 与四张卡片，议题标题硬限 25 字", () => {
-    const order = ["公司长期目标（LTCO）", "新建会议", "新建议题", "新建战场", "新建能力"];
+    const order = ["公司长期目标（LTO）", "新建会议", "新建议题", "新建战场", "新建能力"];
     const positions = order.map((title) => html.indexOf(title));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);

@@ -1,0 +1,755 @@
+{
+  "period": "2026-09",
+  "missions": [
+    {
+      "code": "04-1",
+      "title": "CEO Agent 核心体验产品化与真实使用（P0）",
+      "ownerId": "sun-mingze",
+      "capabilityCode": "04",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "到 9 月底，CEO 有一套清晰、连贯并可持续使用的 Agent 工作体验：知道在什么场景进入，进入后看到什么，如何从全局定位异常，如何研究和追问，如何形成判断与 Decision，以及语音、动态界面和工作台能力如何自然组合。月底不能仍然只有 Chat 可用。",
+      "why": "CEO Agent 当前真正进入使用的核心仍然是 Chat，但 CEO 的真实工作并不是持续使用聊天框。产品必须帮助 CEO 在有限时间内理解全局、被关键异常吸引、追问重要问题、形成判断，并把成熟议题带入 Decision 与会议。",
+      "successEvidence": [
+        "CEO Agent 新交互和前端完成验收，前后端连接后进入可持续使用状态。",
+        "CEO 能从全局界面看见公司战场、关键变化和需要其注意的议题，而不是先向聊天框提问才能获得全部上下文。",
+        "至少跑通一条真实 CEO 工作路径：进入 → 理解全局或异常 → 追问/研究 → 形成判断 → 进入 Decision 或正式讨论。",
+        "语音、动态界面和文字交互各有清晰位置，切换自然；语音不可用时不阻塞核心工作。",
+        "CEO 的真实使用记录、失败点和产品调整有留档；“增加功能”不作为完成证据。",
+        "与人豪共同完成 CEO Agent 质量和端到端验收；体验问题与底层质量问题能够分层定位。"
+      ],
+      "milestones": [
+        "9/10–9/14 · CEO Agent 核心交互完成验收与前端构建 · 孙铭泽",
+        "9/9–9/18 · CEO Agent 后端构建与测试 · 孙铭泽、刘人豪",
+        "9/16–9/17 · 客户端＋手机端展示 Demo（面向王总） · 孙铭泽、陈溪南",
+        "9/17–9/18 · CEO Agent 前后端连接、上线与验收 · 孙铭泽、刘人豪",
+        "9/23 · 端到端材料准备与 CEO / DRI 联合验收 · 孙铭泽、刘人豪",
+        "9/24–9/30 · 基于 CEO 真实使用持续修正核心体验 · CEO、孙铭泽"
+      ],
+      "dependencies": "",
+      "risk": "",
+      "boundaries": "孙铭泽不负责另建解耦工作台、Eval 或底层质量体系，但必须向人豪提供真实场景、体验要求和验收反馈。 不单独另画 TKOS 产品全景蓝图；CEO / DRI 体验判断作为溪南收敛 North Star 的关键输入。 P0 只以 CEO 核心体验进入真实使用为完成，不以 Demo、页面数量或功能数量替代。 CEO Agent 帮助形成判断和讨论方向，不替 CEO 自动确认正式 Decision。",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/YL64wBD0XiSgu3kS15RcMiKVnhf",
+      "sourceDocumentId": "YiR7dyjYwoBa8ixFeRycaSPKnQU",
+      "sourceRevision": 34,
+      "sourceTitle": "孙铭泽｜2026 年 9 月 Mission Card"
+    },
+    {
+      "code": "04-2",
+      "title": "DRI Agent V1 核心体验与真实验证（P1）",
+      "ownerId": "sun-mingze",
+      "capabilityCode": "04",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "在 CEO Agent 已形成的产品语言和共性能力上，完成 DRI Agent V1 的核心工作体验，并在真实 DRI 中验证。DRI 能围绕自己的 Outcome / Mission 工作，在 Agent 帮助下推进关键问题、带回材料、调整判断、向 CEO 提请并承接回应；与 M1B 和 ENO 共同支持 CEO→DRI 闭环。",
+      "why": "DRI Agent 的重点不是重新定义整个经营闭环，而是回答一个管理者如何通过 Agent 更高效地工作：看到什么信息，如何承接 CEO 的判断和 Outcome，如何管理 Mission，如何获得提醒和辅助判断，以及什么时候与 AI 对话、什么时候进入协同和 Review。",
+      "successEvidence": [
+        "形成单一、连贯的 DRI V1 工作路径，并完成交互与前端验收。",
+        "至少一位真实 DRI 使用真实 Mission 完成一次推进：承接 Outcome → 明确问题 → 行动/带回材料 → 更新判断 → 提请或 Review。",
+        "DRI 清楚什么时候与 Agent 对话，什么时候进入协同、会议或 Review；重要提醒可见但不变成任务噪音。",
+        "DRI Agent 与 CEO Agent 完成端到端验收，角色、通知和状态能正确往返。",
+        "与 M1B 的共同 Outcome 保留，但能明确区分：孙铭泽对单个 CEO / DRI 的人机体验负责，溪南对多人协同和持续承接负责。"
+      ],
+      "milestones": [
+        "9/13–9/17 · DRI Agent 交互设计完成验收与前端构建 · 孙铭泽、白田田、陈溪南",
+        "9/18–9/19 · DRI Agent 前后端连接、上线与验收 · 孙铭泽、白田田、于斯一",
+        "9/18–9/23 · DRI Agent 后端构建与测试 · 孙铭泽、于斯一",
+        "9/23 · 准备端到端材料并完成 CEO Agent / DRI Agent 验收 · 孙铭泽、刘人豪",
+        "9/24–9/30 · 真实 DRI 使用验证，接入 M1B V1 运行条件 · 真实 DRI、陈溪南、孙铭泽"
+      ],
+      "dependencies": "",
+      "risk": "",
+      "boundaries": "当 CEO Agent P0 与 DRI Agent P1 发生资源冲突时，优先保证 CEO Agent 核心体验真正过线。 DRI Agent 不另建一套产品语言、研究流水线或整体经营协同架构；优先复用 CEO Agent 的共性能力与溪南收敛的整体产品语言。 第一版以真实管理者工作路径是否更高效为判断，不以功能数量或 Action Item 数量判断完成。",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/YL64wBD0XiSgu3kS15RcMiKVnhf",
+      "sourceDocumentId": "YiR7dyjYwoBa8ixFeRycaSPKnQU",
+      "sourceRevision": 34,
+      "sourceTitle": "孙铭泽｜2026 年 9 月 Mission Card"
+    },
+    {
+      "code": "04-3",
+      "title": "M1-B 经营协同 MVP 与真实实践",
+      "ownerId": "chen-xinan",
+      "capabilityCode": "04",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "完成可真实使用的 M1-B MVP，并在 TKOS 经营场景中跑起来。团队围绕同一份经营内容协同、反馈和补充，AI 持续理解变化、更新和承接，开始支撑下一轮 Review。",
+      "why": "",
+      "successEvidence": [
+        "团队在同一份经营内容上完成反馈、补充、讨论和确认，不再依赖多轮人工搬运汇总。",
+        "AI 能持续理解内容变化、更新结构并保留上下文，而不只是一次性生成。",
+        "MVP 使用 TKOS 真实信息支撑一次真实经营协同或 Review。",
+        "CEO / DRI 确认新的方式已经减少人工整理，并具备继续使用价值。"
+      ],
+      "milestones": [
+        "9/10：L4 流程方案确认。",
+        "9/11：L5 能力、数据与交互方案确认。",
+        "9/16：Demo 跑通。",
+        "9/20：完成必要能力建设。",
+        "9/21：接入 TKOS 真实信息。",
+        "9/23–9/24：CEO、DRI 进入真实经营协同实践。",
+        "9/28：M1-B MVP 真实实践验收。"
+      ],
+      "dependencies": "Method：流程、判断规则和 Review 要求。 E&O / 本体：真实信息、变化更新与读写能力。 工程：Agent、Workflow、模型与协同界面。 CEO / DRI：真实协同与验收。",
+      "risk": "",
+      "boundaries": "聚焦一条 M1-B 核心经营协同场景，不要求完整自动化。 允许人工兜底，但真实协同必须在产品中发生。 Demo、能力和数据接通不是最终验收结果。",
+      "keyPath": "确认 L4 流程和 L5 能力、数据与交互方案。 跑通 Demo，完成必要能力并接入 TKOS 真实信息。 支持围绕同一经营内容持续协同和 AI 更新。 投入真实使用，支撑经营协同 / Review 并完成验收。",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/OfoHwC4gYie1x6kUlxMcNTzCnip",
+      "sourceDocumentId": "SsVbduAu7ocyFpxjF4uc6DkGnWg",
+      "sourceRevision": 337,
+      "sourceTitle": "陈溪南｜DRI 2026 年 9 月 PDO & Missions"
+    },
+    {
+      "code": "04-4",
+      "title": "TKOS 产品全景蓝图与概念性交互",
+      "ownerId": "chen-xinan",
+      "capabilityCode": "04",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "形成 TKOS 产品全景蓝图与概念性交互（North Star Experience），经 CEO / 一号位用户验证，成为未来 3—6 个月 Product、Agent、E&O 研发的共同锚点。",
+      "why": "",
+      "successEvidence": [
+        "直观呈现 CEO、DRI 如何使用 TKOS，以及角色 Agent 与 Co-Agent 如何协同。",
+        "核心经营场景、Workspace、关键界面和主要交互足够具体，可以走查体验。",
+        "CEO / 一号位用户验证其符合主要直觉、习惯和真实工作方式。",
+        "能够据此对齐未来 3—6 个月 Product、Agent、E&O 的建设方向。"
+      ],
+      "milestones": [
+        "9/10：与 CEO 对齐方向。",
+        "9/15：完成产品蓝图与概念性交互草稿。",
+        "9/16：完成 CEO 反馈对齐。",
+        "9/21：North Star Experience V0.5。",
+        "9/23–9/24：关键场景、界面走查与 CEO 用户验证。",
+        "9/28：产品蓝图与 North Star Experience V1。"
+      ],
+      "dependencies": "CEO / 一号位：体验判断与用户验证。 Product、Agent、E&O DRI：确认场景、能力和实现边界。 M1-B MVP：提供真实场景与交互证据。",
+      "risk": "",
+      "boundaries": "交付概念级 North Star Experience，不要求本月全部工程实现。 重点表达核心用户、核心场景和关键交互，不追求完整高保真产品。 不是单纯的 Product Architecture，也不替代详细技术方案。",
+      "keyPath": "收敛 CEO Agent、管理者 Agent 与 Co-Agent 的核心体验判断。 把用户、经营场景、Agent 协同、Workspace 和关键界面组织成统一蓝图。 形成可走查的 North Star Experience，并由 CEO / 一号位验证。 输出未来 3—6 个月跨 Product、Agent、E&O 的共同建设方向。",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/OfoHwC4gYie1x6kUlxMcNTzCnip",
+      "sourceDocumentId": "SsVbduAu7ocyFpxjF4uc6DkGnWg",
+      "sourceRevision": 337,
+      "sourceTitle": "陈溪南｜DRI 2026 年 9 月 PDO & Missions"
+    },
+    {
+      "code": "05-1",
+      "title": "CEO Agent Architecture & Quality",
+      "ownerId": "liu-renhao",
+      "capabilityCode": "05",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "推动 CEO Agent 从当前以 Chat 为主的能力，形成模块边界清楚、关键模块可独立观察和调试、质量可持续验证的 M1A 业务链，并在词元云集内部发生真实使用。",
+      "why": "",
+      "successEvidence": [
+        "有经过产品和业务确认的模块清单、输入输出、实施顺序和不做范围；本月必要模块可单独测试、回放和定位问题。M1A 具备真实材料的端到端测试记录、人工质量评审、失败案例和修复回归记录，并留下内部用户实际使用及反馈证据。首次集成、Demo 或上线本身不能替代质量验收。"
+      ],
+      "milestones": [],
+      "dependencies": "",
+      "risk": "",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/JUrswhCoKiLBtKkn7mCcqlWXnBb",
+      "sourceDocumentId": "UvSrdWhPzoGGtCxE47fcHAPlnic",
+      "sourceRevision": 33,
+      "sourceTitle": "刘人豪 2026 年 9 月 Mission Card"
+    },
+    {
+      "code": "05-2",
+      "title": "Ontology & Data Grounding",
+      "ownerId": "liu-renhao",
+      "capabilityCode": "05",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "让 M1A / CEO Agent 成为 TKOS 记忆与真实企业数据的验证场，跑通真实数据读取、必要蒸馏、候选写入、人工确认、正式写回及更新后再次调用。数据有来源、有业务确认人、有维护责任，并有 Agent 实际使用证据。",
+      "why": "",
+      "successEvidence": [
+        "M1A 必需数据具备来源、状态、更新方式和消费模块记录；读取与蒸馏服务接入真实产品，候选数据未经确认不得进入正式事实。至少有一条完整的确认写回、数据更新后再次调用记录，并完成缺失、过期、写入失败等情况的检查，明确发现问题后的处理人。仅完成 Schema、接口或技术方案不算达成。"
+      ],
+      "milestones": [],
+      "dependencies": "",
+      "risk": "",
+      "boundaries": "优先实现 M1A 所需的最小服务；M1B 共用需求经溪南、田田和斯一确认后纳入排期。斯一不承担完整 CEO / DRI 后端或全部 Agent Infra。蒸馏、确认写回等有明确业务影响的服务本月必须做好设计和必要实现，不因完整微服务化后移而搁置。",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/JUrswhCoKiLBtKkn7mCcqlWXnBb",
+      "sourceDocumentId": "UvSrdWhPzoGGtCxE47fcHAPlnic",
+      "sourceRevision": 33,
+      "sourceTitle": "刘人豪 2026 年 9 月 Mission Card"
+    },
+    {
+      "code": "05-3",
+      "title": "ENO / Engine Blueprint",
+      "ownerId": "liu-renhao",
+      "capabilityCode": "05",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "形成一版能够指导产品模块化设计和后续投入取舍的 ENO / Engine Blueprint，说明 ENO 在 TKOS 中的角色，以及 Ontology、Context、Memory、Runtime、Harness、Eval 的边界与关系。",
+      "why": "",
+      "successEvidence": [
+        "蓝图能够解释本月模块与记忆服务放在哪里、哪些能力共用、哪些仍是产品专属，并给出做与不做的决定及理由。蓝图与运行实际一致，不能把规划能力标成已实现。未来演进路线是方向性计划，不作为本月工程交付承诺。"
+      ],
+      "milestones": [
+        "9/15 ENO边界初稿",
+        "9/24结合产品全景架构讨论进行评审",
+        "9/30定稿。"
+      ],
+      "dependencies": "",
+      "risk": "",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/JUrswhCoKiLBtKkn7mCcqlWXnBb",
+      "sourceDocumentId": "UvSrdWhPzoGGtCxE47fcHAPlnic",
+      "sourceRevision": 33,
+      "sourceTitle": "刘人豪 2026 年 9 月 Mission Card"
+    },
+    {
+      "code": "08-1",
+      "title": "明确tokenhub第一期需求",
+      "ownerId": "wang-chuangfeng",
+      "capabilityCode": "08",
+      "battlefieldCodes": [
+        "02"
+      ],
+      "outcome": "有明确功能范围的需求文档",
+      "why": "",
+      "successEvidence": [],
+      "milestones": [],
+      "dependencies": "",
+      "risk": "",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/S6iVwHZKMi4LBekiJ93cwKPRn0g",
+      "sourceDocumentId": "ARjAdvd5yolZRPx6nFOcVWFDnMh",
+      "sourceRevision": 121,
+      "sourceTitle": "王创峰 | 2026-09 Mission Card"
+    },
+    {
+      "code": "08-2",
+      "title": "完成tokenhub第一期系统设计",
+      "ownerId": "wang-chuangfeng",
+      "capabilityCode": "08",
+      "battlefieldCodes": [
+        "02"
+      ],
+      "outcome": "tokenhub系统功能设计 tokenhub开发计划时间表",
+      "why": "",
+      "successEvidence": [],
+      "milestones": [],
+      "dependencies": "",
+      "risk": "",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/S6iVwHZKMi4LBekiJ93cwKPRn0g",
+      "sourceDocumentId": "ARjAdvd5yolZRPx6nFOcVWFDnMh",
+      "sourceRevision": 121,
+      "sourceTitle": "王创峰 | 2026-09 Mission Card"
+    },
+    {
+      "code": "08-3",
+      "title": "开发环境依赖项就绪",
+      "ownerId": "wang-chuangfeng",
+      "capabilityCode": "08",
+      "battlefieldCodes": [
+        "02"
+      ],
+      "outcome": "依赖就绪的服务器环境 依赖就绪的本地开发环境",
+      "why": "",
+      "successEvidence": [],
+      "milestones": [],
+      "dependencies": "",
+      "risk": "",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/S6iVwHZKMi4LBekiJ93cwKPRn0g",
+      "sourceDocumentId": "ARjAdvd5yolZRPx6nFOcVWFDnMh",
+      "sourceRevision": 121,
+      "sourceTitle": "王创峰 | 2026-09 Mission Card"
+    },
+    {
+      "code": "07-1",
+      "title": "识别组织能力 Gap 并形成补位决策",
+      "ownerId": "qin-mengyi",
+      "capabilityCode": "07",
+      "battlefieldCodes": [
+        "01",
+        "02",
+        "03"
+      ],
+      "outcome": "到9月底，完成组织能力 Gap 识别方法初版并投入真实使用；结合公司经营运行 Evidence、Domain DRI 判断和外部人才市场信息，识别并聚焦当前最关键的组织能力 Gap，形成优先级判断，并对关键 Gap 明确补位方式、Owner 和行动节点。",
+      "why": "公司处于早期阶段，能够识别出的 Gap 很多，但真正重要的是判断哪些能力缺口正在影响六个月目标，以及哪些在9—10月不补会直接阻塞关键业务。 组织 Gap 判断不能只依赖内部提出的招聘需求，还需要结合 Agent、Runtime、Ontology、Enterprise AI 等外部团队的人才结构和新能力趋势，逐步形成独立的人才与组织判断。",
+      "successEvidence": [
+        "《组织能力 Gap 识别方法 v0.1》已形成并用于本月真实组织扫描，能够区分专业能力、Owner 能力、执行力量、责任不清、协作阻塞和 Agent 能力不足。",
+        "结合内部 Mission Evidence、相关 DRI 沟通和外部人才市场信息，形成3—5个关键 Gap 的优先级判断，并说明对公司目标的具体影响。",
+        "每个关键 Gap 均明确补位方式、Owner 和行动节点；补位方式在外部招聘、现有人才成长、责任调整、Agent、顾问或合作中作出选择，并实际更新07-2招聘投入。",
+        "核心沉淀：《组织能力 Gap 识别方法 v0.1》《关键组织能力 Gap 与补位决策表》。"
+      ],
+      "milestones": [
+        "9月4日前：明确组织能力 Gap 的观察范围、Evidence 来源和重点沟通对象，形成识别方法初版。",
+        "9月9日前：基于当前经营 Evidence，形成关键 Gap 和补位方向的初步判断，为A1招聘 Review提供输入。",
+        "9月16日前：补充外部人才市场信息，聚焦3—5个关键 Gap，并与相关DRI核实。",
+        "9月22日前：与CEO对齐关键 Gap优先级、业务影响和补位方向，并更新07-2招聘投入。",
+        "9月28日前：推动关键 Gap 形成补位 Decision、Owner 和执行节点。"
+      ],
+      "dependencies": "05 Method 提供 Mission 承诺、Runtime、Review 和有效 Evidence；Co-Agent 仅在能力已具备时辅助汇总运行信息。 各 Domain DRI 提供真实业务 Context、专业判断和组织问题反馈；CEO 校准关键 Gap、优先级和重大补位决策。 外部人才、行业专家、候选人和公开市场信息提供人才结构与能力趋势输入。",
+      "risk": "最大风险是形成很多 Gap 或一套方法，却没有聚焦关键问题并推动行动。若优先级或补位方式存在分歧，人才 DRI 应提交 Evidence、业务影响和备选方案，升级 CEO 决策。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/KfD9wiq9Zi0rWLkOE13cqr6YnGh",
+      "sourceDocumentId": "XcAKdRseSobfYYxDeKKcpyFHnqb",
+      "sourceRevision": 17,
+      "sourceTitle": "组织与人才 Domain｜2026年9月 Mission Card v3.0"
+    },
+    {
+      "code": "07-2",
+      "title": "推动核心人才到岗",
+      "ownerId": "qin-mengyi",
+      "capabilityCode": "07",
+      "battlefieldCodes": [
+        "01",
+        "02",
+        "03"
+      ],
+      "outcome": "到9月底，推动与关键组织能力 Gap 对齐的A1核心人才实际到岗并进入对应 Domain 的真实 Mission。因客观 Notice Period 无法到岗的，至少完成 Offer 接受、入职日期锁定和责任承接计划确认；因董事长或董事会终面、最终决策安排未完成的，在人才 Domain 可控范围内完成候选人评估、逐人 Win Plan、拟录用建议和条件预案，锁定拟录用优先人选及备选，达到最终录用决策就绪状态。",
+      "why": "8月已经形成重点候选人和推进路径，但核心人才尚未实际进入组织，关键能力缺口仍未关闭。9月招聘必须从流程推进转向人才成交。人才 DRI 负责候选人管理、推进节奏、Win Plan、Offer 和入职闭环；CEO、董事会和 Domain DRI 分别承担战略说服、最终决策和专业判断。",
+      "successEvidence": [
+        "A1角色及招聘投入与07-1确认的关键 Gap 保持一致；Pipeline和逐人 Win Plan 实时可见，覆盖重点候选人、备选、核心诉求、顾虑、说服人、易流失节点、下一步行动和最晚决策时间。",
+        "能够到岗的候选人已实际到岗并进入真实 Mission；受客观 Notice Period 影响的候选人已接受 Offer、锁定入职日期并明确责任承接计划。",
+        "受董事长或董事会排期影响的候选人已完成拟录用建议、条件预案、优先人选及备选，并完成升级和待决策节点确认；该状态单独标识，不等同于已完成引入。",
+        "核心沉淀：《A1核心人才引入与到岗看板》《重点候选人逐人 Win Plan》。"
+      ],
+      "milestones": [
+        "9月10日前：基于07-1初步判断，完成A1角色、Pipeline、重点候选人和逐人Win Plan Review。",
+        "9月17日前：完成可安排的重点候选人核心面试、Evidence 汇总和录用建议；未完成终面排期的，当日升级决策依赖。",
+        "9月21日前：已获决策授权的人选完成主要 Offer 谈判、接受确认和入职日期锁定；待董事长或董事会决策的人选达到最终录用决策就绪状态。",
+        "9月30日前：能够到岗的A1核心人才实际到岗并进入真实 Mission；客观原因延后的，按上述分层口径形成明确结果。"
+      ],
+      "dependencies": "07-1持续提供关键 Gap、补位方式和招聘优先级输入。 CEO、董事长或董事会完成终面、最终判断和例外决策；Domain DRI完成专业判断并准备真实 Mission；07-4及相关运营团队提供激励口径、Offer、合同、薪酬和入职支持。",
+      "risk": "最大风险是最终决策排期错过候选人窗口。人才 DRI 应提前提交候选人比较、Win Plan、拟录用建议和最晚决策节点并升级；最终决策时间不由人才 DRI 单独承担，但风险暴露和决策准备属于人才 DRI 的责任。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/KfD9wiq9Zi0rWLkOE13cqr6YnGh",
+      "sourceDocumentId": "XcAKdRseSobfYYxDeKKcpyFHnqb",
+      "sourceRevision": 17,
+      "sourceTitle": "组织与人才 Domain｜2026年9月 Mission Card v3.0"
+    },
+    {
+      "code": "07-3",
+      "title": "推动人才评价机制进入运行",
+      "ownerId": "qin-mengyi",
+      "capabilityCode": "07",
+      "battlefieldCodes": [
+        "01",
+        "02",
+        "03"
+      ],
+      "outcome": "到9月底，基于真实 Mission Evidence 完成一次全员人才评价试运行，验证 Result、Ownership、Leverage 评价框架，以及 Evidence 来源、评价主体、评价流程和校准方式是否清晰、可执行，并根据试运行情况修订人才评价方法。",
+      "why": "人才评价需要直接消费 Outcome—Mission—DRI / IC 运行产生的 Evidence，而不是另外建立传统岗位 KPI。9月应先验证机制能否在真实团队中完整跑通。 本次试运行的目标是发现评价口径、Evidence 和流程问题，而不是提前把尚未成熟的方法用于奖金、调薪、期权、晋升或责任调整。",
+      "successEvidence": [
+        "所有纳入范围的成员均按照统一的 Result、Ownership、Leverage 框架完成一次试评价，并使用真实 Outcome、Mission、Review、Decision、Context 和可复用资产作为 Evidence。",
+        "完成评价校准，能够区分结果未完成与个人不胜任，识别计划判断、跨 Domain 依赖、资源、专业能力、Owner 质量和机制成熟度等不同原因。",
+        "形成试运行问题清单并修订评价原则、Evidence 口径、评价主体、流程和校准方式，产出《人才评价方法 v0.2》和《全员人才评价试运行与校准记录》。",
+        "本次试评价结果仅用于验证和修订机制，不用于奖金、调薪、期权、晋升、岗位或责任调整以及劳动关系决定。"
+      ],
+      "milestones": [
+        "9月10日前：汇总首个 Mission Cycle 反馈，确认全员试运行范围、评价主体、使用目的和 Evidence 清单。",
+        "9月18日前：完成全员人才评价试运行和首轮校准 Review。",
+        "9月24日前：完成评价口径、Evidence 和流程问题复盘，形成人才评价方法修订版。"
+      ],
+      "dependencies": "05 Method提供首个 Mission Cycle 的承诺、Runtime、Review 和有效 Evidence 标准。 CEO和各 Domain DRI提供真实 Mission Context、结果判断和校准输入；被评价成员完成事实核对和试运行反馈。 Agent仅在真实能力可用时辅助结构化 Evidence；没有成熟能力时先由人工跑通 Work Pattern。",
+      "risk": "最大风险是试运行滑向正式绩效打分，或把 Mission 完成率机械等同于人才表现。人才 DRI 须明确试运行边界；Evidence 不足时记录缺口，不形成超出证据的个人结论。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/KfD9wiq9Zi0rWLkOE13cqr6YnGh",
+      "sourceDocumentId": "XcAKdRseSobfYYxDeKKcpyFHnqb",
+      "sourceRevision": 17,
+      "sourceTitle": "组织与人才 Domain｜2026年9月 Mission Card v3.0"
+    },
+    {
+      "code": "07-4",
+      "title": "推动长期激励机制进入运行",
+      "ownerId": "qin-mengyi",
+      "capabilityCode": "07",
+      "battlefieldCodes": [
+        "01",
+        "02",
+        "03"
+      ],
+      "outcome": "到9月底，推动长期激励机制完成 CEO / 股东治理确认，完成《词元云集股权激励方案 v1.0》及必要执行材料，使 Initial Grant、Refresh / Additional Grant 和候选人沟通能够在明确权限与规则下实际运行。",
+      "why": "8月已经形成长期人才价值和股权激励的主体原则，9月重点不是继续扩大设计，而是把待确认问题、执行边界和治理权限收口。 人才 DRI 不拥有最终治理决定，但不能被动等待；需要把问题、选项和影响整理清楚，推动决策发生，并在收到反馈后快速完成版本和执行口径收口。",
+      "successEvidence": [
+        "《词元云集股权激励方案 v1.0》已形成，覆盖 Domain 长期价值、DRI / IC 责任结构、Initial Grant、Refresh / Additional Grant、期权池、授予、Vesting、Cliff、行权、离职、回购、例外和治理权限。",
+        "CEO / 股东已对关键原则和治理事项形成确认；如月末仍有未决事项，送审版已完整呈现待确认问题、备选方案、决策影响和建议，不将等待反馈视为人才 DRI 已完成治理收口。",
+        "财务、法务和运营执行边界已经校验；如发生真实候选人或内部人才激励事项，已在授权范围内使用统一机制和沟通口径，未发生越权承诺。",
+        "核心沉淀：《词元云集股权激励方案 v1.0》《长期激励治理 Decision 与版本修订记录》。"
+      ],
+      "milestones": [
+        "9月11日前：形成长期激励待确认事项、备选方案和决策影响清单。",
+        "收到 CEO / 股东反馈后5个工作日内：完成治理原则、财务及法务校验和方案收口。",
+        "9月30日前：完成股权激励方案正式版；如发生授权范围内的真实激励事项，完成机制使用、沟通和 Decision 留存。"
+      ],
+      "dependencies": "CEO / 股东按公司治理权限完成长期价值原则、股权机制和个案的最终决策。 Finance, Compliance and Operations提供股权、税务、合同、授予和退出执行校验。 07-2提供真实候选人的激励需求和沟通场景；07-3的试运行结果本月不直接作为个人授予依据。",
+      "risk": "最大风险是治理事项未决导致候选人沟通停滞或出现不一致承诺。人才 DRI 应按节点提交问题、选项、影响和建议并推动决策；未经授权的事项不得对外承诺。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/KfD9wiq9Zi0rWLkOE13cqr6YnGh",
+      "sourceDocumentId": "XcAKdRseSobfYYxDeKKcpyFHnqb",
+      "sourceRevision": 17,
+      "sourceTitle": "组织与人才 Domain｜2026年9月 Mission Card v3.0"
+    },
+    {
+      "code": "07-5",
+      "title": "建立新人加入与融入机制",
+      "ownerId": "qin-mengyi",
+      "capabilityCode": "07",
+      "battlefieldCodes": [
+        "01",
+        "02",
+        "03"
+      ],
+      "outcome": "到9月底，形成并投入使用轻量的新人加入与融入机制。9月新入职人员在入职一周后，能够说明公司当前在解决什么关键问题、自己负责什么结果、需要与谁协作，并已进入对应 Domain 的真实 Mission。",
+      "why": "新人到岗只有转化为真实组织能力才有价值。当前不需要建设完整培训体系，而需要解决理解公司、连接团队、明确责任和进入真实 Mission 四个问题。 该 Mission 的优先级低于07-1至07-4；有新人加入时必须做好，但不为追求完整流程占用本月过多核心精力。",
+      "successEvidence": [
+        "形成并投入使用《新员工 Onboarding 流程 v1.0》和《词元云集新员工指南 v1.0》，只保留入职前、首日和首周的必要动作、信息、Owner 与触发时间。",
+        "9月新入职人员在入职一周后能够说明 Company / Domain Outcome、本人责任结果和关键协作人，并已进入真实 Mission。",
+        "合同、薪酬福利、账户权限、办公支持和业务 Context 等阻塞项有明确 Owner 和处理节点，不因机制缺失影响新人开始工作。"
+      ],
+      "milestones": [
+        "9月10日前：完成近期新人加入体验复盘，形成 Onboarding 流程和新员工指南初版。",
+        "每位新人入职前：完成必要公司 Context、责任角色、关键协作人和基础支持准备。",
+        "每位新人入职一周内：完成融入检查，确认其理解当前目标、本人责任和协作关系，并已进入真实 Mission。",
+        "9月30日前：根据真实使用反馈完成必要修订。"
+      ],
+      "dependencies": "07-2提供已接受 Offer 人选、入职日期和候选人关注事项。 各 Domain DRI提供业务 Context、责任角色、关键协作人和真实 Mission 入口。 Finance, Compliance and Operations提供合同、薪酬福利、账户权限和办公保障。",
+      "risk": "最大风险是 Onboarding 变成资料和介绍会，而新人仍不知道自己要负责什么结果。入职一周后若尚未进入真实 Mission，人才 DRI 应升级对应 Domain DRI，明确责任、协作人和启动节点。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/KfD9wiq9Zi0rWLkOE13cqr6YnGh",
+      "sourceDocumentId": "XcAKdRseSobfYYxDeKKcpyFHnqb",
+      "sourceRevision": 17,
+      "sourceTitle": "组织与人才 Domain｜2026年9月 Mission Card v3.0"
+    },
+    {
+      "code": "09-1",
+      "title": "基础财务与运营稳定运行",
+      "ownerId": "tang-jujie",
+      "capabilityCode": "09",
+      "battlefieldCodes": [
+        "01",
+        "02",
+        "03"
+      ],
+      "outcome": "截至9月30日，建立可以持续运行的基础财务与运营节奏，使公司能够稳定掌握资金、预算、已承诺支出、应收应付和月末核算状态，并及时发现和处理经营异常。 工具联通是实现该结果的手段，不是本项Mission的最终结果。",
+      "why": "公司需要从零散费用记录进入稳定的经营管理节奏。管理层不仅需要看到已经发生的支出，还需要知道未来确定会发生什么、现金状态如何、是否存在异常，以及月底能否完成基本核算。",
+      "successEvidence": [
+        "财务经营视图持续运行，能够支持实际汇报和经营判断；",
+        "建立周度资金、付款及异常事项更新机制；",
+        "建立月度预算、实际发生、已承诺支出和现金状态复盘；",
+        "应收、应付及月末核算状态有明确记录；",
+        "未完成联通的数据有临时补充方式、责任人和后续处理计划。"
+      ],
+      "milestones": [
+        "9月12日：补齐当前财务经营视图的字段、数据来源和更新责任，明确尚未联通事项及人工替代方案。",
+        "9月20日：形成连续的周度更新记录，暴露预算、资金、付款和核算中的主要异常。",
+        "9月30日：完成本月经营复盘和月末核算状态检查，形成下一月可持续执行的财务运营节奏。"
+      ],
+      "dependencies": "真实财务数据、付款信息以及相关责任人的及时输入。",
+      "risk": "工作停留在工具建设和数据整理，没有形成稳定运行节奏及经营判断。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/TPUiwUs8yigqHFkb61xcFfWnnlb",
+      "sourceDocumentId": "AASMdveweoIl1wx81cXcIHwin8b",
+      "sourceRevision": 19,
+      "sourceTitle": "唐巨杰|2026年9月Mission Card"
+    },
+    {
+      "code": "09-2",
+      "title": "Token市场、供应与合作模式基线",
+      "ownerId": "tang-jujie",
+      "capabilityCode": "09",
+      "battlefieldCodes": [
+        "02"
+      ],
+      "outcome": "截至9月30日，覆盖官方平台、云平台和聚合平台三类具有代表性的关键主体，并形成国内外采购、服务及合作模式的比较判断。 在此基础上，形成首批模型采购与测试建议，并推动至少一条服务于TKOS内部真实模型调用、具备后续执行条件的初步合作路径。初步合作路径不等同于本月必须签署正式合同。",
+      "why": "Token运营不能只解决一次采购问题。公司需要理解上游市场的供应结构、价格体系、商业模式和关键合作方，判断未来折扣、毛利和服务能力从哪里产生，并建立可持续的上游关系。 首条合作路径应先服务公司当前能够实际验证的模型调用需求，并观察其能否进一步复用于后续客户服务和Token运营。",
+      "successEvidence": [
+        "对官方平台、云平台和聚合平台形成代表性主体覆盖；",
+        "对国内外供应主体的采购、服务和合作模式形成比较判断；",
+        "能够说明价格与折扣、预付与充值、阶梯价格、企业合同、代理或转售、引荐合作及企业服务等主要模式；",
+        "形成首批模型采购、测试和供应商选择建议；",
+        "至少形成一条服务TKOS内部真实模型调用的可执行合作路径，并明确合作对象、适用模型、账户及结算方式、当前卡点和下一步动作。"
+      ],
+      "milestones": [
+        "9月12日：完成现有三家供应商回复的结构化整理，形成官方平台和国外供应主体的优先补充名单。",
+        "9月20日：完成三类代表性供应主体的重点接洽，形成国内外价格、结算、账户、服务和合作模式的初步比较。",
+        "9月30日：完成Token市场、供应与合作模式基线，提交首批采购测试建议，并形成至少一条服务TKOS内部真实模型调用的可执行合作路径。"
+      ],
+      "dependencies": "首批模型需求、预计调用量、TKOS内部真实调用场景，以及供应商价格、账户、结算和合作政策的可获得程度。",
+      "risk": "把工作做成供应商名单或单次询价，没有形成对市场结构、利润来源和合作路径的经营认知；或者只关注采购折扣和转售机会，偏离公司当前真实业务需要。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/TPUiwUs8yigqHFkb61xcFfWnnlb",
+      "sourceDocumentId": "AASMdveweoIl1wx81cXcIHwin8b",
+      "sourceRevision": 19,
+      "sourceTitle": "唐巨杰|2026年9月Mission Card"
+    },
+    {
+      "code": "09-3",
+      "title": "TokenHub经营边界矩阵",
+      "ownerId": "tang-jujie",
+      "capabilityCode": "09",
+      "battlefieldCodes": [
+        "02"
+      ],
+      "outcome": "截至9月30日，形成能够直接指导业务推进的经营边界矩阵，对主要业务场景分别给出四级判断： 可以做； 有条件可以做； 暂时不能做； 经专业确认后再做。 矩阵必须说明公司当前可以怎样开展Token相关业务，以及哪些条件未满足前不能对外承诺。",
+      "why": "供应商接洽、产品设计和客户服务必须建立在明确的经营边界之上。若账户、调用、数据、收费和责任边界不清晰，即使商务合作已经推进，也可能产生后续合规、合同和交付风险。",
+      "successEvidence": [
+        "对官方或云平台采购、企业服务、代理或转售、API调用中转等经营方式形成明确判断；",
+        "对统一账户、客户账户、调用主体和责任主体形成边界；",
+        "对客户数据经过公司系统、内容存储、训练使用及境外模型调用形成边界；",
+        "对收费方式、开票方式、合同承诺和服务责任形成边界；",
+        "对最高风险场景中可由内部核验的事实和链路完成验证；仍需法律或其他专业结论的事项，有明确的专业确认路径、责任人和后续动作。"
+      ],
+      "milestones": [
+        "9月12日：形成第一版事实清单、问题清单、数据路径和责任人清单，明确尚未确认的关键缺口。",
+        "9月20日：形成第一版经营边界矩阵，完成最高风险场景中可由内部核验的事实和链路验证；仍需法律或其他专业结论的事项，同步明确专业确认路径。",
+        "9月30日：完成经营边界矩阵及验证记录，形成能够直接支持商务接洽、产品设计、收费方案和合同沟通的业务口径。"
+      ],
+      "dependencies": "供应商规则、实际产品与数据路径、收费方案，以及必要的法律或其他专业意见。",
+      "risk": "形成大量问题清单，但没有完成内部能够实施的事实和链路核验，也没有转化为明确经营判断，导致商务、产品和交付无法据此行动。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/TPUiwUs8yigqHFkb61xcFfWnnlb",
+      "sourceDocumentId": "AASMdveweoIl1wx81cXcIHwin8b",
+      "sourceRevision": 19,
+      "sourceTitle": "唐巨杰|2026年9月Mission Card"
+    },
+    {
+      "code": "09-4",
+      "title": "灯塔项目成本与经济性基线",
+      "ownerId": "tang-jujie",
+      "capabilityCode": "09",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "截至9月30日，以真实项目数据形成灯塔项目成本与经济性基线，回答四个核心问题： 项目实际投入了什么； 实际投入与原计划为什么存在偏差； 哪些投入能够在后续项目中复用； 下一单同类项目应如何估算投入并形成报价输入。 成本工具是数据载体，不是本项Mission的最终结果。",
+      "why": "如果只有成本记录，没有项目经济性判断，公司就无法判断项目是否可以复制、后续交付需要多少资源，以及下一单的成本和报价依据是什么。 项目Owner不仅需要使用工具，还必须基于真实数据对项目投入和后续行动作出判断。",
+      "successEvidence": [
+        "按项目范围、工作包、角色、人天和资源成本记录真实投入；",
+        "对计划与实际投入偏差形成原因判断；",
+        "识别可以复用的工具、数据、方法和交付资产，并判断其对后续成本的降低作用；",
+        "形成“范围—工作包—角色—人天—资源成本—复用降低—报价输入”的估算逻辑；",
+        "由项目Owner基于真实数据完成至少一次投入、偏差、复用和下一单估算复盘，并形成继续执行、调整投入或补充数据后再判断的明确经营判断。"
+      ],
+      "milestones": [
+        "9月12日：明确成本字段、统计范围和基线口径，继续录入真实项目数据。",
+        "9月20日：完成工具和数据验证，形成第一版实际投入、计划偏差及复用资产分析。",
+        "9月30日：由项目Owner基于真实数据完成至少一次投入、偏差、复用和下一单估算复盘，形成灯塔项目成本与经济性基线及明确经营判断。"
+      ],
+      "dependencies": "项目成员的真实投入数据、项目范围与工作包信息，以及项目Owner参与数据复盘和经营判断。",
+      "risk": "将工具汇报或简单试用视为任务完成，没有基于真实数据形成偏差分析、复用判断和下一单估算逻辑。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/TPUiwUs8yigqHFkb61xcFfWnnlb",
+      "sourceDocumentId": "AASMdveweoIl1wx81cXcIHwin8b",
+      "sourceRevision": 19,
+      "sourceTitle": "唐巨杰|2026年9月Mission Card"
+    },
+    {
+      "code": "03-1",
+      "title": "Method Blueprint｜把五套 Method 串成一套系统",
+      "ownerId": "bai-tiantian",
+      "capabilityCode": "03",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "到 9 月底，不重做已经完成的 L1–L3 Overview / L1–L5 Template，而是完成五套 Method 的 architecture closure：同步 M2 / M3 / MF 最新 L3，把 M1-A、M1-B、M2、M3、MF 的信息流、管理动作、Handoff、Decision Right 与回流路径串起来；标出真正影响系统连通的关键 L4 design point，并明确 L5 由 Product / Agent / E&O 如何深化、Method 验收什么。Blueprint 必须能指导后续下钻，而不是一张并排放置的五列图。",
+      "why": "当前风险不是缺少更多 Method 设计，而是各 Domain 各自往下做后接口接不上。L1–L3 已有基础，因此 9 月横向工作的价值是把五套 Method 连成一套 business system，并把“哪里需要继续进入 L4 / L5、谁负责”说清楚。",
+      "successEvidence": [
+        "任取一个真实经营事项，可从战略 / Company Outcome 走到 Domain / Mission、执行，再由 Reality / Feedback 返回正确责任层；每个关键 handoff 都能说清“传什么、何时触发、谁交给谁、接收方做什么判断、异常回哪里”。",
+        "M2 / M3 / MF 最新 L3 已进入统一 Blueprint；关键接口无 Owner 空档、无重复 Decision Right，也不需要下游重新定义 Method。",
+        "关键 L4 design point 与 L5 ownership / Method acceptance 已明确；非 blocking L4/L5 不主动展开。"
+      ],
+      "milestones": [
+        "9/11–9/19｜同步最新 L3，完成 cross-method stitching 与关键接口收口。",
+        "9/23｜用 M1-A / M1-B E2E Gate 反向验证 Blueprint 是否真的能接起来。",
+        "9/24–9/30｜只修正 E2E 暴露的结构性 Gap；9/30 锁定当前 Method Blueprint baseline。"
+      ],
+      "dependencies": "M2 / M3 / MF 最新 L3；M1-A / M1-B L5 co-design 输出；04 Products&Applications / 05 E&O 对接口的真实消费与 challenge；9/23 E2E Evidence。",
+      "risk": "把“完整 Blueprint”误解成“五套 Method 都做到 L5”，重新回到大而全设计。控制方式：以系统连通性为完成标准；只深化会阻塞 cross-method contract 或当前产品承载的 L4/L5。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/AXnuwBDabiqlFpkigSDcK5bun4e",
+      "sourceDocumentId": "XIludr7lIonRFRxVk6ac0bDQnHf",
+      "sourceRevision": 2,
+      "sourceTitle": "词元云集_2026年9月_Method_Domain_Outcome_Mission_Cards_CEO反馈更新_2026-09-11"
+    },
+    {
+      "code": "03-2",
+      "title": "M1-A｜从 Method 到真实战略运行 End-to-End 纵向打穿",
+      "ownerId": "bai-tiantian",
+      "capabilityCode": "03",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "到 9 月底，用真实战略 Case 把 M1-A 从业务流程纵向贯通到 Agent / Product / Data 与真实 CEO / DRI 工作：关键 Step 的 Anchor / Reference、Context、Skill、输出和质量要求在真实 E2E 中落下来；QA/QC 不作为独立建设项，而是在 Agent 输出被真实使用、Failure 被归因、修正并 Retest 的过程中形成。月底以内部质量通关、无已知 deployment-blocking Method / Agent Quality Gap 作为支持 01 部署的 ready-for-deployment 标准。",
+      "why": "CEO 要求的不是“运行起来”或单独建设一套 QC，而是从 Method 到真实输出全部连起来。只有 E2E 跑通，才能知道专业质量到底检查什么，以及 Failure 应改 Method、Skill、Context、Agent 还是 Product。",
+      "successEvidence": [
+        "代表性真实战略 Case 可从 M1-A Method 一路追到 Agent / Product / Data 与 CEO / DRI 的实际使用；输出被采纳、修改或拒绝，并进入 Decision / follow-up。",
+        "关键步骤所需 Anchor / Reference、Context、Skill / Input / Quality Bar 只在真实需要处固化，并被用于 Business QC / Eval。",
+        "Failure 能完成 Method / Skill / Context / Agent / Product 归因与必要 Fix / Retest；月底形成明确的 ready-for-deployment 判断。"
+      ],
+      "milestones": [
+        "9/11–9/23｜随 CEO / DRI Agent 可测版本滚动做真实 Case E2E 与专业质量验证。",
+        "9/23｜CEO Agent + DRI Agent E2E Quality Gate，同时验证 03-1 Blueprint。",
+        "9/24–9/30｜内部真实使用、Fix / Retest；9/30 Deployment Readiness Quality Judgment。"
+      ],
+      "dependencies": "04 Products&Applications（Agent / 产品版本与修正）；05 E&O（Context / Object / trace / data）；CEO / DRI（真实使用、Decision 与反馈）；01（后续部署窗口与验收需要）。",
+      "risk": "把 Skill / QA/QC 重新拆成平行建设项，或以 Demo / 功能完成代替 E2E 真实使用。控制方式：所有质量工作都必须挂在真实 Case 和 Failure 上；支持 01 部署只以内部 readiness 判断为终点，不承担 9 月实际部署准备交付。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/AXnuwBDabiqlFpkigSDcK5bun4e",
+      "sourceDocumentId": "XIludr7lIonRFRxVk6ac0bDQnHf",
+      "sourceRevision": 2,
+      "sourceTitle": "词元云集_2026年9月_Method_Domain_Outcome_Mission_Cards_CEO反馈更新_2026-09-11"
+    },
+    {
+      "code": "03-3",
+      "title": "M1-B｜从经营目标形成到真实 Review End-to-End 纵向打穿",
+      "ownerId": "bai-tiantian",
+      "capabilityCode": "03",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "到 9 月底，把 M1-B 从 Method 贯通到 L5 co-design、Agent / Product / Data 承载与真实经营运行。9/9–9/14 以 September Formation Review 校验现有 Method；9/4–9/11 的 L5 由其他 Domain 继续深化，Method 负责业务 Contract、关键对象 / Context / 质量要求和 acceptance；9/12–9/16 Demo、9/17–9/28 V1 上线窗口一路进入真实 Commitment / Review / Adjustment，并形成 Failure→Fix→Retest。",
+      "why": "M1-B 不能停在“方法已写清”或“产品已上线”。纵向 E2E 要把 Company Outcome、Domain / Mission、Review 等对象在整条链中的角色、每一步输出、Agent Context / Skill 和质量标准通过真实运行验证出来。",
+      "successEvidence": [
+        "9/9–9/14 完成 Formation Keep / Adjust / Open；仅 Material Gap 改 Method，并将结构性问题回写 03-1。",
+        "L5 输入可被 Product / E&O 直接消费或 challenge；关键经营对象、Reference / Context 与输出质量要求在 Demo / V1 中被正确承载。",
+        "Demo / V1 不是最终 Gate；月底有真实 Commitment / Review / Feedback / Adjustment Evidence，并能对 Failure 完成归因、Fix / Retest。"
+      ],
+      "milestones": [
+        "9/4–9/11｜M1-B L5 co-design input / acceptance：所需能力、数据、关键对象与质量要求。",
+        "9/9–9/14｜September Formation First-run Review。",
+        "9/12–9/16｜M1-B Demo + Initial QC。",
+        "9/17–9/28｜M1-B V1 上线窗口 + Live Validation；验证持续至 9/30。"
+      ],
+      "dependencies": "04 Products&Applications / 05 E&O（L5 深化、产品 / 数据承载与修正）；CEO / 各 Domain DRI（真实 Formation、Review 和使用）；R1 周复盘（真实经营 Evidence）。",
+      "risk": "Method 因“对 L5 负责验收”而反向承担全部 L5 设计，或把 Demo / V1 上线当成完成。控制方式：其他 Domain 负责具体实现，Method 负责 business contract 与 correctness / professional quality acceptance；月底只看真实经营 Evidence 和 E2E 质量闭环。",
+      "boundaries": "",
+      "keyPath": "",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/AXnuwBDabiqlFpkigSDcK5bun4e",
+      "sourceDocumentId": "XIludr7lIonRFRxVk6ac0bDQnHf",
+      "sourceRevision": 2,
+      "sourceTitle": "词元云集_2026年9月_Method_Domain_Outcome_Mission_Cards_CEO反馈更新_2026-09-11"
+    },
+    {
+      "code": "05-4",
+      "title": "战略层与经营层 Ontology v0.1 及真实数据 Context / Memory 闭环",
+      "ownerId": "yu-siyi",
+      "capabilityCode": "05",
+      "battlefieldCodes": [
+        "01"
+      ],
+      "outcome": "9月底形成战略层与经营层 Ontology v0.1，推动8–9月已产生的真实企业经营数据开始系统沉淀到统一 Context / Memory，并通过至少一条真实 Agent 使用链路，证明这些 Context 能被正确、授权、可追溯地读取和写回。\n\n同步完成支撑该链路的 Memory 治理内核、最小部署验证与投产差距报告，形成可评审、可实施、可验收的基线。\n\n协作任务：本月协助孙铭泽完成 DRI Agent 的后端开发任务。我负责双方约定范围内的开发与联调支持，具体模块、分工和交付节点与孙铭泽对齐；以约定开发内容完成、相关测试及联调验证通过为验收依据。",
+      "why": "对齐9月 E&O 的真实经营目标，减少核心经营信息散落在文档和聊天中、难以复用和追溯的问题；推动 Clark 从演示应用走向承载真实经营的决策系统，避免 Agent 越权、数据真源混乱和决策无法回放。",
+      "successEvidence": [
+        "两层 Ontology 可承载真实业务：战略层覆盖 Strategy / Outcome / Domain / Mission / Decision / Evidence；经营层覆盖 Mission Runtime / Review / Risk / Feedback / Meeting，并纳入 Artifact 及其关联。与人豪对齐业务语义，形成核心对象、关系、权责和版本规则；Design Pack v0.1、Action Catalog、Evidence Policy 完成评审。",
+        "真实数据进入统一 Context / Memory：按与业务负责人确认的首批范围，沉淀8–9月真实 Outcome、Mission、Decision、Evidence、Review、Meeting、Artifact 等数据。提供数据清单、实际入库数量、覆盖范围及缺口；入库数据可查来源、责任人、时间、版本和权限，并具备后续增量沉淀入口。样例或模拟数据不计入本项验收。",
+        "真实 Agent 消费闭环成立：冻结两条 Golden Chain 与 Decision Right，其中至少一条使用真实业务数据，由 CEO Agent / Co-Agent / 管理者 Agent 中至少一类实际完成“真实数据进入 → Context Pack 授权读取 → Agent 使用并生成 Proposal → 人工确认 → 版本化写回 → Receipt / Audit 留痕”。保留输入、调用记录、结果引用、确认记录和写回前后版本，验证来源正确、权限有效、版本一致及全过程可回放。",
+        "治理边界验证通过：在约定验收范围内，Agent 越权确认成功数、跨组织数据泄漏数均为0；未授权操作被拒绝，版本冲突被识别并阻止错误覆盖，拒绝及冲突过程可审计。",
+        "部署与交付可复核：x86 Docker Compose 部署及持久化验证通过，交付部署记录、验收记录和投产差距报告。明确已验证环境、剩余缺口及责任人；设计评审或本地部署通过不等同于生产投产完成。"
+      ],
+      "milestones": [
+        "9/8 原计划业务链与权责冻结节点：确认两条 Golden Chain、Decision Right 和真实 Agent 场景；完成状态待核实，未决项纳入9/10裁决。",
+        "9/10 对齐两层 Ontology 业务范围、首批真实数据清单及提供人、确认权与验收口径；对缺失数据或权责作出裁决，必要时收敛业务范围。",
+        "9/15 Design Pack、Action Catalog、Evidence Policy 完成评审；首批真实数据开始入库，形成来源、权限、版本及缺口清单。",
+        "9/22 至少一条真实 Agent 链路完成读取、使用、Proposal、人工确认及写回，留存全链路证据；完成越权、组织隔离与版本冲突验证。",
+        "9/29 完成部署与持久化验收，汇总真实数据沉淀、Agent 使用和治理验证证据；提交投产差距报告，供月底验收与定版判断。"
+      ],
+      "dependencies": "业务负责人：提供真实脱敏数据、业务场景及数据责任人，并确认首批覆盖范围；人豪：协同确认战略层与经营层业务语义；领导：裁决 Decision Right、范围取舍与最终验收口径；安全团队：确认身份、组织隔离和数据分级；运维：提供 PostgreSQL、对象存储、部署及备份能力。",
+      "risk": "真实数据无法及时提供，或业务语义、确认权长期不明确，导致成果停留在设计与演示。最晚9/10由我汇总缺口并升级，请领导裁决；若条件不足，缩减到一条核心业务链及其必要真实数据，暂停 Jena、图数据库、Kafka、Kubernetes 等扩展组件。\n\n缩减范围仍须满足“真实数据进入 → Agent 使用 → 人工确认／写回 → 可追溯”。若最低真实数据或授权条件仍不具备，明确记录阻塞及对月底目标的影响，不以模拟数据替代达标证据。",
+      "boundaries": "先用最小技术栈完成真实经营闭环，不追求完整企业本体或全量历史数据迁移，不以引入 Jena、图数据库、Kafka、Kubernetes 作为成果。数据批次、具体场景和权责以9/10确认结果为基线；范围变更同步更新验收口径与排期。",
+      "keyPath": "真实数据及 Decision Right 确认 → 数据沉淀与 Context 构建 → Agent 消费及确认写回 → 部署验收。设计与部署准备可并行推进，真实链路验收依赖数据和授权到位。以上均为计划节点，不代表已完成。",
+      "resources": "",
+      "humanAgentSplit": "",
+      "retrospect": "",
+      "sourceRef": "https://tokenking.feishu.cn/wiki/Hc2owzpoliP907kLGP0cd5kgnKg",
+      "sourceDocumentId": "WBCud9IoFoCnJ5xu7uHcRiZKncS",
+      "sourceRevision": 1,
+      "sourceTitle": "于斯一 2026 年 9 月 Mission Card"
+    }
+  ]
+}

@@ -7,7 +7,7 @@
  * 声纹、雷达和口令各开一个小弹窗，不离开当前页面。
  */
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
 import { ArrowLeftRight, ArrowRight, AudioLines, KeyRound, LogOut, PlugZap, Radar, RotateCcw, Settings2, Smile, X } from "lucide-react";
@@ -43,6 +43,18 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const radarTitle = account.role === "ceo" ? "雷达设置" : "我的雷达";
+  const trigger = useRef<HTMLButtonElement>(null);
+  // 通知上的「授权开始」要打开「连接到外部工具」；页面上可能同时挂着手机版和桌面版两份菜单，只让看得见的那份接。
+  useEffect(() => {
+    const openConnection = (event: Event) => {
+      if (event.defaultPrevented || !trigger.current || trigger.current.offsetParent === null) return;
+      event.preventDefault();
+      setOpen(false);
+      setDialog("connection");
+    };
+    window.addEventListener("open-connection-dialog", openConnection);
+    return () => window.removeEventListener("open-connection-dialog", openConnection);
+  }, []);
   const openMenu = (next: boolean) => {
     setOpen(next);
     if (!next) return;
@@ -85,7 +97,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   return (
     <>
       <Popover isOpen={open} onOpenChange={openMenu}>
-        <Button variant="ghost" className={compact ? m.avatarButton : m.chip} aria-label={`${account.displayName}，打开个人菜单`} data-account-menu>
+        <Button ref={trigger} variant="ghost" className={compact ? m.avatarButton : m.chip} aria-label={`${account.displayName}，打开个人菜单`} data-account-menu>
           <span className={m.avatar} aria-hidden="true">
             {avatarInitial(account.displayName)}
           </span>
@@ -221,6 +233,20 @@ export function MenuDialog({ title, wide = false, onClose, children }: { title: 
 
 const FOUR_DIGITS = /^\d{4}$/;
 
+/** 版本信息藏在「修改口令」底部（用户 2026-09-30 指定）：Web 与 API 各自的构建版本，一样时只写一个。 */
+function BuildVersion() {
+  const [text, setText] = useState("");
+  useEffect(() => {
+    let active = true;
+    const sha = (url: string) => fetch(url).then((response) => response.json() as Promise<{ buildSha?: string }>).then((body) => (body.buildSha ?? "").slice(0, 7)).catch(() => "");
+    void Promise.all([sha("/healthz"), sha("/api/healthz")]).then(([web, api]) => {
+      if (active) setText(web && api && web !== api ? `版本 Web ${web} · API ${api}` : web || api ? `版本 ${web || api}` : "");
+    });
+    return () => { active = false; };
+  }, []);
+  return text ? <p className={m.version}>{text}</p> : null;
+}
+
 /** 修改口令：当前口令 + 新口令两遍。改好后这台电脑继续登录着，其他设备要用新口令重新登录（会话版本随口令递增）。 */
 export function PasscodeForm({ loginId, onDone }: { loginId?: string; onDone: () => void }) {
   const [current, setCurrent] = useState("");
@@ -289,6 +315,7 @@ export function PasscodeForm({ loginId, onDone }: { loginId?: string; onDone: ()
           {busy ? "修改中…" : "修改口令"}
         </Button>
       </div>
+      <BuildVersion />
     </form>
   );
 }

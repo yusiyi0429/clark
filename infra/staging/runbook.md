@@ -5,7 +5,7 @@
 
 ## 0. 火山主机准备（方案 B，一次性）
 
-> **2026-09-29 实际上线**：天枢生产域名改为 `tk.tokenkingos.com`（新建 `sites-available/tk.conf`，配置见 `infra/host-nginx/tk.tokenkingos.com.conf`，证书 certbot webroot 签发）；`mvp.tokenkingos.com` 保持 clark 不变。镜像在主机上按国内源构建，公众号 sidecar 用 `infra/volcano.override.yml` 的本地标签。
+> **2026-09-29 实际上线**：天枢生产域名改为 `tk.tokenkingos.com`（新建 `sites-available/tk.conf`，配置见 `infra/host-nginx/tk.tokenkingos.com.conf`，证书 certbot webroot 签发）；`mvp.tokenkingos.com` 保持 clark 不变。镜像在主机上按国内源构建，公众号 sidecar 用 `infra/volcano.override.yml` 的本地标签。每日 05:00 备份：`crontab` 读 `infra/backup.env`（`BACKUP_TARGET=local`，存 `/srv/tokenhub/backups/tianshu`，保留 14 天，只留本机、不是异地）；age 公钥在 `backup.env`，**私钥只在 `TokenkingOS/tkos-secrets` 的 `tianshu/backup-age.key`**，主机上不留。恢复时私钥经 stdin 传入（`age -d -i -`），不落盘。
 
 主机是 `tokenhub-prod-app-01`（Ubuntu 22.04，8C16G，公网 115.191.26.230），同时跑着 TokenHub 官网、clark-main（`demo`/旧 `mvp`）、本体 world-lab、openviking、tkos-lab 等。宿主机 Nginx 占 80/443，站点配置在 `/etc/nginx/sites-available/` 并软链到 `sites-enabled/`，证书由 certbot（nginx 插件）签发与续期。天枢只把 edge 绑在 `127.0.0.1:3130`，由宿主机 Nginx 终止 TLS 后整域名转发过来，不按路径拆。
 
@@ -21,12 +21,12 @@
    sudo nginx -t && sudo systemctl reload nginx
    ```
    新配置沿用同一证书路径，已含 120m 上传上限、SSE 不缓冲、600s 读超时，以及转发 `Host`/`X-Forwarded-Proto`/`X-Forwarded-For`。回退：把备份拷回 `sites-available/mvp.conf` 后 reload。
-5. **镜像与依赖下载**：大陆主机直连 Docker Hub 与 npm 常失败。先试 `docker pull caddy:2 postgres:17-alpine node:22-alpine node:22.13-alpine`；失败时在 `/etc/docker/daemon.json` 配 `registry-mirrors`（火山镜像仓库或可用加速地址）后 `systemctl restart docker`。`tmwgsicp/wechat-download-api` 按 digest 拉取，镜像站没有时在可联网机器 `docker save` 后 `docker load`。构建时 `pnpm install` 慢可在 `infra/.env` 所在 shell 设 `NPM_CONFIG_REGISTRY=https://registry.npmmirror.com` 后构建。
+5. **镜像与依赖下载**：大陆主机直连 Docker Hub 与 npm 常失败。先试 `docker pull caddy:2 postgres:17-alpine node:22-alpine node:22.13-alpine`；失败时在 `/etc/docker/daemon.json` 配 `registry-mirrors`（火山镜像仓库或可用加速地址）后 `systemctl restart docker`。`tmwgsicp/wechat-download-api` 按 digest 拉取，镜像站没有时在可联网机器 `docker save` 后 `docker load`。构建时 `pnpm install`/`apk add` 慢可在 `infra/.env` 加 `NPM_CONFIG_REGISTRY=https://registry.npmmirror.com` 与 `ALPINE_MIRROR=https://mirrors.aliyun.com`，compose 会作为构建参数传入。
 6. **出网连通**（在主机上执行，任何一项不通都先解决再上线）：
    ```bash
    for u in https://api.edgecloudapp.com https://api.bochaai.com https://tos-cn-beijing.volces.com \
             https://openspeech.bytedance.com https://asr.tencentcloudapi.com https://github.com \
-            https://world-lab.tokenkingos.com; do
+            https://world-02.tokenkingos.com/v1/health; do
      printf '%-45s ' "$u"; curl -s -o /dev/null -m 10 -w '%{http_code}\n' "$u" || echo 不通
    done
    ```

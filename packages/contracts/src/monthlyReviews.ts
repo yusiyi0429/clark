@@ -24,6 +24,8 @@ export const MonthlyReviewStatus = Type.Union([
 ]);
 
 export const MonthlyReviewItemStatus = Type.Union([
+  /** 本单元的个人复盘还没交齐（全部提交或被 CEO 跳过后自动起草）。 */
+  Type.Literal("waiting"),
   Type.Literal("drafting"),
   Type.Literal("draft_failed"),
   Type.Literal("draft"),
@@ -33,6 +35,9 @@ export const MonthlyReviewItemStatus = Type.Union([
 ]);
 
 export const MonthlyReviewSubjectType = Type.Union([Type.Literal("battlefield"), Type.Literal("capability")]);
+
+/** 已确认项的确认来源：ceo 是 CEO 在天枢逐项确认；import 是导入的复盘（没有确认人，不算 CEO 确认过）。未确认为 null。 */
+export const MonthlyReviewConfirmationSource = Type.Union([Type.Literal("ceo"), Type.Literal("import"), Type.Null()]);
 
 /**
  * 战场 / 能力域月度复盘的四部分（与 Co-Agent Design 的 BR 一致）：本周期总体结果、关键经营判断、下周期经营重点、
@@ -219,6 +224,7 @@ export const MonthlyReviewItemPayload = Type.Object(
     participantNames: Type.Array(Type.String()),
     submittedAt: NullableDateTime,
     confirmedAt: NullableDateTime,
+    confirmationSource: MonthlyReviewConfirmationSource,
     /** isParticipant：本单元当月 Mission 负责人；canComment：确认前负责人、CEO、参与者都能评论。 */
     viewer: Type.Object({ isOwner: Type.Boolean(), isCeo: Type.Boolean(), isParticipant: Type.Boolean(), canComment: Type.Boolean() }, { additionalProperties: false }),
     conversationScope: Type.String(),
@@ -242,6 +248,7 @@ export const MonthlyReviewItemRow = Type.Object(
     ownerName: Type.String(),
     ownerUnassigned: Type.Boolean(),
     status: MonthlyReviewItemStatus,
+    confirmationSource: MonthlyReviewConfirmationSource,
     /** 本周期总体结果的第一句；还没有自评时为 null。 */
     lead: NullableText,
     assessmentStatus: Type.Union([MonthlyReviewGenerationStatus, Type.Literal("none")]),
@@ -277,10 +284,16 @@ export const MonthlyReviewPayload = Type.Object(
       },
       { additionalProperties: false },
     ),
+    /** LTO（Long Term Outcome，原 LTCO）审视：先公司 LTO，后各战场 LTO；字段名沿用 ltco。 */
     ltco: Type.Object(
       {
+        /**
+         * 滑动窗口：从下月起算 6 个月（例如 2026-10 至 2027-03），每月审视时整体往后滑一个月；
+         * 公司与战场 LTO 用同一个窗口。PO（Period Outcome）是窗口第一个月的拆分。
+         */
+        window: Type.Object({ start: MonthlyPlanPeriod, end: MonthlyPlanPeriod }, { additionalProperties: false }),
         current: Type.String(),
-        /** 各战场 / 能力域当前的长期目标（六个月目标），LTO 审视时一起看、一起改。 */
+        /** 各战场当前的 LTO（六个月目标），审视时一起看、一起改；能力域不在这里审（2026-09-30 用户决定）。 */
         units: Type.Array(Type.Object(
           { ...MonthlyReviewSubjectRef.properties, subjectCode: Type.String(), subjectName: Type.String(), current: Type.String() },
           { additionalProperties: false },
@@ -334,6 +347,8 @@ export const MonthlyReviewNotice = Type.Object(
   {
     id: Type.String(),
     kind: Type.Union([
+      /** 本人：个人复盘还没提交（waiting / drafting / draft_failed / draft）。 */
+      Type.Literal("personal_todo"),
       /** 负责人：本项待完成（draft / returned / draft_failed / drafting）。 */
       Type.Literal("item_todo"),
       /** 本单元当月 Mission 负责人：复盘还没确认，可以参与讨论与补充。 */
@@ -419,6 +434,7 @@ export const MonthlyReviewDecideLtcoInput = Type.Union([
 export type TMonthlyReviewStatus = Static<typeof MonthlyReviewStatus>;
 export type TMonthlyReviewItemStatus = Static<typeof MonthlyReviewItemStatus>;
 export type TMonthlyReviewSubjectType = Static<typeof MonthlyReviewSubjectType>;
+export type TMonthlyReviewConfirmationSource = Static<typeof MonthlyReviewConfirmationSource>;
 export type TMonthlyReviewField = Static<typeof MonthlyReviewField>;
 export type TMonthlyReviewSelfReview = Static<typeof MonthlyReviewSelfReview>;
 export type TMonthlyReviewAssessment = Static<typeof MonthlyReviewAssessment>;

@@ -21,10 +21,16 @@ const battlefields: TBattlefieldManagementResponse["battlefields"] = [
     sixMonthOutcome: "验证渠道结构与交付节奏",
     missionAnchors: [{ code: "01-1", title: "未来组织范式设计与确认" }],
     pendingIssueCount: 2,
+    participantIds: ["person-fixture-002"],
+    participantsDerived: true,
   },
-  { id: "delivery", version: 1, code: "02", sortOrder: 20, name: "交付战场", ownerId: "", ownerDisplayName: "", sixMonthOutcome: "", missionAnchors: [], pendingIssueCount: 1 },
+  { id: "delivery", version: 1, code: "02", sortOrder: 20, name: "交付战场", ownerId: "", ownerDisplayName: "", sixMonthOutcome: "", missionAnchors: [], pendingIssueCount: 1, participantIds: [], participantsDerived: false },
 ];
-const people: PersonOption[] = [{ personId: "person-fixture-002", displayName: "陈珂", roles: ["dri", "participant"] }];
+const people: PersonOption[] = [
+  { personId: "person-fixture-001", displayName: "刘明华", roles: ["ceo"] },
+  { personId: "person-fixture-002", displayName: "陈珂", roles: ["dri", "participant"] },
+  { personId: "person-fixture-003", displayName: "于斯一", roles: ["participant"] },
+];
 const issues: Issue[] = [
   { id: "i1", title: "是否追加东南亚渠道预算 40%", urgencyLevel: "red", decisionBy: "2025-09-30", battlefieldIds: ["growth"] },
   { id: "i2", title: "明年研发预算向平台还是应用倾斜", urgencyLevel: "yellow", battlefieldIds: ["growth", "delivery"] },
@@ -130,6 +136,39 @@ describe("战场编辑弹层提交字段", () => {
     expect(battlefieldEditPatch(current, { ...current, code: "07" })).toEqual({ ok: true, patch: { code: "07" } });
     expect(battlefieldEditPatch(current, { ...current, sortOrder: "70" })).toEqual({ ok: true, patch: { sortOrder: 70 } });
     expect(battlefieldEditPatch(current, { ...current, sortOrder: "abc" })).toEqual({ ok: true, patch: {} });
+  });
+
+  it("参与者没动过不保存（仍按上月 Mission 推算），改了才发整份名单", () => {
+    const derived = battlefieldDraft(battlefields[0]);
+    expect(battlefieldEditPatch(derived, { ...derived })).toEqual({ ok: true, patch: {} });
+    expect(battlefieldEditPatch(derived, { ...derived, participantIds: ["person-fixture-002", "person-fixture-003"] }))
+      .toEqual({ ok: true, patch: { participantIds: ["person-fixture-002", "person-fixture-003"] } });
+    expect(battlefieldEditPatch(derived, { ...derived, participantIds: [] })).toEqual({ ok: true, patch: { participantIds: [] } });
+  });
+});
+
+describe("战场参与者编辑", () => {
+  const html = renderToStaticMarkup(<BattlefieldScreen battlefields={battlefields} issues={issues} people={people} initialBattlefieldId="growth" />);
+
+  it("从签发页带 battlefieldId 进入直接展开这个战场的编辑", () => {
+    expect(html).toContain("编辑战场");
+    expect(html).toContain('value="增长战场"');
+  });
+
+  it("从人员目录多选，CEO 不在名单里；没保存过的名单注明按上月 Mission 推算", () => {
+    const group = html.slice(html.indexOf('aria-labelledby="battlefield-participants"'), html.indexOf("取消</button>"));
+    expect(group).toContain("参与者");
+    expect(group).toContain("按上月 Mission 推算");
+    expect(group).toContain("陈珂");
+    expect(group).toContain("于斯一");
+    expect(group).not.toContain("刘明华");
+    expect(group.match(/type="checkbox" checked=""/g)).toHaveLength(1);
+  });
+
+  it("保存过的名单不再注明推算", () => {
+    const saved = renderToStaticMarkup(<BattlefieldScreen battlefields={battlefields} issues={issues} people={people} initialBattlefieldId="delivery" />);
+    expect(saved).toContain("参与者");
+    expect(saved).not.toContain("按上月 Mission 推算");
   });
 });
 

@@ -97,9 +97,90 @@ export const TaskView = Type.Object(
     latestProgress: Type.Union([TaskLatestProgress, Type.Null()]),
     returnReason: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     origin: Type.Union([TaskOrigin, Type.Null()]),
+    /** 外部工具替推进人提交了验收、推进人还没处理。不是状态：页头和首页卡片写「等你验收」。 */
+    awaitingAcceptance: Type.Boolean(),
     /** ISO 8601 */
     createdAt: Type.String({ minLength: 1 }),
     updatedAt: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * 验收时对一条完成标准的判断。index 是按行拆出的完成标准里的第几条（从 0 起）；
+ * evidence 是一句依据，materialId 指向这件事里的一份材料（依据是材料时才有）。
+ */
+export const TaskStandardCheck = Type.Object(
+  {
+    index: Type.Integer({ minimum: 0, maximum: 49 }),
+    met: Type.Boolean(),
+    evidence: Type.Union([Type.String({ minLength: 1, maxLength: 300 }), Type.Null()]),
+    materialId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+/** 外部工具（Codex、Claude Code 等）替推进人提交的验收，可带草稿；推进人验收或点「还要继续做」后清掉。 */
+export const TaskSubmission = Type.Object(
+  {
+    by: TaskPerson,
+    via: TaskProgressSource,
+    /** ISO 8601 */
+    at: Type.String({ minLength: 1 }),
+    verdict: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
+    standards: Type.Array(TaskStandardCheck, { maxItems: 50 }),
+    deliverableMaterialIds: Type.Array(Type.String({ format: "uuid" }), { maxItems: 30 }),
+  },
+  { additionalProperties: false },
+);
+
+/** 验收记录：完成标准存验收那一刻的文字快照；重新打开时清掉。 */
+export const TaskAcceptance = Type.Object(
+  {
+    by: TaskPerson,
+    /** ISO 8601 */
+    at: Type.String({ minLength: 1 }),
+    verdict: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
+    standards: Type.Array(Type.Object(
+      {
+        text: Type.String({ minLength: 1, maxLength: 500 }),
+        met: Type.Boolean(),
+        evidence: Type.Union([Type.String({ minLength: 1, maxLength: 300 }), Type.Null()]),
+        materialId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
+      },
+      { additionalProperties: false },
+    ), { maxItems: 50 }),
+    deliverableMaterialIds: Type.Array(Type.String({ format: "uuid" }), { maxItems: 30 }),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * 推进人验收：只有推进人；version 不一致 409 带 latestTask。standards 只带判断，完成标准的文字由服务端按当前
+ * doneDefinition 拆出来存快照；没列到的条目记为没达到。交付结果必须是这件事现有的材料。
+ */
+export const AcceptMyTaskRequest = Type.Object(
+  {
+    version: Type.Integer({ minimum: 1 }),
+    verdict: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
+    standards: Type.Array(TaskStandardCheck, { maxItems: 50 }),
+    deliverableMaterialIds: Type.Array(Type.String({ format: "uuid" }), { maxItems: 30 }),
+  },
+  { additionalProperties: false },
+);
+
+/** 完成后重新打开：状态回进行中，清掉验收记录。 */
+export const ReopenMyTaskRequest = Type.Object(
+  { version: Type.Integer({ minimum: 1 }) },
+  { additionalProperties: false },
+);
+
+/** 我的 Agent 对照完成标准起草的验收：只预填，由推进人改完再验收。 */
+export const TaskAcceptanceDraft = Type.Object(
+  {
+    verdict: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
+    standards: Type.Array(TaskStandardCheck, { maxItems: 50 }),
+    deliverableMaterialIds: Type.Array(Type.String({ format: "uuid" }), { maxItems: 30 }),
   },
   { additionalProperties: false },
 );
@@ -112,19 +193,26 @@ export const MissionCardItemsResponse = Type.Object({
 }, { additionalProperties: false });
 
 /** 成员工作台：参与的本月工作、我负责的执行事项（全部状态，新到旧），以及开着时的个人雷达小组件。 */
+/** 周五 18:00 到周日结束，本周没有外部 Agent 写入的进展时提醒；no_connection 没有有效连接，not_synced 连了但没同步。 */
+export const WeeklySyncReminder = Type.Object(
+  { reason: Type.Union([Type.Literal("no_connection"), Type.Literal("not_synced")]) },
+  { additionalProperties: false },
+);
+
 export const MeHomeResponse = Type.Object(
-  { myTasks: Type.Array(TaskView), work: MemberWork, radar: Type.Union([MemberRadarBrief, Type.Null()]) },
+  { myTasks: Type.Array(TaskView), work: MemberWork, radar: Type.Union([MemberRadarBrief, Type.Null()]), weeklySync: Type.Union([WeeklySyncReminder, Type.Null()]) },
   { additionalProperties: false },
 );
 
 /**
  * 只有推进人能改；version 不一致返回 409 并带 latestTask。除 version 外至少带一个字段。
  * missionId 改归属：从原个人任务移出、排到新个人任务的最后一步；null 表示改为独立事项。
+ * 完成只能走验收（AcceptMyTaskRequest），这里的 status 不收 done；已完成的事项要先重新打开。
  */
 export const PatchMyTaskRequest = Type.Object(
   {
     version: Type.Integer({ minimum: 1 }),
-    status: Type.Optional(Type.Union([Type.Literal("not_started"), Type.Literal("in_progress"), Type.Literal("done")])),
+    status: Type.Optional(Type.Union([Type.Literal("not_started"), Type.Literal("in_progress")])),
     title: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
     startDate: Type.Optional(NullableDate),
     dueDate: Type.Optional(NullableDate),
@@ -168,6 +256,11 @@ export const TaskDetailResponse = Type.Object(
     /** 可邀请的同事：人员名单里除本人和现有成员以外的人。 */
     collaboratorOptions: Type.Array(TaskPerson),
     progress: Type.Array(TaskProgressEntry, { maxItems: 50 }),
+    /** 完成标准：doneDefinition 按行拆开，去掉空行和行首的列表记号。 */
+    standards: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { maxItems: 50 }),
+    submission: Type.Union([TaskSubmission, Type.Null()]),
+    /** 验收记录；没验收过、重新打开过、或 10/8 前就标完成的老事项为 null。 */
+    acceptance: Type.Union([TaskAcceptance, Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -263,6 +356,8 @@ export const NotificationKind = Type.Union([
   Type.Literal("task_collaborator_added"),
   /** 被拉进议题群或会议群（工单 08）；payload {objectType, objectId, inviterId, note?}。 */
   Type.Literal("thread_member_added"),
+  /** 外部工具替推进人提交了验收，推进人收到「等你验收」。 */
+  Type.Literal("task_submitted"),
 ]);
 
 /** 通知只指向对象；text 在读取时按对象当前状态组合。 */
@@ -311,7 +406,14 @@ export type TMonthPlanResponse = Static<typeof MonthPlanResponse>;
 export type TSaveMonthPlanRequest = Static<typeof SaveMonthPlanRequest>;
 export type TTaskOrigin = Static<typeof TaskOrigin>;
 export type TTaskView = Static<typeof TaskView>;
+export type TTaskStandardCheck = Static<typeof TaskStandardCheck>;
+export type TTaskSubmission = Static<typeof TaskSubmission>;
+export type TTaskAcceptance = Static<typeof TaskAcceptance>;
+export type TAcceptMyTaskRequest = Static<typeof AcceptMyTaskRequest>;
+export type TReopenMyTaskRequest = Static<typeof ReopenMyTaskRequest>;
+export type TTaskAcceptanceDraft = Static<typeof TaskAcceptanceDraft>;
 export type TMeHomeResponse = Static<typeof MeHomeResponse>;
+export type TWeeklySyncReminder = Static<typeof WeeklySyncReminder>;
 export type TPatchMyTaskRequest = Static<typeof PatchMyTaskRequest>;
 export type TReturnMyTaskRequest = Static<typeof ReturnMyTaskRequest>;
 export type TNotificationKind = Static<typeof NotificationKind>;

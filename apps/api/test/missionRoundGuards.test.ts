@@ -55,11 +55,12 @@ describe("Mission Card attachment boundaries", () => {
           opened_at=$3::timestamptz, closes_at=$3::timestamptz+interval '48 hours',
           confirmed_at=CASE WHEN $2='confirmed' THEN $3::timestamptz+interval '49 hours' ELSE NULL END WHERE id=$1`, [roundId, status, at]);
         const projected = await t.app.inject({ method: "GET", url: `/api/cards/missions/${original.objectRef.id}`, headers });
-        expect(projected.json().cards[0]).toMatchObject({ actions: [], payload: { placeholder: true, personalCard: { cardId, roundId, status } } });
+        if (status === "confirmed") expect(projected.json().cards[0]).toMatchObject({ actions: [], payload: { placeholder: true, personalCard: { cardId, roundId, status } } });
+        else expect(projected.statusCode).toBe(404);
         const rejected = await t.app.inject({ method: "POST", url: "/api/actions/execute", headers,
           payload: { actionId: original.actions[0].actionId, input: { title: "绕过任务卡编辑" } } });
-        expect(rejected.statusCode).toBe(409);
-        expect(rejected.json().code).toBe("MISSION_IN_MISSION_CARD");
+        expect(rejected.statusCode).toBe(status === "confirmed" ? 409 : 404);
+        expect(rejected.json().code).toBe(status === "confirmed" ? "MISSION_IN_MISSION_CARD" : "MISSION_NOT_FOUND");
       }
       const deleted = await t.app.inject({ method: "DELETE", url: "/api/config/battlefields/growth", headers });
       expect(deleted.statusCode).toBe(409);

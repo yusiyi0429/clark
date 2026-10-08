@@ -82,7 +82,7 @@ describe("成员战场阅读与任务卡入口", () => {
     expect(ui.navigate).toHaveBeenCalledWith("/me/mission-cards/card", null);
   });
   it.each([
-    ["none", "本月目标还没出来"], ["negotiating", "本月目标还在协商"], ["confirmed", "任务卡草稿还没整理"],
+    ["none", "本月目标还没出来"], ["negotiating", "本月目标还在协商"], ["confirmed", "任务卡还没起草"],
   ] as const)("%s 无轮次照实写来源状态，不推断没有工作", (state, line) => {
     const data = fixture();
     data.round = null; data.missionCards = []; data.myMissions = []; data.monthTargetState = state;
@@ -134,10 +134,10 @@ describe("成员战场阅读与任务卡入口", () => {
     expect(html).toContain("已确定 · 占位");
     expect(ui.buttons.has("打开白田田的本月卡")).toBe(true);
   });
-  it("与共享分钟时钟越过截止，立即换成汇总中，不残留讨论中", () => {
+  it("与共享分钟时钟越过截止，立即换成本人确认时间已到，不残留讨论中", () => {
     ui.now = Date.parse("2026-10-03T00:00:00.000Z");
     const html = render();
-    expect(html).toContain("已截止 · 汇总中");
+    expect(html).toContain("本人确认时间已到");
     expect(html).not.toContain("草稿 · 讨论中");
   });
 });

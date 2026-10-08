@@ -110,6 +110,8 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
       const body = (await response.json()) as { attachments?: Attachment[] } | Attachment[];
       const uploaded = Array.isArray(body) ? body : body.attachments ?? [];
       setAttachments((current) => [...current, ...uploaded]);
+      // 个人复盘页按上传的材料决定能不能请 Co-Agent 起草：上传完立刻让它重读。
+      window.dispatchEvent(new CustomEvent("conversation-attachments-changed", { detail: { scope } }));
       if (rejected.length) setAttachmentError(`已上传 ${acceptable.length} 份；${rejected.length} 份不是 PDF/DOCX/MD，已忽略。`);
     } catch (cause) {
       setAttachmentError((cause as Error).message);
@@ -179,6 +181,9 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
           // 复盘项：agent 给了改写建议，页面重新读取后在那一栏下显示「采用 / 忽略」。
           if (event.type === "tool" && event.phase === "completed" && !event.isError && event.name === "propose_review_edit")
             window.dispatchEvent(new CustomEvent("monthly-review-suggested", { detail: { scope } }));
+          if (event.type === "tool" && event.phase === "completed" && !event.isError
+            && (event.name === "edit_mission_card" || event.name === "edit_my_mission_card" || event.name === "ask_mission_card_question"))
+            window.dispatchEvent(new CustomEvent("mission-card-changed", { detail: { scope } }));
           if (event.type === "error") throw new TurnError(event.code, event.message ?? "Pi Runtime 失败");
           if (event.type === "done" && event.status === "completed") completed = true;
           if (event.type === "done" && event.status === "aborted") setStatus("aborted");

@@ -1,6 +1,15 @@
 services:
+  api:
+    ports: !override
+      - "127.0.0.1:4000:4000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      PUBLIC_ORIGIN: http://127.0.0.1:3100
+      EXTRA_ALLOWED_ORIGINS: ${EXTRA_ALLOWED_ORIGINS:-http://localhost:3100,http://127.0.0.1:3100}
   web:
     ports: !override []
+    environment:
+      PUBLIC_ORIGIN: http://127.0.0.1:3100
   edge:
     ports: !override
       - "127.0.0.1:3100:80"

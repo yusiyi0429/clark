@@ -33,8 +33,8 @@ export async function globalConversationContext(q: Query, now: Date): Promise<Re
   };
 }
 
-export async function listConversationMissions(q: Query, filters: { period?: string; battlefieldId?: string; capabilityId?: string; ownerId?: string }): Promise<MissionConversationSummary[]> {
-  const rows = await listMissionRows(q, filters.period);
+export async function listConversationMissions(q: Query, filters: { period?: string; battlefieldId?: string; capabilityId?: string; ownerId?: string }, person?: { personId: string; role: "ceo" | "member" }): Promise<MissionConversationSummary[]> {
+  const rows = await listMissionRows(q, filters.period, person);
   return rows
     .filter((item) => !filters.battlefieldId || item.battlefield_ids.includes(filters.battlefieldId))
     .filter((item) => !filters.capabilityId || item.capability_id === filters.capabilityId)

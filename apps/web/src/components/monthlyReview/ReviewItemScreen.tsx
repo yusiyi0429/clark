@@ -16,6 +16,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { FIELD_HINTS, FIELD_LABELS, FIELDS, OPTIONAL_FIELDS, itemStatusText, monthOf, requestError, runReviewAction, ReviewActionError, type ReviewAction } from "./reviewApi";
 import { ReviewDiscussion } from "./ReviewDiscussion";
 import { FeedbackLink } from "./FeedbackLink";
+import { Sources } from "./Sources";
 import s from "@/components/missionCards/mission-card.module.css";
 import r from "./monthly-review.module.css";
 
@@ -143,12 +144,13 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
           </div> : null}
 
           <section className={r.goal} aria-label="本月目标">
-            <h2>{month} 月目标</h2>
+            <h2>{item.subjectType === "battlefield" ? "PO · " : ""}{month} 月目标</h2>
             {item.target ? <p>{item.target}</p> : <p className={r.muted}>{month} 月没有签发的目标，按实际推进情况复盘。</p>}
-            <h2>六个月目标</h2>
+            <h2>{item.subjectType === "battlefield" ? "LTO · " : ""}六个月目标</h2>
             <p className={r.muted}>{item.sixMonthOutcome || "未填写"}</p>
           </section>
 
+          {item.status === "waiting" ? <p className={r.muted} role="status">等这里的 Mission 负责人交齐个人复盘（或 CEO 选择不再等）后，Co-Agent 会以他们的复盘为材料自动起草。</p> : null}
           {item.status === "drafting" ? <div className={r.working} role="status"><span className={r.pulse} aria-hidden />Co-Agent 正在根据本月目标、反馈和 Mission 起草自评，一般一两分钟…</div> : null}
           {item.status === "draft_failed" ? <div className={s.error} role="alert">
             起草没有成功{item.draftError ? `：${item.draftError.message}` : ""}。
@@ -170,7 +172,7 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
                         placeholder={FIELD_HINTS[field]} onChange={(event) => setDrafts((current) => ({ ...current, [field]: event.target.value }))} />
                     : <p id={`review-${field}`}>{saved.text || <span className={s.missing}>{OPTIONAL_FIELDS.includes(field) ? "无" : "未填写"}</span>}</p>}
                   {fieldErrors[field] ? <p id={`review-${field}-error`} className={s.proposalError}>这一栏还没写，提交前要写上</p> : null}
-                  {saved.sources.length ? <p className={r.sources}>依据：{saved.sources.join("；")}</p> : null}
+                  <Sources sources={saved.sources} />
                   {suggestion && isOwner && editable ? <div className={r.suggestion} role="group" aria-label={`${FIELD_LABELS[field]}的改写建议`}>
                     <header>Agent 建议改写 · {monthDayTime(suggestion.createdAt)}</header>
                     <p>{suggestion.text}</p>

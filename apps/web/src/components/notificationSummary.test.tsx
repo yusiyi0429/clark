@@ -20,6 +20,16 @@ const meeting = (id: string, scheduledAt: string, lead = "bai") =>
   card("meeting", id, `会议 ${id}`, { status: "scheduled", scheduledAt, leadDriId: lead, participants: [{ personId: "bai", displayName: "白田田" }], issueIds: [] });
 
 describe("通知栏分组（clark 三组）", () => {
+  it("到结束时间或手动结束后退出参会人通知，主持人保留改期与纪要入口", () => {
+    const now = new Date("2026-09-30T08:00:00Z");
+    const ended = card("meeting", "ended", "已结束会议", { status: "scheduled", scheduledAt: "2026-09-30T07:00:00Z", endsAt: now.toISOString(), endedAt: null, leadDriId: "host", participants: [] },
+      { actions: [{ actionId: "reschedule", actionType: "meeting.reschedule", label: "重新安排会议" }] });
+    const marked = card("meeting", "marked", "提前结束", { ...ended.payload as object, endsAt: "2026-10-01T08:00:00Z", endedAt: now.toISOString() });
+    expect(railGroups([ended, marked], now, "attendee")).toEqual([]);
+    expect(railGroups([ended], now, "host")[0].items[0]).toMatchObject({ followUp: true, canReschedule: true });
+    const html = renderToStaticMarkup(<NotificationRail cards={[ended]} viewerId="host" onNavigate={() => undefined} />);
+    expect(html).toContain("重新安排"); expect(html).toContain("上传文字纪要");
+  });
   it("只收需要行动的：未签发月度计划、已排期会议、红色待决议题；顺序固定", () => {
     const now = new Date("2026-09-23T01:00:00Z");
     const groups = railGroups(
@@ -69,42 +79,44 @@ describe("本月 Mission Card 的 CEO 通知入口", () => {
   const round: TMissionRoundSummary = {
     roundId: "round-01", period: "2026-10", battlefieldId: "01", battlefieldName: "灯塔项目", version: 1,
     phase: "draft", round: 1, openedAt: null, closesAt: null, reviewAt: null, serverNow: "2026-10-01T02:00:00.000Z",
-    approver: true, deciderName: "刘明华", todo: null, placeholder: true, draftOrigin: "placeholder", goals: null,
-    counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 0, late: 0, corrections: 0 }, cards: [],
+    approver: true, deciderName: "刘明华", todo: null, placeholder: true, draftOrigin: "placeholder", draftFailures: [], retryDraftAction: null, goals: null,
+    counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 0, late: 0, corrections: 0, unreviewed: 0 }, cards: [],
   };
   const summaryCard = (overrides: Partial<TMissionRoundSummary> = {}) => card("mission-round", "round-01", "10 月 Mission Card · 灯塔项目", { ...round, ...overrides });
 
-  it("没有轮次的 slot 与月度计划在战略决策更新同组，不冒充已整理", () => {
-    const draft = card("mission-round", "slot-01", "10 月 Mission Card · 灯塔项目", {
-      period: "2026-10", battlefieldId: "01", battlefieldName: "灯塔项目", placeholder: true,
-      todo: "让 Co-Agent 整理任务卡草稿（占位）", serverNow: round.serverNow,
-    }, { objectRef: { type: "mission-round-slot", id: "01:2026-10", version: 1 }, actions: [{ actionId: "signed-slot", actionType: "mission-round.draft", label: "整理任务卡草稿" }] });
-    const group = railGroups([monthly, draft])[0];
+  it("轮次与月度计划在战略决策更新同组；起草失败写明未完成", () => {
+    const group = railGroups([monthly, summaryCard({ phase: "drafting" })])[0];
     expect(group.title).toBe("战略决策更新");
     expect(group.items).toHaveLength(2);
-    expect(group.items[1].meta).toBe("可以整理任务卡草稿");
-    const html = renderToStaticMarkup(<NotificationRail cards={[draft]} onNavigate={() => undefined} onCard={() => undefined} />);
-    expect(html).toContain("10 月 Mission Card · 灯塔项目，可以整理任务卡草稿");
+    expect(group.items[1].meta).toBe("Co-Agent 正在起草");
+    const failed = summaryCard({ phase: "draft", draftFailures: [{ ownerId: "o", ownerName: "白田田", message: "超时" }] });
+    expect(railGroups([failed])[0].items[0].meta).toBe("任务起草未完成");
   });
 
   it.each([
     [{ phase: "drafting" }, "Co-Agent 正在起草"],
-    [{ phase: "draft" }, "草稿 · 可以统一开放讨论"],
-    [{ phase: "open", closesAt: "2026-10-02T09:24:00.000Z" }, "讨论中 · 31 小时 24 分"],
-    [{ phase: "closed" }, "已截止 · 汇总中"],
-    [{ phase: "reviewing", counts: { ...round.counts, pending: 5 } }, "5 条待你处理"],
-    [{ phase: "reviewing" }, "意见已全部处理，待你确认"],
+    [{ phase: "draft" }, "未交给本人确认"],
+    [{ phase: "open", closesAt: "2026-10-02T09:24:00.000Z" }, "本人已确认 1/1"],
+    [{ phase: "closed" }, "Co-Agent 正在统一核对"],
+    [{ phase: "reviewing", counts: { ...round.counts, pending: 5 } }, "待战场 DRI 确认任务组合"],
+    [{ phase: "reviewing" }, "待战场 DRI 确认任务组合"],
   ] as const)("已建轮次按服务端阶段给出 %s", (overrides, expected) => {
     expect(railGroups([summaryCard(overrides)], new Date("2030-01-01"))[0].items[0].meta).toBe(expected);
   });
 
   it("越过服务端截止时刻时不显示负数，确认后退出通知栏", () => {
-    expect(railGroups([summaryCard({ phase: "open", closesAt: round.serverNow })])[0].items[0].meta).toBe("已截止 · 汇总中");
+    expect(railGroups([summaryCard({ phase: "open", closesAt: round.serverNow })])[0].items[0].meta).toBe("Co-Agent 正在统一核对");
     expect(railGroups([summaryCard({ phase: "confirmed" })])).toEqual([]);
+  });
+  it("审核状态来自各卡本人确认，失败草稿不会承诺可以下发", () => {
+    const row = { cardId: "own", ownerId: "sun", ownerName: "孙铭泽", roleLabel: null, missionCount: 1, ownerConfirmedAt: "2026-10-01T01:00:00Z", line: "本人已确认", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: true, placeholder: false };
+    expect(railGroups([summaryCard({ phase: "open", closesAt: null, cards: [row] })])[0].items[0].meta).toBe("本人已确认 1/1");
+    expect(railGroups([summaryCard({ phase: "open", approver: false, closesAt: null, cards: [row] })])[0].items[0].meta).toBe("本人已确认");
+    expect(railGroups([summaryCard({ phase: "draft", draftFailures: [{ ownerId: "sun", ownerName: "孙铭泽", message: "缺少验收依据" }] })])[0].items[0].meta).toBe("任务起草未完成");
   });
 
   it("已确定后，拍板人有更正申请待处理时这一轮回到通知栏（GAP-04）", () => {
-    const row = { cardId: "card-01", ownerId: "sun", ownerName: "孙铭泽", roleLabel: null, missionCount: 2, line: "2 条更正申请", pending: 0,
+    const row = { cardId: "card-01", ownerId: "sun", ownerName: "孙铭泽", roleLabel: null, missionCount: 2, ownerConfirmedAt: null, line: "2 条更正申请", pending: 0,
       firstPendingFeedbackId: null, pendingCorrections: 2, firstPendingCorrectionId: "correction-01", mine: false, placeholder: false };
     const corrections = summaryCard({ phase: "confirmed", todo: "2 条更正申请待你处理", counts: { ...round.counts, corrections: 2 }, cards: [row] });
     expect(railGroups([corrections])[0].items[0]).toMatchObject({ meta: "2 条更正申请待你处理", missionRound: corrections });

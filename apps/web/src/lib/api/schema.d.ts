@@ -345,6 +345,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mission-cards/{cardId}/annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取正文批注、澄清问题和修改记录 */
+        get: operations["getMissionCardAnnotations"];
+        put?: never;
+        /** 保存选区批注并交给 Co-Agent 处理 */
+        post: operations["createMissionCardAnnotation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-cards/{cardId}/owner-confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人完成审核或取消确认；最后一人完成时自动汇总 */
+        post: operations["setMissionCardOwnerConfirmation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-cards/{cardId}/annotations/{annotationId}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 保留备注并明确终止待改意图，记录原因 */
+        post: operations["resolveMissionCardAnnotation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-cards/{cardId}/annotations/{annotationId}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 明确修改意图并继续处理 */
+        post: operations["answerMissionCardAnnotation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-cards/{cardId}/annotations/{annotationId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 重试未完成的批注修改 */
+        post: operations["retryMissionCardAnnotation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-cards/{cardId}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取任务字段修改前后与依据 */
+        get: operations["getMissionCardRevisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/mission-cards/{cardId}/corrections": {
         parameters: {
             query?: never;
@@ -456,8 +559,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 拍板人整理任务卡草稿、统一开放或重开；版本冲突返回 latestCard */
+        /** 战场 DRI 重试起草、交给本人确认、延长本人确认与确认任务组合；版本冲突返回 latestCard */
         post: operations["executeMissionRoundAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mission-rounds/{roundId}/return-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 战场 DRI 退回受影响的任务卡，保留其他人的本人确认 */
+        post: operations["returnMissionCards"];
         delete?: never;
         options?: never;
         head?: never;
@@ -543,6 +663,74 @@ export interface paths {
         put?: never;
         /** 执行复盘动作；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT */
         post: operations["executeMonthlyReviewAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monthly-cycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 当前月度经营周期的总倒计时（从个人复盘收集起 72 小时到签发下月任务卡）；全员可读，没有周期时 cycle 为 null */
+        get: operations["getMonthlyCycle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/personal-reviews/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 个人复盘看板：进行中的月末复盘里每人的提交状态（全员可见，不含内容）；没有进行中的复盘时 board 为 null */
+        get: operations["getPersonalReviewBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/personal-reviews/{personalReviewId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人或 CEO 读取一份个人复盘；其他人 404 */
+        get: operations["getPersonalReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/personal-reviews/actions/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 执行个人复盘动作；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT */
+        post: operations["executePersonalReviewAction"];
         delete?: never;
         options?: never;
         head?: never;
@@ -875,6 +1063,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/seen-marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我看过的更新与演示：按看过时间排序，跨设备同步 */
+        get: operations["getSeenMarks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/seen-marks/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人记一次看过某版本更新卡或产品演示（幂等，需要同站 Origin） */
+        post: operations["markSeen"];
+        /** 本人清掉一条看过标记，便于测试时重看 */
+        delete: operations["clearSeenMark"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/home": {
         parameters: {
             query?: never;
@@ -1048,6 +1271,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/{objectType}/{objectId}/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 执行事项里贴一条外部链接（只收 http/https，不抓外部页面）；会议、议题 400；计入 30 份上限 */
+        post: operations["addMaterialLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/{objectType}/{objectId}/{materialId}": {
         parameters: {
             query?: never;
@@ -1061,6 +1301,74 @@ export interface paths {
         post?: never;
         /** 主人删自己的材料（软删）；不是主人 403 */
         delete: operations["deleteMaterial"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{objectType}/{objectId}/{materialId}/annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 选中材料里的一段文字写批注；默认只保存（noted），intent=edit「立即修改」只给上传者和对象负责人、只限 Markdown / HTML，排队让 Co-Agent 按批注改（同一份材料按顺序一条条改），其他人 403；按 clientId 幂等 */
+        post: operations["createMaterialAnnotation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{objectType}/{objectId}/{materialId}/annotations/{annotationId}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 上传者或对象负责人处理一条保存着的批注：采用（进原队列让 Co-Agent 按批注改，记下采用人）或不采用（原因可不填）；PDF / Word 400，其他人 403，已处理 409 */
+        post: operations["decideMaterialAnnotation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{objectType}/{objectId}/{materialId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 把垃圾篓里的一段插回原位，存成新的一版；只有上传者和对象负责人，其他人 403；version 不是最新 409 */
+        post: operations["restoreMaterialRemoved"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{objectType}/{objectId}/{materialId}/proposals/{proposalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 对 Co-Agent 的修改提议点「按这个改」或「忽略」；提议对象本人处理，不能改的人提的建议上传者和对象负责人都能处理；材料已被改过则 409（提议变 stale） */
+        post: operations["decideMaterialEditProposal"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1094,6 +1402,24 @@ export interface paths {
         get: operations["previewMaterial"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-oauth/requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取本人浏览器中的 MCP 授权请求 */
+        get: operations["readOAuthConsent"];
+        put?: never;
+        /** 允许或拒绝 MCP 连接授权 */
+        post: operations["decideOAuthConsent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1236,8 +1562,76 @@ export interface paths {
         delete: operations["deleteMyTask"];
         options?: never;
         head?: never;
-        /** 推进人改状态、标题、日期、完成定义、判断或所属个人任务；不是推进人 404 TASK_NOT_FOUND，version 不一致 409 带 latestTask */
+        /** 推进人改标题、日期、完成标准、判断或所属个人任务（状态只能改未启动/进行中，完成走验收）；不是推进人 404 TASK_NOT_FOUND，version 不一致 409 带 latestTask */
         patch: operations["patchMyTask"];
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 推进人验收：对照完成标准逐条记下是否达到和依据、选交付结果、写一句结论；状态变完成，清掉待验收的提交 */
+        post: operations["acceptMyTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/acceptance-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 推进人打开验收时，请我的 Agent 对照完成标准、材料和进展起草（只读，最多 30 秒）；起草不出来 503，手填照样能验收 */
+        post: operations["draftMyTaskAcceptance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/submission": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 推进人看过外部工具提交的验收后「还要继续做」：清掉这次提交，状态不变 */
+        delete: operations["clearMyTaskSubmission"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 推进人重新打开已完成的事项：状态回进行中，清掉验收记录 */
+        post: operations["reopenMyTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/me/tasks/{id}/return": {
@@ -2040,6 +2434,7 @@ export interface components {
                     meetingTitle: string;
                     quote: string | null;
                 } | null;
+                awaitingAcceptance: boolean;
                 createdAt: string;
                 updatedAt: string;
             };
@@ -2213,6 +2608,7 @@ export interface components {
                 code: string;
                 title: string;
             }[];
+            participantIds?: string[];
         };
         CreateCapabilityRequest: {
             code: string;
@@ -2278,6 +2674,8 @@ export interface components {
             battlefieldIds: string[];
             battlefieldNames: string[];
             outcome: string;
+            timeBoundary: string;
+            tradeoffs: string;
             why: string;
             successEvidence: string[];
             milestones: string[];
@@ -2307,6 +2705,8 @@ export interface components {
             capabilityId: string;
             battlefieldIds: string[];
             outcome: string;
+            timeBoundary?: string;
+            tradeoffs?: string;
             why?: string;
             successEvidence?: string[];
             milestones?: string[];
@@ -2330,6 +2730,8 @@ export interface components {
             capabilityId?: string;
             battlefieldIds?: string[];
             outcome?: string;
+            timeBoundary?: string;
+            tradeoffs?: string;
             why?: string;
             successEvidence?: string[];
             milestones?: string[];
@@ -2355,6 +2757,8 @@ export interface components {
                 battlefieldIds: string[];
                 battlefieldNames: string[];
                 outcome: string;
+                timeBoundary: string;
+                tradeoffs: string;
                 why: string;
                 successEvidence: string[];
                 milestones: string[];
@@ -2377,13 +2781,15 @@ export interface components {
                 sourceTitle: string;
             }[];
         };
-        MissionCardField: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+        MissionCardField: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
         MissionCardRow: {
             cardId: string;
             ownerId: string;
             ownerName: string;
             roleLabel: string | null;
             missionCount: number;
+            ownerConfirmedAt: string | null;
+            contentVisible?: boolean;
             line: string;
             pending: number;
             firstPendingFeedbackId: string | null;
@@ -2411,6 +2817,18 @@ export interface components {
             todo: string | null;
             placeholder: boolean;
             draftOrigin: "agent" | "placeholder" | null;
+            draftFailures: {
+                ownerId: string;
+                ownerName: string;
+                message: string;
+            }[];
+            retryDraftAction: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            } | null;
             goals: {
                 sixMonthOutcome: string;
                 monthOutcome: string;
@@ -2425,6 +2843,7 @@ export interface components {
                 dependencies: number;
                 late: number;
                 corrections: number;
+                unreviewed: number;
             };
             cards: {
                 cardId: string;
@@ -2432,6 +2851,8 @@ export interface components {
                 ownerName: string;
                 roleLabel: string | null;
                 missionCount: number;
+                ownerConfirmedAt: string | null;
+                contentVisible?: boolean;
                 line: string;
                 pending: number;
                 firstPendingFeedbackId: string | null;
@@ -2440,6 +2861,34 @@ export interface components {
                 mine: boolean;
                 placeholder: boolean;
             }[];
+            coAgentReview?: {
+                status: "queued" | "running" | "completed" | "failed";
+                summary: string;
+                findings: {
+                    kind: "question" | "risk" | "suggestion";
+                    title: string;
+                    body: string;
+                    sources: {
+                        cardId: string;
+                        missionId?: string;
+                        field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                        version?: number;
+                        annotationId?: string;
+                        revisionId?: string;
+                        correctionId?: string;
+                        quote?: string;
+                    }[];
+                }[];
+                error: string | null;
+                completedAt: string | null;
+                retryAction: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                } | null;
+            } | null;
         };
         MyMissionRoundsResponse: {
             rounds: {
@@ -2460,6 +2909,18 @@ export interface components {
                 todo: string | null;
                 placeholder: boolean;
                 draftOrigin: "agent" | "placeholder" | null;
+                draftFailures: {
+                    ownerId: string;
+                    ownerName: string;
+                    message: string;
+                }[];
+                retryDraftAction: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                } | null;
                 goals: {
                     sixMonthOutcome: string;
                     monthOutcome: string;
@@ -2474,6 +2935,7 @@ export interface components {
                     dependencies: number;
                     late: number;
                     corrections: number;
+                    unreviewed: number;
                 };
                 cards: {
                     cardId: string;
@@ -2481,6 +2943,8 @@ export interface components {
                     ownerName: string;
                     roleLabel: string | null;
                     missionCount: number;
+                    ownerConfirmedAt: string | null;
+                    contentVisible?: boolean;
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
@@ -2489,16 +2953,35 @@ export interface components {
                     mine: boolean;
                     placeholder: boolean;
                 }[];
+                coAgentReview?: {
+                    status: "queued" | "running" | "completed" | "failed";
+                    summary: string;
+                    findings: {
+                        kind: "question" | "risk" | "suggestion";
+                        title: string;
+                        body: string;
+                        sources: {
+                            cardId: string;
+                            missionId?: string;
+                            field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                            version?: number;
+                            annotationId?: string;
+                            revisionId?: string;
+                            correctionId?: string;
+                            quote?: string;
+                        }[];
+                    }[];
+                    error: string | null;
+                    completedAt: string | null;
+                    retryAction: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    } | null;
+                } | null;
             }[];
-        };
-        MissionRoundDraftPayload: {
-            period: string;
-            battlefieldId: string;
-            battlefieldName: string;
-            placeholder: boolean;
-            todo: string;
-            /** @description 应用时钟生成的 ISO 8601 时间 */
-            serverNow: string;
         };
         ExecuteMissionRoundActionRequest: {
             actionId: string;
@@ -2510,6 +2993,67 @@ export interface components {
         };
         MissionRoundConfirmInput: {
             note: string;
+        };
+        MissionCardReviewSource: {
+            cardId: string;
+            missionId?: string;
+            field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+            version?: number;
+            annotationId?: string;
+            revisionId?: string;
+            correctionId?: string;
+            quote?: string;
+        };
+        MissionCardReviewReport: {
+            summary: string;
+            findings: {
+                kind: "question" | "risk" | "suggestion";
+                title: string;
+                body: string;
+                sources: {
+                    cardId: string;
+                    missionId?: string;
+                    field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                    version?: number;
+                    annotationId?: string;
+                    revisionId?: string;
+                    correctionId?: string;
+                    quote?: string;
+                }[];
+            }[];
+        };
+        MissionCardCoAgentReview: {
+            status: "queued" | "running" | "completed" | "failed";
+            summary: string;
+            findings: {
+                kind: "question" | "risk" | "suggestion";
+                title: string;
+                body: string;
+                sources: {
+                    cardId: string;
+                    missionId?: string;
+                    field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                    version?: number;
+                    annotationId?: string;
+                    revisionId?: string;
+                    correctionId?: string;
+                    quote?: string;
+                }[];
+            }[];
+            error: string | null;
+            completedAt: string | null;
+            retryAction: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            } | null;
+        };
+        ReturnMissionCardsRequest: {
+            cardIds: string[];
+            reason: string;
+            version: number;
         };
         MonthlyReviewResponse: {
             period: string;
@@ -2533,7 +3077,8 @@ export interface components {
                     subjectName: string;
                     ownerName: string;
                     ownerUnassigned: boolean;
-                    status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                    status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                    confirmationSource: "ceo" | "import" | null;
                     lead: string | null;
                     assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
                     assessmentOverall: string | null;
@@ -2563,6 +3108,10 @@ export interface components {
                     confirmedAt: string | null;
                 };
                 ltco: {
+                    window: {
+                        start: string;
+                        end: string;
+                    };
                     current: string;
                     units: {
                         subjectType: "battlefield" | "capability";
@@ -2628,7 +3177,7 @@ export interface components {
                 ownerUnassigned: boolean;
                 target: string | null;
                 sixMonthOutcome: string;
-                status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
                 draftError: {
                     code: string;
                     message: string;
@@ -2697,6 +3246,7 @@ export interface components {
                 participantNames: string[];
                 submittedAt: string | null;
                 confirmedAt: string | null;
+                confirmationSource: "ceo" | "import" | null;
                 viewer: {
                     isOwner: boolean;
                     isCeo: boolean;
@@ -2733,7 +3283,8 @@ export interface components {
                 subjectName: string;
                 ownerName: string;
                 ownerUnassigned: boolean;
-                status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                confirmationSource: "ceo" | "import" | null;
                 lead: string | null;
                 assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
                 assessmentOverall: string | null;
@@ -2763,6 +3314,10 @@ export interface components {
                 confirmedAt: string | null;
             };
             ltco: {
+                window: {
+                    start: string;
+                    end: string;
+                };
                 current: string;
                 units: {
                     subjectType: "battlefield" | "capability";
@@ -2819,7 +3374,7 @@ export interface components {
             ownerUnassigned: boolean;
             target: string | null;
             sixMonthOutcome: string;
-            status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+            status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
             draftError: {
                 code: string;
                 message: string;
@@ -2888,6 +3443,7 @@ export interface components {
             participantNames: string[];
             submittedAt: string | null;
             confirmedAt: string | null;
+            confirmationSource: "ceo" | "import" | null;
             viewer: {
                 isOwner: boolean;
                 isCeo: boolean;
@@ -2911,7 +3467,8 @@ export interface components {
             subjectName: string;
             ownerName: string;
             ownerUnassigned: boolean;
-            status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+            status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+            confirmationSource: "ceo" | "import" | null;
             lead: string | null;
             assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
             assessmentOverall: string | null;
@@ -2927,7 +3484,7 @@ export interface components {
         MyMonthlyReviewNoticesResponse: {
             notices: {
                 id: string;
-                kind: "item_todo" | "item_participant" | "items_to_review" | "summary_pending" | "ltco_pending";
+                kind: "personal_todo" | "item_todo" | "item_participant" | "items_to_review" | "summary_pending" | "ltco_pending";
                 period: string;
                 text: string;
                 href: string;
@@ -2937,7 +3494,7 @@ export interface components {
         };
         MonthlyReviewNotice: {
             id: string;
-            kind: "item_todo" | "item_participant" | "items_to_review" | "summary_pending" | "ltco_pending";
+            kind: "personal_todo" | "item_todo" | "item_participant" | "items_to_review" | "summary_pending" | "ltco_pending";
             period: string;
             text: string;
             href: string;
@@ -2963,7 +3520,7 @@ export interface components {
                 ownerUnassigned: boolean;
                 target: string | null;
                 sixMonthOutcome: string;
-                status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
                 draftError: {
                     code: string;
                     message: string;
@@ -3032,6 +3589,7 @@ export interface components {
                 participantNames: string[];
                 submittedAt: string | null;
                 confirmedAt: string | null;
+                confirmationSource: "ceo" | "import" | null;
                 viewer: {
                     isOwner: boolean;
                     isCeo: boolean;
@@ -3067,7 +3625,8 @@ export interface components {
                     subjectName: string;
                     ownerName: string;
                     ownerUnassigned: boolean;
-                    status: "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                    status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "returned" | "confirmed";
+                    confirmationSource: "ceo" | "import" | null;
                     lead: string | null;
                     assessmentStatus: ("pending" | "running" | "ready" | "failed") | "none";
                     assessmentOverall: string | null;
@@ -3097,6 +3656,10 @@ export interface components {
                     confirmedAt: string | null;
                 };
                 ltco: {
+                    window: {
+                        start: string;
+                        end: string;
+                    };
                     current: string;
                     units: {
                         subjectType: "battlefield" | "capability";
@@ -3146,6 +3709,327 @@ export interface components {
                 text: string;
                 sources?: string[];
             }[];
+        };
+        PersonalReviewPayload: {
+            personalReviewId: string;
+            monthlyReviewId: string;
+            period: string;
+            version: number;
+            personId: string;
+            personName: string;
+            status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+            draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
+            draftError: {
+                code: string;
+                message: string;
+                /** @description ISO 8601 */
+                at: string;
+            } | null;
+            selfReview: {
+                overall: {
+                    text: string;
+                    sources: string[];
+                };
+                judgments: {
+                    text: string;
+                    sources: string[];
+                };
+                nextFocus: {
+                    text: string;
+                    sources: string[];
+                };
+                escalations: {
+                    text: string;
+                    sources: string[];
+                };
+            } | null;
+            missions: {
+                id: string;
+                code: string;
+                title: string;
+                outcome: string;
+            }[];
+            toolConnected: boolean;
+            materialCount: number;
+            conversationScope: string;
+            submittedAt: string | null;
+            skipped: {
+                byName: string;
+                /** @description ISO 8601 */
+                at: string;
+            } | null;
+            viewer: {
+                isSelf: boolean;
+                isCeo: boolean;
+            };
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        PersonalReviewBoard: {
+            monthlyReviewId: string;
+            period: string;
+            counts: {
+                total: number;
+                submitted: number;
+                skipped: number;
+            };
+            complete: boolean;
+            rows: {
+                personalReviewId: string;
+                personId: string;
+                personName: string;
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+                draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
+                submittedAt: string | null;
+                isSelf: boolean;
+                href: string | null;
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            }[];
+        };
+        PersonalReviewBoardRow: {
+            personalReviewId: string;
+            personId: string;
+            personName: string;
+            status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+            draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
+            submittedAt: string | null;
+            isSelf: boolean;
+            href: string | null;
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        PersonalReviewBoardResponse: {
+            board: {
+                monthlyReviewId: string;
+                period: string;
+                counts: {
+                    total: number;
+                    submitted: number;
+                    skipped: number;
+                };
+                complete: boolean;
+                rows: {
+                    personalReviewId: string;
+                    personId: string;
+                    personName: string;
+                    status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+                    draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
+                    submittedAt: string | null;
+                    isSelf: boolean;
+                    href: string | null;
+                    actions: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    }[];
+                }[];
+            } | null;
+        };
+        PersonalReviewResponse: {
+            review: {
+                personalReviewId: string;
+                monthlyReviewId: string;
+                period: string;
+                version: number;
+                personId: string;
+                personName: string;
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+                draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
+                draftError: {
+                    code: string;
+                    message: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                selfReview: {
+                    overall: {
+                        text: string;
+                        sources: string[];
+                    };
+                    judgments: {
+                        text: string;
+                        sources: string[];
+                    };
+                    nextFocus: {
+                        text: string;
+                        sources: string[];
+                    };
+                    escalations: {
+                        text: string;
+                        sources: string[];
+                    };
+                } | null;
+                missions: {
+                    id: string;
+                    code: string;
+                    title: string;
+                    outcome: string;
+                }[];
+                toolConnected: boolean;
+                materialCount: number;
+                conversationScope: string;
+                submittedAt: string | null;
+                skipped: {
+                    byName: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                viewer: {
+                    isSelf: boolean;
+                    isCeo: boolean;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+        };
+        ExecutePersonalReviewActionRequest: {
+            actionId: string;
+            input?: unknown;
+        };
+        ExecutePersonalReviewActionResponse: {
+            review: {
+                personalReviewId: string;
+                monthlyReviewId: string;
+                period: string;
+                version: number;
+                personId: string;
+                personName: string;
+                status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+                draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
+                draftError: {
+                    code: string;
+                    message: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                selfReview: {
+                    overall: {
+                        text: string;
+                        sources: string[];
+                    };
+                    judgments: {
+                        text: string;
+                        sources: string[];
+                    };
+                    nextFocus: {
+                        text: string;
+                        sources: string[];
+                    };
+                    escalations: {
+                        text: string;
+                        sources: string[];
+                    };
+                } | null;
+                missions: {
+                    id: string;
+                    code: string;
+                    title: string;
+                    outcome: string;
+                }[];
+                toolConnected: boolean;
+                materialCount: number;
+                conversationScope: string;
+                submittedAt: string | null;
+                skipped: {
+                    byName: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                viewer: {
+                    isSelf: boolean;
+                    isCeo: boolean;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+            board: {
+                monthlyReviewId: string;
+                period: string;
+                counts: {
+                    total: number;
+                    submitted: number;
+                    skipped: number;
+                };
+                complete: boolean;
+                rows: {
+                    personalReviewId: string;
+                    personId: string;
+                    personName: string;
+                    status: "waiting" | "drafting" | "draft_failed" | "draft" | "submitted" | "skipped";
+                    draftSource: "agent_tool" | "co_agent" | "manual" | "import" | null;
+                    submittedAt: string | null;
+                    isSelf: boolean;
+                    href: string | null;
+                    actions: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    }[];
+                }[];
+            };
+        };
+        PersonalReviewUpdateInput: {
+            fields: {
+                field: "overall" | "judgments" | "nextFocus" | "escalations";
+                text: string;
+                sources?: string[];
+            }[];
+        };
+        MonthlyCycle: {
+            reviewPeriod: string;
+            nextPeriod: string;
+            /** @description ISO 8601 */
+            startedAt: string;
+            /** @description ISO 8601 */
+            deadlineAt: string;
+            completedAt: string | null;
+            stage: "personal_reviews" | "unit_reviews" | "company_summary" | "lto_decision" | "period_plan" | "mission_cards" | "done";
+            /** @description ISO 8601 */
+            serverNow: string;
+        };
+        MonthlyCycleResponse: {
+            cycle: {
+                reviewPeriod: string;
+                nextPeriod: string;
+                /** @description ISO 8601 */
+                startedAt: string;
+                /** @description ISO 8601 */
+                deadlineAt: string;
+                completedAt: string | null;
+                stage: "personal_reviews" | "unit_reviews" | "company_summary" | "lto_decision" | "period_plan" | "mission_cards" | "done";
+                /** @description ISO 8601 */
+                serverNow: string;
+            } | null;
         };
         MonthlyReviewComment: {
             id: string;
@@ -3202,7 +4086,7 @@ export interface components {
             id: string;
             seq: number;
             missionId: string | null;
-            field: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
+            field: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
             kind: "comment" | "quote" | "suggestion";
             authorId: string;
             authorName: string;
@@ -3230,6 +4114,198 @@ export interface components {
                 itemId?: string;
             }[];
         };
+        MissionCardClarificationView: {
+            question: string;
+            answer: string;
+            authorId: string;
+            authorName: string;
+            createdAt: string;
+        };
+        MissionCardAnnotationView: {
+            id: string;
+            cardId: string;
+            missionId: string;
+            field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+            sourceVersion: number;
+            sourceText: string;
+            quote: string;
+            prefix: string;
+            suffix: string;
+            startOffset: number;
+            body: string;
+            intent?: "note" | "edit";
+            authorId: string;
+            authorName: string;
+            status: "saved" | "queued" | "applying" | "needs_clarification" | "applied" | "no_change" | "failed";
+            question: string | null;
+            options: string[];
+            answer: string | null;
+            note: string | null;
+            appliedVersion: number | null;
+            canAnswer: boolean;
+            canRetry: boolean;
+            canResolve: boolean;
+            clarifications: {
+                question: string;
+                answer: string;
+                authorId: string;
+                authorName: string;
+                createdAt: string;
+            }[];
+            stale: boolean;
+            createdAt: string;
+        };
+        MissionCardRevisionView: {
+            id: string;
+            cardId: string;
+            missionId: string;
+            field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+            before: string;
+            after: string;
+            reason: string;
+            source: "annotation" | "agent";
+            authorId: string;
+            authorName: string;
+            annotationId: string | null;
+            beforeVersion: number;
+            afterVersion: number;
+            createdAt: string;
+        };
+        MissionCardAnnotationsResponse: {
+            annotations: {
+                id: string;
+                cardId: string;
+                missionId: string;
+                field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                sourceVersion: number;
+                sourceText: string;
+                quote: string;
+                prefix: string;
+                suffix: string;
+                startOffset: number;
+                body: string;
+                intent?: "note" | "edit";
+                authorId: string;
+                authorName: string;
+                status: "saved" | "queued" | "applying" | "needs_clarification" | "applied" | "no_change" | "failed";
+                question: string | null;
+                options: string[];
+                answer: string | null;
+                note: string | null;
+                appliedVersion: number | null;
+                canAnswer: boolean;
+                canRetry: boolean;
+                canResolve: boolean;
+                clarifications: {
+                    question: string;
+                    answer: string;
+                    authorId: string;
+                    authorName: string;
+                    createdAt: string;
+                }[];
+                stale: boolean;
+                createdAt: string;
+            }[];
+            revisions: {
+                id: string;
+                cardId: string;
+                missionId: string;
+                field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                before: string;
+                after: string;
+                reason: string;
+                source: "annotation" | "agent";
+                authorId: string;
+                authorName: string;
+                annotationId: string | null;
+                beforeVersion: number;
+                afterVersion: number;
+                createdAt: string;
+            }[];
+        };
+        CreateMissionCardAnnotationRequest: {
+            /** Format: uuid */
+            clientId: string;
+            sourceRound: number;
+            missionId: string;
+            field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+            sourceVersion: number;
+            sourceText: string;
+            quote: string;
+            prefix: string;
+            suffix: string;
+            startOffset: number;
+            body: string;
+            intent?: "note" | "edit";
+        };
+        CreateMissionCardAnnotationResponse: {
+            annotation: {
+                id: string;
+                cardId: string;
+                missionId: string;
+                field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                sourceVersion: number;
+                sourceText: string;
+                quote: string;
+                prefix: string;
+                suffix: string;
+                startOffset: number;
+                body: string;
+                intent?: "note" | "edit";
+                authorId: string;
+                authorName: string;
+                status: "saved" | "queued" | "applying" | "needs_clarification" | "applied" | "no_change" | "failed";
+                question: string | null;
+                options: string[];
+                answer: string | null;
+                note: string | null;
+                appliedVersion: number | null;
+                canAnswer: boolean;
+                canRetry: boolean;
+                canResolve: boolean;
+                clarifications: {
+                    question: string;
+                    answer: string;
+                    authorId: string;
+                    authorName: string;
+                    createdAt: string;
+                }[];
+                stale: boolean;
+                createdAt: string;
+            };
+        };
+        AnswerMissionCardAnnotationRequest: {
+            answer: string;
+        };
+        RetryMissionCardAnnotationRequest: Record<string, never>;
+        ResolveMissionCardAnnotationRequest: {
+            reason: string;
+        };
+        SetMissionCardOwnerConfirmationRequest: {
+            confirmed: boolean;
+            round: number;
+            missionVersions: {
+                [key: string]: number;
+            };
+        };
+        MissionCardRevisionsResponse: {
+            revisions: {
+                id: string;
+                cardId: string;
+                missionId: string;
+                field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                before: string;
+                after: string;
+                reason: string;
+                source: "annotation" | "agent";
+                authorId: string;
+                authorName: string;
+                annotationId: string | null;
+                beforeVersion: number;
+                afterVersion: number;
+                createdAt: string;
+            }[];
+        };
         PersonalMissionCardMission: {
             missionId: string;
             code: string;
@@ -3243,6 +4319,8 @@ export interface components {
             battlefieldIds: string[];
             battlefieldNames: string[];
             outcome: string;
+            timeBoundary: string;
+            tradeoffs: string;
             why: string;
             successEvidence: string[];
             milestones: string[];
@@ -3264,7 +4342,8 @@ export interface components {
             sourceRevision: number;
             sourceTitle: string;
             version: number;
-            changedFields: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
+            changedFields: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
+            selfEditedFields: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
         };
         PersonalMissionCardPayload: {
             round: {
@@ -3285,6 +4364,18 @@ export interface components {
                 todo: string | null;
                 placeholder: boolean;
                 draftOrigin: "agent" | "placeholder" | null;
+                draftFailures: {
+                    ownerId: string;
+                    ownerName: string;
+                    message: string;
+                }[];
+                retryDraftAction: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                } | null;
                 goals: {
                     sixMonthOutcome: string;
                     monthOutcome: string;
@@ -3299,6 +4390,7 @@ export interface components {
                     dependencies: number;
                     late: number;
                     corrections: number;
+                    unreviewed: number;
                 };
                 cards: {
                     cardId: string;
@@ -3306,6 +4398,8 @@ export interface components {
                     ownerName: string;
                     roleLabel: string | null;
                     missionCount: number;
+                    ownerConfirmedAt: string | null;
+                    contentVisible?: boolean;
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
@@ -3314,6 +4408,48 @@ export interface components {
                     mine: boolean;
                     placeholder: boolean;
                 }[];
+                coAgentReview?: {
+                    status: "queued" | "running" | "completed" | "failed";
+                    summary: string;
+                    findings: {
+                        kind: "question" | "risk" | "suggestion";
+                        title: string;
+                        body: string;
+                        sources: {
+                            cardId: string;
+                            missionId?: string;
+                            field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                            version?: number;
+                            annotationId?: string;
+                            revisionId?: string;
+                            correctionId?: string;
+                            quote?: string;
+                        }[];
+                    }[];
+                    error: string | null;
+                    completedAt: string | null;
+                    retryAction: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    } | null;
+                } | null;
+            };
+            draftFailure: string | null;
+            selfReview: {
+                canConfirm: boolean;
+                canCancel: boolean;
+                canEdit: boolean;
+                blockedReason: string | null;
+                pendingAnnotations: number;
+                returnReason?: string | null;
+            };
+            annotationAccess: {
+                canCreate: boolean;
+                canApply: boolean;
+                closedReason: string | null;
             };
             card: {
                 cardId: string;
@@ -3326,6 +4462,7 @@ export interface components {
                     title: string | null;
                 }[];
                 status: string;
+                ownerConfirmedAt: string | null;
                 shown: "draft" | "candidate" | "confirmed";
                 missions: {
                     missionId: string;
@@ -3340,6 +4477,8 @@ export interface components {
                     battlefieldIds: string[];
                     battlefieldNames: string[];
                     outcome: string;
+                    timeBoundary: string;
+                    tradeoffs: string;
                     why: string;
                     successEvidence: string[];
                     milestones: string[];
@@ -3361,14 +4500,15 @@ export interface components {
                     sourceRevision: number;
                     sourceTitle: string;
                     version: number;
-                    changedFields: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
+                    changedFields: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
+                    selfEditedFields: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect")[];
                 }[];
             };
             feedback: {
                 id: string;
                 seq: number;
                 missionId: string | null;
-                field: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
+                field: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
                 kind: "comment" | "quote" | "suggestion";
                 authorId: string;
                 authorName: string;
@@ -3406,7 +4546,7 @@ export interface components {
             corrections: {
                 id: string;
                 missionId: string;
-                field: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
                 original: string;
                 proposed: string;
                 reason: string;
@@ -3426,6 +4566,7 @@ export interface components {
             correctionAccess: {
                 canRequest: boolean;
                 canApply: boolean;
+                canReject?: boolean;
                 closedReason: string | null;
             };
         };
@@ -3435,7 +4576,7 @@ export interface components {
             kind: "comment" | "quote" | "suggestion";
             round: number;
             missionId?: string;
-            field?: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+            field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
             quote?: string;
             proposed?: string;
             body: string;
@@ -3446,7 +4587,7 @@ export interface components {
                 id: string;
                 seq: number;
                 missionId: string | null;
-                field: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
+                field: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
                 kind: "comment" | "quote" | "suggestion";
                 authorId: string;
                 authorName: string;
@@ -3491,7 +4632,7 @@ export interface components {
                     id: string;
                     seq: number;
                     missionId: string | null;
-                    field: ("title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
+                    field: ("title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect") | null;
                     kind: "comment" | "quote" | "suggestion";
                     authorId: string;
                     authorName: string;
@@ -3543,7 +4684,7 @@ export interface components {
         MissionCardCorrectionView: {
             id: string;
             missionId: string;
-            field: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+            field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
             original: string;
             proposed: string;
             reason: string;
@@ -3563,13 +4704,14 @@ export interface components {
         MissionCardCorrectionAccess: {
             canRequest: boolean;
             canApply: boolean;
+            canReject?: boolean;
             closedReason: string | null;
         };
         CreateMissionCardCorrectionRequest: {
             /** Format: uuid */
             clientId: string;
             missionId: string;
-            field: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+            field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
             proposed: string;
             reason: string;
             sourceVersion: number;
@@ -3582,7 +4724,7 @@ export interface components {
             correction: {
                 id: string;
                 missionId: string;
-                field: "title" | "why" | "outcome" | "successEvidence" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                field: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
                 original: string;
                 proposed: string;
                 reason: string;
@@ -3667,6 +4809,8 @@ export interface components {
                     title: string;
                 }[];
                 pendingIssueCount: number;
+                participantIds: string[];
+                participantsDerived: boolean;
             }[];
             issues: {
                 id: string;
@@ -3719,6 +4863,7 @@ export interface components {
                     asr: boolean;
                 };
                 voiceprint: boolean;
+                world: boolean;
             };
         };
         RadarScanResponse: {
@@ -3915,6 +5060,8 @@ export interface components {
                     at: string;
                 } | null;
                 generatedAt: string | null;
+                /** @constant */
+                beforeReview?: true;
             };
             confirmedAt: string | null;
         };
@@ -4250,6 +5397,7 @@ export interface components {
             endsAt: string | null;
             hostName: string;
             href: string;
+            followUp?: boolean;
         };
         MemberMeetingsResponse: {
             meetings: {
@@ -4259,6 +5407,7 @@ export interface components {
                 endsAt: string | null;
                 hostName: string;
                 href: string;
+                followUp?: boolean;
             }[];
         };
         ThreadMessage: {
@@ -4347,6 +5496,7 @@ export interface components {
                 meetingTitle: string;
                 quote: string | null;
             } | null;
+            awaitingAcceptance: boolean;
             createdAt: string;
             updatedAt: string;
         };
@@ -4440,6 +5590,7 @@ export interface components {
                         meetingTitle: string;
                         quote: string | null;
                     } | null;
+                    awaitingAcceptance: boolean;
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -4451,18 +5602,35 @@ export interface components {
             id: string;
             name: string;
             client: "codex" | "claude" | "other";
+            authType?: "personal" | "oauth";
             createdAt: string;
             expiresAt: string | null;
             lastUsedAt: string | null;
+            lastProgressAt: string | null;
+        };
+        OAuthConsentRequest: {
+            allow: boolean;
+            csrfToken: string;
+            name: string;
+        };
+        OAuthConsentResponse: {
+            clientName: string;
+            callbackHost: string;
+            scopes: string[];
+            csrfToken: string;
+        };
+        OAuthConsentDecisionResponse: {
+            redirect: string;
         };
         MaterialView: {
             id: string;
             objectType: "issue" | "task" | "meeting";
             objectId: string;
             fileName: string;
-            format: "markdown" | "pdf" | "docx" | "html";
+            format: "markdown" | "pdf" | "docx" | "html" | "link";
             sizeBytes: number;
             pageCount?: number;
+            url?: string;
             origin: "upload" | "agent";
             owner: {
                 personId: string;
@@ -4472,6 +5640,8 @@ export interface components {
             updatedAt: string;
             version: number;
             editable: boolean;
+            canEdit: boolean;
+            pending: number;
             canDelete: boolean;
             lastRevision: {
                 version: number;
@@ -4481,7 +5651,17 @@ export interface components {
                 } | null;
                 summary: string | null;
                 at: string;
+                annotation: {
+                    id: string;
+                    quote: string;
+                    body: string;
+                    author: {
+                        personId: string;
+                        displayName: string;
+                    };
+                } | null;
             } | null;
+            working: boolean;
         };
         MaterialListResponse: {
             materials: {
@@ -4489,9 +5669,10 @@ export interface components {
                 objectType: "issue" | "task" | "meeting";
                 objectId: string;
                 fileName: string;
-                format: "markdown" | "pdf" | "docx" | "html";
+                format: "markdown" | "pdf" | "docx" | "html" | "link";
                 sizeBytes: number;
                 pageCount?: number;
+                url?: string;
                 origin: "upload" | "agent";
                 owner: {
                     personId: string;
@@ -4501,6 +5682,8 @@ export interface components {
                 updatedAt: string;
                 version: number;
                 editable: boolean;
+                canEdit: boolean;
+                pending: number;
                 canDelete: boolean;
                 lastRevision: {
                     version: number;
@@ -4510,9 +5693,23 @@ export interface components {
                     } | null;
                     summary: string | null;
                     at: string;
+                    annotation: {
+                        id: string;
+                        quote: string;
+                        body: string;
+                        author: {
+                            personId: string;
+                            displayName: string;
+                        };
+                    } | null;
                 } | null;
+                working: boolean;
             }[];
             canUpload: boolean;
+        };
+        AddMaterialLinkRequest: {
+            url: string;
+            title?: string;
         };
         MaterialRevisionView: {
             version: number;
@@ -4522,6 +5719,15 @@ export interface components {
             } | null;
             summary: string | null;
             at: string;
+            annotation: {
+                id: string;
+                quote: string;
+                body: string;
+                author: {
+                    personId: string;
+                    displayName: string;
+                };
+            } | null;
         };
         MaterialBlock: {
             text: string;
@@ -4541,6 +5747,25 @@ export interface components {
                 kind: "removed";
                 before: string;
             };
+            history: {
+                version: number;
+                kind: "modified" | "added";
+                before: string;
+                requestedBy: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                at: string;
+                annotation: {
+                    id: string;
+                    quote: string;
+                    body: string;
+                    author: {
+                        personId: string;
+                        displayName: string;
+                    };
+                } | null;
+            }[];
         };
         MaterialDetailResponse: {
             material: {
@@ -4548,9 +5773,10 @@ export interface components {
                 objectType: "issue" | "task" | "meeting";
                 objectId: string;
                 fileName: string;
-                format: "markdown" | "pdf" | "docx" | "html";
+                format: "markdown" | "pdf" | "docx" | "html" | "link";
                 sizeBytes: number;
                 pageCount?: number;
+                url?: string;
                 origin: "upload" | "agent";
                 owner: {
                     personId: string;
@@ -4560,6 +5786,8 @@ export interface components {
                 updatedAt: string;
                 version: number;
                 editable: boolean;
+                canEdit: boolean;
+                pending: number;
                 canDelete: boolean;
                 lastRevision: {
                     version: number;
@@ -4569,7 +5797,17 @@ export interface components {
                     } | null;
                     summary: string | null;
                     at: string;
+                    annotation: {
+                        id: string;
+                        quote: string;
+                        body: string;
+                        author: {
+                            personId: string;
+                            displayName: string;
+                        };
+                    } | null;
                 } | null;
+                working: boolean;
             };
             version: number;
             latest: boolean;
@@ -4581,6 +5819,15 @@ export interface components {
                 } | null;
                 summary: string | null;
                 at: string;
+                annotation: {
+                    id: string;
+                    quote: string;
+                    body: string;
+                    author: {
+                        personId: string;
+                        displayName: string;
+                    };
+                } | null;
             };
             blocks: {
                 text: string;
@@ -4600,6 +5847,25 @@ export interface components {
                     kind: "removed";
                     before: string;
                 };
+                history: {
+                    version: number;
+                    kind: "modified" | "added";
+                    before: string;
+                    requestedBy: {
+                        personId: string;
+                        displayName: string;
+                    } | null;
+                    at: string;
+                    annotation: {
+                        id: string;
+                        quote: string;
+                        body: string;
+                        author: {
+                            personId: string;
+                            displayName: string;
+                        };
+                    } | null;
+                }[];
             }[] | null;
             revisions: {
                 version: number;
@@ -4609,7 +5875,185 @@ export interface components {
                 } | null;
                 summary: string | null;
                 at: string;
+                annotation: {
+                    id: string;
+                    quote: string;
+                    body: string;
+                    author: {
+                        personId: string;
+                        displayName: string;
+                    };
+                } | null;
             }[];
+            annotations: {
+                id: string;
+                materialId: string;
+                version: number;
+                quote: string;
+                body: string;
+                author: {
+                    personId: string;
+                    displayName: string;
+                };
+                status: "noted" | "queued" | "applying" | "applied" | "no_change" | "failed" | "declined";
+                appliedVersion: number | null;
+                note: string | null;
+                decidedBy: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                stale: boolean;
+                canDecide: boolean;
+                canApply: boolean;
+                createdAt: string;
+            }[];
+            removed: {
+                id: string;
+                version: number;
+                text: string;
+                requestedBy: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                at: string;
+                annotation: {
+                    id: string;
+                    quote: string;
+                    body: string;
+                    author: {
+                        personId: string;
+                        displayName: string;
+                    };
+                } | null;
+                restorable: boolean;
+            }[];
+            proposals: {
+                id: string;
+                materialId: string;
+                version: number;
+                summary: string;
+                changes: {
+                    before: string;
+                    after: string;
+                }[];
+                proposedBy: {
+                    personId: string;
+                    displayName: string;
+                };
+                proposedFor: {
+                    personId: string;
+                    displayName: string;
+                };
+                status: "pending" | "applied" | "dismissed" | "stale";
+                createdAt: string;
+            }[];
+        };
+        MaterialAnnotationView: {
+            id: string;
+            materialId: string;
+            version: number;
+            quote: string;
+            body: string;
+            author: {
+                personId: string;
+                displayName: string;
+            };
+            status: "noted" | "queued" | "applying" | "applied" | "no_change" | "failed" | "declined";
+            appliedVersion: number | null;
+            note: string | null;
+            decidedBy: {
+                personId: string;
+                displayName: string;
+            } | null;
+            stale: boolean;
+            canDecide: boolean;
+            canApply: boolean;
+            createdAt: string;
+        };
+        CreateMaterialAnnotationRequest: {
+            /** Format: uuid */
+            clientId: string;
+            version: number;
+            quote: string;
+            prefix: string;
+            suffix: string;
+            body: string;
+            intent?: "note" | "edit";
+        };
+        CreateMaterialAnnotationResponse: {
+            annotation: {
+                id: string;
+                materialId: string;
+                version: number;
+                quote: string;
+                body: string;
+                author: {
+                    personId: string;
+                    displayName: string;
+                };
+                status: "noted" | "queued" | "applying" | "applied" | "no_change" | "failed" | "declined";
+                appliedVersion: number | null;
+                note: string | null;
+                decidedBy: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                stale: boolean;
+                canDecide: boolean;
+                canApply: boolean;
+                createdAt: string;
+            };
+        };
+        MaterialRemovedView: {
+            id: string;
+            version: number;
+            text: string;
+            requestedBy: {
+                personId: string;
+                displayName: string;
+            } | null;
+            at: string;
+            annotation: {
+                id: string;
+                quote: string;
+                body: string;
+                author: {
+                    personId: string;
+                    displayName: string;
+                };
+            } | null;
+            restorable: boolean;
+        };
+        RestoreMaterialRemovedRequest: {
+            removedId: string;
+            version: number;
+        };
+        MaterialEditProposalView: {
+            id: string;
+            materialId: string;
+            version: number;
+            summary: string;
+            changes: {
+                before: string;
+                after: string;
+            }[];
+            proposedBy: {
+                personId: string;
+                displayName: string;
+            };
+            proposedFor: {
+                personId: string;
+                displayName: string;
+            };
+            status: "pending" | "applied" | "dismissed" | "stale";
+            createdAt: string;
+        };
+        DecideMaterialEditProposalRequest: {
+            decision: "apply" | "dismiss";
+        };
+        DecideMaterialAnnotationRequest: {
+            decision: "adopt" | "decline";
+            reason?: string;
         };
         WeeklyProgressResponse: {
             week: string;
@@ -4655,12 +6099,15 @@ export interface components {
                 id: string;
                 name: string;
                 client: "codex" | "claude" | "other";
+                authType?: "personal" | "oauth";
                 createdAt: string;
                 expiresAt: string | null;
                 lastUsedAt: string | null;
+                lastProgressAt: string | null;
             }[];
             /** @constant */
             mcpPath: "/mcp/me";
+            mcpUrl?: string;
         };
         CreatePersonalTokenRequest: {
             name: string;
@@ -4674,9 +6121,11 @@ export interface components {
                 id: string;
                 name: string;
                 client: "codex" | "claude" | "other";
+                authType?: "personal" | "oauth";
                 createdAt: string;
                 expiresAt: string | null;
                 lastUsedAt: string | null;
+                lastProgressAt: string | null;
             };
         };
         TaskPerson: {
@@ -4749,6 +6198,7 @@ export interface components {
                     meetingTitle: string;
                     quote: string | null;
                 } | null;
+                awaitingAcceptance: boolean;
                 createdAt: string;
                 updatedAt: string;
             };
@@ -4784,6 +6234,38 @@ export interface components {
                 }[];
                 createdAt: string;
             }[];
+            standards: string[];
+            submission: {
+                by: {
+                    personId: string;
+                    name: string;
+                };
+                via: "web" | "codex" | "claude" | "github" | "other";
+                at: string;
+                verdict: string | null;
+                standards: {
+                    index: number;
+                    met: boolean;
+                    evidence: string | null;
+                    materialId: string | null;
+                }[];
+                deliverableMaterialIds: string[];
+            } | null;
+            acceptance: {
+                by: {
+                    personId: string;
+                    name: string;
+                };
+                at: string;
+                verdict: string | null;
+                standards: {
+                    text: string;
+                    met: boolean;
+                    evidence: string | null;
+                    materialId: string | null;
+                }[];
+                deliverableMaterialIds: string[];
+            } | null;
         };
         PutMyTaskNoteRequest: {
             note: string | null;
@@ -4850,6 +6332,7 @@ export interface components {
                     meetingTitle: string;
                     quote: string | null;
                 } | null;
+                awaitingAcceptance: boolean;
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -4917,6 +6400,7 @@ export interface components {
                         meetingTitle: string;
                         quote: string | null;
                     } | null;
+                    awaitingAcceptance: boolean;
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -4984,6 +6468,7 @@ export interface components {
                     meetingTitle: string;
                     quote: string | null;
                 } | null;
+                awaitingAcceptance: boolean;
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -5065,6 +6550,12 @@ export interface components {
                     collectedAt: string;
                 }[];
             } | null;
+            weeklySync: {
+                reason: "no_connection" | "not_synced";
+            } | null;
+        };
+        WeeklySyncReminder: {
+            reason: "no_connection" | "not_synced";
         };
         MemberWork: {
             period: string;
@@ -5135,6 +6626,8 @@ export interface components {
                 battlefieldIds: string[];
                 battlefieldNames: string[];
                 outcome: string;
+                timeBoundary: string;
+                tradeoffs: string;
                 why: string;
                 successEvidence: string[];
                 milestones: string[];
@@ -5174,6 +6667,18 @@ export interface components {
                 todo: string | null;
                 placeholder: boolean;
                 draftOrigin: "agent" | "placeholder" | null;
+                draftFailures: {
+                    ownerId: string;
+                    ownerName: string;
+                    message: string;
+                }[];
+                retryDraftAction: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                } | null;
                 goals: {
                     sixMonthOutcome: string;
                     monthOutcome: string;
@@ -5188,6 +6693,7 @@ export interface components {
                     dependencies: number;
                     late: number;
                     corrections: number;
+                    unreviewed: number;
                 };
                 cards: {
                     cardId: string;
@@ -5195,6 +6701,8 @@ export interface components {
                     ownerName: string;
                     roleLabel: string | null;
                     missionCount: number;
+                    ownerConfirmedAt: string | null;
+                    contentVisible?: boolean;
                     line: string;
                     pending: number;
                     firstPendingFeedbackId: string | null;
@@ -5203,6 +6711,34 @@ export interface components {
                     mine: boolean;
                     placeholder: boolean;
                 }[];
+                coAgentReview?: {
+                    status: "queued" | "running" | "completed" | "failed";
+                    summary: string;
+                    findings: {
+                        kind: "question" | "risk" | "suggestion";
+                        title: string;
+                        body: string;
+                        sources: {
+                            cardId: string;
+                            missionId?: string;
+                            field?: "title" | "why" | "outcome" | "successEvidence" | "timeBoundary" | "tradeoffs" | "boundaries" | "keyPath" | "milestones" | "resources" | "dependencies" | "humanAgentSplit" | "risk" | "retrospect";
+                            version?: number;
+                            annotationId?: string;
+                            revisionId?: string;
+                            correctionId?: string;
+                            quote?: string;
+                        }[];
+                    }[];
+                    error: string | null;
+                    completedAt: string | null;
+                    retryAction: {
+                        /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                        actionId: string;
+                        actionType: string;
+                        label: string;
+                        itemId?: string;
+                    } | null;
+                } | null;
             } | null;
             confirmation: {
                 byName: string;
@@ -5452,7 +6988,7 @@ export interface components {
         };
         PatchMyTaskRequest: {
             version: number;
-            status?: "not_started" | "in_progress" | "done";
+            status?: "not_started" | "in_progress";
             title?: string;
             startDate?: string | null;
             dueDate?: string | null;
@@ -5464,10 +7000,71 @@ export interface components {
             version: number;
             reason: string;
         };
+        TaskStandardCheck: {
+            index: number;
+            met: boolean;
+            evidence: string | null;
+            materialId: string | null;
+        };
+        TaskSubmission: {
+            by: {
+                personId: string;
+                name: string;
+            };
+            via: "web" | "codex" | "claude" | "github" | "other";
+            at: string;
+            verdict: string | null;
+            standards: {
+                index: number;
+                met: boolean;
+                evidence: string | null;
+                materialId: string | null;
+            }[];
+            deliverableMaterialIds: string[];
+        };
+        TaskAcceptance: {
+            by: {
+                personId: string;
+                name: string;
+            };
+            at: string;
+            verdict: string | null;
+            standards: {
+                text: string;
+                met: boolean;
+                evidence: string | null;
+                materialId: string | null;
+            }[];
+            deliverableMaterialIds: string[];
+        };
+        AcceptMyTaskRequest: {
+            version: number;
+            verdict: string | null;
+            standards: {
+                index: number;
+                met: boolean;
+                evidence: string | null;
+                materialId: string | null;
+            }[];
+            deliverableMaterialIds: string[];
+        };
+        ReopenMyTaskRequest: {
+            version: number;
+        };
+        TaskAcceptanceDraft: {
+            verdict: string | null;
+            standards: {
+                index: number;
+                met: boolean;
+                evidence: string | null;
+                materialId: string | null;
+            }[];
+            deliverableMaterialIds: string[];
+        };
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted";
                 text: string;
                 objectType: "task" | "meeting" | "issue";
                 objectId: string;
@@ -5588,6 +7185,9 @@ export interface components {
         CompleteOnboardingResponse: {
             /** @constant */
             onboarded: true;
+        };
+        SeenMarksResponse: {
+            keys: string[];
         };
     };
     responses: never;
@@ -6390,6 +7990,417 @@ export interface operations {
             };
         };
     };
+    getMissionCardAnnotations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 批注与记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissionCardAnnotationsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createMissionCardAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMissionCardAnnotationRequest"];
+            };
+        };
+        responses: {
+            /** @description 已保存的批注 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMissionCardAnnotationResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setMissionCardOwnerConfirmation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetMissionCardOwnerConfirmationRequest"];
+            };
+        };
+        responses: {
+            /** @description 最新任务卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    resolveMissionCardAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+                annotationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveMissionCardAnnotationRequest"];
+            };
+        };
+        responses: {
+            /** @description 已保留的备注 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMissionCardAnnotationResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    answerMissionCardAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+                annotationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerMissionCardAnnotationRequest"];
+            };
+        };
+        responses: {
+            /** @description 已回答的问题 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMissionCardAnnotationResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    retryMissionCardAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+                annotationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryMissionCardAnnotationRequest"];
+            };
+        };
+        responses: {
+            /** @description 重试的批注 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMissionCardAnnotationResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMissionCardRevisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 修改记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissionCardRevisionsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     createPersonalMissionCardCorrection: {
         parameters: {
             query?: never;
@@ -6757,6 +8768,77 @@ export interface operations {
             };
         };
     };
+    returnMissionCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roundId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnMissionCardsRequest"];
+            };
+        };
+        responses: {
+            /** @description 当前任务组合进度 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getMonthlyReview: {
         parameters: {
             query?: never;
@@ -6948,6 +9030,173 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExecuteMonthlyReviewActionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMonthlyCycle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 月度周期 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyCycleResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPersonalReviewBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 个人复盘看板 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalReviewBoardResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPersonalReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personalReviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 个人复盘 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalReviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    executePersonalReviewAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecutePersonalReviewActionRequest"];
+            };
+        };
+        responses: {
+            /** @description 个人复盘与看板的最新视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutePersonalReviewActionResponse"];
                 };
             };
             /** @description ApiError 统一错误 */
@@ -7946,6 +10195,131 @@ export interface operations {
             };
         };
     };
+    getSeenMarks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 看过的标记 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeenMarksResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    markSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 看过的标记 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeenMarksResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    clearSeenMark: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已清除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getMyHome: {
         parameters: {
             query?: never;
@@ -8585,6 +10959,69 @@ export interface operations {
             };
         };
     };
+    addMaterialLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task" | "meeting";
+                objectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddMaterialLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description 新链接材料 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getMaterial: {
         parameters: {
             query?: {
@@ -8678,6 +11115,282 @@ export interface operations {
             };
         };
     };
+    createMaterialAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task" | "meeting";
+                objectId: string;
+                materialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMaterialAnnotationRequest"];
+            };
+        };
+        responses: {
+            /** @description 批注 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMaterialAnnotationResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decideMaterialAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task" | "meeting";
+                objectId: string;
+                materialId: string;
+                annotationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideMaterialAnnotationRequest"];
+            };
+        };
+        responses: {
+            /** @description 处理后的批注 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMaterialAnnotationResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    restoreMaterialRemoved: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task" | "meeting";
+                objectId: string;
+                materialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreMaterialRemovedRequest"];
+            };
+        };
+        responses: {
+            /** @description 恢复后的最新详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decideMaterialEditProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                objectType: "issue" | "task" | "meeting";
+                objectId: string;
+                materialId: string;
+                proposalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideMaterialEditProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description 处理后的最新详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     downloadMaterial: {
         parameters: {
             query?: never;
@@ -8757,6 +11470,108 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readOAuthConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 授权信息 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthConsentResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decideOAuthConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthConsentRequest"];
+            };
+        };
+        responses: {
+            /** @description 返回工具的回调地址 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthConsentDecisionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9324,6 +12139,275 @@ export interface operations {
         };
         responses: {
             /** @description 更新后的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    acceptMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptMyTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 已完成的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    draftMyTaskAcceptance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 验收草稿 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAcceptanceDraft"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    clearMyTaskSubmission: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 更新后的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    reopenMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReopenMyTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 重新打开的执行事项 */
             200: {
                 headers: {
                     [name: string]: unknown;

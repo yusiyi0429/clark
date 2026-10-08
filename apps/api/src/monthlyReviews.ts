@@ -3,9 +3,9 @@ import type { Pool, PoolClient, QueryResult } from "pg";
 import type {
   TActionDescriptor,
   TMonthlyPlanBattlefield,
-  TMonthlyPlanCapability,
   TMonthlyReviewAssessment,
   TMonthlyReviewComment,
+  TMonthlyReviewConfirmationSource,
   TMonthlyReviewDecideLtcoInput,
   TMonthlyReviewField,
   TMonthlyReviewItemPayload,
@@ -26,6 +26,9 @@ import type {
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import type { MemoryPerson } from "./companyMemory.js";
+import { ltoWindow } from "./monthlyCycle.js";
+import { redraftPlanAfterReview } from "./monthlyPlans.js";
+import { ensurePersonalReviewsInTransaction, personalReviewHref, type PersonalReviewDraftRun, type PersonalReviewRow } from "./personalReviews.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -65,6 +68,8 @@ export type MonthlyReviewRow = {
   version: number;
   period: string;
   status: TMonthlyReviewStatus;
+  /** import：飞书导入的复盘，复盘项起草后直接确认（只影响这一轮）。 */
+  origin: "import" | null;
   summary: StoredReviewSummary;
   ltco_suggestion: TMonthlyReviewLtcoSuggestion | null;
   ltco_decision: StoredLtcoDecision | null;
@@ -84,7 +89,7 @@ export type MonthlyReviewItemRecord = {
   owner_unassigned: boolean;
   target: string | null;
   status: TMonthlyReviewItemStatus;
-  draft_run: { runId: string | null; error: GenerationError };
+  draft_run: { runId: string | null; error: GenerationError; suggestions?: boolean };
   self_review: TMonthlyReviewSelfReview | null;
   suggestions: TMonthlyReviewSuggestion[];
   return_reason: string | null;
@@ -92,6 +97,7 @@ export type MonthlyReviewItemRecord = {
   history: StoredHistoryEntry[];
   submitted_at: Date | null;
   confirmed_at: Date | null;
+  confirmation_source: TMonthlyReviewConfirmationSource;
   action_fingerprints: string[];
   created_at: Date;
   updated_at: Date;
@@ -103,11 +109,11 @@ export type MonthlyReviewItemRecord = {
 
 export type ReviewViewer = { personId: string; role: string };
 
-const REVIEW_COLUMNS = "id, version, period, status, summary, ltco_suggestion, ltco_decision, action_fingerprints, created_at, updated_at";
+const REVIEW_COLUMNS = "id, version, period, status, origin, summary, ltco_suggestion, ltco_decision, action_fingerprints, created_at, updated_at";
 const ITEM_COLUMNS = [
   "id", "review_id", "version", "subject_type", "subject_id", "owner_id", "owner_unassigned", "target", "status", "draft_run",
-  "self_review", "suggestions", "return_reason", "assessment", "history", "submitted_at", "confirmed_at", "action_fingerprints",
-  "created_at", "updated_at",
+  "self_review", "suggestions", "return_reason", "assessment", "history", "submitted_at", "confirmed_at", "confirmation_source",
+  "action_fingerprints", "created_at", "updated_at",
 ];
 const ITEM_SELECT = `SELECT ${ITEM_COLUMNS.map((column) => `i.${column}`).join(", ")}, r.period,
        COALESCE(b.code, cap.code, '') AS subject_code,
@@ -184,7 +190,7 @@ export async function readLtco(q: Query): Promise<string> {
 
 export async function listMonthlyReviewUnits(q: Query): Promise<TMonthlyReviewPayload["ltco"]["units"]> {
   const units: TMonthlyReviewPayload["ltco"]["units"] = [];
-  for (const [table, subjectType] of [["battlefield_config", "battlefield"], ["capability_config", "capability"]] as const) {
+  for (const [table, subjectType] of [["battlefield_config", "battlefield"]] as const) {
     const rows = (await q(`SELECT id, code, name, six_month_outcome FROM ${table} ORDER BY sort_order, code, id`)).rows;
     for (const row of rows) units.push({ subjectType, subjectId: row.id as string, subjectCode: row.code as string,
       subjectName: row.name as string, current: row.six_month_outcome as string });
@@ -325,6 +331,7 @@ export function projectMonthlyReviewItem(
     participantNames: participantIds.map((id) => people.get(id) ?? id),
     submittedAt: row.submitted_at?.toISOString() ?? null,
     confirmedAt: row.confirmed_at?.toISOString() ?? null,
+    confirmationSource: row.confirmation_source,
     viewer: { isOwner, isCeo, isParticipant, canComment: row.status !== "confirmed" },
     conversationScope: `monthly-review-item:${row.id}`,
     actions,
@@ -342,6 +349,7 @@ function projectItemRow(row: MonthlyReviewItemRecord, people: Map<string, string
     ownerName: people.get(row.owner_id) ?? row.owner_id,
     ownerUnassigned: row.owner_unassigned,
     status: row.status,
+    confirmationSource: row.confirmation_source,
     lead: leadOf(row.self_review),
     assessmentStatus: row.assessment.status,
     assessmentOverall: row.assessment.result?.overall ?? null,
@@ -371,7 +379,7 @@ export function projectMonthlyReview(
   } else if (row.status === "summarizing" && row.summary.status === "failed") {
     actions.push(action("monthly-review.retry_summary", "重新生成"));
   } else if (row.status === "ltco_pending") {
-    actions.push(action("monthly-review.decide_ltco", "决定 LTCO"));
+    actions.push(action("monthly-review.decide_ltco", "决定 LTO"));
   }
   const decision = row.ltco_decision;
   return {
@@ -398,8 +406,9 @@ export function projectMonthlyReview(
     },
     ltco: {
       current: ltcoCurrent,
-      units,
-      suggestion: row.ltco_suggestion,
+      window: ltoWindow(row.period),
+      units: units.filter((unit) => unit.subjectType === "battlefield"),
+      suggestion: row.ltco_suggestion ? { ...row.ltco_suggestion, units: row.ltco_suggestion.units.filter((unit) => unit.subjectType === "battlefield") } : null,
       decision: decision
         ? { decision: decision.decision, ltcoBefore: decision.ltcoBefore, ltcoAfter: decision.ltcoAfter, units: decision.units ?? [], decidedAt: decision.decidedAt, planExisted: decision.planExisted }
         : null,
@@ -408,69 +417,19 @@ export function projectMonthlyReview(
   };
 }
 
-export type MonthlyReviewCreation = { created: boolean; reviewId: string; itemRuns: { itemId: string; runId: string }[] };
+export type MonthlyReviewCreation = { created: boolean; reviewId: string; itemRuns: { itemId: string; runId: string }[]; personalRuns: PersonalReviewDraftRun[] };
 
 /**
- * 为 period 建复盘和全部复盘项（每个战场、能力域各一项，状态 drafting）；已存在时返回现有复盘。
+ * 为 period 建复盘和战场复盘项；已存在时返回现有复盘。
  * 注册表负责人为空时挂到 CEO 名下；target 取被复盘月份已签发计划里这一项的 PCO。
  */
 export async function createMonthlyReview(pool: Pool, period: string, now: Date, people: MemoryPerson[]): Promise<MonthlyReviewCreation> {
-  const at = now.toISOString();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["monthly-review:create"]);
-    const reviewId = randomUUID();
-    const summary: StoredReviewSummary = { status: "none", runId: null, error: null, overall: "", judgments: [], nextFocus: [], confirmedAt: null, confirmedBy: null };
-    const inserted = await client.query(
-      `INSERT INTO monthly_reviews (id, version, period, status, summary, created_at, updated_at)
-       VALUES ($1, 1, $2, 'collecting', $3::jsonb, $4, $4)
-       ON CONFLICT (period) DO NOTHING RETURNING id`,
-      [reviewId, period, JSON.stringify(summary), at],
-    );
-    if (inserted.rowCount !== 1) {
-      const existing = await client.query("SELECT id FROM monthly_reviews WHERE period = $1", [period]);
-      await client.query("COMMIT");
-      return { created: false, reviewId: existing.rows[0].id as string, itemRuns: [] };
-    }
-    const ceo = people.find((person) => person.roles.includes("ceo"))?.personId;
-    const plan = (await client.query(
-      "SELECT battlefields, capabilities FROM monthly_plans WHERE period = $1 AND status = 'confirmed'",
-      [period],
-    )).rows[0] as { battlefields: TMonthlyPlanBattlefield[]; capabilities: TMonthlyPlanCapability[] } | undefined;
-    const battlefields = (await client.query("SELECT id, owner_id FROM battlefield_config ORDER BY sort_order, code, id")).rows as { id: string; owner_id: string }[];
-    const capabilities = (await client.query("SELECT id, owner_id FROM capability_config ORDER BY sort_order, code, id")).rows as { id: string; owner_id: string }[];
-    const subjects = [
-      ...battlefields.map((row) => ({
-        type: "battlefield" as const, ...row,
-        target: plan?.battlefields.find((item) => item.battlefieldId === row.id)?.outcome ?? null,
-      })),
-      ...capabilities.map((row) => ({
-        type: "capability" as const, ...row,
-        target: plan?.capabilities.find((item) => item.capabilityId === row.id)?.outcome ?? null,
-      })),
-    ];
-    const itemRuns: MonthlyReviewCreation["itemRuns"] = [];
-    for (const subject of subjects) {
-      const owner = subject.owner_id || ceo;
-      if (!owner) throw new Error("company-people.v1 没有 CEO，无法为待指派的复盘项指定负责人");
-      const itemId = randomUUID();
-      const runId = randomUUID();
-      await client.query(
-        `INSERT INTO monthly_review_items
-           (id, review_id, version, subject_type, subject_id, owner_id, owner_unassigned, target, status, draft_run, assessment, created_at, updated_at)
-         VALUES ($1, $2, 1, $3, $4, $5, $6, $7, 'drafting', $8::jsonb, $9::jsonb, $10, $10)`,
-        [
-          itemId, reviewId, subject.type, subject.id, owner, !subject.owner_id, subject.target,
-          JSON.stringify({ runId, error: null }),
-          JSON.stringify({ status: "none", runId: null, result: null, error: null }),
-          at,
-        ],
-      );
-      itemRuns.push({ itemId, runId });
-    }
+    const creation = await createMonthlyReviewInTransaction(client.query.bind(client), period, now, people);
     await client.query("COMMIT");
-    return { created: true, reviewId, itemRuns };
+    return creation;
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;
@@ -479,11 +438,65 @@ export async function createMonthlyReview(pool: Pool, period: string, now: Date,
   }
 }
 
+/** createMonthlyReview 的事务内版本：导入复盘的 CLI 在同一个事务里接着写。 */
+export async function createMonthlyReviewInTransaction(q: Query, period: string, now: Date, people: MemoryPerson[]): Promise<MonthlyReviewCreation> {
+  const at = now.toISOString();
+  await q("SELECT pg_advisory_xact_lock(hashtext($1))", ["monthly-review:create"]);
+  const reviewId = randomUUID();
+  const summary: StoredReviewSummary = { status: "none", runId: null, error: null, overall: "", judgments: [], nextFocus: [], confirmedAt: null, confirmedBy: null };
+  const inserted = await q(
+    `INSERT INTO monthly_reviews (id, version, period, status, summary, created_at, updated_at)
+     VALUES ($1, 1, $2, 'collecting', $3::jsonb, $4, $4)
+     ON CONFLICT (period) DO NOTHING RETURNING id`,
+    [reviewId, period, JSON.stringify(summary), at],
+  );
+  if (inserted.rowCount !== 1) {
+    const existing = await q("SELECT id FROM monthly_reviews WHERE period = $1", [period]);
+    const personalRuns = await ensurePersonalReviewsInTransaction(q, existing.rows[0].id, people, now);
+    return { created: false, reviewId: existing.rows[0].id as string, itemRuns: [], personalRuns };
+  }
+  const ceo = people.find((person) => person.roles.includes("ceo"))?.personId;
+  const personalRuns = await ensurePersonalReviewsInTransaction(q, reviewId, people, now);
+  const plan = (await q(
+    "SELECT battlefields FROM monthly_plans WHERE period = $1 AND status = 'confirmed'",
+    [period],
+  )).rows[0] as { battlefields: TMonthlyPlanBattlefield[] } | undefined;
+  const battlefields = (await q("SELECT id, owner_id FROM battlefield_config ORDER BY sort_order, code, id")).rows as { id: string; owner_id: string }[];
+  const subjects = battlefields.map((row) => ({
+    type: "battlefield" as const, ...row,
+    target: plan?.battlefields.find((item) => item.battlefieldId === row.id)?.outcome ?? null,
+  }));
+  const itemRuns: MonthlyReviewCreation["itemRuns"] = [];
+  for (const subject of subjects) {
+    const owner = subject.owner_id || ceo;
+    if (!owner) throw new Error("company-people.v1 没有 CEO，无法为待指派的复盘项指定负责人");
+    const itemId = randomUUID();
+    const runId = randomUUID();
+    const waiting = !!(await q(`SELECT 1 FROM missions m JOIN personal_reviews p ON p.person_id=m.owner_id AND p.monthly_review_id=$1
+      WHERE m.period=$2 AND m.battlefield_ids @> jsonb_build_array($3::text) LIMIT 1`,
+    [reviewId, period, subject.id])).rowCount;
+    await q(
+      `INSERT INTO monthly_review_items
+         (id, review_id, version, subject_type, subject_id, owner_id, owner_unassigned, target, status, draft_run, assessment, created_at, updated_at)
+       VALUES ($1, $2, 1, $3, $4, $5, $6, $7, $11, $8::jsonb, $9::jsonb, $10, $10)`,
+      [
+        itemId, reviewId, subject.type, subject.id, owner, !subject.owner_id, subject.target,
+        JSON.stringify({ runId: waiting ? null : runId, error: null }),
+        JSON.stringify({ status: "none", runId: null, result: null, error: null }),
+        at, waiting ? "waiting" : "drafting",
+      ],
+    );
+    if (!waiting) itemRuns.push({ itemId, runId });
+  }
+  return { created: true, reviewId, itemRuns, personalRuns };
+}
+
 export type MonthlyReviewEffect =
   | { type: "draft"; itemId: string; runId: string }
   | { type: "assess"; itemId: string; runId: string }
   | { type: "summary"; reviewId: string; runId: string }
-  | { type: "next_plan"; period: string };
+  | { type: "next_plan"; period: string }
+  | { type: "plan_draft"; planId: string; runId: string };
 export type MonthlyReviewActionError = { status: number; code: string; message: string; fieldErrors?: Record<string, string> };
 export type MonthlyReviewActionOutcome =
   | { ok: true; effects: MonthlyReviewEffect[] }
@@ -517,6 +530,9 @@ async function withLock<R extends { version: number; action_fingerprints: string
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // 与个人复盘交齐衔接采用相同锁序，避免确认单元时与交齐互相等待。
+    if (table === "monthly_review_items") await client.query(
+      "SELECT id FROM monthly_reviews WHERE id=(SELECT review_id FROM monthly_review_items WHERE id=$1) FOR UPDATE", [id]);
     const found = await client.query(`SELECT * FROM ${table} WHERE id = $1 FOR UPDATE`, [id]);
     const row = found.rows[0] as R | undefined;
     if (!row) {
@@ -624,18 +640,8 @@ export async function executeMonthlyReviewItemAction(
         case "monthly-review-item.confirm": {
           if (!isCeo) return forbidden("只有 CEO 可以确认复盘");
           if (row.status !== "submitted") return notEditable();
-          await write("status = 'confirmed', confirmed_at = $4, history = $5::jsonb", [at, history("confirm", null)]);
-          // 同一事务里看全部项：最后一项确认后复盘进入 summarizing 并启动汇总
-          const review = (await client.query("SELECT status FROM monthly_reviews WHERE id = $1 FOR UPDATE", [row.review_id])).rows[0] as { status: string };
-          const pending = await client.query("SELECT 1 FROM monthly_review_items WHERE review_id = $1 AND status <> 'confirmed' LIMIT 1", [row.review_id]);
-          if (review.status !== "collecting" || pending.rowCount !== 0) return { ok: true, effects: [] };
-          const runId = randomUUID();
-          const summary: StoredReviewSummary = { status: "running", runId, error: null, overall: "", judgments: [], nextFocus: [], confirmedAt: null, confirmedBy: null };
-          await client.query(
-            "UPDATE monthly_reviews SET status = 'summarizing', summary = $2::jsonb, version = version + 1, updated_at = $3 WHERE id = $1",
-            [row.review_id, JSON.stringify(summary), at],
-          );
-          return { ok: true, effects: [{ type: "summary", reviewId: row.review_id, runId }] };
+          await write("status = 'confirmed', confirmed_at = $4, confirmation_source = 'ceo', history = $5::jsonb", [at, history("confirm", null)]);
+          return { ok: true, effects: await advanceMonthlyReviewIfReady(client.query.bind(client), row.review_id, now) };
         }
         case "monthly-review-item.retry_draft": {
           if (!isOwner && !isCeo) return forbidden("只有负责人或 CEO 可以重新起草");
@@ -655,6 +661,50 @@ export async function executeMonthlyReviewItemAction(
           return reviewError(404, "UNKNOWN_ACTION", "无效 actionId");
       }
     });
+}
+
+/**
+ * 个人复盘已交齐、单元已全确认才汇总；也覆盖部署前已确认的单元。调用方在事务内。
+ * 导入的复盘里，有当月 Mission 的能力域项（导入时建的那几项）也要确认完。
+ */
+export async function advanceMonthlyReviewIfReady(q: Query, reviewId: string, now: Date): Promise<MonthlyReviewEffect[]> {
+  const review = (await q("SELECT status FROM monthly_reviews WHERE id=$1 FOR UPDATE", [reviewId])).rows[0];
+  if (review?.status !== "collecting") return [];
+  const pending = await q(`SELECT 1 FROM monthly_review_items i JOIN monthly_reviews r ON r.id=i.review_id
+    WHERE i.review_id=$1 AND i.status<>'confirmed' AND (i.subject_type='battlefield'
+      OR r.origin='import' AND EXISTS (SELECT 1 FROM missions m WHERE m.period=r.period AND m.capability_id=i.subject_id))
+    UNION ALL SELECT 1 FROM personal_reviews WHERE monthly_review_id=$1 AND status NOT IN ('submitted','skipped') LIMIT 1`, [reviewId]);
+  if (pending.rowCount) return [];
+  const runId = randomUUID();
+  const summary: StoredReviewSummary = { status: "running", runId, error: null, overall: "", judgments: [], nextFocus: [], confirmedAt: null, confirmedBy: null };
+  await q("UPDATE monthly_reviews SET status='summarizing',summary=$2::jsonb,version=version+1,updated_at=$3 WHERE id=$1",
+    [reviewId, JSON.stringify(summary), now]);
+  return [{ type: "summary", reviewId, runId }];
+}
+
+/**
+ * 导入的复盘：起草成功直接确认，来源 import、不记确认人，不走负责人提交和 CEO 确认；随后看能否汇总。
+ * 锁序与其他动作相同（先复盘后复盘项）；按 runId 条件写回，旧 run 不覆盖。
+ */
+export async function confirmImportedDraft(pool: Pool, reviewId: string, itemId: string, runId: string,
+  selfReview: TMonthlyReviewSelfReview, now: Date): Promise<MonthlyReviewEffect[]> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT id FROM monthly_reviews WHERE id=$1 FOR UPDATE", [reviewId]);
+    const confirmed = await client.query(`UPDATE monthly_review_items
+        SET status='confirmed', self_review=$3::jsonb, confirmed_at=$4, confirmation_source='import',
+            draft_run=jsonb_build_object('runId', $2::text, 'error', NULL), version=version+1, updated_at=$4
+      WHERE id=$1 AND status='drafting' AND draft_run->>'runId'=$2`, [itemId, runId, JSON.stringify(selfReview), now]);
+    const effects = confirmed.rowCount ? await advanceMonthlyReviewIfReady(client.query.bind(client), reviewId, now) : [];
+    await client.query("COMMIT");
+    return effects;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /** 复盘级动作（只有 CEO）：公司复盘的编辑、重生成、确认，以及 LTCO 决定。 */
@@ -706,27 +756,30 @@ export async function executeMonthlyReviewAction(
           const units: StoredLtcoDecision["units"] = [];
           if (decisionInput.decision === "revise") {
             for (const unit of decisionInput.units ?? []) {
-              const table = unit.subjectType === "battlefield" ? "battlefield_config" : "capability_config";
-              const current = (await client.query(`SELECT six_month_outcome FROM ${table} WHERE id = $1 FOR UPDATE`, [unit.subjectId])).rows[0] as { six_month_outcome: string } | undefined;
+              if (unit.subjectType !== "battlefield") return reviewError(400, "INVALID_SUBJECT", "LTO 审视只包含公司与战场，能力域目标保持原样");
+              const current = (await client.query("SELECT six_month_outcome FROM battlefield_config WHERE id = $1 FOR UPDATE", [unit.subjectId])).rows[0] as { six_month_outcome: string } | undefined;
               if (!current) return reviewError(400, "INVALID_SUBJECT", "长期目标对应的单元不存在");
               if (current.six_month_outcome === unit.sixMonthOutcome) continue;
-              await client.query(`UPDATE ${table} SET six_month_outcome = $2, version = version + 1${unit.subjectType === "battlefield" ? ", updated_at = $3" : ""} WHERE id = $1`,
-                unit.subjectType === "battlefield" ? [unit.subjectId, unit.sixMonthOutcome, at] : [unit.subjectId, unit.sixMonthOutcome]);
+              await client.query("UPDATE battlefield_config SET six_month_outcome = $2 WHERE id = $1", [unit.subjectId, unit.sixMonthOutcome]);
               units.push({ subjectType: unit.subjectType, subjectId: unit.subjectId, before: current.six_month_outcome, after: unit.sixMonthOutcome });
             }
             if (ltcoAfter === ltcoBefore && units.length === 0) return reviewError(400, "LTCO_NOTHING_CHANGED", "修订内容和现在一样；不改请选保持不变");
             if (ltcoAfter !== ltcoBefore) await client.query(
-              "UPDATE company_strategy_config SET ltco = $1, version = version + 1, updated_at = $2 WHERE id = 'default'",
-              [ltcoAfter, at],
+              "UPDATE company_strategy_config SET ltco = $1 WHERE id = 'default'",
+              [ltcoAfter],
             );
           }
           const next = nextPeriod(row.period);
-          const planExisted = (await client.query("SELECT 1 FROM monthly_plans WHERE period = $1", [next])).rowCount === 1;
+          await client.query("UPDATE company_strategy_config SET lto_window_start=$1,version=version+1,updated_at=$2 WHERE id='default'", [next, at]);
+          await client.query("UPDATE battlefield_config SET lto_window_start=$1,version=version+1,updated_at=$2", [next, at]);
+          const plan = await redraftPlanAfterReview(client.query.bind(client), next, at);
+          const planExisted = plan !== null && plan.runId === null;
           const decision: StoredLtcoDecision = {
             decision: decisionInput.decision, ltcoBefore, ltcoAfter, units, decidedAt: at, decidedBy: viewer.personId, planExisted,
           };
           await write("status = 'closed', ltco_decision = $4::jsonb", [JSON.stringify(decision)]);
-          return { ok: true, effects: planExisted ? [] : [{ type: "next_plan", period: next }] };
+          return { ok: true, effects: !plan ? [{ type: "next_plan", period: next }]
+            : plan.runId ? [{ type: "plan_draft", planId: plan.planId, runId: plan.runId }] : [] };
         }
         default:
           return reviewError(404, "UNKNOWN_ACTION", "无效 actionId");
@@ -785,31 +838,30 @@ export async function listMonthlyReviewNotices(q: Query, viewer: ReviewViewer): 
   const notices: TMonthlyReviewNotice[] = [];
   for (const review of reviews) {
     const month = monthLabel(review.period);
+    const personal = (await q("SELECT * FROM personal_reviews WHERE monthly_review_id=$1 AND person_id=$2 AND status NOT IN ('submitted','skipped')", [review.id, viewer.personId])).rows[0] as PersonalReviewRow | undefined;
+    if (personal) {
+      const text = personal.status === "drafting" ? "Co-Agent 起草中" : personal.status === "draft_failed" ? "起草失败，重试"
+        : personal.status === "draft" ? "草稿待你确认提交" : "写你的个人复盘";
+      notices.push({ id: `personal-review:${personal.id}:todo`, kind: "personal_todo", period: review.period,
+        text: `${month}复盘 · ${text}`, href: personalReviewHref(personal.id, isCeo), createdAt: personal.updated_at.toISOString() });
+    }
     const items = await listMonthlyReviewItems(q, review.id);
     for (const item of items) {
-      if (item.owner_id !== viewer.personId || !["drafting", "draft", "returned", "draft_failed"].includes(item.status)) continue;
+      // 导入的复盘不走负责人提交：负责人没有待办
+      if (item.subject_type !== "battlefield" || review.origin === "import") continue;
+      if (item.owner_id !== viewer.personId || !["waiting", "drafting", "draft", "returned", "draft_failed"].includes(item.status)) continue;
       const subject = [item.subject_code, item.subject_name].filter(Boolean).join(" ");
       notices.push({
         id: `monthly-review-item:${item.id}:todo`,
         kind: "item_todo",
         period: review.period,
-        text: item.status === "returned" ? `${month}复盘被打回 · ${subject}` : `${month}复盘待你完成 · ${subject}`,
+        text: item.status === "waiting" ? `${month}复盘 · 等大家交个人复盘 · ${subject}` : item.status === "returned" ? `${month}复盘被打回 · ${subject}` : `${month}复盘待你完成 · ${subject}`,
         href: isCeo ? `/reviews/items/${item.id}` : `/me/reviews/items/${item.id}`,
         createdAt: item.updated_at.toISOString(),
       });
     }
-    for (const item of items) {
-      if (item.status === "confirmed" || !(await monthlyReviewParticipantIds(q, item)).includes(viewer.personId)) continue;
-      const subject = [item.subject_code, item.subject_name].filter(Boolean).join(" ");
-      notices.push({
-        id: `monthly-review-item:${item.id}:participant`, kind: "item_participant", period: review.period,
-        text: `${month}复盘 · ${subject} · 邀请你讨论补充`,
-        href: isCeo ? `/reviews/items/${item.id}` : `/me/reviews/items/${item.id}`,
-        createdAt: item.created_at.toISOString(),
-      });
-    }
     if (!isCeo) continue;
-    const submitted = items.filter((item) => item.status === "submitted");
+    const submitted = items.filter((item) => item.subject_type === "battlefield" && item.status === "submitted");
     if (submitted.length > 0) {
       notices.push({
         id: `monthly-review:${review.id}:items`,
@@ -829,7 +881,7 @@ export async function listMonthlyReviewNotices(q: Query, viewer: ReviewViewer): 
     if (review.status === "ltco_pending") {
       notices.push({
         id: `monthly-review:${review.id}:ltco`, kind: "ltco_pending", period: review.period,
-        text: `${month}复盘已完成 · 待决定 LTCO`, href: `/reviews/${review.period}/ltco`, createdAt: review.updated_at.toISOString(),
+        text: `${month}复盘已完成 · 待决定 LTO`, href: `/reviews/${review.period}/ltco`, createdAt: review.updated_at.toISOString(),
       });
     }
   }

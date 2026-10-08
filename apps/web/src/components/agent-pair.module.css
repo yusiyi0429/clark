@@ -1,0 +1,13 @@
+.pair{display:flex;align-items:center;justify-content:center}
+.tile{display:grid;place-items:center;width:60px;height:60px;border-radius:18px;background:#fff;border:1px solid #e7e9ee;box-shadow:0 1px 2px #17191e0a,0 8px 20px -12px #17191e26}
+.mark{width:32px;height:32px}.raster{width:32px;height:32px;object-fit:contain}
+.claude{width:32px;height:32px;fill:#d97757}
+.other{width:28px;height:28px;fill:none;stroke:#17191e;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.link{position:relative;width:64px;height:1px;background:repeating-linear-gradient(90deg,#c9ccd3 0 4px,transparent 4px 8px)}
+.dot{position:absolute;left:50%;top:50%;translate:-50% -50%;display:grid;place-items:center;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 1.5px #c9ccd3}
+.dot svg{width:12px;height:12px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pair[data-connected] .link{background:#17191e}
+.pair[data-connected] .dot{width:22px;height:22px;background:#17191e;box-shadow:0 0 0 4px #fff;animation:pop .4s cubic-bezier(.2,1.4,.4,1)}
+@keyframes pop{from{transform:scale(.3)}to{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.pair[data-connected] .dot{animation:none}}
+@media(max-width:360px){.tile{width:52px;height:52px;border-radius:16px}.link{width:44px}}

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import {
-  ExecuteMissionRoundActionRequest, MissionCardField, MissionRoundDraftPayload, MissionRoundSummary,
+  ExecuteMissionRoundActionRequest, MissionCardField, MissionRoundSummary,
   CreateMissionRequest, MissionEditInput, MissionCardPayload,
   ConversationScope, CreateMissionCardFeedbackRequest, MissionCardGroupView, MarkMissionCardReadRequest,
   MissionRoundDecideInput, MissionRoundConfirmInput, MissionCardFeedbackView,
   CreateMissionCardCorrectionRequest, DecideMissionCardCorrectionRequest, MissionCardCorrectionView, PersonalMissionCardPayload,
+  SetMissionCardOwnerConfirmationRequest, ResolveMissionCardAnnotationRequest, CreateMissionCardAnnotationRequest,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -14,11 +15,30 @@ const summary = {
   roundId: "round-1", period: "2026-10", battlefieldId: "growth", battlefieldName: "增长", version: 1,
   phase: "draft", round: 1, openedAt: null, closesAt: null, reviewAt: null, serverNow: now,
   approver: true, deciderName: "拍板人", todo: "可以统一开放讨论", placeholder: true, draftOrigin: "placeholder", goals: null,
-  counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 1, late: 0, corrections: 0 },
-  cards: [{ cardId: "card-1", ownerId: "owner", ownerName: "Owner", roleLabel: null, missionCount: 2, line: "未开放", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: false, placeholder: true }],
+  draftFailures: [], retryDraftAction: null,
+  counts: { cards: 1, feedback: 0, pending: 0, conflicts: 0, dependencies: 1, late: 0, corrections: 0, unreviewed: 1 },
+  cards: [{ cardId: "card-1", ownerId: "owner", ownerName: "Owner", roleLabel: null, missionCount: 2, line: "未开放", pending: 0, firstPendingFeedbackId: null, pendingCorrections: 0, firstPendingCorrectionId: null, mine: false, placeholder: true, ownerConfirmedAt: null }],
 };
 
 describe("Mission round contracts", () => {
+  it("requires the reviewed generation and mission versions, and a reason for retained notes", () => {
+    const confirmation = { confirmed: true, round: 2, missionVersions: { "mission-1": 3 } };
+    expect(Value.Check(SetMissionCardOwnerConfirmationRequest, confirmation)).toBe(true);
+    for (const invalid of [{ round: 0 }, { missionVersions: { "mission-1": 0 } }, { ownerId: "forged" }]) {
+      expect(Value.Check(SetMissionCardOwnerConfirmationRequest, { ...confirmation, ...invalid })).toBe(false);
+    }
+    expect(Value.Check(SetMissionCardOwnerConfirmationRequest, { confirmed: true, round: 2 })).toBe(false);
+    expect(Value.Check(CreateMissionCardAnnotationRequest.properties.sourceRound, 2)).toBe(true);
+    expect(Value.Check(CreateMissionCardAnnotationRequest.properties.sourceRound, 0)).toBe(false);
+    expect(CreateMissionCardAnnotationRequest.required).toContain("sourceRound");
+    expect(Value.Check(ResolveMissionCardAnnotationRequest, { reason: "等待材料，保留意见供最终审核。" })).toBe(true);
+    for (const invalid of [{ reason: "" }, { reason: " \n\t " }, { reason: "字".repeat(1001) }, { reason: "保留", resolvedBy: "forged" }]) {
+      expect(Value.Check(ResolveMissionCardAnnotationRequest, invalid)).toBe(false);
+    }
+    const doc = buildOpenApiDocument();
+    expect(doc.paths["/api/mission-cards/{cardId}/owner-confirmation"]?.post.responses?.["409"]).toBeDefined();
+    expect(doc.paths["/api/mission-cards/{cardId}/annotations/{annotationId}/resolve"]?.post.responses?.["403"]).toBeDefined();
+  });
   it("bounds review decisions and requires a substantive collaboration conclusion", () => {
     for (const decision of ["accept", "decline"]) expect(Value.Check(MissionRoundDecideInput, { decision })).toBe(true);
     for (const invalid of [{ decision: "later" }, { decision: "accept", authorId: "forged" }, {}]) expect(Value.Check(MissionRoundDecideInput, invalid)).toBe(false);
@@ -58,7 +78,6 @@ describe("Mission round contracts", () => {
     expect(doc.paths["/api/mission-rounds/actions/execute"]?.post.responses?.["403"]).toBeDefined();
     expect(doc.paths["/api/mission-rounds/actions/execute"]?.post.responses?.["409"]).toBeDefined();
     expect(doc.components.schemas.MissionRoundSummary).toBeDefined();
-    expect(doc.components.schemas.MissionRoundDraftPayload).toBeDefined();
     for (const path of ["/api/mission-cards/{cardId}", "/api/mission-cards/{cardId}/feedback", "/api/mission-cards/{cardId}/group", "/api/mission-cards/{cardId}/group/read"]) expect(doc.paths[path]).toBeDefined();
     expect(doc.components.schemas.PersonalMissionCardPayload).toBeDefined();
   });
@@ -101,10 +120,7 @@ describe("Mission round contracts", () => {
     expect(Value.Check(personalCard, { cardId: "card", roundId: "round", status: "closed" })).toBe(false);
   });
 
-  it("describes a draft slot without inventing a persisted round or personal card", () => {
-    const draft = { period: "2026-10", battlefieldId: "growth", battlefieldName: "增长", placeholder: true, todo: "整理个人卡草稿", serverNow: now };
-    expect(Value.Check(MissionRoundDraftPayload, draft)).toBe(true);
-    expect(Value.Check(MissionRoundDraftPayload, { ...draft, roundId: "invented" })).toBe(false);
+  it("accepts a signed action with optional input and viewed card, never an actor", () => {
     expect(Value.Check(ExecuteMissionRoundActionRequest, { actionId: "signed", viewCardId: "card-1" })).toBe(true);
     expect(Value.Check(ExecuteMissionRoundActionRequest, { actionId: "signed", input: {} })).toBe(true);
     expect(Value.Check(ExecuteMissionRoundActionRequest, { actionId: "signed", actorId: "another" })).toBe(false);

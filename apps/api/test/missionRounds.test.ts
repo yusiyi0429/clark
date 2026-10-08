@@ -6,16 +6,17 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { MissionRoundSummary, type TCard, type TMissionRoundSummary } from "@warmap/contracts";
-import { actionFingerprint, verifyActionId, type ActionScope } from "../src/actionToken.js";
+import { actionFingerprint, signActionId, verifyActionId, type ActionScope } from "../src/actionToken.js";
 import type { MemoryPerson } from "../src/companyMemory.js";
 import { migrate } from "../src/migrate.js";
 import {
   canApprove, missionCardMembers, getMissionRoundCard, listMissionRoundCards,
-  executeOpenMissionRound, executeReopenMissionRound, closeDueRounds,
-  importMissionCardDrafts, executeDraftMissionRound, listMissionRoundDraftCards,
-  recoverStaleMissionDrafts,
+  executeOpenMissionRound, executeCloseMissionRound, executeReopenMissionRound, closeDueRounds,
+  importMissionCardDrafts, executeDraftMissionRound, missionCardParticipants, startSignedMissionDrafts,
+  recoverStaleMissionDrafts, returnMissionCards,
 } from "../src/missionRounds.js";
-import type { MissionCardDraftAgent } from "../src/missionCardDraftAgent.js";
+import { getPersonalMissionCard, getPersonalMissionCardGroup } from "../src/personalMissionCards.js";
+import type { MissionCardDraftAgent, MissionCardDraftInput } from "../src/missionCardDraftAgent.js";
 import { createTestDb, type TestDb } from "./helpers.js";
 
 const SECRET = "mission-round-test-signing";
@@ -61,7 +62,7 @@ async function seedDraft(t: TestDb, battlefieldId = "growth"): Promise<Fixture> 
   return { roundId, planId: actualPlan, cardIds, missionIds, battlefieldId };
 }
 
-async function card(t: TestDb, f: Fixture, person: Actor = ceo, at = START): Promise<TCard> {
+async function card(t: TestDb, f: Fixture, person: Actor = dri, at = START): Promise<TCard> {
   const result = await getMissionRoundCard(t.db.query.bind(t.db), people, SECRET, person, f.roundId, at);
   expect(result).not.toBeNull();
   expect(Value.Check(MissionRoundSummary, result!.payload)).toBe(true);
@@ -72,9 +73,24 @@ function action(value: TCard, actionType: string): { scope: ActionScope; fingerp
   const token = value.actions.find((item) => item.actionType === actionType)!.actionId;
   return { scope: verifyActionId(SECRET, token)!, fingerprint: actionFingerprint(SECRET, token, {}) };
 }
-async function open(t: TestDb, f: Fixture, person: Actor = ceo, at = START) {
+function legacyCloseAction(value: TCard): { scope: ActionScope; fingerprint: string } {
+  const token = signActionId(SECRET, { actionType: "mission-round.close", objectType: "mission-round", objectId: summary(value).roundId, objectVersion: value.version });
+  return { scope: verifyActionId(SECRET, token)!, fingerprint: actionFingerprint(SECRET, token, {}) };
+}
+/** DRI 的起草入口（重试与旧入口共用）：没有首页 slot 后直接签发 growth 本月的令牌。 */
+function slotDraft(): { scope: ActionScope; fingerprint: string } {
+  const token = signActionId(SECRET, { actionType: "mission-round.draft", objectType: "mission-round-slot", objectId: "growth:2026-10", objectVersion: 1 });
+  return { scope: verifyActionId(SECRET, token)!, fingerprint: actionFingerprint(SECRET, token, {}) };
+}
+async function open(t: TestDb, f: Fixture, person: Actor = dri, at = START) {
   const request = action(await card(t, f, person, at), "mission-round.open");
   return executeOpenMissionRound(t.pool, people, SECRET, person, request.scope, request.fingerprint, () => at);
+}
+async function close(t: TestDb, f: Fixture, at: Date) {
+  // Raw repository fixtures model completed owners without running an HTTP Agent queue.
+  await t.pool.query("UPDATE personal_mission_cards SET owner_confirmed_at=$2 WHERE round_id=$1", [f.roundId, at]);
+  const request = legacyCloseAction(await card(t, f, dri, at));
+  return executeCloseMissionRound(t.pool, people, SECRET, dri, request.scope, request.fingerprint, () => at);
 }
 async function feedback(t: TestDb, f: Fixture, at: Date, late = false): Promise<string> {
   const id = randomUUID();
@@ -94,7 +110,8 @@ async function waitForRoundLock(t: TestDb): Promise<void> {
 
 describe("Mission 轮次仓储与状态机", () => {
   it("derives current approvers and persists a deduplicated member set", () => {
-    expect(canApprove(ceo, { battlefield_owner_id: "dri" })).toBe(true);
+    expect(canApprove(ceo, { battlefield_owner_id: "dri" })).toBe(false);
+    expect(canApprove(ceo, { battlefield_owner_id: "ceo" })).toBe(true);
     expect(canApprove(dri, { battlefield_owner_id: "dri" })).toBe(true);
     expect(canApprove(owner, { battlefield_owner_id: "dri" })).toBe(false);
     expect(missionCardMembers("ceo", "ceo", people)).toEqual(["ceo"]);
@@ -117,7 +134,7 @@ describe("Mission 轮次仓储与状态机", () => {
     });
   });
 
-  it("opens exactly 48 hours, freezes versioned goals, and checks authorization before conflict/replay", async () => {
+  it("opens without a deadline, freezes versioned goals, and checks authorization before conflict/replay", async () => {
     await createTestDb(async (t) => {
       await migrate(t.db); const f = await seedDraft(t);
       const initial = await card(t, f); const request = action(initial, "mission-round.open");
@@ -131,14 +148,15 @@ describe("Mission 轮次仓储与状态机", () => {
       expect(row).toMatchObject({ status: "open", version: 2, window_seq: 1 });
       expect(row.opened_at).toEqual(START);
       expect(row.first_opened_at).toEqual(START);
-      expect(row.closes_at.getTime() - row.opened_at.getTime()).toBe(HOURS_48);
+      expect(row.closes_at).toBeNull();
       expect(row.goal_snapshot).toMatchObject({ sixMonthOutcome: "冻结的六个月目标", monthOutcome: "growth本月目标", signedAt: START.toISOString(), battlefieldVersion: 7, monthlyPlanVersion: 3, monthlyPlanId: f.planId });
-      expect(await call(ceo)).toMatchObject({ replayed: true, card: { version: 2 } });
-      expect(await call(ceo, request.scope, "different-input")).toMatchObject({ conflict: true, latestCard: { version: 2 } });
-      expect(await call(ceo, { ...request.scope, objectVersion: 2 }, "repeat-open")).toMatchObject({ error: { code: "ROUND_ALREADY_OPEN" } });
+      expect(await call(ceo)).toMatchObject({ error: { status: 403, code: "ROUND_FORBIDDEN" } });
+      expect(await call(dri)).toMatchObject({ replayed: true, card: { version: 2 } });
+      expect(await call(dri, request.scope, "different-input")).toMatchObject({ conflict: true, latestCard: { version: 2 } });
+      expect(await call(dri, { ...request.scope, objectVersion: 2 }, "repeat-open")).toMatchObject({ error: { code: "ROUND_ALREADY_OPEN" } });
       expect(await call(outsider)).toMatchObject({ error: { status: 404 } });
       await t.db.query("UPDATE battlefield_config SET owner_id='outsider' WHERE id='growth'");
-      expect(await call(dri)).toMatchObject({ error: { code: "ROUND_FORBIDDEN" } });
+      expect(await call(dri)).toMatchObject({ error: { status: 404, code: "ROUND_NOT_FOUND" } });
       expect((await t.db.query("SELECT version FROM missions")).rows.every((item) => item.version === 1)).toBe(true);
     });
   });
@@ -160,7 +178,7 @@ describe("Mission 轮次仓储与状态机", () => {
     });
   });
 
-  it("reads closed without writing and snapshots only pre-deadline feedback once under concurrent schedulers", async () => {
+  it("stays open past 48 hours and snapshots pre-close feedback once under concurrent close actions", async () => {
     await createTestDb(async (t) => {
       await migrate(t.db); const f = await seedDraft(t); await open(t, f);
       const closes = new Date(START.getTime() + HOURS_48);
@@ -168,66 +186,76 @@ describe("Mission 轮次仓储与状态机", () => {
       await feedback(t, f, closes, true);
       await feedback(t, f, new Date(closes.getTime() + 1), true);
       expect(await closeDueRounds(t.pool, () => new Date(closes.getTime() - 1))).toBe(0);
-      expect(summary(await card(t, f, ceo, closes)).phase).toBe("closed");
+      expect(summary(await card(t, f, ceo, closes)).phase).toBe("open");
       expect((await t.db.query("SELECT * FROM mission_round_reviews")).rowCount).toBe(0);
-      const results = await Promise.all([closeDueRounds(t.pool, () => closes), closeDueRounds(t.pool, () => closes)]);
-      expect(results.reduce((sum, count) => sum + count, 0)).toBe(1);
+      expect(await closeDueRounds(t.pool, closes)).toBe(0);
+      const request = legacyCloseAction(await card(t, f, dri, closes));
+      const call = () => executeCloseMissionRound(t.pool, people, SECRET, dri, request.scope, request.fingerprint, () => closes);
+      expect(await executeCloseMissionRound(t.pool, people, SECRET, owner, request.scope, request.fingerprint, () => closes)).toMatchObject({ error: { code: "ROUND_FORBIDDEN" } });
+      expect(await call()).toMatchObject({ error: { code: "OWNERS_NOT_CONFIRMED" } });
+      await t.db.query("UPDATE personal_mission_cards SET owner_confirmed_at=$2 WHERE round_id=$1", [f.roundId, closes]);
+      const results = await Promise.all([call(), call()]);
+      expect(results.filter((result) => "replayed" in result && result.replayed)).toHaveLength(1);
       expect(await closeDueRounds(t.pool, closes)).toBe(0);
       const review = (await t.db.query("SELECT * FROM mission_round_reviews")).rows[0];
       expect(review.feedback_ids).toEqual([included]);
       expect(review.snapshot_at).toEqual(closes);
       expect(review.taken_at).toEqual(closes);
       expect(review.mission_versions).toEqual(Object.fromEntries(f.missionIds.map((id) => [id, 1])));
-      expect(summary(await card(t, f, ceo, closes))).toMatchObject({ phase: "reviewing", version: 3, counts: { feedback: 1, pending: 1, late: 2, dependencies: 4 } });
+      expect(summary(await card(t, f, dri, closes))).toMatchObject({ phase: "reviewing", version: 3, counts: { feedback: 0, pending: 0, conflicts: 0, dependencies: 4, unreviewed: 0 } });
     });
   });
 
-  it("reopens without replacing goals or cards, then carries decisions and includes earlier late notes", async () => {
+  it("returns only affected owners, preserving goals, cards and immutable earlier snapshots", async () => {
     await createTestDb(async (t) => {
       await migrate(t.db); const f = await seedDraft(t); await open(t, f);
       const closes = new Date(START.getTime() + HOURS_48);
       const request = { actionType: "mission-round.reopen", objectType: "mission-round", objectId: f.roundId, objectVersion: 2 };
-      expect(await executeReopenMissionRound(t.pool, people, SECRET, ceo, request, "early", () => START)).toMatchObject({ error: { code: "ROUND_NOT_CLOSED" } });
+      expect(await executeReopenMissionRound(t.pool, people, SECRET, dri, request, "early", () => START)).toMatchObject({ error: { code: "SELECT_AFFECTED_CARDS" } });
       const first = await feedback(t, f, new Date(closes.getTime() - 1));
-      await closeDueRounds(t.pool, closes);
+      await close(t, f, closes);
       const previous = (await t.db.query("SELECT * FROM mission_round_reviews")).rows[0];
-      await t.db.query("INSERT INTO mission_review_decisions (review_id,feedback_id,decision,decided_by,decided_at) VALUES ($1,$2,'accept','dri',$3)", [previous.id, first, closes]);
       await t.db.query("UPDATE mission_round_reviews SET note='旧核对结论' WHERE id=$1", [previous.id]);
       const late = await feedback(t, f, new Date(closes.getTime() + 1), true);
       await t.db.query("UPDATE battlefield_config SET six_month_outcome='新长期目标',version=8 WHERE id='growth'");
       await t.db.query("UPDATE monthly_plans SET battlefields='[]',version=4");
       const nextStart = new Date(closes.getTime() + 1000);
-      const reopen = action(await card(t, f, ceo, nextStart), "mission-round.reopen");
-      expect(await executeReopenMissionRound(t.pool, people, SECRET, owner, reopen.scope, reopen.fingerprint, () => nextStart)).toMatchObject({ error: { code: "ROUND_FORBIDDEN" } });
-      const result = await executeReopenMissionRound(t.pool, people, SECRET, dri, reopen.scope, reopen.fingerprint, () => nextStart);
+      const input = { cardIds: [f.cardIds[0]], reason: "请补齐验收证据", version: 3 };
+      expect(await returnMissionCards(t.pool, people, SECRET, owner, f.roundId, input, () => nextStart)).toMatchObject({ error: { code: "ROUND_FORBIDDEN" } });
+      const result = await returnMissionCards(t.pool, people, SECRET, dri, f.roundId, input, () => nextStart);
       expect(result).toHaveProperty("card");
       const row = (await t.db.query("SELECT * FROM mission_rounds")).rows[0];
-      expect(row).toMatchObject({ version: 4, window_seq: 2, status: "open", reopens: [{ by: "dri", at: nextStart.toISOString(), closedAt: closes.toISOString() }] });
+      expect(row).toMatchObject({ version: 4, window_seq: 2, status: "open", reopens: [{ by: "dri", at: nextStart.toISOString(), closedAt: closes.toISOString(), cardIds: input.cardIds, reason: input.reason }] });
       expect(row.goal_snapshot.monthOutcome).toBe("growth本月目标");
       expect(row.first_opened_at).toEqual(START);
       expect((await t.db.query("SELECT superseded_at FROM mission_round_reviews")).rows[0].superseded_at).toEqual(nextStart);
-      expect(await executeReopenMissionRound(t.pool, people, SECRET, dri, reopen.scope, reopen.fingerprint, () => nextStart)).toMatchObject({ replayed: true, card: { version: 4 } });
+      const stamps = (await t.db.query("SELECT owner_confirmed_at,return_reason FROM personal_mission_cards ORDER BY sort_order")).rows;
+      expect(stamps[0]).toMatchObject({ owner_confirmed_at: null, return_reason: input.reason });
+      expect(stamps[1].owner_confirmed_at).toEqual(closes);
+      expect(await returnMissionCards(t.pool, people, SECRET, dri, f.roundId, input, () => nextStart)).toMatchObject({ conflict: true, latestCard: { version: 4 } });
       const nextCloses = new Date(nextStart.getTime() + HOURS_48);
-      await closeDueRounds(t.pool, nextCloses);
+      expect(row.closes_at).toBeNull();
+      await close(t, f, nextCloses);
       const latest = (await t.db.query("SELECT * FROM mission_round_reviews ORDER BY window_seq DESC LIMIT 1")).rows[0];
       expect(latest.feedback_ids).toEqual([first, late]);
       expect(latest.note).toBeNull();
-      expect((await t.db.query("SELECT feedback_id,decision,decided_by,decided_at,carried FROM mission_review_decisions WHERE review_id=$1", [latest.id])).rows).toEqual([{ feedback_id: first, decision: "accept", decided_by: "dri", decided_at: closes, carried: true }]);
-      expect(summary(await card(t, f, ceo, nextCloses)).counts.pending).toBe(1);
+      expect((await t.db.query("SELECT * FROM mission_review_decisions WHERE review_id=$1", [latest.id])).rows).toEqual([]);
+      expect((await t.db.query("SELECT feedback_ids,note FROM mission_round_reviews WHERE id=$1", [previous.id])).rows[0]).toEqual({ feedback_ids: [first], note: "旧核对结论" });
       expect((await t.db.query("SELECT id FROM personal_mission_cards ORDER BY sort_order")).rows.map((item) => item.id)).toEqual(f.cardIds);
-      await t.db.query("UPDATE mission_rounds SET status='confirmed',confirmed_at=$1,confirmed_by='ceo'", [nextCloses]);
-      expect(await executeReopenMissionRound(t.pool, people, SECRET, ceo, { ...request, objectVersion: 5 }, "confirmed", () => nextCloses)).toMatchObject({ error: { code: "ROUND_CONFIRMED" } });
+      await t.db.query("UPDATE mission_rounds SET status='confirmed',confirmed_at=$1,confirmed_by='dri'", [nextCloses]);
+      expect(await executeReopenMissionRound(t.pool, people, SECRET, dri, { ...request, objectVersion: 5 }, "confirmed", () => nextCloses)).toMatchObject({ error: { code: "ROUND_CONFIRMED" } });
       expect(await listMissionRoundCards(t.db.query.bind(t.db), people, SECRET, ceo, "2026-10", nextCloses)).toEqual([]);
     });
   });
 
-  it("keeps two battlefields independent and commits automatic closure when an action token becomes stale", async () => {
+  it("keeps two battlefields independent after a manual close and rejects an older action", async () => {
     await createTestDb(async (t) => {
       await migrate(t.db); const one = await seedDraft(t); const two = await seedDraft(t, "another");
-      await open(t, one); await open(t, two, ceo, new Date(START.getTime() + 1000));
+      await open(t, one); await open(t, two, dri, new Date(START.getTime() + 1000));
       const at = new Date(START.getTime() + HOURS_48);
       const stale = { actionType: "mission-round.reopen", objectType: "mission-round", objectId: one.roundId, objectVersion: 2 };
-      const result = await executeReopenMissionRound(t.pool, people, SECRET, ceo, stale, "after-close", () => at);
+      await close(t, one, at);
+      const result = await executeReopenMissionRound(t.pool, people, SECRET, dri, stale, "after-close", () => at);
       expect(result).toMatchObject({ conflict: true, latestCard: { version: 3, payload: { phase: "reviewing" } } });
       expect((await t.db.query("SELECT window_seq FROM mission_round_reviews WHERE round_id=$1", [one.roundId])).rowCount).toBe(1);
       expect(summary(await card(t, two, ceo, at))).toMatchObject({ phase: "open", version: 2 });
@@ -241,12 +269,12 @@ describe("Mission 轮次仓储与状态机", () => {
       const request = action(await card(t, f), "mission-round.open");
       await t.db.query("BEGIN"); await t.db.query("SELECT id FROM mission_rounds WHERE id=$1 FOR UPDATE", [f.roundId]);
       let clockRead = false; let at = START;
-      const pending = executeOpenMissionRound(t.pool, people, SECRET, ceo, request.scope, request.fingerprint, () => { clockRead = true; return at; });
+      const pending = executeOpenMissionRound(t.pool, people, SECRET, dri, request.scope, request.fingerprint, () => { clockRead = true; return at; });
       try {
         await waitForRoundLock(t); expect(clockRead).toBe(false);
         at = new Date(START.getTime() + 10_000);
       } finally { await t.db.query("COMMIT"); }
-      const [first, replay] = await Promise.all([pending, executeOpenMissionRound(t.pool, people, SECRET, ceo, request.scope, request.fingerprint, () => at)]);
+      const [first, replay] = await Promise.all([pending, executeOpenMissionRound(t.pool, people, SECRET, dri, request.scope, request.fingerprint, () => at)]);
       expect(first).toHaveProperty("card"); expect(replay).toMatchObject({ replayed: true });
       expect((await t.db.query("SELECT opened_at,version FROM mission_rounds")).rows).toEqual([{ opened_at: at, version: 2 }]);
     });
@@ -258,9 +286,9 @@ describe("Mission 轮次仓储与状态机", () => {
       const closes = new Date(START.getTime() + HOURS_48);
       await t.db.query("BEGIN"); await t.db.query("SELECT id FROM mission_rounds WHERE id=$1 FOR SHARE", [f.roundId]);
       const contributed = await feedback(t, f, new Date(closes.getTime() - 1));
-      const closing = closeDueRounds(t.pool, () => closes);
+      const closing = close(t, f, closes);
       try { await waitForRoundLock(t); } finally { await t.db.query("COMMIT"); }
-      expect(await closing).toBe(1);
+      expect(await closing).toHaveProperty("card");
       expect((await t.db.query("SELECT feedback_ids FROM mission_round_reviews")).rows[0].feedback_ids).toEqual([contributed]);
     });
   });
@@ -275,7 +303,9 @@ describe("Mission 轮次仓储与状态机", () => {
         await waitForRoundLock(t);
         await t.db.query("UPDATE battlefield_config SET owner_id='outsider' WHERE id='growth'");
       } finally { await t.db.query("COMMIT"); }
-      expect(await pending).toMatchObject({ error: { status: 403, code: "ROUND_FORBIDDEN" } });
+      const revoked = await pending;
+      expect(revoked).toMatchObject({ error: { status: 404, code: "ROUND_NOT_FOUND" } });
+      expect(revoked).not.toHaveProperty("latestCard");
       expect((await t.db.query("SELECT status,version FROM mission_rounds")).rows).toEqual([{ status: "draft", version: 1 }]);
     });
   });
@@ -372,23 +402,14 @@ describe("讨论候选导入", () => {
     });
   });
 
-  it("offers slots only after plan sign-off and executes the signed slot with current authority", async () => {
+  it("DRI 起草入口复查当前权限；Co-Agent 未配置时不写入任何轮次", async () => {
     await createTestDb(async (t) => {
       await importRelations(t);
-      await withDraftFile(async (_file, directory) => {
-        const list = () => listMissionRoundDraftCards(t.db.query.bind(t.db), draftPeople, SECRET, ceo, "2026-10", START, directory);
-        await t.db.query("UPDATE monthly_plans SET status='draft'"); expect(await list()).toEqual([]);
-        await t.db.query("UPDATE monthly_plans SET status='confirmed'");
-        const slots = await list(); expect(slots).toHaveLength(1);
-        expect(slots[0].objectRef).toEqual({ type: "mission-round-slot", id: "growth:2026-10", version: 1 });
-        const request = action(slots[0], "mission-round.draft");
-        expect(await executeDraftMissionRound(t.pool, draftPeople, SECRET, outsider, request.scope, request.fingerprint, () => START, directory)).toMatchObject({ error: { status: 403 } });
-        const first = await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, directory);
-        expect(first).toMatchObject({ card: { kind: "mission-round", payload: { phase: "draft" } } });
-        expect(await list()).toEqual([]);
-        expect(await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, directory)).toMatchObject({ replayed: true });
-        expect((await t.db.query("SELECT action_fingerprints FROM mission_rounds")).rows[0].action_fingerprints).toEqual([request.fingerprint]);
-      });
+      const request = slotDraft();
+      expect(await executeDraftMissionRound(t.pool, draftPeople, SECRET, outsider, request.scope, request.fingerprint, () => START)).toMatchObject({ error: { status: 403 } });
+      expect(await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START)).toMatchObject({ error: { status: 503, code: "MISSION_DRAFT_AGENT_UNAVAILABLE" } });
+      expect((await t.db.query("SELECT count(*)::int AS n FROM mission_rounds")).rows[0].n).toBe(0);
+      expect((await t.db.query("SELECT count(*)::int AS n FROM missions")).rows[0].n).toBe(0);
     });
   });
 });
@@ -408,52 +429,46 @@ async function seedAgentOwners(t: TestDb) {
     VALUES ('current-sun',1,'current-sun','2026-10','本月登记任务','sun-mingze','cap-03','["growth"]','本月结果','fixture://current','current',1,'已登记')`);
 }
 const candidate = { missions: [1, 2].map((n) => ({ capabilityCode: "03", title: `起草任务 ${n}`, why: "本月目标", outcome: "待讨论结果",
+  timeBoundary: "10月内完成，具体验收日待确认", tradeoffs: "优先解决当前目标，延后无关优化",
   successEvidence: ["可核验的结果"], boundaries: "待定", keyPath: "先核对", milestones: ["10/12 核对"], resources: "待定",
   dependencies: "待定", humanAgentSplit: "人确认，Agent 辅助", risk: "待定", retrospect: "待定", basis: "签发的本月计划" })) };
 async function settledDraft(t: TestDb, roundId: string) {
   for (let attempt = 0; attempt < 200; attempt++) {
     const row = (await t.db.query("SELECT status,draft_origin FROM mission_rounds WHERE id=$1", [roundId])).rows[0];
-    if (row?.status !== "drafting") {
-      const replacement = (await t.db.query("SELECT status,draft_origin FROM mission_rounds WHERE period='2026-10'")).rows[0];
-      if (replacement?.status === "draft") return replacement;
-    }
+    if (row && row.status !== "drafting") return row;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error("Co-Agent 草稿未完成");
 }
 
 describe("Co-Agent 起草任务卡", () => {
-  it("无人且没有占位文件时给出可操作提示", async () => {
+  it("没有参与者时明确报错，不写入轮次", async () => {
     await createTestDb(async (t) => {
       await importRelations(t);
-      const directory = await mkdtemp(join(tmpdir(), "warmap-empty-drafts-"));
-      try {
-        const slot = (await listMissionRoundDraftCards(t.db.query.bind(t.db), draftPeople, SECRET, ceo, "2026-10", START, directory))[0];
-        expect(slot.payload).toMatchObject({ placeholder: true });
-        const request = action(slot, "mission-round.draft");
-        const agent: MissionCardDraftAgent = { generate: async () => { throw new Error("不应调用 Agent"); } };
-        expect(await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, directory, agent)).toMatchObject({ error: { code: "NO_DRAFT_OWNERS", message: "没有可起草的人" } });
-      } finally { await rmdir(directory); }
+      const request = slotDraft();
+      const agent: MissionCardDraftAgent = { generate: async () => { throw new Error("不应调用 Agent"); } };
+      expect(await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, undefined, agent)).toMatchObject({ error: { code: "NO_DRAFT_OWNERS" } });
+      expect((await t.db.query("SELECT count(*)::int AS n FROM mission_rounds")).rows[0].n).toBe(0);
+      expect((await t.db.query("SELECT count(*)::int AS n FROM missions")).rows[0].n).toBe(0);
     });
   });
-  it("并行逐人起草、起草中阻止重复整理，完成后保留依据并幂等", async () => {
+  it("并行逐人起草、起草中阻止重复整理，完成后自动交给本人并幂等", async () => {
     await createTestDb(async (t) => {
       await seedAgentOwners(t);
       let release!: () => void;
       const gate = new Promise<void>((resolve) => { release = resolve; });
       const seen: string[] = [];
       const agent: MissionCardDraftAgent = { generate: async (input) => { seen.push(input.owner.personId); await gate; return { candidate }; } };
-      const slot = (await listMissionRoundDraftCards(t.db.query.bind(t.db), draftPeople, SECRET, ceo, "2026-10", START))[0];
-      const request = action(slot, "mission-round.draft");
+      const request = slotDraft();
       const first = await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, undefined, agent);
       const firstPayload = (first as { card: TCard }).card.payload as TMissionRoundSummary;
-      expect(firstPayload).toMatchObject({ phase: "drafting", draftOrigin: null });
+      expect(firstPayload).toMatchObject({ phase: "drafting", draftOrigin: "agent" });
       expect(firstPayload.cards.every((row) => row.line === "Co-Agent 正在起草")).toBe(true);
       const roundId = firstPayload.roundId;
       expect(await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, "another", () => START, undefined, agent)).toMatchObject({ error: { code: "ROUND_DRAFTING" } });
       expect(await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, undefined, agent)).toMatchObject({ replayed: true });
       release();
-      expect(await settledDraft(t, roundId)).toMatchObject({ status: "draft", draft_origin: "agent" });
+      expect(await settledDraft(t, roundId)).toMatchObject({ status: "open", draft_origin: "agent" });
       expect(seen.sort()).toEqual(["bai-tiantian", "sun-mingze"]);
       const card = await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, ceo, roundId, START);
       expect((card!.payload as TMissionRoundSummary).cards.every((item) => !item.placeholder)).toBe(true);
@@ -466,95 +481,259 @@ describe("Co-Agent 起草任务卡", () => {
     });
   });
 
-  it("单人失败沿用上月卡并逐卡标占位；全失败退回占位文件", async () => {
+  it("部分失败保留空卡与原始原因、成功正文；重试连续失败后仍可再次成功", async () => {
     await createTestDb(async (t) => {
       await seedAgentOwners(t);
+      let failCount = 2;
+      const called: string[] = [];
       const agent: MissionCardDraftAgent = { generate: async (input) => {
-        if (input.owner.personId === "bai-tiantian") throw new Error("model failed");
-        return { candidate };
+        called.push(input.owner.personId);
+        if (input.owner.personId === "bai-tiantian" && failCount-- > 0)
+          throw Object.assign(new Error("quality review failed"), { reviewRunIds: ["review-failed"], draftRunIds: ["draft-failed"], basisSource: "TKOS-test" });
+        return { candidate, runId: "draft-ok", reviewRunIds: ["review-ok"], draftRunIds: ["draft-ok"], basisSource: "TKOS-test" };
       } };
-      const slot = (await listMissionRoundDraftCards(t.db.query.bind(t.db), draftPeople, SECRET, ceo, "2026-10", START))[0];
-      const request = action(slot, "mission-round.draft");
-      const first = await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, undefined, agent);
-      const id = ((first as { card: TCard }).card.payload as TMissionRoundSummary).roundId;
-      expect(await settledDraft(t, id)).toMatchObject({ draft_origin: "agent" });
-      const rows = ((await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, ceo, id, START))!.payload as TMissionRoundSummary).cards;
-      expect(rows.find((row) => row.ownerId === "bai-tiantian")?.placeholder).toBe(true);
-      expect(rows.find((row) => row.ownerId === "sun-mingze")?.placeholder).toBe(false);
-      expect((await t.db.query("SELECT title,placeholder FROM missions WHERE period='2026-10' AND owner_id='bai-tiantian'")).rows).toMatchObject([{ title: "上月任务", placeholder: true }]);
-    });
-    await createTestDb(async (t) => {
-      await seedAgentOwners(t);
-      const agent: MissionCardDraftAgent = { generate: async () => { throw new Error("model failed"); } };
-      const slot = (await listMissionRoundDraftCards(t.db.query.bind(t.db), draftPeople, SECRET, ceo, "2026-10", START))[0];
-      const request = action(slot, "mission-round.draft");
-      const first = await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, undefined, agent);
-      const id = ((first as { card: TCard }).card.payload as TMissionRoundSummary).roundId;
+      const firstRequest = slotDraft();
+      const first = await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, firstRequest.scope, firstRequest.fingerprint, () => START, undefined, agent);
+      const id = summary((first as { card: TCard }).card).roundId;
       await settledDraft(t, id);
-      // 起草中已经打开的卡链接不失效：占位文件里有的人沿用原来的卡号。
-      const draftingCards = ((first as { card: TCard }).card.payload as TMissionRoundSummary).cards;
-      const finalCards = (await t.db.query("SELECT id::text AS id, owner_id FROM personal_mission_cards WHERE round_id=$1", [id])).rows as { id: string; owner_id: string }[];
-      for (const row of draftingCards) {
-        const kept = finalCards.find((card) => card.owner_id === row.ownerId);
-        if (kept) expect(kept.id).toBe(row.cardId);
-      }
-      expect(draftingCards.some((row) => finalCards.some((card) => card.id === row.cardId))).toBe(true);
-      const round = (await t.db.query("SELECT id,status,draft_origin FROM mission_rounds WHERE period='2026-10'")).rows[0];
-      expect(round).toMatchObject({ id, status: "draft", draft_origin: "placeholder" });
-      expect((await t.db.query("SELECT count(*)::int AS n FROM missions WHERE period='2026-10' AND personal_mission_card_id IS NOT NULL")).rows[0].n).toBe(12);
+      const read = async () => (await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, ceo, id, START))!;
+      const partial = await read();
+      expect(summary(partial).cards).toHaveLength(2);
+      expect(summary(partial).cards.find((row) => row.ownerId === "bai-tiantian")).toMatchObject({ missionCount: 0, placeholder: false, line: "起草未完成，可重试" });
+      expect(summary(partial).draftFailures).toEqual([{ ownerId: "bai-tiantian", ownerName: "bai-tiantian", message: "quality review failed" }]);
+      expect(summary(partial).retryDraftAction).toMatchObject({ actionType: "mission-round.draft" });
+      expect(partial.actions.some((entry) => entry.actionType === "mission-round.open")).toBe(false);
+      expect((await t.db.query("SELECT title FROM missions WHERE period='2026-10' AND owner_id='bai-tiantian'")).rows).toEqual([]);
+      const kept = (await t.db.query("SELECT id,title,version FROM missions WHERE period='2026-10' AND personal_mission_card_id IS NOT NULL ORDER BY id")).rows;
+      expect(kept).toHaveLength(2);
+      const source = (await t.db.query("SELECT draft_source FROM mission_rounds WHERE id=$1", [id])).rows[0].draft_source;
+      expect(source.failedOwners[0]).toMatchObject({ reviewRunIds: ["review-failed"], draftRunIds: ["draft-failed"], basisSource: "TKOS-test" });
+      expect(source.ownerResults).toHaveLength(2);
+      const failedCard = summary(partial).cards.find((row) => row.ownerId === "bai-tiantian")!.cardId;
+      const ownerPage = await getPersonalMissionCard(t.db.query.bind(t.db), draftPeople, SECRET, { personId: "bai-tiantian", role: "member" }, failedCard, START);
+      expect(ownerPage!.payload).toMatchObject({ draftFailure: "quality review failed" });
+      const openScope: ActionScope = { actionType: "mission-round.open", objectType: "mission-round", objectId: id, objectVersion: summary(partial).version };
+      expect(await executeOpenMissionRound(t.pool, draftPeople, SECRET, ceo, openScope, "force-open", () => START)).toMatchObject({ error: { code: "ROUND_DRAFT_INCOMPLETE" } });
+      const retry1 = action(partial, "mission-round.draft");
+      expect(await executeDraftMissionRound(t.pool, draftPeople, SECRET, { personId: "bai-tiantian", role: "member" }, retry1.scope, retry1.fingerprint, () => START, undefined, agent)).toMatchObject({ error: { status: 403 } });
+      await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, retry1.scope, retry1.fingerprint, () => START, undefined, agent);
+      await settledDraft(t, id);
+      const stillFailed = await read();
+      const retry2 = action(stillFailed, "mission-round.draft");
+      expect(retry2.scope.itemId).not.toBe(retry1.scope.itemId);
+      expect(await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, retry1.scope, retry1.fingerprint, () => START, undefined, agent)).toMatchObject({ replayed: true });
+      expect(await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, retry1.scope, "stale-new-fingerprint", () => START, undefined, agent)).toMatchObject({ error: { code: "ROUND_DRAFT_RETRY_STALE" } });
+      await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, retry2.scope, retry2.fingerprint, () => START, undefined, agent);
+      await settledDraft(t, id);
+      const completed = await read();
+      expect(summary(completed).draftFailures).toEqual([]);
+      expect(summary(completed).retryDraftAction).toBeNull();
+      expect(summary(completed).cards.find((row) => row.ownerId === "bai-tiantian")).toMatchObject({ cardId: failedCard, missionCount: 2 });
+      expect(summary(completed).phase).toBe("open");
+      expect(completed.actions.some((entry) => entry.actionType === "mission-round.open")).toBe(false);
+      const old = (await t.db.query("SELECT id,title,version FROM missions WHERE id=ANY($1::text[]) ORDER BY id", [kept.map((entry) => entry.id)])).rows;
+      expect(old).toEqual(kept);
+      expect(called.filter((owner) => owner === "sun-mingze")).toHaveLength(1);
+      expect(called.filter((owner) => owner === "bai-tiantian")).toHaveLength(3);
+      expect((await t.db.query("SELECT draft_source FROM mission_rounds WHERE id=$1", [id])).rows[0].draft_source.ownerResults).toHaveLength(4);
     });
   });
 
-  it("单人没有上月卡时从占位文件找该人的候选", async () => {
+  it("全失败保留每个人和错误，不从默认文件或上月卡生成正文，权限不泄漏别人的失败", async () => {
+    await createTestDb(async (t) => {
+      await seedAgentOwners(t);
+      const agent: MissionCardDraftAgent = { generate: async () => { throw new Error("model unavailable"); } };
+      const request = slotDraft();
+      const first = await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, undefined, agent);
+      const before = summary((first as { card: TCard }).card);
+      await settledDraft(t, before.roundId);
+      const final = summary((await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, ceo, before.roundId, START))!);
+      expect(final).toMatchObject({ phase: "draft", draftOrigin: "agent", placeholder: false });
+      expect(final.cards.map((row) => row.cardId)).toEqual(before.cards.map((row) => row.cardId));
+      expect(final.cards.every((row) => row.missionCount === 0 && !row.placeholder)).toBe(true);
+      expect(final.draftFailures).toHaveLength(2);
+      expect((await t.db.query("SELECT count(*)::int AS n FROM missions WHERE period='2026-10' AND personal_mission_card_id IS NOT NULL")).rows[0].n).toBe(0);
+      const member = summary((await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, { personId: "bai-tiantian", role: "member" }, before.roundId, START))!);
+      expect(member.draftFailures.map((failure) => failure.ownerId)).toEqual(["bai-tiantian"]);
+      expect(member.retryDraftAction).toBeNull();
+      expect(await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, outsider, before.roundId, START)).toBeNull();
+    });
+  });
+
+  it("无上月卡的失败人不会被删除，成功任务编号保持按最初人员顺序", async () => {
     await createTestDb(async (t) => {
       await seedAgentOwners(t);
       const agent: MissionCardDraftAgent = { generate: async (input) => {
         if (input.owner.personId === "sun-mingze") throw new Error("model failed");
         return { candidate };
       } };
-      const slot = (await listMissionRoundDraftCards(t.db.query.bind(t.db), draftPeople, SECRET, ceo, "2026-10", START))[0];
-      const request = action(slot, "mission-round.draft");
+      const request = slotDraft();
       const first = await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, undefined, agent);
-      const id = ((first as { card: TCard }).card.payload as TMissionRoundSummary).roundId;
-      expect(await settledDraft(t, id)).toMatchObject({ status: "draft", draft_origin: "agent" });
-      const rows = ((await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, ceo, id, START))!.payload as TMissionRoundSummary).cards;
-      expect(rows.find((row) => row.ownerId === "sun-mingze")?.placeholder).toBe(true);
-      expect((await t.db.query("SELECT count(*)::int AS n FROM missions WHERE period='2026-10' AND owner_id='sun-mingze' AND personal_mission_card_id IS NOT NULL")).rows[0].n).toBeGreaterThan(0);
+      const id = summary((first as { card: TCard }).card).roundId;
+      await settledDraft(t, id);
+      const rows = summary((await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, ceo, id, START))!).cards;
+      expect(rows.map((row) => row.ownerId)).toEqual(["bai-tiantian", "sun-mingze"]);
+      const codes = (await t.db.query("SELECT code FROM missions WHERE period='2026-10' AND personal_mission_card_id IS NOT NULL ORDER BY code")).rows.map((row) => row.code as string);
+      expect(codes).toHaveLength(2);
+      expect(codes.every((code) => /^2026-10-.+-01-[12]$/.test(code))).toBe(true);
     });
   });
 
-  it("单人起草失败又没有上月卡和占位候选时只去掉他的卡，其余照常；编号可读且按人排序", async () => {
+  it("起草中断保留卡并可重试，旧的延迟结果不能覆盖新成功正文", async () => {
     await createTestDb(async (t) => {
       await seedAgentOwners(t);
-      const directory = await mkdtemp(join(tmpdir(), "warmap-no-placeholder-"));
-      try {
-        const agent: MissionCardDraftAgent = { generate: async (input) => {
-          if (input.owner.personId === "sun-mingze") throw new Error("model failed");
-          return { candidate };
-        } };
-        const slot = (await listMissionRoundDraftCards(t.db.query.bind(t.db), draftPeople, SECRET, ceo, "2026-10", START, directory))[0];
-        const request = action(slot, "mission-round.draft");
-        const first = await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, directory, agent);
-        const id = ((first as { card: TCard }).card.payload as TMissionRoundSummary).roundId;
-        expect(await settledDraft(t, id)).toMatchObject({ status: "draft", draft_origin: "agent" });
-        const rows = ((await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, ceo, id, START))!.payload as TMissionRoundSummary).cards;
-        expect(rows.map((row) => row.ownerId)).toEqual(["bai-tiantian"]);
-        const codes = (await t.db.query("SELECT code FROM missions WHERE period='2026-10' AND personal_mission_card_id IS NOT NULL ORDER BY code")).rows.map((row) => row.code as string);
-        expect(codes).toHaveLength(2);
-        expect(codes.every((code) => /^2026-10-.+-01-[12]$/.test(code))).toBe(true);
-      } finally { await rmdir(directory); }
-    });
-  });
-
-  it("启动时释放超过十分钟的 drafting 轮次", async () => {
-    await createTestDb(async (t) => {
-      await seedAgentOwners(t);
-      const pending: MissionCardDraftAgent = { generate: () => new Promise(() => undefined) };
-      const slot = (await listMissionRoundDraftCards(t.db.query.bind(t.db), draftPeople, SECRET, ceo, "2026-10", START))[0];
-      const request = action(slot, "mission-round.draft");
-      await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, undefined, pending);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      let waiting = 0;
+      const pending: MissionCardDraftAgent = { generate: async () => { waiting++; await gate; return { candidate: { missions: candidate.missions.map((mission) => ({ ...mission, title: "旧请求晚到" })) } }; } };
+      const request = slotDraft();
+      const first = await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START, undefined, pending);
+      const before = summary((first as { card: TCard }).card);
+      for (let attempt = 0; waiting < 2 && attempt < 100; attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
+      expect(waiting).toBe(2);
       expect(await recoverStaleMissionDrafts(t.pool, new Date(START.getTime() + 11 * 60_000))).toBe(1);
-      expect((await listMissionRoundDraftCards(t.db.query.bind(t.db), draftPeople, SECRET, ceo, "2026-10", START))).toHaveLength(1);
+      const recovered = (await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, ceo, before.roundId, START))!;
+      expect(summary(recovered).cards.map((row) => row.cardId)).toEqual(before.cards.map((row) => row.cardId));
+      expect(summary(recovered).draftFailures).toHaveLength(2);
+      const retry = action(recovered, "mission-round.draft");
+      await executeDraftMissionRound(t.pool, draftPeople, SECRET, ceo, retry.scope, retry.fingerprint, () => START, undefined, { generate: async () => ({ candidate }) });
+      await settledDraft(t, before.roundId);
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const missions = (await t.db.query("SELECT title FROM missions WHERE period='2026-10' AND personal_mission_card_id IS NOT NULL")).rows;
+      expect(missions).toHaveLength(4);
+      expect(missions.every((mission) => mission.title.startsWith("起草任务"))).toBe(true);
+    });
+  });
+});
+
+describe("签发后系统起草任务卡", () => {
+  async function settled(t: TestDb): Promise<{ id: string; battlefield_id: string; status: string }[]> {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const rows = (await t.db.query("SELECT id,battlefield_id,status FROM mission_rounds WHERE period='2026-10' ORDER BY battlefield_id")).rows;
+      if (rows.length && rows.every((row) => row.status !== "drafting")) return rows;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error("系统起草未完成");
+  }
+
+  it("签发后各战场按参与者起草，全部成功自动交给本人；再次启动不重复起草", async () => {
+    await createTestDb(async (t) => {
+      await seedAgentOwners(t);
+      // 交付战场存过名单（含 CEO），安静战场存过空名单。
+      await t.db.query(`INSERT INTO battlefield_config (id,version,code,name,owner_id,six_month_outcome,participant_ids)
+        VALUES ('delivery',1,'02','交付战场','liu-renhao','交付六个月目标','["chen-xinan","ceo"]'),('quiet',1,'03','安静战场','ceo','安静六个月目标','[]')`);
+      await t.db.query("UPDATE monthly_plans SET battlefields=$1 WHERE period='2026-10'",
+        [JSON.stringify(["growth", "delivery", "quiet"].map((battlefieldId) => ({ battlefieldId, outcome: `${battlefieldId} 本月目标` })))]);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      const seen: MissionCardDraftInput[] = [];
+      const agent: MissionCardDraftAgent = { generate: async (input) => { seen.push(input); await gate; return { candidate }; } };
+      await startSignedMissionDrafts(t.pool, draftPeople, "2026-10", () => START, agent, undefined, join(tmpdir(), "warmap-missing-known-missions.json"));
+      const started = (await t.db.query("SELECT battlefield_id,status,action_fingerprints,draft_source FROM mission_rounds WHERE period='2026-10' ORDER BY battlefield_id")).rows;
+      expect(started.map((row) => [row.battlefield_id, row.status])).toEqual([["delivery", "drafting"], ["growth", "drafting"]]);
+      for (const row of started) {
+        expect(row.action_fingerprints).toEqual([]);
+        expect(row.draft_source.trail).toEqual([{ at: START.toISOString(), by: "system", text: "CEO 签发后系统起草" }]);
+      }
+      release();
+      expect((await settled(t)).map((row) => [row.battlefield_id, row.status])).toEqual([["delivery", "open"], ["growth", "open"]]);
+      expect((await t.db.query(`SELECT r.battlefield_id,c.owner_id FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id
+        WHERE r.period='2026-10' ORDER BY r.battlefield_id,c.sort_order`)).rows).toEqual([
+        { battlefield_id: "delivery", owner_id: "chen-xinan" }, { battlefield_id: "growth", owner_id: "bai-tiantian" }, { battlefield_id: "growth", owner_id: "sun-mingze" }]);
+      // 已知任务文件缺失时照常起草。
+      expect(seen.map((input) => input.knownMissions)).toEqual([[], [], []]);
+      const growth = (await t.db.query("SELECT id,draft_source,goal_snapshot FROM mission_rounds WHERE battlefield_id='growth' AND period='2026-10'")).rows[0];
+      expect(growth.draft_source.trail).toEqual([{ at: START.toISOString(), by: "system", text: "CEO 签发后系统起草" },
+        { at: START.toISOString(), by: "system", text: "起草完成后自动交给本人" }]);
+      expect(growth.goal_snapshot).toMatchObject({ monthOutcome: "growth 本月目标", signedAt: START.toISOString() });
+      const asDri = (await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, ceo, growth.id, START))!;
+      expect(asDri.actions.map((item) => item.actionType)).not.toContain("mission-round.open");
+      const member = { personId: "bai-tiantian", role: "member" as const };
+      const notices = await listMissionRoundCards(t.db.query.bind(t.db), draftPeople, SECRET, member, "2026-10", START);
+      expect(notices.map(summary)).toMatchObject([{ battlefieldId: "growth", phase: "open", cards: [{ ownerId: "bai-tiantian", mine: true, missionCount: 2 }] }]);
+      const group = await getPersonalMissionCardGroup(t.db.query.bind(t.db), draftPeople, SECRET, member, summary(notices[0]).cards[0].cardId, START);
+      expect(group!.entries.filter((entry) => entry.type === "divider").map((entry) => entry.type === "divider" && entry.text))
+        .toEqual([expect.stringContaining("CEO 签发后系统起草"), expect.stringContaining("起草完成后自动交给本人")]);
+      const calls = seen.length;
+      await startSignedMissionDrafts(t.pool, draftPeople, "2026-10", () => START, agent);
+      expect(seen).toHaveLength(calls);
+      expect((await t.db.query("SELECT count(*)::int AS n FROM mission_rounds WHERE period='2026-10'")).rows[0].n).toBe(2);
+    });
+  });
+
+  it("有人起草失败停在草稿，CEO 与战场 DRI 都看得到失败的人；DRI 重试成功后自动交给本人", async () => {
+    await createTestDb(async (t) => {
+      await seedAgentOwners(t);
+      await t.db.query("UPDATE battlefield_config SET owner_id='liu-renhao' WHERE id='growth'");
+      let failNext = true;
+      const agent: MissionCardDraftAgent = { generate: async (input) => {
+        if (input.owner.personId === "sun-mingze" && failNext) { failNext = false; throw new Error("model timeout"); }
+        return { candidate };
+      } };
+      await startSignedMissionDrafts(t.pool, draftPeople, "2026-10", () => START, agent);
+      const [round] = await settled(t);
+      expect(round.status).toBe("draft");
+      const read = (person: { personId: string; role: "ceo" | "member" }) => getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, person, round.id, START);
+      const dri = { personId: "liu-renhao", role: "member" as const };
+      const asDri = (await read(dri))!;
+      expect(summary(asDri)).toMatchObject({ phase: "draft", todo: "1 张任务卡起草未完成，可重试", draftFailures: [{ ownerId: "sun-mingze", message: "model timeout" }] });
+      expect(asDri.actions.map((item) => item.actionType)).toEqual(["mission-round.draft"]);
+      const asCeo = (await read(ceo))!;
+      expect(summary(asCeo).draftFailures).toEqual([{ ownerId: "sun-mingze", ownerName: "sun-mingze", message: "model timeout" }]);
+      expect(asCeo.actions).toEqual([]);
+      const retry = action(asDri, "mission-round.draft");
+      await executeDraftMissionRound(t.pool, draftPeople, SECRET, dri, retry.scope, retry.fingerprint, () => START, undefined, agent);
+      expect(await settledDraft(t, round.id)).toMatchObject({ status: "open" });
+      const source = (await t.db.query("SELECT draft_source FROM mission_rounds WHERE id=$1", [round.id])).rows[0].draft_source;
+      expect(source.trail.map((entry: { text: string }) => entry.text)).toEqual(["CEO 签发后系统起草", "起草完成后自动交给本人"]);
+    });
+  });
+
+  it("参与者：没保存过按上月 Mission 推算，保存后以名单为准，CEO 不拿卡", async () => {
+    await createTestDb(async (t) => {
+      await seedAgentOwners(t);
+      const q = t.db.query.bind(t.db);
+      await t.db.query(`INSERT INTO missions (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,source_ref,source_document_id,source_revision,source_title)
+        VALUES ('prior-ceo',1,'prior-ceo','2026-09','CEO 上月任务','ceo','cap-03','["growth"]','上月结果','fixture://ceo','ceo',1,'已登记')`);
+      expect(await missionCardParticipants(q, draftPeople, "growth", "2026-10")).toEqual({ personIds: ["bai-tiantian", "sun-mingze"], derived: true });
+      await t.db.query(`UPDATE battlefield_config SET participant_ids='["yu-siyi","ceo","bai-tiantian","not-in-directory"]' WHERE id='growth'`);
+      expect(await missionCardParticipants(q, draftPeople, "growth", "2026-10")).toEqual({ personIds: ["yu-siyi", "bai-tiantian"], derived: false });
+      await t.db.query("UPDATE battlefield_config SET participant_ids='[]' WHERE id='growth'");
+      expect(await missionCardParticipants(q, draftPeople, "growth", "2026-10")).toEqual({ personIds: [], derived: false });
+    });
+  });
+
+  it("起草输入带上本人已知的本月任务；没有原文的条目不传", async () => {
+    await createTestDb(async (t) => {
+      await seedAgentOwners(t);
+      const directory = await mkdtemp(join(tmpdir(), "warmap-known-missions-"));
+      const file = join(directory, "2026-10-known-missions.json");
+      const feishu = { personId: "bai-tiantian", kind: "feishu", title: "白田田｜10 月任务卡", sourceRef: "https://feishu.example/doc", markdown: "# 10 月任务\n沿用这个拆分" };
+      await writeFile(file, JSON.stringify({ period: "2026-10", items: [feishu, { personId: "sun-mingze", kind: "world-02", missionIds: ["sun-202610-1"], markdown: null }] }));
+      try {
+        const seen: MissionCardDraftInput[] = [];
+        await startSignedMissionDrafts(t.pool, draftPeople, "2026-10", () => START, { generate: async (input) => { seen.push(input); return { candidate }; } }, undefined, file);
+        await settled(t);
+        const known = (personId: string) => seen.find((input) => input.owner.personId === personId)!.knownMissions;
+        expect(known("bai-tiantian")).toEqual([{ kind: "feishu", title: feishu.title, sourceRef: feishu.sourceRef, markdown: feishu.markdown }]);
+        expect(known("sun-mingze")).toEqual([]);
+      } finally { await unlink(file); await rmdir(directory); }
+    });
+  });
+
+  it("自动交给本人的检查不过时停在草稿并写明原因，补齐后由战场 DRI 交给本人", async () => {
+    await createTestDb(async (t) => {
+      await seedAgentOwners(t);
+      await t.db.query("UPDATE battlefield_config SET six_month_outcome='' WHERE id='growth'");
+      await startSignedMissionDrafts(t.pool, draftPeople, "2026-10", () => START, { generate: async () => ({ candidate }) });
+      const [round] = await settled(t);
+      expect(round.status).toBe("draft");
+      const read = async () => (await getMissionRoundCard(t.db.query.bind(t.db), draftPeople, SECRET, ceo, round.id, START))!;
+      expect(summary(await read())).toMatchObject({ phase: "draft", draftFailures: [], todo: "缺少本战场的六个月目标或已签发本月目标，暂不能交给本人确认" });
+      await t.db.query("UPDATE battlefield_config SET six_month_outcome='六个月目标' WHERE id='growth'");
+      const request = action(await read(), "mission-round.open");
+      expect(await executeOpenMissionRound(t.pool, draftPeople, SECRET, ceo, request.scope, request.fingerprint, () => START)).toMatchObject({ card: { payload: { phase: "open" } } });
     });
   });
 });

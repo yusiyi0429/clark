@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { Pool } from "pg";
+import { Client } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import { Card, MeetingCardPayload, type TPreflightCandidate } from "@warmap/contracts";
 import { buildApp } from "../src/app.js";
@@ -87,15 +87,16 @@ async function execute(t: TestApp, cookie: string, actionId: string, input?: unk
 async function expectNoIdleInTransaction(t: TestApp): Promise<void> {
   const dbName = (await t.sql("SELECT current_database() AS db"))[0].db as string;
   const base = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
-  const probePool = new Pool({ connectionString: base.replace(/\/postgres$/, `/${dbName}`), max: 1 });
+  const probe = new Client({ connectionString: base.replace(/\/postgres$/, `/${dbName}`) });
   try {
-    const idle = await probePool.query(
+    await probe.connect();
+    const idle = await probe.query(
       "SELECT count(*)::int AS count FROM pg_stat_activity WHERE state LIKE 'idle in transaction%' AND datname = $1",
       [dbName],
     );
     expect(Number(idle.rows[0].count)).toBe(0);
   } finally {
-    await probePool.end();
+    await probe.end();
   }
 }
 
@@ -166,7 +167,7 @@ describe("会前材料替换后的预审 Context", () => {
 describe("Issue → Meeting Card/Action user journey", () => {
   it("creates a scheduled Meeting from an Issue and projects the same object on the card, notification and conversation", async () => {
     const agent = fakeAgent();
-    const t = await createTestApp({}, undefined, { preflightAgent: agent });
+    const t = await createTestApp({}, undefined, { preflightAgent: agent, monthlyNow: () => new Date("2026-05-31T00:00:00Z") });
     try {
       const issue = await createIssue(t, "dri-meeting-001");
       const cookie = await t.loginCookie();
@@ -1082,25 +1083,25 @@ describe("Meeting 计划结束时间与「这场会开完了」", () => {
     }
   });
 
-  it("主持人只拿到 meeting.end，并且执行和冲突响应都保持成员投影", async () => {
+  it("主持人拿到结束与重新安排操作，并且执行和冲突响应都保持成员投影", async () => {
     const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
     try {
       const { cookie, meetingId, card } = await readyMeeting(t, "member-host-end");
       const member = await t.memberCookie();
       const memberCard = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${meetingId}`, headers: { cookie: member } })).json();
-      expect(memberCard.actions.map((action: { actionType: string }) => action.actionType)).toEqual(["meeting.end"]);
+      expect(memberCard.actions.map((action: { actionType: string }) => action.actionType)).toEqual(["meeting.reschedule", "meeting.end"]);
       expect(memberCard.payload).not.toHaveProperty("draft");
       expect((await execute(t, member, actionOf(card as ActionCard, "meeting.edit_details").actionId, { title: "越权修改" })).statusCode).toBe(403);
       expect((await execute(t, cookie, actionOf(card as ActionCard, "meeting.edit_details").actionId, { title: "CEO 改名" })).statusCode).toBe(200);
-      const stale = await execute(t, member, memberCard.actions[0].actionId);
+      const stale = await execute(t, member, actionOf(memberCard, "meeting.end").actionId);
       expect(stale.statusCode).toBe(409);
       expect(stale.json().latestCard.payload).not.toHaveProperty("draft");
       const fresh = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${meetingId}`, headers: { cookie: member } })).json();
-      const ended = await execute(t, member, fresh.actions[0].actionId);
+      const ended = await execute(t, member, actionOf(fresh, "meeting.end").actionId);
       expect(ended.statusCode).toBe(200);
       expect(ended.json().cards[0].payload.endedAt).toEqual(expect.any(String));
       expect(ended.json().cards[0].payload).not.toHaveProperty("draft");
-      expect(ended.json().cards[0].actions).toEqual([]);
+      expect(ended.json().cards[0].actions.map((action: { actionType: string }) => action.actionType)).toEqual(["meeting.reschedule"]);
 
       const other = await readyMeeting(t, "member-not-host-end");
       await t.sql("UPDATE meetings SET lead_dri_id=$2 WHERE id=$1", [other.meetingId, "another-host"]);

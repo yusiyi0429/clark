@@ -121,11 +121,11 @@ describe("议题与会议群", () => {
       expect((await t.app.inject({ method: "GET", url: `/api/threads/meeting/${id}`, headers: { cookie: member } })).json().unread).toBe(0);
       expect((await t.app.inject({ method: "GET", url: `/api/threads/meeting/${id}`, headers: { cookie: ceo } })).json().unread).toBe(1);
       const card = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${id}`, headers: { cookie: member } })).json();
-      expect(card.actions.map((action: { actionType: string }) => action.actionType)).toEqual(["meeting.end"]);
+      expect(card.actions.map((action: { actionType: string }) => action.actionType)).toEqual(["meeting.reschedule", "meeting.end"]);
       expect(card.payload.purpose).toBeNull();
       expect(card.payload).not.toHaveProperty("draft");
       expect(card.payload).not.toHaveProperty("transcript");
-      expect(card.payload).not.toHaveProperty("transcriptCandidate");
+      expect(card.payload.transcriptCandidate).toBeNull();
       expect(card.payload).not.toHaveProperty("recording");
       const agentTurn = await t.app.inject({ method: "POST", url: `/api/conversations/meeting:${id}/messages`,
         headers: { cookie: member, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "说说会议安排" } });
@@ -134,7 +134,7 @@ describe("议题与会议群", () => {
       expect(agentObject?.payload).not.toHaveProperty("draft");
       expect(agentObject?.payload).not.toHaveProperty("recording");
       expect(agentObject?.payload).not.toHaveProperty("transcript");
-      expect(agentObject?.payload).not.toHaveProperty("transcriptCandidate");
+      expect((agentObject?.payload as { transcriptCandidate?: unknown } | undefined)?.transcriptCandidate).toBeNull();
       expect((agentObject?.payload as { preflight?: unknown } | undefined)?.preflight).not.toHaveProperty("entries");
       expect((await t.app.inject({ method: "GET", url: "/api/me/meetings", headers: { cookie: member } })).json().meetings[0]).toMatchObject({ meetingId: id, href: `/me/meetings/${id}` });
       expect((await t.app.inject({ method: "POST", url: `/api/threads/meeting/${id}/leave`, headers: { cookie: member, origin: t.publicOrigin } })).statusCode).toBe(409);

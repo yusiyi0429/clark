@@ -107,7 +107,7 @@ describe("收尾按钮文案与实际落点一致", () => {
   const ceoNext = { ...ceo, next: { text: "9 月的目标等你核对和签发", action: "核对 9 月目标", href: "/plans/2026-09" } };
   const memberNext = { ...member, next: { text: "先处理你的执行事项", action: "查看我的执行事项", href: "/me/tasks/task-1" } };
   const memberMission = { ...member, next: { text: "10 月 Mission Card 讨论开放到 10/3 18:00", action: "查看我的 10 月卡", href: "/me/mission-cards/my-card" } };
-  const ceoMission = { ...ceo, next: { text: "10 月任务卡草稿已就绪，可以统一开放讨论", action: "查看 10 月任务卡", href: "/mission-cards/first-card" } };
+  const ceoMission = { ...ceo, next: { text: "10 月任务卡草稿已就绪，可以下发审核", action: "查看 10 月任务卡", href: "/mission-cards/first-card" } };
   it.each([
     { name: "CEO 默认首页", data: ceoNext, nextPath: "/", label: "核对 9 月目标", destination: "/plans/2026-09" },
     { name: "成员默认首页", data: memberNext, nextPath: "/me", label: "查看我的执行事项", destination: "/me/tasks/task-1" },
@@ -154,7 +154,7 @@ describe("真实数据的首次引导", () => {
     expect(text(tree)).toContain("往下是你的工作");
     expect(elements(tree).find((element) => element.type === WorkspaceSchematic)?.props).toMatchObject({ role: "member", focus: "board" });
     const diagram = renderToStaticMarkup(<WorkspaceSchematic role="member" focus="board" />);
-    for (const label of ["新的执行事项", "执行事项", "+", "等上一步", "我的 Agent"]) expect(diagram).toContain(label);
+    for (const label of ["新的执行事项", "执行事项", "+", "等你验收", "我的 Agent"]) expect(diagram).toContain(label);
   });
   it("Mission 六步按顺序呈现，之后才能看本月工作，也能返回", () => {
     let tree = renderFlow(member);
@@ -166,7 +166,7 @@ describe("真实数据的首次引导", () => {
     expect(elements(tree).find((element) => element.type === MissionFlow)).toBeDefined();
     const diagram = renderToStaticMarkup(<MissionFlow />);
     expect(diagram.match(/<li\b/g)).toHaveLength(6);
-    const titles = ["本月目标", "任务卡草稿", "48 小时讨论", "集中处理", "确定", "拆成执行事项"];
+    const titles = ["本月目标", "任务卡草稿", "本人确认", "统一核对", "DRI 确认", "拆成执行事项"];
     let position = -1;
     for (const title of titles) {
       const next = diagram.indexOf(`<strong>${title}</strong>`);

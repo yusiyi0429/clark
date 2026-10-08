@@ -1,117 +1,103 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowUpRight } from "lucide-react";
-import { ActionButton, FormField, StatusBadge, TianshuPortalTheme } from "ts-design";
-import { Button, Input, Label, ListBox, Select, TextField, ToggleButton, ToggleButtonGroup } from "ts-design/primitives";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
+import { Check, Ellipsis, Pencil, RotateCcw, Trash2, Undo2 } from "lucide-react";
+import { TianshuPortalTheme } from "ts-design";
+import { Button, Label, Popover, TextArea, TextField } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { monthDayTime } from "@/lib/companyTime";
-import { TASK_STATUS } from "@/components/member/MemberTasks";
-import { CollaboratorsDialog } from "./CollaboratorsDialog";
+import { MenuDialog } from "@/components/AccountMenu";
 import { ObjectMaterialArea } from "@/components/materials/ObjectMaterialArea";
+import { CollaboratorsDialog } from "./CollaboratorsDialog";
+import { TaskCover } from "./TaskCover";
+import { TaskEditForm, type TaskPatch } from "./TaskEditForm";
+import { AcceptDialog } from "./AcceptDialog";
 import s from "./task-detail.module.css";
+import c from "./task-cover.module.css";
+import t from "@/styles/material-tabs.module.css";
 
 type Detail = components["schemas"]["TaskDetailResponse"];
 type Task = Detail["task"];
-type Draft = { title: string; missionId: string; startDate: string; dueDate: string; doneDefinition: string; judgment: string };
 const cards: [] = [];
-const draftOf = (detail: Detail): Draft => ({ title: detail.task.title, missionId: detail.task.mission?.missionId ?? "", startDate: detail.task.startDate ?? "", dueDate: detail.task.dueDate ?? "", doneDefinition: detail.task.doneDefinition ?? "", judgment: detail.judgment ?? "" });
-const dateLabel = (date: string | null) => date ? `${Number(date.slice(5, 7))} 月 ${Number(date.slice(8, 10))} 日` : null;
+const COVER = "task";
 
-/** clark TaskPane：推进人编辑，协作者只能保存自己的私有批注。 */
+/** 页头那一段状态：「等你验收」不是状态，是外部工具交了、推进人还没处理；协作者看到的是「待验收」。 */
+function taskStatus(task: Task, owner: boolean): { tone: "idle" | "active" | "done" | "returned"; label: string } {
+  if (task.status === "done") return { tone: "done", label: "完成" };
+  if (task.status === "returned") return { tone: "returned", label: "已退回" };
+  if (task.awaitingAcceptance) return { tone: "active", label: owner ? "等你验收" : "待验收" };
+  return task.status === "in_progress" ? { tone: "active", label: "进行中" } : { tone: "idle", label: "未启动" };
+}
+
+/**
+ * 执行事项详情就是这件事的「封面」（design-12）：页头写状态，右边材料下拉、验收、⋯；正文是封面（TaskCover）。
+ * 状态跟着推进人的动作在服务端自动走，完成只能经推进人验收；页面只读、只发请求，不做状态迁移。
+ */
 export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
   const workspace = useWorkspace();
   const { ask, dialog } = useConfirm();
   const [detail, setDetail] = useState(initialDetail);
-  const [draft, setDraft] = useState<Draft>(() => draftOf(initialDetail));
-  const [note, setNote] = useState(initialDetail.myNote ?? "");
   const [editing, setEditing] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
-  const [returnReason, setReturnReason] = useState("");
+  const [acceptOpen, setAcceptOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [progressText, setProgressText] = useState("");
-  const [progressEventId, setProgressEventId] = useState<string | null>(null);
-  const [materialTab, setMaterialTab] = useState("task");
+  const [materialTab, setMaterialTab] = useState(COVER);
   const task = detail.task;
   const owner = detail.role === "owner";
-  const missionOptions = task.mission && !detail.missionOptions.some((option) => option.missionId === task.mission?.missionId)
-    ? [task.mission, ...detail.missionOptions] : detail.missionOptions;
+  const done = task.status === "done";
+  const acceptable = owner && task.status !== "done" && task.status !== "returned";
   const group = useMemo(() => ({ kind: "task" as const, taskId: task.id, viewerId: workspace.viewerId ?? task.owner.personId, members: [task.owner, ...task.collaborators].map((person) => ({ personId: person.personId, displayName: person.name })) }), [task.id, task.owner, task.collaborators, workspace.viewerId]);
   useRegisterDetail({ scope: `task:${task.id}`, label: task.title, mark: null, cards, group });
-  const set = (key: keyof Draft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
+  /** 重读这件事。读不到返回 false：写入已经成功，下次打开或刷新时就是最新的。 */
   const refresh = async () => {
     try {
       const { data } = await browserApi.GET("/api/me/tasks/{id}", { params: { path: { id: task.id } } });
-      if (data) { setDetail(data); setDraft(draftOf(data)); setNote(data.myNote ?? ""); }
-    } catch { /* 写入已成功；下次打开或刷新时读最新详情。 */ }
+      if (!data) return false;
+      setDetail(data);
+      return true;
+    } catch { return false; }
   };
+  // 通知里的「等你验收」带 ?accept=1 打开：直接弹出验收，地址里的参数随即去掉（刷新不再弹）。
+  // 这一页已经开着时再点那条通知，路由不会重新挂载这一页，所以跟着地址里的参数走，不只在打开时看一次。
+  const acceptLink = useSearchParams()?.get("accept") === "1";
+  useEffect(() => {
+    if (!acceptLink) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("accept");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    if (acceptable) setAcceptOpen(true);
+    // 只响应参数出现的那一下。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [acceptLink]);
   const failed = (failure: { message?: string; latestTask?: Task } | undefined, fallback: string) => {
-    if (failure?.latestTask) setDetail((current) => ({ ...current, task: failure.latestTask! }));
+    if (failure?.latestTask) { setDetail((current) => ({ ...current, task: failure.latestTask! })); void refresh(); }
     setError(failure?.latestTask ? "这件事刚被改过，请核对最新内容再保存。" : failure?.message ?? fallback);
   };
-  const patch = async (body: Omit<components["schemas"]["PatchMyTaskRequest"], "version">, success: string) => {
+  const changed = (message: string) => { setNotice(message); window.dispatchEvent(new Event("member-tasks-changed")); void refresh(); };
+  const patch = async (body: TaskPatch) => {
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await browserApi.PATCH("/api/me/tasks/{id}", { params: { path: { id: task.id } }, body: { version: task.version, ...body } });
-      if (result.data) { setDetail((current) => ({ ...current, task: result.data!, ...(body.judgment !== undefined ? { judgment: body.judgment ?? null } : {}) })); setEditing(false); setNotice(success); window.dispatchEvent(new Event("member-tasks-changed")); await refresh(); }
+      if (result.data) { setEditing(false); changed("已保存"); }
       else failed(result.error as typeof result.error & { latestTask?: Task }, "没保存，请重试。输入已经保留。");
     } catch { setError("没保存，网络断了。输入已经保留，请重试。"); }
     finally { setBusy(false); }
   };
-  const save = () => {
-    if (!draft.title.trim()) return setError("请填写执行事项标题。");
-    if (draft.startDate && draft.dueDate && draft.startDate > draft.dueDate) return setError("计划开始不能晚于截止日期。");
-    const body: Omit<components["schemas"]["PatchMyTaskRequest"], "version"> = {};
-    if (draft.title.trim() !== task.title) body.title = draft.title.trim();
-    if ((draft.missionId || null) !== (task.mission?.missionId ?? null)) body.missionId = draft.missionId || null;
-    if ((draft.startDate || null) !== task.startDate) body.startDate = draft.startDate || null;
-    if ((draft.dueDate || null) !== task.dueDate) body.dueDate = draft.dueDate || null;
-    if ((draft.doneDefinition.trim() || null) !== task.doneDefinition) body.doneDefinition = draft.doneDefinition.trim() || null;
-    if (!Object.keys(body).length) { setEditing(false); return; }
-    void patch(body, "已保存执行事项");
-  };
-  const saveNote = async () => {
-    setBusy(true); setError("");
+  const returnTask = async (reason: string): Promise<string | null> => {
+    if (!await ask(`退回执行事项「${task.title}」？`, "退回执行事项")) return null;
     try {
-      const { data, error: failure } = await browserApi.PUT("/api/me/tasks/{id}/note", { params: { path: { id: task.id } }, body: { note: note.trim() || null } });
-      if (data) { setDetail((current) => ({ ...current, myNote: data.myNote, myNoteAt: data.myNote ? new Date().toISOString() : null })); setNotice("已保存我的批注"); }
-      else setError(failure?.message ?? "批注没保存，请重试。");
-    } catch { setError("批注没保存，请重试。"); }
-    finally { setBusy(false); }
-  };
-  const saveProgress = async () => {
-    if (!progressText.trim() || busy) return;
-    const clientEventId = progressEventId ?? crypto.randomUUID();
-    setProgressEventId(clientEventId); setBusy(true); setError("");
-    try {
-      const { data, error: failure } = await browserApi.POST("/api/me/tasks/{id}/progress", {
-        params: { path: { id: task.id } }, body: { clientEventId, body: progressText.trim() },
-      });
-      if (!data) throw new Error(failure?.message ?? "进展没保存，请重试");
-      setDetail((current) => ({ ...current, progress: [data, ...current.progress.filter((entry) => entry.id !== data.id)].slice(0, 50),
-        task: { ...current.task, latestProgress: { body: data.body, source: data.source, author: data.author, createdAt: data.createdAt } } }));
-      setProgressText(""); setProgressEventId(null); setNotice("进展已保存");
-      window.dispatchEvent(new Event("member-tasks-changed"));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "进展没保存，输入已保留"); }
-    finally { setBusy(false); }
-  };
-  const returnTask = async () => {
-    if (!returnReason.trim()) return setError("请填写退回原因。");
-    if (!await ask(`退回执行事项「${task.title}」？`, "退回执行事项")) return;
-    setBusy(true); setError("");
-    try {
-      const { data, error: failure } = await browserApi.POST("/api/me/tasks/{id}/return", { params: { path: { id: task.id } }, body: { version: task.version, reason: returnReason.trim() } });
-      if (data) { setReturnOpen(false); setNotice("已退回执行事项"); window.dispatchEvent(new Event("member-tasks-changed")); await refresh(); }
-      else failed(failure as typeof failure & { latestTask?: Task }, "没退回，请重试。");
-    } catch { setError("没退回，网络断了，请重试。"); }
-    finally { setBusy(false); }
+      const { data, error: failure } = await browserApi.POST("/api/me/tasks/{id}/return", { params: { path: { id: task.id } }, body: { version: task.version, reason } });
+      if (data) { setReturnOpen(false); changed("已退回执行事项"); return null; }
+      if ((failure as { latestTask?: Task } | undefined)?.latestTask) void refresh();
+      return failure?.message ?? "没退回，请重试。";
+    } catch { return "没退回，网络断了，请重试。"; }
   };
   const remove = async () => {
     if (!await ask(`删除执行事项「${task.title}」？删除后无法找回。`, "删除执行事项")) return;
@@ -123,48 +109,100 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
     } catch { setError("没删除，网络断了，请重试。"); }
     finally { setBusy(false); }
   };
-  return <>
-    <DetailFrame title={task.title} subtitle="执行事项" onBack={workspace.close} actions={owner ? <Button variant="ghost" onPress={() => { setEditing((value) => !value); setError(""); }}>编辑</Button> : undefined}>
-      <ObjectMaterialArea objectType="task" objectId={task.id} baseTabs={[{ id: "task", label: "事项", title: "事项" }]}
-        selected={materialTab} onSelect={setMaterialTab}>
-      <div className={s.taskPane}><div className={s.pane}>
-        <section className={s.paneBlock}>
-          <div className={s.paneRow}>{task.mission ? <Button variant="ghost" className={s.longLink} onPress={() => workspace.navigate(`/me/mission-cards/${encodeURIComponent(task.mission!.cardId)}`)}>{task.mission.title}<ArrowUpRight size={15} aria-hidden /></Button> : <StatusBadge tone="info"><span className={s.sourceBadge}>{task.source === "meeting" ? `会后分派 · ${task.origin?.meetingTitle ?? "独立事项"}` : "独立事项"}</span></StatusBadge>}<StatusBadge tone={task.status === "done" ? "success" : "info"}>{TASK_STATUS[task.status]}</StatusBadge></div>
-          <p className={s.paneNote}>{task.mission?.battlefieldName ?? "未关联战场"} · {owner ? "你在推进" : `${task.owner.name}在推进`}{task.mission ? ` · 第 ${task.mission.step} 步，共 ${task.mission.steps} 步` : ""}</p>
-          {task.waitingOn ? <p className={s.paneNote}>等上一步：{task.waitingOn.title}</p> : null}
-        </section>
-        <div className={s.paneRow}><span className={s.paneNote}>{task.dueDate ? `${dateLabel(task.dueDate)}前完成` : "截止日期待定"} · 参与：{[task.owner, ...task.collaborators].map((person) => person.name).join("、")}</span>{owner ? <Button variant="secondary" onPress={() => setInviteOpen(true)}>邀请协作</Button> : null}</div>
-        {task.startDate ? <p className={s.paneNote}>计划开始 {dateLabel(task.startDate)}</p> : null}
-        {editing && owner ? <section className={s.paneBlock}><h3>编辑执行事项</h3>
-          <FormField label="执行事项标题" value={draft.title} onChange={(value) => set("title", value)} />
-          <Select aria-label="所属个人任务" selectedKey={draft.missionId || "independent"} onSelectionChange={(key) => set("missionId", key === "independent" ? "" : String(key))}><Label>所属个人任务</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><TianshuPortalTheme><ListBox><ListBox.Item id="independent" textValue="不挂个人任务（独立事项）">不挂个人任务（独立事项）<ListBox.ItemIndicator /></ListBox.Item>{missionOptions.map((option) => <ListBox.Item key={option.missionId} id={option.missionId} textValue={option.title}>{option.title} · {option.battlefieldName}<ListBox.ItemIndicator /></ListBox.Item>)}</ListBox></TianshuPortalTheme></Select.Popover></Select>
-          <div className={s.twoFields}><TextField><Label>计划开始日期 · 可选</Label><Input type="date" value={draft.startDate} onChange={(event) => set("startDate", event.target.value)} /></TextField><TextField><Label>截止日期 · 可选</Label><Input type="date" value={draft.dueDate} onChange={(event) => set("dueDate", event.target.value)} /></TextField></div>
-          <FormField label="完成时应该留下什么 · 可选" value={draft.doneDefinition} onChange={(value) => set("doneDefinition", value)} multiline rows={3} />
-          <div className={s.paneRow}><ActionButton intent="secondary" isDisabled={busy} onPress={save}>保存</ActionButton><Button variant="ghost" onPress={() => { setDraft(draftOf(detail)); setEditing(false); }}>取消</Button></div>
-        </section> : null}
-        <section className={s.paneBlock}><h3>完成时留下什么</h3><p className={task.doneDefinition ? undefined : s.paneNote}>{task.doneDefinition ?? "还没有写完成定义。"}</p></section>
-        <section className={s.paneBlock}><h3>{owner ? "这件事的判断" : "这件事的判断（推进人写的）"}</h3>
-          <p className={detail.judgment ? undefined : s.paneNote}>{detail.judgment ?? (owner ? "还没写过。写下来之后，别人打开这件事看到的就是这一句。" : `${task.owner.name}还没写过。`)}</p>
-          {detail.judgment && detail.judgmentAt ? <p className={s.paneNote}>{owner ? "你" : task.owner.name}写于 {monthDayTime(detail.judgmentAt)}</p> : null}
-          <div className={s.separator} />
-          {owner ? <><FormField label="写下这件事的判断" value={draft.judgment} onChange={(value) => set("judgment", value)} multiline rows={3} /><div className={s.paneRow}><ActionButton intent="secondary" isDisabled={busy} onPress={() => void patch({ judgment: draft.judgment.trim() || null }, "已保存这件事的判断")}>保存</ActionButton></div></> : <><FormField label="我的批注（只属于你，不覆盖这件事的判断）" value={note} onChange={setNote} multiline rows={3} /><div className={s.paneRow}><ActionButton intent="secondary" isDisabled={busy} onPress={() => void saveNote()}>保存</ActionButton>{detail.myNote && detail.myNoteAt ? <span className={s.paneNote}>上次写于 {monthDayTime(detail.myNoteAt)}</span> : null}</div></>}
-        </section>
-        <section className={s.paneBlock}><h3>报进度</h3>{owner && task.status !== "returned" ? <><p className={s.paneNote}>进度只认推进人自报。没报过是「还没报」，不是 0%。</p><ToggleButtonGroup selectionMode="single" disallowEmptySelection selectedKeys={[task.status]} aria-label="报进度" onSelectionChange={(keys) => { const next = [...keys][0]; if (next === "not_started" || next === "in_progress" || next === "done") void patch({ status: next }, "状态已更新"); }}>{(["not_started", "in_progress", "done"] as const).map((status) => <ToggleButton key={status} id={status} isDisabled={busy}>{TASK_STATUS[status]}</ToggleButton>)}</ToggleButtonGroup>{task.source === "meeting" ? <><Button variant="ghost" onPress={() => setReturnOpen((open) => !open)}>退回</Button>{returnOpen ? <div className={s.returnForm}><FormField label="退回原因" value={returnReason} onChange={setReturnReason} multiline rows={2} /><ActionButton intent="secondary" isDisabled={busy || !returnReason.trim()} onPress={() => void returnTask()}>确认退回</ActionButton></div> : null}</> : null}</> : <p className={s.paneNote}>{task.status === "returned" ? `这件事已退回。${task.returnReason ? `原因：${task.returnReason}` : ""}` : `这件事由${task.owner.name}推进，进度只认他自报的。你的看法写在上面的批注里。`}</p>}</section>
-        <section className={s.paneBlock}><h3>进展</h3>
-          {detail.progress.length ? <div className={s.progressList}>{detail.progress.map((entry) => <article key={entry.id} className={s.progressEntry}>
-            <div className={s.progressMeta}><span className={s.progressSource}>{({ web: "网页", codex: "Codex", claude: "Claude Code", github: "GitHub", other: "外部工具" })[entry.source]}</span><span>{entry.author.name}</span><time dateTime={entry.createdAt}>{monthDayTime(entry.createdAt)}</time></div>
-            <p>{entry.body}</p>{entry.links.length ? <div className={s.progressLinks}>{entry.links.map((link) => <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.title || link.url}</a>)}</div> : null}
-          </article>)}</div> : <p className={s.paneNote}>还没有进展。可以在这里写，也可以从 Codex 或 Claude Code 同步。</p>}
-          <FormField label="写一条进展" value={progressText} onChange={(value) => { setProgressText(value); setProgressEventId(null); }} multiline rows={3} />
-          <div className={s.paneRow}><ActionButton intent="secondary" isDisabled={busy || !progressText.trim() || progressText.length > 2000} onPress={() => void saveProgress()}>保存</ActionButton></div>
-        </section>
-        {task.origin ? <section className={s.paneBlock}><h3>会议来源</h3><p>{task.origin.meetingTitle}</p>{task.origin.quote ? <blockquote>{task.origin.quote}</blockquote> : null}</section> : null}
-        {owner && task.status === "not_started" && (task.source === "self" || task.source === "plan") ? <div className={s.paneRow}><Button variant="ghost" isDisabled={busy} onPress={() => void remove()}>删除执行事项</Button></div> : null}
-        {error ? <p className={s.error} role="alert">{error}</p> : null}{notice ? <p className={s.notice} role="status">{notice}</p> : null}
-      </div></div>
+  const reopen = async () => {
+    if (!await ask(`重新打开「${task.title}」？验收记录会清掉，状态回到进行中。`, "重新打开")) return;
+    setBusy(true); setError("");
+    try {
+      const { data, error: failure } = await browserApi.POST("/api/me/tasks/{id}/reopen", { params: { path: { id: task.id } }, body: { version: task.version } });
+      if (data) changed("已重新打开");
+      else failed(failure as typeof failure & { latestTask?: Task }, "没重新打开，请重试。");
+    } catch { setError("没重新打开，网络断了，请重试。"); }
+    finally { setBusy(false); }
+  };
+  const status = taskStatus(task, owner);
+  const deletable = task.status === "not_started" && (task.source === "self" || task.source === "plan");
+  return <div className={c.screen}>
+    <DetailFrame title={task.title} subtitle="执行事项" onBack={workspace.close} actions={<>
+      <span data-task-status className={c.status} data-tone={status.tone}>
+        <span className={c.statusDot} aria-hidden /><span className={c.statusText}>{status.label}</span>
+      </span>
+      {owner ? <div data-task-actions className={c.headerActions}>
+        {acceptable ? <Button variant={task.awaitingAcceptance ? "primary" : "ghost"} className={task.awaitingAcceptance ? c.acceptSolid : c.acceptQuiet}
+          onPress={() => setAcceptOpen(true)}><Check size={15} strokeWidth={2} aria-hidden />验收</Button> : null}
+        <MoreMenu items={[
+          ...(acceptable ? [{ id: "accept", label: task.awaitingAcceptance ? "验收（外部工具已提交）" : "验收", icon: <Check size={15} strokeWidth={2} aria-hidden />, phoneOnly: true, run: () => setAcceptOpen(true) }] : []),
+          { id: "edit", label: "编辑", icon: <Pencil size={15} strokeWidth={1.8} aria-hidden />, run: () => { setEditing(true); setError(""); } },
+          ...(task.source === "meeting" && task.status !== "returned" && task.status !== "done" ? [{ id: "return", label: "退回", icon: <Undo2 size={15} strokeWidth={1.8} aria-hidden />, run: () => setReturnOpen(true) }] : []),
+          ...(done ? [{ id: "reopen", label: "重新打开", icon: <RotateCcw size={15} strokeWidth={1.8} aria-hidden />, run: () => void reopen() }] : []),
+          ...(deletable ? [{ id: "delete", label: "删除", icon: <Trash2 size={15} strokeWidth={1.8} aria-hidden />, danger: true, run: () => void remove() }] : []),
+        ]} disabled={busy} />
+      </div> : null}
+    </>}>
+      <ObjectMaterialArea objectType="task" objectId={task.id} baseTabs={[{ id: COVER, label: "封面", title: "封面" }]}
+        selected={materialTab} onSelect={setMaterialTab} links onDraft={() => workspace.compose("帮我在这件事里起草一份：")}
+        deliverables={done && detail.acceptance ? detail.acceptance.deliverableMaterialIds : null} onChanged={() => void refresh()}>
+        {(area) => <>
+          <TaskCover detail={detail} area={area} onEdit={() => setEditing(true)} onInvite={() => setInviteOpen(true)}
+            onProgress={(entry) => { setDetail((current) => ({ ...current, progress: [entry, ...current.progress.filter((item) => item.id !== entry.id)].slice(0, 50) })); void refresh(); }}
+            editor={editing && owner ? <TaskEditForm detail={detail} busy={busy} onSave={(body) => void patch(body)} onCancel={() => { setEditing(false); setError(""); }} /> : null} />
+          {error || notice ? <div className={s.taskPane} role={error ? "alert" : "status"}><div className={s.pane}>
+            {error ? <p className={s.error}>{error}</p> : <p className={s.notice}>{notice}</p>}
+          </div></div> : null}
+          {acceptOpen ? <AcceptDialog detail={detail} materials={area.materials} onClose={() => setAcceptOpen(false)} onStale={() => void refresh()}
+            onOpenMaterial={(id) => area.open(id)}
+            onDone={async (next, accepted) => {
+              if (!await refresh()) setDetail((current) => ({ ...current, task: next }));
+              setAcceptOpen(false); setNotice(accepted ? "已验收，这件事完成了" : "已清掉这次提交，接着做");
+            }} /> : null}
+        </>}
       </ObjectMaterialArea>
     </DetailFrame>
     <CollaboratorsDialog taskId={task.id} options={detail.collaboratorOptions} isOpen={inviteOpen} onClose={() => setInviteOpen(false)} onAdded={() => void refresh()} />
+    {returnOpen ? <ReturnDialog onClose={() => setReturnOpen(false)} onSubmit={returnTask} /> : null}
     {dialog}
-  </>;
+  </div>;
+}
+
+type MoreItem = { id: string; label: string; icon: ReactNode; run: () => void; danger?: boolean; phoneOnly?: boolean };
+
+/** 页头 ⋯：推进人的低频动作（编辑、退回、删除、重新打开；手机上验收也在这里）。下拉单和材料下拉同一种毛玻璃。 */
+function MoreMenu({ items, disabled }: { items: MoreItem[]; disabled: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!items.length) return null;
+  return <Popover isOpen={open} onOpenChange={setOpen}>
+    <Button variant="ghost" isIconOnly className={c.more} aria-label="更多" isDisabled={disabled}><Ellipsis size={18} aria-hidden /></Button>
+    <Popover.Content placement="bottom end" offset={6} className={`${t.popover} ${c.moreMenu}`}>
+      <TianshuPortalTheme>
+        <Popover.Dialog className={t.menu} aria-label="更多">
+          {items.map((item) => <Button key={item.id} variant="ghost" className={`${t.item}${item.danger ? ` ${c.danger}` : ""}${item.phoneOnly ? ` ${c.phoneOnly}` : ""}`}
+            onPress={() => { setOpen(false); item.run(); }}>
+            {item.icon}<span className={t.label}>{item.label}</span>
+          </Button>)}
+        </Popover.Dialog>
+      </TianshuPortalTheme>
+    </Popover.Content>
+  </Popover>;
+}
+
+/** 退回（会后分派的事项）：写原因，主持人会收到提醒。 */
+function ReturnDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (reason: string) => Promise<string | null> }) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async () => {
+    setBusy(true); setError("");
+    const failure = await onSubmit(reason.trim());
+    setBusy(false);
+    if (failure) setError(failure);
+  };
+  return <MenuDialog title="退回执行事项" onClose={onClose}>
+    <form className={s.returnForm} onSubmit={(event) => { event.preventDefault(); if (reason.trim()) void submit(); }}>
+      <TextField value={reason} onChange={setReason} maxLength={200} autoFocus>
+        <Label>退回原因</Label>
+        <TextArea rows={3} placeholder="写清是不归你、会上没这么定，还是该找别人。" />
+      </TextField>
+      {error ? <p className={s.error} role="alert">{error}</p> : null}
+      <Button variant="primary" type="submit" isDisabled={busy || !reason.trim()}>退回，告诉主持人</Button>
+    </form>
+  </MenuDialog>;
 }

@@ -19,6 +19,9 @@ export type PersonalMissionGroup = {
   phase: MissionGroupPhase;
   round: number;
   onRefresh: () => void;
+  agentNote?: string;
+  /** 个人准备与本人确认通过私聊完成，不提供公开改卡入口。 */
+  canDiscuss?: boolean;
   reference?: MissionGroupReference | null;
   onRemoveReference: () => void;
 };
@@ -41,9 +44,9 @@ export type ThreadGroup = {
 export type DetailGroup = PersonalMissionGroup | TaskGroup | ThreadGroup;
 
 export function groupInputState(phase: MissionGroupPhase) {
-  if (phase === "draft") return { writable: false, placeholder: "讨论还没开放" };
+  if (phase === "draft") return { writable: false, placeholder: "审核尚未下发" };
   if (phase === "confirmed") return { writable: false, placeholder: "本月 Mission Card 已确定" };
-  return { writable: true, placeholder: phase === "open" ? "输入你的想法…" : "截止后留言 · 不进这一轮集中 Review" };
+  return { writable: true, placeholder: phase === "open" ? "输入你的想法…" : "汇总后留言 · 待拍板人处理" };
 }
 
 export function mergeGroupEntries(previous: MissionGroupEntry[], incoming: MissionGroupEntry[]): MissionGroupEntry[] {

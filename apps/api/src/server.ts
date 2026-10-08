@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { buildApp, type AppEnv } from "./app.js";
+import { buildApp, DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR, type AppEnv } from "./app.js";
 import { migrate } from "./migrate.js";
 import { Pool } from "pg";
 import { createRadarService } from "./radar.js";
@@ -21,11 +21,13 @@ import { createMonthlyPlanService } from "./monthlyDraft.js";
 import { createMonthlyDraftAgent } from "./monthlyDraftAgent.js";
 import { createMonthlyPlanScheduler } from "./monthlyPlanScheduler.js";
 import { createMonthlyReviewService } from "./monthlyReviewService.js";
+import { createPersonalReviewDraftAgent } from "./personalReviewAgent.js";
 import { createMonthlyReviewAssessAgent, createMonthlyReviewDraftAgent, createMonthlyReviewSummaryAgent } from "./monthlyReviewAgents.js";
 import { createMonthlyReviewScheduler } from "./monthlyReviewScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
 import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
+import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
 
 function requiredEnv(name: string): string {
@@ -41,11 +43,14 @@ const env: AppEnv = {
   extraOrigins: (process.env.EXTRA_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean),
   driServiceToken: requiredEnv("DRI_SERVICE_TOKEN"),
   ontologyServiceToken: process.env.ONTOLOGY_SERVICE_TOKEN,
+  worldApiUrl: process.env.TKOS_WORLD_API_URL,
+  worldAgentToken: process.env.TKOS_WORLD_AGENT_TOKEN,
   mcpServiceToken: requiredEnv("COMPANY_MEMORY_MCP_TOKEN"),
   companyMemorySeedDir: requiredEnv("COMPANY_MEMORY_SEED_DIR"),
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
   companyName: process.env.COMPANY_NAME,
   missionCardDraftsDir: process.env.MISSION_CARD_DRAFTS_DIR,
+  missionCardKnownMissionsFile: process.env.MISSION_CARD_KNOWN_MISSIONS_FILE,
   piBaseUrl: requiredEnv("PI_BASE_URL"),
   piApiKey: requiredEnv("PI_API_KEY"),
   lightModel: requiredEnv("LIGHT_MODEL"),
@@ -121,6 +126,7 @@ const personalRadarService = createPersonalRadarService({
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.lightModel,
+    personName: (personId) => personDisplayNames(companyMemory).get(personId),
   }),
   // 02b：GitHub Trending 没有订阅源、检索也限定不了站点，直接读榜单页面
   trending: createGithubTrendingReader(),
@@ -142,6 +148,8 @@ const reviewAgentOptions = { query: pool.query.bind(pool), baseUrl: env.piBaseUr
 const monthlyReviewService = createMonthlyReviewService({
   pool,
   companyMemory,
+  personalDraft: { storageDir: env.conversationAttachmentStorageDir ?? DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR,
+    agent: createPersonalReviewDraftAgent({ ...reviewAgentOptions, personName: (personId) => personDisplayNames(companyMemory).get(personId) }) },
   agents: {
     draft: createMonthlyReviewDraftAgent(reviewAgentOptions),
     assess: createMonthlyReviewAssessAgent(reviewAgentOptions),

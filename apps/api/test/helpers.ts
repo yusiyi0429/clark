@@ -4,7 +4,7 @@ import { Pool } from "pg";
 import type { TPreflightCandidate, TWebSearchInput, TWebSearchResponse, TWebSearchResult } from "@warmap/contracts";
 import { migrate } from "../src/migrate.js";
 import { hashSecret } from "../src/session.js";
-import { buildApp, type AppEnv } from "../src/app.js";
+import { buildApp, DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR, type AppEnv } from "../src/app.js";
 import type { FastifyInstance } from "fastify";
 import type { ConversationRuntime } from "../src/conversations.js";
 import type { ResearchService } from "../src/research.js";
@@ -21,6 +21,11 @@ import type { DictationDeps } from "../src/dictation.js";
 import type { RadarService } from "../src/radar.js";
 import type { PersonalRadarService } from "../src/personalRadar.js";
 import type { ThreadIntroAgent } from "../src/threadIntro.js";
+import type { TaskAcceptanceAgent } from "../src/taskAcceptanceDraft.js";
+import type { MaterialAnnotationAgent } from "../src/materialAnnotationAgent.js";
+import type { MissionCardAnnotationAgent } from "../src/missionCardAnnotationAgent.js";
+import type { MissionCardReviewAgent } from "../src/missionCardReview.js";
+import type { MissionCardDraftAgent } from "../src/missionCardDraftAgent.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
@@ -186,13 +191,19 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "publicOrigin">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
     preflightAgent?: PreflightAgent;
     outcomeAgent?: PostMeetingAgent;
     threadIntroAgent?: ThreadIntroAgent;
+    /** 验收草稿的假 Agent；不注入时起草失败（接口 503，手填照样能验收）。 */
+    taskAcceptanceAgent?: TaskAcceptanceAgent;
+    materialAnnotationAgent?: MaterialAnnotationAgent;
+    missionCardAnnotationAgent?: MissionCardAnnotationAgent;
+    missionCardReviewAgent?: MissionCardReviewAgent;
+    missionCardDraftAgent?: MissionCardDraftAgent;
     driExporter?: DriExporter;
     ontologyUpdater?: OntologyUpdater;
     monthlyDraftAgent?: MonthlyDraftAgent;
@@ -229,13 +240,19 @@ export async function createTestApp(
     ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;
   const monthlyReviews = monthlyReviewAgents
-    ? createMonthlyReviewService({ pool, companyMemory: loadCompanyMemory(env), agents: monthlyReviewAgents, now: monthlyNow, retryDelayMs: monthlyReviewRetryDelayMs })
+    ? createMonthlyReviewService({ pool, companyMemory: loadCompanyMemory(env), agents: monthlyReviewAgents, now: monthlyNow, retryDelayMs: monthlyReviewRetryDelayMs,
+      personalDraft: { storageDir: env.conversationAttachmentStorageDir ?? DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR,
+        agent: monthlyReviewAgents.personal ?? { async generate() { return { candidate: {
+          overall: { text: "缺少材料", sources: [] }, judgments: { text: "缺少材料", sources: [] },
+          nextFocus: { text: "缺少材料", sources: [] }, escalations: { text: "", sources: [] },
+        } }; } } } })
     : undefined;
   const recordings = recordingDeps
     ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, companyMemory: loadCompanyMemory(env), deps: recordingDeps })
     : undefined;
   const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, recordingService: recordings, now: monthlyNow,
     threadIntroAgent: { async generate(input) { return { message: `${input.inviter}邀请${input.newcomers.join("、")}加入「${input.title}」，请查看对象进展。` }; } },
+    taskAcceptanceAgent: { async draft() { throw new Error("测试里没有模型"); } },
     ...appRuntimeOptions });
   const apps = [app];
   return {
@@ -244,8 +261,8 @@ export async function createTestApp(
     monthlyPlans,
     monthlyReviews,
     recordings,
-    publicOrigin: testEnv.publicOrigin,
-    env: testEnv,
+    publicOrigin: env.publicOrigin,
+    env,
     loginCookie: () => loginAs(app, TEST_CEO),
     memberCookie: () => loginAs(app, TEST_MEMBER),
     /** 真实 DRI 导入的 pending Issue：目标路由只消费持久对象，测试不再依赖 fixture 表。 */

@@ -15,7 +15,7 @@ type Battlefield = TBattlefieldManagementResponse["battlefields"][number];
 type Status = { kind: "ok" | "error"; message: string } | null;
 
 /** 编辑草稿：编号/顺序以文本编辑，战略锚点以「编号 标题」逐行文本编辑，存储仍是结构化值。 */
-export type BattlefieldDraft = { code: string; sortOrder: string; name: string; ownerId: string; sixMonthOutcome: string; missionAnchors: string };
+export type BattlefieldDraft = { code: string; sortOrder: string; name: string; ownerId: string; sixMonthOutcome: string; missionAnchors: string; participantIds: string[] };
 
 export function formatMissionAnchors(missionAnchors: TMissionAnchor[]): string {
   return missionAnchors.map((mission) => `${mission.code} ${mission.title}`).join("\n");
@@ -47,8 +47,10 @@ export function parseMissionAnchors(text: string): MissionAnchorParse {
 }
 
 export function battlefieldDraft(item: Battlefield): BattlefieldDraft {
-  return { code: item.code, sortOrder: String(item.sortOrder), name: item.name, ownerId: item.ownerId, sixMonthOutcome: item.sixMonthOutcome, missionAnchors: formatMissionAnchors(item.missionAnchors) };
+  return { code: item.code, sortOrder: String(item.sortOrder), name: item.name, ownerId: item.ownerId, sixMonthOutcome: item.sixMonthOutcome, missionAnchors: formatMissionAnchors(item.missionAnchors), participantIds: item.participantIds };
 }
+
+const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id) => b.includes(id));
 
 /** 编辑弹层只提交真正改动的字段：未动的负责人（可能是空串）不重写，避免被当成新值。 */
 export type BattlefieldPatch = {
@@ -58,6 +60,7 @@ export type BattlefieldPatch = {
   ownerId?: string;
   sixMonthOutcome?: string;
   missionAnchors?: TMissionAnchor[];
+  participantIds?: string[];
 };
 
 export function battlefieldEditPatch(
@@ -78,6 +81,8 @@ export function battlefieldEditPatch(
     if (!parsed.ok) return { ok: false, error: parsed.error };
     patch.missionAnchors = parsed.missionAnchors;
   }
+  // 推算出的名单没动过就不保存，下次起草仍按上月 Mission 推算。
+  if (!sameIds(draft.participantIds, current.participantIds)) patch.participantIds = draft.participantIds;
   return { ok: true, patch };
 }
 
@@ -95,13 +100,15 @@ function ownerLabel(issue: Issue, names: Map<string, string>) {
 /**
  * 战场管理页只消费 GET /api/config/battlefields 一次投影：
  * 左侧选战场并删除，右侧看关联议题、增删议题归属，写完用 router.refresh 重读投影。
+ * 带 battlefieldId 进入（签发页「改参与者」）时直接展开这个战场的编辑。
  */
-export function BattlefieldScreen({ battlefields, issues, people }: TBattlefieldManagementResponse & { people: PersonOption[] }) {
+export function BattlefieldScreen({ battlefields, issues, people, initialBattlefieldId }: TBattlefieldManagementResponse & { people: PersonOption[]; initialBattlefieldId?: string }) {
   const router = useRouter();
-  const [selectedId, setSelectedId] = useState(battlefields[0]?.id ?? "");
+  const initial = battlefields.find((item) => item.id === initialBattlefieldId);
+  const [selectedId, setSelectedId] = useState(initial?.id ?? battlefields[0]?.id ?? "");
   const [confirming, setConfirming] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<BattlefieldDraft>({ code: "", sortOrder: "", name: "", ownerId: "", sixMonthOutcome: "", missionAnchors: "" });
+  const [editing, setEditing] = useState(Boolean(initial));
+  const [draft, setDraft] = useState<BattlefieldDraft>(initial ? battlefieldDraft(initial) : { code: "", sortOrder: "", name: "", ownerId: "", sixMonthOutcome: "", missionAnchors: "", participantIds: [] });
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Record<"list" | "pick", Status>>({ list: null, pick: null });
 
@@ -110,6 +117,8 @@ export function BattlefieldScreen({ battlefields, issues, people }: TBattlefield
   const missionParse = parseMissionAnchors(draft.missionAnchors);
   const missionError = missionParse.ok ? null : missionParse.error;
   const related = selected ? issues.filter((issue) => issue.battlefieldIds.includes(selected.id)) : [];
+  // CEO 不拿任务卡，名单里不出现。
+  const candidates = people.filter((person) => !person.roles.includes("ceo"));
   const report = (slot: "list" | "pick", value: Status) => setStatus((prev) => ({ ...prev, [slot]: value }));
 
   /** 401 回登录入口；成功重读服务端投影，失败把后端 message 原样落到对应页脚。 */
@@ -274,7 +283,7 @@ export function BattlefieldScreen({ battlefields, issues, people }: TBattlefield
                   </select>
                 </label>
                 <label className={b.field}>
-                  <span>六个月目标</span>
+                  <span>LTO · 六个月目标</span>
                   <textarea value={draft.sixMonthOutcome} onChange={(event) => setDraft({ ...draft, sixMonthOutcome: event.target.value })} />
                 </label>
                 <label className={b.field}>
@@ -282,6 +291,29 @@ export function BattlefieldScreen({ battlefields, issues, people }: TBattlefield
                   <textarea value={draft.missionAnchors} onChange={(event) => setDraft({ ...draft, missionAnchors: event.target.value })} />
                   {missionError ? <span className={b.fieldError} role="alert">{missionError}</span> : null}
                 </label>
+                <div className={b.field} role="group" aria-labelledby="battlefield-participants">
+                  <span id="battlefield-participants">
+                    参与者
+                    {selected.participantsDerived && sameIds(draft.participantIds, selected.participantIds) ? <em className={b.fieldNote}>按上月 Mission 推算</em> : null}
+                  </span>
+                  <div className={b.choices}>
+                    {candidates.map((person) => (
+                      <label key={person.personId} className={b.choice}>
+                        <input
+                          type="checkbox"
+                          checked={draft.participantIds.includes(person.personId)}
+                          onChange={(event) => {
+                            const chosen = new Set(draft.participantIds);
+                            if (event.target.checked) chosen.add(person.personId);
+                            else chosen.delete(person.personId);
+                            setDraft({ ...draft, participantIds: candidates.filter((item) => chosen.has(item.personId)).map((item) => item.personId) });
+                          }}
+                        />
+                        {person.displayName}
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <span className={b.confirmActions}>
                   <button type="button" className={b.cancel} onClick={() => setEditing(false)}>
                     取消

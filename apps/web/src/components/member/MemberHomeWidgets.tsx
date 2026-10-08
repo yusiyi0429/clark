@@ -22,8 +22,12 @@ export function MemberHomeWidgets({ work, onNavigate, onRefresh, radar }: { work
       <Card className={s.widget}><div className={s.heading}><h2>参与的战场</h2></div><p className={s.empty}>还没有登记你参与的战场</p></Card>}
     <Card className={s.widget} data-widget="mission-cards">
       <div className={s.heading}><h2>我的本月卡</h2><span className={s.month}>{Number(work.period.slice(5))} 月</span></div>
-      {work.missionCards.length ? <div className={s.cardList}>{work.missionCards.map((card) => <PersonalCardEntry key={card.cardId} card={card} onNavigate={onNavigate} onRefresh={onRefresh} />)}</div> :
-        <p className={s.empty}>这个月还没有你的卡</p>}
+      {work.missionCards.length ? <div className={s.cardList}>{work.missionCards.map((card) => <PersonalCardEntry key={card.cardId} card={card} onNavigate={onNavigate} onRefresh={onRefresh} />)}</div> : null}
+      {/* 没有任务卡、但这个月有独立登记的 Mission（9 月 Mission 是直接导入的）：列出来，下月卡确定前一直显示。 */}
+      {!work.missionCards.length && work.missions.length ? <ul className={s.missionList} aria-label={`${Number(work.period.slice(5))} 月 Mission`}>
+        {work.missions.map((mission) => <li key={mission.id}><span className={s.missionCode}>{mission.code}</span>{mission.title}</li>)}
+      </ul> : null}
+      {!work.missionCards.length && !work.missions.length ? <p className={s.empty}>这个月还没有你的卡</p> : null}
     </Card>
   </section>{radar ? <div className={s.radarSlot} data-widget="radar">{radar}</div> : null}</div>;
 }
@@ -51,7 +55,7 @@ function BattlefieldWidget({ battlefield, onNavigate }: { battlefield: MemberWor
       {battlefield.isDri ? <span className={s.crown} role="img" aria-label="你是这个战场的 DRI" title="你是这个战场的 DRI"><Crown size={20} strokeWidth={1.65} aria-hidden /></span> : null}
     </div>
     <div className={s.goal}>
-      <span className={s.label}>本月目标</span>
+      <span className={s.label}>PO · 本月目标</span>
       <p ref={target} id={goalId} className={s.goalText} data-expanded={expanded} data-empty={battlefield.monthTargetState !== "confirmed"}>{battlefield.monthTargetText}</p>
       {overflows ? <button type="button" className={s.expand} aria-expanded={expanded} aria-controls={goalId} onClick={() => setExpanded((value) => !value)}>
         {expanded ? "收起" : "展开全文"}<ChevronDown size={14} aria-hidden />
@@ -66,7 +70,7 @@ function PersonalCardEntry({ card, onNavigate, onRefresh }: { card: MemberWork["
   const awaitingSnapshot = card.phase === "open" && !!card.closesAt && now >= Date.parse(card.closesAt);
   return <HeroButton variant="ghost" className={s.personalLink} data-origin={card.href} aria-label={`打开我的本月卡：${card.battlefieldName}`} onPress={(event) => onNavigate(card.href, event.target)}>
     <span className={s.cardName}>{card.battlefieldName}<ChevronRight size={16} aria-hidden /></span>
-    <span className={s.cardStatus}>{awaitingSnapshot ? "已截止 · 汇总中" : card.status}</span>
+    <span className={s.cardStatus}>{awaitingSnapshot ? "本人确认时间已到" : card.status}</span>
     <span className={s.cardMeta}>{card.missionCount} 项个人任务{card.placeholder ? " · 占位" : ""}</span>
     {card.closesAt && card.phase !== "confirmed" ? <span className={s.deadline}><time dateTime={card.closesAt}>{monthDayTime(card.closesAt)} 截止</time><span>{clock}</span></span> : null}
   </HeroButton>;

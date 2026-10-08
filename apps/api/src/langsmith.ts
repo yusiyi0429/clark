@@ -10,6 +10,14 @@ export type AgentTrace = {
   agentKind: string;
   promptHash?: string;
   objectRef?: unknown;
+  /** 发起或所属的人；系统/公司级 run 缺省。 */
+  personId?: string;
+  /** 有名字时 run 名前缀人名，查看者只用 LangSmith 也能认出是谁。 */
+  personName?: string;
+  /** LangSmith Threads 按它把同一会话的多轮串起来。 */
+  threadId?: string;
+  /** 其余可筛选字段（如对话发生的部分）。 */
+  metadata?: Record<string, unknown>;
   inputs?: unknown;
   outputs?: unknown;
   toolEvents?: unknown[];
@@ -48,7 +56,7 @@ export async function recordAgentTrace(trace: AgentTrace): Promise<void> {
   try {
     const payload = redactSecrets({
       id: trace.runId,
-      name: trace.name,
+      name: trace.personName ? `${trace.personName} · ${trace.name}` : trace.name,
       run_type: "chain",
       session_name: config.project,
       start_time: new Date(trace.startedAt).toISOString(),
@@ -56,7 +64,10 @@ export async function recordAgentTrace(trace: AgentTrace): Promise<void> {
       inputs: { agentKind: trace.agentKind, promptHash: trace.promptHash, objectRef: trace.objectRef, input: trace.inputs },
       outputs: trace.outputs,
       error: trace.error,
-      extra: { status: trace.status, durationMs: trace.durationMs, toolEvents: trace.toolEvents, usage: trace.usage },
+      extra: {
+        status: trace.status, durationMs: trace.durationMs, toolEvents: trace.toolEvents, usage: trace.usage,
+        metadata: { user_id: trace.personId, user_name: trace.personName, thread_id: trace.threadId, ...trace.metadata },
+      },
     });
     const response = await send(`${config.endpoint}/runs`, {
       method: "POST",

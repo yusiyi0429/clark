@@ -1,0 +1,28 @@
+/* 个人复盘看板：通知卡里的一份名单，未交的在前、琥珀点；已交绿色；跳过灰色。 */
+.ratio { min-width: 30px; }
+
+.roster { display: flex; flex-direction: column; gap: 0; margin: 4px 0 2px; padding: 4px 0 0; list-style: none; border-top: 1px solid var(--notice-separator); }
+.row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.row + .row { border-top: 1px solid rgb(32 38 48 / 5%); }
+
+.open { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 40px; padding: 8px 10px 8px 12px; border-radius: 12px; background: transparent; text-align: left; color: var(--notice-ink); font: inherit; }
+button.open:hover { background: rgb(38 61 92 / 6%); }
+.open > svg { flex: none; color: #a2a6ad; }
+
+.name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 20px; font-weight: 520; }
+.name em { font-style: normal; font-weight: 400; color: var(--notice-muted); }
+.state { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; line-height: 18px; color: var(--notice-muted); }
+.state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #8e8e93; }
+.state[data-tone="open"] { color: #8a6415; }
+.state[data-tone="open"]::before { background: #c79624; box-shadow: 0 0 0 3px #c7962418; }
+.state[data-tone="done"] { color: #26805e; }
+.state[data-tone="done"]::before { background: #2f9a70; }
+.state[data-tone="skipped"]::before { background: #b3b6bc; }
+.row[data-tone="open"] .name { color: var(--notice-ink); }
+.row[data-tone="done"] .name, .row[data-tone="skipped"] .name { color: var(--notice-muted); font-weight: 450; }
+
+.skip { flex: none; min-height: 30px; margin-right: 6px; padding: 0 10px; border-radius: 9px; background: rgb(38 61 92 / 6%); color: #334d70; font-size: 12px; font-weight: 560; }
+.skip:hover { background: rgb(38 61 92 / 11%); }
+
+.selfDone { display: flex; align-items: center; gap: 6px; margin: 0; padding: 10px 12px; color: #26805e; font-size: 13px; line-height: 1.5; }
+.selfDone svg { flex: none; }

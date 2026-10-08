@@ -16,7 +16,9 @@ import { resolveConfiguredOutletIds } from "./outletSources.js";
 import type { ResearchService } from "./research.js";
 import type { PreflightAgent } from "./meetingPreflight.js";
 import { createPreflightAgent } from "./preflightAgent.js";
-import { pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
+import { onOutcomeReviewed, pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
+import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
+import { createWorldMeetingService } from "./worldMeetingEvents.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import type { DriExporter } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
@@ -38,12 +40,17 @@ import {
   type RouteContext,
 } from "./routes/shared.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerMcpOAuthRoutes } from "./routes/mcpOAuth.js";
 import { registerCardRoutes } from "./routes/cards.js";
 import { registerConfigRoutes } from "./routes/config.js";
 import { registerRadarRoutes } from "./routes/radar.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerMeetingRoutes } from "./routes/meetings.js";
 import { registerMaterialRoutes } from "./routes/materials.js";
+import type { MaterialAnnotationAgent } from "./materialAnnotationAgent.js";
+import type { MissionCardAnnotationAgent } from "./missionCardAnnotationAgent.js";
+import type { MissionCardReviewAgent } from "./missionCardReview.js";
+import { createMissionCardDraftAgent, type MissionCardDraftAgent } from "./missionCardDraftAgent.js";
 import { registerActionRoutes } from "./routes/actions.js";
 import { registerDriRoutes } from "./routes/dri.js";
 import { registerSystemRoutes } from "./routes/system.js";
@@ -51,6 +58,7 @@ import { registerThreadRoutes } from "./routes/threads.js";
 import { registerRecordingRoutes } from "./routes/recordings.js";
 import { registerMeRoutes } from "./routes/me.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
+import { registerSeenMarkRoutes } from "./routes/seenMarks.js";
 import { registerMissionCardRoutes } from "./routes/missionCards.js";
 import { registerMyRadarRoutes } from "./routes/myRadar.js";
 import { registerOntologyRoutes } from "./routes/ontology.js";
@@ -59,6 +67,7 @@ import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type Meet
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
 import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js";
+import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAcceptanceDraft.js";
 
 type ValidationItem = { instancePath?: string; dataPath?: string; message?: string };
 
@@ -66,7 +75,7 @@ export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
 /** warmap-transcript.v1 单文件上限；Web multipart 与 service API 共用。 */
 export const MAX_TRANSCRIPT_BYTES = 1024 * 1024;
 const DEFAULT_MATERIAL_STORAGE_DIR = "/tmp/warmap-meeting-materials";
-const DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR = "/tmp/warmap-conversation-attachments";
+export const DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR = "/tmp/warmap-conversation-attachments";
 
 export type AppEnv = {
   sessionSecret: string;
@@ -81,8 +90,10 @@ export type AppEnv = {
   demoLoginId?: string;
   /** 引导中的公司名，可空；不从其他资料猜测。 */
   companyName?: string;
-  /** mission-card-drafts.v1 占位文件目录；未配置时使用仓库 seed/placeholders。 */
+  /** 旧配置兼容；正式自动起草不读取文件，人工导入须由 CLI 显式指定路径。 */
   missionCardDraftsDir?: string;
+  /** 已知的本月任务（飞书任务卡、本体 Mission 导出），作为起草依据；未配置或文件缺失时照常起草。 */
+  missionCardKnownMissionsFile?: string;
   driServiceToken: string;
   ontologyServiceToken?: string;
   mcpServiceToken: string;
@@ -100,7 +111,7 @@ export type AppEnv = {
   conversationAttachmentStorageDir?: string;
   /** 会议录音卷（分片、拼好的 webm、转码后的 mp3、厂商原文）；与材料卷隔离。 */
   recordingStorageDir?: string;
-} & CompanyMemorySeedEnv;
+} & CompanyMemorySeedEnv & WorldEnv;
 
 export async function buildApp({
   pool,
@@ -119,6 +130,11 @@ export async function buildApp({
   voiceprintDeps = realVoiceprintDeps,
   dictationDeps = realDictationDeps,
   threadIntroAgent,
+  taskAcceptanceAgent,
+  materialAnnotationAgent,
+  missionCardAnnotationAgent,
+  missionCardReviewAgent,
+  missionCardDraftAgent,
   webSearch,
   outlets,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
@@ -146,6 +162,12 @@ export async function buildApp({
   /** 输入框语音转文字用的 ffmpeg 与火山极速版；缺省为真实实现（测试注入假实现）。 */
   dictationDeps?: DictationDeps;
   threadIntroAgent?: ThreadIntroAgent;
+  taskAcceptanceAgent?: TaskAcceptanceAgent;
+  materialAnnotationAgent?: MaterialAnnotationAgent;
+  missionCardAnnotationAgent?: MissionCardAnnotationAgent;
+  missionCardReviewAgent?: MissionCardReviewAgent;
+  /** 任务卡起草 Co-Agent；缺省用 heavy 模型槽位（测试注入假实现）。 */
+  missionCardDraftAgent?: MissionCardDraftAgent;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
@@ -181,6 +203,8 @@ export async function buildApp({
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     companyMemory,
     materialPool: pool,
+    missionCardSecret: env.sessionSecret,
+    now,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.lightModel,
@@ -188,7 +212,7 @@ export async function buildApp({
     search: webSearch,
     outletFeed: readOutletFeed,
     globalContext: () => globalConversationContext(pool.query.bind(pool), new Date()),
-    listMissions: (filters) => listConversationMissions(pool.query.bind(pool), filters),
+    listMissions: (filters, viewer) => listConversationMissions(pool.query.bind(pool), filters, viewer),
     // 对话只读工具：实时待决策 Issue 清单（不含签名 Action，不可写入）。
     listPendingIssues: async () => {
       const result = await pool.query(
@@ -233,6 +257,11 @@ export async function buildApp({
     await runtime.close?.();
   });
   const q = pool.query.bind(pool);
+  if (worldConfigured(env)) {
+    const worldMeetings = createWorldMeetingService(pool, new WorldClient(q, env), env.publicOrigin, now);
+    const unsubscribe = onOutcomeReviewed(pool, worldMeetings.schedule);
+    app.addHook("onClose", async () => { unsubscribe(); await worldMeetings.close(); });
+  }
   // 每个请求的结构化日志上下文：handler 里补充 action/run 字段，onResponse 统一落一条。
   const requestContext = new WeakMap<FastifyRequest, RequestContext>();
   app.addHook("onResponse", async (req, reply) => {
@@ -321,6 +350,8 @@ export async function buildApp({
     voiceprints: voiceprintDeps,
     dictation: dictationDeps,
     threadIntroAgent: threadIntroAgent ?? createThreadIntroAgent(pool, env),
+    missionCardDraftAgent: missionCardDraftAgent ?? createMissionCardDraftAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.heavyModel }),
+    taskAcceptanceAgent: taskAcceptanceAgent ?? createTaskAcceptanceAgent(pool, env),
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,
@@ -339,12 +370,13 @@ export async function buildApp({
   };
 
   registerAuthRoutes(app, ctx);
+  await registerMcpOAuthRoutes(app, ctx);
   registerCardRoutes(app, ctx);
   registerConfigRoutes(app, ctx);
   registerRadarRoutes(app, ctx);
   registerConversationRoutes(app, ctx);
   registerMeetingRoutes(app, ctx);
-  registerMaterialRoutes(app, ctx);
+  registerMaterialRoutes(app, ctx, materialAnnotationAgent);
   registerActionRoutes(app, ctx);
   registerDriRoutes(app, ctx);
   registerOntologyRoutes(app, ctx);
@@ -353,7 +385,8 @@ export async function buildApp({
   registerRecordingRoutes(app, ctx);
   registerMeRoutes(app, ctx);
   registerOnboardingRoutes(app, ctx);
-  registerMissionCardRoutes(app, ctx);
+  registerSeenMarkRoutes(app, ctx);
+  registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
 

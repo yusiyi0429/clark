@@ -77,3 +77,10 @@ Issues 和 Specs 使用本地 Markdown，保存在 `.scratch/<feature-slug>/`。
 ### Domain docs
 
 项目使用 single-context 领域文档布局。详见 `docs/agents/domain.md`。
+
+### 天枢执行事项
+
+通过用户级 MCP 服务 `tianshu` 读写本人的执行事项（令牌只在用户配置里，不写进项目文件）。
+
+- 推进天枢里的执行事项时：开始前用 `list_my_items` 找到对应事项；收尾时用 `append_progress` 写一条进展（做了什么、证据链接、下一步或阻塞）；做出来的文档、设计稿、PR 用 `add_link` 放进这件事；做完用 `submit_for_acceptance` 提交验收（对照完成标准逐条写明是否达到和依据），由本人在天枢确认完成。只写真实做过的事。
+- 用户说「同步本周进展」时：先调用 tianshu 的 `list_my_items`（status=all）看我负责的执行事项；我已知的协作事项用 `get_item` 核对。再根据我这周实际做过的事（当前目录的提交、文档，以及我们的对话），为每件有进展的事项调用一次 `append_progress`，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 `add_link` 放进对应事项。我推进的事项已经做完的，用 `submit_for_acceptance` 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条。

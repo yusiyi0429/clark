@@ -24,8 +24,11 @@ export function projectMemberMeetingCard(row: MeetingRow, secret: string, viewer
 
 export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string): TCard {
   const payload = card.payload as TMeetingCardPayload;
+  const isHost = payload.leadDriId === viewerId;
   return { ...card, payload: {
     status: payload.status, scheduledAt: payload.scheduledAt, endsAt: payload.endsAt, endedAt: payload.endedAt,
+    hasEnded: payload.hasEnded,
+    ...(isHost ? { transcriptCandidate: payload.transcriptCandidate } : {}),
     leadDriId: payload.leadDriId, participants: payload.participants,
     purpose: payload.preflight.taskDefinition?.reviewPurpose ?? null,
     materials: payload.materials,
@@ -35,6 +38,6 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
       .filter((item) => (item.kind === "decision" || item.kind === "todo") && item.review?.status === "confirmed")
       .map((item) => ({ id: item.id, kind: item.kind, text: item.text, ownerPersonId: item.ownerPersonId })) } : null,
   },
-    actions: payload.leadDriId === viewerId ? card.actions.filter((action) => action.actionType === "meeting.end") : [],
+    actions: isHost ? card.actions.filter((action) => ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(action.actionType)) : [],
     navigation: [{ href: `/me/meetings/${card.objectRef.id}`, label: "会议" }] };
 }

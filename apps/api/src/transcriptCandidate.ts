@@ -91,9 +91,10 @@ export async function createTranscriptCandidate(
   secret: string,
   meetingId: string,
   file: { fileName: string; buffer: Buffer },
+  hostId?: string,
 ): Promise<TranscriptCandidateResult> {
   const meeting = await getMeetingRow(pool.query.bind(pool), meetingId);
-  if (!meeting) return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
+  if (!meeting || (hostId !== undefined && meeting.lead_dri_id !== hostId)) return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
   const parsed = parseMiaojiMarkdown(file.buffer);
   if (!parsed.ok) {
     const message = parsed.error.line ? `${parsed.error.message}（第 ${parsed.error.line} 行）` : parsed.error.message;
@@ -108,7 +109,7 @@ export async function createTranscriptCandidate(
     timeAnchor: meeting.scheduled_at.toISOString(),
   };
   const candidate = buildTranscriptCandidate(parsed.transcript.turns, companyMemory.searchPeople(undefined), source);
-  const saved = await saveTranscriptCandidate(pool, meetingId, candidate);
+  const saved = await saveTranscriptCandidate(pool, meetingId, candidate, hostId);
   return "row" in saved ? { status: 200, card: projectMeetingCard(saved.row, secret) } : saved;
 }
 
@@ -120,6 +121,7 @@ export async function saveTranscriptCandidate(
   pool: Pool,
   meetingId: string,
   candidate: TStoredTranscriptCandidate,
+  hostId?: string,
 ): Promise<{ row: MeetingRow } | { status: 404 | 409; code: string; message: string }> {
   const client = await pool.connect();
   try {
@@ -130,6 +132,10 @@ export async function saveTranscriptCandidate(
       return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
     }
     const row = locked.rows[0];
+    if (hostId !== undefined && row.lead_dri_id !== hostId) {
+      await client.query("ROLLBACK");
+      return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
+    }
     if (row.transcript) {
       await client.query("ROLLBACK");
       return { status: 409, code: "TRANSCRIPT_ALREADY_IMPORTED", message: "Transcript 已存在，不能生成候选" };
@@ -164,6 +170,7 @@ export async function executeConfirmTranscriptCandidate(
   scope: ActionScope,
   input: { speakerMappings: { speakerName: string; personId: string }[]; confirmAddParticipants: true },
   fingerprint: string,
+  hostId?: string,
 ): Promise<MeetingActionOutcome> {
   const personById = new Map(companyMemory.searchPeople(undefined).map((person) => [person.personId, person]));
   const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
@@ -229,7 +236,7 @@ export async function executeConfirmTranscriptCandidate(
       ],
     );
     return commit(client, updated, secret);
-  });
+  }, hostId);
   if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
   await runOutcome(pool, outcomeAgent, scope.objectId);
   return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
@@ -241,6 +248,7 @@ export async function executeDiscardTranscriptCandidate(
   secret: string,
   scope: ActionScope,
   fingerprint: string,
+  hostId?: string,
 ): Promise<MeetingActionOutcome> {
   return withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
     if (row.status !== "scheduled") {
@@ -254,5 +262,5 @@ export async function executeDiscardTranscriptCandidate(
       [JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
     );
     return commit(client, updated, secret);
-  });
+  }, hostId);
 }

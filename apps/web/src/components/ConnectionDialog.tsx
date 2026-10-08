@@ -5,14 +5,14 @@ import { Button } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { ConnectAgentForm, expiryText } from "@/components/ConnectAgentForm";
+import { ConnectAgentForm, connectionState, expiryText } from "@/components/ConnectAgentForm";
 import { monthDayTime } from "@/lib/companyTime";
 import { SYNC_INSTRUCTION, clientName, syncCommand } from "@/lib/connectionGuide";
 import s from "@/styles/connection-dialog.module.css";
 
 type TokenView = components["schemas"]["PersonalTokenView"];
 
-/** 连接到外部工具：主路径是下载一份说明文件发给自己的 Codex、Claude Code 或其他 AI 工具，由它完成设置；命令行步骤收在「手动设置」里。 */
+/** 浏览器授权为默认连接方式；个人令牌作为备用，每周同步另行设置。 */
 export function ConnectionDialog({ role }: { role: "ceo" | "member" }) {
   const [tokens, setTokens] = useState<TokenView[]>([]);
   /** 本次撤销掉的连接；刚生成的那个被撤销时，表单不再给已失效的说明。 */
@@ -50,25 +50,26 @@ export function ConnectionDialog({ role }: { role: "ceo" | "member" }) {
   return <div className={s.root}>
     <p className={s.lead}>{role === "ceo"
       ? "让你自己用的 AI 工具（Codex、Claude Code 等）连上天枢，随时问它：今天有什么要我拍板、某个议题进展如何、这周各战场怎么样。它只能看，拍板、签发、确认仍在天枢里做。"
-      : "让你自己用的 AI 工具（Codex、Claude Code、OpenCode 等）连上天枢：它能读你的执行事项、帮你写进展。"}</p>
+      : "让你自己用的 AI 工具（Codex、Claude Code、OpenCode 等）连上天枢：它能读你的执行事项、帮你写进展、放进做出来的东西，做完提交给你验收。"}</p>
     <section className={s.section} aria-label="连接一个 Agent"><h3>连接一个 Agent</h3>
       <ConnectAgentForm role={role} activeCount={activeCount} revokedIds={revokedIds}
-        onCreated={(view) => setTokens((current) => [view, ...current])} />
+        onCreated={(view) => setTokens((current) => [view, ...current])}
+        onUpdated={(view) => setTokens((current) => current.map((item) => item.id === view.id ? view : item))} />
     </section>
     {role === "member" ? <section className={s.section} aria-label="每周同步进展"><h3>每周同步进展</h3>
-      <p className={s.muted}>连上以后，随时对你的 Agent 说「同步本周进展」就行；生成连接说明时打开「每周五自动同步」，它会一并设好定时任务。天枢每周汇总后同步给本体。</p>
+      <p className={s.muted}>连上以后，随时对你的 Agent 说「同步本周进展」。需要每周五自动运行时，再让 Agent 设置系统定时任务；连接授权本身不会创建任务。</p>
       <details className={s.manual}><summary>同步指令和定时命令</summary>
         <div className={s.manualBody}>
           <div className={s.commandBlock}><strong>同步指令</strong><div className={s.command}><code>{SYNC_INSTRUCTION}</code><button type="button" onClick={() => void copy("同步指令", SYNC_INSTRUCTION)}>复制指令</button></div></div>
           {commandBlock("Codex 定时运行", syncCommand("codex"))}
           {commandBlock("Claude Code 定时运行", syncCommand("claude"))}
-          <p className={s.muted}>放进系统定时任务（Windows 任务计划程序，macOS / Linux 的 crontab），工作目录设成你常用的项目。</p>
+          <p className={s.muted}>放进系统定时任务（Windows 任务计划程序，macOS 的 LaunchAgent，Linux 的 crontab），工作目录设成你放项目的目录，装着多个仓库的上级目录也行。</p>
         </div>
       </details>
     </section> : null}
     <section className={s.section}><h3>已连接</h3>
       {tokens.length ? <ul className={s.list}>{tokens.map((token) => <li key={token.id}>
-        <div><strong>{token.name}</strong><span>{clientName(token.client)} · 创建 {monthDayTime(token.createdAt)}</span><span>到期 {expiryText(token.expiresAt)} · 最后使用 {token.lastUsedAt ? monthDayTime(token.lastUsedAt) : "尚未使用"}</span></div>
+        <div><strong>{token.name}</strong><span>{clientName(token.client)} · {token.authType === "oauth" ? "浏览器授权" : "个人令牌"} · 创建 {monthDayTime(token.createdAt)}</span><span>到期 {expiryText(token.expiresAt)} · {connectionState(token)}</span></div>
         <Button variant="ghost" isDisabled={busy} onPress={() => void revoke(token)}>撤销</Button>
       </li>)}</ul> : <p className={s.muted}>还没有连接。</p>}
     </section>

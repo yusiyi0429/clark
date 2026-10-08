@@ -34,7 +34,7 @@ function Diff({ item, before, after }: { item: Correction; before: string; after
 }
 
 function CorrectionNote({ item, label, access, deciderName, controls }: { item: Correction; label: string; access: TMissionCardCorrectionAccess; deciderName: string; controls: CorrectionControls }) {
-  const deciding = item.status === "pending" && access.canApply;
+  const deciding = item.status === "pending" && (access.canApply || access.canReject);
   const rejecting = controls.rejecting?.id === item.id ? controls.rejecting : null;
   const error = controls.decisionError?.correctionId === item.id ? controls.decisionError.message : null;
   const status = item.status === "rejected" ? `未采纳${item.note ? ` · ${item.note}` : ""}` : access.closedReason ? "未处理 · 月份已过" : deciding ? null : `更正申请 · 等${deciderName}处理`;
@@ -49,7 +49,7 @@ function CorrectionNote({ item, label, access, deciderName, controls }: { item: 
         <input id={`reject-${item.id}`} type="text" value={rejecting.note} maxLength={300} autoFocus disabled={controls.busy} aria-describedby={error ? `correction-decision-error-${item.id}` : undefined} onChange={(event) => controls.onRejecting({ id: item.id, note: event.target.value })} />
         <div className={s.inlineActions}><Button variant="ghost" className={s.secondary} isDisabled={controls.busy || !rejecting.note.trim()} aria-label={`确认不采纳：${label}`} onPress={() => controls.onDecide(item, "reject")}>确认不采纳</Button><Button variant="ghost" className={s.secondary} isDisabled={controls.busy} aria-label={`取消不采纳：${label}`} onPress={() => controls.onRejecting(null)}>取消</Button></div>
       </div> : <div className={s.inlineActions}>
-        <Button variant="primary" className={s.decisionPrimary} isDisabled={controls.busy || item.stale} aria-label={`采纳：${label}`} aria-describedby={item.stale ? `stale-${item.id}` : undefined} onPress={() => controls.onDecide(item, "apply")}>采纳</Button>
+        {access.canApply ? <Button variant="primary" className={s.decisionPrimary} isDisabled={controls.busy || item.stale} aria-label={`采纳：${label}`} aria-describedby={item.stale ? `stale-${item.id}` : undefined} onPress={() => controls.onDecide(item, "apply")}>采纳</Button> : <span className={s.hint}>需要修改时，请从页头退回本人准备。</span>}
         <Button variant="ghost" className={s.secondary} isDisabled={controls.busy} aria-label={`不采纳：${label}`} onPress={() => controls.onRejecting({ id: item.id, note: "" })}>不采纳</Button>
         {item.stale ? <span id={`stale-${item.id}`} className={s.blocked}>原文已变化</span> : null}
       </div>}

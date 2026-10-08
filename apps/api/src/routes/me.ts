@@ -1,8 +1,9 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
-import { addTaskCollaborators, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
+import { acceptMyTask, addTaskCollaborators, clearMyTaskSubmission, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
+import { draftTaskAcceptance } from "../taskAcceptanceDraft.js";
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
 import { companyPeriod } from "../monthlyPlans.js";
 import { personDisplayNames } from "../people.js";
@@ -13,6 +14,7 @@ import { idParams, type AppInstance, type Guard, type RouteContext } from "./sha
 import { readMemberWork } from "../memberWork.js";
 import { readMemberBattlefield } from "../memberBattlefields.js";
 import { readMemberRadarBrief } from "../personalSignals.js";
+import { readWeeklySyncReminder } from "../weeklySyncReminder.js";
 import { appendTaskProgress } from "../taskProgress.js";
 import { createPersonalToken, listPersonalTokens, revokePersonalToken } from "../personalTokens.js";
 import { getIssueRow } from "../issues.js";
@@ -39,16 +41,17 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   };
 
   app.get("/api/me/home", { preHandler: requireMember, schema: { response: { 200: MeHomeResponse } } }, async (req) => {
-    const [myTasks, { work }, radar] = await Promise.all([
+    const [myTasks, { work }, radar, weeklySync] = await Promise.all([
       listMyTasks(q, req.person!.personId, names()),
       readMemberWork(q, companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, ctx.now()),
       readMemberRadarBrief(q, req.person!, ctx.now()),
+      readWeeklySyncReminder(q, req.person!.personId, ctx.now()),
     ]);
-    return { myTasks, work, radar };
+    return { myTasks, work, radar, weeklySync };
   });
 
   app.get("/api/me/tokens", { preHandler: requirePerson, schema: { response: { 200: ListPersonalTokensResponse } } }, async (req) => ({
-    tokens: await listPersonalTokens(q, req.person!.personId), mcpPath: "/mcp/me" as const,
+    tokens: await listPersonalTokens(q, req.person!.personId), mcpPath: "/mcp/me" as const, mcpUrl: `${ctx.env.publicOrigin.replace(/\/$/, "")}/mcp/me`,
   }));
   app.post("/api/me/tokens", { preHandler: requirePerson, schema: { body: CreatePersonalTokenRequest, response: { 200: CreatePersonalTokenResponse } } }, async (req, reply) => {
     if (!req.body.name.trim()) return fail(reply, 400, "INVALID_INPUT", "请填写令牌名称");
@@ -74,6 +77,27 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     "/api/me/tasks/:id/return",
     { preHandler: requireMember, schema: { params: idParams, body: ReturnMyTaskRequest } },
     async (req, reply) => respondTask(reply, await returnMyTask(pool, req.person!.personId, req.params.id, req.body, names())),
+  );
+
+  // 完成只能经推进人验收（design-12）；外部工具的提交走 MCP。
+  app.post(
+    "/api/me/tasks/:id/accept",
+    { preHandler: requireMember, schema: { params: idParams, body: AcceptMyTaskRequest } },
+    async (req, reply) => respondTask(reply, await acceptMyTask(pool, req.person!.personId, req.params.id, req.body, names(), ctx.now())),
+  );
+  app.post("/api/me/tasks/:id/acceptance-draft", { preHandler: requireMember, schema: { params: idParams, response: { 200: TaskAcceptanceDraft } } }, async (req, reply) => {
+    const draft = await draftTaskAcceptance(pool, ctx.taskAcceptanceAgent, req.params.id, req.person!.personId, names());
+    if (draft === "not_found") return fail(reply, 404, "TASK_NOT_FOUND", "执行事项不存在");
+    if (draft === "closed") return fail(reply, 409, "TASK_NOT_ACCEPTABLE", "这件事已经完成或已退回");
+    return draft ?? fail(reply, 503, "ACCEPTANCE_DRAFT_UNAVAILABLE", "我的 Agent 这次没起草出来，可以直接手填");
+  });
+  app.delete("/api/me/tasks/:id/submission", { preHandler: requireMember, schema: { params: idParams,
+    querystring: Type.Object({ version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false }) } }, async (req, reply) =>
+    respondTask(reply, await clearMyTaskSubmission(pool, req.person!.personId, req.params.id, req.query.version, names())));
+  app.post(
+    "/api/me/tasks/:id/reopen",
+    { preHandler: requireMember, schema: { params: idParams, body: ReopenMyTaskRequest } },
+    async (req, reply) => respondTask(reply, await reopenMyTask(pool, req.person!.personId, req.params.id, req.body.version, names())),
   );
 
   app.get("/api/me/tasks/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: TaskDetailResponse } } }, async (req, reply) =>
@@ -114,14 +138,16 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     unreadThreads(q, req.person!.personId));
 
   app.get("/api/me/meetings", { preHandler: requireMember, schema: { response: { 200: MemberMeetingsResponse } } }, async (req) => {
-    const rows = (await q(`SELECT m.id::text,m.title,m.scheduled_at,m.ends_at,m.lead_dri_id FROM meetings m
+    const at = ctx.now();
+    const rows = (await q(`SELECT m.id::text,m.title,m.scheduled_at,m.ends_at,m.ended_at,m.lead_dri_id FROM meetings m
       JOIN thread_members tm ON tm.object_type='meeting' AND tm.object_id=m.id::text
-      WHERE tm.person_id=$1 AND tm.left_at IS NULL AND m.status='scheduled' AND m.ended_at IS NULL
-        AND (m.ends_at > now() OR m.lead_dri_id=$1)
-      ORDER BY m.scheduled_at,m.id`, [req.person!.personId])).rows;
+      WHERE tm.person_id=$1 AND tm.left_at IS NULL AND m.status='scheduled'
+        AND ((m.ended_at IS NULL AND m.ends_at > $2) OR m.lead_dri_id=$1)
+      ORDER BY m.scheduled_at,m.id`, [req.person!.personId, at])).rows;
     const displayNames = names();
     return { meetings: rows.map((row) => ({ meetingId: row.id, title: row.title,
       startsAt: row.scheduled_at.toISOString(), endsAt: row.ends_at?.toISOString() ?? null,
+      followUp: row.ended_at !== null || row.ends_at.getTime() <= at.getTime(),
       hostName: displayNames.get(row.lead_dri_id) ?? row.lead_dri_id, href: `/me/meetings/${row.id}` })) };
   });
 

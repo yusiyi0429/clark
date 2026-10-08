@@ -5,6 +5,7 @@ import type { Query } from "./meetingStore.js";
 import { companyPeriod, type MonthlyPlanRow } from "./monthlyPlans.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
 import { getPersonalMissionCard } from "./personalMissionCards.js";
+import { shiftMonth } from "./monthlyCycle.js";
 
 type Plan = Pick<MonthlyPlanRow, "status" | "battlefields">;
 
@@ -12,13 +13,21 @@ type Plan = Pick<MonthlyPlanRow, "status" | "battlefields">;
 export async function readMemberWork(q: Query, people: MemoryPerson[], secret: string, person: MissionRoundPerson, now: Date): Promise<{
   work: TMemberWork; deciders: Map<string, string>;
 }> {
-  const period = companyPeriod(now);
+  const currentPeriod = companyPeriod(now);
+  let period = currentPeriod;
+  const current = await q(`SELECT EXISTS (SELECT 1 FROM missions WHERE period=$1 AND owner_id=$2) AS missions,
+    EXISTS (SELECT 1 FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id
+      WHERE r.period=$1 AND c.owner_id=$2 AND r.status='confirmed') AS confirmed`, [period, person.personId]);
+  if (!current.rows[0].missions && !current.rows[0].confirmed) {
+    const previous = shiftMonth(period, -1);
+    if ((await q("SELECT 1 FROM missions WHERE period=$1 AND owner_id=$2 LIMIT 1", [previous, person.personId])).rowCount) period = previous;
+  }
   const [battlefields, plans, missionRows, ownedCards] = await Promise.all([
     listBattlefieldRows(q),
     q("SELECT status,battlefields FROM monthly_plans WHERE period=$1", [period]),
     q("SELECT id,code,title,battlefield_ids FROM missions WHERE period=$1 AND owner_id=$2 ORDER BY code,id", [period, person.personId]),
     q(`SELECT c.id FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id
-      JOIN battlefield_config b ON b.id=r.battlefield_id WHERE r.period=$1 AND c.owner_id=$2 ORDER BY b.sort_order,b.code,c.sort_order,c.id`, [period, person.personId]),
+      JOIN battlefield_config b ON b.id=r.battlefield_id WHERE r.period=$1 AND c.owner_id=$2 ORDER BY b.sort_order,b.code,c.sort_order,c.id`, [currentPeriod, person.personId]),
   ]);
   const plan = plans.rows[0] as Plan | undefined;
   const missionCards: TMemberWork["missionCards"] = [];

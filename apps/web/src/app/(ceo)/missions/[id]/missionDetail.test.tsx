@@ -28,7 +28,7 @@ const mission: MissionPayload = {
   dependencies: "平台团队提供评测环境",
   risk: "节奏被打断",
   boundaries: "不含模型训练",
-  keyPath: "", resources: "", humanAgentSplit: "", retrospect: "", placeholder: false, personalCard: null,
+  timeBoundary: "", tradeoffs: "", keyPath: "", resources: "", humanAgentSplit: "", retrospect: "", placeholder: false, personalCard: null,
   sourceRef: "mission-cards/01",
   sourceDocumentId: "doc-01",
   sourceRevision: 3,

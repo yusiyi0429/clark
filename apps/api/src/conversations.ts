@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Pool, QueryResult } from "pg";
 import type {
@@ -17,7 +17,7 @@ import { getIssueRow, projectIssueCard } from "./issues.js";
 import { moveStagedFile } from "./meetingMaterials.js";
 import { getMeetingRow, projectMeetingCard } from "./meetingStore.js";
 import { getMonthlyPlanRow, projectMonthlyPlanCard } from "./monthlyPlans.js";
-import { getMissionRow, projectMissionCard } from "./missions.js";
+import { canReadMission, getMissionRow, projectMissionCard } from "./missions.js";
 import { canReadMonthlyReviewItem, getMonthlyReviewItem } from "./monthlyReviews.js";
 import { getSignalCard } from "./signals.js";
 import { getPersonalMissionCard } from "./personalMissionCards.js";
@@ -79,6 +79,14 @@ export async function getScopeObject(
 ): Promise<{ snapshot: TReferenceSnapshot | null; visible: boolean }> {
   if (scope === "global") return { snapshot: null, visible: true };
   const [objectType, id] = scope.split(":", 2);
+  if (objectType === "personal-review") {
+    if (!context || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return { visible: false, snapshot: null };
+    const review = (await q("SELECT id, version, person_id, period, status, self_review FROM personal_reviews WHERE id=$1", [id])).rows[0];
+    if (!review || review.person_id !== context.person.personId) return { visible: false, snapshot: null };
+    return { visible: true, snapshot: { cardId: scope, version: review.version, kind: "personal-review",
+      title: `${review.period} 个人复盘`, objectRef: { type: "personal-review", id, version: review.version },
+      payload: { period: review.period, status: review.status, selfReview: review.self_review } } };
+  }
   if (objectType === "task") {
     if (!context || !await canReadTask(q, id, context.person.personId)) return { visible: false, snapshot: null };
     const task = await getTaskView(q, id, new Map(context.people.map((person) => [person.personId, person.displayName])));
@@ -178,6 +186,7 @@ export async function getScopeObject(
     };
   }
   const mission = objectType === "mission" ? await getMissionRow(q, id) : null;
+  if (mission && !await canReadMission(q, mission, context?.person)) return { visible: false, snapshot: null };
   if (mission) {
     const card = projectMissionCard(mission, secret, new Map());
     return {
@@ -206,6 +215,7 @@ export async function resolveReferenceSnapshots(
   q: Query,
   references: TCardReference[],
   secret: string,
+  person?: MissionRoundPerson,
 ): Promise<
   | { snapshots: TReferenceSnapshot[] }
   | { status: 403 | 404 | 409; code: string; message: string }
@@ -266,6 +276,7 @@ export async function resolveReferenceSnapshots(
       continue;
     }
     const mission = objectType === "mission" ? await getMissionRow(q, id) : null;
+    if (mission && !await canReadMission(q, mission, person)) return { status: 404, code: "REFERENCE_NOT_FOUND", message: "Card 引用不存在" };
     if (mission) {
       const card = projectMissionCard(mission, secret, new Map());
       if (card.version !== reference.version) {
@@ -407,6 +418,17 @@ export async function loadConversationAttachments(
     }
   }
   return attachments;
+}
+
+/** 上传即为材料；读取服务端目录，不要求附件已经绑定到一条消息。 */
+export async function listConversationAttachments(storageDir: string, sessionId: string): Promise<TConversationAttachment[]> {
+  if (!SESSION_ID_PATTERN.test(sessionId)) throw attachmentMissing("会话不存在");
+  let files: string[];
+  try { files = await readdir(join(storageDir, sessionId)); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
+  const ids = files.filter((file) => file.endsWith(".json") && SESSION_ID_PATTERN.test(file.slice(0, -5)))
+    .map((file) => file.slice(0, -5)).sort();
+  return loadConversationAttachments(storageDir, sessionId, ids);
 }
 
 export function conversationAttachmentInfo(attachment: TConversationAttachment): TConversationAttachmentInfo {

@@ -1,25 +1,24 @@
-import type { TMeetingCardPayload, TPersonalMissionCardPayload, TResearchDoc, TWeeklyProgressResponse } from "@warmap/contracts";
+import type { TMeetingCardPayload, TResearchDoc, TWeeklyProgressResponse } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 import type { MemoryPerson } from "./companyMemory.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "./issues.js";
 import { getMeetingRow, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "./meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice } from "./monthlyPlans.js";
-import { listMissionRoundCards, listMissionRoundDraftCards } from "./missionRounds.js";
-import { getPersonalMissionCard } from "./personalMissionCards.js";
+import { listMissionRoundCards } from "./missionRounds.js";
+import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { loadWeeklyProgress, weekRange } from "./weeklyProgress.js";
 
 type Context = { q: Query; secret: string; now: Date; names: Map<string, string>; people: MemoryPerson[];
-  personId: string; draftDir?: string };
+  personId: string };
 const short = (value: string, max = 600) => value.length > max ? `${value.slice(0, max)}…` : value;
 
 /** 与 CEO 首页同源的待处理投影，只摘可读字段；Card actions 从不进入 MCP 结果。 */
 export async function listPending(ctx: Context) {
   const period = companyPeriod(ctx.now);
   const person = { personId: ctx.personId, role: "ceo" as const };
-  const [issues, meetingRows, monthly, rounds, draftSlots] = await Promise.all([
+  const [issues, meetingRows, monthly, rounds] = await Promise.all([
     listPendingIssueCards(ctx.q, ctx.secret), listMeetingRows(ctx.q), getMonthlyPlanNotice(ctx.q, ctx.secret, ctx.now),
     listMissionRoundCards(ctx.q, ctx.people, ctx.secret, person, undefined, ctx.now),
-    listMissionRoundDraftCards(ctx.q, ctx.people, ctx.secret, person, period, ctx.now, ctx.draftDir),
   ]);
   const issueItems = issues.map((card) => {
     const payload = card.payload as { urgency: { level: string; decisionBy?: string }; status: string };
@@ -34,7 +33,7 @@ export async function listPending(ctx: Context) {
     kind: monthly.kind, id: monthly.objectRef.id, title: monthly.title, urgency: null,
     status: "月度计划待签发", at: null, href: `/plans/${period}`,
   }] : [];
-  const roundItems = [...rounds, ...draftSlots].map((card) => {
+  const roundItems = rounds.map((card) => {
     const payload = card.payload as { todo?: string | null; closesAt?: string | null };
     return { kind: card.kind, id: card.objectRef.id, title: card.title, urgency: null,
       status: payload.todo ?? "任务卡待处理", at: payload.closesAt ?? null,
@@ -87,18 +86,8 @@ export async function getMeeting(ctx: Context, meetingId: string) {
 }
 
 export async function getMissionCard(ctx: Context, cardId: string) {
-  const card = await getPersonalMissionCard(ctx.q, ctx.people, ctx.secret,
+  return readMissionCardForAgent(ctx.q, ctx.people, ctx.secret,
     { personId: ctx.personId, role: "ceo" }, cardId, ctx.now);
-  if (!card) return null;
-  const payload = card.payload as TPersonalMissionCardPayload;
-  const roundCard = payload.round.cards.find((entry) => entry.cardId === cardId);
-  return { id: cardId, title: card.title, owner: { id: payload.card.ownerId, name: payload.card.ownerName },
-    battlefield: { id: payload.round.battlefieldId, name: payload.round.battlefieldName }, period: payload.round.period,
-    status: payload.card.status, pendingOpinions: (roundCard?.pending ?? 0) + (roundCard?.pendingCorrections ?? 0),
-    missions: payload.card.missions.map((mission) => ({ id: mission.missionId, title: mission.title, outcome: mission.outcome,
-      why: mission.why, successEvidence: mission.successEvidence, milestones: mission.milestones, keyPath: mission.keyPath,
-      dependencies: mission.dependencies, risk: mission.risk, boundaries: mission.boundaries, resources: mission.resources })),
-    href: `/mission-cards/${cardId}` };
 }
 
 type TaskScope = { id: string; status: "not_started" | "in_progress" | "done" | "returned";

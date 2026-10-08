@@ -54,3 +54,6 @@
 @media (prefers-contrast: more) { .widget, .radarCard.radarCard { border-color: var(--ink-muted); } .goal, .cardStatus, .cardMeta, .deadline, .empty, .radarStatus { color: var(--ink); } }
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
 @media(max-width:959px){.label.label{font-size:13px}.expand.expand,.cardMeta.cardMeta,.deadline.deadline>time,.deadline.deadline>span{font-size:14px}}
+.missionList { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.missionList li { display: flex; align-items: baseline; gap: 8px; min-width: 0; color: var(--ink); font-size: 14px; line-height: 1.6; }
+.missionCode { flex: none; color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; }

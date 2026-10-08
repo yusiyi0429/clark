@@ -91,7 +91,7 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
     setBusy(null);
   }
 
-  /** LTCO 没有对象 id，只 version+1：写作后下一次月度草案即可读到新版本。 */
+  /** 公司 LTO（原 LTCO）没有对象 id，只 version+1：写作后下一次月度草案即可读到新版本。 */
   async function saveStrategy(event: React.FormEvent) {
     event.preventDefault();
     setBusy("strategy");
@@ -191,7 +191,7 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
 
       <div className={c.grid}>
         <form className={`${c.card} ${c.ltco}`} onSubmit={saveStrategy}>
-          <CardHead title="公司长期目标（LTCO）" desc="定义跨月稳定的公司结果方向，月度计划据此生成当月 PCO。" />
+          <CardHead title="公司长期目标（LTO）" desc="未来 6 个月的公司结果方向，每月审视时窗口往后滑一个月；月度计划据此拆出当月 PO。" />
           <textarea
             className={c.ltcoInput}
             aria-label="公司长期目标"
@@ -313,7 +313,7 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
                 ))}
               </Select>
             </Field>
-            <Field label="六个月目标">
+            <Field label="LTO · 六个月目标">
               <textarea
                 className={c.textarea}
                 placeholder="描述春节前需要形成的真实经营结果"

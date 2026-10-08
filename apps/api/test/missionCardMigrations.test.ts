@@ -21,7 +21,7 @@ async function seedRound(db: TestDb["db"]) {
 }
 
 describe("Mission Card database invariants", () => {
-  it("enforces one round per battlefield/month and a fixed window consistent with its phase", async () => {
+  it("enforces one round per battlefield/month and allows an open discussion without a deadline", async () => {
     await createTestDb(async ({ db }) => {
       await migrate(db);
       const { roundId, planId } = await seedRound(db);
@@ -36,10 +36,11 @@ describe("Mission Card database invariants", () => {
         "opened_at = '2026-10-01T00:00:00Z'",
         "status = 'open'",
         "opened_at = '2026-10-01T00:00:00Z', closes_at = '2026-10-03T00:00:00Z'",
-        "status = 'open', opened_at = '2026-10-01T00:00:00Z', closes_at = '2026-10-02T23:59:59.999Z'",
+        "status = 'open', opened_at = '2026-10-01T00:00:00Z', closes_at = '2026-09-30T23:59:59.999Z'",
         "period = '2026-13'", "version = 0", "window_seq = -1", "confirmed_at = '2026-10-01T00:00:00Z'",
       ]) await expect(update(sql)).rejects.toMatchObject({ code: "23514" });
-      await update("status = 'open', window_seq = 1, first_opened_at = '2026-10-01T00:00:00Z', opened_at = '2026-10-01T00:00:00Z', closes_at = '2026-10-03T00:00:00Z'");
+      await update("status = 'open', window_seq = 1, first_opened_at = '2026-10-01T00:00:00Z', opened_at = '2026-10-01T00:00:00Z', closes_at = NULL");
+      await update("closes_at = '2026-10-02T03:00:00Z'");
       await update("status = 'reviewing'");
       await expect(update("status = 'confirmed'")).rejects.toMatchObject({ code: "23514" });
       await update("status = 'confirmed', confirmed_at = '2026-10-03T01:00:00Z', confirmed_by = 'ceo'");

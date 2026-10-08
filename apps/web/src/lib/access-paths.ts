@@ -8,6 +8,11 @@ export function validNextPath(role: Role, candidate?: string): string | null {
     const path = decodeURIComponent(url.pathname);
     if (url.origin !== "https://tianshu.local" || /[\\\u0000-\u0020]/.test(path) || path.startsWith("//")) return null;
     if (/^\/(access|welcome|api|_next)(\/|$)/.test(path)) return null;
+    if (path === "/oauth/consent") {
+      const id = url.searchParams.get("request");
+      return id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) &&
+        [...url.searchParams].length === 1 && !url.hash ? `${path}?request=${id}` : null;
+    }
     const member = path === "/me" || path.startsWith("/me/");
     if ((role === "member") !== member) return null;
     url.searchParams.delete("_entry");
@@ -28,6 +33,8 @@ export function landingPath(role: Role, nextPath?: string): string {
 }
 
 export function loginDestination(role: Role, nextPath?: string, onboarded = true): string {
+  const consent = validNextPath(role, nextPath);
+  if (consent?.startsWith("/oauth/consent?")) return consent;
   if (onboarded) return landingPath(role, nextPath);
   const next = validNextPath(role, nextPath);
   return next ? `/welcome?next=${encodeURIComponent(next)}` : "/welcome";

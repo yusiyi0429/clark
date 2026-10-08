@@ -4,10 +4,12 @@ import { useState, type ReactNode } from "react";
 import { Lock } from "lucide-react";
 import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { ActionNoticeCard } from "@/components/ActionNoticeCard";
+import { CycleCountdown } from "@/components/CycleCountdown";
 import { HeroButton } from "@/components/HeroButton";
 import { RailClock } from "@/components/NotificationRail";
 import { MissionCardNoticeGroup } from "@/components/missionCards/MissionCardNoticeGroup";
 import { MonthlyReviewNotices } from "@/components/monthlyReview/MonthlyReviewNotices";
+import { PersonalReviewBoard } from "@/components/monthlyReview/PersonalReviewBoard";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
@@ -18,6 +20,7 @@ import { MemberRadarNotices, noteworthySignals } from "./MemberRadarNotices";
 import { MemberMeetingSchedule } from "./MemberMeetingSchedule";
 import { memberNoticeGroups } from "./memberNotices";
 import { useMemberHome } from "./useMemberHome";
+import { weeklySyncNotices } from "./weeklySyncNotice";
 import n from "@/styles/notifications.module.css";
 import m from "@/styles/member-home.module.css";
 
@@ -46,11 +49,14 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
             }
           />
           <div className={n.noticeList}>
+            <CycleCountdown />
+            <ActionNoticeCard id="weekly-sync" title="每周同步" subtitle="把本周进展写进天枢" mark="meeting" notices={weeklySyncNotices(home.weeklySync)} onSettled={() => undefined} />
             <MemberMeetingSchedule meetings={home.meetings} onNavigate={api.navigate} />
+            <PersonalReviewBoard onNavigate={api.navigate} />
             <MonthlyReviewNotices onNavigate={api.navigate} />
             {home.rounds.map((round) => <MissionCardNoticeGroup key={round.roundId} round={round} entry="member" currentHref={currentHref} onNavigate={api.navigate} onRefresh={home.refresh} />)}
             <ActionNoticeCard id="assigned" title="分给你的事与邀请" subtitle="会后分派与协作邀请" mark="meeting" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).assigned} onSettled={home.settle} />
-            <ActionNoticeCard id="results" title="回复与结果" mark="issue" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).results} onSettled={home.settle} />
+            <ActionNoticeCard id="results" title="回复与结果" mark="issue" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openAcceptance: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}?accept=1`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).results} onSettled={home.settle} />
             <ActionNoticeCard id="thread-unread" title="群聊新消息" mark="issue" notices={home.unreadThreads.map((item) => ({ id: `${item.objectType}:${item.objectId}`, title: `${item.objectType === "issue" ? "议题" : item.objectType === "meeting" ? "会议" : "执行事项"}「${item.title}」 · ${item.unread} 条新消息`, detail: "群聊", onOpen: (from: Element | null) => {
               window.dispatchEvent(new CustomEvent("open-thread-channel", { detail: { objectType: item.objectType, objectId: item.objectId } }));
               api.navigate(`${item.href}?channel=group`, from);
@@ -59,7 +65,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
               api.navigate(`${item.href}?channel=group`, from);
             }, buttons: [] })))} onSettled={() => undefined} />
             <MemberRadarNotices signals={radarSignals} currentHref={currentHref} onNavigate={api.navigate} onRead={home.readRadarNotice} />
-            {home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + home.notifications.filter((item) => !item.readAt).length + radarSignals.length === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
+            {home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + home.notifications.filter((item) => !item.readAt).length + radarSignals.length + (home.weeklySync ? 1 : 0) === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
           </div>
           <div className={n.railFoot}>
             <AccountMenu account={account} onNavigate={api.navigate} />
@@ -78,7 +84,7 @@ function MemberHomeBody({ displayName, home, account }: { displayName: string; h
     {home.homeError ? <div className={m.error} role="alert"><span>{home.homeError}</span><HeroButton variant="ghost" size="sm" onPress={() => void home.refresh()}>重试</HeroButton></div> : null}
     {home.work || !home.homeError ? <div className={m.widgetsSlot}><MemberHomeWidgets work={home.work} onNavigate={navigate} onRefresh={home.refresh}
       radar={home.radar ? <MemberRadarWidget radar={home.radar} onNavigate={navigate} /> : undefined} /></div> : null}
-    <MemberTasks tasks={home.tasks} busyId={home.busyId} error={home.taskError === home.homeError ? null : home.taskError} onStatus={(task, status) => void home.setStatus(task, status)} onNavigate={navigate} />
+    <MemberTasks tasks={home.tasks} error={home.taskError === home.homeError ? null : home.taskError} onNavigate={navigate} />
     <div className={m.phoneAccount}><AccountMenu account={account} onNavigate={navigate} /></div>
   </div>;
 }

@@ -18,7 +18,7 @@ vi.mock("@/lib/api/client", () => ({ browserApi: { GET: ui.get, PUT: ui.put, DEL
 vi.mock("ts-design/primitives", () => ({ Button: ({ children, onPress, isDisabled }: { children: unknown; onPress?: () => void; isDisabled?: boolean }) => <button onClick={onPress} disabled={isDisabled}>{children as string}</button> }));
 import { MonthPlan } from "./MonthPlan";
 
-const task: TTaskView = { id: "task-1", version: 3, title: "准备材料", status: "not_started", source: "plan", startDate: "2026-10-05", dueDate: "2026-10-08", doneDefinition: null, waitingOn: null, latestProgress: null, returnReason: null, origin: null, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", owner: { personId: "owner", name: "白田田" }, collaborators: [], mission: { missionId: "mission", title: "完善方法闭环", cardId: "card", period: "2026-10", battlefieldName: "灯塔项目", step: 1, steps: 1 } };
+const task: TTaskView = { id: "task-1", version: 3, title: "准备材料", status: "not_started", source: "plan", startDate: "2026-10-05", dueDate: "2026-10-08", doneDefinition: null, waitingOn: null, awaitingAcceptance: false, latestProgress: null, returnReason: null, origin: null, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", owner: { personId: "owner", name: "白田田" }, collaborators: [], mission: { missionId: "mission", title: "完善方法闭环", cardId: "card", period: "2026-10", battlefieldName: "灯塔项目", step: 1, steps: 1 } };
 const plan = { period: "2026-10", firstDay: "2026-10-01", lastDay: "2026-10-31", today: "2026-10-06", editable: true, closedReason: null, groups: [
   { missionId: "mission", title: "完善方法闭环", battlefieldName: "灯塔项目", cardId: "card", milestones: [{ date: "2026-10-10", text: "10/10 核对" }], items: [task] },
   { missionId: null, title: "独立事项", battlefieldName: null, cardId: null, milestones: [], items: [] },
@@ -94,18 +94,19 @@ describe("本月计划", () => {
     const mark = render({ ...plan, groups: [{ ...plan.groups[0], items: [{ ...task, startDate: null }] }, plan.groups[1]] });
     expect(mark.some(node => String(node.props.className).includes("dateMark"))).toBe(true);
   });
-  it("独立事项不显示步骤号，也没有调先后控件", () => {
+  it("事项都不显示步骤号（顺序照旧）；独立事项也没有调先后控件", () => {
     const independent: TTaskView = { ...task, id: "solo", mission: null };
     let all = render({ ...plan, groups: [plan.groups[0], { ...plan.groups[1], items: [independent] }] });
-    expect(named(all, "准备材料")).toBeTruthy();
-    expect(named(all, "第 1 步 · 准备材料")).toBeTruthy();
-    (named(all, "准备材料").props.onClick as () => void)();
+    const rows = all.filter(node => node.props.children === "准备材料");
+    expect(rows).toHaveLength(2);
+    expect(all.some(node => /第 \d+ 步/.test(String(node.props.children)))).toBe(false);
+    (rows[1].props.onClick as () => void)();
     all = render({ ...plan, groups: [plan.groups[0], { ...plan.groups[1], items: [independent] }] });
     expect(all.filter(node => node.props.children === "上移")).toHaveLength(0);
   });
   it("409 提示刷新并保留本地编辑", async () => {
     let all = render();
-    (named(all, "第 1 步 · 准备材料").props.onClick as () => void)();
+    (named(all, "准备材料").props.onClick as () => void)();
     all = render();
     (all.filter(node => node.props.type === "date")[1].props.onChange as (event: unknown) => void)({ target: { value: "2026-10-09" } });
     all = render();
@@ -127,7 +128,7 @@ describe("本月计划", () => {
   });
   it("删除已有步骤先确认，通过 DELETE 携带版本", async () => {
     let all = render();
-    (named(all, "第 1 步 · 准备材料").props.onClick as () => void)();
+    (named(all, "准备材料").props.onClick as () => void)();
     all = render();
     ui.del.mockResolvedValue({ response: { ok: true, status: 204 } });
     (named(all, "删除").props.onClick as () => void)();

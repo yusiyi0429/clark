@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   createAssistantMessageEventStream,
@@ -9,10 +11,14 @@ import { loadCompanyMemory } from "../src/companyMemory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import type { Pool } from "pg";
-import { createFakeWebSearchAdapter, testEnv } from "./helpers.js";
+import { createFakeWebSearchAdapter, createTestApp, testEnv } from "./helpers.js";
+import { createObjectMaterial, getObjectMaterialDetail, readObjectMaterial } from "../src/objectMaterials.js";
+import { createMaterialAnnotationAgent } from "../src/materialAnnotationAgent.js";
 
 const CEO_VIEWER = { personId: "person-fixture-001", displayName: "测试甲", role: "ceo" as const };
 const MEMBER_VIEWER = { personId: "person-fixture-002", displayName: "测试乙", role: "member" as const };
+const COLLABORATOR = { personId: "person-fixture-003", displayName: "测试丙", role: "member" as const };
+const PEOPLE = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
 
 const usage = {
   input: 4,
@@ -60,6 +66,62 @@ function stream(final: AssistantMessage) {
 }
 
 describe("controlled Pi conversation adapter public behavior", () => {
+  it("材料提议工具拒绝非唯一 find，唯一修改只生成本人的 pending 提议", async () => {
+    const t = await createTestApp();
+    const issue = await t.createIssue();
+    const ref = { objectType: "issue" as const, objectId: issue.objectRef.id };
+    const made = await createObjectMaterial(t.pool, ref, CEO_VIEWER, "讨论材料", "今天开会。今天复盘。", "起草", null);
+    let calls = 0;
+    const results: string[] = [];
+    const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(testEnv), materialPool: t.pool,
+      baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+      streamSimple: (_model, context) => {
+        calls++;
+        expect(context.systemPrompt).toContain("不确定是否共识就不提议");
+        if (calls > 1) results.push(JSON.stringify(context.messages.findLast((item) => item.role === "toolResult")));
+        if (calls <= 2) return stream(message([{ type: "toolCall", id: `proposal-${calls}`, name: "propose_material_edit",
+          arguments: { materialId: made.id, summary: "改开会日期", edits: [{ find: calls === 1 ? "今天" : "今天开会。", replace: "明天开会。" }] } }], "toolUse"));
+        return stream(message([{ type: "text", text: "已提议" }], "stop"));
+      } });
+    try {
+      await runtime.run({ scope: `issue:${ref.objectId}`, viewer: CEO_VIEWER, message: "同意这个改法", currentObject: { viewingMaterial: { id: made.id } },
+        referencesSnapshot: [], runtimeEntries: [], piSessionId: "11111111-1111-4111-8111-111111111111",
+        signal: new AbortController().signal, emit: () => undefined });
+      expect(results[0]).toContain("MATERIAL_FIND_NOT_UNIQUE");
+      expect(results[1]).toContain("已在左侧材料上方提议");
+      const detail = await getObjectMaterialDetail(t.pool.query.bind(t.pool), ref, made.id, CEO_VIEWER, new Map());
+      expect(detail.version).toBe(1);
+      expect(detail.proposals).toHaveLength(1);
+      expect(detail.proposals[0]).toMatchObject({ status: "pending", proposedFor: { personId: CEO_VIEWER.personId }, changes: [{ before: "今天开会。", after: "明天开会。" }] });
+    } finally { await runtime.close?.(); await t.close(); }
+  }, 20_000);
+
+  it("批注 Agent 使用 heavy 与严格输出工具，输入含最新版和定位信息", async () => {
+    const t = await createTestApp();
+    let modelId: string | undefined;
+    const agent = createMaterialAnnotationAgent({ baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-heavy",
+      streamSimple: (model, context) => {
+        modelId = model.id;
+        expect(context.tools?.map((tool) => tool.name)).toEqual(["submit_candidate"]);
+        expect(context.tools?.[0].parameters).toMatchObject({ additionalProperties: false,
+          properties: { edits: { items: { additionalProperties: false } } } });
+        expect(context.systemPrompt).toContain("不加外链脚本");
+        expect(JSON.stringify(context.messages)).toContain("今天开会");
+        return stream(message([{ type: "toolCall", id: "annotation-output", name: "submit_candidate", arguments: {
+          edits: [{ find: "今天", replace: "明天" }], summary: "改日期", noChange: null,
+        } }], "toolUse"));
+      } });
+    try {
+      const result = await agent.generate({ materialId: "fixture-material", objectType: "issue", objectId: "fixture-issue", title: "讨论日期",
+        format: "markdown", source: "今天开会。", version: 2, quote: "今天", prefix: "", suffix: "开会。", body: "改为明天",
+        author: CEO_VIEWER, previousError: null }, new AbortController().signal, t.pool.query.bind(t.pool));
+      expect(modelId).toBe("fake-heavy");
+      expect(result.candidate).toMatchObject({ edits: [{ find: "今天", replace: "明天" }], noChange: null });
+      expect((await t.sql("SELECT kind,model_slot,status FROM agent_runs WHERE id=$1", [result.runId]))[0])
+        .toMatchObject({ kind: "material-annotation", model_slot: "heavy", status: "succeeded" });
+    } finally { await t.close(); }
+  }, 20_000);
+
   it("only offers material tools in issue, task and meeting scopes", async () => {
     const toolsByScope: string[][] = [];
     const runtime = await createPiConversationRuntime({
@@ -76,14 +138,58 @@ describe("controlled Pi conversation adapter public behavior", () => {
           runtimeEntries: [], piSessionId: "11111111-1111-4111-8111-111111111111", signal: new AbortController().signal,
           emit: () => undefined });
       expect(toolsByScope[0]).not.toContain("edit_material");
-      for (const names of [toolsByScope[1], toolsByScope[2], toolsByScope[3]])
-        expect(names).toEqual(expect.arrayContaining(["list_materials", "read_material", "edit_material", "create_material"]));
+      // 这里没有本人能改的材料，所以不给 edit_material（能不能改见下一条）。
+      for (const names of [toolsByScope[1], toolsByScope[2], toolsByScope[3]]) {
+        expect(names).toEqual(expect.arrayContaining(["list_materials", "read_material", "create_material", "propose_material_edit"]));
+        expect(names).not.toContain("edit_material");
+      }
+      expect(toolsByScope[0]).not.toContain("propose_material_edit");
+      expect(toolsByScope[4]).not.toContain("propose_material_edit");
       // 复盘项对话只多一个改写建议工具，不带材料工具
       expect(toolsByScope[4]).toContain("propose_review_edit");
       expect(toolsByScope[4]).not.toContain("edit_material");
       expect(toolsByScope.slice(0, 4).flat()).not.toContain("propose_review_edit");
     } finally { await runtime.close?.(); }
   });
+  it("不能改这份材料的人拿不到 edit_material，对话里的修改提议交给上传者；能改的人照旧直接改", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE });
+    const ref = { objectType: "task" as const, objectId: randomUUID() };
+    await t.sql("INSERT INTO tasks(id,title,status,owner_id,created_by) VALUES($1,'材料走查','not_started',$2,$2)", [ref.objectId, MEMBER_VIEWER.personId]);
+    await t.sql("INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('task',$1,$2,$2),('task',$1,$3,$2)",
+      [ref.objectId, MEMBER_VIEWER.personId, COLLABORATOR.personId]);
+    const made = await createObjectMaterial(t.pool, ref, MEMBER_VIEWER, "方案", "今天开会。", "起草", null);
+    const tools: string[][] = [];
+    let calls = 0, toolResult = "";
+    const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(t.env), materialPool: t.pool,
+      baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+      streamSimple: (_model, context) => {
+        calls++;
+        tools.push(context.tools?.map((tool) => tool.name) ?? []);
+        expect(context.systemPrompt).toContain("canEdit=false 或没有 edit_material 时不直接改");
+        if (calls === 2) toolResult = JSON.stringify(context.messages.at(-1));
+        return stream(calls === 1 ? message([{ type: "toolCall", id: "proposal", name: "propose_material_edit",
+          arguments: { materialId: made.id, summary: "改开会日期", edits: [{ find: "今天", replace: "明天" }] } }], "toolUse")
+          : message([{ type: "text", text: "好" }], "stop"));
+      } });
+    const turn = (viewer: typeof MEMBER_VIEWER) => runtime.run({ scope: `task:${ref.objectId}`, viewer, message: "把开会改到明天",
+      currentObject: { viewingMaterial: { id: made.id } }, referencesSnapshot: [], runtimeEntries: [],
+      piSessionId: "11111111-1111-4111-8111-111111111111", signal: new AbortController().signal, emit: () => undefined });
+    try {
+      await turn(COLLABORATOR);
+      expect(tools[0]).toEqual(expect.arrayContaining(["list_materials", "read_material", "create_material", "propose_material_edit"]));
+      expect(tools[0]).not.toContain("edit_material");
+      expect(toolResult).toContain("已交给测试乙");
+      expect(await t.sql("SELECT proposed_by,proposed_for,status FROM material_edit_proposals WHERE material_id=$1", [made.id]))
+        .toEqual([{ proposed_by: COLLABORATOR.personId, proposed_for: MEMBER_VIEWER.personId, status: "pending" }]);
+      const q = t.pool.query.bind(t.pool), names = new Map<string, string>();
+      expect((await readObjectMaterial(q, ref, made.id, COLLABORATOR)).version).toBe(1);
+      expect((await getObjectMaterialDetail(q, ref, made.id, MEMBER_VIEWER, names)).proposals).toHaveLength(1);
+      expect((await getObjectMaterialDetail(q, ref, made.id, COLLABORATOR, names)).proposals).toEqual([]);
+      await turn(MEMBER_VIEWER);
+      expect(tools[2]).toContain("edit_material");
+    } finally { await runtime.close?.(); await t.close(); }
+  }, 20_000);
+
   it("does not call the model when the public abort signal is already aborted", async () => {
     let modelCalls = 0;
     const runtime = await createPiConversationRuntime({

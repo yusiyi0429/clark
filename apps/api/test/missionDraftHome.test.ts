@@ -4,16 +4,17 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { signActionId } from "../src/actionToken.js";
-import { closeDueRounds } from "../src/missionRounds.js";
+import { closeDueRounds, importMissionCardDrafts } from "../src/missionRounds.js";
 import { createTestApp, type TestApp } from "./helpers.js";
+import { hashSecret } from "../src/session.js";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const filename = "2026-10-mission-cards.battlefield-01.json";
 
 describe("CEO Mission draft entry and October rehearsal", () => {
-  it("signs targets, drafts 5 cards/12 Missions atomically, snapshots the deadline and reopens", async () => {
+  it("signs targets, explicitly imports an isolated 5-card fixture, snapshots after owner confirmations and returns only selected cards", async () => {
     const dir = await mkdtemp(join(tmpdir(), "warmap-mission-home-"));
     let t: TestApp | undefined;
     let pool: Pool | undefined;
@@ -25,7 +26,7 @@ describe("CEO Mission draft entry and October rehearsal", () => {
       const peopleFile = join(dir, "people.json");
       await writeFile(peopleFile, JSON.stringify(people));
       let current = new Date("2026-10-01T02:00:00.000Z");
-      t = await createTestApp({ companyPeopleSeed: peopleFile, missionCardDraftsDir: dir }, undefined, { monthlyNow: () => current });
+      t = await createTestApp({ companyPeopleSeed: peopleFile, missionCardDraftsDir: dir }, undefined, { monthlyNow: () => current, missionCardReviewAgent: { async generate() { return { candidate: { summary: "五张卡与目标和依赖一致", findings: [] } }; } } });
       const instance = t;
       const cookie = await t.loginCookie();
       const headers = { cookie, origin: t.publicOrigin };
@@ -48,14 +49,17 @@ describe("CEO Mission draft entry and October rehearsal", () => {
       const plan = (await t.app.inject({ method: "GET", url: `/api/cards/monthly-plans/${planId}`, headers })).json().cards[0];
       const signed = await t.app.inject({ method: "POST", url: "/api/actions/execute", headers, payload: { actionId: plan.actions.find((a: {actionType: string}) => a.actionType === "monthly-plan.sign").actionId, input: {} } });
       expect(signed.statusCode).toBe(200);
-      const entry = (await home())[0];
-      expect(entry).toMatchObject({ objectRef: { type: "mission-round-slot", id: "growth:2026-10" }, payload: { placeholder: true } });
+      // 签发后没有整理入口；这个战场没有参与者，系统不起草。
+      expect(await home()).toHaveLength(0);
       const member = await t.memberCookie();
-      expect((await t.app.inject({ method: "POST", url: "/api/mission-rounds/actions/execute", headers: { cookie: member, origin: t.publicOrigin }, payload: { actionId: entry.actions[0].actionId } })).statusCode).toBe(403);
-      const [one, two] = await Promise.all([execute(entry.actions[0].actionId), execute(entry.actions[0].actionId)]);
-      expect([one.statusCode, two.statusCode]).toEqual([200, 200]);
-      const round = one.json().cards[0];
-      expect(two.json().cards[0].id).toBe(round.id);
+      expect((await t.app.inject({ method: "POST", url: "/api/mission-rounds/actions/execute", headers: { cookie: member, origin: t.publicOrigin }, payload: { actionId: slotToken } })).statusCode).toBe(403);
+      const [one, two] = await Promise.all([execute(slotToken), execute(slotToken)]);
+      expect([one.statusCode, two.statusCode]).toEqual([409, 409]);
+      expect(one.json().code).toBe("NO_DRAFT_OWNERS");
+      expect(await t.sql("SELECT count(*)::int AS count FROM mission_rounds")).toEqual([{ count: 0 }]);
+      // Only an explicit human file import can load this rehearsal fixture.
+      await importMissionCardDrafts(t.pool, people.people, join(dir, filename), current);
+      const round = (await home())[0];
       expect(await t.sql("SELECT count(*)::int AS count FROM mission_rounds")).toEqual([{ count: 1 }]);
       expect(await t.sql("SELECT count(*)::int AS count FROM personal_mission_cards")).toEqual([{ count: 5 }]);
       const missions = await t.sql("SELECT id,code,version,placeholder,source_title,milestones,battlefield_ids FROM missions ORDER BY code");
@@ -65,14 +69,14 @@ describe("CEO Mission draft entry and October rehearsal", () => {
         expect(mission.id).toBe(mission.code);
         expect((mission.milestones as string[]).every((line) => line.startsWith("待定 · "))).toBe(true);
       }
-      expect((await home())[0].payload).toMatchObject({ phase: "draft", todo: "任务卡草稿已就绪，可以统一开放讨论" });
+      expect((await home())[0].payload).toMatchObject({ phase: "draft", todo: "任务卡草稿已就绪，可以交给本人确认" });
       const before = await t.sql("SELECT row_to_json(r) AS row FROM mission_rounds r");
-      expect((await execute(entry.actions[0].actionId)).statusCode).toBe(200);
+      expect((await execute(slotToken)).statusCode).toBe(200);
       expect(await t.sql("SELECT row_to_json(r) AS row FROM mission_rounds r")).toEqual(before);
       const opened = await execute(round.actions.find((a: {actionType: string}) => a.actionType === "mission-round.open").actionId);
       expect(opened.statusCode).toBe(200);
-      const closes = opened.json().cards[0].payload.closesAt;
-      expect(Date.parse(closes) - current.getTime()).toBe(48 * 60 * 60 * 1000);
+      expect(opened.json().cards[0].payload.closesAt).toBeNull();
+      const closes = new Date(current.getTime() + 72 * 60 * 60 * 1000).toISOString();
       const firstCard = round.payload.cards[0].cardId;
       const included = randomUUID(), excluded = randomUUID();
       for (const [id, time, late] of [[included, new Date(Date.parse(closes) - 1), false], [excluded, new Date(closes), true]] as const) {
@@ -82,16 +86,36 @@ describe("CEO Mission draft entry and October rehearsal", () => {
       const [{ database }] = await t.sql("SELECT current_database() AS database");
       pool = new Pool({ connectionString: (process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres").replace(/\/postgres$/, `/${database}`), max: 2 });
       current = new Date(closes);
-      expect(await closeDueRounds(pool, () => current)).toBe(1);
+      expect(await closeDueRounds(pool, () => current)).toBe(0);
+      // Preparing cards are private; the DRI cannot confirm or read another owner's draft.
+      expect((await instance.app.inject({ method: "GET", url: `/api/mission-cards/${firstCard}`, headers })).statusCode).toBe(404);
+      expect(opened.json().cards[0].actions.some((a: {actionType: string}) => a.actionType === "mission-round.close")).toBe(false);
+      for (const [index, row] of round.payload.cards.entries()) {
+        const loginId = `draftowner${String.fromCharCode(97 + index)}`;
+        await t.sql("INSERT INTO member_access (person_id,login_id,passcode_hash,must_change) VALUES ($1,$2,$3,false)", [row.ownerId, loginId, hashSecret("9137")]);
+        const login = await instance.app.inject({ method: "POST", url: "/api/auth/login", headers: { origin: t.publicOrigin }, payload: { loginId, passcode: "9137" } });
+        expect(login.statusCode).toBe(200);
+        const ownCookie = String(login.headers["set-cookie"]).split(";")[0];
+        const ownHeaders = { cookie: ownCookie, origin: t.publicOrigin };
+        const page = (await instance.app.inject({ method: "GET", url: `/api/mission-cards/${row.cardId}`, headers: ownHeaders })).json().cards[0];
+        const confirmed = await instance.app.inject({ method: "POST", url: `/api/mission-cards/${row.cardId}/owner-confirmation`, headers: ownHeaders, payload: { confirmed: true, round: 1, missionVersions: Object.fromEntries(page.payload.card.missions.map((mission: any) => [mission.missionId, mission.version])) } });
+        expect(confirmed.statusCode, confirmed.body).toBe(200);
+      }
+      await vi.waitFor(async () => expect((await home())[0].payload.coAgentReview.status).toBe("completed"));
       expect((await t.sql("SELECT feedback_ids,mission_versions FROM mission_round_reviews"))[0]).toMatchObject({ feedback_ids: [included] });
       expect(Object.keys((await t.sql("SELECT mission_versions FROM mission_round_reviews"))[0].mission_versions as object)).toHaveLength(12);
       const reviewed = (await home())[0];
-      const reopened = await execute(reviewed.actions.find((a: {actionType: string}) => a.actionType === "mission-round.reopen").actionId);
+      expect(reviewed.actions.some((a: {actionType: string}) => a.actionType === "mission-round.reopen")).toBe(false);
+      const reopened = await instance.app.inject({ method: "POST", url: `/api/mission-rounds/${round.objectRef.id}/return-cards`, headers, payload: { cardIds: [firstCard], version: reviewed.version, reason: "请明确该卡的验收证据" } });
       expect(reopened.statusCode).toBe(200);
       expect(reopened.json().cards[0].payload).toMatchObject({ phase: "open", round: 2 });
-      expect((await t.sql("SELECT reopens FROM mission_rounds"))[0].reopens).toEqual([{ by: "person-fixture-001", at: current.toISOString(), closedAt: closes }]);
+      expect((await t.sql("SELECT reopens FROM mission_rounds"))[0].reopens).toEqual([{ by: "person-fixture-001", at: current.toISOString(), closedAt: closes, cardIds: [firstCard], reason: "请明确该卡的验收证据" }]);
+      const stamps = await t.sql("SELECT id,owner_confirmed_at FROM personal_mission_cards");
+      expect(stamps.filter((row) => row.owner_confirmed_at === null).map((row) => row.id)).toEqual([firstCard]);
+      expect((await instance.app.inject({ method: "GET", url: `/api/mission-cards/${firstCard}`, headers })).statusCode).toBe(404);
       await writeFile(join(dir, filename), `${fileContent}\n`);
-      expect((await execute(entry.actions[0].actionId)).statusCode).toBe(409);
+      await expect(importMissionCardDrafts(t.pool, people.people, join(dir, filename), current)).rejects.toMatchObject({ code: "MISSION_DRAFT_SOURCE_CHANGED" });
+      expect((await execute(slotToken)).statusCode).toBe(200);
       expect(await t.sql("SELECT count(*)::int AS count FROM missions")).toEqual([{ count: 12 }]);
     } finally {
       await pool?.end();
@@ -99,5 +123,42 @@ describe("CEO Mission draft entry and October rehearsal", () => {
       if (!resolve(dir).startsWith(join(resolve(tmpdir()), "warmap-mission-home-"))) throw new Error("Unexpected fixture directory");
       await rm(dir, { recursive: true, force: true });
     }
+  }, 30_000);
+
+  it("签发后系统为参与者起草并自动交给本人；重放签发不重复起草，DRI 只看进度", async () => {
+    const drafted: string[] = [];
+    const candidate = { missions: [{ capabilityCode: "03", title: "起草任务", why: "本月目标", outcome: "待讨论结果", timeBoundary: "10月内完成，具体验收日待确认",
+      tradeoffs: "优先当前目标", successEvidence: ["可核验的结果"], boundaries: "待定", keyPath: "先核对", milestones: ["10/12 核对"], resources: "",
+      dependencies: "待定", humanAgentSplit: "", risk: "", retrospect: "", basis: "签发的本月计划" }] };
+    const t = await createTestApp({}, undefined, { monthlyNow: () => new Date("2026-10-08T07:00:00.000Z"),
+      missionCardDraftAgent: { async generate(input) { drafted.push(input.owner.personId); return { candidate }; } } });
+    try {
+      const headers = { cookie: await t.loginCookie(), origin: t.publicOrigin };
+      // 名单里有 CEO，CEO 不拿卡；战场 DRI 是成员。
+      await t.sql(`UPDATE battlefield_config SET code='01',owner_id='person-fixture-002',six_month_outcome='六个月结果',
+        participant_ids='["person-fixture-001","person-fixture-002"]' WHERE id='growth'`);
+      await t.sql("INSERT INTO capability_config (id,version,code,name,six_month_outcome) VALUES ('cap-03',1,'03','cap-03','能力结果')");
+      const planId = randomUUID();
+      await t.sql(`INSERT INTO monthly_plans (id,version,period,status,company_outcome,battlefields,todos,negotiation,generation)
+        VALUES ($1,1,'2026-10','negotiating','公司结果','[{"battlefieldId":"growth","outcome":"战场结果"}]','[]',
+        '{"edits":[],"checkedItemIds":["company","battlefield:growth"],"feedback":[],"note":""}',
+        '{"status":"ready","pendingSince":null,"runId":null,"previousRunIds":[],"error":null,"generatedAt":"2026-10-08T00:00:00.000Z"}')`, [planId]);
+      const plan = (await t.app.inject({ method: "GET", url: `/api/cards/monthly-plans/${planId}`, headers })).json().cards[0];
+      const sign = () => t.app.inject({ method: "POST", url: "/api/actions/execute", headers,
+        payload: { actionId: plan.actions.find((a: { actionType: string }) => a.actionType === "monthly-plan.sign").actionId, input: {} } });
+      expect((await sign()).statusCode).toBe(200);
+      const home = (await t.app.inject({ method: "GET", url: "/api/cards/home", headers })).json().cards.filter((card: { kind: string }) => card.kind === "mission-round");
+      expect(home.map((card: { objectRef: { type: string } }) => card.objectRef.type)).toEqual(["mission-round"]);
+      await vi.waitFor(async () => expect(await t.sql("SELECT status FROM mission_rounds")).toEqual([{ status: "open" }]));
+      expect(drafted).toEqual(["person-fixture-002"]);
+      const replay = await sign();
+      expect(replay.statusCode).toBe(200);
+      expect(drafted).toHaveLength(1);
+      const member = { cookie: await t.memberCookie() };
+      const [round] = (await t.app.inject({ method: "GET", url: "/api/me/mission-cards", headers: member })).json().rounds;
+      expect(round).toMatchObject({ phase: "open", approver: true, cards: [{ ownerId: "person-fixture-002", mine: true, missionCount: 1 }] });
+      const asDri = (await t.app.inject({ method: "GET", url: `/api/mission-rounds/${round.roundId}`, headers: member })).json().cards[0];
+      expect(asDri.actions.map((a: { actionType: string }) => a.actionType)).not.toContain("mission-round.open");
+    } finally { await t.close(); }
   });
 });

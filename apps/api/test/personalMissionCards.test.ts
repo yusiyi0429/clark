@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createTestApp, createTestDb, type TestApp, type TestDb } from "./helpers.js";
+import { signActionId } from "../src/actionToken.js";
 import { migrate } from "../src/migrate.js";
 import { createPersonalMissionCardFeedback } from "../src/personalMissionCards.js";
 
@@ -24,13 +25,21 @@ const get = (t: TestApp, cookie: string, path: string) => t.app.inject({ method:
 const post = (t: TestApp, cookie: string, path: string, payload: Record<string, unknown>) => t.app.inject({ method: "POST", url: path, headers: { cookie, origin: t.publicOrigin }, payload });
 const feedback = (card: string, kind: string, extra: Record<string, unknown> = {}) => ({ clientId: randomUUID(), kind, round: 1, body: "公开意见", ...(kind === "comment" ? {} : { missionId: card, field: "outcome", sourceVersion: 1, ...(kind === "quote" ? { quote: "原始 结果" } : { proposed: "候选结果" }) }), ...extra });
 async function open(t: TestApp, cookie: string, card: string) {
-  const page = (await get(t, cookie, `/api/mission-cards/${card}`)).json().cards[0];
-  return post(t, cookie, '/api/mission-rounds/actions/execute', { actionId: page.actions[0].actionId, viewCardId: card });
+  const id = (await t.sql("SELECT round_id FROM personal_mission_cards WHERE id=$1", [card]))[0].round_id;
+  const progress = (await get(t, cookie, `/api/mission-rounds/${id}`)).json().cards[0];
+  return post(t, cookie, '/api/mission-rounds/actions/execute', { actionId: progress.actions[0].actionId });
+}
+async function close(t: TestApp, cookie: string, card: string) {
+  const id = (await t.sql("SELECT round_id FROM personal_mission_cards WHERE id=$1", [card]))[0].round_id;
+  await t.sql("UPDATE personal_mission_cards SET owner_confirmed_at=$2 WHERE round_id=$1", [id, START]);
+  const progress = (await get(t, cookie, `/api/mission-rounds/${id}`)).json().cards[0];
+  const actionId = signActionId(t.env.sessionSecret, { actionType: "mission-round.close", objectType: "mission-round", objectId: id, objectVersion: progress.version });
+  expect((await post(t, cookie, '/api/mission-rounds/actions/execute', { actionId })).statusCode).toBe(200);
 }
 
 describe("Personal Mission Card discussion", () => {
   it("limits page/group/feedback/read/private scope to card members and current approvers", async () => {
-    const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(START) });
+    const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(START), missionCardReviewAgent: { async generate() { return { candidate: { summary: "已核对测试快照", findings: [] } }; } } });
     try {
       const f = await fixture(t), ceo = await t.loginCookie(), member = await t.memberCookie();
       expect((await get(t, '', `/api/mission-cards/${f.card}`)).statusCode).toBe(401);
@@ -38,16 +47,17 @@ describe("Personal Mission Card discussion", () => {
       expect(mine.statusCode).toBe(200);
       expect(mine.json().cards[0]).toMatchObject({ kind: 'personal-mission-card', actions: [], conversation: { scope: `mission-card:${f.card}` }, payload: { card: { ownerId: 'person-fixture-002', shown: 'draft', missions: [{ version: 1, placeholder: true, changedFields: [] }] } } });
       expect(mine.json().cards[0].payload.card.status).toBe('草稿');
-      expect((await get(t, ceo, `/api/mission-cards/${f.card}`)).json().cards[0].payload.card.status).toBe(mine.json().cards[0].payload.card.status);
+      expect((await get(t, ceo, `/api/mission-cards/${f.card}`)).statusCode).toBe(404);
       for (const path of [`/api/mission-cards/${f.other}`, `/api/mission-cards/${f.other}/group`, `/api/conversations/mission-card:${f.other}/messages`]) expect((await get(t, member, path)).statusCode).toBe(404);
       expect((await post(t, member, `/api/mission-cards/${f.other}/feedback`, feedback(f.other, 'comment'))).statusCode).toBe(404);
       expect((await post(t, member, `/api/mission-cards/${f.other}/group/read`, { lastReadSeq: 0 })).statusCode).toBe(404);
       expect((await post(t, member, `/api/conversations/mission-card:${f.other}/messages`, { message: '不可见卡' })).statusCode).toBe(404);
       expect((await t.app.inject({ method: 'POST', url: `/api/mission-cards/${f.card}/feedback`, headers: { cookie: member, origin: 'https://elsewhere.invalid' }, payload: feedback(f.card, 'comment') })).statusCode).toBe(403);
-      expect((await get(t, ceo, `/api/mission-cards/${f.other}`)).statusCode).toBe(200);
+      expect((await get(t, ceo, `/api/mission-cards/${f.other}`)).statusCode).toBe(404);
       await t.sql("UPDATE battlefield_config SET owner_id='person-fixture-002' WHERE id='growth'");
-      expect((await get(t, member, `/api/mission-cards/${f.other}`)).json().cards[0].actions).toHaveLength(1);
-      expect((await open(t, member, f.card)).json().cards[0]).toMatchObject({ kind: 'personal-mission-card', payload: { round: { phase: 'open' } } });
+      expect((await get(t, member, `/api/mission-cards/${f.other}`)).statusCode).toBe(404);
+      expect((await get(t, member, `/api/mission-rounds/${f.round}`)).json().cards[0].actions).toHaveLength(1);
+      expect((await open(t, member, f.card)).json().cards[0]).toMatchObject({ kind: 'mission-round', payload: { phase: 'open' } });
       await t.sql("UPDATE battlefield_config SET owner_id='person-fixture-001' WHERE id='growth'");
       for (const path of [`/api/mission-cards/${f.other}`, `/api/mission-cards/${f.other}/group`, `/api/conversations/mission-card:${f.other}/messages`]) expect((await get(t, member, path)).statusCode).toBe(404);
       expect((await post(t, member, `/api/mission-cards/${f.other}/group/read`, { lastReadSeq: 0 })).statusCode).toBe(404);
@@ -58,25 +68,26 @@ describe("Personal Mission Card discussion", () => {
   for (const phase of ['draft', 'open', 'closed', 'reviewing', 'confirmed']) {
     for (const kind of ['comment', 'quote', 'suggestion']) it(`${phase} × ${kind} enforces the writing table`, async () => {
       let clock = new Date(START);
-      const t = await createTestApp({}, undefined, { monthlyNow: () => clock });
+      const t = await createTestApp({}, undefined, { monthlyNow: () => clock, missionCardReviewAgent: { async generate() { return { candidate: { summary: "已核对测试快照", findings: [] } }; } } });
       try {
         const f = await fixture(t), ceo = await t.loginCookie(), member = await t.memberCookie();
         if (phase !== 'draft') await open(t, ceo, f.card);
         if (['closed','reviewing','confirmed'].includes(phase)) clock = new Date(CLOSE);
-        if (['reviewing','confirmed'].includes(phase)) await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'comment'));
-        if (phase === 'confirmed') await t.sql("UPDATE mission_rounds SET status='confirmed',confirmed_at=$1,confirmed_by='person-fixture-001' WHERE id=$2", [CLOSE, f.round]);
+        // 保留已写截止时间、尚未落快照的边界态覆盖；新开放流程不自动写截止。
+        if (phase === 'closed') await t.sql('UPDATE mission_rounds SET closes_at=$1 WHERE id=$2', [CLOSE, f.round]);
+        if (['reviewing','confirmed'].includes(phase)) await t.sql("UPDATE mission_rounds SET status=$2,confirmed_at=CASE WHEN $2='confirmed' THEN $3::timestamptz ELSE NULL END,confirmed_by=CASE WHEN $2='confirmed' THEN 'person-fixture-001' ELSE NULL END WHERE id=$1", [f.round,phase,CLOSE]);
         const res = await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, kind));
-        const accepted = phase === 'open' || (['closed','reviewing'].includes(phase) && kind !== 'suggestion');
+        const accepted = phase === 'open';
         expect(res.statusCode).toBe(accepted ? 200 : 409);
         if (accepted) expect(res.json().feedback).toMatchObject({ kind, late: phase !== 'open', basis: phase === 'open' ? 'draft' : 'candidate', ...(kind === 'suggestion' ? { original: '原始  结果', sourceVersion: 1 } : {}) });
-        else expect(res.json().code).toBe(phase === 'draft' ? 'ROUND_NOT_OPEN' : phase === 'confirmed' ? 'ROUND_CONFIRMED' : 'ROUND_CLOSED');
-        if (phase === 'closed') expect(await t.sql('SELECT id FROM mission_round_reviews WHERE round_id=$1', [f.round])).toHaveLength(1);
+        else expect(res.json().code).toBe('ROUND_NOT_OPEN');
+        if (phase === 'closed') expect(await t.sql('SELECT id FROM mission_round_reviews WHERE round_id=$1', [f.round])).toHaveLength(0);
       } finally { await t.close(); }
     });
   }
 
   it("validates anchors, versions, quote text, field types and normalized list proposals; retries are immutable", async () => {
-    const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(START) });
+    const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(START), missionCardReviewAgent: { async generate() { return { candidate: { summary: "已核对测试快照", findings: [] } }; } } });
     try {
       const f = await fixture(t), ceo = await t.loginCookie(), member = await t.memberCookie(); await open(t, ceo, f.card);
       const send = (input: Record<string, unknown>) => post(t, member, `/api/mission-cards/${f.card}/feedback`, input);
@@ -96,71 +107,68 @@ describe("Personal Mission Card discussion", () => {
     } finally { await t.close(); }
   });
 
-  it("quotes the candidate after cutoff while reopening quotes the draft; retains one opening and confirmation history", async () => {
+  it("旧采纳历史不叠加正文，已确认任务只读，定向退回后引用真实当前正文", async () => {
     let clock = new Date(START);
-    const t = await createTestApp({}, undefined, { monthlyNow: () => clock });
+    const t = await createTestApp({}, undefined, { monthlyNow: () => clock, missionCardReviewAgent: { async generate() { return { candidate: { summary: "已核对", findings: [] } }; } } });
     try {
       const f = await fixture(t), ceo = await t.loginCookie(), member = await t.memberCookie();
-      expect((await get(t, member, `/api/mission-cards/${f.card}/group`)).json().entries).toEqual([]);
       await open(t, ceo, f.card);
       const proposal = (await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'suggestion'))).json().feedback;
       clock = new Date(CLOSE);
-      await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'comment'));
+      await close(t, ceo, f.card);
       const review = (await t.sql('SELECT id FROM mission_round_reviews WHERE round_id=$1', [f.round]))[0];
-      await t.sql("INSERT INTO mission_review_decisions (review_id,feedback_id,decision,decided_by,decided_at) VALUES ($1,$2,'accept','person-fixture-001',$3)", [review.id, proposal.id, CLOSE]);
+      await t.sql("INSERT INTO mission_review_decisions (review_id,feedback_id,decision,decided_by,decided_at) VALUES ($1,$2,'accept','person-fixture-001',$3)", [review.id,proposal.id,CLOSE]);
       const page = (await get(t, member, `/api/mission-cards/${f.card}`)).json().cards[0];
-      expect(page.payload.card.missions[0]).toMatchObject({ outcome: '候选结果', changedFields: ['outcome'], version: 1 });
-      expect(page.payload.card.status).toContain('候选版本 · 相比草稿 1 处改动');
-      expect((await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'quote'))).statusCode).toBe(409);
-      expect((await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'quote', { quote: '候选结果' }))).statusCode).toBe(200);
-      const before = (await get(t, ceo, `/api/mission-cards/${f.card}`)).json().cards[0];
-      await post(t, ceo, '/api/mission-rounds/actions/execute', { actionId: before.actions[0].actionId, viewCardId: f.card });
-      expect((await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'quote', { round: 2 }))).statusCode).toBe(200);
+      expect(page.payload.card.missions[0]).toMatchObject({ outcome: '原始  结果', changedFields: [], version: 1 });
+      expect(page.payload.feedback[0]).toMatchObject({ original:'原始  结果',proposed:'候选结果',actions:[] });
+      expect((await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card,'quote'))).statusCode).toBe(409);
+      const progress = (await get(t, ceo, `/api/mission-rounds/${f.round}`)).json().cards[0];
+      expect((await post(t, ceo, `/api/mission-rounds/${f.round}/return-cards`, { cardIds:[f.card],reason:'请核对结果',version:progress.version })).statusCode).toBe(200);
+      expect((await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card,'quote',{round:2}))).statusCode).toBe(200);
       const group = (await get(t, member, `/api/mission-cards/${f.card}/group`)).json();
-      expect(group.entries.filter((e: any) => e.type === 'opening')).toHaveLength(1);
-      expect(group.entries[0].type).toBe('divider'); expect(group.entries[1].type).toBe('opening');
-      expect(group.entries[1].text).toContain('占位');
-      expect(group.entries.filter((e: any) => e.type === 'divider').map((e: any) => e.text).join('\n')).toContain('第 2 轮');
-      await t.sql("UPDATE mission_rounds SET status='confirmed',confirmed_at=$1,confirmed_by='person-fixture-001' WHERE id=$2", [CLOSE, f.round]);
-      expect((await get(t, member, `/api/mission-cards/${f.card}/group`)).json().entries.some((e: any) => e.type === 'divider' && e.text.includes('确认了本月 Mission Card'))).toBe(true);
+      expect(group.entries.filter((e:any)=>e.type==='opening')).toHaveLength(1);
+      expect(group.entries.some((e:any)=>e.type==='divider'&&e.text.includes('重新开放'))).toBe(true);
+      expect((await t.sql('SELECT original,proposed FROM mission_card_feedback WHERE id=$1',[proposal.id]))[0]).toEqual({original:'原始  结果',proposed:'候选结果'});
     } finally { await t.close(); }
   });
 
   it("replays after closure without another write, rejects cross-card reuse, and rechecks visibility before replay", async () => {
-    const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(START) });
+    const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(START), missionCardReviewAgent: { async generate() { return { candidate: { summary: "已核对测试快照", findings: [] } }; } } });
     try {
       const f = await fixture(t), ceo = await t.loginCookie(), member = await t.memberCookie(); await open(t, ceo, f.card);
       const input = feedback(f.card, 'comment');
       const first = (await post(t, member, `/api/mission-cards/${f.card}/feedback`, input)).json().feedback;
       await t.sql("UPDATE mission_rounds SET status='confirmed',confirmed_at=$1,confirmed_by='person-fixture-001' WHERE id=$2", [CLOSE, f.round]);
       expect((await post(t, member, `/api/mission-cards/${f.card}/feedback`, input)).json().feedback.id).toBe(first.id);
-      await t.sql("UPDATE personal_mission_cards SET member_ids='[\"person-fixture-001\"]' WHERE id=$1", [f.card]);
+      await t.sql("UPDATE personal_mission_cards SET owner_id='new-owner',member_ids='[\"person-fixture-001\"]' WHERE id=$1", [f.card]);
       expect((await post(t, member, `/api/mission-cards/${f.card}/feedback`, input)).statusCode).toBe(404);
-      const ceoInput = feedback(f.card, 'comment');
-      await t.sql("UPDATE mission_rounds SET status='open',confirmed_at=NULL,confirmed_by=NULL WHERE id=$1", [f.round]);
-      expect((await post(t, ceo, `/api/mission-cards/${f.card}/feedback`, ceoInput)).statusCode).toBe(200);
-      expect((await post(t, ceo, `/api/mission-cards/${f.other}/feedback`, ceoInput)).statusCode).toBe(409);
-      expect((await t.sql('SELECT count(*)::int AS n FROM mission_card_feedback'))[0].n).toBe(2);
+      expect((await t.sql('SELECT count(*)::int AS n FROM mission_card_feedback'))[0].n).toBe(1);
     } finally { await t.close(); }
   });
 
   it("counts only others' feedback, clamps monotonic reads and keeps each person's Agent private and outside Review", async () => {
     let clock = new Date(START); let context: unknown;
-    const t = await createTestApp({}, { async run(input) { context = input.currentObject; return { assistantMessage: '私下回复', runtimeEntries: [] }; } }, { monthlyNow: () => clock });
+    const t = await createTestApp({}, { async run(input) { context = input.currentObject; return { assistantMessage: '私下回复', runtimeEntries: [] }; } }, { monthlyNow: () => clock, missionCardReviewAgent: { async generate() { return { candidate: { summary: "已核对测试快照", findings: [] } }; } } });
     try {
       const f = await fixture(t), ceo = await t.loginCookie(), member = await t.memberCookie(); await open(t, ceo, f.card);
       const mine = (await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'comment'))).json().feedback;
-      const theirs = (await post(t, ceo, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'comment'))).json().feedback;
+      // 旧公开意见仍保留供审计；当前上级不能在准备阶段创建修改意见。
+      const theirs = (await t.sql(`INSERT INTO mission_card_feedback (id,round_id,card_id,kind,author_id,client_id,body,basis,late,window_seq,created_at)
+        VALUES ($1,$2,$3,'comment','person-fixture-001',$4,'历史公开意见','draft',false,1,$5) RETURNING id,seq`, [randomUUID(),f.round,f.card,randomUUID(),START]))[0];
+      theirs.seq = Number(theirs.seq);
+      expect((await post(t, ceo, `/api/mission-cards/${f.card}/feedback`, feedback(f.card,'comment'))).statusCode).toBe(404);
       expect((await get(t, member, `/api/mission-cards/${f.card}/group`)).json().unread).toBe(1);
       expect((await get(t, member, `/api/mission-cards/${f.card}/group?after=${mine.seq}`)).json().entries.filter((e: any) => e.type === 'message')).toHaveLength(1);
       expect((await post(t, member, `/api/mission-cards/${f.card}/group/read`, { lastReadSeq: 999999 })).json()).toEqual({ lastReadSeq: theirs.seq, unread: 0 });
       expect((await post(t, member, `/api/mission-cards/${f.card}/group/read`, { lastReadSeq: 0 })).json().lastReadSeq).toBe(theirs.seq);
+      await t.sql("UPDATE personal_mission_cards SET owner_confirmed_at=$2 WHERE id=$1",[f.card,START]);
       const scope = `/api/conversations/mission-card:${f.card}/messages`;
       expect((await post(t, member, scope, { message: '私下讨论承诺' })).statusCode).toBe(200);
       expect((await get(t, member, scope)).json().messages).toHaveLength(2);
       expect((await get(t, ceo, scope)).json().messages).toHaveLength(0);
       expect(JSON.stringify(context)).toContain('公开意见'); expect(JSON.stringify(context)).not.toContain('开放到');
       clock = new Date(CLOSE);
+      await close(t, ceo, f.card);
       await post(t, member, `/api/mission-cards/${f.card}/feedback`, feedback(f.card, 'comment'));
       expect((await t.sql('SELECT feedback_ids FROM mission_round_reviews WHERE round_id=$1', [f.round]))[0].feedback_ids).toEqual([mine.id, theirs.id]);
     } finally { await t.close(); }
@@ -179,8 +187,8 @@ describe("Personal Mission Card discussion", () => {
         await waitForLock(t); expect(clockRead).toBe(false); clock = new Date(CLOSE);
       } finally { await t.db.query('COMMIT'); }
       const results = await Promise.all([first, submit()]);
-      for (const result of results) expect(result).toMatchObject({ feedback: { late: true, createdAt: CLOSE, basis: 'candidate' } });
-      expect((await t.db.query('SELECT feedback_ids FROM mission_round_reviews WHERE round_id=$1', [f.round])).rows).toEqual([{ feedback_ids: [] }]);
+      for (const result of results) expect(result).toMatchObject({ error: { code: "ROUND_NOT_OPEN" } });
+      expect((await t.db.query('SELECT feedback_ids FROM mission_round_reviews WHERE round_id=$1', [f.round])).rows).toEqual([]);
     });
   });
 });

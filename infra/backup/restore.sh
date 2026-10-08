@@ -168,7 +168,7 @@ fi
 
 if [ "$VOLUME_MODE" = 1 ]; then
   # 存储校验（fail closed）：以恢复后的 DB 为准，逐行核对卷内文件 SHA-256
-  storage_rows=$("$PSQL_BIN" "$TARGET_URL" -Atc "SELECT 'meeting_material|' || m.id || '|' || value->>'storageKey' || '|' || value->>'sha256' FROM meetings m, jsonb_array_elements(m.materials) value WHERE value->>'storageKey' <> '' UNION ALL SELECT 'conversation_attachment|' || cm.id || '|' || a->>'storageKey' || '|' || a->>'sha256' FROM conversation_messages cm, jsonb_array_elements(cm.attachments) a WHERE a->>'storageKey' <> ''")
+  storage_rows=$("$PSQL_BIN" "$TARGET_URL" -Atc "SELECT 'meeting_material|' || m.id || '|' || (value->>'storageKey') || '|' || (value->>'sha256') FROM meetings m, jsonb_array_elements(m.materials) value WHERE value->>'storageKey' <> '' UNION ALL SELECT 'conversation_attachment|' || cm.conversation_id || ':' || cm.sequence || '|' || (a->>'storageKey') || '|' || (a->>'sha256') FROM conversation_messages cm, jsonb_array_elements(cm.attachments) a WHERE a->>'storageKey' <> ''")
   verified=0
   while IFS='|' read -r kind _owner storage_key expected; do
     [ -n "$storage_key" ] || continue

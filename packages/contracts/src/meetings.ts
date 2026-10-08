@@ -255,6 +255,7 @@ export const MemberMeetingItem = Type.Object(
     endsAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     hostName: Type.String({ minLength: 1 }),
     href: Type.String({ minLength: 1 }),
+    followUp: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );
@@ -271,6 +272,7 @@ export const MeetingCardPayload = Type.Object(
     endsAt: Type.String(),
     /** 「这场会开完了」的时刻；不改变 status，held 仍只表示已有确认的 Transcript。 */
     endedAt: Type.Union([Type.String(), Type.Null()]),
+    hasEnded: Type.Optional(Type.Boolean()),
     leadDriId: Type.String(),
     ceoParticipantId: Type.String(),
     participants: Type.Array(MeetingParticipant),

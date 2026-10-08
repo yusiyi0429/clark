@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { TMissionRoundDraftPayload, TMissionRoundSummary } from "@warmap/contracts";
+import type { TMissionRoundSummary } from "@warmap/contracts";
 import { Card as HeroCard } from "@heroui/react";
 import { ChevronRight, Lock } from "lucide-react";
 import { AccountMenu, type Account } from "./AccountMenu";
@@ -14,16 +14,17 @@ import { HeroButton } from "./HeroButton";
 import { ReferenceButton } from "@/conversation/references";
 import { StrategicConfirmCard, pendingStrategicItems } from "./StrategicConfirmCard";
 import { TianshuMark } from "./TianshuMark";
-import { useConfirm } from "./ConfirmDialog";
-import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
 import { COMPANY_TIMEZONE, monthDayTime } from "@/lib/companyTime";
 import { MissionCardNoticeGroup } from "./missionCards/MissionCardNoticeGroup";
+import { roundStatusText } from "./missionCards/roundStatusText";
 import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
+import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
+import { CycleCountdown } from "./CycleCountdown";
 import n from "@/styles/notifications.module.css";
 
 type RailKind = "decisions" | "meetings" | "research";
 type Tone = "red" | "amber" | "neutral";
-type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card };
+type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card; followUp?: boolean; canReschedule?: boolean };
 type RailGroup = { kind: RailKind; title: string; subtitle: string; mark: ContextMarkKind; items: RailItem[] };
 
 const RAIL: Record<RailKind, { title: string; mark: ContextMarkKind }> = {
@@ -49,24 +50,23 @@ export function clock(date: Date): { time: string; weekday: string; day: string 
 
 const sameCompanyDay = (a: Date, b: Date) => clock(a).day === clock(b).day;
 
-function missionRoundMeta(payload: TMissionRoundSummary | TMissionRoundDraftPayload): string {
-  if (!("phase" in payload)) return "可以整理任务卡草稿";
+function missionRoundMeta(payload: TMissionRoundSummary): string {
   if (payload.phase === "drafting") return "Co-Agent 正在起草";
-  if (payload.phase === "draft") return "草稿 · 可以统一开放讨论";
-  if (payload.phase === "open" && payload.closesAt) {
-    const minutes = Math.max(0, Math.ceil((Date.parse(payload.closesAt) - Date.parse(payload.serverNow)) / 60_000));
-    return minutes ? `讨论中 · ${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分` : "已截止 · 汇总中";
+  if (payload.phase === "draft") return payload.draftFailures.length ? "任务起草未完成" : "未交给本人确认";
+  if (payload.phase === "open") {
+    if (payload.closesAt && Date.parse(payload.closesAt) <= Date.parse(payload.serverNow)) return roundStatusText({ ...payload, phase: "closed" }, { feedbackCount: 0 });
+    return roundStatusText(payload, { cardId: payload.cards.find((row) => row.mine)?.cardId, feedbackCount: 0 });
   }
-  if (payload.phase === "reviewing") return payload.counts.pending ? `${payload.counts.pending} 条待你处理` : "意见已全部处理，待你确认";
+  if (payload.phase === "reviewing") return roundStatusText(payload, { feedbackCount: 0 });
   if (payload.phase === "confirmed") return payload.todo ?? "已确定";
-  return "已截止 · 汇总中";
+  return roundStatusText(payload, { feedbackCount: 0 });
 }
 
 /**
  * 把首页 Card 集合整理成三组通知（clark `notifications.tsx` 的分组与顺序）。
  * 只收需要行动的：未签发的月度计划、已排期会议、红色待决议题（v0.3 §645）；打开不会让条目消失（C-05）。
  */
-export function railGroups(cards: Card[], now: Date = new Date()): RailGroup[] {
+export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: string): RailGroup[] {
   const names = new Map<string, string>();
   for (const card of cards) {
     if (card.kind === "battlefield") names.set(payloadOf<BattlefieldPayload>(card).battlefieldId, card.title);
@@ -88,22 +88,31 @@ export function railGroups(cards: Card[], now: Date = new Date()): RailGroup[] {
 
   const missionRounds = cards.flatMap<RailItem>((card) => {
     if (card.kind !== "mission-round") return [];
-    const payload = payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(card);
+    const payload = payloadOf<TMissionRoundSummary>(card);
     // 确认后退出；拍板人还有更正申请待处理时服务端才会把它放回来，待办写在 todo（GAP-04）。
-    if ("phase" in payload && payload.phase === "confirmed" && !payload.todo) return [];
-    const firstCard = "cards" in payload ? payload.cards[0] : null;
+    if (payload.phase === "confirmed" && !payload.todo) return [];
+    const firstCard = payload.cards[0];
     return [{ id: card.id, title: card.title, meta: missionRoundMeta(payload), tone: "amber", href: firstCard ? `/mission-cards/${firstCard.cardId}` : "/", missionRound: card }];
   });
 
   const meetings = cards
-    .filter((card) => card.kind === "meeting" && payloadOf<MeetingPayload>(card).status === "scheduled")
+    .filter((card) => {
+      if (card.kind !== "meeting") return false;
+      const meeting = payloadOf<MeetingPayload>(card);
+      const ended = Boolean(meeting.hasEnded || meeting.endedAt) || Date.parse(meeting.endsAt) <= now.getTime();
+      return meeting.status === "scheduled" && (!ended || meeting.leadDriId === viewerId);
+    })
     .sort((a, b) => payloadOf<MeetingPayload>(a).scheduledAt.localeCompare(payloadOf<MeetingPayload>(b).scheduledAt));
   const meetingItems = meetings.map<RailItem>((card) => {
-    const at = payloadOf<MeetingPayload>(card).scheduledAt;
+    const payload = payloadOf<MeetingPayload>(card);
+    const at = payload.scheduledAt;
+    const followUp = Boolean(payload.hasEnded || payload.endedAt) || Date.parse(payload.endsAt) <= now.getTime();
     return {
       id: card.id,
       title: card.title,
-      meta: sameCompanyDay(new Date(at), now) ? clock(new Date(at)).time : monthDayTime(at),
+      meta: followUp ? "会议已结束，待你提交记录或重新安排" : sameCompanyDay(new Date(at), now) ? clock(new Date(at)).time : monthDayTime(at),
+      followUp,
+      canReschedule: card.actions.some((action) => action.actionType === "meeting.reschedule"),
       tone: "neutral",
       href: `/meetings/${card.objectRef.id}`,
     };
@@ -116,7 +125,7 @@ export function railGroups(cards: Card[], now: Date = new Date()): RailGroup[] {
     }),
   );
   const lead = leads.size === 1 ? [...leads][0] : "";
-  const meetingSubtitle = allToday ? `今天${lead ? ` · ${lead}主持` : ""}` : `${meetings.length} 场待开`;
+  const meetingSubtitle = meetingItems.some((item) => item.followUp) ? "含待你处理的会后记录" : allToday ? `今天${lead ? ` · ${lead}主持` : ""}` : `${meetings.length} 场待开`;
 
   const urgent = cards.filter((card) => card.kind === "issue" && card.urgency === "red");
   const origins = new Set(urgent.map((card) => payloadOf<IssuePayload>(card).origin));
@@ -199,6 +208,7 @@ export function NotificationRail({
   currentHref,
   onCard,
   account,
+  viewerId,
 }: {
   cards: Card[];
   onNavigate: (href: string, origin?: Element | null) => void;
@@ -206,19 +216,14 @@ export function NotificationRail({
   onCard?: (card: Card) => void;
   /** 左下角自己的名字：个人菜单。 */
   account?: Account;
+  viewerId?: string;
   onHome?: () => void;
   homeActive?: boolean;
   /** 当前打开的对象（高亮所在分组与那一行）。 */
   currentHref?: string;
 }) {
   const router = useRouter();
-  const { ask, dialog } = useConfirm();
-  const [notice, setNotice] = useState("");
-  const action = useCardAction((updated) => {
-    onCard?.(updated);
-    router.refresh();
-  }, "/api/mission-rounds/actions/execute");
-  const groups = railGroups(cards);
+  const groups = railGroups(cards, new Date(), viewerId);
   const rail = useRef<HTMLElement>(null);
   const positions = useRef(new Map<string, number>());
   const strategic = pendingStrategicItems(cards).length;
@@ -226,6 +231,7 @@ export function NotificationRail({
 
   // 同成员工作台同步其他拍板人的变更；倒计时本身由分组与卡页共享分钟时钟。
   const needsRoundRefresh = cards.some((card) => {
+    if (card.kind === "meeting") return payloadOf<MeetingPayload>(card).status === "scheduled";
     if (card.kind !== "mission-round") return false;
     const payload = payloadOf<TMissionRoundSummary>(card);
     return payload.phase !== "confirmed" || Boolean(payload.todo);
@@ -235,50 +241,11 @@ export function NotificationRail({
     const refresh = () => { if (document.visibilityState === "visible") router.refresh(); };
     const timer = window.setInterval(refresh, 20_000);
     window.addEventListener("focus", refresh);
+    window.addEventListener("meeting-changed", refresh);
     document.addEventListener("visibilitychange", refresh);
-    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); window.removeEventListener("meeting-changed", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [needsRoundRefresh, router]);
   const refreshRound = useCallback(() => router.refresh(), [router]);
-  const requestedDraft = useRef<string | null>(null);
-
-  async function openItem(item: RailItem, origin: Element | null) {
-    if (!item.missionRound) {
-      onNavigate(item.href, origin);
-      return;
-    }
-    const draft = item.missionRound.actions.find((descriptor) => descriptor.actionType === "mission-round.draft");
-    if (!draft) {
-      if (item.href !== "/") onNavigate(item.href, origin);
-      else setNotice("这一轮暂无可打开的任务卡。");
-      return;
-    }
-    setNotice("");
-    action.reset();
-    // 没有可起草的人时只能导入占位文件；否则 Co-Agent 逐人起草（工单 10）。
-    const onlyPlaceholder = payloadOf<TMissionRoundDraftPayload>(item.missionRound).placeholder;
-    if (!await ask(onlyPlaceholder
-      ? "这个战场还没有可以起草的人，先用占位文件整理草稿，待大家讨论修改。整理草稿不会确认个人承诺，也不会开放讨论。"
-      : "Co-Agent 会按签发的本月计划和上个月的任务卡，为这个战场的每个人起草任务卡，需要一两分钟；起草不成的人先沿用上个月的卡。整理草稿不会确认个人承诺，也不会开放讨论。", "整理任务卡草稿")) return;
-    const saved = await action.run(draft);
-    if (saved) {
-      // Co-Agent 在后台起草：留在通知栏看「正在起草」，好了再点进去；这时的卡可能在起草失败后被替换。
-      if (payloadOf<TMissionRoundSummary>(saved).phase === "drafting") { setNotice("Co-Agent 已开始起草任务卡，起草好的卡会列在这一轮下面。"); return; }
-      const firstCard = payloadOf<TMissionRoundSummary>(saved).cards[0];
-      if (firstCard) onNavigate(`/mission-cards/${firstCard.cardId}`, origin);
-      else setNotice("草稿已整理，这一轮暂无可打开的任务卡。");
-    }
-  }
-
-  // 引导的下一件事定位真实 slot，只打开原有确认框；整理仍由用户明确按下。
-  useEffect(() => {
-    const slot = new URLSearchParams(window.location.search).get("missionRoundDraft");
-    if (!slot || requestedDraft.current === slot) return;
-    const item = groups.flatMap((group) => group.items).find((item) => item.missionRound?.objectRef.type === "mission-round-slot" && item.missionRound.objectRef.id === slot);
-    if (!item) return;
-    requestedDraft.current = slot;
-    void openItem(item, null);
-  });
-
   // 分组出现 / 消失时，其余卡片从旧位置滑到新位置（FLIP，clark 同）。
   useLayoutEffect(() => {
     if (!rail.current || rail.current.offsetParent === null) return;
@@ -306,10 +273,12 @@ export function NotificationRail({
         }
       />
       <div className={n.noticeList}>
+        <CycleCountdown />
         {onCard ? <StrategicConfirmCard cards={cards} onCard={onCard} onNavigate={onNavigate} /> : null}
+        <PersonalReviewBoard onNavigate={onNavigate} />
         <MonthlyReviewNotices onNavigate={onNavigate} ceo />
         {groups.map((group) => {
-          const current = group.items.some((item) => item.href === currentHref || (item.missionRound && "cards" in payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(item.missionRound) && payloadOf<TMissionRoundSummary>(item.missionRound).cards.some((row) => `/mission-cards/${row.cardId}` === currentHref?.split("?")[0])));
+          const current = group.items.some((item) => item.href === currentHref || (item.missionRound && payloadOf<TMissionRoundSummary>(item.missionRound).cards.some((row) => `/mission-cards/${row.cardId}` === currentHref?.split("?")[0])));
           return (
             <HeroCard<"section">
               render={(props) => <section {...props} />}
@@ -333,11 +302,11 @@ export function NotificationRail({
                 </span>
               </HeroCard.Header>
               <div className={n.tray}>
-                {group.items.map((item) => item.missionRound && "phase" in payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(item.missionRound) ? (
+                {group.items.map((item) => item.missionRound ? (
                   <MissionCardNoticeGroup key={item.id} round={payloadOf<TMissionRoundSummary>(item.missionRound)} entry="ceo" embedded currentHref={currentHref} onNavigate={onNavigate} onRefresh={refreshRound} />
                 ) : (
+                  <div key={item.id}>
                   <HeroButton
-                    key={item.id}
                     variant="ghost"
                     size="sm"
                     data-ts-layout="true"
@@ -347,8 +316,7 @@ export function NotificationRail({
                     data-origin={item.href}
                     aria-current={item.href === currentHref ? "true" : undefined}
                     aria-label={`${item.title}，${item.meta}`}
-                    isDisabled={Boolean(item.missionRound) && action.pending}
-                    onPress={(event) => void openItem(item, (event.target as Element).closest("[data-notice]"))}
+                    onPress={(event) => onNavigate(item.href, (event.target as Element).closest("[data-notice]"))}
                   >
                     <span className={n.mark} aria-hidden="true" />
                     <span className={n.itemText}>
@@ -357,18 +325,17 @@ export function NotificationRail({
                     </span>
                     <ChevronRight size={15} aria-hidden="true" />
                   </HeroButton>
+                  {item.followUp ? <div className={n.meetingFollowUp}>
+                    {item.canReschedule ? <button type="button" onClick={(event) => onNavigate(`${item.href}?meetingAction=reschedule`, event.currentTarget)}>重新安排</button> : null}
+                    <button type="button" onClick={(event) => onNavigate(`${item.href}?meetingAction=transcript`, event.currentTarget)}>上传文字纪要</button>
+                  </div> : null}
+                  </div>
                 ))}
-                {group.kind === "decisions" ? <>
-                  {action.pending ? <p role="status">正在整理任务卡草稿…</p> : null}
-                  {notice ? <p role="status">{notice}</p> : null}
-                  <ActionFeedback state={action.state} onRetry={action.retry} label="整理任务卡草稿" />
-                </> : null}
               </div>
             </HeroCard>
           );
         })}
       </div>
-      {dialog}
       {account ? (
         <div className={n.railFoot}>
           <AccountMenu account={account} onNavigate={(href) => onNavigate(href)} />

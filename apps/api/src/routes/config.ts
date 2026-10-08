@@ -24,6 +24,7 @@ import { listCapabilityCards, listCapabilityRows, registerCapability, updateCapa
 import { assignIssueBattlefield, createCeoIssue, unassignIssueBattlefield } from "../issues.js";
 import { createConfigMeeting } from "../meetings.js";
 import { listMissionCards, listMissionRows, registerMission, validateMissionRelations } from "../missions.js";
+import { missionCardParticipants } from "../missionRounds.js";
 import { companyPeriod } from "../monthlyPlans.js";
 import { isKnownOwner, personDisplayNames } from "../people.js";
 import { getStrategyConfig, updateStrategyConfig } from "../strategy.js";
@@ -194,8 +195,8 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
   app.get(
     "/api/config/missions",
     { preHandler: requireCEO },
-    async (): Promise<TMissionManagementResponse> => ({
-      missions: (await listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory))).map(
+    async (req): Promise<TMissionManagementResponse> => ({
+      missions: (await listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), undefined, req.person!)).map(
         (card) => card.payload as TMissionManagementResponse["missions"][number],
       ),
     }),
@@ -229,6 +230,7 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     async (req, reply): Promise<FastifyReply> => {
       const ownerNames = personDisplayNames(companyMemory);
       if (!isKnownOwner(ownerNames, req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
+      if (req.body.participantIds?.some((id) => !ownerNames.has(id))) return fail(reply, 400, "INVALID_PARTICIPANT", "参与者必须命中 company-people.v1");
       const result = await updateBattlefield(pool, req.params.id, req.body);
       if (!result.ok) return fail(reply, result.status, result.code, result.message);
       const cards = (await listBattlefieldCards(q, companyPeriod(now()), ownerNames)).filter((card) => card.objectRef.id === result.id);
@@ -240,7 +242,12 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
   app.get(
     "/api/config/battlefields",
     { preHandler: requireCEO },
-    async (): Promise<TBattlefieldManagementResponse> => projectBattlefieldManagement(q, personDisplayNames(companyMemory)),
+    async (): Promise<TBattlefieldManagementResponse> => {
+      const people = companyMemory.searchPeople(undefined);
+      // 推算按下一次起草的月份：最新一份月度计划（月底签发下月计划时就是下月）。
+      const period = ((await q("SELECT max(period) AS period FROM monthly_plans")).rows[0]?.period as string | null) ?? companyPeriod(now());
+      return projectBattlefieldManagement(q, personDisplayNames(companyMemory), (id) => missionCardParticipants(q, people, id, period));
+    },
   );
 
   // CEO 配置页的议题↔战场关联集合：确定性配置语义，不走 opaque-action。

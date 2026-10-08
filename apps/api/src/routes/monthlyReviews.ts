@@ -41,6 +41,7 @@ import {
 } from "../monthlyReviews.js";
 import { personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
+import { registerPersonalReviewRoutes } from "./personalReviews.js";
 
 const NoInput = Type.Object({}, { additionalProperties: false });
 
@@ -62,6 +63,7 @@ const ACTIONS: Record<string, [string, TSchema]> = {
 
 /** 月末复盘：CEO 总览、负责人 / CEO 的复盘项、现算通知，以及独立的 Action 执行接口。 */
 export function registerMonthlyReviewRoutes(app: AppInstance, ctx: RouteContext): void {
+  registerPersonalReviewRoutes(app, ctx);
   const secret = ctx.env.sessionSecret;
   const reviewView = async (row: MonthlyReviewRow): Promise<TMonthlyReviewPayload> =>
     projectMonthlyReview(row, await listMonthlyReviewItems(ctx.q, row.id), personDisplayNames(ctx.companyMemory), await readLtco(ctx.q), secret,
@@ -115,6 +117,8 @@ export function registerMonthlyReviewRoutes(app: AppInstance, ctx: RouteContext)
       if (effect.type === "summary") service?.startSummary(effect.reviewId, effect.runId).catch(logFailure);
       // 下月计划沿用现有创建与生成流程；已存在时 createForPeriod 不重复创建
       if (effect.type === "next_plan") await ctx.monthlyPlanService?.createForPeriod(effect.period).catch((err) => console.error("next monthly plan failed", err));
+      // 已有计划按复盘重新生成：与「重新生成草案」同一个执行入口
+      if (effect.type === "plan_draft") ctx.monthlyPlanService?.executeRun(effect.planId, effect.runId).catch((err) => console.error("monthly draft run failed", err));
     }
   };
 

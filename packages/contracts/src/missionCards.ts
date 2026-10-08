@@ -4,9 +4,10 @@ import { ActionDescriptor } from "./cards.js";
 import { MissionCardPayload } from "./missions.js";
 import { ThreadMember } from "./threads.js";
 
-/** 个人任务允许建议的 12 个字段；唯一责任人由任务卡归属决定。 */
+/** 个人任务允许建议的字段；唯一责任人由任务卡归属决定。 */
 export const MissionCardField = Type.Union([
   Type.Literal("title"), Type.Literal("why"), Type.Literal("outcome"), Type.Literal("successEvidence"),
+  Type.Literal("timeBoundary"), Type.Literal("tradeoffs"),
   Type.Literal("boundaries"), Type.Literal("keyPath"), Type.Literal("milestones"), Type.Literal("resources"),
   Type.Literal("dependencies"), Type.Literal("humanAgentSplit"), Type.Literal("risk"), Type.Literal("retrospect"),
 ]);
@@ -29,14 +30,40 @@ export const MissionCardRow = Type.Object({
   ownerName: Type.String(),
   roleLabel: Type.Union([Type.String(), Type.Null()]),
   missionCount: Count,
+  ownerConfirmedAt: NullableDateTime,
+  contentVisible: Type.Optional(Type.Boolean()),
   line: Type.String(),
   pending: Count,
   firstPendingFeedbackId: Type.Union([Type.String(), Type.Null()]),
   pendingCorrections: Count,
   firstPendingCorrectionId: Type.Union([Type.String(), Type.Null()]),
   mine: Type.Boolean(),
-  /** 这张卡是占位：Co-Agent 起草失败时沿用上个月的卡，或整轮来自占位文件。 */
+  /** 显式人工导入的历史占位来源；正式自动起草不会生成占位内容。 */
   placeholder: Type.Boolean(),
+}, { additionalProperties: false });
+
+export const MissionCardReviewSource = Type.Object({
+  cardId: Type.String(), missionId: Type.Optional(Type.String()), field: Type.Optional(MissionCardField),
+  version: Type.Optional(Type.Integer({ minimum: 1 })), annotationId: Type.Optional(Type.String()),
+  revisionId: Type.Optional(Type.String()), correctionId: Type.Optional(Type.String()), quote: Type.Optional(Type.String({ maxLength: 2000 })),
+}, { additionalProperties: false });
+export const MissionCardReviewReport = Type.Object({
+  summary: Type.String({ minLength: 1, maxLength: 2000 }),
+  findings: Type.Array(Type.Object({
+    kind: Type.Union([Type.Literal("question"), Type.Literal("risk"), Type.Literal("suggestion")]),
+    title: Type.String({ minLength: 1, maxLength: 200 }), body: Type.String({ minLength: 1, maxLength: 2000 }),
+    sources: Type.Array(MissionCardReviewSource, { minItems: 1, maxItems: 20 }),
+  }, { additionalProperties: false }), { maxItems: 30 }),
+}, { additionalProperties: false });
+export const MissionCardCoAgentReview = Type.Object({
+  status: Type.Union([Type.Literal("queued"), Type.Literal("running"), Type.Literal("completed"), Type.Literal("failed")]),
+  summary: Type.String(), findings: MissionCardReviewReport.properties.findings,
+  error: Type.Union([Type.String(), Type.Null()]), completedAt: NullableDateTime,
+  retryAction: Type.Union([ActionDescriptor, Type.Null()]),
+}, { additionalProperties: false });
+export const ReturnMissionCardsRequest = Type.Object({
+  cardIds: Type.Array(Type.String({ format: "uuid" }), { minItems: 1, maxItems: 100, uniqueItems: true }),
+  reason: Type.String({ minLength: 1, maxLength: 2000, pattern: "\\S" }), version: Type.Integer({ minimum: 1 }),
 }, { additionalProperties: false });
 
 /** 同一轮次的公开事实；动作权限单独通过 approver 与 Card actions 投影。 */
@@ -58,6 +85,10 @@ export const MissionRoundSummary = Type.Object({
   placeholder: Type.Boolean(),
   /** 草稿来源：agent 为 Co-Agent 起草，placeholder 为占位文件；还没起草为 null。 */
   draftOrigin: Type.Union([Type.Literal("agent"), Type.Literal("placeholder"), Type.Null()]),
+  /** 仅投影当前人看得见的卡的起草错误；不以旧卡或文件代替失败。 */
+  draftFailures: Type.Array(Type.Object({ ownerId: Type.String(), ownerName: Type.String(), message: Type.String() }, { additionalProperties: false })),
+  /** 拍板人可重试所有失败卡；已成功的任务不会重新起草。 */
+  retryDraftAction: Type.Union([ActionDescriptor, Type.Null()]),
   goals: Type.Union([Type.Object({
     sixMonthOutcome: Type.String(),
     monthOutcome: Type.String(),
@@ -67,23 +98,14 @@ export const MissionRoundSummary = Type.Object({
     cards: Count, feedback: Count, pending: Count, conflicts: Count, dependencies: Count, late: Count,
     /** 确认后等拍板人处理的更正申请（GAP-04）。 */
     corrections: Count,
+    unreviewed: Count,
   }, { additionalProperties: false }),
   cards: Type.Array(MissionCardRow),
+  coAgentReview: Type.Optional(Type.Union([MissionCardCoAgentReview, Type.Null()])),
 }, { additionalProperties: false });
 
 /** 尚未确认的轮次跨月保留；通知按 Owner 或当前拍板权限筛选，不写通知表。 */
 export const MyMissionRoundsResponse = Type.Object({ rounds: Type.Array(MissionRoundSummary) }, { additionalProperties: false });
-
-/** 尚未建轮次的入口只引用 slot，不伪造 round/card 身份。 */
-export const MissionRoundDraftPayload = Type.Object({
-  period: MonthlyPlanPeriod,
-  battlefieldId: Type.String(),
-  battlefieldName: Type.String(),
-  /** 整理草稿时是否只能用占位文件（Co-Agent 起草不可用）。 */
-  placeholder: Type.Boolean(),
-  todo: Type.String(),
-  serverNow: DateTime,
-}, { additionalProperties: false });
 
 export const ExecuteMissionRoundActionRequest = Type.Object({
   actionId: Type.String(),
@@ -115,6 +137,7 @@ export const MissionCardFeedbackView = Type.Object({
 }, { additionalProperties: false });
 export const PersonalMissionCardMission = Type.Object({
   ...MissionCardPayload.properties, version: Type.Integer({ minimum: 1 }), changedFields: Type.Array(MissionCardField),
+  selfEditedFields: Type.Array(MissionCardField),
 }, { additionalProperties: false });
 /**
  * 已确定任务卡的更正（GAP-04）：非拍板人申请、拍板人逐条采纳或不采纳；拍板人自己更正直接生效（direct）。
@@ -131,13 +154,21 @@ export const MissionCardCorrectionView = Type.Object({
 }, { additionalProperties: false });
 /** 更正入口随看的人变化；closedReason 为 null 时本卡可更正。 */
 export const MissionCardCorrectionAccess = Type.Object({
-  canRequest: Type.Boolean(), canApply: Type.Boolean(), closedReason: NullableText,
+  canRequest: Type.Boolean(), canApply: Type.Boolean(), canReject: Type.Optional(Type.Boolean()), closedReason: NullableText,
 }, { additionalProperties: false });
 export const PersonalMissionCardPayload = Type.Object({
   round: MissionRoundSummary,
+  draftFailure: NullableText,
+  selfReview: Type.Object({
+    canConfirm: Type.Boolean(), canCancel: Type.Boolean(), canEdit: Type.Boolean(),
+    blockedReason: NullableText, pendingAnnotations: Count,
+    returnReason: Type.Optional(NullableText),
+  }, { additionalProperties: false }),
+  annotationAccess: Type.Object({ canCreate: Type.Boolean(), canApply: Type.Boolean(), closedReason: NullableText }, { additionalProperties: false }),
   card: Type.Object({
     cardId: Type.String(), ownerId: Type.String(), ownerName: Type.String(), roleLabel: NullableText,
     members: Type.Array(ThreadMember), status: Type.String(),
+    ownerConfirmedAt: NullableDateTime,
     shown: Type.Union([Type.Literal("draft"), Type.Literal("candidate"), Type.Literal("confirmed")]),
     missions: Type.Array(PersonalMissionCardMission),
   }, { additionalProperties: false }),
@@ -146,6 +177,10 @@ export const PersonalMissionCardPayload = Type.Object({
   /** 新的在前；看得到卡的人都看得到这张卡的更正记录。 */
   corrections: Type.Array(MissionCardCorrectionView),
   correctionAccess: MissionCardCorrectionAccess,
+}, { additionalProperties: false });
+export const SetMissionCardOwnerConfirmationRequest = Type.Object({
+  confirmed: Type.Boolean(), round: Type.Integer({ minimum: 1 }),
+  missionVersions: Type.Record(Type.String({ minLength: 1 }), Type.Integer({ minimum: 1 })),
 }, { additionalProperties: false });
 export const CreateMissionCardFeedbackRequest = Type.Object({
   clientId: Type.String({ format: "uuid" }), kind: FeedbackKind, round: Type.Integer({ minimum: 1 }),
@@ -183,16 +218,19 @@ export type TMissionRoundPhase = Static<typeof MissionRoundPhase>;
 export type TMissionCardRow = Static<typeof MissionCardRow>;
 export type TMissionRoundSummary = Static<typeof MissionRoundSummary>;
 export type TMyMissionRoundsResponse = Static<typeof MyMissionRoundsResponse>;
-export type TMissionRoundDraftPayload = Static<typeof MissionRoundDraftPayload>;
 export type TExecuteMissionRoundActionRequest = Static<typeof ExecuteMissionRoundActionRequest>;
 export type TMissionRoundDecideInput = Static<typeof MissionRoundDecideInput>;
 export type TMissionRoundConfirmInput = Static<typeof MissionRoundConfirmInput>;
 export type TMissionCardFeedbackView = Static<typeof MissionCardFeedbackView>;
 export type TPersonalMissionCardMission = Static<typeof PersonalMissionCardMission>;
 export type TPersonalMissionCardPayload = Static<typeof PersonalMissionCardPayload>;
+export type TSetMissionCardOwnerConfirmationRequest = Static<typeof SetMissionCardOwnerConfirmationRequest>;
 export type TCreateMissionCardFeedbackRequest = Static<typeof CreateMissionCardFeedbackRequest>;
 export type TMissionCardCorrectionView = Static<typeof MissionCardCorrectionView>;
 export type TMissionCardCorrectionAccess = Static<typeof MissionCardCorrectionAccess>;
 export type TCreateMissionCardCorrectionRequest = Static<typeof CreateMissionCardCorrectionRequest>;
 export type TDecideMissionCardCorrectionRequest = Static<typeof DecideMissionCardCorrectionRequest>;
 export type TMissionCardGroupView = Static<typeof MissionCardGroupView>;
+export type TMissionCardReviewReport = Static<typeof MissionCardReviewReport>;
+export type TMissionCardReviewSource = Static<typeof MissionCardReviewSource>;
+export type TReturnMissionCardsRequest = Static<typeof ReturnMissionCardsRequest>;

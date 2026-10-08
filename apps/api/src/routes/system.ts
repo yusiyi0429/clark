@@ -3,9 +3,10 @@ import type { Static } from "@sinclair/typebox";
 import { HealthResponse } from "@warmap/contracts";
 import { createCompanyMemoryMcpSession } from "../mcpCompanyMemory.js";
 import { createMeMcpSession } from "../mcpMe.js";
-import { authenticatePersonalToken } from "../personalTokens.js";
+import { authenticateMcpToken, MCP_WRITE_TOOLS, oauthUrls } from "../mcpOAuth.js";
 import { personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
+import { worldConfigured } from "../worldClient.js";
 
 export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void {
   const { q, env, runtime, companyMemory, radar, recordings, voiceprints, requireServiceToken } = ctx;
@@ -30,6 +31,7 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
       recording: recordings.configured(),
       // 腾讯云声纹凭据是否配全（同上，只看变量）
       voiceprint: voiceprints.configured(),
+      world: worldConfigured(env),
     };
     const status: Static<typeof HealthResponse>["status"] =
       database && dependencies.piRuntime && dependencies.modelSlots && dependencies.companyMemoryMcp ? "ok" : "degraded";
@@ -54,12 +56,21 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
 
   const meMcp = async (req: FastifyRequest, reply: FastifyReply) => {
     const findPerson = (personId: string) => companyMemory.searchPeople(undefined).find((person) => person.personId === personId);
-    const identity = await authenticatePersonalToken(q, req.headers.authorization, env.sessionSecret, ctx.now(), (personId) => !!findPerson(personId));
-    if (!identity) return ctx.fail(reply, 401, "UNAUTHORIZED", "个人令牌无效");
+    const urls = oauthUrls(env.publicOrigin);
+    const identity = await authenticateMcpToken(q, req.headers.authorization, env.sessionSecret, ctx.now(), (personId) => !!findPerson(personId), urls.resource);
+    if (!identity) {
+      reply.header("WWW-Authenticate", `Bearer resource_metadata="${urls.metadata}", scope="tianshu:read tianshu:write"`);
+      return ctx.fail(reply, 401, "UNAUTHORIZED", "连接授权无效，请重新登录或检查个人令牌");
+    }
+    const rpc = req.body as { method?: string; params?: { name?: string } } | undefined;
+    if (identity.scopes && (!identity.scopes.includes("tianshu:read") || rpc?.method === "tools/call" && MCP_WRITE_TOOLS.has(rpc.params?.name ?? "") && !identity.scopes.includes("tianshu:write"))) {
+      reply.header("WWW-Authenticate", `Bearer error="insufficient_scope", resource_metadata="${urls.metadata}", scope="tianshu:read tianshu:write"`);
+      return ctx.fail(reply, 403, "FORBIDDEN", "这次连接没有写入权限，请重新授权");
+    }
     reply.hijack();
     const { server, transport } = await createMeMcpSession({ pool: ctx.pool, q, pepper: env.sessionSecret, now: ctx.now,
       names: () => personDisplayNames(companyMemory), findPerson, initialPerson: findPerson(identity.personId)!, authorization: req.headers.authorization,
-      people: () => companyMemory.searchPeople(undefined), draftDir: env.missionCardDraftsDir });
+      people: () => companyMemory.searchPeople(undefined), publicOrigin: env.publicOrigin });
     reply.raw.on("close", () => { void server.close(); });
     await transport.handleRequest(req.raw, reply.raw, req.body);
   };

@@ -17,3 +17,11 @@ export async function loadMonthlyReview(cookie: string, period: string) {
   if (!response.ok || !data) throw new Error(`Monthly review query failed with ${response.status}`);
   return data;
 }
+
+export async function loadPersonalReview(cookie: string, personalReviewId: string) {
+  const { data, response } = await serverApi.GET("/api/personal-reviews/{personalReviewId}", { params: { path: { personalReviewId } }, headers: { cookie } });
+  if (response.status === 401) redirect("/access");
+  if (response.status === 404) notFound();
+  if (!response.ok || !data) throw new Error(`Personal review query failed with ${response.status}`);
+  return data.review;
+}

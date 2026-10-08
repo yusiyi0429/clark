@@ -25,13 +25,18 @@ export function createPersonalRadarJudge(options: {
   apiKey: string;
   modelId: string;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
+  /** 只用于 LangSmith run 名。 */
+  personName?: (personId: string) => string | undefined;
 }): PersonalRadarJudge {
+  const { personName, ...runtimeOptions } = options;
   return {
     async judge({ personId, directions, sources }, signal) {
       const result = await runCandidateAgent({
-        ...options,
+        ...runtimeOptions,
         kind: "personal-radar-assess",
         objectRef: { type: "person-radar", id: personId },
+        personId,
+        personName: personName?.(personId),
         input: { directions, sources },
         prompt: PERSONAL_RADAR_PROMPT,
         schema: PersonalRadarJudgeSubmission,

@@ -17,6 +17,7 @@
 .editor:focus-visible { border-color: var(--onboarding-blue); outline: 2px solid color-mix(in oklab, var(--onboarding-blue) 30%, transparent); outline-offset: 1px; }
 .editor[data-dirty] { border-color: color-mix(in oklab, var(--onboarding-blue) 55%, var(--hairline)); }
 .sources { margin: 6px 0 0; color: var(--ink-faint); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.sources a { color: var(--brand-deep); text-decoration: underline; text-underline-offset: 3px; }
 .suggestion { display: grid; gap: 8px; margin-top: 10px; padding: 12px 14px; border: 1px solid color-mix(in oklab, var(--onboarding-blue) 22%, var(--surface)); border-radius: var(--onboarding-inset-radius); background: color-mix(in oklab, var(--onboarding-blue) 5%, var(--surface)); font-size: 14px; line-height: 1.75; }
 .suggestion header { color: var(--brand-deep); font-size: 13px; font-weight: 600; }
 .suggestion p { margin: 0; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -115,3 +116,16 @@
 }
 @media (max-width: 959px) { .sources { font-size: 13px; } .rowOwner, .rowAssess, .evidence, .history { font-size: 14px; } }
 @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } .editor { transition: none; } }
+
+/* 个人复盘：本月 Mission 列表（对照基准）与三条起草路径。 */
+.missions { display: grid; gap: 10px; margin: 4px 0 0; padding: 0; list-style: none; }
+.missions li { display: grid; gap: 2px; }
+.missions strong { color: var(--ink); font-size: 14px; font-weight: 600; }
+.goal .missions p { margin: 0; color: var(--ink-muted); }
+.paths { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.path { display: grid; align-content: start; gap: 8px; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); background: var(--surface); font-size: 14px; line-height: 1.7; }
+.path h3 { margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; }
+.path p { margin: 0; color: var(--ink-muted); }
+.instruction { margin: 0; padding: 10px 12px; border-left: 3px solid color-mix(in oklab, var(--onboarding-blue) 40%, var(--surface)); border-radius: 0 10px 10px 0; background: color-mix(in oklab, var(--onboarding-blue) 5%, var(--surface)); color: var(--ink); font-size: 13px; line-height: 1.7; user-select: all; }
+.muted { color: var(--ink-muted); }
+.window { margin: 0 0 16px; color: var(--ink-muted); font-size: 13px; line-height: 1.6; }

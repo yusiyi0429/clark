@@ -6,6 +6,8 @@ import remarkGfm from "remark-gfm";
 import { Paperclip, Quote } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import type { Message, ThinkingStage } from "./useConversation";
+import { QuoteChips } from "./QuoteChips";
+import { readQuotedMessage } from "./quotes";
 import s from "@/styles/conversation-transcript.module.css";
 import c from "@/styles/card-references.module.css";
 
@@ -24,6 +26,7 @@ function turnMs(messages: Message[], index: number): number | undefined {
 export function ConversationTurn({ message, ms }: { message: Message; ms?: number }) {
   const user = message.role === "user";
   const attachments = message.attachments ?? [];
+  const quoted = user ? readQuotedMessage(message.content) : { message: message.content, quotes: [] };
   return (
     <article className={user ? s.user : s.assistant} data-chat-role={message.role} aria-label={user ? "你" : "天枢"}>
       {!user && ms !== undefined ? (
@@ -56,8 +59,9 @@ export function ConversationTurn({ message, ms }: { message: Message; ms?: numbe
           ))}
         </details>
       ) : null}
+      {quoted.quotes.length ? <QuoteChips quotes={quoted.quotes} sent /> : null}
       <div className={s.prose}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{quoted.message}</ReactMarkdown>
       </div>
     </article>
   );

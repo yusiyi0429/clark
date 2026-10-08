@@ -11,8 +11,10 @@ import type { Account } from "@/components/AccountMenu";
 import { columnHostClass } from "@/conversation/ConversationColumn";
 import { ConversationHost, type ConversationUiState } from "@/conversation/ConversationHost";
 import { ReferenceProvider } from "@/conversation/references";
+import { appendQuote, type QuotePrefill, type QuoteSource, type TextQuote } from "@/conversation/quotes";
 import { NARROW_COLUMN_QUERY, saveColumnMode } from "@/conversation/useColumnMode";
 import { prefersReducedMotion, runRouteTransition, supportsViewTransition, type TransitionDirection } from "@/lib/viewTransition";
+import { WhatsNewCard } from "@/components/whatsNew/WhatsNewCard";
 import { LoadingMask } from "./LoadingMask";
 import { NoticeStrip } from "./NoticeStrip";
 import { WorkspaceContext, type DetailInfo, type WorkspaceApi } from "./WorkspaceContext";
@@ -82,23 +84,46 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   const [historyOpen, setHistoryOpen] = useState(false);
   const [globalView, setGlobalView] = useState(false);
   const [railMobileOpen, setRailMobileOpen] = useState(false);
-  const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
+  const quoteKey = `${viewerId ?? ""}:${homeHref}:${pathname}:${detail?.scope ?? "global"}`;
+  const [quoteDraft, setQuoteDraft] = useState<{ key: string; items: TextQuote[]; prefill: QuotePrefill | null } | null>(null);
+  const quoteNonce = useRef(0);
+  // Hide old selections in the same render as an object/identity switch, before the reset effect runs.
+  const quotes = quoteDraft?.key === quoteKey ? quoteDraft.items : [];
+  const prefill = quoteDraft?.key === quoteKey ? quoteDraft.prefill : null;
   useEffect(() => {
     setHistoryOpen(false);
     setGlobalView(false);
     setRailMobileOpen(false);
-    setPrefill(null);
-  }, [pathname]);
-  // clark onQuote：切到当前对象的对话（右列收着就展开并记成偏好，窄屏打开浮层），输入条写入「关于“…”，」。
-  const quote = useCallback((text: string) => {
+  }, [pathname, viewerId, homeHref]);
+  useEffect(() => setQuoteDraft(null), [quoteKey]);
+  // 引用只进入当前对象的私聊，正文保持在小引用块里，输入条留给用户自己的话。
+  const quote = useCallback((text: string, source?: QuoteSource) => {
+    if (!text.trim()) return;
     setHistoryOpen(false);
     setGlobalView(false);
     setKeyboard(true);
     if (window.matchMedia(NARROW_COLUMN_QUERY).matches) setRailMobileOpen(true);
     else saveColumnMode("expanded");
-    setPrefill({ text: `关于“${text}”，`, nonce: Date.now() });
-  }, []);
-  const consumePrefill = useCallback(() => setPrefill(null), []);
+    const nonce = ++quoteNonce.current;
+    const resolvedSource = { label: detail?.label, ...source, scope: detail?.scope ?? "global" };
+    setQuoteDraft((current) => ({ key: quoteKey,
+      items: appendQuote(current?.key === quoteKey ? current.items : [], { id: `quote-${nonce}`, text, source: resolvedSource }),
+      prefill: { text, nonce, source: resolvedSource } }));
+  }, [detail?.label, detail?.scope, quoteKey]);
+  const compose = useCallback((draft: string) => {
+    setHistoryOpen(false);
+    setGlobalView(false);
+    setKeyboard(true);
+    if (window.matchMedia(NARROW_COLUMN_QUERY).matches) setRailMobileOpen(true);
+    else saveColumnMode("expanded");
+    const nonce = ++quoteNonce.current;
+    setQuoteDraft((current) => ({ key: quoteKey, items: current?.key === quoteKey ? current.items : [],
+      prefill: { text: "", draft, nonce, source: { label: detail?.label, scope: detail?.scope ?? "global" } } }));
+  }, [detail?.label, detail?.scope, quoteKey]);
+  const consumePrefill = useCallback((nonce?: number) => setQuoteDraft((current) =>
+    current && (nonce === undefined || current.prefill?.nonce === nonce) ? { ...current, prefill: null } : current), []);
+  const removeQuotes = useCallback((ids: string[]) => setQuoteDraft((current) => current
+    ? { ...current, items: current.items.filter((item) => !ids.includes(item.id)) } : current), []);
   useEffect(() => {
     if (historyOpen) setPeek(false);
   }, [historyOpen]);
@@ -413,8 +438,8 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   );
 
   const api: WorkspaceApi = useMemo(
-    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, viewerId }),
-    [homeCards, close, closing, detailOpen, navigate, quote, registerDetail, showToast, viewerId],
+    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, compose, viewerId }),
+    [homeCards, close, closing, compose, detailOpen, navigate, quote, registerDetail, showToast, viewerId],
   );
 
   const conversationUi: ConversationUiState = {
@@ -428,6 +453,8 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
     setRailMobileOpen,
     prefill,
     consumePrefill,
+    quotes,
+    removeQuotes,
   };
 
   return (
@@ -499,6 +526,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             {toast}
           </div>
         ) : null}
+        <WhatsNewCard />
       </div>
       </ReferenceProvider>
     </WorkspaceContext.Provider>

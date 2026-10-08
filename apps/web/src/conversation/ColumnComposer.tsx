@@ -12,6 +12,8 @@ import { AttachButton } from "./ConversationAttachments";
 import { DictationControls } from "./DictationControls";
 import { useDictation, withDictation } from "./useDictation";
 import type { ConversationData } from "./useConversation";
+import { QuoteChips } from "./QuoteChips";
+import { quotedMessage, storedDraft, type QuotePrefill, type TextQuote } from "./quotes";
 import d from "@/styles/conversation-dock.module.css";
 import ds from "@/styles/dictation.module.css";
 
@@ -34,6 +36,8 @@ export function ColumnComposer({
   onHeightChange,
   prefill,
   onPrefillUsed,
+  textQuotes = [],
+  onRemoveQuotes,
   draftOwnerId,
   allowAttachments = true,
 }: {
@@ -49,9 +53,11 @@ export function ColumnComposer({
   references: Card[];
   onDiscussGlobal?: () => void;
   onHeightChange: (height: number) => void;
-  /** 引用追问：替换输入并聚焦。 */
-  prefill?: { text: string; nonce: number } | null;
-  onPrefillUsed?: () => void;
+  /** A new reference focuses the field without replacing its draft. */
+  prefill?: QuotePrefill | null;
+  onPrefillUsed?: (nonce?: number) => void;
+  textQuotes?: TextQuote[];
+  onRemoveQuotes?: (ids: string[]) => void;
   draftOwnerId?: string;
   allowAttachments?: boolean;
 }) {
@@ -62,6 +68,8 @@ export function ColumnComposer({
   const composing = useRef(false);
   const rows = usePillRows(input, pill, inputElement);
   const busy = data.streaming;
+  const inputVersion = useRef(0);
+  const sending = useRef(false);
   const dictation = useDictation();
 
   // 草稿按对话范围保存（C-03：切换对象后不串草稿），关闭和改变宽度不丢。
@@ -73,6 +81,7 @@ export function ColumnComposer({
     }
   }, [draftKey]);
   const updateInput = (value: string) => {
+    inputVersion.current++;
     setInput(value);
     dictation.clearError();
     try {
@@ -85,12 +94,13 @@ export function ColumnComposer({
 
   useEffect(() => {
     if (!prefill) return;
-    updateInput(prefill.text);
-    onPrefillUsed?.();
+    onPrefillUsed?.(prefill.nonce);
+    // 输入条里已有草稿就不覆盖（刚换到这个频道时，存着的草稿可能还没渲染进 input）。
+    if (prefill.draft && !input.trim() && !storedDraft(draftKey)) updateInput(prefill.draft);
     requestAnimationFrame(() => {
       const element = inputElement.current;
       element?.focus({ preventScroll: true });
-      element?.setSelectionRange(prefill.text.length, prefill.text.length);
+      if (element) element.setSelectionRange(element.value.length, element.value.length);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只响应新的引用
   }, [prefill?.nonce]);
@@ -118,16 +128,24 @@ export function ColumnComposer({
 
   async function submit(value = input) {
     const text = value.trim();
-    if (!text || busy) return;
+    if (!text || busy || sending.current) return;
+    sending.current = true;
     const kept = value;
+    const sentQuotes = textQuotes;
     updateInput("");
+    const clearedVersion = inputVersion.current;
     // C-04：服务端还没接收就失败时，把输入放回去，不先清空后提示失败。
-    if (!(await data.send(text, []))) updateInput(kept);
+    try {
+      const accepted = await data.send(quotedMessage(text, sentQuotes), []);
+      if (accepted) onRemoveQuotes?.(sentQuotes.map((quote) => quote.id));
+      else if (inputVersion.current === clearedVersion) updateInput(kept);
+    } finally { sending.current = false; }
   }
 
   const showSwitch = channels.length > 1 || narrow;
-  const attachments = data.attachments.length || dictation.error ? (
+  const attachments = textQuotes.length || data.attachments.length || dictation.error ? (
     <>
+      {textQuotes.length ? <QuoteChips quotes={textQuotes} onRemove={onRemoveQuotes} /> : null}
       {dictation.error ? <p role="alert" className={ds.error}>{dictation.error}</p> : null}
       {data.attachments.map((attachment) => (
         <span key={attachment.id} className={pillStyles.reference}>
