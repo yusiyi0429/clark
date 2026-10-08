@@ -284,6 +284,8 @@ async function main() {
     const id = randomUUID();
     await app.sql("INSERT INTO tasks (id,title,status,owner_id,created_by,due_date) VALUES ($1,$2,$3,$4,'meeting','2026-10-07')", [id, title, status, personId]);
     await app.sql("INSERT INTO task_members (task_id,person_id,role,added_by) VALUES ($1,$2,'owner','meeting')", [id, personId]);
+    // 和产品建事项一样把推进人放进群组：材料、群聊的权限按群组名单判断。
+    await app.sql("INSERT INTO thread_members (object_type,object_id,person_id,added_by) VALUES ('task',$1,$2,'meeting')", [id, personId]);
   }
   // TM_PLAN_STAGE=negotiating：停在未签发，好在界面上亲手签发（签发后系统自动起草，见 ADR-0026）。
   const initialStage = process.env.TM_PLAN_STAGE === "negotiating" ? "negotiating" : "issued";
