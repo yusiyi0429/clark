@@ -110,7 +110,7 @@
 @media(max-width:959px){
   .header{min-height:0;padding:16px}.body{display:block;padding-bottom:0;position:relative}
   .materials{padding:24px 16px 64px}
-  .commitArea{gap:10px;padding:12px 16px 14px}.workspace .receipt{margin:0 16px 20px}.workspace .reviewButton{margin-left:auto}.workspace .message{max-width:94%}
+  .commitArea{gap:10px;padding:12px 16px 14px}.workspace .commitArea>.edit{flex:1 1 100%}.workspace .receipt{margin:0 16px 20px}.workspace .reviewButton{margin-left:auto}.workspace .message{max-width:94%}
 }
 @media(pointer:coarse){
   .workspace .reviewButton,.workspace .submit,.workspace .save,.workspace .mobileTabs button,.workspace .recipientEdit{min-height:44px}
