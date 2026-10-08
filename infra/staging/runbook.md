@@ -26,7 +26,7 @@
    ```bash
    for u in https://api.edgecloudapp.com https://api.bochaai.com https://tos-cn-beijing.volces.com \
             https://openspeech.bytedance.com https://asr.tencentcloudapi.com https://github.com \
-            https://world-lab.tokenkingos.com; do
+            https://world-02.tokenkingos.com/v1/health; do
      printf '%-45s ' "$u"; curl -s -o /dev/null -m 10 -w '%{http_code}\n' "$u" || echo 不通
    done
    ```
