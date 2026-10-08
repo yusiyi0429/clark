@@ -1,6 +1,6 @@
 {
   "period": "2026-09",
-  "exportedAt": "2026-10-08T14:10:00+08:00",
+  "exportedAt": "2026-10-08T13:30:00+08:00",
   "source": "飞书知识库「业务域」https://tokenking.feishu.cn/wiki/YEhVwPN9liTZzGk0ZgDcvouInhg，lark-cli docs +fetch --doc-format markdown 导出",
   "mappingRule": "按标题归栏：本周期总体结果 / CEO 要点 → overall；关键经营判断 → judgments；下一周期经营重点 / 10 月必须承接 / Formation Input → nextFocus；待上层决策事项 → escalations；其余小节原样附在 overall 之后。正文为飞书原文，只去掉 callout 标签。10/8 追加：各人飞书复盘末尾 CEO 写的「CEO反馈」整节，原样接在 overall 之后。",
   "personalReviews": [
