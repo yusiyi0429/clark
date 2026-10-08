@@ -1,12 +1,12 @@
 {
-  "scope_id": "1e8552e2-4c5e-4c1a-be44-0f6cccddcd13",
+  "scope_id": "a92430fd-e1fc-4a42-8a04-bc2faa0a34cc",
   "domains": {
-    "company": "5959b42a-f114-4675-8b40-051f8086204f",
-    "eo": "280fb9c9-8133-4b68-bd52-1273b5db2c0c"
+    "company": "fc9e6f1e-0bec-4076-8d0d-2686c8ea26fa",
+    "eo": "88674067-189b-4457-ba20-7de2df9f3768"
   },
   "people": {
-    "liu-minghua": "bcecff11-2555-4f40-8678-6bc7df388b74",
-    "yu-siyi": "f4dd1cf6-b9d8-4e7c-b2b8-4cd58f608864",
-    "liu-renhao": "d7b1dba8-afc8-4525-8717-f4b1f456a3e4"
+    "liu-minghua": "f7788d18-a7a0-454f-a835-504d3c56280d",
+    "yu-siyi": "41b0a17f-a6eb-4fb2-9fb2-97e471a673ae",
+    "liu-renhao": "35d64f99-c846-4ae3-a2ca-ae6444be88f0"
   }
 }
