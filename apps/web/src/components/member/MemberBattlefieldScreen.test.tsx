@@ -82,7 +82,7 @@ describe("成员战场阅读与任务卡入口", () => {
     expect(ui.navigate).toHaveBeenCalledWith("/me/mission-cards/card", null);
   });
   it.each([
-    ["none", "本月目标还没出来"], ["negotiating", "本月目标还在协商"], ["confirmed", "任务卡草稿还没整理"],
+    ["none", "本月目标还没出来"], ["negotiating", "本月目标还在协商"], ["confirmed", "任务卡还没起草"],
   ] as const)("%s 无轮次照实写来源状态，不推断没有工作", (state, line) => {
     const data = fixture();
     data.round = null; data.missionCards = []; data.myMissions = []; data.monthTargetState = state;

@@ -27,6 +27,7 @@ import { executeRegeneratePreflight, executeRetryPreflight, executeRunPreflight 
 import { executeEditMission } from "../missions.js";
 import { personDisplayNames } from "../people.js";
 import { executeRetryMonthlyPlanDraft, executeSignMonthlyPlan, executeUpdateMonthlyPlanDraft } from "../monthlyPlans.js";
+import { startSignedMissionDrafts } from "../missionRounds.js";
 import { executeConfirmItem, executeDismissItem, executeReplaceTranscript, executeRetryOutcome, executeRevokeEffect } from "../outcome.js";
 import { executeConfirmTranscriptCandidate, executeDiscardTranscriptCandidate } from "../transcriptCandidate.js";
 import { getMeetingRow, type MeetingActionOutcome } from "../meetingStore.js";
@@ -165,7 +166,11 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       if (scope.actionType === "monthly-plan.sign") {
         const signInput = input ?? {};
         if (!Value.Check(SignMonthlyPlanRequest, signInput)) return invalidInput(reply, SignMonthlyPlanRequest, signInput);
-        return respond(reply, await executeSignMonthlyPlan(pool, companyMemory, env.sessionSecret, scope, fingerprint));
+        const result = await executeSignMonthlyPlan(pool, companyMemory, env.sessionSecret, scope, fingerprint);
+        // 签发已提交：由系统为各战场参与者起草任务卡；重放不再启动，已有轮次的战场跳过。起草没能开始也不影响签发结果。
+        if ("card" in result && !result.replayed) await startSignedMissionDrafts(pool, companyMemory.searchPeople(undefined), (result.card.payload as { period: string }).period,
+          ctx.now, ctx.missionCardDraftAgent, companyMemory, env.missionCardKnownMissionsFile).catch((error) => console.error("mission card drafts did not start", error));
+        return respond(reply, result);
       }
 
       if (scope.actionType === "mission.edit") {

@@ -2,7 +2,6 @@ import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { CreateMissionCardCorrectionRequest, CreateMissionCardFeedbackRequest, DecideMissionCardCorrectionRequest, ExecuteMissionRoundActionRequest, MarkMissionCardReadRequest, MissionRoundConfirmInput, MissionRoundDecideInput, MyMissionRoundsResponse, type TMissionRoundConfirmInput, type TMissionRoundDecideInput, type TMissionRoundSummary } from "@warmap/contracts";
 import { actionFingerprint, verifyActionId } from "../actionToken.js";
-import { createMissionCardDraftAgent } from "../missionCardDraftAgent.js";
 import { createMissionCardCorrection, decideMissionCardCorrection } from "../missionCardCorrections.js";
 import { executeCloseMissionRound, executeConfirmMissionRound, executeDecideMissionRound, executeDraftMissionRound, executeOpenMissionRound, executeReopenMissionRound, executeRetryMissionRoundReview, returnMissionCards, getMissionRoundCard, listMissionRoundCards } from "../missionRounds.js";
 import type { AppInstance, RouteContext } from "./shared.js";
@@ -116,8 +115,8 @@ export function registerMissionCardRoutes(app: AppInstance, ctx: RouteContext, a
     }
     ctx.requestContext.set(req, { actionType: scope.actionType, objectRef: `${scope.objectType}:${scope.objectId}` });
     const fingerprint = actionFingerprint(ctx.env.sessionSecret, req.body.actionId, input);
-    if (draft) return ctx.respond(reply, await executeDraftMissionRound(ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, scope, fingerprint, ctx.now, ctx.env.missionCardDraftsDir,
-      createMissionCardDraftAgent({ query: ctx.q, baseUrl: ctx.env.piBaseUrl, apiKey: ctx.env.piApiKey, modelId: ctx.env.heavyModel }), ctx.companyMemory));
+    if (draft) return ctx.respond(reply, await executeDraftMissionRound(ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, scope, fingerprint, ctx.now,
+      ctx.env.missionCardKnownMissionsFile, ctx.missionCardDraftAgent, ctx.companyMemory));
     const args = [ctx.pool, ctx.companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, scope, fingerprint, ctx.now] as const;
     const outcome = scope.actionType === "mission-round.decide" ? await executeDecideMissionRound(...args, input as TMissionRoundDecideInput)
       : scope.actionType === "mission-round.review-retry" ? await executeRetryMissionRoundReview(...args)

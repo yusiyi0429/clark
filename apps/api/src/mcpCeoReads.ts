@@ -4,22 +4,21 @@ import type { MemoryPerson } from "./companyMemory.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "./issues.js";
 import { getMeetingRow, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "./meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice } from "./monthlyPlans.js";
-import { listMissionRoundCards, listMissionRoundDraftCards } from "./missionRounds.js";
+import { listMissionRoundCards } from "./missionRounds.js";
 import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { loadWeeklyProgress, weekRange } from "./weeklyProgress.js";
 
 type Context = { q: Query; secret: string; now: Date; names: Map<string, string>; people: MemoryPerson[];
-  personId: string; draftDir?: string };
+  personId: string };
 const short = (value: string, max = 600) => value.length > max ? `${value.slice(0, max)}…` : value;
 
 /** 与 CEO 首页同源的待处理投影，只摘可读字段；Card actions 从不进入 MCP 结果。 */
 export async function listPending(ctx: Context) {
   const period = companyPeriod(ctx.now);
   const person = { personId: ctx.personId, role: "ceo" as const };
-  const [issues, meetingRows, monthly, rounds, draftSlots] = await Promise.all([
+  const [issues, meetingRows, monthly, rounds] = await Promise.all([
     listPendingIssueCards(ctx.q, ctx.secret), listMeetingRows(ctx.q), getMonthlyPlanNotice(ctx.q, ctx.secret, ctx.now),
     listMissionRoundCards(ctx.q, ctx.people, ctx.secret, person, undefined, ctx.now),
-    listMissionRoundDraftCards(ctx.q, ctx.people, ctx.secret, person, period, ctx.now, ctx.draftDir),
   ]);
   const issueItems = issues.map((card) => {
     const payload = card.payload as { urgency: { level: string; decisionBy?: string }; status: string };
@@ -34,7 +33,7 @@ export async function listPending(ctx: Context) {
     kind: monthly.kind, id: monthly.objectRef.id, title: monthly.title, urgency: null,
     status: "月度计划待签发", at: null, href: `/plans/${period}`,
   }] : [];
-  const roundItems = [...rounds, ...draftSlots].map((card) => {
+  const roundItems = rounds.map((card) => {
     const payload = card.payload as { todo?: string | null; closesAt?: string | null };
     return { kind: card.kind, id: card.objectRef.id, title: card.title, urgency: null,
       status: payload.todo ?? "任务卡待处理", at: payload.closesAt ?? null,

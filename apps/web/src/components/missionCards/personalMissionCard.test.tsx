@@ -148,7 +148,7 @@ describe("任务起草来源与本人确认倒计时", () => {
     expect(roundClockText(personalPayload.round, now)).toBe(text);
   });
   it("未下发显示准备状态，提前进入组合核对不误示时间已到", () => {
-    expect(roundClockText({ ...personalPayload.round, phase: "draft" }, 0)).toBe("待下发本人确认");
+    expect(roundClockText({ ...personalPayload.round, phase: "draft" }, 0)).toBe("未交给本人确认");
     expect(roundClockText({ ...personalPayload.round, phase: "confirmed" }, 0)).toBe("已确定");
     expect(roundClockText({ ...personalPayload.round, phase: "reviewing", closesAt: "2026-10-03T00:00:00Z" }, Date.parse("2026-10-01T00:00:00Z"))).toBe("任务组合核对");
     const html = renderToStaticMarkup(<RoundClock round={{ ...personalPayload.round, round: 2 }} now={Date.parse(personalPayload.round.serverNow)} />);

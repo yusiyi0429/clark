@@ -107,10 +107,15 @@ export function MissionRoundProgress({ round, entry, onNavigate, onRefresh, comp
   const report = current.coAgentReview;
   const confirm = snapshot.actions.find((action) => action.actionType === "mission-round.confirm");
   const start = snapshot.actions.find((action) => action.actionType === "mission-round.open");
+  const retryDraft = snapshot.actions.find((action) => action.actionType === "mission-round.draft");
   const extend = snapshot.actions.find((action) => action.actionType === "mission-round.reopen");
   const retry = report?.retryAction;
   const path = (id: string) => `${entry === "member" ? "/me" : ""}/mission-cards/${id}`;
   const label = report ? "Co-Agent 核对报告" : "任务准备进度";
+  const personState = (card: TMissionRoundSummary["cards"][number]) => current.phase === "confirmed" ? "已确定"
+    : current.phase === "drafting" ? "Co-Agent 正在起草"
+    : current.draftFailures.some((failure) => failure.ownerId === card.ownerId) ? "起草未完成"
+    : card.ownerConfirmedAt ? "本人已确认" : "待本人确认";
   return <Popover isOpen={open} onOpenChange={setOpen}>
     <Button variant="ghost" className={`${s.trigger} ${compact ? s.compact : ""}`} aria-label={`查看${label}`}>
       {compact ? <FileCheck2 size={16} aria-hidden /> : null}<span>{report ? label : `本人已确认 ${done} / ${current.counts.cards}`}</span><ChevronRight size={14} aria-hidden />
@@ -119,8 +124,8 @@ export function MissionRoundProgress({ round, entry, onNavigate, onRefresh, comp
       <TianshuPortalTheme><Popover.Dialog className={`${t.menu} ${s.panel}`} aria-label={label}>
         <header className={s.header}><strong>{current.battlefieldName}</strong><span>本人已确认 {done} / {current.counts.cards}</span></header>
         <ul className={s.people} aria-label="本人确认进度">{current.cards.map((card) => <li key={card.cardId}>
-          <Button variant="ghost" className={s.person} isDisabled={card.contentVisible === false} aria-label={`${card.ownerName} · ${current.phase === "confirmed" ? "已确定" : card.ownerConfirmedAt ? "本人已确认" : "待本人确认"}${card.contentVisible === false ? "，正文仅本人可见" : "，查看任务"}`} onPress={() => { if (card.contentVisible !== false) { setOpen(false); onNavigate(path(card.cardId)); } }}>
-            <span>{card.ownerName}</span><span className={s.state} data-confirmed={!!card.ownerConfirmedAt || current.phase === "confirmed"}>{card.ownerConfirmedAt || current.phase === "confirmed" ? <Check size={13} aria-hidden /> : null}{current.phase === "confirmed" ? "已确定" : card.ownerConfirmedAt ? "本人已确认" : "待本人确认"}</span>
+          <Button variant="ghost" className={s.person} isDisabled={card.contentVisible === false} aria-label={`${card.ownerName} · ${personState(card)}${card.contentVisible === false ? "，正文仅本人可见" : "，查看任务"}`} onPress={() => { if (card.contentVisible !== false) { setOpen(false); onNavigate(path(card.cardId)); } }}>
+            <span>{card.ownerName}</span><span className={s.state} data-confirmed={!!card.ownerConfirmedAt || current.phase === "confirmed"}>{card.ownerConfirmedAt || current.phase === "confirmed" ? <Check size={13} aria-hidden /> : null}{personState(card)}</span>
           </Button>
         </li>)}</ul>
         {loading ? <p className={s.muted} role="status">正在读取最新进度…</p> : null}
@@ -135,6 +140,7 @@ export function MissionRoundProgress({ round, entry, onNavigate, onRefresh, comp
         {error ? <p className={s.error} role="alert">{error}<button type="button" disabled={busy} onClick={() => void load()}>重新读取</button></p> : null}
         {!loading ? <div className={s.actions}>
           {start ? <Button variant="primary" isDisabled={busy || !!error} onPress={() => void act(start.actionType)}>下发本人确认</Button> : null}
+          {retryDraft ? <Button variant="ghost" isDisabled={busy || !!error} onPress={() => void act(retryDraft.actionType)}>重试起草</Button> : null}
           {current.phase === "closed" && extend ? <Button variant="ghost" isDisabled={busy || !!error} onPress={() => void act(extend.actionType)}>继续本人准备</Button> : null}
           {retry ? <Button variant="ghost" isDisabled={busy || !!error} onPress={() => void act(retry.actionType)}>重试 Co-Agent 核对</Button> : null}
           {current.approver && ["reviewing", "confirmed"].includes(current.phase) ? <Button variant="ghost" isDisabled={busy || !!error} onPress={() => { setReturning(!returning); setReturnVersion(current.version); }}>退回相关任务</Button> : null}

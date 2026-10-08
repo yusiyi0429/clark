@@ -86,7 +86,7 @@ export function MemberBattlefieldScreen({ initialData }: { initialData: TMemberB
   const mine = view.missionCards.find((card) => card.ownerId === workspace.viewerId);
   const shownRound = round && awaitingSnapshot ? { ...round, phase: "closed" as const } : round;
   const status = shownRound ? roundStatusText(shownRound, { cardId: mine?.cardId, feedbackCount: mine?.feedbackCount ?? 0, confirmation: view.confirmation })
-    : view.monthTargetState === "confirmed" ? "任务卡草稿还没整理" : view.monthTargetText;
+    : view.monthTargetState === "confirmed" ? "任务卡还没起草" : view.monthTargetText;
   const pendingCard = round?.approver && round.phase === "reviewing" ? round.cards.find((card) => card.pending > 0 && card.firstPendingFeedbackId) : undefined;
   // 已确定后拍板人的待办是更正申请（GAP-04）：同样直达第一条。
   const correctionCard = round?.approver && round.phase === "confirmed" && round.todo ? round.cards.find((card) => card.pendingCorrections > 0 && card.firstPendingCorrectionId) : undefined;

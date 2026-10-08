@@ -20,7 +20,8 @@ describe("任务卡与成员战场共用本人确认状态", () => {
   });
   it("草稿、汇总中、拍板待办直接保持任务卡原句", () => {
     const round = personalPayload.round;
-    expect(roundStatusText({ ...round, phase: "draft", approver: false }, { cardId: "card", feedbackCount: 0 })).toBe("草稿已整理 · 等刘明华下发本人确认");
+    expect(roundStatusText({ ...round, phase: "draft", approver: false }, { cardId: "card", feedbackCount: 0 })).toBe("任务卡尚未交给本人确认");
+    expect(roundStatusText({ ...round, phase: "draft", approver: false, draftFailures: [{ ownerId: "owner", ownerName: "白田田", message: "超时" }] }, { cardId: "card", feedbackCount: 0 })).toBe("起草未完成 · 等刘明华重试");
     expect(roundStatusText({ ...round, phase: "closed" }, { feedbackCount: 0 })).toBe("仍有 1 人待本人确认");
     expect(roundStatusText({ ...round, phase: "closed", counts: { ...round.counts, unreviewed: 0 } }, { feedbackCount: 0 })).toBe("Co-Agent 正在统一核对");
     expect(roundStatusText({ ...round, phase: "reviewing", todo: "2 条待你处理" }, { feedbackCount: 0 })).toBe("2 条待你处理");

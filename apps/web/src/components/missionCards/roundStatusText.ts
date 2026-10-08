@@ -10,7 +10,8 @@ export function roundStatusText(round: TMissionRoundSummary, { cardId, confirmat
   corrected?: number;
 }): string {
   if (round.phase === "drafting") return "Co-Agent 正在起草";
-  if (round.phase === "draft") return round.approver ? round.todo ?? "任务草稿已就绪，可以下发本人确认" : `草稿已整理 · 等${round.deciderName}下发本人确认`;
+  if (round.phase === "draft") return round.approver ? round.todo ?? "任务卡尚未交给本人确认"
+    : round.draftFailures.length ? `起草未完成 · 等${round.deciderName}重试` : "任务卡尚未交给本人确认";
   if (round.phase === "open") {
     if (round.approver || !cardId) return `本人已确认 ${round.counts.cards - round.counts.unreviewed}/${round.counts.cards}`;
     return round.cards.find((row) => row.cardId === cardId)?.ownerConfirmedAt ? "本人已确认" : "待本人确认";

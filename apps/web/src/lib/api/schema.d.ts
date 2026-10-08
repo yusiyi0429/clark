@@ -559,7 +559,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 拍板人整理任务卡草稿、统一开放或重开；版本冲突返回 latestCard */
+        /** 战场 DRI 重试起草、交给本人确认、延长本人确认与确认任务组合；版本冲突返回 latestCard */
         post: operations["executeMissionRoundAction"];
         delete?: never;
         options?: never;
@@ -2505,6 +2505,7 @@ export interface components {
                 code: string;
                 title: string;
             }[];
+            participantIds?: string[];
         };
         CreateCapabilityRequest: {
             code: string;
@@ -2878,15 +2879,6 @@ export interface components {
                     } | null;
                 } | null;
             }[];
-        };
-        MissionRoundDraftPayload: {
-            period: string;
-            battlefieldId: string;
-            battlefieldName: string;
-            placeholder: boolean;
-            todo: string;
-            /** @description 应用时钟生成的 ISO 8601 时间 */
-            serverNow: string;
         };
         ExecuteMissionRoundActionRequest: {
             actionId: string;
@@ -4714,6 +4706,8 @@ export interface components {
                     title: string;
                 }[];
                 pendingIssueCount: number;
+                participantIds: string[];
+                participantsDerived: boolean;
             }[];
             issues: {
                 id: string;

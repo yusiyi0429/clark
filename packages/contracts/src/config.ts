@@ -73,6 +73,8 @@ export const PatchBattlefieldRequest = Type.Object(
     ownerId: Type.Optional(Type.String({ maxLength: 200 })),
     sixMonthOutcome: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
     missionAnchors: Type.Optional(MissionAnchors),
+    /** 签发后为这些人起草任务卡；存过一次就以名单为准，空数组表示没人拿卡。 */
+    participantIds: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { maxItems: 100, uniqueItems: true })),
   },
   { additionalProperties: false, minProperties: 1 },
 );
@@ -149,6 +151,9 @@ export const BattlefieldManagementResponse = Type.Object(
           sixMonthOutcome: Type.String(),
           missionAnchors: MissionAnchors,
           pendingIssueCount: Type.Integer({ minimum: 0 }),
+          /** 下一次起草任务卡的名单（已去掉 CEO）；participantsDerived 为 true 表示从未保存过，按上月 Mission 推算。 */
+          participantIds: Type.Array(Type.String({ minLength: 1 })),
+          participantsDerived: Type.Boolean(),
         },
         { additionalProperties: false },
       ),

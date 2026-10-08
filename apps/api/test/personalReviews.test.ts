@@ -331,7 +331,7 @@ describe("跨月工作台与任务卡起草", () => {
     } finally { await f.close(); }
   });
 
-  it("十月起草包含上月独立 Mission 的在册 owner，并带本人已提交复盘；未提交为 null", async () => {
+  it("十月起草包含上月独立 Mission 的在册 owner，并带本人已提交复盘；CEO 不拿卡", async () => {
     const f = await fixture();
     try {
       await seedMission(f.t, "unknown-owner"); await f.open();
@@ -351,13 +351,12 @@ describe("跨月工作台与任务卡起草", () => {
         { personId: TEST_MEMBER.personId, role: "member" }, { actionType: "mission-round.draft", objectType: "mission-round-slot", objectId: "growth:2026-10", objectVersion: 1 },
         "test-carryover", () => START, undefined, { async generate(input) { seen.push(input); return { candidate }; } });
       expect(result).toHaveProperty("card");
-      await vi.waitFor(async () => expect((await f.t.sql("SELECT status FROM mission_rounds WHERE period='2026-10'"))[0].status).toBe("draft"), { timeout: 5000 });
-      expect(seen.map((input) => input.owner.personId).sort()).toEqual([TEST_CEO.personId, TEST_MEMBER.personId]);
+      await vi.waitFor(async () => expect((await f.t.sql("SELECT status FROM mission_rounds WHERE period='2026-10'"))[0].status).toBe("open"), { timeout: 5000 });
+      expect(seen.map((input) => input.owner.personId)).toEqual([TEST_MEMBER.personId]);
       const member = seen.find((input) => input.owner.personId === TEST_MEMBER.personId)!;
       expect(member.previousCard?.missions).toMatchObject([{ title: "本人承诺", outcome: "承诺结果", success_evidence: ["验收证据"] }]);
       expect(member.previousReview).toEqual(selfReview());
-      expect(seen.find((input) => input.owner.personId === TEST_CEO.personId)!.previousReview).toBeNull();
-      expect(await f.t.sql("SELECT count(*)::int AS n FROM missions WHERE period='2026-10'")).toEqual([{ n: 4 }]);
+      expect(await f.t.sql("SELECT count(*)::int AS n FROM missions WHERE period='2026-10'")).toEqual([{ n: 2 }]);
     } finally { await f.close(); }
   });
 });

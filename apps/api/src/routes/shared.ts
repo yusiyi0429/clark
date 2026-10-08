@@ -21,6 +21,7 @@ import type { MeetingRecordingService } from "../meetingRecordings.js";
 import type { VoiceprintDeps } from "../voiceprints.js";
 import type { DictationDeps } from "../dictation.js";
 import type { ThreadIntroAgent } from "../threadIntro.js";
+import type { MissionCardDraftAgent } from "../missionCardDraftAgent.js";
 import type { AppEnv } from "../app.js";
 
 export type AppInstance = FastifyInstance<
@@ -67,6 +68,7 @@ export type RouteContext = {
   voiceprints: VoiceprintDeps;
   dictation: DictationDeps;
   threadIntroAgent: ThreadIntroAgent;
+  missionCardDraftAgent: MissionCardDraftAgent;
   materialStorageDir: string;
   conversationAttachmentStorageDir: string;
   conversationTurnTimeoutMs: number;

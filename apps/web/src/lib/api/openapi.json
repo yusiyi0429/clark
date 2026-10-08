@@ -1783,7 +1783,7 @@
     "/api/mission-rounds/actions/execute": {
       "post": {
         "operationId": "executeMissionRoundAction",
-        "summary": "拍板人整理任务卡草稿、统一开放或重开；版本冲突返回 latestCard",
+        "summary": "战场 DRI 重试起草、交给本人确认、延长本人确认与确认任务组合；版本冲突返回 latestCard",
         "requestBody": {
           "required": true,
           "content": {
@@ -10440,6 +10440,16 @@
                 }
               }
             }
+          },
+          "participantIds": {
+            "maxItems": 100,
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 200,
+              "type": "string"
+            }
           }
         }
       },
@@ -12727,40 +12737,6 @@
                 }
               }
             }
-          }
-        }
-      },
-      "MissionRoundDraftPayload": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "period",
-          "battlefieldId",
-          "battlefieldName",
-          "placeholder",
-          "todo",
-          "serverNow"
-        ],
-        "properties": {
-          "period": {
-            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
-            "type": "string"
-          },
-          "battlefieldId": {
-            "type": "string"
-          },
-          "battlefieldName": {
-            "type": "string"
-          },
-          "placeholder": {
-            "type": "boolean"
-          },
-          "todo": {
-            "type": "string"
-          },
-          "serverNow": {
-            "description": "应用时钟生成的 ISO 8601 时间",
-            "type": "string"
           }
         }
       },
@@ -25295,7 +25271,9 @@
                 "ownerDisplayName",
                 "sixMonthOutcome",
                 "missionAnchors",
-                "pendingIssueCount"
+                "pendingIssueCount",
+                "participantIds",
+                "participantsDerived"
               ],
               "properties": {
                 "id": {
@@ -25352,6 +25330,16 @@
                 "pendingIssueCount": {
                   "minimum": 0,
                   "type": "integer"
+                },
+                "participantIds": {
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "participantsDerived": {
+                  "type": "boolean"
                 }
               }
             }

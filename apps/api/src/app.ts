@@ -50,6 +50,7 @@ import { registerMaterialRoutes } from "./routes/materials.js";
 import type { MaterialAnnotationAgent } from "./materialAnnotationAgent.js";
 import type { MissionCardAnnotationAgent } from "./missionCardAnnotationAgent.js";
 import type { MissionCardReviewAgent } from "./missionCardReview.js";
+import { createMissionCardDraftAgent, type MissionCardDraftAgent } from "./missionCardDraftAgent.js";
 import { registerActionRoutes } from "./routes/actions.js";
 import { registerDriRoutes } from "./routes/dri.js";
 import { registerSystemRoutes } from "./routes/system.js";
@@ -90,6 +91,8 @@ export type AppEnv = {
   companyName?: string;
   /** 旧配置兼容；正式自动起草不读取文件，人工导入须由 CLI 显式指定路径。 */
   missionCardDraftsDir?: string;
+  /** 已知的本月任务（飞书任务卡、本体 Mission 导出），作为起草依据；未配置或文件缺失时照常起草。 */
+  missionCardKnownMissionsFile?: string;
   driServiceToken: string;
   ontologyServiceToken?: string;
   mcpServiceToken: string;
@@ -129,6 +132,7 @@ export async function buildApp({
   materialAnnotationAgent,
   missionCardAnnotationAgent,
   missionCardReviewAgent,
+  missionCardDraftAgent,
   webSearch,
   outlets,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
@@ -159,6 +163,8 @@ export async function buildApp({
   materialAnnotationAgent?: MaterialAnnotationAgent;
   missionCardAnnotationAgent?: MissionCardAnnotationAgent;
   missionCardReviewAgent?: MissionCardReviewAgent;
+  /** 任务卡起草 Co-Agent；缺省用 heavy 模型槽位（测试注入假实现）。 */
+  missionCardDraftAgent?: MissionCardDraftAgent;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
@@ -341,6 +347,7 @@ export async function buildApp({
     voiceprints: voiceprintDeps,
     dictation: dictationDeps,
     threadIntroAgent: threadIntroAgent ?? createThreadIntroAgent(pool, env),
+    missionCardDraftAgent: missionCardDraftAgent ?? createMissionCardDraftAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.heavyModel }),
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,

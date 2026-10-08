@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import {
-  ExecuteMissionRoundActionRequest, MissionCardField, MissionRoundDraftPayload, MissionRoundSummary,
+  ExecuteMissionRoundActionRequest, MissionCardField, MissionRoundSummary,
   CreateMissionRequest, MissionEditInput, MissionCardPayload,
   ConversationScope, CreateMissionCardFeedbackRequest, MissionCardGroupView, MarkMissionCardReadRequest,
   MissionRoundDecideInput, MissionRoundConfirmInput, MissionCardFeedbackView,
@@ -78,7 +78,6 @@ describe("Mission round contracts", () => {
     expect(doc.paths["/api/mission-rounds/actions/execute"]?.post.responses?.["403"]).toBeDefined();
     expect(doc.paths["/api/mission-rounds/actions/execute"]?.post.responses?.["409"]).toBeDefined();
     expect(doc.components.schemas.MissionRoundSummary).toBeDefined();
-    expect(doc.components.schemas.MissionRoundDraftPayload).toBeDefined();
     for (const path of ["/api/mission-cards/{cardId}", "/api/mission-cards/{cardId}/feedback", "/api/mission-cards/{cardId}/group", "/api/mission-cards/{cardId}/group/read"]) expect(doc.paths[path]).toBeDefined();
     expect(doc.components.schemas.PersonalMissionCardPayload).toBeDefined();
   });
@@ -121,10 +120,7 @@ describe("Mission round contracts", () => {
     expect(Value.Check(personalCard, { cardId: "card", roundId: "round", status: "closed" })).toBe(false);
   });
 
-  it("describes a draft slot without inventing a persisted round or personal card", () => {
-    const draft = { period: "2026-10", battlefieldId: "growth", battlefieldName: "增长", placeholder: true, todo: "整理个人卡草稿", serverNow: now };
-    expect(Value.Check(MissionRoundDraftPayload, draft)).toBe(true);
-    expect(Value.Check(MissionRoundDraftPayload, { ...draft, roundId: "invented" })).toBe(false);
+  it("accepts a signed action with optional input and viewed card, never an actor", () => {
     expect(Value.Check(ExecuteMissionRoundActionRequest, { actionId: "signed", viewCardId: "card-1" })).toBe(true);
     expect(Value.Check(ExecuteMissionRoundActionRequest, { actionId: "signed", input: {} })).toBe(true);
     expect(Value.Check(ExecuteMissionRoundActionRequest, { actionId: "signed", actorId: "another" })).toBe(false);

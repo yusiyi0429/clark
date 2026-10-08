@@ -151,6 +151,17 @@ describe("战场 DRI 的任务准备进度与核对", () => {
     h.get.mockResolvedValue(reply(round(), [])); click("重新读取"); const html = await settle();
     expect(html).not.toContain("进度读取失败"); expect(h.buttons.has("下发本人确认")).toBe(false);
   });
+  it("起草未完成的人在进度里标出来，战场 DRI 用重新读取后的 token 重试起草", async () => {
+    const draftRetry = { actionId: "draft-v3", actionType: "mission-round.draft", label: "重试未完成的起草" };
+    const failed = round({ draftFailures: [{ ownerId: "sun", ownerName: "孙铭泽", message: "模型超时" }], retryDraftAction: draftRetry });
+    const { props, open, click, settle } = setup(failed, [draftRetry]); await open();
+    expect(h.buttons.has("孙铭泽 · 起草未完成，正文仅本人可见")).toBe(true);
+    expect(h.buttons.has("下发本人确认")).toBe(false);
+    h.get.mockResolvedValue(reply(failed, [{ ...draftRetry, actionId: "draft-v4" }]));
+    click("重试起草"); await settle();
+    expect(h.post).toHaveBeenCalledExactlyOnceWith("/api/mission-rounds/actions/execute", { body: { actionId: "draft-v4" } });
+    expect(props.onRefresh).toHaveBeenCalledOnce();
+  });
   it("Co-Agent 核对失败保留报告错误，只用重新读取后授予的重试token", async () => {
     const failed = reviewing({ coAgentReview: { status: "failed", summary: "", findings: [], error: "报告未通过依据校验", completedAt: null, retryAction: retry } });
     const { open, click, settle } = setup(failed, [retry]); expect(await open()).toContain("报告未通过依据校验");

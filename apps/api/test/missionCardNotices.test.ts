@@ -1,7 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { signActionId } from "../src/actionToken.js";
 import { createTestApp, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
@@ -102,7 +99,7 @@ describe("Mission Card notices and onboarding", () => {
       expect(onboarding.work.missions).toEqual([]);
       expect(onboarding.work.missionCards).toHaveLength(1);
       expect(onboarding.work.missionCards[0]).toMatchObject({ cardId: ids.mine, roundId: ids.round, period: "2026-10", phase: "draft", closesAt: null, placeholder: true, missionCount: 0 });
-      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月任务卡草稿已就绪，待战场 DRI 交给本人确认", action: "进入工作台", href: "/" });
+      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月任务 · 任务卡草稿已就绪，可以交给本人确认", action: "进入工作台", href: "/" });
       await seedMissions(t, ids);
       await execute(t, ceo, ids.round, 1, "open");
       onboarding = await read(t, member, "/api/me/onboarding");
@@ -127,22 +124,15 @@ describe("Mission Card notices and onboarding", () => {
     } finally { await t.close(); }
   });
 
-  it("签发后提供整理入口；没有人和占位文件时由动作返回具体提示", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "warmap-04d-drafts-"));
-    const t = await createTestApp({ missionCardDraftsDir: directory }, undefined, { monthlyNow: () => START });
+  it("签发后没有整理任务卡的入口：首页与引导都不提供", async () => {
+    const t = await createTestApp({}, undefined, { monthlyNow: () => START });
     try {
       const ids = await seed(t); const ceo = await t.loginCookie();
       await t.sql("DELETE FROM personal_mission_cards"); await t.sql("DELETE FROM mission_rounds");
-      await t.sql("UPDATE battlefield_config SET code='01' WHERE id='growth'");
-      expect((await read(t, ceo, "/api/me/onboarding")).next.href).toBe("/");
-      await writeFile(join(directory, "2026-10-mission-cards.battlefield-01.json"), "{}", "utf8");
-      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "10 月目标已签发，可以整理任务卡草稿", action: "进入工作台", href: "/" });
+      expect((await read(t, ceo, "/api/cards/home")).cards.filter((card: any) => card.kind === "mission-round")).toEqual([]);
+      expect((await read(t, ceo, "/api/me/onboarding")).next).toEqual({ text: "首页上暂时没有要你马上处理的事", action: "进入工作台", href: "/" });
       await t.sql("UPDATE monthly_plans SET status='negotiating',confirmed_at=NULL WHERE id=$1", [ids.plan]);
       expect((await read(t, ceo, "/api/me/onboarding")).next).toMatchObject({ text: "10 月的目标等你核对和签发", href: "/" });
-    } finally {
-      await t.close();
-      await rm(join(directory, "2026-10-mission-cards.battlefield-01.json"), { force: true });
-      await rmdir(directory);
-    }
+    } finally { await t.close(); }
   });
 });

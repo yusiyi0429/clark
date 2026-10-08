@@ -176,6 +176,8 @@ export type BattlefieldWriteInput = {
   ownerId?: string;
   sixMonthOutcome: string;
   missionAnchors?: TMissionAnchor[];
+  /** 签发后起草任务卡的名单；只在编辑时写入，没存过时按上月 Mission 推算。 */
+  participantIds?: string[];
 };
 
 /** code 非空时同表唯一；空 code 是迁移期未编号的旧行，不参与冲突。 */
@@ -295,6 +297,7 @@ export async function updateBattlefield(
           SET code = COALESCE($2, code), sort_order = COALESCE($3, sort_order), name = COALESCE($4, name),
               owner_id = COALESCE($5, owner_id), six_month_outcome = COALESCE($6, six_month_outcome),
               mission_anchors = COALESCE($7::jsonb, mission_anchors),
+              participant_ids = COALESCE($9::jsonb, participant_ids),
               version = version + 1, updated_at = now()
         WHERE id = $1
           AND ($8::text IS NULL OR $8 = id OR NOT EXISTS (SELECT 1 FROM battlefield_config WHERE id = $8))
@@ -308,6 +311,7 @@ export async function updateBattlefield(
         input.sixMonthOutcome ?? null,
         input.missionAnchors === undefined ? null : JSON.stringify(input.missionAnchors),
         nextSlug,
+        input.participantIds === undefined ? null : JSON.stringify(input.participantIds),
       ],
     );
     if (updated.rowCount !== 1) {
@@ -333,9 +337,10 @@ export async function updateBattlefield(
 /**
  * 战场管理页投影：一次返回战场列表与可选议题。
  * 议题只取 pending 且非 capability 级；battlefieldIds 即归一化集合，未归属为空数组，
- * 因此同一议题可以同时出现在多个战场的关联列表里。
+ * 因此同一议题可以同时出现在多个战场的关联列表里。参与者名单由调用方按起草规则给出。
  */
-export async function projectBattlefieldManagement(q: Query, ownerNames: Map<string, string>): Promise<TBattlefieldManagementResponse> {
+export async function projectBattlefieldManagement(q: Query, ownerNames: Map<string, string>,
+  participantsOf: (battlefieldId: string) => Promise<{ personIds: string[]; derived: boolean }>): Promise<TBattlefieldManagementResponse> {
   const battlefields = await q(
     "SELECT id, version, code, sort_order, name, owner_id, six_month_outcome, mission_anchors AS \"missionAnchors\" FROM battlefield_config ORDER BY sort_order, code, id",
   );
@@ -351,6 +356,7 @@ export async function projectBattlefieldManagement(q: Query, ownerNames: Map<str
     ...(row.urgency.decisionBy ? { decisionBy: row.urgency.decisionBy } : {}),
     battlefieldIds: battlefieldSetOf(row.location) ?? [],
   }));
+  const participants = new Map(await Promise.all((battlefields.rows as BattlefieldRow[]).map(async (row) => [row.id, await participantsOf(row.id)] as const)));
   return {
     battlefields: (battlefields.rows as BattlefieldRow[]).map((row) => ({
       id: row.id,
@@ -363,6 +369,8 @@ export async function projectBattlefieldManagement(q: Query, ownerNames: Map<str
       sixMonthOutcome: row.six_month_outcome,
       missionAnchors: row.missionAnchors ?? [],
       pendingIssueCount: pending.filter((issue) => issue.battlefieldIds.includes(row.id)).length,
+      participantIds: participants.get(row.id)!.personIds,
+      participantsDerived: participants.get(row.id)!.derived,
     })),
     issues: pending,
   };

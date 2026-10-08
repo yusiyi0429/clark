@@ -84,22 +84,18 @@ describe("本月 Mission Card 的 CEO 通知入口", () => {
   };
   const summaryCard = (overrides: Partial<TMissionRoundSummary> = {}) => card("mission-round", "round-01", "10 月 Mission Card · 灯塔项目", { ...round, ...overrides });
 
-  it("没有轮次的 slot 与月度计划在战略决策更新同组，不冒充已整理", () => {
-    const draft = card("mission-round", "slot-01", "10 月 Mission Card · 灯塔项目", {
-      period: "2026-10", battlefieldId: "01", battlefieldName: "灯塔项目", placeholder: true,
-      todo: "让 Co-Agent 整理任务卡草稿（占位）", serverNow: round.serverNow,
-    }, { objectRef: { type: "mission-round-slot", id: "01:2026-10", version: 1 }, actions: [{ actionId: "signed-slot", actionType: "mission-round.draft", label: "整理任务卡草稿" }] });
-    const group = railGroups([monthly, draft])[0];
+  it("轮次与月度计划在战略决策更新同组；起草失败写明未完成", () => {
+    const group = railGroups([monthly, summaryCard({ phase: "drafting" })])[0];
     expect(group.title).toBe("战略决策更新");
     expect(group.items).toHaveLength(2);
-    expect(group.items[1].meta).toBe("可以整理任务卡草稿");
-    const html = renderToStaticMarkup(<NotificationRail cards={[draft]} onNavigate={() => undefined} onCard={() => undefined} />);
-    expect(html).toContain("10 月 Mission Card · 灯塔项目，可以整理任务卡草稿");
+    expect(group.items[1].meta).toBe("Co-Agent 正在起草");
+    const failed = summaryCard({ phase: "draft", draftFailures: [{ ownerId: "o", ownerName: "白田田", message: "超时" }] });
+    expect(railGroups([failed])[0].items[0].meta).toBe("任务起草未完成");
   });
 
   it.each([
     [{ phase: "drafting" }, "Co-Agent 正在起草"],
-    [{ phase: "draft" }, "草稿 · 待下发本人确认"],
+    [{ phase: "draft" }, "未交给本人确认"],
     [{ phase: "open", closesAt: "2026-10-02T09:24:00.000Z" }, "本人已确认 1/1"],
     [{ phase: "closed" }, "Co-Agent 正在统一核对"],
     [{ phase: "reviewing", counts: { ...round.counts, pending: 5 } }, "待战场 DRI 确认任务组合"],

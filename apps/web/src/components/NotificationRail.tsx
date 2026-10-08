@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { TMissionRoundDraftPayload, TMissionRoundSummary } from "@warmap/contracts";
+import type { TMissionRoundSummary } from "@warmap/contracts";
 import { Card as HeroCard } from "@heroui/react";
 import { ChevronRight, Lock } from "lucide-react";
 import { AccountMenu, type Account } from "./AccountMenu";
@@ -14,8 +14,6 @@ import { HeroButton } from "./HeroButton";
 import { ReferenceButton } from "@/conversation/references";
 import { StrategicConfirmCard, pendingStrategicItems } from "./StrategicConfirmCard";
 import { TianshuMark } from "./TianshuMark";
-import { useConfirm } from "./ConfirmDialog";
-import { ActionFeedback, useCardAction } from "@/lib/useCardAction";
 import { COMPANY_TIMEZONE, monthDayTime } from "@/lib/companyTime";
 import { MissionCardNoticeGroup } from "./missionCards/MissionCardNoticeGroup";
 import { roundStatusText } from "./missionCards/roundStatusText";
@@ -52,10 +50,9 @@ export function clock(date: Date): { time: string; weekday: string; day: string 
 
 const sameCompanyDay = (a: Date, b: Date) => clock(a).day === clock(b).day;
 
-function missionRoundMeta(payload: TMissionRoundSummary | TMissionRoundDraftPayload): string {
-  if (!("phase" in payload)) return "可以整理任务卡草稿";
+function missionRoundMeta(payload: TMissionRoundSummary): string {
   if (payload.phase === "drafting") return "Co-Agent 正在起草";
-  if (payload.phase === "draft") return payload.draftFailures.length ? "任务起草未完成" : "草稿 · 待下发本人确认";
+  if (payload.phase === "draft") return payload.draftFailures.length ? "任务起草未完成" : "未交给本人确认";
   if (payload.phase === "open") {
     if (payload.closesAt && Date.parse(payload.closesAt) <= Date.parse(payload.serverNow)) return roundStatusText({ ...payload, phase: "closed" }, { feedbackCount: 0 });
     return roundStatusText(payload, { cardId: payload.cards.find((row) => row.mine)?.cardId, feedbackCount: 0 });
@@ -91,10 +88,10 @@ export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: str
 
   const missionRounds = cards.flatMap<RailItem>((card) => {
     if (card.kind !== "mission-round") return [];
-    const payload = payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(card);
+    const payload = payloadOf<TMissionRoundSummary>(card);
     // 确认后退出；拍板人还有更正申请待处理时服务端才会把它放回来，待办写在 todo（GAP-04）。
-    if ("phase" in payload && payload.phase === "confirmed" && !payload.todo) return [];
-    const firstCard = "cards" in payload ? payload.cards[0] : null;
+    if (payload.phase === "confirmed" && !payload.todo) return [];
+    const firstCard = payload.cards[0];
     return [{ id: card.id, title: card.title, meta: missionRoundMeta(payload), tone: "amber", href: firstCard ? `/mission-cards/${firstCard.cardId}` : "/", missionRound: card }];
   });
 
@@ -226,12 +223,6 @@ export function NotificationRail({
   currentHref?: string;
 }) {
   const router = useRouter();
-  const { ask, dialog } = useConfirm();
-  const [notice, setNotice] = useState("");
-  const action = useCardAction((updated) => {
-    onCard?.(updated);
-    router.refresh();
-  }, "/api/mission-rounds/actions/execute");
   const groups = railGroups(cards, new Date(), viewerId);
   const rail = useRef<HTMLElement>(null);
   const positions = useRef(new Map<string, number>());
@@ -255,46 +246,6 @@ export function NotificationRail({
     return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); window.removeEventListener("meeting-changed", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [needsRoundRefresh, router]);
   const refreshRound = useCallback(() => router.refresh(), [router]);
-  const requestedDraft = useRef<string | null>(null);
-
-  async function openItem(item: RailItem, origin: Element | null) {
-    if (!item.missionRound) {
-      onNavigate(item.href, origin);
-      return;
-    }
-    const draft = item.missionRound.actions.find((descriptor) => descriptor.actionType === "mission-round.draft");
-    if (!draft) {
-      if (item.href !== "/") onNavigate(item.href, origin);
-      else setNotice("暂时没有可打开的任务卡。");
-      return;
-    }
-    setNotice("");
-    action.reset();
-    // 没有可起草的人时只能导入占位文件；否则 Co-Agent 逐人起草（工单 10）。
-    const onlyPlaceholder = payloadOf<TMissionRoundDraftPayload>(item.missionRound).placeholder;
-    if (!await ask(onlyPlaceholder
-      ? "这个入口用于人工导入历史占位草稿，整理完成后仍需战场 DRI 下发本人确认。"
-      : "Co-Agent 会按签发的本月计划与现有任务依据，为当前参与者起草任务卡。失败会保留具体原因，供重试未完成的任务；完成后由战场 DRI 下发本人确认。", "整理任务卡草稿")) return;
-    const saved = await action.run(draft);
-    if (saved) {
-      // Co-Agent 在后台起草：留在通知栏看「正在起草」，好了再点进去；这时的卡可能在起草失败后被替换。
-      if (payloadOf<TMissionRoundSummary>(saved).phase === "drafting") { setNotice("Co-Agent 已开始起草，完成后可以打开各人的任务卡。"); return; }
-      const firstCard = payloadOf<TMissionRoundSummary>(saved).cards.find((card) => card.contentVisible !== false);
-      if (firstCard) onNavigate(`/mission-cards/${firstCard.cardId}`, origin);
-      else setNotice("草稿已整理，请从任务准备进度查看状态并下发本人确认。");
-    }
-  }
-
-  // 引导的下一件事定位真实 slot，只打开原有确认框；整理仍由用户明确按下。
-  useEffect(() => {
-    const slot = new URLSearchParams(window.location.search).get("missionRoundDraft");
-    if (!slot || requestedDraft.current === slot) return;
-    const item = groups.flatMap((group) => group.items).find((item) => item.missionRound?.objectRef.type === "mission-round-slot" && item.missionRound.objectRef.id === slot);
-    if (!item) return;
-    requestedDraft.current = slot;
-    void openItem(item, null);
-  });
-
   // 分组出现 / 消失时，其余卡片从旧位置滑到新位置（FLIP，clark 同）。
   useLayoutEffect(() => {
     if (!rail.current || rail.current.offsetParent === null) return;
@@ -327,7 +278,7 @@ export function NotificationRail({
         <PersonalReviewBoard onNavigate={onNavigate} />
         <MonthlyReviewNotices onNavigate={onNavigate} ceo />
         {groups.map((group) => {
-          const current = group.items.some((item) => item.href === currentHref || (item.missionRound && "cards" in payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(item.missionRound) && payloadOf<TMissionRoundSummary>(item.missionRound).cards.some((row) => `/mission-cards/${row.cardId}` === currentHref?.split("?")[0])));
+          const current = group.items.some((item) => item.href === currentHref || (item.missionRound && payloadOf<TMissionRoundSummary>(item.missionRound).cards.some((row) => `/mission-cards/${row.cardId}` === currentHref?.split("?")[0])));
           return (
             <HeroCard<"section">
               render={(props) => <section {...props} />}
@@ -351,7 +302,7 @@ export function NotificationRail({
                 </span>
               </HeroCard.Header>
               <div className={n.tray}>
-                {group.items.map((item) => item.missionRound && "phase" in payloadOf<TMissionRoundSummary | TMissionRoundDraftPayload>(item.missionRound) ? (
+                {group.items.map((item) => item.missionRound ? (
                   <MissionCardNoticeGroup key={item.id} round={payloadOf<TMissionRoundSummary>(item.missionRound)} entry="ceo" embedded currentHref={currentHref} onNavigate={onNavigate} onRefresh={refreshRound} />
                 ) : (
                   <div key={item.id}>
@@ -365,8 +316,7 @@ export function NotificationRail({
                     data-origin={item.href}
                     aria-current={item.href === currentHref ? "true" : undefined}
                     aria-label={`${item.title}，${item.meta}`}
-                    isDisabled={Boolean(item.missionRound) && action.pending}
-                    onPress={(event) => void openItem(item, (event.target as Element).closest("[data-notice]"))}
+                    onPress={(event) => onNavigate(item.href, (event.target as Element).closest("[data-notice]"))}
                   >
                     <span className={n.mark} aria-hidden="true" />
                     <span className={n.itemText}>
@@ -381,17 +331,11 @@ export function NotificationRail({
                   </div> : null}
                   </div>
                 ))}
-                {group.kind === "decisions" ? <>
-                  {action.pending ? <p role="status">正在整理任务卡草稿…</p> : null}
-                  {notice ? <p role="status">{notice}</p> : null}
-                  <ActionFeedback state={action.state} onRetry={action.retry} label="整理任务卡草稿" />
-                </> : null}
               </div>
             </HeroCard>
           );
         })}
       </div>
-      {dialog}
       {account ? (
         <div className={n.railFoot}>
           <AccountMenu account={account} onNavigate={(href) => onNavigate(href)} />

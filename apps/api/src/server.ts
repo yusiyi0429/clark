@@ -50,6 +50,7 @@ const env: AppEnv = {
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
   companyName: process.env.COMPANY_NAME,
   missionCardDraftsDir: process.env.MISSION_CARD_DRAFTS_DIR,
+  missionCardKnownMissionsFile: process.env.MISSION_CARD_KNOWN_MISSIONS_FILE,
   piBaseUrl: requiredEnv("PI_BASE_URL"),
   piApiKey: requiredEnv("PI_API_KEY"),
   lightModel: requiredEnv("LIGHT_MODEL"),

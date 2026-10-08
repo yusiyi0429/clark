@@ -77,7 +77,7 @@ const result = (value: unknown, isError = false) => ({ isError, content: [{ type
 
 export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: string; now: () => Date;
   names: () => Map<string, string>; findPerson: (personId: string) => MemoryPerson | undefined;
-  people: () => MemoryPerson[]; initialPerson: MemoryPerson; draftDir?: string; publicOrigin?: string; authorization: string | undefined }) {
+  people: () => MemoryPerson[]; initialPerson: MemoryPerson; publicOrigin?: string; authorization: string | undefined }) {
   const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   const initialAccess = access(deps.initialPerson);
   const instructions = [
@@ -118,7 +118,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       }
       const names = deps.names();
       const ceoContext = () => ({ q: deps.q, secret: deps.pepper, now: deps.now(), names,
-        people: deps.people(), personId: identity.personId, draftDir: deps.draftDir });
+        people: deps.people(), personId: identity.personId });
       switch (tool) {
         case "list_pending": {
           if (!Value.Check(EmptyInput, args)) break;

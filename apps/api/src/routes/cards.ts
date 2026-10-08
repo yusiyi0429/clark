@@ -3,23 +3,13 @@ import { PeopleDirectoryResponse, type TCard, type TCardCollection } from "@warm
 import { listBattlefieldCards } from "../battlefields.js";
 import { listCapabilityCards } from "../capabilities.js";
 import { canReadMission, getMissionRow, listMissionCards, projectMissionCard } from "../missions.js";
-import { listMissionRoundCards, listMissionRoundDraftCards } from "../missionRounds.js";
+import { listMissionRoundCards } from "../missionRounds.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "../issues.js";
 import { getMeetingRow, hasMeetingNotice, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "../meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice, getMonthlyPlanRow, listMonthlyPlanRows, projectMonthlyPlanCard } from "../monthlyPlans.js";
 import { personDisplayNames } from "../people.js";
 import { projectRadarCard } from "../signals.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
-
-/** 并行读可能跨过整理草稿的提交时刻；同战场同月份优先显示已持久化轮次。 */
-export function mergeMissionRoundCards(rounds: TCard[], draftSlots: TCard[]): TCard[] {
-  const slotKey = (card: TCard) => {
-    const payload = card.payload as { battlefieldId: string; period: string };
-    return `${payload.battlefieldId}:${payload.period}`;
-  };
-  const existing = new Set(rounds.map(slotKey));
-  return [...rounds, ...draftSlots.filter((card) => !existing.has(slotKey(card)))];
-}
 
 export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
   const { q, env, fail, requireCEO, now, companyMemory, radar } = ctx;
@@ -35,7 +25,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
     const at = now();
     const period = companyPeriod(at);
     const people = companyMemory.searchPeople(undefined);
-    const [radarCard, battlefields, issues, capabilities, meetingRows, missions, monthlyNotice, rounds, draftSlots] = await Promise.all([
+    const [radarCard, battlefields, issues, capabilities, meetingRows, missions, monthlyNotice, rounds] = await Promise.all([
       projectRadarCard(q, radar.providerStatus),
       listBattlefieldCards(q, period, personDisplayNames(companyMemory)),
       listPendingIssueCards(q, env.sessionSecret),
@@ -45,14 +35,13 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
       listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), period, req.person!),
       getMonthlyPlanNotice(q, env.sessionSecret, at),
       listMissionRoundCards(q, people, env.sessionSecret, req.person!, undefined, at),
-      listMissionRoundDraftCards(q, people, env.sessionSecret, req.person!, period, at, env.missionCardDraftsDir),
     ]);
     // 会前通知看 scheduled；会后有待 CEO 确认的战略议题的会议也进首页（通知栏「需要你确认」）
     const meetings = meetingRows
       .filter((row) => hasMeetingNotice(row, req.person!.personId, at) || hasPendingStrategicItem(row.outcome))
       .map((row) => projectMeetingCard(row, env.sessionSecret, at));
     const monthly = monthlyNotice && (monthlyNotice.payload as { status?: string }).status !== "confirmed" ? [monthlyNotice] : [];
-    return { cards: [radarCard, ...battlefields, ...capabilities, ...issues, ...meetings, ...missions, ...monthly, ...mergeMissionRoundCards(rounds, draftSlots)] };
+    return { cards: [radarCard, ...battlefields, ...capabilities, ...issues, ...meetings, ...missions, ...monthly, ...rounds] };
   });
   app.get(
     "/api/cards/issues/:id",

@@ -6,7 +6,7 @@ import type { Query } from "./meetingStore.js";
 import { companyPeriod, type MonthlyPlanRow } from "./monthlyPlans.js";
 import { getStrategyConfig } from "./strategy.js";
 import { voiceprintStatus, type VoiceprintDeps } from "./voiceprints.js";
-import { listMissionRoundCards, listMissionRoundDraftCards } from "./missionRounds.js";
+import { listMissionRoundCards } from "./missionRounds.js";
 import { readMemberWork } from "./memberWork.js";
 import { readRadarSummary } from "./radarSettings.js";
 
@@ -54,8 +54,7 @@ function ceoRoundNext(rounds: TMissionRoundSummary[]): Next | null {
   if (!round.cards.length) return null;
   const month = Number(round.period.slice(5));
   return {
-    text: round.phase === "draft" ? `${month} 月任务卡草稿已就绪，待战场 DRI 交给本人确认`
-      : `${month} 月任务 · ${round.todo ?? "等待战场 DRI 确认组合"}`,
+    text: `${month} 月任务 · ${round.todo ?? "等待战场 DRI 确认组合"}`,
     action: "进入工作台", href: "/",
   };
 }
@@ -81,7 +80,7 @@ async function ceoNext(q: Query, plan: Plan | undefined, period: string, now: Da
 }
 
 /** 引导只读取持久事实；角色边界、月份、目标状态与下一步都由服务端决定。 */
-export async function readOnboarding({ q, companyMemory, voiceprints, person, companyName, now, secret, draftsDirectory }: {
+export async function readOnboarding({ q, companyMemory, voiceprints, person, companyName, now, secret }: {
   q: Query;
   companyMemory: CompanyMemoryRepository;
   voiceprints: VoiceprintDeps;
@@ -89,7 +88,6 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
   companyName?: string;
   now: Date;
   secret: string;
-  draftsDirectory?: string;
 }): Promise<TOnboardingResponse> {
   const period = companyPeriod(now);
   const people = companyMemory.searchPeople(undefined);
@@ -107,14 +105,11 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
     radar,
   };
   if (person.role === "ceo") {
-    const [strategy, capabilities, rounds, slots] = await Promise.all([
+    const [strategy, capabilities, rounds] = await Promise.all([
       getStrategyConfig(q), listCapabilityRows(q),
       listMissionRoundCards(q, people, secret, person, period, now),
-      listMissionRoundDraftCards(q, people, secret, person, period, now, draftsDirectory),
     ]);
-    const month = Number(period.slice(5));
-    const next = slots[0] ? { text: `${month} 月目标已签发，可以整理任务卡草稿`, action: "进入工作台", href: "/" }
-      : ceoRoundNext(rounds.map((card) => card.payload as TMissionRoundSummary)) ?? await ceoNext(q, plan, period, now);
+    const next = ceoRoundNext(rounds.map((card) => card.payload as TMissionRoundSummary)) ?? await ceoNext(q, plan, period, now);
     const names = new Map(people.map((entry) => [entry.personId, entry.displayName]));
     return {
       ...common, role: "ceo", next,

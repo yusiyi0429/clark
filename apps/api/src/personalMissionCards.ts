@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 import type { TCard, TCreateMissionCardFeedbackRequest, TMissionCardCorrectionView, TMissionCardFeedbackView, TMissionCardField, TMissionCardGroupView, TMissionCardPayload, TMissionRoundSummary, TPersonalMissionCardMission, TPersonalMissionCardPayload, TThreadMember, TSetMissionCardOwnerConfirmationRequest } from "@warmap/contracts";
 import type { MemoryPerson } from "./companyMemory.js";
 import type { Query } from "./meetingStore.js";
-import { canApprove, closeIfDue, correctionPeriodClosed, getMissionRoundRow, missionCardWriteProblem, pendingMissionCardAnnotations, projectMissionRoundCard, type MissionRoundPerson, type MissionRoundRow } from "./missionRounds.js";
+import { canApprove, closeIfDue, correctionPeriodClosed, draftTrail, getMissionRoundRow, missionCardWriteProblem, pendingMissionCardAnnotations, projectMissionRoundCard, type MissionRoundPerson, type MissionRoundRow } from "./missionRounds.js";
 import { fieldText, getMissionRow, projectMissionCard } from "./missions.js";
 export { fieldText } from "./missions.js";
 import { signActionId } from "./actionToken.js";
@@ -321,9 +321,13 @@ export async function getPersonalMissionCardGroup(q: Query, people: MemoryPerson
   const { card, round } = visible; const data = await discussion(q, round, cardId);
   const entries: TMissionCardGroupView["entries"] = [];
   const names = new Map(people.map((p) => [p.personId, p.displayName]));
+  // 系统代做的动作照留痕原文显示（签发后起草、起草完成后交给本人），不写成任何人的操作。
+  const trail = draftTrail(round);
+  for (const entry of trail) entries.push({ type: "divider", at: entry.at, text: `${localTime(new Date(entry.at))} · ${entry.text}` });
   if (round.first_opened_at) {
     const at = round.first_opened_at.toISOString();
-    entries.push({ type: "divider", at, text: `${localTime(round.first_opened_at)} · 全战场交给本人确认` });
+    if (!trail.some((entry) => Date.parse(entry.at) === round.first_opened_at!.getTime()))
+      entries.push({ type: "divider", at, text: `${localTime(round.first_opened_at)} · 全战场交给本人确认` });
     const countRow = (await q("SELECT count(*) AS n,bool_or(placeholder) AS placeholder FROM missions WHERE personal_mission_card_id=$1", [cardId])).rows[0];
     const count = Number(countRow.n);
     const deciderId = round.battlefield_owner_id || people.find((p) => p.roles.includes("ceo"))?.personId || "CEO";

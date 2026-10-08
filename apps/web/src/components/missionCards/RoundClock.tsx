@@ -8,7 +8,7 @@ import s from "./round-clock.module.css";
 /** clark countdown.tsx；截止仍以服务端为准，数字不出现负数。属于当前月度周期的轮次改显示周期总倒计时（超时标红）。 */
 export function roundClockText(round: Pick<TMissionRoundSummary, "phase" | "closesAt">, now: number): string {
   if (round.phase === "drafting") return "Co-Agent 正在起草";
-  if (round.phase === "draft") return "待下发本人确认";
+  if (round.phase === "draft") return "未交给本人确认";
   if (round.phase === "confirmed") return "已确定";
   if (round.phase === "reviewing") return "任务组合核对";
   // 本人准备未设独立截止时，沿用月度周期计时。

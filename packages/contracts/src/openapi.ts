@@ -27,7 +27,6 @@ import {
   MissionRoundPhase,
   MissionRoundSummary,
   MyMissionRoundsResponse,
-  MissionRoundDraftPayload,
   ExecuteMissionRoundActionRequest,
   MissionRoundDecideInput,
   MissionRoundConfirmInput,
@@ -514,7 +513,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/mission-rounds/actions/execute": {
         post: {
           operationId: "executeMissionRoundAction",
-          summary: "拍板人整理任务卡草稿、统一开放或重开；版本冲突返回 latestCard",
+          summary: "战场 DRI 重试起草、交给本人确认、延长本人确认与确认任务组合；版本冲突返回 latestCard",
           requestBody: jsonBody({ $ref: "#/components/schemas/ExecuteMissionRoundActionRequest" }),
           responses: {
             "200": { description: "当前 Mission round Card；同一动作重放不重复写入", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
@@ -2057,7 +2056,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MissionRoundPhase: MissionRoundPhase as JsonSchema,
         MissionRoundSummary: MissionRoundSummary as JsonSchema,
         MyMissionRoundsResponse: MyMissionRoundsResponse as JsonSchema,
-        MissionRoundDraftPayload: MissionRoundDraftPayload as JsonSchema,
         ExecuteMissionRoundActionRequest: ExecuteMissionRoundActionRequest as JsonSchema,
         MissionRoundDecideInput: MissionRoundDecideInput as JsonSchema,
         MissionRoundConfirmInput: MissionRoundConfirmInput as JsonSchema,

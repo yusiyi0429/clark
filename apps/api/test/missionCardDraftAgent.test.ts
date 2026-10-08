@@ -15,6 +15,7 @@ const input: MissionCardDraftInput = {
   previousCard: null, previousReview: null, capabilities: [{ code: "product", name: "产品验证" }],
   companyMemory: [{ title: "双身份评审试点", sourceRef: "wiki://product-proof", passages: [{ sourceRef: "wiki://product-proof#trial",
     text: "当前已出现双身份界面与权限分界，需要建立真实任务卡里的可复核评审机制。Demo、手册、Workshop是可能的观察载体，但验收应判断真实环境的判断、行为和结果；交付时间、阈值和资源尚未确定。" }] }],
+  knownMissions: [],
 };
 const mission: MissionCardDraftCandidateValue["missions"][number] = {
   capabilityCode: "product", title: "双身份评审机制可复用",

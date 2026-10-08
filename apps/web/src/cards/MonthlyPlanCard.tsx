@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@heroui/react";
 import { ChevronLeft, X } from "lucide-react";
 import type { CardRenderProps } from "./registry";
@@ -54,10 +55,39 @@ export function monthlyDraftPatch(payload: MonthlyPlanPayload, draft: MonthlyDra
   return patch;
 }
 
+type RecipientRow = { battlefieldId: string; name: string; people: string[] };
+
+/** 签发确认：按战场列出签发后拿到任务卡的人；名单为空的战场标出来，签发不拦。 */
+export function SignRecipients({ month, rows, onEdit }: { month: number; rows: RecipientRow[] | "loading" | "error"; onEdit: (battlefieldId: string) => void }) {
+  return (
+    <section className={s.recipients} aria-label="任务卡起草名单">
+      <p className={s.recipientsTitle}>签发后为这些人起草 {month} 月任务卡并直接发给本人</p>
+      {rows === "loading" ? (
+        <p className={s.recipientsNote} role="status">正在读取名单…</p>
+      ) : rows === "error" ? (
+        <p className={s.recipientsNote} role="status">名单暂时读取失败</p>
+      ) : (
+        <ul className={s.recipientList}>
+          {rows.map((row) => (
+            <li key={row.battlefieldId}>
+              <span className={s.recipientBattlefield}>{row.name}</span>
+              <span className={s.recipientNames} data-empty={row.people.length === 0 || undefined}>{row.people.length ? row.people.join("、") : "名单为空"}</span>
+              <button type="button" className={s.recipientEdit} onClick={() => onEdit(row.battlefieldId)}>
+                改参与者
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /** MonthlyPlan：CEO 编辑公司/战场结果与普通待办，签发后生效；不跟踪待办执行状态。 */
 export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
   const payload = payloadOf<MonthlyPlanPayload>(card);
   const { homeCards } = useWorkspace();
+  const router = useRouter();
   const { state, run, retry, pending } = useCardAction(onCard);
   const confirm = useConfirm();
   // 战场 / 能力写名称（首页注册表），找不到才退回层级，不打印原始 id。
@@ -70,6 +100,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
   const [note, setNote] = useState(payload.negotiation.note);
   const [checked, setChecked] = useState<string[]>(payload.negotiation.checkedItemIds);
   const [signArmed, setSignArmed] = useState(false);
+  const [recipients, setRecipients] = useState<Map<string, string[]> | "error" | null>(null);
   const [people, setPeople] = useState<PersonOption[] | null>(null);
   const [peopleError, setPeopleError] = useState(false);
 
@@ -108,6 +139,21 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
     setSignArmed(false);
   }, [payload]);
 
+  // 签发确认时按战场列出会拿到任务卡的人（战场配置里的参与者）；读不到名单不拦签发。
+  useEffect(() => {
+    if (!signArmed) return;
+    let cancelled = false;
+    setRecipients(null);
+    browserApi.GET("/api/config/battlefields").then(({ data, response }) => {
+      if (!cancelled) setRecipients(response.ok && data ? new Map(data.battlefields.map((item) => [item.id, item.participantIds])) : "error");
+    }, () => {
+      if (!cancelled) setRecipients("error");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [signArmed]);
+
   useEffect(() => {
     if (payload.generation.status !== "pending" && payload.generation.status !== "running") return;
     let stopped = false;
@@ -134,6 +180,11 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
   const locked = payload.status === "confirmed" || payload.generation.status === "pending" || payload.generation.status === "running";
   const patch = monthlyDraftPatch(payload, { companyOutcome, battlefields, capabilities, todos, note });
   const dirty = Object.keys(patch).length > 0;
+
+  /** 签发后系统为各战场起草任务卡：刷新首页，通知栏随即出现起草进度。 */
+  async function signPlan() {
+    if (await run(actionOf("monthly-plan.sign")!, {})) router.refresh();
+  }
 
   async function regenerateDraft() {
     const action = actionOf("monthly-plan.retry_draft");
@@ -355,6 +406,17 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
       </div>
 
       <div className={s.commitArea}>
+        {signArmed && actionOf("monthly-plan.sign") ? (
+          <SignRecipients
+            month={Number(month)}
+            rows={recipients === null ? "loading" : recipients === "error" ? "error" : payload.battlefields.map(({ battlefieldId }) => ({
+              battlefieldId,
+              name: battlefieldName(battlefieldId),
+              people: (recipients.get(battlefieldId) ?? []).map((id) => people?.find((person) => person.personId === id)?.displayName ?? id),
+            }))}
+            onEdit={(battlefieldId) => onNavigate(`/config/battlefields?battlefieldId=${encodeURIComponent(battlefieldId)}`)}
+          />
+        ) : null}
         <div className={s.commitInfo}>
           <span>签发后会更新各战场的本月目标和雷达的监测方向；不会直接改企业知识。</span>
           <small>已核对 {checked.length} 项 · 签发前必须核对企业结果、战场结果、能力结果与普通待办</small>
@@ -387,7 +449,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
                 type="button"
                 className={s.submit}
                 disabled={pending || locked || !signArmed}
-                onClick={() => void run(actionOf("monthly-plan.sign")!, {})}
+                onClick={() => void signPlan()}
               >
                 签发计划
               </button>

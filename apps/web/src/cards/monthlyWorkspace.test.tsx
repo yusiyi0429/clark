@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
 import type { MonthlyPlanPayload } from "./payloads";
 import { WorkspaceTestProvider } from "@/components/shell/testing";
-import { MonthlyPlanCard, monthlyDraftPatch, type MonthlyDraftState } from "./MonthlyPlanCard";
+import { MonthlyPlanCard, SignRecipients, monthlyDraftPatch, type MonthlyDraftState } from "./MonthlyPlanCard";
 
 // useCardAction 需要 Next 路由上下文；这里只渲染静态标记。
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
@@ -196,5 +196,24 @@ describe("月度计划 · 保存只提交真正改动的字段", () => {
   it("备注改动也只提交 note", () => {
     const payload = planPayload();
     expect(Object.keys(monthlyDraftPatch(payload, { ...draftOf(payload), note: "新增一句" }))).toEqual(["note"]);
+  });
+});
+
+describe("月度计划 · 签发确认名单", () => {
+  it("按战场一行列出会拿到任务卡的人，月份取计划月份；名单为空的战场标出来，每行都能改参与者", () => {
+    const html = renderToStaticMarkup(<SignRecipients month={10} onEdit={() => undefined} rows={[
+      { battlefieldId: "01", name: "灯塔项目", people: ["白田田", "于斯一"] },
+      { battlefieldId: "03", name: "002 客户", people: [] },
+    ]} />);
+    expect(html).toContain("签发后为这些人起草 10 月任务卡并直接发给本人");
+    expect(html).toContain("灯塔项目");
+    expect(html).toContain("白田田、于斯一");
+    expect(html).toContain('data-empty="true">名单为空');
+    expect(html.match(/改参与者/g)).toHaveLength(2);
+  });
+
+  it("读取中与读取失败照实说明，不拦签发", () => {
+    expect(renderToStaticMarkup(<SignRecipients month={11} rows="loading" onEdit={() => undefined} />)).toContain("正在读取名单…");
+    expect(renderToStaticMarkup(<SignRecipients month={11} rows="error" onEdit={() => undefined} />)).toContain("名单暂时读取失败");
   });
 });

@@ -772,9 +772,12 @@ describe("strategy map config contracts", () => {
       battlefields: [{
         id: "growth", version: 1, code: "01", sortOrder: 10, name: "灯塔项目",
         ownerId: "", ownerDisplayName: "待指派", sixMonthOutcome: "目标", missionAnchors: [], pendingIssueCount: 0,
+        participantIds: ["bai-tiantian"], participantsDerived: true,
       }],
       issues: [],
     })).toBe(true);
+    expect(Value.Check(PatchBattlefieldRequest, { participantIds: [] })).toBe(true);
+    expect(Value.Check(PatchBattlefieldRequest, { participantIds: ["a", "a"] })).toBe(false);
   });
 });
 
