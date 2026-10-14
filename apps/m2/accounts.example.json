@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    { "personId": "replace-with-verified-tianshu-person-id", "memberId": "member-01" }
+  ]
+}

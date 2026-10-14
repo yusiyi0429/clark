@@ -1,0 +1,38 @@
+# Optional M2 trial. Keep the existing web/API/database and their plans unchanged.
+services:
+  m2:
+    restart: unless-stopped
+    mem_limit: 1024m
+    build:
+      context: ..
+      dockerfile: apps/m2/Dockerfile
+      args:
+        NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org/}
+    environment:
+      PUBLIC_ORIGIN: https://${PUBLIC_DOMAIN}
+      M2_AUTH_API_URL: http://api:4000/api/auth/session
+      M2_ACCOUNT_MAP_FILE: /var/lib/m2/seed/accounts.json
+      M2_SEED_DIR: /var/lib/m2/seed
+      M2_INTERNAL_TOKEN: ${M2_INTERNAL_TOKEN:?M2_INTERNAL_TOKEN required}
+      DECODING_API_BASE: ${M2_MODEL_BASE:-http://115.191.26.230:8000/api/openai/v1}
+      DECODING_API_KEY: ${M2_MODEL_KEY:?M2_MODEL_KEY required}
+      DECODING_MODEL: ${M2_MODEL:-aliyun/deepseek-v4.1-flash}
+      TKOS_WORLD_PRODUCT_TOKEN: ${M2_WORLD_READ_TOKEN:-}
+    volumes:
+      - ${M2_SEED_DIR:?M2_SEED_DIR required}:/var/lib/m2/seed:ro
+      - m2_state:/repo/apps/m2/.runtime
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4333/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  edge:
+    volumes:
+      - ../infra/caddy/Caddyfile.m2:/etc/caddy/Caddyfile:ro
+    depends_on:
+      m2:
+        condition: service_healthy
+volumes:
+  m2_state:

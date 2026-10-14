@@ -42,3 +42,7 @@ seed/company-people.json
 .scratch/manual-test/run/
 apps/web-manual-preview/
 .scratch/lan-https/ca/
+
+# M2 private trial state and imported plans
+**/.runtime/
+seed/m2/
