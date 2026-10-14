@@ -235,3 +235,7 @@
 }
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
 @media(max-width:959px){.expandedIdentity.expandedIdentity>div>span{font-size:13px}}
+
+.m2Entry{display:flex;justify-content:flex-end;padding:8px 16px 0}
+.m2Entry a{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border,rgba(0,0,0,.12));border-radius:12px;color:inherit;font-size:14px;text-decoration:none;background:var(--surface,#fff)}
+.m2Entry a:focus-visible{outline:2px solid currentColor;outline-offset:3px}

@@ -64,6 +64,15 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   const pathname = usePathname();
   /** 已发起、新路由还没提交的目标：二级页先打开，右侧盖加载蒙版。路由提交（包括被重定向到别处）就清掉。 */
   const [pending, setPending] = useState<string | null>(null);
+  const [m2Available, setM2Available] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    setM2Available(false);
+    void fetch("/m2/api/session", { signal: controller.signal }).then(async (response) => {
+      if (response.ok) setM2Available((await response.json()).authenticated === true);
+    }).catch(() => undefined);
+    return () => controller.abort();
+  }, [viewerId]);
   const routeOpen = pathname !== homeHref;
   const detailOpen = routeOpen || pending !== null;
   /** 从首页打开、页面还没到：面板是空的，透明着让蒙版磨砂后面的首页。 */
@@ -484,6 +493,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             inert={detailOpen}
             style={noticeTransition && !openingEmpty ? { viewTransitionName: "home-board" } : undefined}
           >
+            {m2Available ? <div className={s.m2Entry}><a href="/m2/" target="_blank" rel="noopener noreferrer">目标拆解与协作 <span aria-hidden="true">↗</span></a></div> : null}
             {home}
           </div>
           {detailOpen ? (

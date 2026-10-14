@@ -1,0 +1,65 @@
+[
+  {
+    "id": "member-01",
+    "name": "刘明华",
+    "file": "member-01.png",
+    "mode": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: small circular chat avatar for a business collaboration app. Create one original fictional portrait, Chinese man, short neat black hair, rectangular glasses, navy shirt. Clean tasteful semi-flat editorial illustration, natural Chinese facial features, friendly professional expression, head and shoulders centered, full hair visible, face fills central 65 percent, pale neutral blue-grey solid square background, subtle shading and crisp silhouette readable at 32 pixels. Not a real likeness. No text, letters, logos, watermark, extra people or decorative objects. Square composition."
+  },
+  {
+    "id": "member-02",
+    "name": "白田田",
+    "file": "member-02.png",
+    "mode": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: small circular chat avatar for a business collaboration app. Create one original fictional portrait, Chinese woman, shoulder length straight black hair, cream blouse. Clean tasteful semi-flat editorial illustration, natural Chinese facial features, friendly professional expression, head and shoulders centered, full hair visible, face fills central 65 percent, pale neutral blue-grey solid square background, subtle shading and crisp silhouette readable at 32 pixels. Not a real likeness. No text, letters, logos, watermark, extra people or decorative objects. Square composition."
+  },
+  {
+    "id": "member-03",
+    "name": "孙铭泽",
+    "file": "member-03.png",
+    "mode": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: small circular chat avatar for a business collaboration app. Create one original fictional portrait, Chinese man, short side parted black hair, light blue shirt. Clean tasteful semi-flat editorial illustration, natural Chinese facial features, friendly professional expression, head and shoulders centered, full hair visible, face fills central 65 percent, pale neutral blue-grey solid square background, subtle shading and crisp silhouette readable at 32 pixels. Not a real likeness. No text, letters, logos, watermark, extra people or decorative objects. Square composition."
+  },
+  {
+    "id": "member-04",
+    "name": "陈溪南",
+    "file": "member-04.png",
+    "mode": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: small circular chat avatar for a business collaboration app. Create one original fictional portrait, Chinese man, wavy short black hair, round glasses, charcoal shirt. Clean tasteful semi-flat editorial illustration, natural Chinese facial features, friendly professional expression, head and shoulders centered, full hair visible, face fills central 65 percent, pale neutral blue-grey solid square background, subtle shading and crisp silhouette readable at 32 pixels. Not a real likeness. No text, letters, logos, watermark, extra people or decorative objects. Square composition."
+  },
+  {
+    "id": "member-05",
+    "name": "刘人豪",
+    "file": "member-05.png",
+    "mode": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: small circular chat avatar for a business collaboration app. Create one original fictional portrait, Chinese man, cropped black hair, green shirt. Clean tasteful semi-flat editorial illustration, natural Chinese facial features, friendly professional expression, head and shoulders centered, full hair visible, face fills central 65 percent, pale neutral blue-grey solid square background, subtle shading and crisp silhouette readable at 32 pixels. Not a real likeness. No text, letters, logos, watermark, extra people or decorative objects. Square composition."
+  },
+  {
+    "id": "member-06",
+    "name": "于斯一",
+    "file": "member-06.png",
+    "mode": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: small circular chat avatar for a business collaboration app. Create one original fictional portrait, Chinese man, straight black hair, oval glasses, grey shirt. Clean tasteful semi-flat editorial illustration, natural Chinese facial features, friendly professional expression, head and shoulders centered, full hair visible, face fills central 65 percent, pale neutral blue-grey solid square background, subtle shading and crisp silhouette readable at 32 pixels. Not a real likeness. No text, letters, logos, watermark, extra people or decorative objects. Square composition."
+  },
+  {
+    "id": "member-07",
+    "name": "王创峰",
+    "file": "member-07.png",
+    "mode": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: small circular chat avatar for a business collaboration app. Create one original fictional portrait, Chinese man, swept black hair, navy jacket. Clean tasteful semi-flat editorial illustration, natural Chinese facial features, friendly professional expression, head and shoulders centered, full hair visible, face fills central 65 percent, pale neutral blue-grey solid square background, subtle shading and crisp silhouette readable at 32 pixels. Not a real likeness. No text, letters, logos, watermark, extra people or decorative objects. Square composition."
+  },
+  {
+    "id": "member-08",
+    "name": "秦梦怡",
+    "file": "member-08.png",
+    "mode": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: small circular chat avatar for a business collaboration app. Create one original fictional portrait, Chinese woman, long black hair tied back, blue blouse. Clean tasteful semi-flat editorial illustration, natural Chinese facial features, friendly professional expression, head and shoulders centered, full hair visible, face fills central 65 percent, pale neutral blue-grey solid square background, subtle shading and crisp silhouette readable at 32 pixels. Not a real likeness. No text, letters, logos, watermark, extra people or decorative objects. Square composition."
+  },
+  {
+    "id": "member-09",
+    "name": "唐巨杰",
+    "file": "member-09.png",
+    "mode": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: small circular chat avatar for a business collaboration app. Create one original fictional portrait, Chinese woman, short black bob, green blouse. Clean tasteful semi-flat editorial illustration, natural Chinese facial features, friendly professional expression, head and shoulders centered, full hair visible, face fills central 65 percent, pale neutral blue-grey solid square background, subtle shading and crisp silhouette readable at 32 pixels. Not a real likeness. No text, letters, logos, watermark, extra people or decorative objects. Square composition."
+  }
+]

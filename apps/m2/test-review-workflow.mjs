@@ -1,0 +1,7 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {profiles} from './domain.mjs';
+import {canPreviewRevise,draftRevision,reviewChanges,roleGuides} from './review-workflow.mjs';
+test('角色工作提示区分审阅与修订，不把任务规划设为握手',()=>{assert.match(roleGuides.ceo.body,/不额外确认/);assert.match(roleGuides.mission.body,/自主规划/);assert.equal(canPreviewRevise({id:'bf01',level:'po'},'ceo',profiles.ceo),false);assert.equal(canPreviewRevise({id:'bf01',level:'po'},'dri',profiles.dri),true);assert.equal(canPreviewRevise({id:'bf01-m3',level:'mission'},'dri',profiles.dri),false);assert.equal(canPreviewRevise({id:'bf01-m3',level:'mission'},'mission',profiles.mission),true);assert.equal(canPreviewRevise({id:'bf01-m1',level:'mission'},'mission',profiles.mission),false);});
+test('完整字段修订保留旧值、历史，不空升版本',()=>{const before={version:1,title:'原成果',result:'原描述',checks:['原验收'],time:'原时间'};assert.equal(draftRevision(before,{title:'原成果'},'DRI'),null);const next=draftRevision(before,{title:'原成果',result:'修订描述',checks:['新验收'],time:'原时间'},'DRI');assert.equal(next.version,2);assert.equal(next.history[0].changes.length,2);assert.equal(next.history[0].changes[0].before,'原描述');assert.equal(before.result,'原描述');const after=draftRevision({...before,...next},{time:'新时间'},'DRI');assert.equal(after.history.length,2);assert.equal(after.version,3);assert.equal(reviewChanges(before,before).length,0);});
+test('打开缺少可选里程碑的文档不生成空修订',()=>{assert.deepEqual(reviewChanges({title:'成果'},{title:'成果',milestones:[]}),[]);});

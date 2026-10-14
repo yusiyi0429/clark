@@ -18,3 +18,8 @@ infra/backup/.state
 !**/.env.example
 **/*.log
 .DS_Store
+
+**/.runtime
+**/test*.mjs
+
+.data

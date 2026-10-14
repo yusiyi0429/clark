@@ -1,0 +1,176 @@
+{
+  "status": "roster-approved-awaiting-account-creation",
+  "rosterApprovedAt": "2026-10-11",
+  "preparedAt": "2026-10-11",
+  "organizationSource": {
+    "url": "https://tokenking.feishu.cn/wiki/UZB8wP5jQi7QcykuvimcLiZbnye",
+    "documentId": "T2cxdCGajoowFPxumjOc0AZZn9d",
+    "revision": 48
+  },
+  "missionSource": "output/m2-round06-20261010/data.json",
+  "notes": [
+    "组织身份以责任图 V2 为依据；具体 Mission 来源于第六轮候选，不代表已派工。",
+    "visibleUnits 是候选共享范围；CEO 查看所有单元，普通成员查看其所参与单元内全部内容。",
+    "试用名单及职责映射已获用户确认；账号尚未创建，正式访问授权尚未启用。",
+    "同人兼任确认职责是否需第二人复核，等待人工确认。"
+  ],
+  "accounts": [
+    {
+      "id": "member-01",
+      "name": "刘明华",
+      "ceo": true,
+      "unitDri": [
+        "bf01",
+        "bf02",
+        "bf03",
+        "rearch",
+        "agents"
+      ],
+      "missionDri": [
+        "bf03-m1",
+        "rearch-m1"
+      ],
+      "visibleUnits": [
+        "bf01",
+        "bf02",
+        "bf03",
+        "rearch",
+        "agents"
+      ],
+      "approval": "pending"
+    },
+    {
+      "id": "member-02",
+      "name": "白田田",
+      "ceo": false,
+      "unitDri": [
+        "method"
+      ],
+      "missionDri": [
+        "bf01-m1",
+        "method-m1",
+        "method-m2"
+      ],
+      "visibleUnits": [
+        "bf01",
+        "method"
+      ],
+      "approval": "pending"
+    },
+    {
+      "id": "member-03",
+      "name": "孙铭泽",
+      "ceo": false,
+      "unitDri": [],
+      "missionDri": [
+        "bf01-m3",
+        "agents-m1"
+      ],
+      "visibleUnits": [
+        "bf01",
+        "agents"
+      ],
+      "approval": "pending"
+    },
+    {
+      "id": "member-04",
+      "name": "陈溪南",
+      "ceo": false,
+      "unitDri": [],
+      "missionDri": [
+        "bf01-m4",
+        "agents-m2"
+      ],
+      "visibleUnits": [
+        "bf01",
+        "agents"
+      ],
+      "approval": "pending"
+    },
+    {
+      "id": "member-05",
+      "name": "刘人豪",
+      "ceo": false,
+      "unitDri": [
+        "eo"
+      ],
+      "missionDri": [
+        "bf01-m2",
+        "agents-m3",
+        "eo-m1"
+      ],
+      "visibleUnits": [
+        "bf01",
+        "agents",
+        "eo"
+      ],
+      "approval": "pending"
+    },
+    {
+      "id": "member-06",
+      "name": "于斯一",
+      "ceo": false,
+      "unitDri": [],
+      "missionDri": [
+        "eo-m2"
+      ],
+      "visibleUnits": [
+        "bf01",
+        "eo"
+      ],
+      "approval": "pending"
+    },
+    {
+      "id": "member-07",
+      "name": "王创峰",
+      "ceo": false,
+      "unitDri": [
+        "tokenhub"
+      ],
+      "missionDri": [
+        "bf02-m1",
+        "tokenhub-m1"
+      ],
+      "visibleUnits": [
+        "bf02",
+        "tokenhub"
+      ],
+      "approval": "pending"
+    },
+    {
+      "id": "member-08",
+      "name": "秦梦怡",
+      "ceo": false,
+      "unitDri": [
+        "talent"
+      ],
+      "missionDri": [
+        "talent-m1",
+        "talent-m2"
+      ],
+      "visibleUnits": [
+        "talent"
+      ],
+      "approval": "pending"
+    },
+    {
+      "id": "member-09",
+      "name": "唐巨杰",
+      "ceo": false,
+      "unitDri": [
+        "finance"
+      ],
+      "missionDri": [
+        "bf02-m2",
+        "finance-m1",
+        "finance-m2",
+        "finance-m3"
+      ],
+      "visibleUnits": [
+        "bf02",
+        "finance"
+      ],
+      "approval": "pending"
+    }
+  ]
+}
