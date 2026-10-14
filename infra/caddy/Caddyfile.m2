@@ -4,6 +4,7 @@
  }
 }
 :80 {
+ encode /m2/* gzip
  redir /m2 /m2/ 308
  reverse_proxy /m2/* m2:4333 {
   flush_interval -1
