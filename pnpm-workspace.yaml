@@ -1,6 +1,8 @@
 packages:
   - apps/*
   - packages/*
+# Production downloads can exceed one minute on the deployment host.
+fetchTimeout: 300000
 allowBuilds:
   '@google/genai': false
   esbuild: true
