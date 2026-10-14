@@ -2,7 +2,7 @@ import {readFile} from 'node:fs/promises';
 import {timingSafeEqual} from 'node:crypto';
 import {memberProfiles} from './member-profiles.mjs';
 
-const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
+const fail=(status,message,code)=>{throw Object.assign(Error(message),{status,code});};
 const equal=(a,b)=>typeof a==='string'&&typeof b==='string'&&Buffer.byteLength(a)===Buffer.byteLength(b)&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
 export function validateBindings(value){
  if(value?.schemaVersion!==1||!Array.isArray(value.bindings)||!value.bindings.length)throw Error('M2 账号映射为空或格式无效');
@@ -32,6 +32,7 @@ export async function createLegacyAuth({env=process.env,transport=fetch}={}){
   let session;try{session=await response.json();}catch{fail(503,'天枢登录校验返回无效，请稍后重试');}
   if(session.authenticated!==true||typeof session.personId!=='string')fail(401,'登录已失效，请重新登录天枢');
   const memberId=bindings.get(session.personId);if(!memberId)fail(403,'当前账号尚未加入 M2 试用名单');
+  if(req.headers['x-m2-expected-member']&&req.headers['x-m2-expected-member']!==memberId)fail(409,'登录账号已改变，请刷新后继续','IDENTITY_CHANGED');
   return {memberId,homeHref:session.role==='ceo'?'/':'/me'};
  };
 }

@@ -14,6 +14,7 @@ test('Legacy identity is server-verified; client member IDs and unrelated cookie
   const auth=await createLegacyAuth({env,transport:async(url,options)=>{assert.equal(url.href,env.M2_AUTH_API_URL);assert.deepEqual(options.headers,{cookie:'warmap_session=opaque'});assert.equal(options.redirect,'error');if(outage)throw Error('private outage');return {ok:true,json:async()=>session};}});
   const req={method:'GET',headers:{host:'trial.example',cookie:'other=secret; warmap_session=opaque','x-person-id':'admin'},socket:{remoteAddress:'10.0.0.2'}};
   assert.deepEqual(await auth(req,'/api/data'),{memberId:'member-02',homeHref:'/me'});
+  await assert.rejects(auth({...req,headers:{...req.headers,'x-m2-expected-member':'member-01'}},'/api/actions'),{status:409,code:'IDENTITY_CHANGED'});
   session={authenticated:false};await assert.rejects(auth(req,'/api/data'),{status:401});
   session={authenticated:true,personId:'unknown',role:'ceo'};await assert.rejects(auth(req,'/api/data'),{status:403});
   outage=true;await assert.rejects(auth(req,'/api/data'),{status:503});
