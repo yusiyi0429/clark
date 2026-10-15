@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
+import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { TPreflightCandidate, TWebSearchInput, TWebSearchResponse, TWebSearchResult } from "@warmap/contracts";
 import { migrate } from "../src/migrate.js";
 import { hashSecret } from "../src/session.js";
@@ -191,6 +192,8 @@ export async function createTestApp(
   seedOverrides: Partial<Pick<AppEnv, "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "publicOrigin">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
+    conversationStream?: Parameters<typeof buildApp>[0]["conversationStream"];
+    personalDistillationStream?: Parameters<typeof buildApp>[0]["personalDistillationStream"];
     conversationTurnTimeoutMs?: number;
     preflightAgent?: PreflightAgent;
     outcomeAgent?: PostMeetingAgent;
@@ -247,7 +250,15 @@ export async function createTestApp(
   const recordings = recordingDeps
     ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, companyMemory: createCompanyContext(env), deps: recordingDeps })
     : undefined;
-  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, recordingService: recordings, now: monthlyNow,
+  const personalDistillationStream = runtimeOptions.personalDistillationStream ?? (() => {
+    const stream = createAssistantMessageEventStream();
+    const message: AssistantMessage = { role: "assistant", api: "openai-responses", provider: "warmap", model: "test",
+      content: [{ type: "toolCall", id: randomUUID(), name: "submit_candidate", arguments: { changes: [], clarification: "" } }],
+      stopReason: "toolUse", timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+    queueMicrotask(() => stream.push({ type: "done", reason: "toolUse", message }));
+    return stream;
+  });
+  const app = await buildApp({ pool, env, conversationRuntime: runtimeOptions.conversationStream ? undefined : conversationRuntime, personalDistillationStream, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, recordingService: recordings, now: monthlyNow,
     threadIntroAgent: { async generate(input) { return { message: `${input.inviter}邀请${input.newcomers.join("、")}加入「${input.title}」，请查看对象进展。` }; } },
     taskAcceptanceAgent: { async draft() { throw new Error("测试里没有模型"); } },
     ...appRuntimeOptions });
@@ -306,7 +317,7 @@ export async function createTestApp(
     agentRuns: async () => (await pool.query("SELECT * FROM agent_runs ORDER BY started_at, id")).rows,
     sql: async (text, params) => (await pool.query(text, params)).rows,
     restart: async (runtime) => {
-      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, recordingService: recordings, now: monthlyNow, ...appRuntimeOptions });
+      const restarted = await buildApp({ pool, env, conversationRuntime: runtime, personalDistillationStream, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, recordingService: recordings, now: monthlyNow, ...appRuntimeOptions });
       apps.push(restarted);
       return restarted;
     },

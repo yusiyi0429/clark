@@ -226,10 +226,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
               fullText = latest.extractedText;
             } catch { return { unavailable: true, message: "附件已不可用" }; }
           }
-          const text = boundedText(fullText.slice(offset), 6000);
-          const next = offset + text.length;
-          return { handle, title: turnReferences[index].title, kind: turnReferences[index].kind, text,
-            more: next < fullText.length, ...(next < fullText.length ? { cursor: `${runId}:${handle}:${next}` } : {}) };
+          let text = boundedText(fullText.slice(offset), 6000);
+          const page = () => {
+            const next = offset + text.length;
+            return { handle, title: boundedText(turnReferences[index].title, 300), kind: turnReferences[index].kind, text,
+              more: next < fullText.length, ...(next < fullText.length ? { cursor: `${runId}:${handle}:${next}` } : {}) };
+          };
+          // Escaped quotes and backslashes consume more JSON bytes than source bytes.
+          while (Buffer.byteLength(JSON.stringify(page())) > 8192) text = boundedText(text, Math.floor(Buffer.byteLength(text) * 0.8));
+          return page();
         };
         const learnsPersonal = !req.params.scope.startsWith('mission-card:');
         let personalEpoch = learnsPersonal ? ((await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0) : row.memory_epoch;

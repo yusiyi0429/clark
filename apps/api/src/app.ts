@@ -122,6 +122,7 @@ export async function buildApp({
   pool,
   env,
   conversationRuntime,
+  conversationStream,
   personalDistillationStream,
   companyReader,
   radarService,
@@ -150,6 +151,7 @@ export async function buildApp({
   pool: Pool;
   env: AppEnv;
   conversationRuntime?: ConversationRuntime;
+  conversationStream?: Parameters<typeof createPiConversationRuntime>[0]["streamSimple"];
   personalDistillationStream?: Parameters<typeof createPersonalDistillation>[0]["streamSimple"];
   companyReader?: CompanyReader;
   radarService?: RadarService;
@@ -212,6 +214,7 @@ export async function buildApp({
     return outlets.fetchLatest({ outletIds, lookbackHours: row.lookback_hours }, signal);
   } : undefined;
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
+    streamSimple: conversationStream,
     peopleDirectory,
     company: companyMemory.company,
     personal: personalMemory,

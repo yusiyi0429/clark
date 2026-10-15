@@ -68,7 +68,7 @@ function stream(final: AssistantMessage) {
 describe("controlled Pi conversation adapter public behavior", () => {
   it("injects this turn's Anchor on first and tool requests without persisting it", async () => {
     const captures: Context[] = [];
-    const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(testEnv),
+    const runtime = await createPiConversationRuntime({ peopleDirectory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1", apiKey: "test", modelId: "fake-light",
       streamSimple: (_model, context) => {
         captures.push({ ...context, messages: structuredClone(context.messages) });
@@ -398,9 +398,15 @@ describe("controlled Pi conversation adapter public behavior", () => {
       search,
       streamSimple: (_model, context) => {
         if (context.systemPrompt.includes("context summarization assistant")) {
+          expect(JSON.stringify(context.messages)).not.toContain("临时自动压缩锚点");
+          expect(JSON.stringify(context.messages)).not.toContain("临时自动参考");
           return stream(message([{ type: "text", text: "自动压缩摘要" }], "stop"));
         }
         regularCalls += 1;
+        if (regularCalls >= 3) {
+          expect(JSON.stringify(context.messages).match(/临时自动压缩锚点/g)).toHaveLength(1);
+          expect(JSON.stringify(context.messages)).toContain("临时自动参考");
+        }
         if (regularCalls === 3) return stream(message([{
           type: "toolCall", id: "search-auto", name: "web_search", arguments: { query: "latest" },
         }], "toolUse", highUsage));
@@ -438,6 +444,8 @@ describe("controlled Pi conversation adapter public behavior", () => {
         scope: "global",
         viewer: CEO_VIEWER,
         message: "查询当前事实",
+        anchor: { view: { scene: "公司首页", summary: "临时自动压缩锚点", items: [], more: false }, read: async () => ({}) },
+        references: [{ handle: "R1", kind: "attachment", title: "临时自动参考", text: "不写入压缩" }],
         currentObject: null,
         referencesSnapshot: [],
         runtimeEntries: JSON.parse(JSON.stringify(middle.runtimeEntries)),
@@ -467,11 +475,14 @@ describe("controlled Pi conversation adapter public behavior", () => {
       apiKey: "test-key",
       modelId: "fake-light",
       compactionModelId: "fake-compaction",
-      streamSimple: (model) => {
+      streamSimple: (model, context) => {
         if (model.id === "fake-compaction") {
+          expect(JSON.stringify(context.messages)).not.toContain("临时手动压缩锚点");
+          expect(JSON.stringify(context.messages)).not.toContain("临时手动参考");
           return stream(message([{ type: "text", text: "旧讨论的压缩摘要" }], "stop"));
         }
         lightTurns += 1;
+        if (lightTurns === 3) expect(JSON.stringify(context.messages).match(/临时手动压缩锚点/g)).toHaveLength(1);
         return stream(message([{ type: "text", text: `light-${lightTurns}` }], "stop"));
       },
     });
@@ -506,6 +517,8 @@ describe("controlled Pi conversation adapter public behavior", () => {
         scope: "global",
         viewer: CEO_VIEWER,
         message: "继续",
+        anchor: { view: { scene: "公司首页", summary: "临时手动压缩锚点", items: [], more: false }, read: async () => ({}) },
+        references: [{ handle: "R1", kind: "attachment", title: "临时手动参考", text: "不写入压缩" }],
         currentObject: null,
         referencesSnapshot: [],
         runtimeEntries: roundTripped,
