@@ -10,7 +10,7 @@ import { AttachmentStatus } from "./ConversationAttachments";
 import { ConversationNotice, ConversationThinking, ConversationTurns } from "./Transcript";
 import { useReferences } from "./references";
 import { useColumnMode } from "./useColumnMode";
-import { useConversation, type ConversationData } from "./useConversation";
+import { useConversation, type ConversationData, type AnchorSelection } from "./useConversation";
 import { useMissionGroup } from "./useMissionGroup";
 import { useThreadGroup } from "./useTaskGroup";
 import { ThreadMembersMenu } from "./ThreadMembersMenu";
@@ -25,7 +25,7 @@ import type { QuotePrefill, TextQuote } from "./quotes";
 import groupStyles from "@/styles/mission-group.module.css";
 import w from "@/styles/app-shell.module.css";
 
-export type ConversationTarget = { scope: string; label: string; group?: DetailGroup };
+export type ConversationTarget = { scope: string; label: string; cards?: Card[]; anchorSelection?: AnchorSelection; group?: DetailGroup };
 const GLOBAL: ConversationTarget = { scope: "global", label: "我的 Agent" };
 
 export type ConversationUiState = {
@@ -83,7 +83,9 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { targ
     window.addEventListener("viewing-material-changed", changed);
     return () => window.removeEventListener("viewing-material-changed", changed);
   }, [target.scope]);
-  const data = useConversation(target.scope, viewingMaterial);
+  const currentCard = target.cards?.find(card => card.conversation?.scope === target.scope || card.id === target.scope);
+  const anchorSelection = target.anchorSelection ?? (currentCard ? { cardId: currentCard.id, version: currentCard.version } : undefined);
+  const data = useConversation(target.scope, viewingMaterial, anchorSelection);
   const references = useReferences();
   const global = target.scope === "global";
   const items = references?.items ?? [];

@@ -9,6 +9,7 @@ const harness = vi.hoisted(() => ({
   rail: null as { channel: string; onChannel: (channel: string) => void } | null,
   agent: null as { prefill: { text: string; nonce: number } | null; onPrefillUsed: () => void; data: ConversationData } | null,
   group: null as { onSend: (body: string) => unknown } | null,
+  lastAnchor: undefined as { cardId: string; version: number } | undefined,
   privateSend: vi.fn().mockResolvedValue(true), groupSend: vi.fn().mockResolvedValue(true),
   column: { mode: "strip" as "strip" | "expanded", narrow: false, setMode: vi.fn() },
 }));
@@ -33,8 +34,8 @@ vi.mock("react", async (importOriginal) => {
     },
   };
 });
-vi.mock("./useConversation", () => ({ useConversation: (scope: string) => ({ scope, messages: [], streaming: false,
-  attachments: [], error: null, send: harness.privateSend }) }));
+vi.mock("./useConversation", () => ({ useConversation: (scope: string, _material: unknown, anchor: { cardId: string; version: number } | undefined) => { harness.lastAnchor = anchor; return { scope, messages: [], streaming: false,
+  attachments: [], error: null, send: harness.privateSend }; } }));
 vi.mock("./useMissionGroup", () => ({ useMissionGroup: () => ({ view: { members: [], entries: [] }, send: harness.groupSend }) }));
 vi.mock("./useTaskGroup", () => ({ useThreadGroup: () => ({ view: { members: [], messages: [] }, catchUp: null }) }));
 vi.mock("./useColumnMode", () => ({ useColumnMode: () => harness.column }));
@@ -93,6 +94,15 @@ function setup() {
 }
 
 describe("任务卡引用进入私聊", () => {
+  it("uses the current page Card version as focus and clears it when discussing globally", () => {
+    const { props, ui, render } = setup();
+    props.page!.cards = [{ id: "mission-card:card-01", version: 4, conversation: { scope: "mission-card:card-01" } }] as NonNullable<typeof props.page>["cards"];
+    render();
+    expect(harness.lastAnchor).toEqual({ cardId: "mission-card:card-01", version: 4 });
+    ui.globalView = true; render();
+    expect(harness.lastAnchor).toBeUndefined();
+  });
+
   it.each([false, true])("从公开事项群组引用并对话，切回 Co-Agent 且不公开发送（窄屏：%s）", async (narrow) => {
     harness.column.narrow = narrow;
     const { ui, render } = setup();

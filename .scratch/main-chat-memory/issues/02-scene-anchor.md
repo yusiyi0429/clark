@@ -17,3 +17,13 @@ Status: ready-for-agent
 ## Execution
 
 Each ticket uses one implement subagent in an isolated worktree; red/green evidence and Standards/Spec review evidence must be recorded before resolution. User-approved public seams and fixed point are in ticket-breakdown.md.
+
+## Implementation evidence
+
+- Public seams approved by user: Web composer interactions, messages HTTP, Runtime.run/tool. Fixed review baseline: fed15706be1107b327fd670e8e21534fd9cdc5b6.
+- Red/green: real Pi test initially received old persisted JSON instead of Anchor; ephemeral provider dispatch now passes first request, tool continuation and restored subsequent turn while entries retain raw words only.
+- Red/green: HTTP focus initially undefined; same authorized home projection now supports selection, stale409 and missing404, bounded directory paging.
+- Red/green: Web request initially omitted selection; sends selection separately, rejected409 returns false so existing composer retains input.
+- Attachment extraction moved from query to Reference; full backend reader pages6KiB, rechecks ownership/content and per-run cursor. Ticket03 wires shared read_reference tool to this callback.
+- Relevant API run:39/39 passed before extra pagination/attachment cases; expanded HTTP suite21/21 passed; Pi16/16 passed. Web conversation86/86; contracts75/75. API/Web full runs and typechecks recorded after review below.
+- Migration060 replaces derived execution state on the first schema2 turn, restoring recent raw discussion and preserving original messages.

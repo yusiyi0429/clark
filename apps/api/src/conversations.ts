@@ -25,6 +25,8 @@ import { canReadTask, getTaskView } from "./tasks.js";
 import type { MemoryPerson } from "./companyMemory.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
 
+import type { ConversationAnchor, ReferenceView } from "./conversationAnchor.js";
+
 export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
   | { type: "warning"; code: "RUNTIME_RECREATED"; message: string }
@@ -42,6 +44,10 @@ export type ConversationRuntime = {
     /** 这一轮是谁在问：CEO 用 CEO Agent；成员用 DRI Agent（不带 CEO 决策面工具与首页全局上下文）。 */
     viewer: { personId: string; displayName: string; role: SessionRole };
     message: string;
+    anchor?: ConversationAnchor;
+    rebuildFromRaw?: boolean;
+    references?: ReferenceView[];
+    readReference?: (args: { handle: string; cursor?: string }) => Promise<unknown>;
     currentObject: TReferenceSnapshot | null;
     runId?: string;
     referencesSnapshot: TReferenceSnapshot[];

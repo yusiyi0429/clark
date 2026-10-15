@@ -11,6 +11,60 @@ function parseSse(body: string): unknown[] {
 }
 
 describe("Conversation HTTP/SSE public seam", () => {
+  it("uses the authorized home Cards as Anchor, validates focus and preserves the raw query", async () => {
+    const turns: Parameters<ConversationRuntime["run"]>[0][] = [];
+    const t = await createTestApp({}, { async run(input) { turns.push(input); return { assistantMessage: "已理解", runtimeEntries: [] }; } });
+    try {
+      const cookie = await t.loginCookie();
+      const issue = await t.createIssue();
+      const cards = (await t.app.inject({ url: "/api/cards/home", headers: { cookie } })).json().cards;
+      const post = (cardId: string, version: number) => t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin }, payload: { message: "解释当前项", anchorSelection: { cardId, version } } });
+      const accepted = await post(issue.id, issue.version);
+      expect(accepted.statusCode).toBe(200);
+      expect(turns[0].anchor?.view.focus).toMatchObject({ title: issue.title, handle: "A1" });
+      expect(turns[0].anchor?.view.items.map(item => item.title)).toEqual(expect.arrayContaining([issue.title]));
+      expect(turns[0].message).toBe("解释当前项");
+      const expanded = await turns[0].anchor!.read({ handle: "A1" });
+      expect(expanded).toMatchObject({ title: issue.title, meaning: "当前页面内容" });
+      expect(cards.map((card: {title: string}) => card.title)).toContain(issue.title);
+      expect((await post(issue.id, 999)).json()).toMatchObject({ code: "ANCHOR_VERSION_CONFLICT" });
+      expect((await post("issue:11111111-1111-4111-8111-111111111111", 1)).statusCode).toBe(404);
+      const history = (await t.app.inject({ url: "/api/conversations/global/messages", headers: { cookie } })).json();
+      expect(history.messages[0].content).toBe("解释当前项");
+    } finally { await t.close(); }
+  });
+
+  it("paginates only visible home items and does not expose CEO objects to a member", async () => {
+    let ceoItems = 0;
+    const runtime: ConversationRuntime = { async run(input) {
+      expect(input.anchor!.view.items.length).toBeLessThanOrEqual(12);
+      expect(Buffer.byteLength(JSON.stringify(input.anchor!.view))).toBeLessThanOrEqual(8192);
+      if (input.viewer.role === "member") {
+        expect(JSON.stringify(input.anchor!.view)).not.toContain("CEO独有议题");
+        expect(await input.anchor!.read({ handle: "A999" })).toMatchObject({ unavailable: true });
+      } else {
+        let page = await input.anchor!.read({}) as { items: unknown[]; cursor?: string };
+        ceoItems = page.items.length;
+        while (page.cursor) {
+          page = await input.anchor!.read({ cursor: page.cursor }) as typeof page;
+          ceoItems += page.items.length;
+        }
+      }
+      return { assistantMessage: "已理解", runtimeEntries: [] };
+    } };
+    const t = await createTestApp({}, runtime);
+    try {
+      const ceo = await t.loginCookie();
+      const member = await t.memberCookie();
+      for (let index = 0; index < 14; index++) await t.createIssue({ title: `CEO独有议题${index}` });
+      for (const cookie of [ceo, member]) expect((await t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin }, payload: { message: "当前页面有什么" } })).statusCode).toBe(200);
+      const cards = (await t.app.inject({ url: "/api/cards/home", headers: { cookie: ceo } })).json().cards;
+      expect(ceoItems).toBe(cards.length);
+    } finally { await t.close(); }
+  });
+
   it("authenticates history reads and returns an empty stable global scope", async () => {
     const t = await createTestApp();
     try {

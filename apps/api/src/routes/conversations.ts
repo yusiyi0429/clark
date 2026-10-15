@@ -1,3 +1,7 @@
+import { readHomeCards } from "./cards.js";
+import { readMemberHome } from "./me.js";
+import { buildSceneAnchor } from "../sceneAnchor.js";
+import { boundedText, readableValue, type ReferenceView } from "../conversationAnchor.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
@@ -88,6 +92,32 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             ...(material.url ? { url: material.url } : {}) } });
         } catch { return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在"); }
       }
+      const pageSnapshots = async () => {
+        if (req.params.scope !== "global") {
+          const current = await scopeObjectFor(person, req.params.scope);
+          if (current.visible && current.snapshot && object.snapshot && Object.hasOwn(object.snapshot, "viewingMaterial"))
+            Object.assign(current.snapshot, { viewingMaterial: (object.snapshot as unknown as { viewingMaterial: unknown }).viewingMaterial });
+          return current.visible && current.snapshot ? [current.snapshot] : [];
+        }
+        if (person.role === "ceo") return (await readHomeCards(ctx, person)).cards.map(card => ({
+          cardId: card.id, version: card.version, kind: card.kind, title: card.title, objectRef: card.objectRef, payload: card.payload,
+        }));
+        const home = await readMemberHome(ctx, person);
+        const scopes = [...home.myTasks.map(task => `task:${task.id}`), ...home.work.missions.map(mission => `mission:${mission.id}`),
+          ...home.work.missionCards.map(card => `mission-card:${card.cardId}`)];
+        const projected = await Promise.all(scopes.map(scope => getScopeObject(q, scope, env.sessionSecret,
+          { person, people: peopleDirectory.searchPeople(undefined), now: ctx.now() })));
+        return projected.flatMap(result => result.visible && result.snapshot ? [result.snapshot] : []);
+      };
+      let anchor;
+      try {
+        anchor = await buildSceneAnchor({ scene: req.params.scope === "global" ? (person.role === "ceo" ? "公司首页" : "我的工作台") : "对象详情",
+          selection: req.body.anchorSelection, list: pageSnapshots });
+      } catch (error) {
+        const cause = error as { status?: number; code?: string; message: string };
+        if (cause.status) return fail(reply, cause.status, cause.code!, cause.message);
+        throw error;
+      }
       // 成员在 2a 看不到任何 Card，也不能借显式引用把 Card 带进自己的 Agent。
       if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
       const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret, person);
@@ -117,9 +147,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
       let runOutput: unknown;
       try {
         // 主对话 = 这个人最早未删除的会话；不存在则在锁内惰性创建。
-        let row: { id: string; pi_session_id: string; runtime_entries: unknown[] };
-        const existing = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[] }>(
-          "SELECT id, pi_session_id, runtime_entries FROM conversations WHERE owner_id = $1 AND scope = $2 AND deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1",
+        let row: { id: string; pi_session_id: string; runtime_entries: unknown[]; context_schema_version?: number };
+        const existing = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[]; context_schema_version?: number }>(
+          "SELECT id, pi_session_id, runtime_entries, context_schema_version FROM conversations WHERE owner_id = $1 AND scope = $2 AND deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1",
           [owner, req.params.scope],
         );
         if (existing.rows[0]) {
@@ -147,9 +177,42 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             throw error;
           }
         }
-        const runtimeMessage = attachments.length
-          ? `${req.body.message}\n\n${attachments.map((attachment) => `[附件 ${attachment.fileName}]\n${attachment.extractedText}`).join("\n\n")}`
-          : req.body.message;
+        const turnReferences: ReferenceView[] = [
+          ...references.snapshots.map((snapshot, index) => ({ handle: `R${index + 1}`, kind: "explicit" as const, title: snapshot.title,
+            text: boundedText(JSON.stringify(readableValue(snapshot.payload)), 4096), state: "本地页面引用" })),
+          ...attachments.map((attachment, index) => ({ handle: `R${references.snapshots.length + index + 1}`, kind: "attachment" as const,
+            title: attachment.fileName, text: boundedText(attachment.extractedText, 4096) })),
+        ];
+        let referenceBytes = 0;
+        const boundedReferences = turnReferences.filter(reference => { referenceBytes += Buffer.byteLength(JSON.stringify(reference)); return referenceBytes <= 24576; });
+        const readReference = async ({ handle, cursor }: { handle: string; cursor?: string }) => {
+          const index = turnReferences.findIndex(reference => reference.handle === handle);
+          if (index < 0) return { unavailable: true, message: "参考项不存在" };
+          let offset = 0;
+          if (cursor) {
+            const prefix = `${runId}:${handle}:`;
+            if (!cursor.startsWith(prefix) || !/^\d+$/.test(cursor.slice(prefix.length))) return { unavailable: true, message: "参考游标已失效" };
+            offset = Number(cursor.slice(prefix.length));
+          }
+          let fullText: string;
+          if (index < references.snapshots.length) {
+            const snapshot = references.snapshots[index];
+            const latest = await resolveReferenceSnapshots(q, [{ cardId: snapshot.cardId, version: snapshot.version }], env.sessionSecret, person);
+            if (!("snapshots" in latest)) return { unavailable: true, message: "参考内容已更新或不可见" };
+            fullText = JSON.stringify(readableValue(latest.snapshots[0].payload));
+          } else {
+            const attachment = attachments[index - references.snapshots.length];
+            try {
+              const [latest] = await loadConversationAttachments(conversationAttachmentStorageDir, row.id, [attachment.id]);
+              if (latest.sha256 !== attachment.sha256) return { unavailable: true, message: "附件内容已变化" };
+              fullText = latest.extractedText;
+            } catch { return { unavailable: true, message: "附件已不可用" }; }
+          }
+          const text = boundedText(fullText.slice(offset), 6000);
+          const next = offset + text.length;
+          return { handle, title: turnReferences[index].title, kind: turnReferences[index].kind, text,
+            more: next < fullText.length, ...(next < fullText.length ? { cursor: `${runId}:${handle}:${next}` } : {}) };
+        };
         const next = await client.query<{ sequence: number }>(
           `SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence
              FROM conversation_messages WHERE conversation_id = $1`,
@@ -222,7 +285,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             scope: req.params.scope,
             runId,
             viewer: { personId: owner, displayName: personDisplayNames(peopleDirectory).get(owner) ?? owner, role: person.role },
-            message: runtimeMessage,
+            message: req.body.message,
+            anchor,
+            references: boundedReferences,
+            readReference,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,
             recentMessages: recent.rows.reverse().map((message) => ({
@@ -230,13 +296,14 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
               content: message.content,
               createdAt: message.created_at.toISOString(),
             })),
-            runtimeEntries: row.runtime_entries,
+            runtimeEntries: row.context_schema_version === 2 ? row.runtime_entries : [],
+            rebuildFromRaw: row.context_schema_version !== 2 && recent.rows.length > 0,
             piSessionId: row.pi_session_id,
             signal: abort.signal,
             emit,
             checkpoint: async (runtimeEntries) => {
               await client.query(
-                "UPDATE conversations SET runtime_entries = $2::jsonb, runtime_updated_at = now() WHERE id = $1",
+                "UPDATE conversations SET runtime_entries = $2::jsonb, context_schema_version = 2, runtime_updated_at = now() WHERE id = $1",
                 [row.id, JSON.stringify(runtimeEntries)],
               );
             },
@@ -261,6 +328,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             await client.query(
               `UPDATE conversations
                   SET runtime_entries = $2::jsonb,
+                      context_schema_version = 2,
                       pi_session_id = $3,
                       runtime_updated_at = now(),
                       recreated_at = CASE WHEN $4::boolean THEN now() ELSE recreated_at END,
@@ -302,9 +370,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           if (reason?.code === "TURN_TIMEOUT") {
             emit({ type: "error", code: "TURN_TIMEOUT", message: reason.message ?? "Conversation turn exceeded 180 seconds" });
           } else if (!abort.signal.aborted) {
-            const code = (err as { code?: string }).code === "SEARCH_BUDGET_EXHAUSTED"
-              ? "SEARCH_BUDGET_EXHAUSTED"
-              : "RUNTIME_FAILED";
+            const errorCode = (err as { code?: string }).code;
+            const code = errorCode && ["SEARCH_BUDGET_EXHAUSTED", "TURN_CONTEXT_TOO_LARGE", "CURRENT_QUERY_MISMATCH"].includes(errorCode) ? errorCode : "RUNTIME_FAILED";
             emit({ type: "error", code, message: (err as Error).message || "Pi Runtime 失败" });
           }
         } finally {

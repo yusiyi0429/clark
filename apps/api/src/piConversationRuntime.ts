@@ -1,3 +1,6 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { fallbackAnchor, boundedText, readableValue } from "./conversationAnchor.js";
+import { composeTurnContext, TURN_CONTEXT_RULES, type ProviderTurnContext } from "./turnContext.js";
 import { createHash, randomUUID } from "node:crypto";
 import { Type } from "@sinclair/typebox";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -12,6 +15,7 @@ import {
 } from "@warmap/contracts";
 import {
   calculateContextTokens,
+  convertToLlm,
   createAgentSession,
   createExtensionRuntime,
   defineTool,
@@ -46,7 +50,7 @@ import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { MISSION_CARD_WRITING_RULES } from "./missionCardWritingRules.js";
 
 /** CEO 与 DRI Agent 共用的材料改写规则；能不能直接改按 canEdit（上传者和对象负责人），与 edit_material 是否开放一致。 */
-const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 currentObject.viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
+const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 Anchor 展开结果的 viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 Anchor 展开结果的 viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
 
 const SYSTEM_PROMPT = `# 角色
 
@@ -60,11 +64,7 @@ const SYSTEM_PROMPT = `# 角色
 
 # 每轮注入的上下文
 
-每轮输入是一个 JSON。\`currentObject\` 是当前页面对象的 Card 快照，含完整业务字段，Meeting 还附带本场关联 Issue。\`references\` 是本轮 CEO 显式引用的 Card 快照。\`globalContext\` 仅首页全局对话提供。\`message\` 是 CEO 本轮原话。
-
-\`globalContext\` 是首页全局对话每轮自动带入的实时摘要，包含当前周期、战场、能力、Mission 总数、待决策 Issue 和月度计划状态。涉及某个战场、能力或 DRI 的 Mission 明细时调用 \`list_missions\`，不要从总数推断。
-
-优先使用 currentObject 与 references，不要用历史对话猜测当前对象的最新状态。
+每轮最新用户消息由 anchor（当前页面与选中项）和 query（用户原话）组成。显式引用和附件通过独立 Reference 提供。优先根据本轮 Anchor 理解当前讨论范围，用 read_anchor 展开页面项；不从历史猜测当前页面状态。本地页面状态、草稿和历史快照不等于 World 最新公司事实。
 
 # 只读边界
 
@@ -118,9 +118,7 @@ function driSystemPrompt(displayName: string, personalCard = false): string {
 
 # 每轮注入的上下文
 
-每轮输入是一个 JSON。\`currentObject\` 是当前页面对象的 Card 快照，没有时为 null。\`references\` 是本轮显式引用的 Card 快照。\`message\` 是 ${displayName} 本轮原话。
-
-优先使用 currentObject 与 references，不要用历史对话猜测当前对象的最新状态。
+每轮最新用户消息由 anchor（当前页面与选中项）和 query（用户原话）组成。显式引用和附件通过独立 Reference 提供。优先根据本轮 Anchor 理解讨论范围，用 read_anchor 展开本轮页面；本地页面内容不代表 World 最新公司事实。
 
 # 只读边界
 
@@ -134,7 +132,7 @@ ${personalCard ? "当前任务卡正文也是上述边界的例外：审核中�
 
 # 工具
 
-${personalCard ? "当前任务卡的正文、公开意见和轮次已放在 currentObject；只根据这份授权资料讨论个人承诺。不能查询或推测其他人的任务卡，也不能把私聊变为公开意见。" : "- `list_missions`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。"}
+${personalCard ? "当前任务卡的正文、公开意见和轮次可用 read_anchor 或 read_mission_card 读取；只根据这份授权资料讨论个人承诺。不能查询或推测其他人的任务卡，也不能把私聊变为公开意见。" : "- `list_missions`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。"}
 - \`list_sections\`：企业知识章节目录，先看目录再决定读哪里。
 - \`search_sections\`：在企业知识内按关键词定位相关章节。
 - \`get_passages\`：读取指定章节的段落正文。
@@ -169,7 +167,7 @@ function resourceLoaderFor(systemPrompt: string): ResourceLoader {
     getPrompts: () => ({ prompts: [], diagnostics: [] }),
     getThemes: () => ({ themes: [], diagnostics: [] }),
     getAgentsFiles: () => ({ agentsFiles: [] }),
-    getSystemPrompt: () => systemPrompt,
+    getSystemPrompt: () => `${systemPrompt}\n\n${TURN_CONTEXT_RULES}`,
     getSystemPromptSource: () => undefined,
     getAppendSystemPrompt: () => [],
     getAppendSystemPromptSources: () => [],
@@ -372,6 +370,15 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
     })),
   });
   await modelRuntime.setRuntimeApiKey("warmap", options.apiKey);
+  const turnContext = new AsyncLocalStorage<ProviderTurnContext>();
+  const dispatch = modelRuntime.streamSimple.bind(modelRuntime);
+  modelRuntime.streamSimple = (model, context, streamOptions) => {
+    if (!context.systemPrompt?.includes(TURN_CONTEXT_RULES)) return dispatch(model, context, streamOptions);
+    const turn = turnContext.getStore();
+    if (!turn) throw new Error("MISSING_TURN_CONTEXT");
+    try { return dispatch(model, composeTurnContext(context, turn), streamOptions); }
+    catch (error) { turn.error = error as Error; throw error; }
+  };
   const model = modelRuntime.getModel("warmap", options.modelId);
   if (!model) throw new Error(`Pi model not found: warmap/${options.modelId}`);
   const compactionModel = modelRuntime.getModel("warmap", options.compactionModelId ?? options.modelId);
@@ -382,6 +389,12 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
     modelSlot: "light",
     modelId: options.modelId,
     async run(input) {
+      const anchor = input.anchor ?? fallbackAnchor(input.scope, input.currentObject);
+      const anchorTools = [defineTool({ name: "read_anchor", label: "展开当前页面",
+        description: "展开本轮页面项或分页目录；只描述本地页面状态，不代表 World 公司事实。",
+        parameters: Type.Object({ handle: Type.Optional(Type.String({ maxLength: 20 })), cursor: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false }),
+        execute: async (_id, args) => { const value = await anchor.read(args); return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value }; },
+      })];
       const search = options.search ?? unavailableWebSearchAdapter;
       let outletFeedRead = false;
       let searchCount = 0;
@@ -558,9 +571,9 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
         },
       })] : [];
-      const recreated = !validRuntimeEntries(input.runtimeEntries, input.piSessionId);
+      const recreated = input.rebuildFromRaw === true || !validRuntimeEntries(input.runtimeEntries, input.piSessionId);
       const piSessionId = recreated ? randomUUID() : input.piSessionId;
-      const warning = recreated ? "Pi runtime entries were corrupted; rebuilt from current object and recent raw messages" : undefined;
+      const warning = recreated ? (input.rebuildFromRaw ? "Conversation context upgraded; rebuilt from recent raw messages" : "Pi runtime entries were corrupted; rebuilt from current object and recent raw messages") : undefined;
       const manager = SessionManager.inMemory(
         process.cwd(),
         { id: piSessionId },
@@ -577,8 +590,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         modelRuntime,
         resourceLoader: personalCard ? resourceLoaderFor(`${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`)
           : isCeo ? ceoResourceLoader : resourceLoaderFor(driSystemPrompt(input.viewer.displayName)),
-        customTools: [...mcpTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...outletFeedTools, searchTool],
-        tools: [...COMPANY_MEMORY_TOOLS, ...viewerBoardTools.map((tool) => tool.name), ...missionCardTools.map((tool) => tool.name), ...materialTools.map((tool) => tool.name), ...reviewTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
+        customTools: [...anchorTools, ...mcpTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...outletFeedTools, searchTool],
+        tools: ["read_anchor", ...COMPANY_MEMORY_TOOLS, ...viewerBoardTools.map((tool) => tool.name), ...missionCardTools.map((tool) => tool.name), ...materialTools.map((tool) => tool.name), ...reviewTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
         sessionManager: manager,
         settingsManager: settings,
         thinkingLevel: "off",
@@ -622,13 +635,24 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           await checkpointDone;
           await session.setModel(model);
         }
-        const prompt = JSON.stringify({
-          currentObject: input.currentObject,
-          references: input.referencesSnapshot,
-          globalContext: isCeo && input.scope === "global" && options.globalContext ? await options.globalContext() : null,
-          message: input.message,
-        });
-        await session.prompt(prompt, { expandPromptTemplates: false, source: "rpc" });
+        const references = input.references ?? input.referencesSnapshot.map((snapshot, index) => ({ handle: `R${index + 1}`, kind: "explicit" as const,
+          title: snapshot.title, text: boundedText(JSON.stringify(readableValue(snapshot.payload)), 4096), state: "本地页面引用" }));
+        const turn: ProviderTurnContext = { query: input.message, anchor: anchor.view, references };
+        const preflightContext = () => composeTurnContext({ systemPrompt: session.systemPrompt,
+          messages: [...convertToLlm(session.messages), { role: "user", content: input.message, timestamp: Date.now() }],
+          tools: session.getAllTools(),
+        }, turn);
+        try { preflightContext(); }
+        catch (error) {
+          if ((error as { code?: string }).code !== "TURN_CONTEXT_TOO_LARGE" || !session.messages.length) throw error;
+          await session.setModel(compactionModel);
+          await session.compact("保留用户意图、下一步和未决问题；历史事实仅代表当时讨论，不当作当前公司事实。");
+          await checkpointDone;
+          await session.setModel(model);
+          preflightContext();
+        }
+        await turnContext.run(turn, () => session.prompt(input.message, { expandPromptTemplates: false, source: "rpc" }));
+        if (turn.error) throw turn.error;
         await checkpointDone;
         if (searchLimitReached) throw searchBudgetError;
         if (input.signal.aborted) throw new Error("Conversation aborted");

@@ -70,9 +70,15 @@ export const ConversationAttachmentUploadResponse = Type.Object(
   { additionalProperties: false },
 );
 
+export const AnchorSelection = Type.Object({
+  cardId: Type.String({ minLength: 1, maxLength: 256 }), version: Type.Integer({ minimum: 1 }),
+  selectedText: Type.Optional(Type.String({ maxLength: 2000 })),
+}, { additionalProperties: false });
+
 export const ConversationMessageRequest = Type.Object(
   {
     message: Type.String({ minLength: 1, maxLength: 20_000 }),
+    anchorSelection: Type.Optional(AnchorSelection),
     references: Type.Optional(Type.Array(CardReference, { maxItems: 20 })),
     attachments: Type.Optional(Type.Array(ConversationAttachmentRef, { maxItems: 10 })),
     /** 工单 09：页面左侧正在看的那份材料；必须属于这个 scope 的对象。 */
@@ -172,3 +178,5 @@ export type TConversationMessageRequest = Static<typeof ConversationMessageReque
 export type TConversationMessage = Static<typeof ConversationMessage>;
 export type TConversationHistory = Static<typeof ConversationHistory>;
 export type TConversationSseEvent = Static<typeof ConversationSseEvent>;
+
+export type TAnchorSelection = Static<typeof AnchorSelection>;

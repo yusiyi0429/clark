@@ -17,12 +17,14 @@ function multipart(filename: string, content: string): { headers: Record<string,
 }
 
 /** 假 runtime：记下每一轮收到的消息（含拼接的附件抽取文本）。 */
-function recordingRuntime(): ConversationRuntime & { messages: string[] } {
+function recordingRuntime(): ConversationRuntime & { messages: string[]; references: unknown[][] } {
   const messages: string[] = [];
+  const references: unknown[][] = [];
   return {
-    messages,
+    messages, references,
     async run(input) {
       messages.push(input.message);
+      references.push(input.references ?? []);
       input.emit({ type: "message", delta: "收到" });
       return { assistantMessage: "收到", runtimeEntries: [] };
     },
@@ -140,6 +142,36 @@ describe("每人每页一条主对话", () => {
     });
   });
 
+  it("expands attachment References in bounded pages and rejects another turn's cursor", async () => {
+    const body = "渠道事实。".repeat(1800);
+    let previousCursor: string | undefined;
+    let checks = 0;
+    const runtime: ConversationRuntime = { async run(input) {
+      expect(input.message).toBe("看长材料");
+      expect(input.references?.[0].text.length).toBeLessThan(body.length);
+      if (previousCursor) expect(await input.readReference!({ handle: "R1", cursor: previousCursor })).toMatchObject({ unavailable: true });
+      let cursor: string | undefined;
+      let collected = "";
+      do {
+        const page = await input.readReference!({ handle: "R1", cursor }) as { text: string; cursor?: string };
+        expect(Buffer.byteLength(page.text)).toBeLessThanOrEqual(6000);
+        collected += page.text;
+        cursor = page.cursor;
+        if (cursor && !previousCursor) previousCursor = cursor;
+      } while (cursor);
+      expect(collected).toBe(body);
+      checks++;
+      return { assistantMessage: "已读完", runtimeEntries: [] };
+    } };
+    await withApp(runtime, async t => {
+      const cookie = await t.loginCookie();
+      const uploaded = await upload(t, cookie, multipart("long.md", body));
+      const id = uploaded.json().attachments[0].id;
+      for (let turn = 0; turn < 2; turn++) expect((await send(t, cookie, { message: "看长材料", attachments: [{ id }] })).statusCode).toBe(200);
+      expect(checks).toBe(2);
+    });
+  });
+
   it("没有对话时上传会建主对话；带附件 id 发消息能读到抽取文本；历史只留元数据", async () => {
     const runtime = recordingRuntime();
     await withApp(runtime, async (t, attachmentDir) => {
@@ -158,10 +190,10 @@ describe("每人每页一条主对话", () => {
 
       const sent = await send(t, cookie, { message: "看附件", attachments: [{ id: info.id }] });
       expect(sent.statusCode).toBe(200);
-      // Runtime 只收到有界抽取文本拼接，收不到存储位置。
+      // Runtime receives raw Query and bounded attachment References separately.
       expect(runtime.messages[0]).toContain("看附件");
-      expect(runtime.messages[0]).toContain("[附件 note.md]");
-      expect(runtime.messages[0]).toContain("东南亚渠道预算追加 15%。");
+      expect(runtime.messages[0]).toBe("看附件");
+      expect(runtime.references[0]).toMatchObject([{ kind: "attachment", title: "note.md", text: expect.stringContaining("东南亚渠道预算追加 15%。") }]);
       expect(runtime.messages[0]).not.toContain(main.id as string);
       // 发消息用的是同一条主对话，没有另建。
       expect(await liveConversations(t)).toEqual([main]);

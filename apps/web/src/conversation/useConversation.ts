@@ -16,6 +16,7 @@ export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
 /** clark 的三段思考：尚无事件 = 思考；开始用工具 = 快速查证；首个文字 = 整理回答。 */
 export type ThinkingStage = "thinking" | "researching" | "answering";
+export type AnchorSelection = { cardId: string; version: number; selectedText?: string };
 export type CardRef = { cardId: string; version: number };
 
 export function messagesEndpoint(scope: string): string {
@@ -33,6 +34,10 @@ export function failureCopy(code: string | undefined, fallback?: string): string
       return "这次回答等待较久，已停止。你仍可以打开战场、查看目标或研究已有议题。";
     case "TURN_IN_PROGRESS":
       return "上一轮回答还没结束，请稍后再发。";
+    case "ANCHOR_VERSION_CONFLICT":
+      return "当前卡片已更新，请刷新页面后再发。输入已保留。";
+    case "ANCHOR_NOT_FOUND":
+      return "当前选中项已不存在或不在这个页面，请刷新后再发。";
     case "REFERENCE_VERSION_CONFLICT":
       return "引用的卡片已更新，请重新引用后再发。";
     case "REFERENCE_NOT_FOUND":
@@ -52,7 +57,7 @@ class TurnError extends Error {
   }
 }
 
-export function useConversation(scope: string, viewingMaterial: { id: string; editable: boolean } | null = null) {
+export function useConversation(scope: string, viewingMaterial: { id: string; editable: boolean } | null = null, anchorSelection?: AnchorSelection) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<ConversationStatus>("idle");
   const [partial, setPartial] = useState("");
@@ -145,6 +150,7 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
         method: "POST",
         headers: { accept: "text/event-stream", "content-type": "application/json" },
         body: JSON.stringify({ message: text, references, attachments: attachmentRefs,
+          ...(anchorSelection ? { anchorSelection } : {}),
           ...(viewingMaterial ? { viewingMaterialId: viewingMaterial.id } : {}) }),
         signal: controller.signal,
       });

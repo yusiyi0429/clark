@@ -2510,6 +2510,11 @@ export interface components {
         };
         ConversationMessageRequest: {
             message: string;
+            anchorSelection?: {
+                cardId: string;
+                version: number;
+                selectedText?: string;
+            };
             references?: {
                 cardId: string;
                 version: number;

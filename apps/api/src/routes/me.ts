@@ -22,6 +22,18 @@ import { getMeetingRow } from "../meetingStore.js";
 import { projectMemberIssueCard, projectMemberMeetingCard } from "../memberCards.js";
 import { isActiveMember, unreadThreads } from "../threads.js";
 
+/** Same permission-filtered workspace data serves the member page and Anchor. */
+export async function readMemberHome(ctx: RouteContext, person: import("./shared.js").SessionPerson) {
+  const { q, peopleDirectory } = ctx;
+    const [myTasks, { work }, radar, weeklySync] = await Promise.all([
+      listMyTasks(q, person.personId, personDisplayNames(peopleDirectory)),
+      readMemberWork(q, peopleDirectory.searchPeople(undefined), ctx.env.sessionSecret, person, ctx.now()),
+      readMemberRadarBrief(q, person, ctx.now()),
+      readWeeklySyncReminder(q, person.personId, ctx.now()),
+    ]);
+    return { myTasks, work, radar, weeklySync };
+}
+
 // 成员工作台：普通视图对象，不走 Card/Action 签名（spec §3.5）。
 export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   const { pool, q, fail, requirePerson, companyMemory, voiceprints, dictation, materialMultipartLimitError, peopleDirectory } = ctx;
@@ -41,13 +53,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   };
 
   app.get("/api/me/home", { preHandler: requireMember, schema: { response: { 200: MeHomeResponse } } }, async (req) => {
-    const [myTasks, { work }, radar, weeklySync] = await Promise.all([
-      listMyTasks(q, req.person!.personId, names()),
-      readMemberWork(q, peopleDirectory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, ctx.now()),
-      readMemberRadarBrief(q, req.person!, ctx.now()),
-      readWeeklySyncReminder(q, req.person!.personId, ctx.now()),
-    ]);
-    return { myTasks, work, radar, weeklySync };
+    return readMemberHome(ctx, req.person!);
   });
 
   app.get("/api/me/tokens", { preHandler: requirePerson, schema: { response: { 200: ListPersonalTokensResponse } } }, async (req) => ({

@@ -66,6 +66,43 @@ function stream(final: AssistantMessage) {
 }
 
 describe("controlled Pi conversation adapter public behavior", () => {
+  it("injects this turn's Anchor on first and tool requests without persisting it", async () => {
+    const captures: Context[] = [];
+    const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(testEnv),
+      baseUrl: "https://provider.invalid/v1", apiKey: "test", modelId: "fake-light",
+      streamSimple: (_model, context) => {
+        captures.push({ ...context, messages: structuredClone(context.messages) });
+        return captures.length === 1
+          ? stream(message([{ type: "toolCall", id: "anchor-read", name: "read_anchor", arguments: { handle: "A1" } }], "toolUse"))
+          : stream(message([{ type: "text", text: "已理解" }], "stop"));
+      } });
+    try {
+      const result = await runtime.run({ scope: "global", viewer: CEO_VIEWER, message: "解释这个",
+        currentObject: null, referencesSnapshot: [], runtimeEntries: [], piSessionId: randomUUID(),
+        anchor: { view: { scene: "公司首页", summary: "当前页面", items: [{ handle: "A1", kind: "issue", title: "唯一页面锚点", state: "pending", meaning: "当前页面内容", summary: "待讨论" }], more: false },
+          read: async () => ({ text: "授权展开内容" }) },
+        references: [{ handle: "R1", kind: "attachment", title: "材料", text: "独立附件参考" }],
+        signal: new AbortController().signal, emit: () => undefined });
+      expect(captures).toHaveLength(2);
+      for (const request of captures) {
+        const current = request.messages.findLast(item => item.role === "user" && JSON.stringify(item.content).includes("解释这个"));
+        expect(JSON.stringify(current)).toContain("唯一页面锚点");
+        expect(JSON.stringify(request.messages)).toContain("独立附件参考");
+      }
+      expect(captures[1].messages.at(-1)).toMatchObject({ role: "toolResult", toolCallId: "anchor-read", isError: false });
+      expect(JSON.stringify(result.runtimeEntries)).not.toContain("唯一页面锚点");
+      expect(JSON.stringify(result.runtimeEntries)).not.toContain("独立附件参考");
+      expect(JSON.stringify(result.runtimeEntries)).toContain("解释这个");
+      await runtime.run({ scope: "global", viewer: CEO_VIEWER, message: "换个页面",
+        currentObject: null, referencesSnapshot: [], runtimeEntries: JSON.parse(JSON.stringify(result.runtimeEntries)), piSessionId: result.piSessionId!,
+        anchor: { view: { scene: "公司首页", summary: "全新的页面锚点", items: [], more: false }, read: async () => ({ unavailable: true }) },
+        signal: new AbortController().signal, emit: () => undefined });
+      expect(JSON.stringify(captures.at(-1)?.messages)).toContain("全新的页面锚点");
+      expect(JSON.stringify(captures.at(-1)?.messages)).not.toContain("唯一页面锚点");
+      expect(JSON.stringify(captures.at(-1)?.messages)).not.toContain("独立附件参考");
+    } finally { await runtime.close?.(); }
+  });
+
   it("材料提议工具拒绝非唯一 find，唯一修改只生成本人的 pending 提议", async () => {
     const t = await createTestApp();
     const issue = await t.createIssue();
@@ -576,7 +613,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       expect(first.assistantMessage).toBe("MCP OK");
       expect(first.runtimeEntries.length).toBeGreaterThan(0);
       expect(contexts[0].tools?.map((tool) => tool.name).sort()).toEqual([
-        "get_passages", "list_sections", "search_people", "search_sections", "web_search",
+        "get_passages", "list_sections", "read_anchor", "search_people", "search_sections", "web_search",
       ]);
       expect(contexts[0].tools?.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));
       expect(contexts[0].systemPrompt).toContain("不能执行任何业务写入");
@@ -751,7 +788,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       expect(memberTools).toContain("list_missions");
       expect(memberTools).not.toContain("get_warmap_overview");
       expect(memberTools).not.toContain("list_pending_issues");
-      expect(userPrompt(contexts[0]).globalContext).toBeNull();
+      expect(userPrompt(contexts[0]).globalContext).toBeUndefined();
       expect(globalContextReads).toBe(0);
       expect(contexts[0].systemPrompt).toContain("测试乙 的 DRI Agent");
       expect(contexts[0].systemPrompt).toContain("企业知识");
@@ -764,7 +801,8 @@ describe("controlled Pi conversation adapter public behavior", () => {
       await turn(CEO_VIEWER, "55555555-5555-4555-8555-555555555555");
       const ceoTools = contexts[1].tools?.map((tool) => tool.name) ?? [];
       expect(ceoTools).toEqual(expect.arrayContaining(["get_warmap_overview", "list_missions", "list_pending_issues"]));
-      expect(userPrompt(contexts[1]).globalContext).toEqual({ period: "2026-09" });
+      expect(userPrompt(contexts[1]).globalContext).toBeUndefined();
+      expect(globalContextReads).toBe(0);
       expect(contexts[1].systemPrompt).toContain("你是天枢里 CEO 的 Agent，负责只读决策对话");
     } finally {
       await runtime.close?.();

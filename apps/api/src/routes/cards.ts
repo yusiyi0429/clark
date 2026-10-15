@@ -11,6 +11,31 @@ import { personDisplayNames } from "../people.js";
 import { projectRadarCard } from "../signals.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
+/** Shared authorized projection for the CEO page and main-chat Anchor. */
+export async function readHomeCards(ctx: RouteContext, person: import("./shared.js").SessionPerson): Promise<TCardCollection> {
+  const { q, env, now, peopleDirectory, radar } = ctx;
+    const at = now();
+    const period = companyPeriod(at);
+    const people = peopleDirectory.searchPeople(undefined);
+    const [radarCard, battlefields, issues, capabilities, meetingRows, missions, monthlyNotice, rounds] = await Promise.all([
+      projectRadarCard(q, radar.providerStatus),
+      listBattlefieldCards(q, period, personDisplayNames(peopleDirectory)),
+      listPendingIssueCards(q, env.sessionSecret),
+      listCapabilityCards(q),
+      listMeetingRows(q),
+      // 首页只读当前公司周期的 Mission：战场卡 Mission 数、能力面板数量与入口都从这份 collection 派生，不保存汇总；历史周期留在 /api/cards/missions
+      listMissionCards(q, env.sessionSecret, personDisplayNames(peopleDirectory), period, person),
+      getMonthlyPlanNotice(q, env.sessionSecret, at),
+      listMissionRoundCards(q, people, env.sessionSecret, person, undefined, at),
+    ]);
+    // 会前通知看 scheduled；会后有待 CEO 确认的战略议题的会议也进首页（通知栏「需要你确认」）
+    const meetings = meetingRows
+      .filter((row) => hasMeetingNotice(row, person.personId, at) || hasPendingStrategicItem(row.outcome))
+      .map((row) => projectMeetingCard(row, env.sessionSecret, at));
+    const monthly = monthlyNotice && (monthlyNotice.payload as { status?: string }).status !== "confirmed" ? [monthlyNotice] : [];
+    return { cards: [radarCard, ...battlefields, ...capabilities, ...issues, ...meetings, ...missions, ...monthly, ...rounds] };
+}
+
 export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
   const { q, env, fail, requireCEO, now, peopleDirectory, radar } = ctx;
 
@@ -22,26 +47,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
     })),
   }));
   app.get("/api/cards/home", { preHandler: requireCEO }, async (req): Promise<TCardCollection> => {
-    const at = now();
-    const period = companyPeriod(at);
-    const people = peopleDirectory.searchPeople(undefined);
-    const [radarCard, battlefields, issues, capabilities, meetingRows, missions, monthlyNotice, rounds] = await Promise.all([
-      projectRadarCard(q, radar.providerStatus),
-      listBattlefieldCards(q, period, personDisplayNames(peopleDirectory)),
-      listPendingIssueCards(q, env.sessionSecret),
-      listCapabilityCards(q),
-      listMeetingRows(q),
-      // 首页只读当前公司周期的 Mission：战场卡 Mission 数、能力面板数量与入口都从这份 collection 派生，不保存汇总；历史周期留在 /api/cards/missions
-      listMissionCards(q, env.sessionSecret, personDisplayNames(peopleDirectory), period, req.person!),
-      getMonthlyPlanNotice(q, env.sessionSecret, at),
-      listMissionRoundCards(q, people, env.sessionSecret, req.person!, undefined, at),
-    ]);
-    // 会前通知看 scheduled；会后有待 CEO 确认的战略议题的会议也进首页（通知栏「需要你确认」）
-    const meetings = meetingRows
-      .filter((row) => hasMeetingNotice(row, req.person!.personId, at) || hasPendingStrategicItem(row.outcome))
-      .map((row) => projectMeetingCard(row, env.sessionSecret, at));
-    const monthly = monthlyNotice && (monthlyNotice.payload as { status?: string }).status !== "confirmed" ? [monthlyNotice] : [];
-    return { cards: [radarCard, ...battlefields, ...capabilities, ...issues, ...meetings, ...missions, ...monthly, ...rounds] };
+    return readHomeCards(ctx, req.person!);
   });
   app.get(
     "/api/cards/issues/:id",

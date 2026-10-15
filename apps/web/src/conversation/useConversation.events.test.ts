@@ -23,6 +23,16 @@ function streamedTool(name: string, phase = "completed", isError = false) {
 }
 
 describe("任务卡私聊工具完成后同步正文与批注", () => {
+  it("sends an explicit Anchor selection separately and keeps failed input retryable", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: false, status: 409,
+      json: async () => ({ code: "ANCHOR_VERSION_CONFLICT" }) }).mockResolvedValue({ ok: true, json: async () => ({ messages: [] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const selection = { cardId: "issue:selected", version: 3, selectedText: "第二项" };
+    const accepted = await useConversation("issue:selected", null, selection).send("请解释", []);
+    expect(accepted).toBe(false);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ message: "请解释", anchorSelection: selection, references: [] });
+  });
+
   it.each(["edit_mission_card", "edit_my_mission_card", "ask_mission_card_question"])("%s 成功完成即发送当前卡的刷新事件", async (tool) => {
     const fetchMock = vi.fn().mockResolvedValueOnce(streamedTool(tool))
       .mockResolvedValue({ ok: true, json: async () => ({ messages: [] }) });
