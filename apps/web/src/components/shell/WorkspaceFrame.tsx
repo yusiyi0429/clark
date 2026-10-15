@@ -493,7 +493,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             inert={detailOpen}
             style={noticeTransition && !openingEmpty ? { viewTransitionName: "home-board" } : undefined}
           >
-            {m2Available ? <div className={s.m2Entry}><a href="/m2/" target="_blank" rel="noopener noreferrer">目标拆解与协作 <span aria-hidden="true">↗</span></a></div> : null}
+            {m2Available ? <div className={s.m2Entry}><a href="/m2/">目标拆解与协作 <span aria-hidden="true">→</span></a></div> : null}
             {home}
           </div>
           {detailOpen ? (
