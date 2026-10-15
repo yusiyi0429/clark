@@ -607,7 +607,7 @@ describe("MonthlyPlan signing boundaries", () => {
       // CompanyMemory 只读：没有写入入口，签发不改变人员目录
       const memory = createCompanyContext(testEnv);
       const peopleBefore = memory.searchPeople(undefined).map((person) => person.personId).sort();
-      expect(Object.keys(memory).every((key) => /^(list|search|get)/.test(key))).toBe(true);
+      expect(Object.keys(memory.company)).toEqual(["read"]);
       expect((await t.app.inject({ method: "GET", url: "/api/cards/battlefields", headers: { cookie } })).statusCode).toBe(200);
       expect(memory.searchPeople(undefined).map((person) => person.personId).sort()).toEqual(peopleBefore);
     } finally {

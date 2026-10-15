@@ -205,7 +205,7 @@ export type PiConversationRuntimeOptions = {
   company?: CompanyReader;
   personal?: {
     select(personId: string, query: string): Promise<{ handle: string; kind: 'personal'; title: string; text: string }[]>;
-    readReference(personId: string, input: { handle: string }): Promise<unknown>;
+    readReference(personId: string, input: { handle: string; cursor?: string }): Promise<unknown>;
   };
   materialPool?: Pool;
   missionCardSecret?: string;
@@ -430,6 +430,15 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         },
       })] : [];
       const isCeo = input.viewer.role === "ceo";
+      const ephemeralResults: NonNullable<ProviderTurnContext["toolResults"]> = new Map();
+      const ephemeralTool = (tool: ReturnType<typeof defineTool>): ReturnType<typeof defineTool> => ({ ...tool,
+        execute: async (...args: Parameters<typeof tool.execute>) => {
+          const value = await tool.execute(...args);
+          ephemeralResults.set(args[0], { toolName: tool.name, content: value.content });
+          // Pi persistence and compaction only receive this marker, never the reference body.
+          return { content: [{ type: "text", text: "本轮临时参考已读取；历史中不保留正文，请按当前场景重新查询。" }], details: {} };
+        },
+      });
       const personalCard = input.scope.startsWith("mission-card:");
       // The current card has already passed object authorization. The unscoped Mission query must not bypass that boundary.
       const availableBoardTools = personalCard ? boardTools(input.viewer) : [];
@@ -482,7 +491,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             if (options.personal) {
               const handle = personalHandles.get(args.handle);
               if (!handle) return result({ status: 'unavailable', message: '参考不属于本轮记忆。' });
-              try { return memoryResult(await options.personal.readReference(input.viewer.personId, { handle })); }
+              try { return memoryResult(await options.personal.readReference(input.viewer.personId, { handle, cursor: args.cursor })); }
               catch { return result({ status: 'unavailable', message: '个人记忆暂时不可用。' }); }
             }
             return result({ status: 'unavailable', message: '参考不存在、已变化或不可见。' });
@@ -629,7 +638,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         modelRuntime,
         resourceLoader: personalCard ? resourceLoaderFor(`${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`)
           : isCeo ? ceoResourceLoader : resourceLoaderFor(driSystemPrompt(input.viewer.displayName)),
-        customTools: [...anchorTools, peopleTool, ...companyTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...outletFeedTools, searchTool],
+        customTools: [...anchorTools.map(ephemeralTool), peopleTool, ...companyTools.map(ephemeralTool), ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...outletFeedTools, searchTool],
         tools: ["read_anchor", "search_people", ...companyTools.map((tool) => tool.name), ...viewerBoardTools.map((tool) => tool.name), ...missionCardTools.map((tool) => tool.name), ...materialTools.map((tool) => tool.name), ...reviewTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
         sessionManager: manager,
         settingsManager: settings,
@@ -681,7 +690,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           return { ...reference, handle };
         }) ?? input.referencesSnapshot.map((snapshot, index) => ({ handle: `R${index + 1}`, kind: "explicit" as const,
           title: snapshot.title, text: boundedText(JSON.stringify(readableValue(snapshot.payload)), 4096), state: "本地页面引用" }));
-        const turn: ProviderTurnContext = { query: input.message, anchor: anchor.view, references };
+        const turn: ProviderTurnContext = { query: input.message, anchor: anchor.view, references, toolResults: ephemeralResults };
         const preflightContext = () => composeTurnContext({ systemPrompt: session.systemPrompt,
           messages: [...convertToLlm(session.messages), { role: "user", content: input.message, timestamp: Date.now() }],
           tools: session.getAllTools(),

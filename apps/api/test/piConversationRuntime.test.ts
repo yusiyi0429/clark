@@ -92,6 +92,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       expect(captures[1].messages.at(-1)).toMatchObject({ role: "toolResult", toolCallId: "anchor-read", isError: false });
       expect(JSON.stringify(result.runtimeEntries)).not.toContain("唯一页面锚点");
       expect(JSON.stringify(result.runtimeEntries)).not.toContain("独立附件参考");
+      expect(JSON.stringify(result.runtimeEntries)).not.toContain("授权展开内容");
       expect(JSON.stringify(result.runtimeEntries)).toContain("解释这个");
       await runtime.run({ scope: "global", viewer: CEO_VIEWER, message: "换个页面",
         currentObject: null, referencesSnapshot: [], runtimeEntries: JSON.parse(JSON.stringify(result.runtimeEntries)), piSessionId: result.piSessionId!,
@@ -100,6 +101,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       expect(JSON.stringify(captures.at(-1)?.messages)).toContain("全新的页面锚点");
       expect(JSON.stringify(captures.at(-1)?.messages)).not.toContain("唯一页面锚点");
       expect(JSON.stringify(captures.at(-1)?.messages)).not.toContain("独立附件参考");
+      expect(JSON.stringify(captures.at(-1)?.messages)).not.toContain("授权展开内容");
     } finally { await runtime.close?.(); }
   });
 
@@ -400,6 +402,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
         if (context.systemPrompt.includes("context summarization assistant")) {
           expect(JSON.stringify(context.messages)).not.toContain("临时自动压缩锚点");
           expect(JSON.stringify(context.messages)).not.toContain("临时自动参考");
+          expect(JSON.stringify(context.messages)).not.toContain("TOOL_AUTO_EPHEMERAL");
           return stream(message([{ type: "text", text: "自动压缩摘要" }], "stop"));
         }
         regularCalls += 1;
@@ -408,7 +411,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
           expect(JSON.stringify(context.messages)).toContain("临时自动参考");
         }
         if (regularCalls === 3) return stream(message([{
-          type: "toolCall", id: "search-auto", name: "web_search", arguments: { query: "latest" },
+          type: "toolCall", id: "search-auto", name: "read_anchor", arguments: { handle: "A1" },
         }], "toolUse", highUsage));
         return stream(message(
           [{ type: "text", text: `regular-${regularCalls}` }],
@@ -444,7 +447,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
         scope: "global",
         viewer: CEO_VIEWER,
         message: "查询当前事实",
-        anchor: { view: { scene: "公司首页", summary: "临时自动压缩锚点", items: [], more: false }, read: async () => ({}) },
+        anchor: { view: { scene: "公司首页", summary: "临时自动压缩锚点", items: [], more: false }, read: async () => ({ text: "TOOL_AUTO_EPHEMERAL" }) },
         references: [{ handle: "R1", kind: "attachment", title: "临时自动参考", text: "不写入压缩" }],
         currentObject: null,
         referencesSnapshot: [],
@@ -459,6 +462,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
         expect.objectContaining({ type: "compaction", phase: "completed" }),
       ]));
       expect(JSON.stringify(checkpoints)).toContain("自动压缩摘要");
+      expect(JSON.stringify(checkpoints)).not.toContain("TOOL_AUTO_EPHEMERAL");
     } finally {
       await runtime.close?.();
     }

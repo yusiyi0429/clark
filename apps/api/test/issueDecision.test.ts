@@ -1029,17 +1029,14 @@ describe("strict ResearchDoc candidate tool", () => {
       }], "toolUse"));
       const doc = await runner({ issue: { id: "fixture-08", title: "测试战略", origin: "dri", originRef: {}, location: {}, urgency: {} } }, new AbortController().signal);
       expect(doc).toEqual(RESEARCH_DOC);
-      expect(contexts[0].tools?.map((tool) => tool.name)).toEqual(["submit_candidate"]);
+      expect(contexts[0].tools?.map((tool) => tool.name)).toEqual(["submit_candidate", "query_company"]);
       const run = await db.query("SELECT kind, model_slot, status, candidate_output, input_snapshot FROM agent_runs");
       expect(run.rows).toHaveLength(1);
       expect(run.rows[0]).toMatchObject({ kind: "issue-research", model_slot: "heavy", status: "succeeded" });
       expect(run.rows[0].candidate_output).toEqual(RESEARCH_DOC);
-      // CompanyMemory 段落真实注入模型输入，且只携带 id/text/sourceRef
-      const passages = (run.rows[0].input_snapshot as { companyMemoryPassages: { id: string; text: string; sourceRef: string }[] }).companyMemoryPassages;
-      expect(passages.length).toBeGreaterThan(0);
-      for (const passage of passages) {
-        expect(Object.keys(passage).sort()).toEqual(["id", "sourceRef", "text"]);
-      }
+      // No authorized World configuration in this fixture: no legacy Markdown fallback.
+      expect(run.rows[0].input_snapshot).toMatchObject({ company: { status: "coverage_unavailable", entries: [] } });
+      expect(JSON.stringify(run.rows[0].input_snapshot)).not.toContain("companyMemoryPassages");
     });
   });
 

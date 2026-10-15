@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { boundedText } from './conversationAnchor.js';
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Pool, PoolClient } from 'pg';
@@ -197,7 +198,8 @@ export function createPersonalMemory({ pool, storageDir }: {
                             items.splice(index, 1);
                     }
                     else if (change.text?.trim()) {
-                        const item = { id: change.attributeKey, title: clean(change.title ?? '个人记忆').replace(/[\r\n]+/g,' '), text: clean(change.text) };
+                        const item = { id: change.attributeKey, title: clean(change.title ?? '个人记忆').replace(/[\r\n]+/g,' '),
+                          text: clean(change.text).replace(/^#{1,6} (.+)$/gm, '**$1**') };
                         if (index >= 0)
                             items[index] = item;
                         else
@@ -227,19 +229,42 @@ export function createPersonalMemory({ pool, storageDir }: {
             };
             const terms = grams(query);
             let bytes = 0;
-            return doc.sections.map(item => ({ item, score: [...grams(item.title + ' ' + item.text)].filter(term => terms.has(term)).length, stable: /协作|沟通|表达|偏好/.test(item.title) })).filter(row => row.score > 0 || row.stable).sort((a, b) => b.score - a.score).flatMap(({ item, stable, score }) => { const size = Buffer.byteLength(item.text); if (size > 4096 || bytes + size > (stable && score === 0 ? 2048 : 8192))
-                return []; bytes += size; const handle = randomUUID(); handles.set(handle, { personId, revision: doc.revision, id: item.id }); if (handles.size > 1024)
-                handles.delete(handles.keys().next().value!); return [{ handle, kind: 'personal' as const, title: item.title, text: item.text }]; });
+            return doc.sections.map(item => ({ item, score: [...grams(item.title + ' ' + item.text)].filter(term => terms.has(term)).length, stable: /协作|沟通|表达|偏好/.test(item.title) })).filter(row => row.score > 0 || row.stable).sort((a, b) => b.score - a.score).flatMap(({ item, stable, score }) => {
+                const handle = randomUUID();
+                const reference = { handle, kind: 'personal' as const, title: boundedText(item.title, 200), text: boundedText(item.text, stable && score === 0 ? 1400 : 3000) };
+                while (Buffer.byteLength(JSON.stringify(reference)) > (stable && score === 0 ? 2048 : 4096)) reference.text = boundedText(reference.text, Math.floor(Buffer.byteLength(reference.text) * 0.8));
+                const size = Buffer.byteLength(JSON.stringify(reference));
+                if (bytes + size > (stable && score === 0 ? 2048 : 8192)) return [];
+                bytes += size; handles.set(handle, { personId, revision: doc.revision, id: item.id });
+                if (handles.size > 1024) handles.delete(handles.keys().next().value!);
+                return [reference];
+            });
         },
         async readReference(personId: string, input: {
             handle: string;
+            cursor?: string;
         }): Promise<{
             title: string;
             text: string;
+            more: boolean;
+            cursor?: string;
         } | {
             unavailable: true;
         }> { const entry = handles.get(input.handle); if (!entry || entry.personId !== personId)
-            return { unavailable: true }; const doc = await api.readOwn(personId), item = doc.sections.find(item => item.id === entry.id); return doc.revision === entry.revision && item ? { title: item.title, text: item.text } : { unavailable: true }; }
+            return { unavailable: true };
+            if (input.cursor && !/^\d+$/.test(input.cursor)) return { unavailable: true };
+            const doc = await api.readOwn(personId), item = doc.sections.find(item => item.id === entry.id);
+            if (doc.revision !== entry.revision || !item) return { unavailable: true };
+            const offset = Number(input.cursor ?? 0);
+            if (!Number.isSafeInteger(offset) || offset > item.text.length) return { unavailable: true };
+            let text = boundedText(item.text.slice(offset), 6000);
+            const page = () => {
+                const next = offset + text.length;
+                return { title: boundedText(item.title, 300), text, more: next < item.text.length, ...(next < item.text.length ? { cursor: String(next) } : {}) };
+            };
+            while (Buffer.byteLength(JSON.stringify(page())) > 8192) text = boundedText(text, Math.floor(Buffer.byteLength(text) * 0.8));
+            return page();
+        }
     };
     return api;
 }

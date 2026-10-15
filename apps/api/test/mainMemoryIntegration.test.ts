@@ -101,3 +101,28 @@ test('oversized references are reduced before the complete query and necessary f
     expect(calls).toBe(1);
   } finally { await runtime.close?.(); }
 });
+
+test('ephemeral tool bodies exist only in the current provider turn even when a later turn reuses a tool call id', async () => {
+  let calls = 0; const captured: Context[] = [];
+  const runtime = await createPiConversationRuntime({ ...options, streamSimple: (_model, context) => {
+    captured.push({ ...context, messages: structuredClone(context.messages) }); calls++;
+    if (calls % 2 === 1) {
+      const message: AssistantMessage = { role: 'assistant', api: 'openai-responses', provider: 'warmap', model: 'fake-light', content: [{ type: 'toolCall', id: 'reused-id', name: 'read_anchor', arguments: { handle: 'A1' } }], stopReason: 'toolUse', usage, timestamp: Date.now() };
+      const events = createAssistantMessageEventStream(); queueMicrotask(() => events.push({ type: 'done', reason: 'toolUse', message })); return events;
+    }
+    return response();
+  } });
+  const input = { scope: 'global' as const, viewer: { personId: 'person-fixture-001', role: 'ceo' as const, displayName: '甲' }, currentObject: null, referencesSnapshot: [], runtimeEntries: [], piSessionId: randomUUID(), signal: new AbortController().signal, emit: () => undefined };
+  const anchor = (text: string) => ({ view: { scene: '首页', summary: '目录', items: [], more: false }, read: async () => ({ text }) });
+  try {
+    const first = await runtime.run({ ...input, message: 'first', anchor: anchor('OLD_EPHEMERAL_BODY') });
+    expect(JSON.stringify(captured[1].messages)).toContain('OLD_EPHEMERAL_BODY');
+    expect(JSON.stringify(first.runtimeEntries)).not.toContain('OLD_EPHEMERAL_BODY');
+    const second = await runtime.run({ ...input, message: 'next', runtimeEntries: first.runtimeEntries, anchor: anchor('NEW_EPHEMERAL_BODY') });
+    expect(JSON.stringify(captured[3].messages)).not.toContain('OLD_EPHEMERAL_BODY');
+    expect(JSON.stringify(captured[3].messages).match(/NEW_EPHEMERAL_BODY/g)).toHaveLength(1);
+    expect(JSON.stringify(second.runtimeEntries)).not.toContain('NEW_EPHEMERAL_BODY');
+    const results = captured[3].messages.filter(item => item.role === 'toolResult');
+    expect(results).toHaveLength(2); expect(results.every(item => item.toolCallId === 'reused-id')).toBe(true);
+  } finally { await runtime.close?.(); }
+});

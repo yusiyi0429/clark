@@ -49,11 +49,15 @@ export async function buildSceneAnchor(options: {
         if (latest.version !== entry.snapshot.version || JSON.stringify(latest.payload) !== JSON.stringify(entry.snapshot.payload)
           || JSON.stringify((latest as unknown as { viewingMaterial?: unknown }).viewingMaterial) !== JSON.stringify((entry.snapshot as unknown as { viewingMaterial?: unknown }).viewingMaterial)) return { conflict: true, message: "页面内容已更新，请刷新后继续" };
         const fullText = JSON.stringify(readableValue(latest.payload));
-        const text = boundedText(fullText.slice(textOffset), 5800);
-        const next = textOffset + text.length;
-        return { ...entry.item, text, more: next < fullText.length,
-          ...(next < fullText.length ? { cursor: `${runToken}:${activeHandle}:${next}` } : {}),
-          ...(Object.hasOwn(latest, "viewingMaterial") ? { viewingMaterial: boundedText(JSON.stringify(readableValue((latest as unknown as { viewingMaterial: unknown }).viewingMaterial)), 600) } : {}) };
+        let text = boundedText(fullText.slice(textOffset), 5800);
+        const result = () => {
+          const next = textOffset + text.length;
+          return { ...entry.item, text, more: next < fullText.length,
+            ...(next < fullText.length ? { cursor: `${runToken}:${activeHandle}:${next}` } : {}),
+            ...(Object.hasOwn(latest, "viewingMaterial") ? { viewingMaterial: boundedText(JSON.stringify(readableValue((latest as unknown as { viewingMaterial: unknown }).viewingMaterial)), 600) } : {}) };
+        };
+        while (Buffer.byteLength(JSON.stringify(result())) > 8192) text = boundedText(text, Math.floor(Buffer.byteLength(text) * 0.8));
+        return result();
       }
       // Do not disclose revoked titles or counts from the frozen directory.
       if (catalog.some(({ snapshot }) => !available.has(snapshot.cardId))) return { unavailable: true, message: "页面访问范围已变化，请刷新" };
