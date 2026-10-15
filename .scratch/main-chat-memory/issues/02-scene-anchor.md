@@ -1,16 +1,16 @@
 # 02 — 主私聊使用当前页面 Anchor，保留用户原话
 
 Type: implementation
-Status: ready-for-agent
+Status: resolved
 
 **What to build:** 用户在首页或对象页发送消息时，Agent 获得与可见 Card 一致的有界 Anchor，可展开当前项；当前 Query、显式引用与附件分别处理，换页面后旧 Anchor 不累积。
 
 **Blocked by:** None — can start immediately.
 
-- [ ] 前端选择与 API 契约连通；过期选择返回 409、越权返回 404，失败保留输入。
-- [ ] 页面和 Anchor 复用授权投影，先权限过滤再计数，目录分页不泄露隐藏对象。
-- [ ] 真实 Pi 首轮、工具后续请求、恢复及压缩使用本轮 Anchor，持久消息保留原话。
-- [ ] 本地页面值明确为页面/草稿/历史，不借高场景权重覆盖 World 事实。
+- [x] 前端选择与 API 契约连通；过期选择返回 409、越权返回 404，失败保留输入。
+- [x] 页面和 Anchor 复用授权投影，先权限过滤再计数，目录分页不泄露隐藏对象。
+- [x] 真实 Pi 首轮、工具后续请求、恢复及压缩使用本轮 Anchor，持久消息保留原话。
+- [x] 本地页面值明确为页面/草稿/历史，不借高场景权重覆盖 World 事实。
 
 **TDD seams:** Web 私聊输入公开交互、messages HTTP、ConversationRuntime.run、read_anchor 工具。复用已有真实 Pi 离线探针，不测 SDK 私有实现。
 
@@ -34,3 +34,10 @@ Each ticket uses one implement subagent in an isolated worktree; red/green evide
 - Spec: two P2 findings: omitted member battlefield targets/radar/weeklySync; frozen viewing-material metadata. Both reproduced with failing HTTP/runtime tests before fixes. Member-visible workspace summaries now join the authorized index; material is re-read under current viewer and frozen snapshot comparison returns conflict when changed. Both targeted regressions pass; API typecheck passes.
 - Web full suite completed814/814, contracts75/75. API full run stopped by parent instruction to reserve full integrated run for ticket07; no full API result claimed.
 - No new dependency, general plugin framework, shell access, World write capability, or excluded-feature behavior was introduced. Shared projection exports replace duplicated route reads; page/attachment machine metadata stays out of model text. Budget adaptation retains raw query and existing tool pairs.
+
+
+## Resolution
+
+- Implementation commits891de30 + edfbbc9. Standards initially1 finding, fixed and rechecked clean; Spec initially2 findings, fixed with red/green tests and rechecked clean. Review baseline fed15706be1107b327fd670e8e21534fd9cdc5b6.
+- Final focused API run:41passed/2default5s setup timeouts; reran only those2 tests, both passed (1.68s and1.01s), without changing timeouts or code. All43 focused behaviors passed across the run and targeted rerun. API/Web typechecks pass; Web814/814 and contracts75/75 completed.
+- Remaining integration: ticket03 wires read_reference to run.readReference; later Company/Personal readers append typed References before ephemeral provider assembly. No real provider or remote World calls were used in this ticket. Root ticket07 owns the final integrated full-suite/PR review.
