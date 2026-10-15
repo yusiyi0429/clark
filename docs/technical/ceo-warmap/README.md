@@ -36,3 +36,12 @@
 严格按 00 的纵向阶段推进。01 是所有模块前置；02 完成后再进入 Agent 业务链；06 在阶段 0 先冻结视觉证据，在后端 Card 稳定后完成接线；08 最后执行。
 
 每个分片只实现自己的完成条件。不得借实现某一分片提前引入队列、多 Runtime、通用工作流、移动端、语音或任务系统。
+
+## 公司与个人记忆运行配置
+
+- `TKOS_WORLD_API_URL` / `TKOS_WORLD_AGENT_TOKEN`：World 只读服务连接。服务令牌本身不赋予成员可见范围。
+- `COMPANY_WORLD_ACCESS_FILE`：API 容器内的只读授权文件路径，例如 `/repo/seed/company-world-access.json`；内容为 `{"稳定personId":["允许的World domain_id"]}`。生产使用真实授权范围，不提交凭据或人员授权文件。
+- `COMPANY_SYSTEM_PERSON_ID`：雷达、预审等后台共同读取使用的明确 personId；仍须在上述文件有授权。缺失时后台不能读取公司事实。
+- `MEMORY_STORAGE_DIR`：Company/Personal 持久目录的共同根。Compose 使用独立 memory 卷，由 storage-init 初始化为 uid 1000 可写、目录权限 0700；API 继续以非 root 运行。
+
+缺少 World 或授权时主聊仍可工作，公司事实明确显示不可用，不读取旧 Markdown 或页面快照补齐。`healthz.dependencies.companyConfigured` 仅表示连接与授权路径已经配置，不执行网络连通性或授权文件有效性检查；它不影响基础 API 就绪状态。人员 seed 仍须合法。旧 `COMPANY_MEMORY_MCP_TOKEN` 和 `COMPANY_MEMORY_SEED_DIR` 已退出启动配置；`/mcp/company-memory` 返回 404，个人 `/mcp/me` 保留独立授权。

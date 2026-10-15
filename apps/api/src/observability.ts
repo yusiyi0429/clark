@@ -18,7 +18,14 @@ export function redactSecrets(value: unknown): unknown {
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [key, inner] of Object.entries(value)) {
-      out[key] = isSensitive(key) ? REDACTED : redactSecrets(inner);
+      if (key === "company" || key === "companyMemory") {
+        // Reference bodies use these public input fields; retain availability, not the prose or internal cursors.
+        out[key] = inner && typeof inner === "object" && !Array.isArray(inner)
+          ? Object.fromEntries(Object.entries(inner).map(([field, item]) => [field, field === "status" || field === "more" ? redactSecrets(item) : REDACTED]))
+          : REDACTED;
+      } else {
+        out[key] = isSensitive(key) ? REDACTED : redactSecrets(inner);
+      }
     }
     return out;
   }
