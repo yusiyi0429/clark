@@ -34,3 +34,9 @@ Each ticket uses one implement subagent in an isolated worktree; red/green evide
 - Repeated reads still call World list/detail and recheck dependency heads; no TTL or cached fact fallback was introduced. When freshly normalized content and dependency heads equal the current generation, the existing immutable generation is retained instead of writing duplicate files.
 - Public Company test suite: 8/8 passed; API TypeScript passed. Additional artifact smoke inspection of two unchanged reads plus one changed read produced two generations (initial + changed), preserving current pointer on the unchanged read.
 - Ablation: Removing per-person grants would let an all-powerful bearer act as every user; default-deny test rejects that. Removing final grant recheck reproduces the mid-read revocation test failure. Removing Chinese bigram retrieval loses Chinese query recall. Keeping deterministic projection avoids an unvalidated extra organizer model and never invents new factual claims.
+
+### Continuation safety
+
+- Public Company continuation tokens bind the caller, authorized scope, current dependency/content version and query. Main Runtime translates them into per-run `CP1` handles, retaining the original query server-side; model views contain no hashes or raw backend tokens.
+- TDD red: changing the object version between pages previously returned `ready` with later content, silently skipping the changed beginning. Green: the same public call now returns `unavailable` and asks to restart. 9 Company tests pass.
+- Personal tool reads now accept only handles registered in this Runtime turn. Ticket04's initial Personal Reference mapping is integrated by the root agent with Ticket02's ephemeral context composition.

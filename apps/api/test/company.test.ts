@@ -164,4 +164,17 @@ describe('World company public read boundary', () => {
     } finally { await t.close(); }
   });
 
+  it('rejects company continuation after the authorized facts change instead of skipping new content', async () => {
+    const t = await setup();
+    try {
+      t.object.business.blocks[0].value.text = '经营进展。'.repeat(4000);
+      const first = await t.company.read(viewer, {}, new AbortController().signal);
+      expect(first.nextCursor).toBeDefined();
+      t.object.business.object_version++;
+      const next = await t.company.read(viewer, { cursor: first.nextCursor }, new AbortController().signal);
+      expect(next).toMatchObject({ status: 'unavailable', entries: [] });
+      expect(next.message).toContain('变化');
+    } finally { await t.close(); }
+  });
+
 });

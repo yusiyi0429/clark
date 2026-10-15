@@ -155,8 +155,15 @@ export function createCompanyMemory(env: CompanyEnv): CompanyReader {
             if (JSON.stringify(await authorizedDomains()) !== JSON.stringify(domains)) return unavailableScope;
             const ranked = relevantEntries(entries, request.query);
             const filtered = ranked.entries.filter((entry) => !request.handle || entry.handle === request.handle);
-            const cursor = request.cursor === undefined ? 0 : Number(request.cursor);
-            if (!Number.isSafeInteger(cursor) || cursor < 0) return { status: 'unavailable', entries: [], message: '无效的 Company 分页位置。' };
+            const version = createHash('sha256').update(JSON.stringify([viewer.personId, scope, fingerprint(heads), markdown, request.query ?? ''])).digest('base64url');
+            let cursor = 0;
+            if (request.cursor !== undefined) {
+              try {
+                const continuation = JSON.parse(Buffer.from(request.cursor, 'base64url').toString('utf8')) as { offset: number; version: string };
+                if (continuation.version !== version || !Number.isSafeInteger(continuation.offset) || continuation.offset < 0) throw new Error('Stale cursor');
+                cursor = continuation.offset;
+              } catch { return { status: 'unavailable', entries: [], message: '公司信息、可见范围或检索条件已变化，请重新开始查询。' }; }
+            }
             const page: CompanyEntry[] = [];
             let size = 0;
             for (const entry of filtered.slice(cursor)) {
@@ -164,7 +171,7 @@ export function createCompanyMemory(env: CompanyEnv): CompanyReader {
               page.push(entry); size += Buffer.byteLength(JSON.stringify(entry));
               if (page.length >= 8) break;
             }
-            return { status: heads.length ? 'ready' : 'empty', entries: page, ...(cursor + page.length < filtered.length ? { nextCursor: String(cursor + page.length) } : {}),
+            return { status: heads.length ? 'ready' : 'empty', entries: page, ...(cursor + page.length < filtered.length ? { nextCursor: Buffer.from(JSON.stringify({ offset: cursor + page.length, version })).toString('base64url') } : {}),
               ...(ranked.fallback ? { message: '未精确匹配关键词；以下为授权范围的有界目录及正文，请按标题继续定位。' } : {}) };
           }
           return { status: 'unavailable', entries: [], message: '读取期间公司信息发生变化，本次未发布或使用不完整的公司记忆。请重试。' };

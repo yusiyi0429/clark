@@ -437,6 +437,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const availableBoardTools = personalCard ? boardTools(input.viewer) : [];
       const viewerBoardTools = isCeo ? availableBoardTools : availableBoardTools.filter((tool) => !CEO_ONLY_TOOLS.has(tool.name) && !(personalCard && tool.name === "list_missions"));
       const companyHandles = new Map<string, string>();
+      const companyCursors = new Map<string, { cursor: string; query?: string }>();
       const personalHandles = new Map<string, string>();
       const personalView = async (query: string) => {
         if (!options.personal) return { status: 'not_configured', entries: [] };
@@ -453,8 +454,13 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         : result({ status: 'unavailable', message: '参考超过单次读取范围，请缩小检索内容。' });
       const companyView = async (request: { query?: string; cursor?: string; handle?: string }) => {
         if (!options.company) return { status: 'not_configured', entries: [], message: '公司事实读取尚未配置。' };
-        const view = await options.company.read(input.viewer, request, input.signal);
-        return { ...view, entries: view.entries.map((entry) => {
+        if (request.cursor && !companyCursors.has(request.cursor)) return { status: 'unavailable', entries: [], message: '分页位置不属于本轮参考，请重新查询。' };
+        const continuation = request.cursor ? companyCursors.get(request.cursor) : undefined;
+        const query = request.query ?? continuation?.query;
+        const view = await options.company.read(input.viewer, { ...request, query, cursor: continuation?.cursor }, input.signal);
+        let nextCursor: string | undefined;
+        if (view.nextCursor) { nextCursor = `CP${companyCursors.size + 1}`; companyCursors.set(nextCursor, { cursor: view.nextCursor, query }); }
+        return { ...view, nextCursor, entries: view.entries.map((entry) => {
           let handle = [...companyHandles].find(([, original]) => original === entry.handle)?.[0];
           if (!handle) { handle = `C${companyHandles.size + 1}`; companyHandles.set(handle, entry.handle); }
           return { ...entry, handle };
@@ -476,7 +482,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             const explicitReader = (input as typeof input & { readReference?: (args: { handle: string; cursor?: string }) => Promise<unknown> }).readReference;
             if (/^R\d+$/.test(args.handle) && explicitReader) return result(await explicitReader(args));
             if (options.personal) {
-              const handle = personalHandles.get(args.handle) ?? args.handle;
+              const handle = personalHandles.get(args.handle);
+              if (!handle) return result({ status: 'unavailable', message: '参考不属于本轮记忆。' });
               try { return memoryResult(await options.personal.readReference(input.viewer.personId, { handle })); }
               catch { return result({ status: 'unavailable', message: '个人记忆暂时不可用。' }); }
             }
