@@ -103,7 +103,7 @@ promotion fingerprint 固定为 `SHA-256(v1 + decisionKind + normalizedDecisionQ
 
 服务 API 最低输入：externalId、submitterPersonId、title、whyNow、sourceRef、location。red 额外要求 decisionBy 和 reason。
 
-CompanyMemory MCP 验证人员，TypeBox 验证结构，domain 验证 location。相同 externalId 同内容返回原对象，不同内容返回 409。
+PeopleDirectory 验证人员，TypeBox 验证结构，domain 验证 location。相同 externalId 同内容返回原对象，不同内容返回 409。
 
 ## 9. Issue 数据与状态
 

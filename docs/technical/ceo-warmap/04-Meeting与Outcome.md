@@ -13,7 +13,7 @@
 - Issue Action：加入已有 Meeting／新建 Meeting；
 - DRI Meeting import。
 
-必填：title、time、leadDriId、ceoParticipantId、participants、issueIds。人员 ID 必须来自 CompanyMemory MCP；保存 name/role snapshot。
+必填：title、time、leadDriId、ceoParticipantId、participants、issueIds。人员 ID 必须来自 PeopleDirectory；保存 name/role snapshot。
 
 状态：
 
@@ -25,7 +25,7 @@ reviewed → held   # 撤回已确认 Outcome effect 后
 
 ## 3. Preflight
 
-Meeting 创建后启动临时 Pi Session。会前预审采用 advisor-review 后端场景：方法固化在后端 Prompt，公司事实只通过当前对象与只读 CompanyMemory MCP 获取，不在运行时加载 `.agents` 文件。
+Meeting 创建后启动临时 Pi Session。会前预审采用 advisor-review 后端场景：方法固化在后端 Prompt，当前对象提供待审材料，公司正式事实通过授权只读 World Company 获取，不在运行时加载 `.agents` 文件。
 
 四输入映射不新增 Material 实体：背景来自关联 Issue 与 CompanyMemory；目的由 Meeting 标题和 Issue 决策问题推导并明确标记；源材料来自 ResearchDoc 与当前 Meeting 内嵌会前材料的受限抽取文本；关联会议取最近一场包含相同 Issue 的历史 Transcript/Outcome。缺失项写入 `inputCoverage` 并显示“待补”，不得由模型猜造。
 

@@ -43,7 +43,7 @@
    - `wechat` sidecar 只在内网，无 `ports`，不经 Caddy；首次需访问其内网登录页扫码（见 §5）。
    - 首次上线（或新增人员）后发初始码：`docker compose -f infra/docker-compose.yml --env-file infra/.env exec api pnpm --filter @warmap/api access:issue`，把输出表格里的「ID / 初始码」私下发给每个人；首次登录会要求改成自己的 4 位口令。重置某人：`... exec api pnpm --filter @warmap/api access:issue <personId>`（旧会话立即失效）。容器工作目录是 workspace 根，不带 `--filter` 会报 `Command "access:issue" not found`。
 4. `bash infra/staging/smoke.sh`（需要 `PUBLIC_ORIGIN`、`CEO_LOGIN_ID` 与 `CEO_PASSCODE`）。
-5. 入口复验：`bash infra/caddy/verify.sh`（本地 stub）或对线上域名复跑 `/`（Web）、`/api/healthz`（API）、`/mcp/company-memory`（401）、SSE 与 multipart；宿主机上 `curl -s http://127.0.0.1:3130/api/healthz` 可绕过 Nginx 单独确认 edge。
+5. 入口复验：`bash infra/caddy/verify.sh`（本地 stub）或对线上域名复跑 `/`（Web）、`/api/healthz`（API）、`/mcp/me`（401，未授权）、已停用 `/mcp/company-memory`（404）、SSE 与 multipart；宿主机上 `curl -s http://127.0.0.1:3130/api/healthz` 可绕过 Nginx 单独确认 edge。
 
 ## 2. 迁移与版本检查
 

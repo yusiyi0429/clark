@@ -1,16 +1,16 @@
 # 06 — 停用旧 CompanyMemory MCP，保留共同调用方能力
 
 Type: implementation
-Status: ready-for-agent
+Status: resolved
 
 **What to build:** 旧企业知识端点、专用配置和 Markdown 事实源退出；主聊、雷达、预审等已有调用方使用共同 Company 能力，身份与其他 MCP 保持可用。
 
 **Blocked by:** 01、03（先有独立人员目录和可替代公司读取路径，再 contract）。
 
-- [ ] 没有旧 CompanyMemory MCP 或旧 Markdown 的隐藏公司事实回退。
-- [ ] 停用专用端点/Token/启动条件，其他 MCP 和既有服务仍可运行。
-- [ ] 配置、健康状态、部署存储与领域文档一致，旧 ADR 明确被替代。
-- [ ] 不扩展群消息、任务卡批注或 M2 功能。
+- [x] 没有旧 CompanyMemory MCP 或旧 Markdown 的隐藏公司事实回退。
+- [x] 停用专用端点/Token/启动条件，其他 MCP 和既有服务仍可运行。
+- [x] 配置、健康状态、部署存储与领域文档一致，旧 ADR 明确被替代。
+- [x] 不扩展群消息、任务卡批注或 M2 功能。
 
 **TDD seams:** 应用启动与 health HTTP、旧端点停用、现有雷达/预审公共运行入口、其他 MCP 现有接口。
 
@@ -39,3 +39,18 @@ The initial Spec report's cross-generation pagination concern is addressed in ro
 ### Memory trace regression fix
 
 Standards recheck found the new structured `company.entries[].text` input bypassed the former `passages` key redaction. Following the approved context-contract memory-body policy, added a public redaction seam assertion (red before fix), then omitted Company/companyMemory payload bodies while retaining availability metadata. ADR-0008 now explicitly defers this narrow memory-body policy to ADR-0027 without altering other business tracing. Focused observability/research checks: 14 / 14 passed; API typecheck passed. Operational README now describes actual World/grants/system-person paths, private persistent memory volume and honest health semantics.
+
+
+## Final review
+
+Review fixed base: `9e3d261a4429c0bc2b7285aff8866c045052fcd8`. Implementation commits: `d1e8c90`, `a483bbd`, `76aebf1`.
+
+### Standards
+
+Final independent recheck: **0 residual findings**. Initial eager Company injection and the new structured Company trace-redaction regression were fixed and rechecked. Worst residual: none.
+
+### Spec
+
+Final independent recheck: **0 residual findings**. Legacy endpoint/token/Markdown facts are removed, independent identities and personal MCP remain, bounded direct Company consumption and private persistent deployment align with the ticket. Integration must include Company03's final query/person/scope/dependency-bound continuation validation; this branch preserves its opaque cursor boundary. Worst residual: none.
+
+No real World or model integration is claimed. Root ticket07 owns final combined migration/generated-client/full-suite checks and main Pi trace-string audit. Final documentation sweep updated remaining active runbook/meeting/radar/directory references to the retired MCP; historical ADRs retain their original text with explicit replacement notices.
