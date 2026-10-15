@@ -46,6 +46,8 @@ const env: AppEnv = {
   ontologyServiceToken: process.env.ONTOLOGY_SERVICE_TOKEN,
   worldApiUrl: process.env.TKOS_WORLD_API_URL,
   worldAgentToken: process.env.TKOS_WORLD_AGENT_TOKEN,
+  companyWorldAccessFile: process.env.COMPANY_WORLD_ACCESS_FILE,
+  companyStorageDir: process.env.COMPANY_STORAGE_DIR,
   mcpServiceToken: requiredEnv("COMPANY_MEMORY_MCP_TOKEN"),
   companyMemorySeedDir: requiredEnv("COMPANY_MEMORY_SEED_DIR"),
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),

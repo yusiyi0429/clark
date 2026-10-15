@@ -613,7 +613,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       expect(first.assistantMessage).toBe("MCP OK");
       expect(first.runtimeEntries.length).toBeGreaterThan(0);
       expect(contexts[0].tools?.map((tool) => tool.name).sort()).toEqual([
-        "get_passages", "list_sections", "read_anchor", "search_people", "search_sections", "web_search",
+        "query_company", "read_anchor", "read_reference", "search_memory", "search_people", "web_search",
       ]);
       expect(contexts[0].tools?.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));
       expect(contexts[0].systemPrompt).toContain("不能执行任何业务写入");
@@ -697,52 +697,23 @@ describe("controlled Pi conversation adapter public behavior", () => {
     }
   });
 
-  it("exposes list_pending_issues only when configured and returns live board data", async () => {
-    const contexts: Context[] = [];
-    const streamSimple = (_model: Model<any>, context: Context) => {
-      contexts.push(context);
-      if (contexts.length === 1) {
-        return stream(message([
-          { type: "toolCall", id: "board-1", name: "list_pending_issues", arguments: {} },
-        ], "toolUse"));
-      }
-      const toolResult = context.messages.findLast((item) => item.role === "toolResult");
-      const text = JSON.stringify(toolResult).includes("月球基地供应链选择") ? "BOARD OK" : "BOARD missing";
-      return stream(message([{ type: "text", text }], "stop"));
-    };
+  it("main chat does not expose local company-fact board tools even when configured", async () => {
+    let reads = 0;
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
-      baseUrl: "https://provider.invalid/v1/responses",
-      apiKey: "test-key",
-      modelId: "fake-light",
-      streamSimple,
-      listPendingIssues: async () => [{
-        id: "issue-1",
-        title: "月球基地供应链选择",
-        location: { level: "battlefield", battlefieldId: "growth" },
-        urgency: "red",
-        researchStatus: "ready",
-        createdAt: "2026-09-16T00:00:00.000Z",
-      }],
+      companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+      listPendingIssues: async () => { reads++; return []; },
+      streamSimple: (_model, context) => {
+        expect(context.tools?.map((tool) => tool.name)).not.toContain("list_pending_issues");
+        expect(context.tools?.map((tool) => tool.name)).toContain("query_company");
+        return stream(message([{ type: "text", text: "ANCHOR" }], "stop"));
+      },
     });
     try {
-      const result = await runtime.run({
-        scope: "global",
-        viewer: CEO_VIEWER,
-        message: "现在公司有哪些战略议题？",
-        currentObject: null,
-        referencesSnapshot: [],
-        runtimeEntries: [],
-        piSessionId: "22222222-2222-4222-8222-222222222222",
-        signal: new AbortController().signal,
-        emit: () => undefined,
-      });
-      expect(result.assistantMessage).toBe("BOARD OK");
-      expect(contexts[0].tools?.map((tool) => tool.name)).toContain("list_pending_issues");
-      expect(contexts[0].systemPrompt).toContain("list_pending_issues");
-    } finally {
-      await runtime.close?.();
-    }
+      const result = await runtime.run({ scope: "global", viewer: CEO_VIEWER, message: "当前页面有哪些待决策事项？", currentObject: null,
+        referencesSnapshot: [], runtimeEntries: [], piSessionId: "22222222-2222-4222-8222-222222222222", signal: new AbortController().signal, emit: () => undefined });
+      expect(result.assistantMessage).toBe("ANCHOR");
+      expect(reads).toBe(0);
+    } finally { await runtime.close?.(); }
   });
 
   it("gives a member the DRI Agent: no CEO decision tools, no global context, own identity", async () => {
@@ -785,7 +756,8 @@ describe("controlled Pi conversation adapter public behavior", () => {
     try {
       await turn(MEMBER_VIEWER, "44444444-4444-4444-8444-444444444444");
       const memberTools = contexts[0].tools?.map((tool) => tool.name) ?? [];
-      expect(memberTools).toContain("list_missions");
+      expect(memberTools).not.toContain("list_missions");
+      expect(memberTools).toContain("query_company");
       expect(memberTools).not.toContain("get_warmap_overview");
       expect(memberTools).not.toContain("list_pending_issues");
       expect(userPrompt(contexts[0]).globalContext).toBeUndefined();
@@ -800,7 +772,10 @@ describe("controlled Pi conversation adapter public behavior", () => {
       // 同一个 runtime 上 CEO 的一轮不受影响
       await turn(CEO_VIEWER, "55555555-5555-4555-8555-555555555555");
       const ceoTools = contexts[1].tools?.map((tool) => tool.name) ?? [];
-      expect(ceoTools).toEqual(expect.arrayContaining(["get_warmap_overview", "list_missions", "list_pending_issues"]));
+      expect(ceoTools).toContain("query_company");
+      expect(ceoTools).not.toContain("get_warmap_overview");
+      expect(ceoTools).not.toContain("list_missions");
+      expect(ceoTools).not.toContain("list_pending_issues");
       expect(userPrompt(contexts[1]).globalContext).toBeUndefined();
       expect(globalContextReads).toBe(0);
       expect(contexts[1].systemPrompt).toContain("你是天枢里 CEO 的 Agent，负责只读决策对话");

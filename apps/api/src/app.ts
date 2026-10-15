@@ -20,6 +20,7 @@ import type { ResearchService } from "./research.js";
 import type { PreflightAgent } from "./meetingPreflight.js";
 import { createPreflightAgent } from "./preflightAgent.js";
 import { onOutcomeReviewed, pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
+import { createCompanyMemory, type CompanyEnv } from "./company.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { createWorldMeetingService } from "./worldMeetingEvents.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
@@ -115,7 +116,7 @@ export type AppEnv = {
   conversationAttachmentStorageDir?: string;
   /** 会议录音卷（分片、拼好的 webm、转码后的 mp3、厂商原文）；与材料卷隔离。 */
   recordingStorageDir?: string;
-} & CompanyMemorySeedEnv & WorldEnv;
+} & CompanyMemorySeedEnv & WorldEnv & CompanyEnv;
 
 export async function buildApp({
   pool,
@@ -182,6 +183,7 @@ export async function buildApp({
 }): Promise<FastifyInstance> {
   configureLangSmith({ apiKey: env.langsmithApiKey, project: env.langsmithProject });
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
+  const personalMemory = createPersonalMemory({ pool, storageDir: env.personalMemoryStorageDir ?? "/tmp/warmap-personal-memory" });
   const peopleDirectory = loadPeopleDirectory(env);
   const companyMemory = loadCompanyMemory(env);
   const preflight = preflightAgent ?? await createPreflightAgent({
@@ -206,7 +208,9 @@ export async function buildApp({
     return outlets.fetchLatest({ outletIds, lookbackHours: row.lookback_hours }, signal);
   } : undefined;
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
-    companyMemory,
+    peopleDirectory,
+    company: createCompanyMemory(env),
+    personal: personalMemory,
     materialPool: pool,
     missionCardSecret: env.sessionSecret,
     now,
@@ -336,7 +340,6 @@ export async function buildApp({
 
   app.setNotFoundHandler((_req, reply) => fail(reply, 404, "NOT_FOUND", "路径不存在"));
 
-  const personalMemory = createPersonalMemory({ pool, storageDir: env.personalMemoryStorageDir ?? "/tmp/warmap-personal-memory" });
 
   const ctx: RouteContext = {
     personalMemory,
