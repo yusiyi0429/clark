@@ -28,7 +28,8 @@ export function selectFacts(facts, policy = testPolicy) {
     } else if (historicalKinds.has(fact.kind)) {
       // recordedAt/modifiedAt/as_of alone cannot prove when a fact was true.
       if (!validDate(fact.factThrough) || !fact.dateEvidence) { hold('缺少事实截至日期及其依据'); continue; }
-      if (Date.parse(fact.factThrough) > Date.parse(policy.cutoff)) { reject('事实晚于测试截止时间'); continue; }
+      // A later fact enters only when someone approved that specific item by id (recorded in the manifest).
+      if (Date.parse(fact.factThrough) > Date.parse(policy.cutoff) && !fact.approvedAfterCutoff?.by) { reject('事实晚于测试截止时间'); continue; }
     } else { hold('未识别的资料类别'); continue; }
     if (fact.reviewed !== true) { hold('尚未检查答案夹带、时间和业务含义'); continue; }
     // Explicit projection prevents raw payloads, comments and previous outputs leaking.

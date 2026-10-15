@@ -1,9 +1,11 @@
 import {visibleReaderViews} from './deployment-projection.mjs';
 import {memberProfiles} from './member-profiles.mjs';
+import {ownerName} from './owner-name.mjs';
+export {ownerName};
 import {canRead,currentVersion,cardStatus,mayRevise} from './governance.mjs';
 import {reviewChanges} from './review-workflow.mjs';
 import {materializeTopics} from './topic-lifecycle.mjs';
-export function memberActor(id,state){const p=memberProfiles[id];if(!p)throw Object.assign(Error('请选择名单中的试用成员'),{status:400});const missions=state?.round?Object.values(state.cards).filter(c=>c.level==='mission'&&currentVersion(c).content.owner===p.name).map(c=>c.id):p.missions;return {id,name:p.name,ceo:p.ceo,visibleUnits:[...new Set([...(p.units||[]),...missions.map(id=>state?.cards[id]?.unit).filter(Boolean)])],unitDri:p.unitDri,missionDri:missions};}
+export function memberActor(id,state){const p=memberProfiles[id];if(!p)throw Object.assign(Error('请选择名单中的试用成员'),{status:400});const missions=state?.round?Object.values(state.cards).filter(c=>c.level==='mission'&&ownerName(currentVersion(c).content.owner)===p.name).map(c=>c.id):p.missions;return {id,name:p.name,ceo:p.ceo,visibleUnits:[...new Set([...(p.units||[]),...missions.map(id=>state?.cards[id]?.unit).filter(Boolean)])],unitDri:p.unitDri,missionDri:missions};}
 export function sharedProjection(state,actor){
  const cards=Object.values(state.cards).filter(c=>canRead(actor,c));
  const drafts=Object.fromEntries(cards.map(c=>[c.id,{...currentVersion(c).content,status:cardStatus(c),signatures:currentVersion(c).signatures,upstreamChange:c.upstreamChange,history:c.versions.slice(1).map((v,i)=>({from:c.versions[i].number,to:v.number,author:memberProfiles[v.author]?.name||v.author,changes:reviewChanges(c.versions[i].content,v.content)}))}]));

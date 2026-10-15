@@ -1,6 +1,6 @@
 {
   "source": "/Users/cooper/TKOS/apps/decoding-mvp",
-  "capturedAt": "2026-10-14",
+  "capturedAt": "2026-10-15",
   "files": [
     {
       "path": "document-navigation.mjs",
@@ -8,7 +8,7 @@
     },
     {
       "path": "generation-progress.mjs",
-      "sha256": "954fa08165a79bbce8015f8eef0c2c8c7f5c1729c881044d0ddf18d641ce3029"
+      "sha256": "3a6d817f61ffe16c7f43504d0083bcf012481dfdf2677ade46b40078a3762f4f"
     },
     {
       "path": "nexus-next-step.mjs",
@@ -16,7 +16,7 @@
     },
     {
       "path": "round-runner.mjs",
-      "sha256": "d6d3e78f1b62d3486a4adb78f998c11d29b9a8ca64298147f2a042169c8a1664"
+      "sha256": "3db40babc173ea01449dfa2c13128a74a5f7805b3757ac57882e601685d69235"
     },
     {
       "path": "schedule-check.mjs",
@@ -28,7 +28,7 @@
     },
     {
       "path": "AuditStatus.jsx",
-      "sha256": "3013b52522a4939a17f7ad7e4a57a3af54593e1ddef7b5d15d1ca28156674b01"
+      "sha256": "4b5adc012a06e40b5c65253515b5400403add0dfd3368bb589e8565281b66384"
     },
     {
       "path": "index.html",
@@ -40,11 +40,11 @@
     },
     {
       "path": "round-metadata.mjs",
-      "sha256": "719723280910adfa941884297e8e1675e4f52e2286643b62f7487626b7d9986f"
+      "sha256": "1df164192cf0c5abc1c4c3d53c1fa9411465f4a28773c104594940905f96f9ac"
     },
     {
       "path": "round-pool.mjs",
-      "sha256": "e36d749e9e4d73cbb500c4af367e949edf27b6a10dab8c8d2d36f9ba3040b596"
+      "sha256": "d821edc0cf277260c58438babe51589d74287d8cc1156deeb7db1bb6a7f082c0"
     },
     {
       "path": "nexus-policy.mjs",
@@ -60,7 +60,7 @@
     },
     {
       "path": "round-retry.mjs",
-      "sha256": "76c7ffb3ae48440f0671956e43916d21e15c23bfd34e1228d89eb29487fee374"
+      "sha256": "c15b2db085f9df3dd62b6363857b5a2956189e44467c53dc1eba1be43be19c36"
     },
     {
       "path": "Handshake.jsx",
@@ -96,7 +96,7 @@
     },
     {
       "path": "EntryMetadata.jsx",
-      "sha256": "1b60b05105c8ba3206f891810bb61bc4c523e0f00686e3f266cd78277c32cd3a"
+      "sha256": "ef173a6af37c370b03dd3534d882718cd9cba280fe207e2ce613af7f998358d7"
     },
     {
       "path": "ChatMessage.jsx",
@@ -104,7 +104,7 @@
     },
     {
       "path": "skill-snapshot.mjs",
-      "sha256": "d72dc16624bbb47b116bd030276874e892c96fcc04a76170e3d15685d7af12d1"
+      "sha256": "c59beda7622ebed35df008c1f86cbaadbd57fbd030dd0f8e7b0df665a72935d7"
     },
     {
       "path": "agent-prompts.mjs",
@@ -120,7 +120,7 @@
     },
     {
       "path": "shared-projection.mjs",
-      "sha256": "d139dddac14f93178852746199e0ec066dc78d3c5e788a3d4f54d11817ce3e48"
+      "sha256": "a3e8f41d3136187a6f8f11d2e2d261b967e094def7db7c6a5e87ae1ec128b20d"
     },
     {
       "path": "NexusIsland.jsx",
@@ -144,7 +144,7 @@
     },
     {
       "path": "decoding-gateway.mjs",
-      "sha256": "994f16bfc2046fe6c05857a770bdb006c173e312858d82fe4c52a079d1f92533"
+      "sha256": "ad4854be44d9d4104d78a9715805e2fca611e4573cbf0bb94be830ca8799d22f"
     },
     {
       "path": "account-responsibilities.pending.json",
@@ -156,11 +156,11 @@
     },
     {
       "path": "ontology-sources.mjs",
-      "sha256": "02e09358e2d1eb6bdb7326da185a9b099e589968e3f9db73c24e038a7c0fad6d"
+      "sha256": "36909b379b729e7adc2ecd5ff1aa80a3b9475a6b329716a45e5954bd8f7e671b"
     },
     {
       "path": "app.jsx",
-      "sha256": "4d50e7d94f2b290a04a05ada6a3b56897c69a42b2b0d14e02b1c2b0bcb8d0c6d"
+      "sha256": "71ae8c1f313c9d6b0afcb6b2d92c5be86e9b48da83e4f375b28d31f1ef8ce3bd"
     },
     {
       "path": "document-template.mjs",
@@ -172,7 +172,7 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "af95035d9d8da092a42c0d91df4956f87a8830e83cc3aaca3cfb508a6d6fdcc9"
+      "sha256": "cfca3acde5f75ed12afd367023964c1cb934bc5064eb303fc5a7cfb81f27e62d"
     },
     {
       "path": "codex-ontology-bridge.mjs",
@@ -240,7 +240,7 @@
     },
     {
       "path": "model.mjs",
-      "sha256": "de5137fa51e4727d806d8604e689fc1f36aa43ad33f9d64aa5b58dbc1023800d"
+      "sha256": "6a4c9c6b126be1053dbf343f9467461b8efd486e149bc817698751fe83d16d04"
     },
     {
       "path": "MemberAvatar.jsx",
@@ -265,10 +265,19 @@
     {
       "path": "DocumentCanvas.jsx",
       "sha256": "f429c03b5c58f641787c8e14bb91cc61256de0ed913167543601ad2bb6e64d3b"
+    },
+    {
+      "path": "owner-name.mjs",
+      "sha256": "b7c317bf789a1add41dd948ee6305a6b401c2e1c71c2deaa742addae42c61693"
     }
   ],
   "excluded": [
     "world-snapshot.json (ontology snapshot not used by the trial service)",
     "runtime state, histories and private inputs (deployment-only)"
-  ]
+  ],
+  "skill": {
+    "version": "2.0.2",
+    "fingerprint": "7280d1495ee0",
+    "source": ".runtime/eval/skills/tkos-decoding-2.0.2"
+  }
 }

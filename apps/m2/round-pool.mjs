@@ -1,6 +1,6 @@
 // Keep slots busy, but stop dequeuing on failure and drain in-flight work before return.
 export async function runRoundPool(items,worker,concurrency=2){
- if(!Number.isInteger(concurrency)||concurrency<1||concurrency>4)throw Error('拆解并发数必须是1到4的整数');
+ if(!Number.isInteger(concurrency)||concurrency<1||concurrency>50)throw Error('拆解并发数必须是1到50的整数');
  let next=0,failure;
  const run=async()=>{
   while(!failure&&next<items.length){

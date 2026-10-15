@@ -4,6 +4,7 @@ import {createCollaborationState,applyAction,currentVersion} from './governance.
 import {memberActor,sharedProjection} from './shared-projection.mjs';
 import {foundationContent,fetchRoundSources,sourceManifest} from './round-sources.mjs';
 import {generateRound,validateRound,validateUnit,canonicalOwner} from './round-runner.mjs';
+import {layeredGateway,roundKeys} from './layered-mock.mjs';
 const task={id:'bf01-m1-t1',unit:'bf01',level:'task',title:'任务',children:[]};
 const mission={id:'bf01-m1',unit:'bf01',level:'mission',title:'项目',owner:'白田田',children:[task]};
 const po={id:'bf01',level:'po',title:'成果',children:[mission]};
@@ -31,18 +32,32 @@ test('新轮读取十五份基础材料，排除结果文档，未知标题 fail
  assert.ok(!foundationContent(xml,'bf01').includes('旧答案'));assert.throws(()=>foundationContent('<p>新结构</p>','bf01'));
  const input=await fetchRoundSources({fetchDocument:async()=>({document_id:'d',revision_id:1,content:xml})});assert.equal(input.sources.length,15);assert.equal(input.capacity.workCalendar,null);assert.equal(input.capacity.hoursPerWorkday,null);assert.equal(input.capacity.otherWorkHours,null);
 });
-test('新轮全局起草与细化不用旧答案，十个领域组成同源树',async()=>{
+test('新轮逐层生成：PO、Mission 各十个领域并行，Task 按 Mission 并行，交叉验证无问题即进入下一层，Task 由总校验统一检查',async()=>{
  const ownerByUnit=key=>Object.values(memberProfiles).find(p=>p.unitDri.includes(key)).name;
- const calls=[];const gateway={complete:async messages=>{const q=JSON.parse(messages[1].content);calls.push(q);let answer;if(q.task.includes('全局十个'))answer={units:q.units.map(([key,name])=>({key,name,title:'新成果',result:'候选结果'}))};else if(q.task.includes('审核完整'))answer={issues:[],gaps:['工作日历'],summary:'待核对'};else{const fields={title:'新成果',result:'可检查结果',checks:['核对证据'],owner:ownerByUnit(q.key)};answer={unit:{...fields,key:q.key,name:q.name,missions:[{...fields,tasks:[{...fields,activities:[]}]}]}};}return {answer:JSON.stringify(answer),model:'test'};}};
- const v=await generateRound({gateway,rules:'quality rules',fetchSources:async()=>({sources:[],capacity:{hoursPerWorkday:8},retrievedAt:'test'})});assert.equal(v.units.length,10);assert.equal(v.counts.task,10);assert.equal(calls.length,12);assert.equal(v.status,'candidate-needs-review');assert.throws(()=>validateRound([]));
+ const make=key=>{const card={title:'新成果',result:'候选结果',checks:['证据'],owner:ownerByUnit(key)};return {...card,key,name:key,missions:[{...card,tasks:[{...card,activities:[]}]}]};};
+ const stages=[];const v=await generateRound({gateway:layeredGateway(make,{onCall:q=>stages.push(q.stage)}),rules:'quality rules',fetchSources:async()=>({sources:[],capacity:{hoursPerWorkday:8},retrievedAt:'test'})});
+ assert.equal(v.units.length,10);assert.equal(v.counts.task,10);assert.equal(v.status,'candidate-needs-review');assert.throws(()=>validateRound([]));
+ const count=s=>stages.filter(x=>x===s).length;
+ for(const layer of ['po','mission','task'])assert.equal(count(layer+'-generate'),10);
+ assert.deepEqual(stages.filter(s=>s.endsWith('-check')),['po-check','mission-check','final-check']);
+ assert.ok(stages.indexOf('po-check')<stages.indexOf('mission-generate')&&stages.indexOf('mission-check')<stages.indexOf('task-generate'));
+ assert.deepEqual(v.audit.iterations.map(x=>x.layer),['po','mission','final','format']);
 });
-test('失败重试复用本轮材料及有效领域，不重新抓取也不借旧轮答案',async()=>{
- const keys=['bf01','bf02','bf03','rearch','method','agents','eo','tokenhub','talent','finance'];
- const makeUnit=key=>{const owner=Object.values(memberProfiles).find(p=>p.unitDri.includes(key)).name;const card={title:'本轮结果',result:'待核对结果',checks:['证据'],owner};return {...card,key,name:key,missions:[{...card,tasks:[{...card,activities:[]}]}]};};
- const calls=[];const result=await generateRound({rules:'rules',resume:{input:{sources:[],capacity:{hoursPerWorkday:8}},sketch:{units:keys.map(key=>({key}))},partialUnits:keys.slice(0,9).map(makeUnit)},fetchSources:()=>{throw Error('不应重新抓取');},gateway:{complete:async messages=>{const q=JSON.parse(messages[1].content);calls.push(q);return {answer:JSON.stringify(q.key?{unit:makeUnit(q.key)}:{issues:[],gaps:[],summary:'待确认'}),model:'test'};}}});
- assert.equal(calls.length,2);assert.equal(calls[0].key,'finance');assert.equal(result.units.length,10);
+test('失败续跑沿用本轮材料和已完成的层，不重新抓取也不借旧轮答案',async()=>{
+ const make=key=>{const owner=Object.values(memberProfiles).find(p=>p.unitDri.includes(key)).name;const card={title:'本轮结果',result:'待核对结果',checks:['证据'],owner};return {...card,key,name:key,missions:[{...card,tasks:[{...card,activities:[]}]}]};};
+ const po=k=>{const {missions,...rest}=make(k);return {po:rest,upstream:[],sharedEvents:[]};};
+ const withMissions=k=>({...po(k),missions:make(k).missions.map(({tasks,...m})=>m)});
+ const units=f=>Object.fromEntries(roundKeys.map(k=>[k,f(k)]));
+ const layerState={po:{units:units(po),rounds:1,remaining:[],done:true},mission:{units:units(withMissions),rounds:1,remaining:[],done:true},task:{units:Object.fromEntries(roundKeys.slice(0,9).map(k=>[k,{...withMissions(k),missions:make(k).missions}])),rounds:0,remaining:[]}};
+ const stages=[];const result=await generateRound({rules:'rules',resume:{input:{sources:[],capacity:{hoursPerWorkday:8}},layerState},fetchSources:()=>{throw Error('不应重新抓取');},gateway:layeredGateway(make,{onCall:q=>stages.push(q.stage+':'+(q.key||'all'))})});
+ assert.deepEqual(stages,['task-generate:finance','final-check:all']);assert.equal(result.units.length,10);
 });
 test('模型结构化验收和依赖保留原始出处，呈现为文档字段而非丢失',()=>{
  const card={title:'成果',result:'结果',owner:'白田田',checks:[{evidence:'记录',criterion:'有负责人'}],dependencies:{input:'已核对资料'},time:null};const u={...card,key:'bf01',missions:[{...card,tasks:[{...card,activities:[]}]}]};validateUnit(u);
  assert.match(u.missions[0].checks[0],/有负责人/);assert.match(u.dependencies,/已核对资料/);assert.deepEqual(u.generatedFieldSources.dependencies,{input:'已核对资料'});assert.equal(u.time,undefined);
+});
+test('带候选标记的负责人仍归入本人目录',async()=>{
+ const {ownerName}=await import('./shared-projection.mjs');
+ for(const v of ['刘明华','刘明华（候选）','待确认候选：刘明华','候选：刘明华'])assert.equal(ownerName(v),'刘明华');
+ assert.equal(ownerName('不是名单里的人'),'不是名单里的人');
 });
