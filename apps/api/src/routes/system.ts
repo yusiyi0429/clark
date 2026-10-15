@@ -9,7 +9,7 @@ import type { AppInstance, RouteContext } from "./shared.js";
 import { worldConfigured } from "../worldClient.js";
 
 export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { q, env, runtime, companyMemory, radar, recordings, voiceprints, requireServiceToken } = ctx;
+  const { q, env, runtime, companyMemory, radar, recordings, voiceprints, requireServiceToken, peopleDirectory } = ctx;
 
   const healthz = async (): Promise<Static<typeof HealthResponse>> => {
     let database = true;
@@ -55,7 +55,7 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
   );
 
   const meMcp = async (req: FastifyRequest, reply: FastifyReply) => {
-    const findPerson = (personId: string) => companyMemory.searchPeople(undefined).find((person) => person.personId === personId);
+    const findPerson = (personId: string) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId);
     const urls = oauthUrls(env.publicOrigin);
     const identity = await authenticateMcpToken(q, req.headers.authorization, env.sessionSecret, ctx.now(), (personId) => !!findPerson(personId), urls.resource);
     if (!identity) {
@@ -69,8 +69,8 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
     }
     reply.hijack();
     const { server, transport } = await createMeMcpSession({ pool: ctx.pool, q, pepper: env.sessionSecret, now: ctx.now,
-      names: () => personDisplayNames(companyMemory), findPerson, initialPerson: findPerson(identity.personId)!, authorization: req.headers.authorization,
-      people: () => companyMemory.searchPeople(undefined), publicOrigin: env.publicOrigin });
+      names: () => personDisplayNames(peopleDirectory), findPerson, initialPerson: findPerson(identity.personId)!, authorization: req.headers.authorization,
+      people: () => peopleDirectory.searchPeople(undefined), publicOrigin: env.publicOrigin });
     reply.raw.on("close", () => { void server.close(); });
     await transport.handleRequest(req.raw, reply.raw, req.body);
   };

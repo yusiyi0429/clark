@@ -17,14 +17,14 @@ const itemParams = Type.Object({ objectType: MaterialObjectType, objectId: Threa
 const versionQuery = Type.Object({ version: Type.Optional(Type.Integer({ minimum: 1 })) });
 
 export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, annotationAgent?: MaterialAnnotationAgent): void {
-  const { q, pool, companyMemory, materialStorageDir, requirePerson, fail } = ctx;
-  const names = personDisplayNames(companyMemory);
+  const { q, pool, peopleDirectory, materialStorageDir, requirePerson, fail } = ctx;
+  const names = personDisplayNames(peopleDirectory);
   const viewer = (person: SessionPerson): MaterialViewer => ({ personId: person.personId, role: person.role,
     displayName: names.get(person.personId) ?? person.personId });
   const queue = createMaterialAnnotationQueue({ pool,
     agent: annotationAgent ?? createMaterialAnnotationAgent({ baseUrl: ctx.env.piBaseUrl, apiKey: ctx.env.piApiKey, modelId: ctx.env.heavyModel }),
     viewer: (personId) => ({ personId, displayName: names.get(personId) ?? personId,
-      role: companyMemory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ? "ceo" : "member" }),
+      role: peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ? "ceo" : "member" }),
     onError: () => app.log.error("material annotation queue failed"),
   });
   let recovery: ReturnType<typeof setInterval> | undefined;

@@ -12,7 +12,7 @@ import type {
   TWarmapTranscript,
 } from "@warmap/contracts";
 import type { ActionScope } from "./actionToken.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import {
   appendFingerprint,
   commit,
@@ -87,7 +87,7 @@ export function buildTranscriptCandidate(
 /** 上传 Markdown 只生成候选并 bump version：不改 status、不跑 Outcome。 */
 export async function createTranscriptCandidate(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   secret: string,
   meetingId: string,
   file: { fileName: string; buffer: Buffer },
@@ -164,7 +164,7 @@ export async function saveTranscriptCandidate(
  */
 export async function executeConfirmTranscriptCandidate(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   outcomeAgent: PostMeetingAgent,
   secret: string,
   scope: ActionScope,

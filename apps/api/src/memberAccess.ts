@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { hashSecret, verifySecret } from "./session.js";
 
@@ -28,10 +28,10 @@ export function randomInitialPasscode(): string {
   }
 }
 
-export const roleOf = (person: MemoryPerson): SessionRole => (person.roles.includes("ceo") ? "ceo" : "member");
-export const canSwitchView = (person: MemoryPerson): boolean =>
+export const roleOf = (person: DirectoryPerson): SessionRole => (person.roles.includes("ceo") ? "ceo" : "member");
+export const canSwitchView = (person: DirectoryPerson): boolean =>
   person.roles.includes("ceo") && (person.roles.includes("dri") || person.roles.includes("participant"));
-export const canUseMemberView = (person: MemoryPerson): boolean =>
+export const canUseMemberView = (person: DirectoryPerson): boolean =>
   person.roles.includes("dri") || person.roles.includes("participant");
 
 export type AccessRow = {
@@ -64,7 +64,7 @@ export async function setMemberAccess(
   );
 }
 
-export type Verified = { kind: "verified"; row: AccessRow; person: MemoryPerson };
+export type Verified = { kind: "verified"; row: AccessRow; person: DirectoryPerson };
 export type Rejected = { kind: "invalid" } | { kind: "locked"; retryAfterSeconds: number };
 
 /**
@@ -73,7 +73,7 @@ export type Rejected = { kind: "invalid" } | { kind: "locked"; retryAfterSeconds
  */
 export async function verifyCredentials(
   q: Query,
-  findPerson: (personId: string) => MemoryPerson | undefined,
+  findPerson: (personId: string) => DirectoryPerson | undefined,
   loginId: string,
   passcode: string,
   now: Date,

@@ -35,7 +35,7 @@ const SECTION_LABELS: Record<string, string> = {
 };
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requirePerson, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs } = ctx;
+  const { pool, q, env, fail, requirePerson, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, peopleDirectory } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
   // 我的 Agent 按「人 × 页面」私有；任务卡 scope 始终复查对象成员及当前拍板权。
@@ -51,7 +51,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         objectRef: card.objectRef, payload: card.payload } };
     }
     return person.role === "ceo" || scope === "global" || scope.startsWith("mission-card:") || scope.startsWith("task:") || scope.startsWith("monthly-review-item:") || scope.startsWith("personal-review:")
-      ? getScopeObject(q, scope, env.sessionSecret, { person, people: companyMemory.searchPeople(undefined), now: ctx.now() })
+      ? getScopeObject(q, scope, env.sessionSecret, { person, people: peopleDirectory.searchPeople(undefined), now: ctx.now() })
       : { snapshot: null, visible: false };
   };
   const conversationScopeVisible = async (person: SessionPerson, scope: TConversationScope) =>
@@ -80,7 +80,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         const [objectType, objectId] = req.params.scope.split(":", 2);
         if (objectType !== "issue" && objectType !== "task") return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在");
         try {
-          const names = personDisplayNames(companyMemory);
+          const names = personDisplayNames(peopleDirectory);
           const material = await getObjectMaterial(q, { objectType, objectId }, req.body.viewingMaterialId,
             { personId: owner, role: person.role, displayName: names.get(owner) ?? owner }, names);
           if (object.snapshot) Object.assign(object.snapshot, { viewingMaterial: {
@@ -221,7 +221,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           const result = await runtime.run({
             scope: req.params.scope,
             runId,
-            viewer: { personId: owner, displayName: personDisplayNames(companyMemory).get(owner) ?? owner, role: person.role },
+            viewer: { personId: owner, displayName: personDisplayNames(peopleDirectory).get(owner) ?? owner, role: person.role },
             message: runtimeMessage,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,
@@ -335,7 +335,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           promptHash: runtime.promptHash,
           objectRef: object.snapshot?.objectRef ?? { type: "global", id: "global" },
           personId: owner,
-          personName: personDisplayNames(companyMemory).get(owner),
+          personName: personDisplayNames(peopleDirectory).get(owner),
           threadId: row.id,
           metadata: { section, scope: req.params.scope, object_title: object.snapshot?.title },
           inputs: { message: req.body.message, currentObject: object.snapshot, references: references.snapshots },

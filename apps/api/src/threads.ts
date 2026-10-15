@@ -1,5 +1,5 @@
 import type { TThreadMember, TThreadMessage, TThreadObjectType, TThreadQuote } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import type { PoolClient } from "pg";
 import { personDisplayNames } from "./people.js";
@@ -48,7 +48,7 @@ export async function isActiveMember(q: Query, ref: ThreadRef, personId: string)
 }
 
 /** 在群里的人，按加入先后；名字与身份现查人员目录。 */
-export async function listMembers(q: Query, companyMemory: CompanyMemoryRepository, ref: ThreadRef): Promise<TThreadMember[]> {
+export async function listMembers(q: Query, companyMemory: PeopleDirectory, ref: ThreadRef): Promise<TThreadMember[]> {
   const people = new Map(companyMemory.searchPeople(undefined).map((person) => [person.personId, person]));
   const result = await q(
     "SELECT person_id FROM thread_members WHERE object_type = $1 AND object_id = $2 AND left_at IS NULL ORDER BY joined_at, person_id",
@@ -67,7 +67,7 @@ export async function listMembers(q: Query, companyMemory: CompanyMemoryReposito
 /** 不给 after 取最近 limit 条（打开群组）；给了取 after 之后的 limit 条（轮询）。都按 id 升序。 */
 export async function listMessages(
   q: Query,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   ref: ThreadRef,
   after?: number,
   limit = 200,
@@ -90,7 +90,7 @@ export async function listMessages(
 
 export async function postMessage(
   q: Query,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   ref: ThreadRef,
   authorId: string,
   input: { content: string; quote?: TThreadQuote },
@@ -149,7 +149,7 @@ function meetingSlot(start: Date, end: Date): string {
   return `${day} ${part(start, { weekday: "short" })} ${time(start)}–${time(end)}`;
 }
 
-export async function threadIntroInput(q: Query, companyMemory: CompanyMemoryRepository, ref: ThreadRef, inviterId: string, newcomers: string[], note?: string): Promise<IntroInput> {
+export async function threadIntroInput(q: Query, companyMemory: PeopleDirectory, ref: ThreadRef, inviterId: string, newcomers: string[], note?: string): Promise<IntroInput> {
   const names = personDisplayNames(companyMemory);
   let title = "";
   let description = "";

@@ -24,10 +24,10 @@ import { isActiveMember, unreadThreads } from "../threads.js";
 
 // 成员工作台：普通视图对象，不走 Card/Action 签名（spec §3.5）。
 export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, fail, requirePerson, companyMemory, voiceprints, dictation, materialMultipartLimitError } = ctx;
+  const { pool, q, fail, requirePerson, companyMemory, voiceprints, dictation, materialMultipartLimitError, peopleDirectory } = ctx;
 
-  const names = () => personDisplayNames(companyMemory);
-  const invitable = () => new Set(companyMemory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId));
+  const names = () => personDisplayNames(peopleDirectory);
+  const invitable = () => new Set(peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId));
   const requireMember: Guard = async (req, reply) => {
     await requirePerson(req, reply);
     if (reply.sent) return reply;
@@ -43,7 +43,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   app.get("/api/me/home", { preHandler: requireMember, schema: { response: { 200: MeHomeResponse } } }, async (req) => {
     const [myTasks, { work }, radar, weeklySync] = await Promise.all([
       listMyTasks(q, req.person!.personId, names()),
-      readMemberWork(q, companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, ctx.now()),
+      readMemberWork(q, peopleDirectory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, ctx.now()),
       readMemberRadarBrief(q, req.person!, ctx.now()),
       readWeeklySyncReminder(q, req.person!.personId, ctx.now()),
     ]);
@@ -63,7 +63,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     await revokePersonalToken(q, req.person!.personId, req.params.id) ? reply.code(204).send() : fail(reply, 404, "TOKEN_NOT_FOUND", "令牌不存在"));
 
   app.get("/api/me/battlefields/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: MemberBattlefieldResponse } } }, async (req, reply) => {
-    const detail = await readMemberBattlefield(q, companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.id, ctx.now());
+    const detail = await readMemberBattlefield(q, peopleDirectory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.id, ctx.now());
     return detail ?? fail(reply, 404, "BATTLEFIELD_NOT_FOUND", "战场不存在");
   });
 

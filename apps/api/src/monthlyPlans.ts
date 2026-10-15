@@ -19,7 +19,7 @@ import {
 import { canonicalJson, signActionId, type ActionScope } from "./actionToken.js";
 import { getRegisteredBattlefieldIds, findUnregisteredBattlefieldId } from "./battlefields.js";
 import { getRegisteredCapabilityIds, findUnregisteredCapabilityId } from "./capabilities.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -248,7 +248,7 @@ function planError(status: number, code: string, message: string, fieldErrors?: 
  */
 export async function executeUpdateMonthlyPlanDraft(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   secret: string,
   scope: ActionScope,
   input: TUpdateMonthlyPlanDraftRequest,
@@ -408,7 +408,7 @@ type DriMonthlyFeedbackResult =
  */
 export async function appendDriMonthlyFeedback(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   body: TDriMonthlyPlanFeedbackRequest | TDriMonthlyPlanTodoFeedbackRequest,
   secret: string,
 ): Promise<DriMonthlyFeedbackResult> {
@@ -561,7 +561,7 @@ async function refreshOntologyAnchors(client: PoolClient, row: MonthlyPlanRow): 
  */
 export async function executeSignMonthlyPlan(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   secret: string,
   scope: ActionScope,
   fingerprint: string,

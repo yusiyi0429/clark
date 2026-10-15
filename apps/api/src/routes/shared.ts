@@ -1,3 +1,4 @@
+import type { PeopleDirectory } from "../peopleDirectory.js";
 import { timingSafeEqual } from "node:crypto";
 import { Type, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -55,6 +56,7 @@ export type RouteContext = {
   q: Query;
   env: AppEnv;
   companyMemory: CompanyMemoryRepository;
+  peopleDirectory: PeopleDirectory;
   preflight: PreflightAgent;
   outcome: PostMeetingAgent;
   runtime: ConversationRuntime;
@@ -124,11 +126,11 @@ export function materialMultipartLimitError(
 }
 
 /** 读会话：签名与有效期之外，人要还在 seed 里，凭据版本要与库里一致（口令重置后旧会话立即失效）。 */
-export function createReadSession(env: AppEnv, q: Query, companyMemory: CompanyMemoryRepository) {
+export function createReadSession(env: AppEnv, q: Query, peopleDirectory: PeopleDirectory) {
   return async function readSession(req: FastifyRequest): Promise<SessionPerson | null> {
     const claims = readSessionToken(env.sessionSecret, parseCookies(req.headers.cookie)[SESSION_COOKIE]);
     if (!claims) return null;
-    const person = companyMemory.searchPeople(undefined).find((p) => p.personId === claims.pid);
+    const person = peopleDirectory.searchPeople(undefined).find((p) => p.personId === claims.pid);
     if (!person) return null;
     if ((await currentSessionVersion(q, person.personId)) !== claims.v) return null;
     const role = claims.view ?? roleOf(person);

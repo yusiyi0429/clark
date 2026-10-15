@@ -4,7 +4,7 @@ import { loadWeeklyProgress, weekRange } from "../weeklyProgress.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerOntologyRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { env, fail, requireServiceToken, q, now, companyMemory } = ctx;
+  const { env, fail, requireServiceToken, q, now, peopleDirectory } = ctx;
   app.get("/api/ontology/weekly-progress", {
     onRequest: (req, reply, done) => {
       if (!env.ontologyServiceToken) {
@@ -22,6 +22,6 @@ export function registerOntologyRoutes(app: AppInstance, ctx: RouteContext): voi
       throw error;
     }
     reply.header("Cache-Control", "no-store");
-    return loadWeeklyProgress(q, range, personDisplayNames(companyMemory));
+    return loadWeeklyProgress(q, range, personDisplayNames(peopleDirectory));
   });
 }

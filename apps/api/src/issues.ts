@@ -17,7 +17,7 @@ import {
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import { battlefieldSetOf, getRegisteredBattlefieldIds, normalizeBattlefieldSet } from "./battlefields.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import { revokeEffect } from "./effects.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
@@ -450,7 +450,7 @@ export type DriImportResult =
  */
 export async function importDriIssue(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   body: TDriIssueImportRequest,
   secret: string,
 ): Promise<DriImportResult> {

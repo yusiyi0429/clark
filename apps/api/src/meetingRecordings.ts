@@ -15,7 +15,7 @@ import { access, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } f
 import { join } from "node:path";
 import type { Pool } from "pg";
 import type { TMeetingRecording, TMeetingRecordingStatus, TTranscriptSource } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import { getMeetingRow, UUID_PATTERN } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
 import { RecordingNotConfigured, assertRecordingConfigured, recordingConfigured } from "./recordingConfig.js";
@@ -144,7 +144,7 @@ export function createMeetingRecordingService({
 }: {
   pool: Pool;
   storageDir: string;
-  companyMemory: CompanyMemoryRepository;
+  companyMemory: PeopleDirectory;
   deps?: RecordingDeps;
 }): MeetingRecordingService {
   const q = pool.query.bind(pool);
@@ -266,7 +266,7 @@ export function createMeetingRecordingService({
     id: string,
     out: Extract<QueryResult, { state: "done" }>,
     mp3: string,
-    people: ReturnType<CompanyMemoryRepository["searchPeople"]>,
+    people: ReturnType<PeopleDirectory["searchPeople"]>,
   ): Promise<Map<string, SpeakerSuggestion> | undefined> {
     if (!deps.voiceprint) return undefined;
     try {

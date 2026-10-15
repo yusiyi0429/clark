@@ -14,7 +14,7 @@ import { idParams, type AppInstance, type Guard, type RouteContext, type Session
 
 /** 个人雷达（ADR-0021）：只服务本人；CEO 的雷达就是公司雷达，走 /api/config/radar。 */
 export function registerMyRadarRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { q, env, fail, requirePerson, companyMemory, personalRadar, now } = ctx;
+  const { q, env, fail, requirePerson, peopleDirectory, personalRadar, now } = ctx;
 
   /** 仅成员：先过登录与写请求的 Origin，再挡 CEO。 */
   const requireMember: Guard = async (req, reply) => {
@@ -24,7 +24,7 @@ export function registerMyRadarRoutes(app: AppInstance, ctx: RouteContext): void
   };
 
   const myRadar = (person: SessionPerson) => readMyRadar({
-    q, people: companyMemory.searchPeople(undefined), secret: env.sessionSecret, person, now: now(), webSearch: personalRadar.providerStatus.webSearch,
+    q, people: peopleDirectory.searchPeople(undefined), secret: env.sessionSecret, person, now: now(), webSearch: personalRadar.providerStatus.webSearch,
   });
 
   app.get("/api/me/radar", { preHandler: requireMember, schema: { response: { 200: MyRadar } } }, async (req) => myRadar(req.person!));

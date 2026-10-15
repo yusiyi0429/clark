@@ -8,7 +8,7 @@ import type { Pool } from "pg";
 import type { Query } from "./meetingStore.js";
 import { authenticateMcpToken, MCP_WRITE_TOOLS, oauthUrls } from "./mcpOAuth.js";
 import { canUseMemberView } from "./memberAccess.js";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson } from "./peopleDirectory.js";
 import { companyProgress, getIssue, getMeeting, listPending } from "./mcpCeoReads.js";
 import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { applyMissionCardRevision } from "./missionCardAnnotations.js";
@@ -70,7 +70,7 @@ const reviewDefinitions: Tool[] = [
 ];
 const memberNames = new Set(memberDefinitions.map((tool) => tool.name));
 const ceoNames = new Set(ceoDefinitions.map((tool) => tool.name));
-const access = (person: MemoryPerson) => ({ member: canUseMemberView(person), ceo: person.roles.includes("ceo") });
+const access = (person: DirectoryPerson) => ({ member: canUseMemberView(person), ceo: person.roles.includes("ceo") });
 type Bucket = { minute: number; total: number; writes: number };
 const buckets = new Map<string, Bucket>();
 function limited(tokenId: string, write: boolean, now: Date): boolean {
@@ -85,8 +85,8 @@ function limited(tokenId: string, write: boolean, now: Date): boolean {
 const result = (value: unknown, isError = false) => ({ isError, content: [{ type: "text" as const, text: JSON.stringify(value) }] });
 
 export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: string; now: () => Date;
-  names: () => Map<string, string>; findPerson: (personId: string) => MemoryPerson | undefined;
-  people: () => MemoryPerson[]; initialPerson: MemoryPerson; publicOrigin?: string; authorization: string | undefined }) {
+  names: () => Map<string, string>; findPerson: (personId: string) => DirectoryPerson | undefined;
+  people: () => DirectoryPerson[]; initialPerson: DirectoryPerson; publicOrigin?: string; authorization: string | undefined }) {
   const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   /** 推进人写进展、放链接会让未启动的事项变进行中、版本跟着变：把事项此刻的状态和版本一起回给外部工具，接着提交验收直接用。 */
   const itemState = async (itemId: string) =>

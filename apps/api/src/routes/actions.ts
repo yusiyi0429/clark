@@ -35,7 +35,7 @@ import { projectMemberMeetingCardFromCard } from "../memberCards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requirePerson, requestContext, companyMemory, preflight, driExporter, ontologyUpdater, outcome, monthlyPlanService, research, invalidInput, respond } = ctx;
+  const { pool, q, env, fail, requirePerson, requestContext, companyMemory, preflight, driExporter, ontologyUpdater, outcome, monthlyPlanService, research, invalidInput, respond, peopleDirectory } = ctx;
 
   app.post(
     "/api/actions/execute",
@@ -168,14 +168,14 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         if (!Value.Check(SignMonthlyPlanRequest, signInput)) return invalidInput(reply, SignMonthlyPlanRequest, signInput);
         const result = await executeSignMonthlyPlan(pool, companyMemory, env.sessionSecret, scope, fingerprint);
         // 签发已提交：由系统为各战场参与者起草任务卡；重放不再启动，已有轮次的战场跳过。起草没能开始也不影响签发结果。
-        if ("card" in result && !result.replayed) await startSignedMissionDrafts(pool, companyMemory.searchPeople(undefined), (result.card.payload as { period: string }).period,
+        if ("card" in result && !result.replayed) await startSignedMissionDrafts(pool, peopleDirectory.searchPeople(undefined), (result.card.payload as { period: string }).period,
           ctx.now, ctx.missionCardDraftAgent, companyMemory, env.missionCardKnownMissionsFile).catch((error) => console.error("mission card drafts did not start", error));
         return respond(reply, result);
       }
 
       if (scope.actionType === "mission.edit") {
         if (!Value.Check(MissionEditInput, input)) return invalidInput(reply, MissionEditInput, input);
-        return respond(reply, await executeEditMission(pool, env.sessionSecret, personDisplayNames(companyMemory), scope, input, fingerprint, req.person!));
+        return respond(reply, await executeEditMission(pool, env.sessionSecret, personDisplayNames(peopleDirectory), scope, input, fingerprint, req.person!));
       }
 
       if (scope.objectType === "issue") {

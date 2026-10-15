@@ -1,38 +1,27 @@
+import { loadPeopleDirectory, type PeopleDirectory, type PeopleDirectoryEnv } from "./peopleDirectory.js";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { Value } from "@sinclair/typebox/value";
 import {
-  CompanyPeopleSeed,
-  type TCompanyPeopleSeed,
-  type TPersonResult,
   type TSectionMatch,
   type TSectionSummary,
 } from "@warmap/contracts";
 
 export type MemorySection = TSectionSummary & { text: string };
-export type MemoryPerson = TPersonResult;
+export type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
+export { loadPeople } from "./peopleDirectory.js";
 
-export type CompanyMemoryRepository = {
+export type CompanyMemoryRepository = PeopleDirectory & {
   listSections(): TSectionSummary[];
   searchSections(query: string, limit: number): TSectionMatch[];
   getPassages(sectionId: string, query: string | undefined, limit: number): {
     section: TSectionSummary;
     passages: { id: string; text: string; sourceRef: string; updatedAt: string }[];
   };
-  searchPeople(query: string | undefined): TPersonResult[];
 };
 
-export type CompanyMemorySeedEnv = {
+export type CompanyMemorySeedEnv = PeopleDirectoryEnv & {
   companyMemorySeedDir: string;
-  companyPeopleSeed: string;
 };
-
-function firstErrors(schema: Parameters<typeof Value.Check>[0], value: unknown): string {
-  return [...Value.Errors(schema, value)]
-    .slice(0, 3)
-    .map((e) => `${e.path || "/"} ${e.message}`)
-    .join("; ");
-}
 
 function bigrams(text: string): string[] {
   const normalized = text.toLowerCase().replace(/\s+/g, "");
@@ -62,36 +51,6 @@ function snippet(text: string, query: string): string {
   return `${start > 0 ? "…" : ""}${text.slice(start, start + 120).trim()}${text.length > start + 120 ? "…" : ""}`;
 }
 
-export function loadPeople(seedPath: string): MemoryPerson[] {
-  if (!existsSync(seedPath)) {
-    throw new Error(`CompanyMemory 人员 seed 不存在: ${seedPath}（不虚构人员，启动失败）`);
-  }
-  let raw: unknown;
-  try {
-    raw = JSON.parse(readFileSync(seedPath, "utf8"));
-  } catch (err) {
-    throw new Error(`CompanyMemory 人员 seed 不是合法 JSON: ${seedPath}: ${(err as Error).message}`);
-  }
-  if (!Value.Check(CompanyPeopleSeed, raw)) {
-    throw new Error(`CompanyMemory 人员 seed 不符合 company-people.v1: ${seedPath}: ${firstErrors(CompanyPeopleSeed, raw)}`);
-  }
-  const updatedAt = statSync(seedPath).mtime.toISOString();
-  const people = (raw as TCompanyPeopleSeed).people.map((p): MemoryPerson => ({
-    personId: p.personId,
-    displayName: p.displayName,
-    roles: [...p.roles],
-    sourceRef: `${seedPath}#${p.personId}`,
-    updatedAt,
-  }));
-  const seen = new Set<string>();
-  for (const person of people) {
-    if (seen.has(person.personId)) {
-      throw new Error(`CompanyMemory 人员 seed 存在重复 personId: ${person.personId}`);
-    }
-    seen.add(person.personId);
-  }
-  return people;
-}
 
 function loadSections(seedDir: string): MemorySection[] {
   if (!existsSync(seedDir)) {
@@ -152,7 +111,7 @@ function splitPassages(section: MemorySection): { id: string; text: string }[] {
 
 /** 装载并校验 seed；任何缺失或不合规都抛错，让 API 启动诚实失败。 */
 export function loadCompanyMemory(env: CompanyMemorySeedEnv): CompanyMemoryRepository {
-  const people = loadPeople(env.companyPeopleSeed);
+  const directory = loadPeopleDirectory(env);
   const sections = loadSections(env.companyMemorySeedDir);
   const sectionById = new Map(sections.map((s) => [s.id, s]));
 
@@ -198,10 +157,6 @@ export function loadCompanyMemory(env: CompanyMemorySeedEnv): CompanyMemoryRepos
       };
     },
 
-    searchPeople(query) {
-      const needle = query?.trim().toLowerCase();
-      const matched = needle ? people.filter((p) => p.displayName.toLowerCase().includes(needle)) : people;
-      return matched.map((p) => ({ ...p }));
-    },
+    searchPeople: directory.searchPeople,
   };
 }

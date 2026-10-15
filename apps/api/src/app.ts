@@ -1,3 +1,4 @@
+import { loadPeopleDirectory } from "./peopleDirectory.js";
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { Value } from "@sinclair/typebox/value";
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
@@ -178,6 +179,7 @@ export async function buildApp({
 }): Promise<FastifyInstance> {
   configureLangSmith({ apiKey: env.langsmithApiKey, project: env.langsmithProject });
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
+  const peopleDirectory = loadPeopleDirectory(env);
   const companyMemory = loadCompanyMemory(env);
   const preflight = preflightAgent ?? await createPreflightAgent({
     query: pool.query.bind(pool),
@@ -298,7 +300,7 @@ export async function buildApp({
   app.addHook("onClose", async () => recordings.close());
 
   const fail = createFail(requestContext);
-  const readSession = createReadSession(env, q, companyMemory);
+  const readSession = createReadSession(env, q, peopleDirectory);
   const requirePerson = createRequirePerson(env, readSession, fail);
   const requireCEO = createRequireCEO(requirePerson, fail);
   const requireServiceToken = createRequireServiceToken(fail);
@@ -336,6 +338,7 @@ export async function buildApp({
     q,
     env,
     companyMemory,
+    peopleDirectory,
     preflight,
     outcome,
     runtime,

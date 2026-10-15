@@ -33,7 +33,7 @@ import { readCompanyRadarSettings, saveCompanyRadarSettings } from "../radarSett
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
 export function registerConfigRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requireCEO, companyMemory, preflight, research, radar, materialStorageDir, materialMultipartLimitError, now } = ctx;
+  const { pool, q, env, fail, requireCEO, companyMemory, preflight, research, radar, materialStorageDir, materialMultipartLimitError, now, peopleDirectory } = ctx;
 
 function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreateConfigMeetingRequest } | { error: string } {
   const body: Record<string, unknown> = {};
@@ -85,7 +85,7 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     "/api/config/battlefields",
     { preHandler: requireCEO, schema: { body: CreateBattlefieldRequest } },
     async (req, reply): Promise<FastifyReply> => {
-      const ownerNames = personDisplayNames(companyMemory);
+      const ownerNames = personDisplayNames(peopleDirectory);
       if (!isKnownOwner(ownerNames, req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
       const result = await registerBattlefield(q, req.body);
       if (!result.ok) return fail(reply, result.status, result.code, result.message);
@@ -97,7 +97,7 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     "/api/config/capabilities",
     { preHandler: requireCEO, schema: { body: CreateCapabilityRequest } },
     async (req, reply): Promise<FastifyReply> => {
-      if (!isKnownOwner(personDisplayNames(companyMemory), req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
+      if (!isKnownOwner(personDisplayNames(peopleDirectory), req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
       const refs = req.body.supportRefs ?? [];
       const refsValid = await validateSupportRefs(q, refs);
       if (!refsValid.ok) return fail(reply, 400, refsValid.code, refsValid.message);
@@ -111,13 +111,13 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
   app.get(
     "/api/config/capabilities",
     { preHandler: requireCEO },
-    async (): Promise<TCapabilityManagementResponse> => ({ capabilities: await listCapabilityRows(q, personDisplayNames(companyMemory)) }),
+    async (): Promise<TCapabilityManagementResponse> => ({ capabilities: await listCapabilityRows(q, personDisplayNames(peopleDirectory)) }),
   );
   app.patch(
     "/api/config/capabilities/:id",
     { preHandler: requireCEO, schema: { params: idParams, body: PatchCapabilityRequest } },
     async (req, reply): Promise<FastifyReply> => {
-      if (!isKnownOwner(personDisplayNames(companyMemory), req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
+      if (!isKnownOwner(personDisplayNames(peopleDirectory), req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
       if (req.body.supportRefs !== undefined) {
         const refsValid = await validateSupportRefs(q, req.body.supportRefs);
         if (!refsValid.ok) return fail(reply, 400, refsValid.code, refsValid.message);
@@ -196,7 +196,7 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     "/api/config/missions",
     { preHandler: requireCEO },
     async (req): Promise<TMissionManagementResponse> => ({
-      missions: (await listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), undefined, req.person!)).map(
+      missions: (await listMissionCards(q, env.sessionSecret, personDisplayNames(peopleDirectory), undefined, req.person!)).map(
         (card) => card.payload as TMissionManagementResponse["missions"][number],
       ),
     }),
@@ -206,7 +206,7 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     "/api/config/missions",
     { preHandler: requireCEO, schema: { body: CreateMissionRequest } },
     async (req, reply): Promise<FastifyReply> => {
-      const ownerNames = personDisplayNames(companyMemory);
+      const ownerNames = personDisplayNames(peopleDirectory);
       const refsValid = await validateMissionRelations(q, ownerNames, req.body);
       if (refsValid) return fail(reply, 400, refsValid.code, refsValid.message);
       const result = await registerMission(q, req.body);
@@ -228,7 +228,7 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     "/api/config/battlefields/:id",
     { preHandler: requireCEO, schema: { params: idParams, body: PatchBattlefieldRequest } },
     async (req, reply): Promise<FastifyReply> => {
-      const ownerNames = personDisplayNames(companyMemory);
+      const ownerNames = personDisplayNames(peopleDirectory);
       if (!isKnownOwner(ownerNames, req.body.ownerId)) return fail(reply, 400, "INVALID_OWNER", "负责人必须命中 company-people.v1");
       if (req.body.participantIds?.some((id) => !ownerNames.has(id))) return fail(reply, 400, "INVALID_PARTICIPANT", "参与者必须命中 company-people.v1");
       const result = await updateBattlefield(pool, req.params.id, req.body);
@@ -243,10 +243,10 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
     "/api/config/battlefields",
     { preHandler: requireCEO },
     async (): Promise<TBattlefieldManagementResponse> => {
-      const people = companyMemory.searchPeople(undefined);
+      const people = peopleDirectory.searchPeople(undefined);
       // 推算按下一次起草的月份：最新一份月度计划（月底签发下月计划时就是下月）。
       const period = ((await q("SELECT max(period) AS period FROM monthly_plans")).rows[0]?.period as string | null) ?? companyPeriod(now());
-      return projectBattlefieldManagement(q, personDisplayNames(companyMemory), (id) => missionCardParticipants(q, people, id, period));
+      return projectBattlefieldManagement(q, personDisplayNames(peopleDirectory), (id) => missionCardParticipants(q, people, id, period));
     },
   );
 

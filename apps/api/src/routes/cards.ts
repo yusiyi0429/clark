@@ -12,10 +12,10 @@ import { projectRadarCard } from "../signals.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
 export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { q, env, fail, requireCEO, now, companyMemory, radar } = ctx;
+  const { q, env, fail, requireCEO, now, peopleDirectory, radar } = ctx;
 
   app.get("/api/people", { preHandler: requireCEO, schema: { response: { 200: PeopleDirectoryResponse } } }, async () => ({
-    people: companyMemory.searchPeople(undefined).map((person) => ({
+    people: peopleDirectory.searchPeople(undefined).map((person) => ({
       personId: person.personId,
       displayName: person.displayName,
       roles: [...person.roles],
@@ -24,15 +24,15 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
   app.get("/api/cards/home", { preHandler: requireCEO }, async (req): Promise<TCardCollection> => {
     const at = now();
     const period = companyPeriod(at);
-    const people = companyMemory.searchPeople(undefined);
+    const people = peopleDirectory.searchPeople(undefined);
     const [radarCard, battlefields, issues, capabilities, meetingRows, missions, monthlyNotice, rounds] = await Promise.all([
       projectRadarCard(q, radar.providerStatus),
-      listBattlefieldCards(q, period, personDisplayNames(companyMemory)),
+      listBattlefieldCards(q, period, personDisplayNames(peopleDirectory)),
       listPendingIssueCards(q, env.sessionSecret),
       listCapabilityCards(q),
       listMeetingRows(q),
       // 首页只读当前公司周期的 Mission：战场卡 Mission 数、能力面板数量与入口都从这份 collection 派生，不保存汇总；历史周期留在 /api/cards/missions
-      listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), period, req.person!),
+      listMissionCards(q, env.sessionSecret, personDisplayNames(peopleDirectory), period, req.person!),
       getMonthlyPlanNotice(q, env.sessionSecret, at),
       listMissionRoundCards(q, people, env.sessionSecret, req.person!, undefined, at),
     ]);
@@ -96,7 +96,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
 
   // Mission Card：总览与详情共用同一 projector；关系显示名在投影时现查。
   app.get("/api/cards/missions", { preHandler: requireCEO }, async (req): Promise<TCardCollection> => ({
-    cards: await listMissionCards(q, env.sessionSecret, personDisplayNames(companyMemory), undefined, req.person!),
+    cards: await listMissionCards(q, env.sessionSecret, personDisplayNames(peopleDirectory), undefined, req.person!),
   }));
 
   app.get(
@@ -105,21 +105,21 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       const mission = await getMissionRow(q, req.params.id);
       return mission && await canReadMission(q, mission, req.person!)
-        ? { cards: [projectMissionCard(mission, env.sessionSecret, personDisplayNames(companyMemory))] }
+        ? { cards: [projectMissionCard(mission, env.sessionSecret, personDisplayNames(peopleDirectory))] }
         : fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
     },
   );
 
   // 战场 Card：正面读已签发计划目标，背面按 battlefieldId 投影 todo/feedback，与通知同源。
   app.get("/api/cards/battlefields", { preHandler: requireCEO }, async (): Promise<TCardCollection> => ({
-    cards: await listBattlefieldCards(q, companyPeriod(now()), personDisplayNames(companyMemory)),
+    cards: await listBattlefieldCards(q, companyPeriod(now()), personDisplayNames(peopleDirectory)),
   }));
   // 单个战场（二级页）：与列表同一份投影，未登记的战场 404。
   app.get(
     "/api/cards/battlefields/:id",
     { preHandler: requireCEO, schema: { params: idParams } },
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
-      const cards = await listBattlefieldCards(q, companyPeriod(now()), personDisplayNames(companyMemory));
+      const cards = await listBattlefieldCards(q, companyPeriod(now()), personDisplayNames(peopleDirectory));
       const card = cards.find((item) => item.objectRef.id === req.params.id);
       return card ? { cards: [card] } : fail(reply, 404, "CARD_NOT_FOUND", "战场不存在");
     },
