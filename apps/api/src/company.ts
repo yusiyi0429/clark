@@ -48,8 +48,9 @@ function project(object: CompanyWorldObject, titles: Map<string, string>): Compa
     if (texts.length) lines.push(`### ${label}`, ...texts, ...businessValues(value));
   }
   const text = lines.join('\n\n');
-  const chunks = splitProse(text, 4500);
-  return chunks.map((body, index) => ({ handle: `company:${encodeURIComponent(business.object_id)}:${index}`, title: business.title, text: body.startsWith('## ') ? body : `## ${business.title}\n\n状态：${status}\n\n${body}` }));
+  const chunks = splitProse(text, 4000);
+  const version = createHash('sha256').update(JSON.stringify([business.revision_id, business.object_version, text])).digest('base64url').slice(0, 16);
+  return chunks.map((body, index) => ({ handle: `company:${encodeURIComponent(business.object_id)}:${version}:${index}`, title: business.title, text: body.startsWith('## ') ? body : `## ${business.title}\n\n状态：${status}\n\n${body}` }));
 }
 /** Keep paragraphs intact where possible, and never split a UTF-8 character. */
 function splitProse(text: string, maxBytes: number): string[] {
@@ -57,12 +58,12 @@ function splitProse(text: string, maxBytes: number): string[] {
   let chunk = '';
   for (const paragraph of text.split('\n\n')) {
     const joined = chunk ? `${chunk}\n\n${paragraph}` : paragraph;
-    if (Buffer.byteLength(joined) <= maxBytes) { chunk = joined; continue; }
+    if (Buffer.byteLength(JSON.stringify(joined)) - 2 <= maxBytes) { chunk = joined; continue; }
     if (chunk) result.push(chunk);
     chunk = '';
     let bytes = 0;
     for (const character of paragraph) {
-      const size = Buffer.byteLength(character);
+      const size = Buffer.byteLength(JSON.stringify(character)) - 2;
       if (bytes + size > maxBytes) { result.push(chunk); chunk = ''; bytes = 0; }
       chunk += character; bytes += size;
     }
@@ -155,6 +156,7 @@ export function createCompanyMemory(env: CompanyEnv): CompanyReader {
             if (JSON.stringify(await authorizedDomains()) !== JSON.stringify(domains)) return unavailableScope;
             const ranked = relevantEntries(entries, request.query);
             const filtered = ranked.entries.filter((entry) => !request.handle || entry.handle === request.handle);
+            if (request.handle && !filtered.length) return { status: 'unavailable', entries: [], message: '公司参考已变化、删除或不可见，请重新查询。' };
             const version = createHash('sha256').update(JSON.stringify([viewer.personId, scope, fingerprint(heads), markdown, request.query ?? ''])).digest('base64url');
             let cursor = 0;
             if (request.cursor !== undefined) {

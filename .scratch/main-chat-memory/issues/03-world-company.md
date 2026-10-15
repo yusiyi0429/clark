@@ -1,16 +1,16 @@
 # 03 — 主私聊按需读取 World 公司事实与 Company
 
 Type: implementation
-Status: claimed
+Status: resolved
 
 **What to build:** 用户询问公司方向、责任或目标时，主 Agent 能查询 World 并消费可读 Company 片段；读取失败时如实说明，不拿本地旧目标或旧 Markdown 补事实。
 
 **Blocked by:** 01（独立人员目录，避免公司事实查询与身份权限混在旧仓储里）。
 
-- [ ] 从完整 World 响应到有界正文、Company 更新与主聊只读工具形成可验证链路。
-- [ ] 不提供 World 写入工具；消除主聊中同用途的本地公司事实工具，页面信息由 Anchor 承担。
-- [ ] 不发布部分失败的残缺投影，不跨访问范围消费 Company，不注入协议哈希或来源模板。
-- [ ] World 未配置不阻止个人问题与已有页面讨论；明确区分没有对象和覆盖不足。
+- [x] 从完整 World 响应到有界正文、Company 更新与主聊只读工具形成可验证链路。
+- [x] 不提供 World 写入工具；消除主聊中同用途的本地公司事实工具，页面信息由 Anchor 承担。
+- [x] 不发布部分失败的残缺投影，不跨访问范围消费 Company，不注入协议哈希或来源模板。
+- [x] World 未配置不阻止个人问题与已有页面讨论；明确区分没有对象和覆盖不足。
 
 **TDD seams:** 主 Runtime 的公开 run/工具接口、Company 公开读写治理接口；HTTP transport 是外部桩边界，使用现有响应样例及人工指定预期。
 
@@ -40,3 +40,11 @@ Each ticket uses one implement subagent in an isolated worktree; red/green evide
 - Public Company continuation tokens bind the caller, authorized scope, current dependency/content version and query. Main Runtime translates them into per-run `CP1` handles, retaining the original query server-side; model views contain no hashes or raw backend tokens.
 - TDD red: changing the object version between pages previously returned `ready` with later content, silently skipping the changed beginning. Green: the same public call now returns `unavailable` and asks to restart. 9 Company tests pass.
 - Personal tool reads now accept only handles registered in this Runtime turn. Ticket04's initial Personal Reference mapping is integrated by the root agent with Ticket02's ephemeral context composition.
+
+## Resolution
+
+- Parallel Standards/Spec review report: [03-world-company](../reviews/03-world-company.md).
+- Standards: 0 hard violations, 1 optional P3 duplicate handle-registration judgment retained under MVP.
+- Spec: 2 P2 findings corrected with public red/green regressions: document-version-bound references and JSON-escaped-byte pagination. No known unresolved finding; final integrated review remains Ticket07/root responsibility.
+- Final focused validation: Company11 + existing Pi15 = 26/26 tests passed; API no-emit typecheck and diff whitespace checks passed.
+- Real World authorization, scope coverage, live shape and model semantic quality are not claimed as verified. Shared-consumer deployment/legacy removal belongs to Ticket06; scene injection integration belongs to Ticket02/root.

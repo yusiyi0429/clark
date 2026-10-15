@@ -22,3 +22,6 @@ Status: implementation-in-progress
 ### Ticket02 delivered
 
 Scene Anchor end-to-end implemented on isolated memory/02-anchor. Commits891de30, edfbbc9; both Standards/Spec review axes clean after fixes. Focused API43 behaviors passed across final run+targeted timeout rerun, Web814/814, contracts75/75, API/Web typechecks green. Migration060 upgrades only derived Pi state; raw discussion retained. See issues/02-scene-anchor.md for evidence and ticket03 reader wiring seam.
+## Ticket03 result
+
+World company facts now use an explicitly scoped read-only reader and governed Company projection. Main private chat consumes bounded `query_company` / memory reference tools with per-turn short handles, version-bound continuations, current access checks and no local/Markdown fact fallback. 26 focused tests and API typecheck passed; both review axes completed and both initial P2 Spec findings were corrected. See [Ticket03](issues/03-world-company.md) and [review](reviews/03-world-company.md). Live World coverage/authorization remains an external acceptance item.

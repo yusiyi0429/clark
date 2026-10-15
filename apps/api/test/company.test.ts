@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -174,6 +174,35 @@ describe('World company public read boundary', () => {
       const next = await t.company.read(viewer, { cursor: first.nextCursor }, new AbortController().signal);
       expect(next).toMatchObject({ status: 'unavailable', entries: [] });
       expect(next.message).toContain('变化');
+    } finally { await t.close(); }
+  });
+
+  it('rejects an old company reference when that document changes before expansion', async () => {
+    const t = await setup();
+    try {
+      const first = await t.company.read(viewer, {}, new AbortController().signal);
+      t.object.business.object_version++;
+      t.object.business.blocks[0].value.text = '修订后的公司方向';
+      const expanded = await t.company.read(viewer, { handle: first.entries[0].handle }, new AbortController().signal);
+      expect(expanded).toMatchObject({ status: 'unavailable', entries: [] });
+      expect(expanded.message).toContain('变化');
+    } finally { await t.close(); }
+  });
+
+  it('keeps every expanded page within the JSON byte budget even for escaped business prose', async () => {
+    const t = await setup();
+    try {
+      t.object.business.blocks[0].value.text = ('"' + String.fromCharCode(92)).repeat(6000);
+      let cursor: string | undefined;
+      let pages = 0;
+      do {
+        const page = await t.company.read(viewer, { cursor }, new AbortController().signal);
+        expect(page.status).toBe('ready');
+        expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(8192);
+        cursor = page.nextCursor;
+        expect(++pages).toBeLessThan(20);
+      } while (cursor);
+      expect(pages).toBeGreaterThan(1);
     } finally { await t.close(); }
   });
 

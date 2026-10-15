@@ -47,6 +47,9 @@ export function createWorldReader(env: WorldEnv) {
       const object = await get(`/v1/world/objects/${encodeURIComponent(id)}`, signal);
       const business = object.business;
       if (!business || business.object_id !== id || typeof business.title !== 'string' || (business.domain_id !== undefined && typeof business.domain_id !== 'string')
+        || Buffer.byteLength(JSON.stringify(business.title)) > 1000 || Buffer.byteLength(id) > 200
+        || (object.records?.lifecycle && Buffer.byteLength(JSON.stringify(object.records.lifecycle.display_name ?? object.records.lifecycle.status ?? '')) > 500)
+        || (business.formal?.lifecycle_status !== undefined && Buffer.byteLength(JSON.stringify(business.formal.lifecycle_status)) > 500)
         || typeof business.revision_id !== 'string' || !Number.isInteger(business.object_version)
         || !business.attributes || !Array.isArray(business.blocks) || !Array.isArray(business.relations)
         || !object.identity || !object.records || !('lifecycle' in object.records)) throw new Error('Invalid World object');
