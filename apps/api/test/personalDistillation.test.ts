@@ -91,3 +91,22 @@ test('an ambiguous explicit request asks for clarification without editing unrel
  }finally{await app.close();await rm(storageDir,{recursive:true,force:true});}
  });
 });
+
+test('forgotten semantics cannot return under a new key, but explicit new permission can restore the exact attribute',async()=>{
+ await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-tombstone-'));
+ try{const memory=createPersonalMemory({pool,storageDir}),id=randomUUID();await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);
+ const saved=await memory.apply('alice',{expectedRevision:0,epoch:0,changes:[{operation:'add',attributeKey:'manual-uuid',title:'兴趣',text:'喜欢徒步。'}]});await memory.forgetOwn('alice',{expectedRevision:saved.revision,sectionIds:['manual-uuid']});
+ await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user','我周末经常徒步。',$2)",[id,randomUUID()]);
+ let explicit=false;const contexts:string[]=[];const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:(_model,context)=>{contexts.push(JSON.stringify(context));return candidate({changes:[{operation:'add',attributeKey:explicit?'manual-uuid':'new-hiking-key',matchedBlockedAttributeKey:'manual-uuid',title:'兴趣',text:'喜欢徒步。',inferred:false,evidence:[{sequence:explicit?2:1,quote:explicit?'我重新允许你记住我喜欢徒步。':'我周末经常徒步。'}]}],clarification:''});}});
+ const job=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:1,kind:'natural',epoch:(await memory.readOwn('alice')).epoch});await worker.processNext();expect(await worker.status(job)).toMatchObject({status:'succeeded'});expect((await memory.readOwn('alice')).sections).toHaveLength(0);expect(contexts[0]).toContain('manual-uuid');
+ explicit=true;await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,2,'user','我重新允许你记住我喜欢徒步。',$2)",[id,randomUUID()]);await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:2,kind:'explicit',epoch:(await memory.readOwn('alice')).epoch});await worker.processNext();expect((await memory.readOwn('alice')).markdown).toContain('喜欢徒步');expect(await memory.readBlocked('alice')).toHaveLength(0);
+ }finally{await rm(storageDir,{recursive:true,force:true});}
+ });
+});
+
+test('a malformed structured submission has a bounded model call budget',async()=>{
+ await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-budget-'));
+ try{const id=randomUUID(),memory=createPersonalMemory({pool,storageDir});await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user','我通常先看结论。',$2)",[id,randomUUID()]);let calls=0;
+ const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:()=>{calls++;if(calls>2)throw new Error('test cap');return candidate({invalid:'submission'});}});const idJob=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:1,kind:'natural',epoch:0});await worker.processNext();expect(calls).toBe(2);expect(await worker.status(idJob)).toMatchObject({status:'pending',attempts:1});expect((await memory.readOwn('alice')).sections).toHaveLength(0);
+ }finally{await rm(storageDir,{recursive:true,force:true});}});
+});

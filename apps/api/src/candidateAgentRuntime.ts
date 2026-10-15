@@ -12,6 +12,7 @@ import {
   type ResourceLoader,
 } from "@earendil-works/pi-coding-agent";
 import {
+  streamSimple as defaultStreamSimple,
   InMemoryCredentialStore,
   InMemoryModelsStore,
   type AssistantMessageEventStream,
@@ -45,6 +46,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   /** 只读辅助工具（如 CompanyMemory MCP）：与 submit_candidate 一同进入工具白名单。 */
   extraTools?: ReturnType<typeof defineTool<any>>[];
   signal?: AbortSignal;
+  maxModelCalls?: number;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 }): Promise<{ runId: string; candidate: Static<T> }> {
   const runId = randomUUID();
@@ -82,11 +84,15 @@ export async function runCandidateAgent<T extends TSchema>(options: {
       modelsPath: null,
       refreshOnCreate: false,
     });
+    let modelCalls = 0;
     modelRuntime.registerProvider("warmap", {
       name: "WarMap OpenAI-compatible Responses",
       baseUrl: normalizedBaseUrl(options.baseUrl),
       api: "openai-responses",
-      streamSimple: options.streamSimple,
+      streamSimple: options.maxModelCalls === undefined ? options.streamSimple : (providerModel, context, streamOptions) => {
+        if (++modelCalls > options.maxModelCalls!) throw new Error('CANDIDATE_MODEL_BUDGET_EXHAUSTED');
+        return (options.streamSimple ?? defaultStreamSimple)(providerModel, context, streamOptions);
+      },
       models: [{
         id: options.modelId,
         name: options.modelId,
