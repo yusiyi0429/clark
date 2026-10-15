@@ -32,11 +32,43 @@ export type SignalReading = {
   url: string;
 };
 
+/** 标题下的头图：图没加载出来（防盗链、原站下线）就整块收起，不留空框。 */
+function SignalHero({ src }: { src: string }) {
+  const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
+  const node = useRef<HTMLImageElement>(null);
+  // 服务端渲染的图可能在脚本接管前就已加载完（或已失败），onLoad/onError 不会再触发：接管时补查一次。
+  useEffect(() => {
+    const image = node.current;
+    if (image?.complete) setState(image.naturalWidth > 0 ? "ready" : "failed");
+  }, []);
+  if (state === "failed") return null;
+  return (
+    <figure className={s.hero} data-state={state}>
+      <img
+        ref={node}
+        src={src}
+        alt="原文配图"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onLoad={() => setState("ready")}
+        onError={() => setState("failed")}
+      />
+    </figure>
+  );
+}
+
+/** 原文里的配图：加载失败就不显示，不留破图标。 */
+function InlineImage({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return <img src={src} alt="原文配图" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+}
+
 /** 多条「尚未确定」连成一段：每条自带句号时直接相连，不再补分号（避免「。；」）。 */
 export const joinSentences = (items: string[]) => items.map((item) => (/[。！？.!?]$/.test(item.trim()) ? item.trim() : `${item.trim()}。`)).join("");
 
 /**
- * 信号阅读（clark `radar-feed.tsx` 阅读态）：一个标题，三块内容——总结 / 关系 / 原文，底下是「继续浏览」。
+ * 信号阅读：读起来像头条 / 公众号文章——来源行、标题、两行简报（总结 · 和我们的关系），然后直接是正文和配图，底下是「继续浏览」。
  * 已读/未读是手动切换（打开不自动标记）；隐藏成功后由 onHidden 决定去向（不传就留在原地，可以当场恢复）。
  */
 export function SignalArticle({
@@ -73,6 +105,8 @@ export function SignalArticle({
   }, [stream, upNext.length]);
 
   const paragraphs = reading.excerpt.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
+  // 首图放到标题下（像公众号文章的头图），原文里就不再重复这一张。
+  const [hero, ...inline] = reading.images;
   const quote = reading.evidenceQuote;
   const highlighted = (paragraph: string) => Boolean(quote) && paragraph.length >= 20 && (quote.includes(paragraph) || paragraph.includes(quote));
 
@@ -96,60 +130,51 @@ export function SignalArticle({
             </ToggleButton>
           </div>
           <h2 id="signal-title">{reading.title}</h2>
-          <div className={s.blocks}>
-            <section className={s.block}>
-              <h3>总结</h3>
-              <div className={s.blockBody}>
-                <p className={s.lead}>{reading.summary}</p>
-                {reading.unknowns.length ? (
-                  <p className={s.note}>
-                    <span>尚未确定</span>
-                    {joinSentences(reading.unknowns)}
-                  </p>
-                ) : null}
-              </div>
-            </section>
-            <section className={s.block}>
-              <h3>{reading.relation.heading}</h3>
-              <div className={s.blockBody}>
-                <p>{reading.relation.text}</p>
-                {reading.relation.tag ? (
-                  <div className={s.anchor}>
-                    <span>{reading.relation.tag.label}</span>
-                    {reading.relation.tag.detail ? <p>{reading.relation.tag.detail}</p> : null}
-                  </div>
-                ) : null}
-              </div>
-            </section>
-            {reading.excerpt ? (
-              <section className={s.block} aria-label="原文">
-                <h3>原文</h3>
-                <div className={s.blockBody}>
-                  <blockquote className={s.excerpt}>
-                    {paragraphs.map((paragraph, index) => (
-                      <Fragment key={`${index}:${paragraph.slice(0, 24)}`}>
-                        <p data-highlight={highlighted(paragraph) || undefined}>{paragraph}</p>
-                        {reading.images
-                          .filter((image) => image.after === index || (index === paragraphs.length - 1 && image.after >= index))
-                          .map((image) => (
-                            <img key={image.src} src={image.src} alt="原文配图" loading="lazy" />
-                          ))}
-                      </Fragment>
-                    ))}
-                  </blockquote>
-                  {/* 点进来就是为了读：摘录直接全文显示。原文链接只作查证用，放在出处行末、做成低调的文字链接，不引导跳走。 */}
-                  <small className={s.provenance}>
-                    {reading.excerptNote ?? (reading.fullText ? "发布方原文（自动抓取）" : "检索服务返回的摘录，未宣称阅读全文")} · 共 {reading.excerpt.length.toLocaleString()} 字 · 采集于{" "}
-                    {new Date(reading.collectedAt).toLocaleString("zh-CN", { timeZone: COMPANY_TIMEZONE })} ·{" "}
-                    <a className={s.sourceLink} href={reading.url} target="_blank" rel="noopener noreferrer" aria-label={`原文链接：${reading.title}`}>
-                      原文链接
-                      <ArrowUpRight size={12} aria-hidden="true" />
-                    </a>
-                  </small>
-                </div>
-              </section>
-            ) : null}
+          {/* 打开先看一眼「讲了什么、和我们什么关系」，两三行就够；下面直接是正文，像读头条 / 公众号文章。 */}
+          <div className={s.brief}>
+            <p>
+              <span className={s.briefLabel}>总结</span>
+              {reading.summary}
+              {reading.unknowns.length ? <span className={s.briefNote}>尚未确定：{joinSentences(reading.unknowns)}</span> : null}
+            </p>
+            <p>
+              <span className={s.briefLabel}>{reading.relation.heading}</span>
+              {reading.relation.text}
+              {reading.relation.tag ? (
+                <span className={s.briefTag} title={reading.relation.tag.detail}>{reading.relation.tag.label}</span>
+              ) : null}
+            </p>
           </div>
+          {reading.excerpt || hero ? (
+            <section className={s.body} aria-label="原文">
+              {hero ? <SignalHero key={hero.src} src={hero.src} /> : null}
+              {paragraphs.map((paragraph, index) => (
+                <Fragment key={`${index}:${paragraph.slice(0, 24)}`}>
+                  <p data-highlight={highlighted(paragraph) || undefined}>{paragraph}</p>
+                  {inline
+                    .filter((image) => image.after === index || (index === paragraphs.length - 1 && image.after >= index))
+                    .map((image) => (
+                      <InlineImage key={image.src} src={image.src} />
+                    ))}
+                </Fragment>
+              ))}
+              {reading.excerpt && !reading.fullText && !reading.excerptNote ? (
+                <p className={s.partial}>
+                  以上是来源给出的摘要，没有读到全文。
+                  <a href={reading.url} target="_blank" rel="noopener noreferrer">去原网页读全文</a>
+                </p>
+              ) : null}
+              {/* 原文链接只作查证用，放在出处行末、做成低调的文字链接，不引导跳走。 */}
+              <small className={s.provenance}>
+                {reading.excerptNote ?? (reading.fullText ? "发布方原文（自动抓取）" : "原文摘录")} · 共 {reading.excerpt.length.toLocaleString()} 字 · 采集于{" "}
+                {new Date(reading.collectedAt).toLocaleString("zh-CN", { timeZone: COMPANY_TIMEZONE })} ·{" "}
+                <a className={s.sourceLink} href={reading.url} target="_blank" rel="noopener noreferrer" aria-label={`原文链接：${reading.title}`}>
+                  原文链接
+                  <ArrowUpRight size={12} aria-hidden="true" />
+                </a>
+              </small>
+            </section>
+          ) : null}
           <div className={s.quietRow}>
             <Button
               size="sm"

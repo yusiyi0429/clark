@@ -11,6 +11,18 @@ import {
   type TRadarSources,
 } from "@warmap/contracts";
 import { assessPromotion } from "./issues.js";
+import { plainCompanyNames, type BattlefieldName } from "./companyNames.js";
+import { fetchCovers, type CoverImageFetcher } from "./signalCover.js";
+import { fetchArticles, fullTextKeepsQuotes, type ArticleFetcher } from "./articleText.js";
+import {
+  ARTICLE_DEDUPE_LOOKBACK_DAYS,
+  findSimilarIssue,
+  sameArticle,
+  sameIssueScope,
+  type SupplementarySignal,
+} from "./radarDedupe.js";
+import type { TIssueLocation } from "@warmap/contracts";
+import { AGENT_ROLES, randomTurnSuffix, stableThreadId, tracedTurn } from "./tracing.js";
 
 export type FingerprintedRadarSource = TRadarSourceItem & { sourceFingerprint: string };
 
@@ -29,8 +41,14 @@ export type RadarOutletAdapter = {
   fetchLatest(input: { outletIds: string[]; lookbackHours: number }, signal: AbortSignal): Promise<TRadarSourceItem[]>;
 };
 
+/** 送给研判模型判重的现有待决策议题：模型判定候选与其中某条是同一决策问题时返回 attachToIssueId。 */
+export type RadarExistingIssue = { id: string; title: string; coreQuestion: string | null; location: TIssueLocation };
+
 export type RadarAssessor = {
-  assess(input: { anchors: TRadarAnchor[]; sources: FingerprintedRadarSource[] }, signal: AbortSignal): Promise<TRadarCandidateSubmission>;
+  assess(
+    input: { anchors: TRadarAnchor[]; sources: FingerprintedRadarSource[]; existingIssues?: RadarExistingIssue[] },
+    signal: AbortSignal,
+  ): Promise<TRadarCandidateSubmission>;
 };
 
 export type RadarService = {
@@ -52,13 +70,54 @@ type RadarConfigRow = {
 const LOCK_KEY = "radar:default";
 /** 单批送入 assess 的来源上限与监测方向上限（doc 03 §6/§11 固定上限，避免无界 prompt）。 */
 const ASSESS_BATCH_SIZE = 5;
-/** assess 批次并发数：串行时单批 9–23 秒，180 秒 scan timeout 内只能跑完约 9 批。 */
+/**
+ * 单次扫描时限（后台任务，不挡首页和雷达页）：Haiku 每批 30–208 秒，线上一轮最多约 7 批、并发 3，
+ * 180 秒会截断，所以放到 6 分钟（agents-model-migration §6.4）。
+ */
+export const RADAR_SCAN_TIMEOUT_MS = 6 * 60_000;
+/** 给 CEO 看的时限说法：整分钟写「6 分钟」，否则写秒。 */
+const scanLimitText = (ms: number) => (ms >= 60_000 && ms % 60_000 === 0 ? `${ms / 60_000} 分钟` : `${ms / 1000} 秒`);
+/** assess 批次并发数：串行时单批 9–23 秒（Haiku 30–208 秒），只靠并发不足以在时限内跑完。 */
 const ASSESS_CONCURRENCY = 3;
 const MAX_ANCHORS = 20;
-/** outlets 是整份 feed，不按 anchor 检索；总量必须受限，保证 180 秒 scan timeout 真正可达。 */
+/** outlets 是整份 feed，不按 anchor 检索；总量必须受限，保证扫描时限真正可达。 */
 const MAX_OUTLET_ITEMS = 20;
 /** 网页检索按 anchor 相乘：每个监测方向只取时间窗内最新几条，控制研判量与自动升级的 Issue 量。 */
 const MAX_WEB_ITEMS_PER_ANCHOR = 3;
+/** 送给研判模型判重的现有待决策议题上限（最近更新的在前）。 */
+const MAX_EXISTING_ISSUES = 40;
+/** 信号层同文去重：回看已入库信号的条数上限。 */
+const MAX_RECENT_SIGNAL_TITLES = 500;
+
+/**
+ * 把一条新信号作为补充依据挂到现有议题上（调用方在事务内）：信号的 promoted_issue_id 指向该议题，
+ * 议题 origin_ref.supplementarySignals 追加一条（议题页「判断的依据」显示为「雷达补充：<信号标题>」），版本 +1。
+ * 议题已不在待决策、或这条信号已经挂过（含议题自己的原始信号）时不改议题。
+ */
+export async function attachSignalToIssue(
+  client: Pick<PoolClient, "query">,
+  input: { issueId: string; signalId: string; promotionFingerprint: string | null; supplement: SupplementarySignal },
+): Promise<boolean> {
+  await client.query(
+    "UPDATE signals SET promoted_issue_id = $2, promotion_fingerprint = COALESCE($3, promotion_fingerprint) WHERE id = $1",
+    [input.signalId, input.issueId, input.promotionFingerprint],
+  );
+  const updated = await client.query(
+    `UPDATE issues
+        SET origin_ref = jsonb_set(
+              origin_ref,
+              '{supplementarySignals}',
+              COALESCE(origin_ref->'supplementarySignals', '[]'::jsonb) || jsonb_build_array($2::jsonb)
+            ),
+            version = version + 1,
+            updated_at = now()
+      WHERE id = $1 AND status = 'pending'
+        AND COALESCE(origin_ref->>'signalId', '') <> $3
+        AND NOT COALESCE(origin_ref->'supplementarySignals', '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('signalId', $3::text))`,
+    [input.issueId, JSON.stringify(input.supplement), input.signalId],
+  );
+  return updated.rowCount === 1;
+}
 
 function companyDay(now: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -101,7 +160,9 @@ export function createRadarService({
   assessor,
   onIssuePromoted,
   now = () => new Date(),
-  scanTimeoutMs = 180_000,
+  scanTimeoutMs = RADAR_SCAN_TIMEOUT_MS,
+  coverImage,
+  articleText,
 }: {
   pool: Pool;
   web: RadarWebAdapter;
@@ -111,6 +172,10 @@ export function createRadarService({
   onIssuePromoted?: (issueId: string) => void;
   now?: () => Date;
   scanTimeoutMs?: number;
+  /** 给没有配图的来源取原文封面（og:image 等）；不传就不抓。单条失败或超时只是没有图，不影响入库。 */
+  coverImage?: CoverImageFetcher;
+  /** 给要落库的检索条目抓原文页全文（通用正文提取）；不传就只存检索摘要。失败、过短、登录墙都退回摘要。 */
+  articleText?: ArticleFetcher;
 }): RadarService {
   async function run(trigger: "manual" | "scheduled"): Promise<TRadarScanResponse> {
     const startedAt = now();
@@ -273,6 +338,26 @@ export function createRadarService({
         );
         for (const { source_fingerprint } of known.rows) unique.delete(source_fingerprint);
       }
+      // 同一篇文章不同来源（转载、移动版、不同检索词命中的不同 URL）只保留一条：URL 指纹之外再按文章标题核心判重，
+      // 先比最近已入库的信号，再比本轮内部（先到先留）。
+      if (unique.size > 0) {
+        const recent = (await client.query<{ source_title: string }>(
+          `SELECT source_title FROM signals WHERE collected_at > now() - make_interval(days => $1)
+            ORDER BY collected_at DESC LIMIT $2`,
+          [ARTICLE_DEDUPE_LOOKBACK_DAYS, MAX_RECENT_SIGNAL_TITLES],
+        )).rows.map((row) => row.source_title);
+        const kept: string[] = [];
+        let sameArticleSkipped = 0;
+        for (const [fingerprint, source] of [...unique]) {
+          if ([...recent, ...kept].some((title) => sameArticle(title, source.title))) {
+            unique.delete(fingerprint);
+            sameArticleSkipped += 1;
+            continue;
+          }
+          kept.push(source.title);
+        }
+        if (sameArticleSkipped > 0) notes.push(`同一篇文章的其他来源略过 ${sameArticleSkipped} 条`);
+      }
       // 每个监测方向的网页结果只留最新几条（无发布时间的条目已被时间窗剔除）
       const webByAnchor = new Map<string, FingerprintedRadarSource[]>();
       for (const [fingerprint, anchorId] of webAnchorByFingerprint) {
@@ -300,6 +385,15 @@ export function createRadarService({
         for (let index = 0; index < deduped.length; index += ASSESS_BATCH_SIZE) {
           batches.push(deduped.slice(index, index + ASSESS_BATCH_SIZE));
         }
+        // 现有待决策议题交给研判模型判重：同一决策问题返回 attachToIssueId，不新建
+        const existingIssues: RadarExistingIssue[] = (await client.query<{
+          id: string; title: string; location: TIssueLocation; core: string | null;
+        }>(
+          `SELECT id, title, location,
+                  COALESCE(research->'doc'->>'summary', origin_ref->>'strategicImpact', origin_ref->>'summary') AS core
+             FROM issues WHERE status = 'pending' ORDER BY updated_at DESC LIMIT $1`,
+          [MAX_EXISTING_ISSUES],
+        )).rows.map((row) => ({ id: row.id, title: row.title, coreQuestion: row.core ? row.core.slice(0, 300) : null, location: row.location }));
         const candidates: TRadarCandidateSubmission["candidates"] = [];
         let failedBatches = 0;
         let failedSources = 0;
@@ -308,12 +402,12 @@ export function createRadarService({
         let nextBatch = 0;
         const assessWorker = async () => {
           // 某个 candidate 运行没有及时响应 abort 时，绝不能继续启动后续 batch。
-          // 否则 180 秒 timeout 只会成为提示，扫描仍可能跑数分钟。
+          // 否则扫描时限只会成为提示，扫描仍可能跑数分钟。
           while (nextBatch < batches.length && !abort.signal.aborted) {
             const batch = batches[nextBatch];
             nextBatch += 1;
             try {
-              candidates.push(...(await assessor.assess({ anchors: monitoredAnchors, sources: batch }, abort.signal)).candidates);
+              candidates.push(...(await assessor.assess({ anchors: monitoredAnchors, sources: batch, existingIssues }, abort.signal)).candidates);
               completedBatches += 1;
             } catch (cause) {
               if (abort.signal.aborted) {
@@ -333,11 +427,53 @@ export function createRadarService({
         if (unassessed > 0) {
           // 超时：已完成批次的候选照常校验落库；一批都没完成时整次扫描仍标为 failed
           if (completedBatches === 0) throw abort.signal.reason ?? new Error(`Radar scan exceeded ${scanTimeoutMs}ms`);
-          warnings.push(`本轮有 ${unassessed} 条来源没来得及研判（扫描超过 ${scanTimeoutMs / 1000} 秒上限）`);
+          warnings.push(`本轮有 ${unassessed} 条来源没来得及研判（扫描超过 ${scanLimitText(scanTimeoutMs)}上限）`);
         }
         assessFailed = failedBatches === batches.length;
         if (failedSources > 0) warnings.push(`有 ${failedSources} 条来源研判失败，本轮可能漏掉其中的信号`);
         let failedSaves = 0;
+        // 升级议题的标题面向 CEO：战场代号（TK、FDD）换成中文公司名
+        const battlefieldNames = candidates.length
+          ? ((await client.query<BattlefieldName>("SELECT id, name, code FROM battlefield_config")).rows) : [];
+        // 检索条目的全文：研判（含引文）是对着检索摘要做的，所以只给通过引文校验、确定要落库的检索条目抓原文页，
+        // 至多 15 篇；全文逐字包含这条来源上每条候选的引文（含 red 截止日引文）才替换，否则保留摘要，引文永远是原文子串。
+        if (articleText) {
+          const quotesBySource = new Map<string, string[]>();
+          for (const candidate of candidates) {
+            const source = unique.get(candidate.sourceFingerprint);
+            if (!source || source.sourceRef.type !== "web-search" || !anchorById.has(candidate.anchorId)
+              || !source.excerpt.includes(candidate.evidenceQuote)) continue;
+            const evidence = candidate.promotion?.urgency.decisionByEvidence?.quote;
+            quotesBySource.set(source.sourceFingerprint, [
+              ...(quotesBySource.get(source.sourceFingerprint) ?? []), candidate.evidenceQuote, ...(evidence ? [evidence] : []),
+            ]);
+          }
+          const pages = [...quotesBySource.keys()].map((fingerprint) => unique.get(fingerprint)!);
+          const articles = await fetchArticles(pages.map((source) => ({ url: source.url, title: source.title })), articleText, { signal: abort.signal });
+          let adopted = 0;
+          for (const source of pages) {
+            const article = articles.get(source.url);
+            if (!fullTextKeepsQuotes(source.excerpt, article, quotesBySource.get(source.sourceFingerprint)!)) continue;
+            unique.set(source.sourceFingerprint, {
+              ...source,
+              excerpt: article.text,
+              sourceRef: { ...source.sourceRef, fullText: true },
+              ...(article.images.length ? { images: article.images } : {}),
+            });
+            adopted += 1;
+          }
+          if (pages.length) notes.push(`检索条目原文页全文 ${adopted}/${pages.length} 篇，其余保留检索摘要`);
+        }
+        // 原文封面：只给要落库、自身没带配图的来源抓，并发且各自带超时；抓不到就按无图入库。
+        const covers = coverImage
+          ? await fetchCovers(
+              candidates.flatMap((candidate) => {
+                const source = unique.get(candidate.sourceFingerprint);
+                return source && !source.images?.length ? [source.url] : [];
+              }),
+              coverImage,
+            )
+          : new Map<string, string>();
         for (const candidate of candidates) {
           const source = unique.get(candidate.sourceFingerprint);
           const anchor = anchorById.get(candidate.anchorId);
@@ -359,7 +495,8 @@ export function createRadarService({
                 randomUUID(), source.sourceType, source.sourceFingerprint, source.title, source.url, source.publishedAt,
                 source.excerpt, JSON.stringify(source.sourceRef), candidate.anchorId, JSON.stringify(anchor.location),
                 candidate.summary, candidate.strategicImpact, candidate.evidenceQuote, JSON.stringify(candidate.unknowns),
-                JSON.stringify(candidate.score), JSON.stringify(source.images ?? []),
+                JSON.stringify(candidate.score),
+                JSON.stringify(source.images?.length ? source.images : covers.has(source.url) ? [{ src: covers.get(source.url), after: 0 }] : []),
               ],
             );
             const signalInserted = inserted.rowCount === 1;
@@ -372,8 +509,39 @@ export function createRadarService({
                 evidenceQuote: candidate.evidenceQuote,
                 score: candidate.score,
               });
+              const issueTitle = promoted.ok ? plainCompanyNames(promoted.promotion.decisionQuestion, battlefieldNames) : "";
+              // 升级前查重（事务内读最新的待决策议题，含本轮刚建的）：模型判定的同一决策问题优先；
+              // 模型漏判时按同战场标题相似度兜底。命中就把本条信号挂靠为补充依据，不新建议题。
+              let attachTarget: { issue: { id: string; title: string }; via: "model" | "similarity" } | null = null;
+              if (promoted.ok) {
+                const pending = (await client.query<{ id: string; title: string; location: TIssueLocation }>(
+                  "SELECT id, title, location FROM issues WHERE status = 'pending'",
+                )).rows;
+                const location = promoted.promotion.location;
+                const named = candidate.attachToIssueId
+                  ? pending.find((issue) => issue.id === candidate.attachToIssueId && sameIssueScope(location, issue.location))
+                  : undefined;
+                if (named) attachTarget = { issue: named, via: "model" };
+                else {
+                  if (candidate.attachToIssueId) notes.push(`模型给的挂靠议题不存在、已不在待决策或不在同一战场: ${candidate.attachToIssueId}`);
+                  const companyNames = battlefieldNames.flatMap((entry) => [entry.name, entry.code ?? ""]);
+                  const similar = findSimilarIssue({ title: issueTitle, location }, pending, companyNames);
+                  if (similar) attachTarget = { issue: similar.issue, via: "similarity" };
+                }
+              }
               if (!promoted.ok) {
                 notes.push(`候选未通过升级门槛: ${promoted.reason}`);
+              } else if (attachTarget) {
+                await attachSignalToIssue(client, {
+                  issueId: attachTarget.issue.id,
+                  signalId,
+                  promotionFingerprint: promoted.promotion.fingerprint,
+                  supplement: {
+                    signalId, sourceTitle: source.title, sourceUrl: source.url, evidenceQuote: candidate.evidenceQuote,
+                    summary: candidate.summary, attachedAt: now().toISOString(), via: attachTarget.via,
+                  },
+                });
+                notes.push(`候选「${issueTitle}」与现有议题「${attachTarget.issue.title}」是同一决策问题（${attachTarget.via}），已作为补充依据挂靠`);
               } else {
                 const created = await client.query<{ id: string }>(
                   `INSERT INTO issues
@@ -387,8 +555,10 @@ export function createRadarService({
                       signalId, sourceFingerprint: source.sourceFingerprint, anchorId: candidate.anchorId,
                       summary: candidate.summary, strategicImpact: candidate.strategicImpact,
                       options: promoted.promotion.options, evidenceQuote: candidate.evidenceQuote,
+                      // 自动升级、无人参与：AI 识别的候选议题（nature=ai_suggested，origin=radar；界面只显示来自雷达，dataOrigin.ts）。
+                      nature: "ai_suggested",
                     }),
-                    promoted.promotion.decisionQuestion,
+                    issueTitle,
                     JSON.stringify(promoted.promotion.location),
                     JSON.stringify(promoted.promotion.urgency),
                     JSON.stringify({
@@ -438,7 +608,7 @@ export function createRadarService({
     } catch (cause) {
       notes.push(`scan failed: ${(cause as Error).message || String(cause)}`);
       logNotes();
-      const warnings = [timedOut ? `扫描超过 ${scanTimeoutMs / 1000} 秒上限，没有完成` : "扫描出错，没有完成，请稍后再试"];
+      const warnings = [timedOut ? `扫描超过 ${scanLimitText(scanTimeoutMs)}上限，没有完成` : "扫描出错，没有完成，请稍后再试"];
       const response: TRadarScanResponse = { trigger, status: "failed", companyDay: day, createdSignals: 0, warnings };
       if (client && locked) await client.query("UPDATE radar_config SET last_run = $1::jsonb, updated_at = now() WHERE id = 'default'", [
         JSON.stringify({ ...response, startedAt: startedAt.toISOString(), completedAt: now().toISOString() }),
@@ -453,9 +623,26 @@ export function createRadarService({
     }
   }
 
+  /**
+   * LangSmith：一次扫描 = 一个 Turn（rdr-<公司日>-<随机>），Thread = 公司雷达；检索与各批 radar-assess 都挂在它下面。
+   * 根节点按需物化：被占用、当日已扫描而跳过的扫描没有任何真实步骤，不留轨迹。
+   */
+  const tracedRun = (trigger: "manual" | "scheduled") => tracedTurn({
+    resolve: async () => ({
+      agentRole: AGENT_ROLES.radarAssess,
+      logicalTurnId: `rdr-${companyDay(now(), "Asia/Shanghai").replace(/-/g, "")}-${randomTurnSuffix()}`,
+      attempt: 1,
+      threadId: await stableThreadId(pool.query.bind(pool), "radar|company"),
+      scope: "global",
+      accepts: ["radar-assess"],
+    }),
+    outputs: (response) => ({ status: response.status, createdSignals: response.createdSignals }),
+    errorOf: (response) => (response.status === "failed" ? "radar scan failed" : undefined),
+  }, () => run(trigger));
+
   return {
-    runManual: () => run("manual"),
-    runScheduled: () => run("scheduled"),
+    runManual: () => tracedRun("manual"),
+    runScheduled: () => tracedRun("scheduled"),
     async recoverStaleRuns(): Promise<void> {
       const client = await pool.connect();
       let locked = false;

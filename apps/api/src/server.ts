@@ -3,6 +3,8 @@ import { buildApp, DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR, type AppEnv } fr
 import { migrate } from "./migrate.js";
 import { Pool } from "pg";
 import { createRadarService } from "./radar.js";
+import { createCoverImageFetcher } from "./signalCover.js";
+import { createArticleFetcher } from "./articleText.js";
 import { createRadarAgentAssessor } from "./radarAgent.js";
 import { createRadarScheduler } from "./radarScheduler.js";
 import { createPersonalRadarService } from "./personalRadar.js";
@@ -15,7 +17,8 @@ import { recoverInterruptedResearch } from "./issues.js";
 import { loadCompanyMemory } from "./companyMemory.js";
 import { assignLegacyConversations } from "./conversations.js";
 import { createResearchService } from "./research.js";
-import { createResearchAgentRunner } from "./researchAgent.js";
+import { createResearchAgentRunner, researchTimeoutMs } from "./researchAgent.js";
+import { agentModel, agentModelEnvFrom } from "./agentModels.js";
 import { recoverInterruptedPreflight } from "./meetingPreflight.js";
 import { createMonthlyPlanService } from "./monthlyDraft.js";
 import { createMonthlyDraftAgent } from "./monthlyDraftAgent.js";
@@ -29,6 +32,7 @@ import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
+import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -43,8 +47,10 @@ const env: AppEnv = {
   extraOrigins: (process.env.EXTRA_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean),
   driServiceToken: requiredEnv("DRI_SERVICE_TOKEN"),
   ontologyServiceToken: process.env.ONTOLOGY_SERVICE_TOKEN,
-  worldApiUrl: process.env.TKOS_WORLD_API_URL,
-  worldAgentToken: process.env.TKOS_WORLD_AGENT_TOKEN,
+  // 本体：TKOS_WORLD_API_URL；凭证 TKOS_WORLD_AGENT_TOKEN 或 TKOS_WORLD_AGENT_TOKEN_FILE（只在内存里）；TKOS_WORLD_INSTANCE 选实例配置（缺省 mvp）。
+  ...resolveWorldEnv(process.env),
+  // 第二个只读实例（词元云集 TK scope）：TKOS_WORLD_TK_INSTANCE=tk 加 TKOS_WORLD_TK_TOKEN_FILE；不设就关闭。
+  worldTk: resolveWorldTkEnv(process.env),
   mcpServiceToken: requiredEnv("COMPANY_MEMORY_MCP_TOKEN"),
   companyMemorySeedDir: requiredEnv("COMPANY_MEMORY_SEED_DIR"),
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
@@ -57,10 +63,18 @@ const env: AppEnv = {
   // 唯一预研深度使用 heavy 槽位；三槽位必须显式配置，不静默降级
   heavyModel: requiredEnv("HEAVY_MODEL"),
   compactionModel: requiredEnv("COMPACTION_MODEL"),
+  // 一号位对话主答与分诊（可选）：不配时主答用 heavy 槽位、分诊用 light 槽位。
+  conversationModel: process.env.CONVERSATION_MODEL || undefined,
+  triageModel: process.env.TRIAGE_MODEL || undefined,
+  conversationApi: process.env.CONVERSATION_API || undefined,
+  conversationBaseUrl: process.env.CONVERSATION_BASE_URL || undefined,
+  conversationThinking: process.env.CONVERSATION_THINKING || undefined,
+  // 会前预审模型与思考强度（可选）：不配时用 heavy 槽位、思考 high。
+  preflightModel: process.env.PREFLIGHT_MODEL || undefined,
+  preflightThinking: process.env.PREFLIGHT_THINKING || undefined,
+  // 预研、会后提取、雷达的模型与思考强度（RESEARCH_MODEL / OUTCOME_MODEL / RADAR_MODEL 等，可选，agentModels.ts）。
+  agentModels: agentModelEnvFrom(process.env),
   buildSha: process.env.BUILD_SHA ?? "dev",
-  // 可选观测：未配置时 LangSmith 完全 no-op，不阻断启动或业务
-  langsmithApiKey: process.env.LANGSMITH_API_KEY,
-  langsmithProject: process.env.LANGSMITH_PROJECT,
   materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
   conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,
   recordingStorageDir: process.env.MEETING_RECORDING_STORAGE_DIR,
@@ -83,14 +97,19 @@ const outletAdapter = createOutletFeedAdapter({});
 // 雷达与对话 web_search 共用一个博查实例：同一 BOCHA_API_KEY 的请求间隔与 429 重试只在一处生效
 const bochaSearch = createBochaWebSearchAdapter({ apiKey: process.env.BOCHA_API_KEY });
 const radarWeb = createBochaRadarWebAdapter(bochaSearch);
+// 检索条目入库前抓原文页全文：公司雷达与个人雷达共用，每页 8 秒超时、只读前 3MB，失败如实退回检索摘要
+const articleText = createArticleFetcher();
+// 预研：RESEARCH_MODEL / RESEARCH_THINKING 可改，不配时 HEAVY_MODEL、不开思考；开思考或用 Claude 时时限放到 8 分钟。
+const researchModel = agentModel(env.agentModels, "research", { modelId: env.heavyModel });
 const researchService = createResearchService({
   pool,
+  researchTimeoutMs: researchTimeoutMs(researchModel),
   runner: createResearchAgentRunner({
     query: pool.query.bind(pool),
     companyMemory,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
-    modelId: env.heavyModel,
+    ...researchModel,
     outlets: outletAdapter,
   }),
 });
@@ -103,12 +122,16 @@ const radarService = createRadarService({
     token: process.env.WECHAT_MCP_TOKEN,
   }),
   outlets: outletAdapter,
+  // 原文封面：每页 4 秒超时，失败只是这条信号没有图
+  coverImage: createCoverImageFetcher(),
+  articleText,
   assessor: await createRadarAgentAssessor({
     query: pool.query.bind(pool),
     companyMemory,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
-    modelId: env.lightModel,
+    // RADAR_MODEL / RADAR_THINKING 可改，不配时 LIGHT_MODEL、不开思考
+    ...agentModel(env.agentModels, "radar", { modelId: env.lightModel }),
   }),
   onIssuePromoted: (issueId) => {
     // DB 抖动时 start 可能抛错：不能让 fire-and-forget 的 rejection 终止进程
@@ -125,11 +148,13 @@ const personalRadarService = createPersonalRadarService({
     query: pool.query.bind(pool),
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
-    modelId: env.lightModel,
+    // PERSONAL_RADAR_MODEL / PERSONAL_RADAR_THINKING 可改，不配时跟公司雷达
+    ...agentModel(env.agentModels, "personalRadar", { modelId: env.lightModel }),
     personName: (personId) => personDisplayNames(companyMemory).get(personId),
   }),
   // 02b：GitHub Trending 没有订阅源、检索也限定不了站点，直接读榜单页面
   trending: createGithubTrendingReader(),
+  articleText,
 });
 // 公司每日扫描结束（busy 除外）之后才排个人扫描
 const scheduler = createRadarScheduler(radarService, 60_000, () => personalRadarService.runScheduled());

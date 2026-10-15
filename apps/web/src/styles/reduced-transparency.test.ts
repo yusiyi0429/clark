@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 describe("onboarding reduced-transparency CSS", () => {
   it.each([
     ["../components/onboarding/foundation.module.css", ".glass"],
-    ["./access.module.css", ".codeCell, .passwordField"],
+    // access.module.css 的验证码格 / 口令框已改用统一输入框样式（实线细边、纯色底），不再有玻璃底，也就没有 backdrop-filter 要在减少透明度时关掉。
   ])("neutralizes both backdrop-filter variants in %s", (file, selector) => {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     const base = source.slice(source.indexOf(`${selector} {`)).match(/^[^{]+\{([^}]+)\}/)?.[1];

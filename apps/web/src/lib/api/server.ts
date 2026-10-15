@@ -5,6 +5,7 @@ import type { TBattlefieldManagementResponse, TCapabilityManagementResponse, TMi
 import type { Card } from "./client";
 import { serverApi } from "./client";
 
+
 export const SESSION_COOKIE = "warmap_session";
 
 export type SessionInfo = { personId: string; displayName: string; role: "ceo" | "member"; onboarded: boolean; loginId?: string };

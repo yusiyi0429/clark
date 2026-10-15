@@ -11,6 +11,8 @@ import { migrate } from "../src/migrate.js";
 import { createPersonalRadarJudge } from "../src/personalRadarAgent.js";
 import { createPersonalRadarService, type PersonalRadarJudge, type PersonalRadarJudgeInput } from "../src/personalRadar.js";
 import type { GithubTrendingReader, TrendingRepo, TrendingSince } from "../src/githubTrending.js";
+import type { ArticleFetcher } from "../src/articleText.js";
+import { getPersonalSignal } from "../src/personalSignals.js";
 import type { RadarOutletAdapter, RadarService, RadarWebAdapter } from "../src/radar.js";
 import { createRadarScheduler } from "../src/radarScheduler.js";
 import { createTestDb, seedTestAccess, testEnv, TEST_MEMBER } from "./helpers.js";
@@ -128,7 +130,7 @@ function fakeTrending(pages: Record<string, TrendingRepo[]>, options: { warnings
 const repo = (name: string, starsInPeriod: number | null, description: string | null = `${name} 的描述`, language: string | null = "TypeScript"): TrendingRepo =>
   ({ fullName: `owner/${name}`, url: `https://github.com/owner/${name}`, description, language, starsInPeriod });
 
-function service(pool: Pool, deps: { web?: RadarWebAdapter; outlets?: RadarOutletAdapter; judge?: PersonalRadarJudge; trending?: GithubTrendingReader; scanTimeoutMs?: number; now?: () => Date }) {
+function service(pool: Pool, deps: { web?: RadarWebAdapter; outlets?: RadarOutletAdapter; judge?: PersonalRadarJudge; trending?: GithubTrendingReader; articleText?: ArticleFetcher; scanTimeoutMs?: number; now?: () => Date }) {
   return createPersonalRadarService({
     pool,
     companyMemory: memory,
@@ -136,6 +138,7 @@ function service(pool: Pool, deps: { web?: RadarWebAdapter; outlets?: RadarOutle
     outlets: deps.outlets ?? fakeOutlets(),
     judge: deps.judge ?? acceptAll(),
     ...(deps.trending ? { trending: deps.trending } : {}),
+    ...(deps.articleText ? { articleText: deps.articleText } : {}),
     now: deps.now ?? (() => NOW),
     ...(deps.scanTimeoutMs ? { scanTimeoutMs: deps.scanTimeoutMs } : {}),
   });
@@ -178,6 +181,44 @@ describe("升级防护", () => {
     for (const file of ["personalRadar.ts", "personalRadarAgent.ts", "personalSignals.ts"]) {
       expect(source(file)).not.toMatch(/radar_config|\b(FROM|INTO|UPDATE|JOIN)\s+(signals|issues)\b/i);
     }
+  });
+});
+
+describe("检索条目全文", () => {
+  it("只给要保存的检索条目抓原文页；全文含引文才替换并标 fullText，抓不到或改写了引文就保留检索摘要", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await setRadar(pool, "person-a");
+      const web = fakeWeb(() => [webItem("https://example.com/full"), webItem("https://example.com/rewritten"), webItem("https://example.com/failed")]);
+      const body = (url: string) => `${"背景段落。".repeat(50)}
+
+原文写明了新的定价方案：${url}
+
+${"后续段落。".repeat(50)}`;
+      const asked: string[] = [];
+      const radar = service(pool, {
+        web,
+        // 引文取原文开头 6 个字：「原文写明了新」
+        judge: acceptAll(),
+        articleText: async (url) => {
+          asked.push(url);
+          if (url.endsWith("/full")) return { text: body(url), images: [{ src: "https://example.com/a.jpg", after: 0 }] };
+          if (url.endsWith("/rewritten")) return { text: body(url).replace("原文写明了新", "原文改写成新"), images: [] };
+          return null;
+        },
+      });
+      await scan(radar, "person-a");
+      expect(asked.sort()).toEqual(["https://example.com/failed", "https://example.com/full", "https://example.com/rewritten"]);
+      const rows = Object.fromEntries((await pool.query("SELECT id, source_url, excerpt, evidence_quote, source_ref FROM person_radar_signals")).rows
+        .map((row) => [row.source_url, row]));
+      expect(rows["https://example.com/full"]).toMatchObject({ excerpt: body("https://example.com/full"), source_ref: { type: "web-search", fullText: true } });
+      expect(rows["https://example.com/rewritten"].excerpt).toBe("原文写明了新的定价方案：https://example.com/rewritten");
+      expect(rows["https://example.com/failed"].source_ref).not.toHaveProperty("fullText");
+      for (const row of Object.values(rows)) expect(row.excerpt).toContain(row.evidence_quote);
+      const q = (sql: string, params?: unknown[]) => pool.query(sql, params);
+      expect((await getPersonalSignal(q, "person-a", rows["https://example.com/full"].id))?.fullText).toBe(true);
+      expect((await getPersonalSignal(q, "person-a", rows["https://example.com/failed"].id))?.fullText).toBe(false);
+    });
   });
 });
 

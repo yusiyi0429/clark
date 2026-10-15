@@ -6,6 +6,7 @@ import { ArrowRight, ChevronLeft, ChevronRight, Flag, Pencil, Plus, Target, Tras
 import type { TMissionAnchor, TBattlefieldManagementResponse } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import type { PersonOption } from "@/lib/api/server";
+import { Select } from "@/components/ui/Select";
 import b from "@/styles/battlefield-management.module.css";
 // 顶栏与页头复用配置页同一套设计常量（UpgradeDesign.pen 两页共享 Top Navigation 与 Page Header）。
 import c from "@/styles/config.module.css";
@@ -273,17 +274,11 @@ export function BattlefieldScreen({ battlefields, issues, people, initialBattlef
                 </label>
                 <label className={b.field}>
                   <span>负责人</span>
-                  <select value={draft.ownerId} onChange={(event) => setDraft({ ...draft, ownerId: event.target.value })}>
-                    <option value="">待指派</option>
-                    {people.map((person) => (
-                      <option key={person.personId} value={person.personId}>
-                        {person.displayName}
-                      </option>
-                    ))}
-                  </select>
+                  <Select aria-label="负责人" value={draft.ownerId} onChange={(ownerId) => setDraft({ ...draft, ownerId })}
+                    options={[{ value: "", label: "待指派" }, ...people.map((person) => ({ value: person.personId, label: person.displayName }))]} />
                 </label>
                 <label className={b.field}>
-                  <span>LTO · 六个月目标</span>
+                  <span>长期目标 · 六个月</span>
                   <textarea value={draft.sixMonthOutcome} onChange={(event) => setDraft({ ...draft, sixMonthOutcome: event.target.value })} />
                 </label>
                 <label className={b.field}>

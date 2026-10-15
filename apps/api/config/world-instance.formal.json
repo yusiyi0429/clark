@@ -1,0 +1,19 @@
+{
+  "label": "正式范围（集团）",
+  "scope_id": "1fb8bdf8-ea7b-4a98-b691-f2d09ee6687f",
+  "tenant_id": "tokenking-world-02-group",
+  "domains": {
+    "company": "b698c937-733a-46c2-80fe-ba92c291cb29",
+    "aidc": "3d41d53d-e4da-414c-818f-87d63cf2897e",
+    "ciyuan": "4e7a6d94-6b4f-4be5-8b9e-1ce52de384c1",
+    "fangdongdong": "202a8faf-d4c7-4183-9ee1-446796d0f592"
+  },
+  "principals": {
+    "group-ceo": "aeb9cd26-95b1-41ea-b741-5ccebba0b227",
+    "tianshu": "be1b7c23-bb7b-4cd7-8584-612f1ea34ace"
+  },
+  "anchors": {},
+  "people": {},
+  "reads": true,
+  "writes": false
+}

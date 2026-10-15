@@ -44,7 +44,7 @@ describe("群成员入口", () => {
   it("首次议题邀请可选人、写理由并提交", async () => {
     api.GET.mockResolvedValue({ data: { people: [{ personId: "person-2", displayName: "测试乙" }] } });
     api.POST.mockResolvedValue({ data: { members: [] } });
-    pressable(render({ inviteOnly: true }), "拉人进群")();
+    pressable(render({ inviteOnly: true }), "邀请成员")();
     await vi.waitFor(() => expect(api.GET).toHaveBeenCalled());
     await Promise.resolve();
     const dialog = render({ inviteOnly: true });
@@ -53,7 +53,7 @@ describe("群成员入口", () => {
     (checkbox.props!.onChange as (event: unknown) => void)({ target: { checked: true } });
     const textarea = children(render({ inviteOnly: true })).find((node) => (node as { type?: string }).type === "textarea") as Node;
     (textarea.props!.onChange as (event: unknown) => void)({ target: { value: "请一起判断" } });
-    pressable(render({ inviteOnly: true }), "拉进群")();
+    pressable(render({ inviteOnly: true }), "确认邀请")();
     await vi.waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/threads/{objectType}/{objectId}/members", {
       params: { path: { objectType: "issue", objectId: "issue-1" } }, body: { personIds: ["person-2"], note: "请一起判断" },
     }));
@@ -71,5 +71,31 @@ describe("群成员入口", () => {
     await vi.waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/threads/{objectType}/{objectId}/leave", {
       params: { path: { objectType: "issue", objectId: "issue-1" } },
     }));
+  });
+});
+
+describe("拉人成功的反馈", () => {
+  it("拉人成功后发出群成员变化，并在工作面底部提示拉了谁", async () => {
+    api.GET.mockResolvedValue({ data: { people: [{ personId: "person-2", displayName: "测试乙" }] } });
+    api.POST.mockResolvedValue({ data: { members: [] } });
+    pressable(render({ inviteOnly: true }), "邀请成员")();
+    await vi.waitFor(() => expect(api.GET).toHaveBeenCalled());
+    await Promise.resolve();
+    const checkbox = children(render({ inviteOnly: true })).find((node) => (node as Node).props?.type === "checkbox") as Node;
+    expect(checkbox.props!["aria-label"]).toBe("测试乙");
+    (checkbox.props!.onChange as (event: unknown) => void)({ target: { checked: true } });
+    pressable(render({ inviteOnly: true }), "确认邀请")();
+    await vi.waitFor(() => expect(window.dispatchEvent).toHaveBeenCalledTimes(2));
+    const events = vi.mocked(window.dispatchEvent).mock.calls.map(([event]) => event as CustomEvent<{ text?: string; objectId?: string }>);
+    expect(events[0].type).toBe("thread-members-changed");
+    expect(events[0].detail.objectId).toBe("issue-1");
+    expect(events[1].type).toBe("workspace-toast");
+    expect(events[1].detail.text).toBe("已邀请测试乙加入议题群聊");
+  });
+
+  it("提示文字：人多时只列前三位", async () => {
+    const { inviteDoneText } = await import("./ThreadMembersMenu");
+    expect(inviteDoneText("issue", ["甲", "乙"])).toBe("已邀请甲、乙加入议题群聊");
+    expect(inviteDoneText("meeting", ["甲", "乙", "丙", "丁"])).toBe("已邀请甲、乙、丙等 4 人加入会议群聊");
   });
 });

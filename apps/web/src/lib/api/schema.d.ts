@@ -158,6 +158,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/issues/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 议题有效历史分层：仍有效的历史决定、此后执行变化、本次待判断、已失效决定（只读） */
+        get: operations["getIssueDecisionHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 会议每个关联议题的有效历史分层（只读） */
+        get: operations["getMeetingDecisionHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/meetings": {
         parameters: {
             query?: never;
@@ -834,6 +868,74 @@ export interface paths {
         put?: never;
         /** 发送消息并通过 SSE 返回 Pi 运行事件 */
         post: operations["sendConversationMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{scope}/new": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 新建对话：本人在该 scope 的当前对话有内容时归档（不删除），之后的消息进一条空白对话 */
+        post: operations["startNewConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{scope}/archived": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人在该 scope 已归档、有内容的历史对话（新的在前） */
+        get: operations["listArchivedConversations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{scope}/archived/{id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 只读回看一段历史对话 */
+        get: operations["getArchivedConversationMessages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{scope}/archived/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 切回一段历史对话继续：当前对话归档，这一段成为当前对话 */
+        post: operations["restoreArchivedConversation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1702,6 +1804,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/dictation/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 实时听写签发：返回签好的一次性腾讯实时识别 wss 地址（30 秒内握手有效，SecretKey 不下发）；每人每分钟最多 6 次；响应 no-store；缺配置 503 DICTATION_REALTIME_NOT_CONFIGURED（前端退回录完再转） */
+        post: operations["createDictationSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/dictation/polish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 听写后的轻度整理（去口头填充词和残句、处理改口、修明显的同音错字、理顺语序、补标点；已经干净的句子不送模型）。mode=sentence（缺省）逐句、不分点，超时默认 1.2 秒；mode=full 整段、列举时按「1. 」分行，超时按字数放宽（封顶 4 秒）。未配置、失败、超时或没通过防护时回原文 polished:false，仍是 200；原文超过 2000 字 413 */
+        post: operations["polishDictation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/voiceprint": {
         parameters: {
             query?: never;
@@ -2506,7 +2642,30 @@ export interface components {
                 runId: string;
                 /** Format: date-time */
                 createdAt: string;
+                recoveryNote?: {
+                    text: string;
+                    detail: string;
+                };
             }[];
+            archivedCount?: number;
+        };
+        ArchivedConversationList: {
+            conversations: {
+                /** Format: uuid */
+                id: string;
+                firstQuestion: string;
+                /** Format: date-time */
+                startedAt: string;
+                /** Format: date-time */
+                lastAt: string;
+                /** Format: date-time */
+                archivedAt: string;
+                messageCount: number;
+            }[];
+        };
+        ConversationSwitchResponse: {
+            conversationId: string | null;
+            archived: boolean;
         };
         ConversationMessageRequest: {
             message: string;
@@ -2519,6 +2678,8 @@ export interface components {
             }[];
             /** Format: uuid */
             viewingMaterialId?: string;
+            /** Format: uuid */
+            resumeRunId?: string;
         };
         ConversationSseEvent: {
             runId: string;
@@ -2539,6 +2700,40 @@ export interface components {
             toolCallId: string;
             name: string;
             isError?: boolean;
+            label?: string;
+            detail?: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "route";
+            tier: "quick" | "grounded" | "deep";
+            source: "rule" | "model" | "fallback";
+            expectSeconds: number;
+            timeoutMs: number;
+            notice?: string;
+            model?: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "thinking";
+            summary?: string;
+            delta?: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "escalation";
+            reason: "slow" | "retrieval";
+            expectSeconds: number;
+            notice: string;
         } | {
             runId: string;
             /** @description global 或稳定对象 scope */
@@ -2575,9 +2770,22 @@ export interface components {
             scope: string;
             sequence: number;
             /** @constant */
+            type: "recovery";
+            reason: string;
+            action: "retry" | "fallback" | "trim" | "continue" | "skip";
+            attempt: number;
+            notice: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
             type: "error";
             code: string;
             message: string;
+            resume?: "continue" | "retry";
+            partial?: boolean;
         } | {
             runId: string;
             /** @description global 或稳定对象 scope */
@@ -2586,6 +2794,10 @@ export interface components {
             /** @constant */
             type: "done";
             status: "completed" | "aborted";
+            recoveryNote?: {
+                text: string;
+                detail: string;
+            };
         };
         CreateBattlefieldRequest: {
             code: string;
@@ -4865,6 +5077,46 @@ export interface components {
                 voiceprint: boolean;
                 world: boolean;
             };
+            world?: {
+                configured: boolean;
+                instance: string;
+                scopeId: string | null;
+                reads: boolean;
+                writes: boolean;
+                state: "not_configured" | "checking" | "connected" | "error";
+                checkedAt: string | null;
+                contractVersion: string | null;
+                serverVersion: string | null;
+                objects: {
+                    company: number;
+                    strategy: number;
+                    units: number;
+                    longTermGoals: number;
+                    periodGoals: number;
+                } | null;
+                errorCode: string | null;
+                httpStatus: number | null;
+            };
+            worldTk?: {
+                configured: boolean;
+                instance: string;
+                scopeId: string | null;
+                reads: boolean;
+                writes: boolean;
+                state: "not_configured" | "checking" | "connected" | "error";
+                checkedAt: string | null;
+                contractVersion: string | null;
+                serverVersion: string | null;
+                objects: {
+                    company: number;
+                    strategy: number;
+                    units: number;
+                    longTermGoals: number;
+                    periodGoals: number;
+                } | null;
+                errorCode: string | null;
+                httpStatus: number | null;
+            };
         };
         RadarScanResponse: {
             trigger: "manual" | "scheduled";
@@ -4939,6 +5191,237 @@ export interface components {
             createdAt: string;
             revokedAt?: string;
             revokeReason?: string;
+        };
+        IssueDecisionHistory: {
+            issueId: string;
+            issueTitle: string;
+            issueStatus: "pending" | "decided" | "dismissed";
+            effective: {
+                ref: string;
+                issueId: string;
+                kind: "decision" | "judgment";
+                text: string;
+                decidedAt: string;
+                decidedBy: {
+                    personId: string | null;
+                    displayName: string;
+                } | null;
+                confirmedVia: "issue.decide" | "issue.decide_override" | "meeting.confirm_item" | "imported";
+                option: {
+                    id: string | null;
+                    label: string | null;
+                } | null;
+                status: "effective" | "revoked" | "superseded";
+                statusAt: string | null;
+                statusReason: string | null;
+                supersededBy: string | null;
+                revokedBy: string | null;
+                source: {
+                    kind: "issue-receipt" | "meeting-item" | "imported";
+                    receiptId?: string;
+                    meetingId?: string;
+                    meetingTitle?: string;
+                    meetingAt?: string;
+                    outcomeItemId?: string;
+                    turnId?: string;
+                    quote?: string;
+                    importedRef?: string;
+                };
+                sourceRefs: string[];
+            }[];
+            changes: {
+                ref: string;
+                kind: "monthly_feedback" | "discussion" | "material_revision" | "signal" | "execution_fact";
+                at: string;
+                text: string;
+                author: {
+                    personId: string | null;
+                    displayName: string;
+                } | null;
+                sourceRef: string;
+                relatedDecisionRefs?: string[];
+                stance?: string;
+            }[];
+            changesSince: string | null;
+            changesNote: string | null;
+            pending: {
+                ref: string;
+                kind: "issue_pending" | "outcome_candidate";
+                text: string;
+                at: string | null;
+                options: {
+                    id: string;
+                    label: string;
+                }[];
+                source: {
+                    kind: "issue-receipt" | "meeting-item" | "imported";
+                    receiptId?: string;
+                    meetingId?: string;
+                    meetingTitle?: string;
+                    meetingAt?: string;
+                    outcomeItemId?: string;
+                    turnId?: string;
+                    quote?: string;
+                    importedRef?: string;
+                } | null;
+                note: string;
+            }[];
+            inactive: {
+                ref: string;
+                issueId: string;
+                kind: "decision" | "judgment";
+                text: string;
+                decidedAt: string;
+                decidedBy: {
+                    personId: string | null;
+                    displayName: string;
+                } | null;
+                confirmedVia: "issue.decide" | "issue.decide_override" | "meeting.confirm_item" | "imported";
+                option: {
+                    id: string | null;
+                    label: string | null;
+                } | null;
+                status: "effective" | "revoked" | "superseded";
+                statusAt: string | null;
+                statusReason: string | null;
+                supersededBy: string | null;
+                revokedBy: string | null;
+                source: {
+                    kind: "issue-receipt" | "meeting-item" | "imported";
+                    receiptId?: string;
+                    meetingId?: string;
+                    meetingTitle?: string;
+                    meetingAt?: string;
+                    outcomeItemId?: string;
+                    turnId?: string;
+                    quote?: string;
+                    importedRef?: string;
+                };
+                sourceRefs: string[];
+            }[];
+            relatedMeetings: {
+                id: string;
+                title: string;
+                status: string;
+                scheduledAt: string;
+            }[];
+        };
+        MeetingDecisionHistoryResponse: {
+            meetingId: string;
+            issues: {
+                issueId: string;
+                issueTitle: string;
+                issueStatus: "pending" | "decided" | "dismissed";
+                effective: {
+                    ref: string;
+                    issueId: string;
+                    kind: "decision" | "judgment";
+                    text: string;
+                    decidedAt: string;
+                    decidedBy: {
+                        personId: string | null;
+                        displayName: string;
+                    } | null;
+                    confirmedVia: "issue.decide" | "issue.decide_override" | "meeting.confirm_item" | "imported";
+                    option: {
+                        id: string | null;
+                        label: string | null;
+                    } | null;
+                    status: "effective" | "revoked" | "superseded";
+                    statusAt: string | null;
+                    statusReason: string | null;
+                    supersededBy: string | null;
+                    revokedBy: string | null;
+                    source: {
+                        kind: "issue-receipt" | "meeting-item" | "imported";
+                        receiptId?: string;
+                        meetingId?: string;
+                        meetingTitle?: string;
+                        meetingAt?: string;
+                        outcomeItemId?: string;
+                        turnId?: string;
+                        quote?: string;
+                        importedRef?: string;
+                    };
+                    sourceRefs: string[];
+                }[];
+                changes: {
+                    ref: string;
+                    kind: "monthly_feedback" | "discussion" | "material_revision" | "signal" | "execution_fact";
+                    at: string;
+                    text: string;
+                    author: {
+                        personId: string | null;
+                        displayName: string;
+                    } | null;
+                    sourceRef: string;
+                    relatedDecisionRefs?: string[];
+                    stance?: string;
+                }[];
+                changesSince: string | null;
+                changesNote: string | null;
+                pending: {
+                    ref: string;
+                    kind: "issue_pending" | "outcome_candidate";
+                    text: string;
+                    at: string | null;
+                    options: {
+                        id: string;
+                        label: string;
+                    }[];
+                    source: {
+                        kind: "issue-receipt" | "meeting-item" | "imported";
+                        receiptId?: string;
+                        meetingId?: string;
+                        meetingTitle?: string;
+                        meetingAt?: string;
+                        outcomeItemId?: string;
+                        turnId?: string;
+                        quote?: string;
+                        importedRef?: string;
+                    } | null;
+                    note: string;
+                }[];
+                inactive: {
+                    ref: string;
+                    issueId: string;
+                    kind: "decision" | "judgment";
+                    text: string;
+                    decidedAt: string;
+                    decidedBy: {
+                        personId: string | null;
+                        displayName: string;
+                    } | null;
+                    confirmedVia: "issue.decide" | "issue.decide_override" | "meeting.confirm_item" | "imported";
+                    option: {
+                        id: string | null;
+                        label: string | null;
+                    } | null;
+                    status: "effective" | "revoked" | "superseded";
+                    statusAt: string | null;
+                    statusReason: string | null;
+                    supersededBy: string | null;
+                    revokedBy: string | null;
+                    source: {
+                        kind: "issue-receipt" | "meeting-item" | "imported";
+                        receiptId?: string;
+                        meetingId?: string;
+                        meetingTitle?: string;
+                        meetingAt?: string;
+                        outcomeItemId?: string;
+                        turnId?: string;
+                        quote?: string;
+                        importedRef?: string;
+                    };
+                    sourceRefs: string[];
+                }[];
+                relatedMeetings: {
+                    id: string;
+                    title: string;
+                    status: string;
+                    scheduledAt: string;
+                }[];
+            }[];
         };
         IssueDecideInput: {
             decisionText: string;
@@ -5135,6 +5618,10 @@ export interface components {
                     level: "capability";
                     capabilityId: string;
                 };
+                /** @constant */
+                nature?: "ai_suggested";
+                /** @constant */
+                fromRadar?: true;
             }[];
             todos: {
                 id: string;
@@ -5304,6 +5791,9 @@ export interface components {
                 title?: string;
                 brief?: string;
                 dueDate?: string;
+                scope?: {
+                    battlefieldIds: string[];
+                };
             }[];
             warnings: {
                 candidate: unknown;
@@ -5660,8 +6150,10 @@ export interface components {
                         displayName: string;
                     };
                 } | null;
+                origin?: "agent" | "upload" | "import";
             } | null;
             working: boolean;
+            nature?: "real" | "ai_generated";
         };
         MaterialListResponse: {
             materials: {
@@ -5702,8 +6194,10 @@ export interface components {
                             displayName: string;
                         };
                     } | null;
+                    origin?: "agent" | "upload" | "import";
                 } | null;
                 working: boolean;
+                nature?: "real" | "ai_generated";
             }[];
             canUpload: boolean;
         };
@@ -5728,6 +6222,7 @@ export interface components {
                     displayName: string;
                 };
             } | null;
+            origin?: "agent" | "upload" | "import";
         };
         MaterialBlock: {
             text: string;
@@ -5765,6 +6260,7 @@ export interface components {
                         displayName: string;
                     };
                 } | null;
+                origin?: "agent" | "upload" | "import";
             }[];
         };
         MaterialDetailResponse: {
@@ -5806,8 +6302,10 @@ export interface components {
                             displayName: string;
                         };
                     } | null;
+                    origin?: "agent" | "upload" | "import";
                 } | null;
                 working: boolean;
+                nature?: "real" | "ai_generated";
             };
             version: number;
             latest: boolean;
@@ -5828,6 +6326,7 @@ export interface components {
                         displayName: string;
                     };
                 } | null;
+                origin?: "agent" | "upload" | "import";
             };
             blocks: {
                 text: string;
@@ -5865,6 +6364,7 @@ export interface components {
                             displayName: string;
                         };
                     } | null;
+                    origin?: "agent" | "upload" | "import";
                 }[];
             }[] | null;
             revisions: {
@@ -5884,6 +6384,7 @@ export interface components {
                         displayName: string;
                     };
                 } | null;
+                origin?: "agent" | "upload" | "import";
             }[];
             annotations: {
                 id: string;
@@ -7064,7 +7565,7 @@ export interface components {
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned";
                 text: string;
                 objectType: "task" | "meeting" | "issue";
                 objectId: string;
@@ -7093,6 +7594,24 @@ export interface components {
         };
         DictationResult: {
             text: string;
+        };
+        DictationSessionResponse: {
+            url: string;
+            voiceId: string;
+            engine: string;
+            expiresAt: string;
+            /** @constant */
+            sampleRate: 16000;
+            /** @constant */
+            frameMs: 200;
+        };
+        DictationPolishRequest: {
+            text: string;
+            mode?: "sentence" | "full";
+        };
+        DictationPolishResponse: {
+            text: string;
+            polished: boolean;
         };
         OnboardingResponse: {
             displayName: string;
@@ -7561,6 +8080,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CardCollection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getIssueDecisionHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 议题有效历史 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueDecisionHistory"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMeetingDecisionHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 会议关联议题的有效历史 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingDecisionHistoryResponse"];
                 };
             };
             /** @description ApiError 统一错误 */
@@ -9515,6 +10114,186 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    startNewConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前对话 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationSwitchResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listArchivedConversations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 历史对话 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchivedConversationList"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getArchivedConversationMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation 历史 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationHistory"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    restoreArchivedConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前对话 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationSwitchResponse"];
                 };
             };
             /** @description ApiError 统一错误 */
@@ -12684,6 +13463,122 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createDictationSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 签好的地址与采音参数 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DictationSessionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    polishDictation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DictationPolishRequest"];
+            };
+        };
+        responses: {
+            /** @description 整理后的文字（或原文） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DictationPolishResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };

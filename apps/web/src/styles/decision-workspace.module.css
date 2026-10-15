@@ -1,0 +1,174 @@
+/*
+ * 议题决策工作区的共用部分（会议页议题块、议题页都用）：依据按钮、三层历史、「依据」抽屉、「回到刚才的位置」。
+ * 色值沿用会议页：白卡 #e6e9ed 描边，蓝 #0a5dc2 / #e8f1ff，绿 #2f7a44 / #e8f6ec，琥珀 #8a6220 / #fdf4e4，红 #a1443c / #fdecea。
+ * 这里没有任何正文滚动框：正文仍由 DetailFrame 的 .ts-detail 统一滚动；只有浮在上面的抽屉自己滚。
+ */
+
+/* 依据：一行小胶囊。可以打开的是蓝字按钮，当前会议本身只是灰字。 */
+.sourceRow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px}
+.sourceRow>small{flex:none;margin-right:2px;color:#6e6e73;font-size:11px}
+.sourceChip{display:inline-flex;align-items:center;gap:3px;max-width:100%;padding:3px 8px;border:1px solid #dbe6f5;border-radius:7px;background:#f5f9ff;color:#0a5dc2;font:inherit;font-size:11.5px;line-height:1.5;text-align:left;overflow-wrap:anywhere;cursor:pointer}
+.sourceChip:hover{border-color:#c6d9f2;background:#e8f1ff}
+.sourceChip:focus-visible{outline:2px solid #007aff80;outline-offset:2px}
+.sourceStatic{display:inline-flex;padding:3px 8px;border-radius:7px;background:#f0f1f3;color:#666c75;font-size:11.5px;line-height:1.5}
+
+/* 三层历史：仍有效（绿点）、此后变化（蓝点）、本次待判断（琥珀点，虚线框）；已失效的收在折叠里。 */
+.layers{display:flex;flex-direction:column;gap:14px;min-width:0}
+.layer>h4{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:13px;font-weight:600;line-height:1.5;color:#1d1d1f}
+.layer>h4::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:#2f7a44}
+.layer[data-layer=changes]>h4::before{background:#3a83f7}
+.layer[data-layer=pending]>h4::before{background:#c98a1b}
+.layer>h4>span{font-size:11px;font-weight:400;color:#6e6e73}
+.layer>ol,.inactive>ol{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.entry{min-width:0;padding:10px 12px;border:1px solid #eef0f4;border-radius:12px;background:#fff}
+.entry[data-layer=effective]{border-color:#dbeee1;background:#f6fbf7}
+.entry[data-layer=pending]{border-style:dashed;border-color:#ead9b4;background:#fffcf5}
+.entry[data-layer=inactive]{background:#f7f8fa}
+.entry[data-flash=true]{animation:sourceFlash 1.8s ease-out}
+.entryText{margin:0;color:#1d1d1f;font-size:13px;font-weight:500;line-height:1.7;overflow-wrap:anywhere}
+.entryText del{color:#8a8f98;text-decoration-color:#b0b5bd}
+.entryMeta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:4px 0 0;color:#6e6e73;font-size:11.5px;line-height:1.6;overflow-wrap:anywhere}
+.changeText{margin:4px 0 0;color:#3c4350;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.changeKind{display:inline-flex;padding:1px 6px;border-radius:5px;background:#eef3fb;color:#3d5a80;font-size:11px;font-weight:600}
+.badge{display:inline-flex;margin-right:6px;padding:1px 6px;border-radius:5px;background:#f3eefb;color:#6b4e9e;font-size:11px;font-weight:600;vertical-align:1px}
+.badge[data-tone=pending]{background:#fdf4e4;color:#8a6220}
+.pendingNote{margin:6px 0 0;color:#8a6220;font-size:11.5px;line-height:1.6}
+.layerEmpty,.layerLoading{margin:0;color:#6e6e73;font-size:12px;line-height:1.7}
+.inactive{padding:0 12px;border:1px solid #eef0f4;border-radius:12px;background:#fafbfc}
+.inactive>summary{padding:10px 0;color:#4f5866;font-size:12px;font-weight:600;cursor:pointer}
+.inactive>ol{padding-bottom:12px}
+.errorLine{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0;padding:9px 12px;border:1px solid #e7c9c5;border-radius:10px;background:#fdecea;color:#a1443c;font-size:12px;line-height:1.6}
+.errorLine button{padding:4px 10px;border:1px solid #d9a49e;border-radius:8px;background:#fff;color:#a1443c;font:inherit;font-size:12px;cursor:pointer}
+
+/* 「依据」抽屉：浮在阅读页右侧（窄面板时从底部升起），正文不动，关上就回到原处。只有抽屉正文自己滚动。 */
+.drawer{position:absolute;z-index:80;top:56px;right:12px;bottom:12px;display:flex;flex-direction:column;width:min(520px,calc(100% - 24px));overflow:hidden;border:1px solid #e1e6ee;border-radius:18px;background:#fff;box-shadow:0 18px 50px #10203a2e;color:#1d1d1f}
+.drawerHead{display:flex;flex:none;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px 12px;border-bottom:1px solid #eef0f4}
+.drawerHead small{display:block;color:#6e6e73;font-size:11px}
+.drawerHead h2{margin:3px 0 0;font-size:15px;font-weight:600;line-height:1.5;color:#1d1d1f;overflow-wrap:anywhere}
+.drawerClose{display:grid;flex:none;place-items:center;width:30px;height:30px;border:0;border-radius:50%;background:#f1f3f6;color:#4f5866;cursor:pointer}
+.drawerClose:hover{background:#e6eaef}
+.drawerBody{flex:1;min-height:0;padding:14px 18px 20px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.drawerFoot{display:flex;flex:none;flex-wrap:wrap;gap:8px;padding:10px 16px;border-top:1px solid #eef0f4}
+.drawerFoot:empty{display:none}
+.drawerAction{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid #d9dde5;border-radius:10px;background:#fff;color:#3c4350;font:inherit;font-size:12.5px;text-decoration:none;cursor:pointer}
+.drawerAction:hover{background:#f7f8fa}
+.drawer button:focus-visible,.drawer a:focus-visible{outline:2px solid #007aff80;outline-offset:2px}
+.drawerMeta{margin:0 0 10px;color:#6e6e73;font-size:12px;line-height:1.7}
+.notice{display:block;margin:6px 0 10px;padding:7px 10px;border-radius:9px;background:#fdf4e4;color:#8a6220;font-size:12px;line-height:1.6}
+.muted{margin:0 0 10px;color:#6e6e73;font-size:12.5px;line-height:1.7}
+.muted a{margin-left:6px;color:#0a5dc2}
+.cited{margin:0 0 14px;padding:12px 14px;border-left:3px solid #3a83f7;border-radius:0 12px 12px 0;background:#f2f7ff;color:#1d1d1f;font-size:13.5px;line-height:1.8}
+.cited>small{display:block;margin-bottom:4px;color:#0a5dc2;font-size:11px;font-weight:600}
+.cited p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.paragraphs{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.paragraphs>li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:6px;padding:6px 8px;border-radius:9px;color:#3c4350;font-size:13px;line-height:1.8}
+.paragraphs>li[data-cited=true]{background:#eef5ff;color:#1d1d1f}
+.paragraphs p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.paragraphs :is(h1,h2,h3,h4,h5){margin:0;font-size:14px;font-weight:600}
+.paragraphs :is(ul,ol){margin:0;padding-left:20px}
+.paragraphs table{display:block;max-width:100%;overflow-x:auto;border-collapse:collapse;font-size:12px}
+.knowledgeSection{margin:0 0 14px}
+.knowledgeSection>h3{margin:0 0 6px;color:#1d1d1f;font-size:14px;font-weight:600;line-height:1.6}
+.knowledgeNote{margin:0 0 10px;color:#3c4350;font-size:13px;line-height:1.7}
+.knowledgeRetry{padding:4px 12px;border:1px solid #d6dae2;border-radius:8px;background:#fff;color:#1d1d1f;font:inherit;font-size:13px;cursor:pointer}
+.paragraphNo{padding-top:3px;color:#a0a6b0;font-size:11px;font-variant-numeric:tabular-nums;text-align:right}
+.quoteBlock{margin:0 0 10px;padding:6px 0 6px 12px;border-left:2px solid #c9d4e2;color:#6b7686;font-size:12.5px;line-height:1.7}
+.messageText{margin:0 0 10px;color:#1d1d1f;font-size:14px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* 定位到同一页里的依据之后：右下角一颗「回到刚才的位置」。 */
+.returnChip{position:absolute;z-index:75;right:20px;bottom:20px;display:flex;align-items:center;border:1px solid #d6e2f3;border-radius:999px;background:#ffffffeb;box-shadow:0 8px 24px #10203a22;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.returnChip>button{display:inline-flex;align-items:center;gap:6px;padding:8px 6px 8px 14px;border:0;background:transparent;color:#0a5dc2;font:inherit;font-size:12.5px;cursor:pointer}
+.returnChip>.returnDismiss{padding:8px 12px 8px 6px;color:#6e6e73}
+.returnChip>button:focus-visible{outline:2px solid #007aff80;outline-offset:-2px;border-radius:999px}
+
+@keyframes sourceFlash{0%,35%{box-shadow:0 0 0 3px #3a83f766;background-color:#eef5ff}100%{box-shadow:0 0 0 0 transparent}}
+/* 面板窄（手机、三折叠、Agent 栏展开后的小屏）：抽屉从底部升起，铺满宽度。 */
+@container pane (max-width: 700px){.drawer{top:auto;right:8px;bottom:8px;left:8px;width:auto;height:min(82%,640px)}}
+/* 手持（≤959）：底部有输入条，回到原位置的钮让开；字号下限 13 / 14。 */
+@media(max-width:959px){
+ .returnChip{bottom:calc(120px + env(safe-area-inset-bottom))}
+ .sourceChip.sourceChip,.sourceStatic.sourceStatic,.entryMeta.entryMeta,.sourceRow.sourceRow>small,.layer.layer>h4>span,.changeKind.changeKind,.badge.badge{font-size:13px}
+ .entryText.entryText,.changeText.changeText,.layerEmpty.layerEmpty,.pendingNote.pendingNote,.drawerMeta.drawerMeta,.muted.muted{font-size:14px}
+}
+@media(prefers-reduced-motion:reduce){.entry[data-flash=true]{animation:none;box-shadow:0 0 0 3px #3a83f766}}
+
+/*
+ * 材料排印（data-type-scale="doc"，议题页起用；规范见 docs/superpowers/specs/2026-10-12-issue-page-typography.md）：
+ * 三层历史与「依据」抽屉只用 --doc-* 的 16 / 13 和标签 12，字重 400 / 600，墨色以主 / 次为主，强调色只给可点的。
+ * 分层不靠颜色：去掉每层标题前的彩色小圆点、条目的绿底 / 琥珀虚线框，改成纯文字小标题 + 发丝线隔开的平实列表。
+ * 会议页没有这个属性，上面的规则原样生效；以后会议页加上 data-type-scale="doc" 就整段换成这一套。
+ */
+:global([data-type-scale='doc']) .layers{gap:20px}
+:global([data-type-scale='doc']) .layer>h4{margin:0 0 8px;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);font-weight:var(--doc-weight-strong);color:var(--doc-ink-2)}
+:global([data-type-scale='doc']) .layer>h4{gap:0}
+:global([data-type-scale='doc']) .layer>h4::before{content:none}
+:global([data-type-scale='doc']) .layer>h4>span{margin-left:8px;font-size:var(--doc-type-meta);font-weight:var(--doc-weight-regular);color:var(--doc-ink-2)}
+:global([data-type-scale='doc']) .layer>ol,
+:global([data-type-scale='doc']) .inactive>ol{gap:0}
+:global([data-type-scale='doc']) .entry.entry{padding:12px 0;border:0;border-radius:0;background:none}
+:global([data-type-scale='doc']) .entry.entry+.entry{border-top:1px solid var(--doc-rule)}
+:global([data-type-scale='doc']) .inactive{padding:0;border:0;border-top:1px solid var(--doc-rule);border-radius:0;background:none}
+:global([data-type-scale='doc']) .inactive>ol{padding-bottom:0}
+:global([data-type-scale='doc']) .entryText{font-size:var(--doc-type-body);line-height:var(--doc-lh-body);font-weight:var(--doc-weight-regular);color:var(--doc-ink-1)}
+:global([data-type-scale='doc']) .entryText del{color:var(--doc-ink-3);text-decoration-color:currentColor}
+:global([data-type-scale='doc']) .entryMeta{margin-top:4px;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-3)}
+:global([data-type-scale='doc']) .changeText{font-size:var(--doc-type-body);line-height:var(--doc-lh-body);color:var(--doc-ink-1)}
+/* 「CEO 判断 / 待决定 / 会后候选 / 群讨论…」是标签：12、次墨、浅灰底，和「雷达」小标签同一种。 */
+:global([data-type-scale='doc']) .badge,
+:global([data-type-scale='doc']) .badge[data-tone=pending],
+:global([data-type-scale='doc']) .changeKind{padding:0 6px;border-radius:4px;background:var(--doc-tag-wash);color:var(--doc-ink-2);font-size:var(--doc-type-tag);line-height:var(--doc-lh-tag);font-weight:var(--doc-weight-regular);vertical-align:2px}
+:global([data-type-scale='doc']) .pendingNote{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-2)}
+:global([data-type-scale='doc']) .layerEmpty,
+:global([data-type-scale='doc']) .layerLoading{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-3)}
+:global([data-type-scale='doc']) .inactive>summary{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);font-weight:var(--doc-weight-strong);color:var(--doc-ink-2)}
+:global([data-type-scale='doc']) .errorLine,
+:global([data-type-scale='doc']) .errorLine button{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta)}
+:global([data-type-scale='doc']) .sourceRow>small{font-size:var(--doc-type-meta);color:var(--doc-ink-3)}
+:global([data-type-scale='doc']) .sourceChip{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-accent)}
+:global([data-type-scale='doc']) .sourceStatic{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-3)}
+/* 「依据」抽屉：标题 16/600，原文 16 正文，其余（出处、说明、段号、按钮）13。 */
+:global([data-type-scale='doc']) .drawerHead small{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-3)}
+:global([data-type-scale='doc']) .drawerHead h2{font-size:var(--doc-type-section);line-height:var(--doc-lh-section);font-weight:var(--doc-weight-strong);color:var(--doc-ink-1)}
+:global([data-type-scale='doc']) .drawerAction{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-2)}
+:global([data-type-scale='doc']) .drawerMeta,
+:global([data-type-scale='doc']) .muted{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-3)}
+:global([data-type-scale='doc']) .muted a{color:var(--doc-ink-accent)}
+:global([data-type-scale='doc']) .notice{background:var(--doc-tag-wash);font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-2)}
+:global([data-type-scale='doc']) .cited{font-size:var(--doc-type-body);line-height:var(--doc-lh-body);color:var(--doc-ink-1)}
+:global([data-type-scale='doc']) .cited>small{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);font-weight:var(--doc-weight-strong);color:var(--doc-ink-2)}
+:global([data-type-scale='doc']) .paragraphs>li{grid-template-columns:32px minmax(0,1fr);font-size:var(--doc-type-body);line-height:var(--doc-lh-body);color:var(--doc-ink-1)}
+:global([data-type-scale='doc']) .paragraphs :is(h1,h2,h3,h4,h5){font-size:var(--doc-type-section);line-height:var(--doc-lh-section);font-weight:var(--doc-weight-strong)}
+:global([data-type-scale='doc']) .paragraphs table{font-size:var(--doc-type-meta)}
+:global([data-type-scale='doc']) .paragraphNo{padding-top:4px;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-3)}
+:global([data-type-scale='doc']) .knowledgeSection>h3{font-size:var(--doc-type-section);line-height:var(--doc-lh-section);font-weight:var(--doc-weight-strong);color:var(--doc-ink-1)}
+:global([data-type-scale='doc']) .knowledgeNote{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-2)}
+:global([data-type-scale='doc']) .knowledgeRetry{font-size:var(--doc-type-meta)}
+:global([data-type-scale='doc']) .quoteBlock{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-2)}
+:global([data-type-scale='doc']) .messageText{font-size:var(--doc-type-body);line-height:var(--doc-lh-body);color:var(--doc-ink-1)}
+:global([data-type-scale='doc']) .returnChip>button{font-size:var(--doc-type-meta)}
+
+
+/*
+ * 点触下限（手机端规范 §2 / §3.4–3.5；docs/superpowers/specs/2026-10-12-mobile-foldable.md）：议题页与会议页共用的判断层小钮，
+ * 手持（≤959）和触屏（pointer: coarse）下热区 ≥44；--touch-hit 在这两种情形由 globals.css 定义，鼠标的电脑不变。
+ * 视觉小于 44 的（依据胶囊）用透明 ::after 外扩补足，不把一行依据撑高；这里没有给任何正文容器加 overflow。
+ */
+@media (max-width: 959px), (pointer: coarse) {
+  /* 「依据」胶囊：版面大小不变，::after 把热区上下左右撑到 44（比 44 大的方向不收缩）。 */
+  .sourceRow { gap: 8px; }
+  .sourceChip { position: relative; }
+  .sourceChip::after {
+    content: "";
+    position: absolute;
+    top: min(0px, calc((100% - var(--touch-hit, 44px)) / 2));
+    bottom: min(0px, calc((100% - var(--touch-hit, 44px)) / 2));
+    left: min(0px, calc((100% - var(--touch-hit, 44px)) / 2));
+    right: min(0px, calc((100% - var(--touch-hit, 44px)) / 2));
+  }
+  /* 「已失效」折叠行、读取失败的「重试」、知识库重试、依据抽屉的关闭 / 操作钮、「回到刚才的位置」：都 44。 */
+  .inactive > summary { padding-block: 13px; }
+  .errorLine button, .knowledgeRetry, .drawerAction { min-height: var(--touch-hit, 44px); font-size: 14px; }
+  .drawerClose { width: var(--touch-hit, 44px); height: var(--touch-hit, 44px); }
+  .returnChip > button { min-height: var(--touch-hit, 44px); }
+  .returnChip > .returnDismiss { min-width: var(--touch-hit, 44px); justify-content: center; }
+}

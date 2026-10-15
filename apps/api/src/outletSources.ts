@@ -1,6 +1,11 @@
 import type { TRadarOutlet, TRadarSourceItem, TRadarSources } from "@warmap/contracts";
 import { RADAR_OUTLETS } from "@warmap/contracts";
 import type { RadarOutletAdapter } from "./radar.js";
+import { RETRIEVE_SOURCES, withRetrieve } from "./tracing.js";
+import { ARTICLE_FETCH_TIMEOUT_MS, ARTICLE_MIN_CHARS, decodeHtml, extractReadableArticle, paragraphsFromHtml, type ArticleContent } from "./articleText.js";
+
+// 实体解码与通用正文提取共用一份实现；githubTrending、清理脚本仍从这里取
+export { decodeHtml };
 
 /** 归属判定：host === d || host.endsWith("." + d)。ftalphaville.ft.com、online.wsj.com 因此自动覆盖。 */
 /** 当前 Radar 配置中的启用 outletId；显式请求只能是已启用的白名单成员。 */
@@ -64,22 +69,6 @@ function iso(value: string): string {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : "";
 }
 
-const NAMED_ENTITIES: Record<string, string> = {
-  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
-  copy: "©", reg: "®", trade: "™", deg: "°", plusmn: "±", times: "×", divide: "÷", middot: "·", bull: "•",
-  mdash: "—", ndash: "–", hellip: "…", ldquo: "“", rdquo: "”", lsquo: "‘", rsquo: "’", laquo: "«", raquo: "»",
-  yen: "¥", euro: "€", pound: "£", cent: "¢", sect: "§",
-};
-
-/** 单遍解码 HTML 实体：常用命名实体 + 十进制 `&#NNN;` + 十六进制 `&#xHH;`；不认识的原样保留，不二次解码。 */
-export function decodeHtml(value: string): string {
-  return value.replace(/&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|([a-zA-Z][a-zA-Z0-9]*));/g, (entity, dec?: string, hex?: string, name?: string) => {
-    if (name) return NAMED_ENTITIES[name] ?? entity;
-    const code = dec ? Number.parseInt(dec, 10) : Number.parseInt(hex!, 16);
-    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : entity;
-  });
-}
-
 /** 从 `<div …>` 开标签处按 div 嵌套深度找配对的 `</div>`，返回其结束位置；不闭合返回 -1。 */
 function matchingDivEnd(html: string, openAt: number): number {
   const divRe = /<(\/?)div\b[^>]*>/gi;
@@ -98,9 +87,6 @@ function removeDiv(html: string, className: string): string {
   return open && end >= 0 ? html.slice(0, open.index) + html.slice(end) : html;
 }
 
-// section：转载自公众号的正文常把文字直接放在 <section> 里
-const BLOCK_TAG = /^<\/?(?:p|div|h[1-6]|li|blockquote|figcaption|section)\b/i;
-
 /**
  * 文章页正文提取（量子位 WordPress：`<div class="article">…</div>`）。
  * 先剔除注释/脚本/样式，按 div 深度配对取出正文容器，去掉容器内的标题、作者行与版权声明；
@@ -108,51 +94,38 @@ const BLOCK_TAG = /^<\/?(?:p|div|h[1-6]|li|blockquote|figcaption|section)\b/i;
  * 配图只取容器内 https 图，after = 它所跟随段落在同一段落流里的索引。
  * 拿不到容器时返回空结果，由调用方诚实退回 feed 摘要。
  */
-export function extractArticleContent(html: string): { text: string; images: { src: string; after: number }[] } {
+export function extractArticleContent(html: string): ArticleContent {
   const clean = html.replace(/<!--[\s\S]*?-->/g, "").replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, "");
   const container = clean.match(/<div[^>]*class="[^"]*\barticle\b[^"]*"[^>]*>/i);
   const end = container ? matchingDivEnd(clean, container.index!) : -1;
   if (!container || end < 0) return { text: "", images: [] };
   // 标题与卡片标题重复；作者/日期行、版权声明是版式，不是正文
   const body = removeDiv(removeDiv(clean.slice(container.index! + container[0].length, end).replace(/<h1\b[\s\S]*?<\/h1>/i, ""), "article_info"), "line_font");
-  const paragraphs: string[] = [];
-  const images: { src: string; after: number }[] = [];
-  let current = "";
-  const flush = () => {
-    const paragraph = current.split("\n").map((line) => line.trim()).filter(Boolean).join("\n");
-    if (paragraph) paragraphs.push(paragraph);
-    current = "";
-  };
-  for (const [token] of body.matchAll(/<[^>]*>|[^<]+/g)) {
-    if (!token.startsWith("<")) current += decodeHtml(token.replace(/\s+/g, " "));
-    else if (/^<br\b/i.test(token)) current += "\n";
-    else if (BLOCK_TAG.test(token)) flush();
-    else {
-      const src = token.match(/^<img\b[^>]*\ssrc="(https:\/\/[^"\s]+)"/i)?.[1];
-      // 图在段中时跟随当前段，否则跟随上一段
-      if (src && images.length < 12) images.push({ src: decodeHtml(src).slice(0, 1000), after: Math.max(0, paragraphs.length - (current.trim() ? 0 : 1)) });
-    }
-  }
-  flush();
-  const text = paragraphs.join("\n\n").slice(0, 10_000);
-  // 10k 截断后，落在被截掉段落之后的配图不再保留
-  const kept = text.split(/\n{2,}/).length;
-  return { text, images: images.filter((image) => image.after < kept) };
+  return paragraphsFromHtml(body);
 }
 
-/** fullText outlet：逐条抓文章页提取全文与配图；失败或无正文时诚实退回 feed 摘要，不用抓取时间或标题冒充。 */
+/**
+ * fullText outlet：逐条抓文章页提取全文与配图；失败或无正文时诚实退回 feed 摘要，不用抓取时间或标题冒充。
+ * 先按量子位正文容器取；改版后找不到容器时退到通用提取，通用提取不足 200 字仍按失败处理。
+ */
 async function fetchFullText(
   fetchImpl: typeof fetch,
   url: string,
+  title: string,
   signal: AbortSignal | undefined,
-): Promise<{ text: string; images: { src: string; after: number }[] }> {
+): Promise<ArticleContent> {
+  const timeout = AbortSignal.timeout(ARTICLE_FETCH_TIMEOUT_MS);
   try {
     const response = await fetchImpl(url, {
-      signal,
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       headers: { "user-agent": "Mozilla/5.0 (compatible; WarMapRadar/1.0)" },
     });
     if (!response.ok) return { text: "", images: [] };
-    return extractArticleContent(await response.text());
+    const html = await response.text();
+    const article = extractArticleContent(html);
+    if (article.text) return article;
+    const generic = extractReadableArticle(html, url, title);
+    return generic.text.length >= ARTICLE_MIN_CHARS ? generic : { text: "", images: [] };
   } catch {
     return { text: "", images: [] };
   }
@@ -176,7 +149,7 @@ export function createOutletFeedAdapter(options: {
   const limit = options.limit ?? 3;
   const fetchImpl = options.fetch ?? fetch;
   const now = options.now ?? Date.now;
-  return {
+  const adapter: RadarOutletAdapter = {
     configured: true,
     async fetchLatest({ outletIds, lookbackHours }, signal): Promise<TRadarSourceItem[]> {
       const wanted = catalog.filter((outlet) => outletIds.includes(outlet.outletId));
@@ -236,17 +209,24 @@ export function createOutletFeedAdapter(options: {
           .slice(0, limit);
         if (outlet.fullText) {
           for (const item of picked) {
-            if (signal?.aborted) break;
-            const full = await fetchFullText(fetchImpl, item.url, signal);
+            const full = signal?.aborted ? { text: "", images: [] } : await fetchFullText(fetchImpl, item.url, item.title, signal);
             if (full.text) {
               item.excerpt = full.text;
               if (full.images.length) item.images = full.images;
             }
+            // 逐条记下原文是否真是全文：阅读页据此标「发布方原文」还是「原文摘录」，不再按目录推断
+            if (item.sourceRef.type === "outlet") item.sourceRef.fullText = Boolean(full.text);
           }
         }
         items.push(...picked);
       }
       return items;
     },
+  };
+  return {
+    configured: adapter.configured,
+    // 每次真实读取发布方 feed 一个 retrieve:outlet-feed 节点（雷达、预研、对话共用）。
+    fetchLatest: (input, signal) => withRetrieve(RETRIEVE_SOURCES.outletFeed, () => input, () => adapter.fetchLatest(input, signal),
+      (items) => ({ items: items.length })),
   };
 }

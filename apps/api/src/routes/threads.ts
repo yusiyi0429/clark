@@ -4,6 +4,7 @@ import { insertNotification } from "../notifications.js";
 import { canUseMemberView } from "../memberAccess.js";
 import { postThreadIntro } from "../threadIntro.js";
 import { isActiveMember, listMembers, listMessages, markRead, postMessage, readState, threadIntroInput } from "../threads.js";
+import { isRealPerson } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 // 通用群组：只有未退出的成员能读能发；非成员（含 CEO）一律 404，不暴露群是否存在。加人、退出、Co-Agent 同步消息在 2b。
@@ -71,7 +72,7 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
     if (req.params.objectType === "signal") return fail(reply, 404, "THREAD_NOT_FOUND", "群组不存在");
     const current = new Set((await listMembers(q, companyMemory, req.params)).map((person) => person.personId));
     if (req.params.objectType === "issue") current.add(req.person!.personId);
-    return { people: companyMemory.searchPeople(undefined).filter((person) => !current.has(person.personId)
+    return { people: companyMemory.searchPeople(undefined).filter((person) => isRealPerson(person) && !current.has(person.personId)
       && (req.params.objectType !== "task" || canUseMemberView(person)))
       .map((person) => ({ personId: person.personId, displayName: person.displayName })) };
   });

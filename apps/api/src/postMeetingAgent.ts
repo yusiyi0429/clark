@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { QueryResult } from "pg";
 import { PostMeetingCandidate } from "@warmap/contracts";
-import { runCandidateAgent } from "./candidateAgentRuntime.js";
+import { runCandidateAgent, type CandidateThinkingLevel } from "./candidateAgentRuntime.js";
 import { HUMAN_WRITING_STYLE } from "./promptStyle.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "./outcome.js";
 
@@ -28,6 +28,8 @@ export function createPostMeetingAgent(options: {
   baseUrl: string;
   apiKey: string;
   modelId: string;
+  /** OUTCOME_THINKING（agentModels.ts）；不给时不开思考，与原来一致。 */
+  thinkingLevel?: CandidateThinkingLevel;
 }): PostMeetingAgent {
   return {
     modelSlot: "heavy",
@@ -44,6 +46,7 @@ export function createPostMeetingAgent(options: {
         apiKey: options.apiKey,
         modelId: options.modelId,
         modelSlot: "heavy",
+        ...(options.thinkingLevel ? { thinkingLevel: options.thinkingLevel } : {}),
         signal,
       });
       return { candidate: result.candidate, runId: result.runId };

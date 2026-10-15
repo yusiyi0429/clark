@@ -39,3 +39,7 @@
 @media(max-width:1250px) { .radar { padding:15px 15px 12px; } }
 @media(max-width:599px) { .radar { padding:14px 12px; } .launch { right:10px; top:17px; width:12px; } }
 @media(prefers-reduced-motion:reduce) { .sweep,.echo { animation:none; } .sweep { transform:rotate(35deg); } .echo { opacity:.35; } .radar,.launch { transition:none; } }
+
+/* 首页雷达卡卡头的小雷达标识：扫描盘的缩小版（同一套 .scope / .sweep / .crosshair / .center），不画回波点。 */
+.mark{position:relative;flex:none;width:24px;height:24px;max-height:none}
+.mark .center{width:3px;height:3px;box-shadow:none}

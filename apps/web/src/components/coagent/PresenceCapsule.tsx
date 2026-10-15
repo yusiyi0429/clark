@@ -63,7 +63,7 @@ export function PresenceCapsule({ skin, pose, level: preview, leaving = false }:
           </span>
         )}
       </div>
-      {preview === undefined ? <span className={s.sr} role="status">{pose === "listening" ? "Co-Agent 在录这场会" : "Co-Agent 在群里给你讲了来龙去脉"}</span> : null}
+      {preview === undefined ? <span className={s.sr} role="status">{`Co-Agent ${pose === "listening" ? "在录这场会" : "已在群内说明背景"}`}</span> : null}
     </div>
   );
 }

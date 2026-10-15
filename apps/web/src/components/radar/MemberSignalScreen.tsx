@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { browserApi, type Card } from "@/lib/api/client";
-import { DetailHeader } from "@/components/shell/DetailHeader";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { SignalArticle, type SignalReading, type SignalState } from "@/cards/SignalArticle";
 import { SignalStoryView } from "@/cards/SignalStory";
@@ -38,7 +38,7 @@ export function personalReading(signal: PersonalSignal): SignalReading {
  * 不挂对话（成员只有全局对话），也不能发给别人或变成执行事项。list 是本人列表里的信号：含当前这条时，「继续浏览」从它往后排。
  */
 export function MemberSignalScreen({ signal, list }: { signal: PersonalSignal; list: PersonalSignalBrief[] }) {
-  const { navigate, close } = useWorkspace();
+  const { navigate } = useWorkspace();
   const [state, setState] = useState(signal.state);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,14 +71,7 @@ export function MemberSignalScreen({ signal, list }: { signal: PersonalSignal; l
   }
 
   return (
-    <>
-      <DetailHeader
-        mark="signal"
-        eyebrow="信号详情 · 我的雷达"
-        back={{ label: "返回我的雷达", onPress: () => navigate("/me/radar") }}
-        closeLabel="关闭我的雷达"
-        onClose={close}
-      />
+    <DetailFrame title="信号详情" subtitle="我的雷达" onBack={() => navigate("/me/radar")} backLabel="返回我的雷达">
       <SignalArticle
         reading={personalReading(signal)}
         state={state}
@@ -92,6 +85,6 @@ export function MemberSignalScreen({ signal, list }: { signal: PersonalSignal; l
           <SignalStoryView key={item.id} {...personalStory(item)} onOpen={navigate} />
         ))}
       />
-    </>
+    </DetailFrame>
   );
 }

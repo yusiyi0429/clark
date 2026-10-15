@@ -9,4 +9,20 @@
 .sentReferences{font-size:11px;margin:0 0 9px;color:#aebfda}.sentReferences>summary{display:flex;align-items:center;gap:5px;cursor:pointer}.sentReferences>details{margin-top:9px}.sentReferences details summary{cursor:pointer}.sentReferences small{color:#adb1ba}
 @keyframes appear{from{opacity:0;translate:0 4px}to{opacity:1;translate:0 0}}
 @media(max-width:599px){.chip .chipTitle{max-width:145px}.quoteButton{width:27px!important;height:27px!important}}
-@media(prefers-reduced-motion:reduce){.quoteButton,.tray,.chip{animation:none;transition:none}}
+/* 点触下限（docs/superpowers/specs/2026-10-12-mobile-foldable.md §2、§3.3）：手持与触屏「批注到对话」热区 44×44，图标与 28 的视觉框不变；鼠标的电脑不进这个查询。
+   默认用 ::after 以按钮中心外扩一块透明热区（不撑大版面；.corner 已是 absolute，不能改成 relative，所以排除）。 */
+@media(max-width:959px),(pointer:coarse){
+.quoteButton:not(.corner){position:relative}
+.quoteButton::after{content:"";position:absolute;left:50%;top:50%;width:var(--touch-hit,44px);height:var(--touch-hit,44px);transform:translate(-50%,-50%)}
+/* 议题行（IssueRow 的 issueSlot，带 data-urgency）外壳是 overflow:hidden，外扩的热区会被裁掉（右侧只剩 1px）：这里改成按钮本体放到 44，
+   28×28 的视觉底色挪到 ::before（沉在图标后面），悬停 / 选中的淡底不会跟着变大。 */
+div[data-urgency]>.quoteButton{width:var(--touch-hit,28px)!important;height:var(--touch-hit,28px)!important}
+div[data-urgency]>.quoteButton::after{content:none}
+div[data-urgency]>.quoteButton::before{content:"";position:absolute;z-index:-1;left:50%;top:50%;width:28px;height:28px;transform:translate(-50%,-50%);border-radius:9px;background:transparent;transition:background 160ms ease}
+div[data-urgency]>.quoteButton.quoteButton:is(:hover,:focus-visible,[aria-pressed=true]:hover){background:transparent!important}
+div[data-urgency]>.quoteButton:is(:hover,:focus-visible)::before{background:#eaf0f9}
+div[data-urgency]>.quoteButton[aria-pressed=true]:is(:hover,:focus-visible)::before{background:#e3eefc}
+}
+/* 对话里「批注了 N 项」那一行：手持 13 字、整行热区 44（原来 11 字、20 高）。 */
+@media(max-width:959px){.sentReferences,.sentReferences small{font-size:13px}.sentReferences>summary{min-height:44px}}
+@media(prefers-reduced-motion:reduce){.quoteButton,.tray,.chip{animation:none;transition:none}.quoteButton::before{transition:none}}

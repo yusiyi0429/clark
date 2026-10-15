@@ -19,7 +19,7 @@ describe("成员主持会议", () => {
     expect(render()).not.toContain("选择会议记录文件");
   });
   it("这一版主持人和其他参会人都没有开始会议，双方都有材料下拉钮那一格", () => {
-    const card = meetingCard({ purpose: "对齐预算" }, [{ actionId: "end", actionType: "meeting.end", label: "这场会开完了" }]);
+    const card = meetingCard({ purpose: "对齐预算" }, [{ actionId: "end", actionType: "meeting.end", label: "会议已结束" }]);
     const render = () => renderToStaticMarkup(<MeetingCard card={card} collection={[card]} onCard={() => undefined}
       onNavigate={() => undefined} readOnly />);
     viewer.id = "p1";

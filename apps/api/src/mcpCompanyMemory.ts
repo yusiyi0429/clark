@@ -14,6 +14,7 @@ import {
   SearchSectionsInput,
 } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
+import { isRealPerson } from "./people.js";
 
 function textResult(value: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value) }] };
@@ -61,7 +62,8 @@ export function createCompanyMemoryMcpServer(repo: CompanyMemoryRepository): Ser
         case "search_people": {
           if (!Value.Check(SearchPeopleInput, args)) throw new Error("参数校验失败：query 类型不合法");
           const q = args as Static<typeof SearchPeopleInput>;
-          return textResult({ people: repo.searchPeople(q.query) });
+          // 选人用：记录账号（如「会议纪要」）不是人，不给 Agent 派活用。
+          return textResult({ people: repo.searchPeople(q.query).filter(isRealPerson) });
         }
         default:
           // 没有写工具：CompanyMemory 对 WarMap 只读（ADR-0004/0013）

@@ -52,7 +52,7 @@ describe("战场卡正面战略上下文", () => {
     expect(html).toContain('data-testid="zone-growth"');
     expect(html).toContain('data-mode="decisions"');
     expect(html).toContain("负责人 · 待指派");
-    expect(html).toContain("LTO · 真正跑通，从目标组织范式设计进入真实经营。");
+    expect(html).toContain("长期目标 · 真正跑通，从目标组织范式设计进入真实经营。");
     expect(html).toContain("是否追加东南亚渠道预算 40%");
   });
 

@@ -1,6 +1,25 @@
 /* 战场二级页（clark `battlefield-detail.module.css` 的分节语言）：小灰标题 + 白底描边的块，发丝线分隔。
    天枢没有健康判断与进度数字：「整体判断」位置放负责人反馈，进展只列有来源的内容。 */
+/* 页头「决策 / 战况」：一整颗胶囊（有底色的轨道，两段等宽并排，选中的一段是轨道里浮起的白色滑块），一眼看出左右二选一。
+   只作用在本页（共用的 SegmentedSwitch 在议题页、会议页是另一种无轨道样式，不动）。
+   位置：页头身份区是「眉题（战场）在上、标题在下」，切换默认按整块居中，会落在眉题与标题之间；这里贴身份区底边（= 标题那一行的底），
+   再按「标题行高 − 胶囊高」的一半抬回，让胶囊与标题字行同一条水平中线。标题行高 = 1.4 × --type-page；胶囊高 36（手机 34）。 */
+.viewSwitch.viewSwitch{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;padding:3px;border:1px solid #d9dfe7;border-radius:999px;background:#edf0f5;box-shadow:inset 0 1px 2px #1f35560d;align-self:flex-end;margin-bottom:calc((1.4 * var(--type-page, 24px) - 36px) / 2)}
+.viewSwitch.viewSwitch>button{justify-content:center;min-width:64px;height:28px;padding:0 14px;color:#5b6677}
+.viewSwitch.viewSwitch>button:hover{color:#1f2a3d;background:#1f355612}
+.viewSwitch.viewSwitch>button[aria-checked=true],.viewSwitch.viewSwitch>button[aria-checked=true]:hover{background:#fff;color:#1c4f94;box-shadow:0 1px 3px #1f355626,0 0 0 .5px #1f355614}
+@media(max-width:599px){.viewSwitch.viewSwitch{margin-bottom:calc((1.4 * var(--type-page, 24px) - 34px) / 2)}.viewSwitch.viewSwitch>button{min-width:56px;height:26px;padding:0 12px}}
+/* 点触下限（docs/superpowers/specs/2026-10-12-mobile-foldable.md §3.6）：手持与触屏每段 34 高、轨道 3 + 3，整颗 42，热区再外扩到 44 以上。 */
+@media(max-width:959px),(pointer:coarse){.viewSwitch.viewSwitch{margin-bottom:calc((1.4 * var(--type-page, 24px) - 42px) / 2)}.viewSwitch.viewSwitch>button{min-width:64px;height:34px;padding:0 16px;font-size:14px}.viewSwitch.viewSwitch>button::after{inset:-5px 0}}
+@media(prefers-contrast:more){.viewSwitch.viewSwitch{border-color:#777}.viewSwitch.viewSwitch>button{color:#333}}
+
 .detail{display:flex;flex-direction:column;gap:30px;min-width:0;padding-top:4px}
+/* 决策页签内容短（负责人反馈 + 几行议题），白底块不要铺满整个宽列：限宽并水平居中；窄屏自然取满宽（左右留白由外层滚动区给）。战况页签内容多，保持满宽。 */
+.detail[data-tab=decisions]{width:100%;max-width:840px;margin-inline:auto}
+/* 电脑上两个页签都是左侧阅读列（深度讨论 spec 末节，conversation/desk/deskLayout 的 MATERIAL_*）：正文 600、左右各 28，在左侧区域里居中，
+   伸进外层滚动区（.expandedScroll）24 的内边距里——左侧材料 656 时正文仍是 600；面板再窄一点（滚动条）内边距先让到 12。
+   深度讨论展开 / 收起时宽度由 data-material-column 固定，不在动画停下后重排。 */
+@media(min-width:960px){.detail.detail{--bf-column:min(var(--material-column,656px),calc(100% + 48px));box-sizing:border-box;width:var(--bf-column);max-width:none;margin-inline:calc((100% - var(--bf-column)) / 2);padding-inline:clamp(12px,calc((var(--bf-column) - var(--material-measure,600px)) / 2),28px)}}
 .owner{margin:-14px 0 0;font-size:13px;line-height:1.6;color:#666d76}
 .lead{display:flex;flex-direction:column;gap:8px;margin:0;padding:16px 18px;border:1px solid #dfe4e9;border-radius:16px;background:linear-gradient(105deg,#f4f7fb,#fff 90%)}
 .lead>span{font-size:12px;color:#84848b;font-variant-numeric:tabular-nums}
@@ -16,13 +35,14 @@
 .note{margin:-4px 0 0;font-size:12px;line-height:1.6;color:#8a8a90}
 .summary{margin:0;padding:14px 18px;border:1px solid #dfe4e9;border-radius:16px;background:#fff;font-size:15px;line-height:1.6;color:#1d1d1f;font-variant-numeric:tabular-nums}
 
-.goals{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.goals{display:grid;grid-template-columns:1fr;gap:14px}
 .goals>div{background:#fff;border:1px solid #dfe4e9;border-radius:18px;padding:18px 20px;min-width:0}
 .goals span{font-size:12px;color:#84848b;font-variant-numeric:tabular-nums}
+.planLink{all:unset;display:inline-block;margin-top:10px;font-size:12px;color:#3c66bf;cursor:pointer}.planLink:hover{text-decoration:underline}.planLink:focus-visible{outline:3px solid #007aff70;outline-offset:2px;border-radius:4px}
 .goals p{margin:8px 0 0;font-size:15px;line-height:1.7;color:#1d1d1f;overflow-wrap:anywhere}
 .goals p.muted{font-size:14px;color:#8a8a90}
 
-.campaigns{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.campaigns{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr;gap:14px}
 .campaigns li{display:flex;align-items:baseline;gap:10px;min-width:0;padding:16px 20px;background:#fff;border:1px solid #dfe4e9;border-radius:18px;font-size:15px;line-height:1.6;color:#1d1d1f}
 .campaigns b{flex:none;font-weight:600;color:#3c66bf;font-variant-numeric:tabular-nums}
 .campaigns span{min-width:0;overflow-wrap:anywhere}
@@ -56,10 +76,166 @@
 .feedback li+li{border-top:1px solid #1d1d1f0a}
 .feedback li>span{grid-row:1/3;font-size:12px;line-height:1.7;color:#8a8a8f;font-variant-numeric:tabular-nums}
 .feedback li>p{margin:0;font-size:14px;line-height:1.7;color:#1d1d1f;overflow-wrap:anywhere}
-.feedback li>small{font-size:12px;color:#a1a1a6;overflow-wrap:anywhere}
+.feedback li>small{font-size:13px;color:#a1a1a6;overflow-wrap:anywhere}
 
-@media(max-width:1250px){.goals,.campaigns{grid-template-columns:1fr}}
+/* 目标、战役、战役定义在 600 的阅读列里一律单列（原来宽面板并两列），深度讨论展开 / 收起也就不会在中途换排法。 */
 @media(max-width:599px){.detail{gap:24px}.lead{padding:14px 15px}.lead>p{font-size:16px}.box{padding:4px 12px}.feedback li{grid-template-columns:1fr}.feedback li>span{grid-row:auto}}
 @media(prefers-contrast:more){.lead,.box,.goals>div,.campaigns li,.group,.summary{border-color:#777}.section>h3,.sectionHead>h3,.note,.owner,.goals span,.mission small{color:#333}.lead{background:#fff}}
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
 @media(max-width:959px){.milestones.milestones>li,.mission.mission>small,.note.note{font-size:14px}.goals.goals>div>span,.group.group>h4>b,.lead.lead>span{font-size:13px}}
+
+/* 战役（演示环境的业务视角“战况图”）：每个战役一张白底描边卡，默认紧凑，「展开详情」用原生 details，不建第二个滚动容器。
+   状态色沿用设计体系：受阻红、有风险琥珀、正常推进绿、已完成蓝灰、未开始灰；“定义待确认”是紫色虚线（初步识别，待人工确认）。 */
+.campaignDigest{margin:0;font-size:12px;color:#84848b;font-variant-numeric:tabular-nums}
+.campaignList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px;min-width:0}
+.campaign{display:flex;flex-direction:column;gap:10px;min-width:0;padding:16px 20px 10px;background:#fff;border:1px solid #dfe4e9;border-radius:18px;color:#1d1d1f}
+.campaignHead{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;min-width:0}
+.campaignHead>b{flex:none;font-size:14px;font-weight:600;color:#3c66bf;font-variant-numeric:tabular-nums}
+.campaignHead>h4{flex:1 1 12em;min-width:0;margin:0;font-size:16px;font-weight:600;line-height:1.5;color:#1d1d1f;overflow-wrap:anywhere}
+.campaignTags{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px}
+.campaignStatus,.campaignDraft{display:inline-flex;align-items:center;padding:1px 8px;border:1px solid;border-radius:6px;font-size:12px;font-weight:500;line-height:1.6;white-space:nowrap}
+.campaignStatus[data-status=not_started]{background:#f1f4f8;border-color:#d9dfe7;color:#5b6573}
+.campaignStatus[data-status=on_track]{background:#e8f6ec;border-color:#cbe7d4;color:#2f7a44}
+.campaignStatus[data-status=at_risk]{background:#fdf4e4;border-color:#efdcb2;color:#8a6220}
+.campaignStatus[data-status=blocked]{background:#fdecea;border-color:#e7c9c5;color:#a1443c}
+.campaignStatus[data-status=done]{background:#eef3fb;border-color:#d3dff0;color:#3d5a80}
+.campaignDraft{background:#f8f5fd;border-style:dashed;border-color:#c9b6e6;color:#6b4e9e}
+.campaignMeta{display:flex;flex-wrap:wrap;gap:2px 16px;margin:0;font-size:13px;line-height:1.6;color:#666d76;font-variant-numeric:tabular-nums}
+.campaignMeta em{font-style:normal;color:#b64c43}
+.campaignTrack{list-style:none;display:flex;gap:3px;height:6px;margin:0;padding:0}
+.campaignTrack li{flex:1 1 0;min-width:4px;border-radius:3px;background:#e3e7ec}
+.campaignTrack li[data-status=done]{background:#5aa572}
+.campaignTrack li[data-status=in_progress]{background:#6f93d6}
+.campaignTrack li[data-status=delayed]{background:#d94a43}
+.campaignState{display:flex;flex-direction:column;gap:4px;padding:10px 14px;border-radius:12px;background:#f6f8fb}
+.campaign[data-status=at_risk] .campaignState{background:#fffaf0}
+.campaign[data-status=blocked] .campaignState{background:#fdf3f2}
+.campaignState p{margin:0;font-size:14px;line-height:1.7;color:#1d1d1f;overflow-wrap:anywhere}
+.campaignState small{font-size:13px;line-height:1.6;color:#84848b;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.campaignMore{border-top:1px solid #1d1d1f0a}
+.campaignMore>summary{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;padding:10px 0 4px;list-style:none;cursor:pointer;font-size:13px;line-height:1.6;color:#3c66bf}
+.campaignMore>summary::-webkit-details-marker{display:none}
+.campaignMore>summary>svg{flex:none;transition:transform .2s ease}
+.campaignMore[open]>summary>svg{transform:rotate(90deg)}
+.campaignMore>summary small{min-width:0;font-size:12px;color:#a1a1a6;overflow-wrap:anywhere}
+.campaignMore>summary:hover>span{text-decoration:underline}
+.campaignMore>summary:focus-visible{outline:2px solid #8cb1e8;outline-offset:2px;border-radius:4px}
+.campaignMore[open] .moreClosed,.campaignMore:not([open]) .moreOpen{display:none}
+.campaignBody{display:flex;flex-direction:column;gap:14px;padding:8px 0 10px;min-width:0}
+.campaignBody section{min-width:0}
+.campaignBody h5{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:0 0 4px;font-size:12px;font-weight:500;color:#77777c}
+.campaignBody h5 small{font-weight:400;color:#a1a1a6;font-variant-numeric:tabular-nums}
+.campaignBody p{margin:0;font-size:14px;line-height:1.7;color:#1d1d1f;overflow-wrap:anywhere}
+.campaignBody p.muted{color:#8a8a90}
+.campaignBody p.campaignSource{font-size:13px;color:#a1a1a6}
+.campaignDefine{display:grid;grid-template-columns:1fr;gap:12px 20px}
+.campaignBullets{margin:0;padding-left:18px;font-size:14px;line-height:1.7;color:#1d1d1f}
+.campaignBullets li{overflow-wrap:anywhere}
+.campaignBullets[data-tone=risk] li::marker{color:#c0564d}
+.campaignMilestones{list-style:none;margin:0;padding:0}
+.campaignMilestones li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:baseline;gap:10px;padding:6px 0;font-size:13px;line-height:1.6}
+.campaignMilestones li+li{border-top:1px solid #1d1d1f0a}
+.campaignMilestones time{position:relative;padding-left:14px;color:#666d76;font-variant-numeric:tabular-nums}
+.campaignMilestones time::before{content:"";position:absolute;left:0;top:.5em;width:7px;height:7px;border-radius:50%;background:#c9ced6}
+.campaignMilestones span{color:#1d1d1f;overflow-wrap:anywhere}
+.campaignMilestones em{font-style:normal;font-size:12px;color:#84848b;white-space:nowrap}
+.campaignMilestones li[data-status=done] time::before{background:#5aa572}
+.campaignMilestones li[data-status=done] span{color:#666d76}
+.campaignMilestones li[data-status=done] em{color:#2f7a44}
+.campaignMilestones li[data-status=in_progress] time::before{background:#6f93d6}
+.campaignMilestones li[data-status=in_progress] em{color:#3c66bf}
+.campaignMilestones li[data-status=delayed] time::before{background:#d94a43}
+.campaignMilestones li[data-status=delayed] em{color:#b64c43;font-weight:600}
+.campaignIssues{list-style:none;margin:0;padding:0}
+.campaignIssues li+li{border-top:1px solid #1d1d1f0a}
+.campaignIssues button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 0;border:0;background:none;font:inherit;font-size:14px;line-height:1.5;text-align:left;cursor:pointer}
+.campaignIssues button>span:nth-child(2){flex:1;min-width:0;overflow-wrap:anywhere}
+.campaignIssues button>small{flex:none;font-size:12px;color:#84848b}
+.campaignIssues button>svg{flex:none;color:#8c98a6;opacity:.6}
+.campaignIssues button:hover>span:nth-child(2){color:#2f6bb4}
+.campaignIssues button:focus-visible{outline:2px solid #8cb1e8;outline-offset:2px;border-radius:4px}
+.campaignIssueDot{flex:none;width:6px;height:6px;border-radius:50%;background:#8e8e93}
+.campaignIssueDot[data-urgency=red]{background:#d94a43}
+.campaignIssueDot[data-urgency=yellow]{background:#c79624}
+.campaignIssueDot[data-urgency=done]{background:#c9ced6}
+@media(max-width:599px){.campaign{padding:14px 14px 8px;border-radius:16px}.campaignState{padding:10px 12px}.campaignMilestones li{gap:8px}}
+/* 手持（≤959）字号下限：标签、编号 13px，说明性的辅助字 14px；三屏和桌面不变。 */
+@media(max-width:959px){.campaignStatus.campaignStatus,.campaignDraft.campaignDraft,.campaignDigest.campaignDigest,.campaignMilestones.campaignMilestones em,.campaignIssues.campaignIssues small,.campaignBody.campaignBody h5{font-size:13px}.campaignState.campaignState small,.campaignMore.campaignMore>summary,.campaignMore.campaignMore>summary small,.campaignMeta.campaignMeta,.campaignMilestones.campaignMilestones li,.campaignBody.campaignBody p.campaignSource{font-size:14px}}
+@media(prefers-contrast:more){.campaign{border-color:#777}.campaignMeta,.campaignState small,.campaignBody h5,.campaignMore>summary small,.campaignDigest{color:#333}}
+@media(prefers-reduced-motion:reduce){.campaignMore>summary>svg{transition:none}}
+
+/* 演示 · 决策页签的判断块（沿用 .lead 的「整体判断」位置）：状态灯 + 一句话判断，原因与依据直接展开，末尾小字出处。 */
+.lead>p.judgmentText{display:flex;align-items:flex-start;gap:10px}
+.judgmentText>[data-light]{margin-top:10px}
+.judgmentText>span{min-width:0}
+.judgmentBasis{display:flex;flex-direction:column;gap:10px;max-width:720px}
+.judgmentBasis h4{margin:0 0 2px;font-size:12px;font-weight:500;color:#84848b}
+.judgmentBasis p,.judgmentBasis li{margin:0;font-size:14px;line-height:1.7;color:#1d1d1f;overflow-wrap:anywhere}
+.judgmentBasis ul{margin:0;padding-left:18px}
+.judgmentSource{font-size:13px;line-height:1.6;color:#a1a1a6;overflow-wrap:anywhere}
+.rows small.decidedTag{color:#517868}
+/* 战况页签「已决定 · 待落实」（同首页战场卡战况面）：12px 小标题 + 13px 议题行，整行点进议题；不加框，克制。 */
+.pendingDecisions{display:flex;flex-direction:column;gap:4px;min-width:0}
+.pendingDecisions>h3{margin:0;font-size:12px;line-height:1.6;font-weight:500;color:#858b94}
+.pendingDecisions ul{list-style:none;margin:0;padding:0}
+.pendingDecisions button{display:flex;align-items:baseline;gap:10px;width:100%;padding:4px 0;border:0;background:none;font:inherit;font-size:13px;line-height:1.6;text-align:left;color:#517868;cursor:pointer}
+.pendingDecisions button>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.pendingDecisions button>small{flex:none;font-size:12px;color:#8c98a6;font-variant-numeric:tabular-nums}
+.pendingDecisions button>svg{flex:none;align-self:center;color:#8c98a6;opacity:.6}
+.pendingDecisions button:hover>span{text-decoration:underline}
+.pendingDecisions button:focus-visible{outline:2px solid #8cb1e8;outline-offset:2px;border-radius:4px}
+
+/* 演示 · 战况页签：目标的成功 / 完成标准一行小字；指标与重要项目逐行（名称、原文数值，下一行目标、截至、口径、出处）。 */
+.criteria{display:block;margin-top:8px;font-size:12px;line-height:1.6;color:#666d76;overflow-wrap:anywhere}
+.metricRows{list-style:none;margin:0;padding:0}
+.metricRows li{display:flex;flex-direction:column;gap:2px;padding:10px 4px}
+.metricRows li+li{border-top:1px solid #1d1d1f0a}
+.metricRows li>div{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.metricRows li>div>span{min-width:0;font-size:14px;line-height:1.6;color:#1d1d1f;overflow-wrap:anywhere}
+.metricRows li>div>b{flex:none;max-width:55%;font-size:14px;font-weight:600;line-height:1.6;color:#1d1d1f;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.metricRows li>div>b[data-empty=true]{font-weight:400;color:#8a8a90}
+.metricRows li>small{font-size:13px;line-height:1.6;color:#84848b;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.metricSources{margin:0;padding:8px 4px 2px;border-top:1px solid #1d1d1f0a;font-size:13px;line-height:1.6;color:#84848b;overflow-wrap:anywhere}
+@media(max-width:959px){.judgmentBasis.judgmentBasis h4,.judgmentSource.judgmentSource{font-size:13px}.criteria.criteria,.metricRows.metricRows li>small{font-size:14px}}
+@media(prefers-contrast:more){.judgmentBasis h4,.judgmentSource,.criteria,.metricRows li>small{color:#333}.decidedTag,.rows small.decidedTag,.pendingDecisions button{color:#2f5a48}.pendingDecisions>h3,.pendingDecisions button>small{color:#444}}
+.progressLists{display:flex;flex-direction:column;gap:18px}
+.progressList{display:flex;flex-direction:column;gap:2px;min-width:0}
+.progressList>h4{display:flex;align-items:baseline;gap:6px;margin:0 0 2px;padding:0 4px;font-size:13px;font-weight:500;color:#1d1d1f}
+.progressList>h4 b{font-weight:500;color:#a1a1a6;font-variant-numeric:tabular-nums}
+.progressList ul{list-style:none;margin:0;padding:0}
+.progressList li{padding:7px 4px;font-size:14px;line-height:1.65;color:#1d1d1f;overflow-wrap:anywhere}
+.progressList li+li{border-top:1px solid #1d1d1f0a}
+.progressList li>small{margin-left:8px;font-size:13px;color:#a1a1a6;white-space:nowrap}
+.progressMore{all:unset;align-self:flex-start;margin:4px 4px 0;font-size:13px;color:#3c66bf;cursor:pointer}.progressMore:hover{text-decoration:underline}.progressMore:focus-visible{outline:3px solid #007aff70;outline-offset:2px;border-radius:4px}
+
+/* 手持 / 触屏点触下限（docs/superpowers/specs/2026-10-12-mobile-foldable.md §2、§3.6）：战场页里能点的行与链接，整行热区至少 44；鼠标的电脑不进这个查询。
+   议题行的批注钮热区在 card-references.module.css；这里只管本页的行高。 */
+@media(max-width:959px),(pointer:coarse){
+.mission{min-height:var(--touch-hit,44px);align-content:center}
+.planLink{display:inline-flex;align-items:center;min-height:var(--touch-hit,44px);margin-top:2px}
+.progressMore{display:inline-flex;align-items:center;min-height:var(--touch-hit,44px);min-width:var(--touch-hit,44px)}
+.pendingDecisions button,.campaignIssues button{min-height:var(--touch-hit,44px);align-items:center}
+.campaignMore>summary{min-height:var(--touch-hit,44px)}
+}
+/* 手持（≤959）字号（§2、§3.6）：议题行与战役行字 15、行最小高 52；正文 ≥15、说明句 ≥14、标签 ≥13。三屏和桌面不变。
+   议题行的按钮与行距来自首页共用的 IssueRow（样式在 home-board.module.css，本页没有 .board 祖先），所以在 .box 里按 data-urgency 的行外壳接。 */
+@media(max-width:959px){
+.box div[data-urgency]{min-height:52px}
+.box div[data-urgency]>button:not([data-reference-id]){height:auto;min-height:52px;font-size:15px}
+.box div[data-urgency] small{font-size:14px}
+.mission{font-size:15px}
+.owner,.empty,.metricSources{font-size:14px}
+.rows li,.progressList li,.feedback li>p,.judgmentBasis p,.judgmentBasis li,.campaignState p,.campaignBody p,.campaignBullets,.campaignIssues button,.metricRows li>div>span,.metricRows li>div>b{font-size:15px}
+.rows small,.feedback li>span,.pendingDecisions>h3,.pendingDecisions button>small{font-size:13px}
+.feedback li>small,.pendingDecisions button,.planLink,.progressMore{font-size:14px}
+}
+/* 战况页签的长目标原文（BattlefieldDetailScreen GoalText，规范 §3.6）：只在手机宽的面板里先收成 4 行、成功标准先收起，「展开全文」44 高；更宽时钮不出现。 */
+.goalMore{display:none}
+@container pane (max-width:599px){.goals .goalText[data-folded=true]{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden}.goals>div:has(>.goalText[data-folded=true]) .criteria{display:none}.goalMore{display:inline-flex;align-items:center;min-height:44px;margin:2px 0 -10px;padding:0;border:0;background:none;color:#2f6bb4;font:inherit;font-size:14px;cursor:pointer}.goalMore:focus-visible{outline:2px solid #3a83f7;outline-offset:2px;border-radius:6px}}
+/* 触屏的工作台（pointer:coarse，规范 §1、§3.6）：战场页议题行在三屏也给 44 高的点触区（字号不变）。 */
+@media(pointer:coarse){.box div[data-urgency]>button:not([data-reference-id]){height:auto;min-height:44px}}
+/* 会后决定写到本战场（docs/superpowers/specs/2026-10-12-confirm-to-battlefield.md §1）：主线 / 经营原则 / 近期重点逐条，标签 12、正文 15。 */
+.directives{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.directives li{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;align-items:baseline}
+.directives b{font-size:12px;font-weight:500;color:#666d76;white-space:nowrap}
+.goals .directives p{margin:0}

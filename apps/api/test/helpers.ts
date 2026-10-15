@@ -7,6 +7,7 @@ import { hashSecret } from "../src/session.js";
 import { buildApp, DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR, type AppEnv } from "../src/app.js";
 import type { FastifyInstance } from "fastify";
 import type { ConversationRuntime } from "../src/conversations.js";
+import type { ConversationCompactionOptions } from "../src/conversationCompaction.js";
 import type { ResearchService } from "../src/research.js";
 import type { PreflightAgent } from "../src/meetingPreflight.js";
 import type { DriExporter } from "../src/meetingStore.js";
@@ -18,6 +19,8 @@ import type { WebSearchAdapter } from "../src/webSearch.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService, type RecordingDeps } from "../src/meetingRecordings.js";
 import type { VoiceprintDeps } from "../src/voiceprints.js";
 import type { DictationDeps } from "../src/dictation.js";
+import type { RealtimeSessionDeps } from "../src/tencentAsrRealtime.js";
+import type { DictationPolishDeps } from "../src/dictationPolish.js";
 import type { RadarService } from "../src/radar.js";
 import type { PersonalRadarService } from "../src/personalRadar.js";
 import type { ThreadIntroAgent } from "../src/threadIntro.js";
@@ -31,10 +34,17 @@ const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@local
 
 export type TestDb = { db: import("pg").PoolClient; pool: Pool; admin: Pool; database: string };
 
-/** 新版 advisor-review 场景的最小合法候选；各领域测试只替换其关心的内容。 */
+/**
+ * 新版 advisor-review 场景的合法候选；各领域测试只替换其关心的内容。
+ * 问题不设下限（feedback 18）：这里是一个真实取舍——一条会议问题、一条不重复的一号位追问，各带 ceoDecision。
+ */
 export function preflightCandidate(sourceRefs: string[]): TPreflightCandidate {
   const entry = (kind: TPreflightCandidate["entries"][number]["kind"], title: string, body: string) =>
     ({ kind, title, body, sourceRefs });
+  const question = (kind: "meeting_question" | "leader_lens", title: string, body: string, options: { label: string; impact: string }[]) => ({
+    ...entry(kind, title, body),
+    ceoDecision: { whyNow: "渠道窗口六月关闭，晚于五月底决定就错过本季投放", whyCeo: "涉及跨战场预算调配，超出渠道负责人授权", options },
+  });
   return {
     taskDefinition: {
       materialPurpose: "说明渠道投入选择",
@@ -51,13 +61,12 @@ export function preflightCandidate(sourceRefs: string[]): TPreflightCandidate {
       entry("strategic_alignment", "战略一致性", "当前选择需与公司主线校准"),
       entry("positive_signal", "积极信号", "材料已经提出明确选择"),
       entry("risk_calibration", "风险与校准", "投入后果仍缺少验证依据"),
-      entry("meeting_question", "重点追问一", "为什么现在必须选择？"),
-      entry("meeting_question", "重点追问二", "选择意味着暂时不做什么？"),
-      entry("meeting_question", "重点追问三", "什么证据会推翻当前判断？"),
+      question("meeting_question", "渠道预算是否转向华南", "是否在六月前把渠道预算从华东转到华南？", [
+        { label: "六月前转向华南", impact: "抢到本季窗口，但华东存量客户的续约投入减少" },
+        { label: "维持华东投入", impact: "保住续约节奏，本季华南窗口放弃" },
+      ]),
       entry("next_step", "下一阶段建议", "提交人先补齐推荐路径与后果"),
-      entry("leader_lens", "一号位追问一", "为什么现在必须选择渠道投入，而不是再等一个季度？"),
-      entry("leader_lens", "一号位追问二", "如果只能保留一个战场，砍掉哪个？"),
-      entry("leader_lens", "一号位追问三", "什么证据会推翻当前推荐？"),
+      question("leader_lens", "华南转化依据", "华南转化率来自哪几家客户，样本够不够支撑整笔预算调整？", []),
     ],
     basis: "依据关联 Issue、ResearchDoc 与 CompanyMemory，只形成候选材料",
     brief: "材料可进入讨论，但关键证据仍需补足",
@@ -195,6 +204,11 @@ export async function createTestApp(
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
+    conversationStallTimeoutMs?: number;
+    conversationHeartbeatMs?: number;
+    /** 对话历史后台压缩的阈值等（conversationCompaction.ts），测试用小阈值。 */
+    conversationCompactionOptions?: Omit<ConversationCompactionOptions, "query" | "summarize">;
+    backgroundPreflight?: boolean;
     preflightAgent?: PreflightAgent;
     outcomeAgent?: PostMeetingAgent;
     threadIntroAgent?: ThreadIntroAgent;
@@ -217,6 +231,10 @@ export async function createTestApp(
     voiceprintDeps?: VoiceprintDeps;
     /** /api/me/dictation 的假 ffmpeg/火山极速版。 */
     dictationDeps?: DictationDeps;
+    /** /api/me/dictation/session 的时钟 / 配置替身（只覆盖给出的几项）。 */
+    dictationRealtimeDeps?: Partial<RealtimeSessionDeps>;
+    /** /api/me/dictation/polish 的假方舟。不注入时按环境变量判断（测试环境未配置，回原文）。 */
+    dictationPolishDeps?: DictationPolishDeps;
     /** 公司雷达与个人雷达服务替身；不注入时 app 用未配置的桩。 */
     radarService?: RadarService;
     personalRadarService?: PersonalRadarService;
@@ -235,7 +253,8 @@ export async function createTestApp(
   await seedTestAccess(client);
   client.release();
   const env = { ...testEnv, ...seedOverrides };
-  const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, ...appRuntimeOptions } = runtimeOptions;
+  const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, ...restRuntimeOptions } = runtimeOptions;
+  const appRuntimeOptions = { backgroundPreflight: false, ...restRuntimeOptions };
   const monthlyPlans = monthlyDraftAgent
     ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;

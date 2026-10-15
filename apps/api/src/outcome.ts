@@ -9,6 +9,7 @@ import {
   type TMeetingOutcomeState,
   type TMeetingParticipant,
   type TOutcomeWarning,
+  type TPostMeetingCandidate,
   type TRadarAnchor,
   type TStoredTranscript,
   type TTranscriptTurn,
@@ -20,8 +21,10 @@ import { buildReopenAnchor, deriveMeetingStatus, meetingEffectRef, revokeEffect,
 import type { IssueReceiptRow, IssueResearch, IssueRow } from "./issues.js";
 import {
   appendFingerprint,
+  childDecisionsOf,
   commit,
   decisionIssueId,
+  isChildDecision,
   getMeetingRow,
   hasConfirmedEffect,
   meetingColumns,
@@ -147,10 +150,68 @@ export type OutcomeAssessment =
   | { ok: true; summary: string; items: TMeetingOutcomeItem[]; warnings: TOutcomeWarning[] }
   | { ok: false; code: string; message: string };
 
+type OutcomeCandidateItem = TPostMeetingCandidate["items"][number];
+
+/** 各可选字段只适用于哪些类型（parentIndex 用于 reopenWhen 与子决定）。 */
+const FIELD_KINDS: ReadonlyArray<[keyof OutcomeCandidateItem, ReadonlyArray<OutcomeCandidateItem["kind"]>]> = [
+  ["judgmentKind", ["ceoJudgment", "strategic"]],
+  ["parentIndex", ["reopenWhen", "decision"]],
+  ["title", ["strategic"]],
+  ["brief", ["strategic"]],
+  ["dueDate", ["todo"]],
+];
+
+/** 去掉这条候选里不适用于它的类型的字段，返回去掉后的副本和被去掉的字段名。 */
+export function dropInapplicableFields(item: OutcomeCandidateItem): { candidate: OutcomeCandidateItem; dropped: string[] } {
+  const candidate = { ...item };
+  const dropped: string[] = [];
+  for (const [field, kinds] of FIELD_KINDS) {
+    if (candidate[field] !== undefined && !kinds.includes(candidate.kind)) {
+      delete candidate[field];
+      dropped.push(field);
+    }
+  }
+  return { candidate, dropped };
+}
+
+const OPTIONAL_FIELDS = ["ownerPersonId", "issueId", "judgmentKind", "parentIndex", "title", "brief", "dueDate"] as const;
+const PLACEHOLDER_TEXT = new Set(["不适用", "不涉及", "无", "暂无", "没有", "未知", "未指定", "n/a", "na", "none", "null", "-", "—", "/"]);
+
+/** null、空串、「不适用」这类占位、负数下标，都算没填。 */
+function isPlaceholder(value: unknown): boolean {
+  if (value === null) return true;
+  if (typeof value === "string") return PLACEHOLDER_TEXT.has(value.trim().toLowerCase()) || value.trim() === "";
+  return typeof value === "number" && value < 0;
+}
+
+/**
+ * 在严格 schema 之前把每条候选里填了占位值的可选字段删掉，当作没填；其余原样交给 schema。
+ * 返回副本和每条被删掉的字段名（下标对应 items）。
+ */
+export function dropPlaceholderFields(input: unknown): { candidate: unknown; dropped: string[][] } {
+  if (typeof input !== "object" || input === null || !Array.isArray((input as { items?: unknown }).items)) return { candidate: input, dropped: [] };
+  const dropped: string[][] = [];
+  const items = (input as { items: unknown[] }).items.map((raw) => {
+    const fields: string[] = [];
+    dropped.push(fields);
+    if (typeof raw !== "object" || raw === null) return raw;
+    const item = { ...(raw as Record<string, unknown>) };
+    for (const field of OPTIONAL_FIELDS) {
+      if (field in item && isPlaceholder(item[field])) {
+        delete item[field];
+        fields.push(field);
+      }
+    }
+    return item;
+  });
+  return { candidate: { ...input, items }, dropped };
+}
+
 /**
  * 确定性校验 Agent 候选：turnId 存在、quote 连续存在于被引用 turn、speaker 只从 turn 取得、
  * owner 只能来自“我来”的 speaker 或引文中明确点名的人、CEO 判断只认 CEO turn 和五类权限、
- * 战略议题可引用任何人但标题/说明/五类权限缺一不可、dueDate 只给 todo 且是真实日期、
+ * 战略议题可引用任何人但标题/说明/五类权限缺一不可、todo 的 dueDate 是真实日期、
+ * 不适用于该类型的可选字段、填了「不适用」/null/-1 这类占位的可选字段直接丢掉（只记日志）、
  * issueId 属 Meeting。任一项不合格的候选进入 warnings，不进入可审阅 items。
  */
 export function assessOutcomeCandidate(input: {
@@ -160,7 +221,9 @@ export function assessOutcomeCandidate(input: {
   ceoParticipantId: string;
   issueIds: string[];
 }): OutcomeAssessment {
-  if (!Value.Check(PostMeetingCandidate, input.candidate)) {
+  // 「不适用」、null、-1 这类占位值当没填，先删掉再过 schema，免得一个占位废掉整份候选
+  const { candidate: normalized, dropped: placeholders } = dropPlaceholderFields(input.candidate);
+  if (!Value.Check(PostMeetingCandidate, normalized)) {
     return { ok: false, code: INVALID_OUTCOME_CANDIDATE, message: "PostMeeting candidate 不符合严格 schema" };
   }
   const personById = new Map(input.participants.map((participant) => [participant.personId, participant]));
@@ -168,10 +231,26 @@ export function assessOutcomeCandidate(input: {
   const issueIds = new Set(input.issueIds);
   const acceptedItems: TMeetingOutcomeItem[] = [];
   const warnings: TOutcomeWarning[] = [];
-  // 仅已接受的 decision 才能作为 reopenWhen 的父项
+  // 仅已接受的 decision 才能作为 reopenWhen 的父项；子决定的父项只能是已接受的主决定（只分一层）
   const decisionItemIdByIndex = new Map<number, string>();
+  const mainDecisionIndexes = new Set<number>();
 
-  for (const [index, candidate] of input.candidate.items.entries()) {
+  for (const [index, raw] of normalized.items.entries()) {
+    // 模型常把只属于别的类型的可选字段也填上（decision 带 judgmentKind、brief 写「不适用」等）：
+    // 这类字段直接丢掉、整条保留，只在日志里记一条警告；字段缺失、类型不对仍照旧拒收。
+    const { candidate, dropped } = dropInapplicableFields(raw);
+    // decision 的 parentIndex 指向自己或指向不是 decision 的条目，说明不是子决定、只是顺手填的
+    if (candidate.kind === "decision" && candidate.parentIndex !== undefined) {
+      const target = normalized.items[candidate.parentIndex];
+      if (candidate.parentIndex === index || (target !== undefined && target.kind !== "decision")) {
+        delete candidate.parentIndex;
+        dropped.push("parentIndex");
+      }
+    }
+    const droppedAll = [...(placeholders[index] ?? []).map((field) => `${field}(占位)`), ...dropped];
+    if (droppedAll.length) {
+      console.warn(`outcome candidate #${index + 1} (${candidate.kind}) 丢掉不适用的字段: ${droppedAll.join(", ")}`);
+    }
     const reject = (reason: string) => warnings.push({ candidate, reason });
     const turn = turnById.get(candidate.turnId);
     if (!turn) {
@@ -183,22 +262,6 @@ export function assessOutcomeCandidate(input: {
       continue;
     }
     const speakerId = turn.speakerId;
-    if (candidate.judgmentKind !== undefined && candidate.kind !== "ceoJudgment" && candidate.kind !== "strategic") {
-      reject("judgmentKind 只允许用于 ceoJudgment 与 strategic");
-      continue;
-    }
-    if (candidate.parentIndex !== undefined && candidate.kind !== "reopenWhen") {
-      reject("parentIndex 只允许用于 reopenWhen");
-      continue;
-    }
-    if ((candidate.title !== undefined || candidate.brief !== undefined) && candidate.kind !== "strategic") {
-      reject("title 与 brief 只允许用于 strategic");
-      continue;
-    }
-    if (candidate.dueDate !== undefined && candidate.kind !== "todo") {
-      reject("dueDate 只允许用于 todo");
-      continue;
-    }
     if (candidate.dueDate !== undefined && !isCalendarDate(candidate.dueDate)) {
       reject(`dueDate 不是有效日期: ${candidate.dueDate}`);
       continue;
@@ -232,6 +295,13 @@ export function assessOutcomeCandidate(input: {
         continue;
       }
     }
+    if (candidate.kind === "decision" && candidate.parentIndex !== undefined) {
+      parentItemId = mainDecisionIndexes.has(candidate.parentIndex) ? decisionItemIdByIndex.get(candidate.parentIndex) ?? null : null;
+      if (!parentItemId) {
+        reject("子决定的主决定不存在、已被拒绝或本身是子决定");
+        continue;
+      }
+    }
     if (candidate.ownerPersonId !== undefined) {
       const person = personById.get(candidate.ownerPersonId);
       if (!person) {
@@ -250,6 +320,7 @@ export function assessOutcomeCandidate(input: {
     }
     const id = `item-${index + 1}`;
     if (candidate.kind === "decision") decisionItemIdByIndex.set(index, id);
+    if (candidate.kind === "decision" && !parentItemId) mainDecisionIndexes.add(index);
     const item: TMeetingOutcomeItem = {
       id,
       kind: candidate.kind,
@@ -271,7 +342,7 @@ export function assessOutcomeCandidate(input: {
     if (candidate.dueDate !== undefined) item.dueDate = candidate.dueDate;
     acceptedItems.push(item);
   }
-  return { ok: true, summary: input.candidate.summary, items: acceptedItems, warnings };
+  return { ok: true, summary: normalized.summary, items: acceptedItems, warnings };
 }
 
 /** YYYY-MM-DD 且是真实存在的日期（排除 2 月 30 日这类）。 */
@@ -447,7 +518,7 @@ export async function recoverInterruptedOutcome(
       WHERE status = 'held'
         AND outcome->>'status' IN ('pending', 'running')
         AND (outcome->>'pendingSince')::timestamptz < $1::timestamptz`,
-    [new Date(now().getTime() - staleAfterMs), OUTCOME_INTERRUPTED, "Outcome 抽取在进程重启前未完成，请显式重试", now()],
+    [new Date(now().getTime() - staleAfterMs), OUTCOME_INTERRUPTED, "会后整理还没完成，可以重新整理。", now()],
   );
   return result.rowCount ?? 0;
 }
@@ -598,6 +669,38 @@ async function commitReview(
   );
   return commit(client, updated, secret);
 }
+type ReviewError = { error: { status: number; code: string; message: string } };
+/** 确认一条 decision：有关联议题时写决定回执并把议题记为 decided；没有关联议题时只记为会上已确认的决定。 */
+async function confirmDecision(client: PoolClient, row: MeetingRow, item: TMeetingOutcomeItem, fingerprint: string, now: string): Promise<ReviewError | null> {
+  const effectRef = meetingEffectRef(row.id, "decision", item.id)!;
+  const issueId = decisionIssueId(row, item);
+  if (!issueId) {
+    // 没有关联议题的会上决定：只记为已确认的会议决定（会议页会后区与「已处理」可见），不写任何议题
+    item.review = { status: "confirmed", effectRef };
+    return null;
+  }
+  const locked = await client.query<IssueRow>("SELECT * FROM issues WHERE id = $1 FOR UPDATE", [issueId]);
+  if (locked.rowCount !== 1) return { error: { status: 404, code: "ISSUE_NOT_FOUND", message: "关联 Issue 不存在" } };
+  const issue = locked.rows[0];
+  if (issue.status === "dismissed") return { error: { status: 409, code: "ISSUE_DISMISSED", message: "dismissed Issue 不能写入 Receipt" } };
+  const receipt: IssueReceiptRow = {
+    id: randomUUID(),
+    actionType: "meeting.confirm_item",
+    actionFingerprint: fingerprint,
+    effectRef,
+    decisionText: item.text,
+    researchStatusAtDecision: (issue.research as IssueResearch).status,
+    override: false,
+    source: { kind: "meeting-item", meetingId: row.id, outcomeItemId: item.id },
+    createdAt: now,
+  };
+  await client.query(
+    "UPDATE issues SET status = 'decided', receipts = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1",
+    [issue.id, JSON.stringify([...issue.receipts, receipt])],
+  );
+  item.review = { status: "confirmed", effectRef };
+  return null;
+}
 /**
  * 逐项确认：写对应数据库 effect、effectRef 与 review，派生 Meeting reviewed。
  * 不同条目仍由 Meeting 行 version 串行，fingerprint 重放不产生第二个 effect。
@@ -624,6 +727,9 @@ export async function executeConfirmItem(
     if (!item) return { error: { status: 404, code: "OUTCOME_ITEM_NOT_FOUND", message: "Outcome item 不存在" } };
     if (!item.review) return { error: { status: 409, code: "OPEN_ITEM_NOT_REVIEWABLE", message: "open item 只展示，不能创建效果" } };
     if (item.review.status !== "pending") return { error: { status: 409, code: "ITEM_ALREADY_REVIEWED", message: "该条目已处理" } };
+    if (isChildDecision(items, item)) {
+      return { error: { status: 409, code: "CHILD_FOLLOWS_PARENT", message: "这一条随主决定一起确认，请处理主决定" } };
+    }
     if (item.kind === "strategic") {
       ontologyRequest = { id: randomUUID(), meetingId: row.id, itemId: item.id, title: item.title ?? item.text, brief: item.brief ?? item.text };
       await client.query(
@@ -638,30 +744,11 @@ export async function executeConfirmItem(
     const now = new Date().toISOString();
 
     if (item.kind === "decision") {
-      const issueId = decisionIssueId(row, item);
-      if (!issueId) {
-        return { error: { status: 409, code: "DECISION_ITEM_WITHOUT_ISSUE", message: "该 decision 没有关联 Issue，无法创建 Receipt" } };
+      // 主决定与它还待处理的子决定在同一事务内一起确认；子决定各自写自己的回执（有关联议题时）
+      for (const target of [item, ...childDecisionsOf(items, item.id).filter((child) => child.review?.status === "pending")]) {
+        const failed = await confirmDecision(client, row, target, fingerprint, now);
+        if (failed) return failed;
       }
-      const locked = await client.query<IssueRow>("SELECT * FROM issues WHERE id = $1 FOR UPDATE", [issueId]);
-      if (locked.rowCount !== 1) return { error: { status: 404, code: "ISSUE_NOT_FOUND", message: "关联 Issue 不存在" } };
-      const issue = locked.rows[0];
-      if (issue.status === "dismissed") return { error: { status: 409, code: "ISSUE_DISMISSED", message: "dismissed Issue 不能写入 Receipt" } };
-      const receipt: IssueReceiptRow = {
-        id: randomUUID(),
-        actionType: "meeting.confirm_item",
-        actionFingerprint: fingerprint,
-        effectRef,
-        decisionText: item.text,
-        researchStatusAtDecision: (issue.research as IssueResearch).status,
-        override: false,
-        source: { kind: "meeting-item", meetingId: row.id, outcomeItemId: item.id },
-        createdAt: now,
-      };
-      await client.query(
-        "UPDATE issues SET status = 'decided', receipts = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1",
-        [issue.id, JSON.stringify([...issue.receipts, receipt])],
-      );
-      item.review = { status: "confirmed", effectRef };
     } else if (item.kind === "todo") {
       // 撤回后再确认即重新推送；负责人是 CEO 时只记已确认，不建执行事项
       const ownerId = item.ownerPersonId ?? row.lead_dri_id;
@@ -731,13 +818,17 @@ export async function executeDismissItem(
     if (!item) return { error: { status: 404, code: "OUTCOME_ITEM_NOT_FOUND", message: "Outcome item 不存在" } };
     if (!item.review) return { error: { status: 409, code: "OPEN_ITEM_NOT_REVIEWABLE", message: "open item 只展示，不能忽略" } };
     if (item.review.status !== "pending") return { error: { status: 409, code: "ITEM_ALREADY_REVIEWED", message: "该条目已处理" } };
+    if (isChildDecision(items, item)) {
+      return { error: { status: 409, code: "CHILD_FOLLOWS_PARENT", message: "这一条随主决定一起处理，请处理主决定" } };
+    }
 
     item.review = { status: "dismissed", effectRef: null, reason: reason ?? null };
     // 父 decision 被忽略时，其未处理的子条件在同一事务内自动 dismissed（不会存在已确认锚点：
     // 撤回父时已同步清理）。
     if (item.kind === "decision") {
+      // 子决定同样一并忽略
       for (const child of items) {
-        if (child.kind !== "reopenWhen" || child.parentItemId !== item.id) continue;
+        if ((child.kind !== "reopenWhen" && child.kind !== "decision") || child.parentItemId !== item.id) continue;
         if (child.review?.status === "pending") {
           child.review = { status: "dismissed", effectRef: null, reason: "parent_dismissed" };
         }

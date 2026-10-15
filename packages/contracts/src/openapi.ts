@@ -6,6 +6,8 @@ import {
   CardCollection,
   ExecuteActionRequest,
   ConversationHistory,
+  ArchivedConversationList,
+  ConversationSwitchResponse,
   ConversationMessageRequest,
   ConversationSseEvent,
   ConversationAttachment,
@@ -57,6 +59,8 @@ import {
   IssueDecideOverrideInput,
   IssueDismissInput,
   IssueReceipt,
+  IssueDecisionHistory,
+  MeetingDecisionHistoryResponse,
   IssueRestoreInput,
   IssueRevokeReceiptInput,
   ResearchDoc,
@@ -149,6 +153,9 @@ import {
   MarkNotificationsSeenRequest,
   VoiceprintStatus,
   DictationResult,
+  DictationSessionResponse,
+  DictationPolishRequest,
+  DictationPolishResponse,
   OnboardingResponse,
   CompleteOnboardingResponse,
   SeenMarkKey,
@@ -328,6 +335,30 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           responses: {
             "200": { description: "Issue Card", content: { "application/json": { schema: { $ref: "#/components/schemas/CardCollection" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/issues/{id}/history": {
+        get: {
+          operationId: "getIssueDecisionHistory",
+          summary: "议题有效历史分层：仍有效的历史决定、此后执行变化、本次待判断、已失效决定（只读）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "议题有效历史", content: { "application/json": { schema: { $ref: "#/components/schemas/IssueDecisionHistory" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/meetings/{id}/history": {
+        get: {
+          operationId: "getMeetingDecisionHistory",
+          summary: "会议每个关联议题的有效历史分层（只读）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "会议关联议题的有效历史", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingDecisionHistoryResponse" } } } },
             "401": errorResponse,
             "404": errorResponse,
           },
@@ -677,6 +708,62 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: {
             "200": { description: "SSE 事件流", content: { "text/event-stream": { schema: { $ref: "#/components/schemas/ConversationSseEvent" } } } },
             "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/conversations/{scope}/new": {
+        post: {
+          operationId: "startNewConversation",
+          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
+          summary: "新建对话：本人在该 scope 的当前对话有内容时归档（不删除），之后的消息进一条空白对话",
+          responses: {
+            "200": { description: "当前对话", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationSwitchResponse" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/conversations/{scope}/archived": {
+        get: {
+          operationId: "listArchivedConversations",
+          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
+          summary: "本人在该 scope 已归档、有内容的历史对话（新的在前）",
+          responses: {
+            "200": { description: "历史对话", content: { "application/json": { schema: { $ref: "#/components/schemas/ArchivedConversationList" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/conversations/{scope}/archived/{id}/messages": {
+        get: {
+          operationId: "getArchivedConversationMessages",
+          parameters: [
+            { name: "scope", in: "path", required: true, schema: { type: "string" } },
+            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          ],
+          summary: "只读回看一段历史对话",
+          responses: {
+            "200": { description: "Conversation 历史", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationHistory" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/api/conversations/{scope}/archived/{id}/restore": {
+        post: {
+          operationId: "restoreArchivedConversation",
+          parameters: [
+            { name: "scope", in: "path", required: true, schema: { type: "string" } },
+            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          ],
+          summary: "切回一段历史对话继续：当前对话归档，这一段成为当前对话",
+          responses: {
+            "200": { description: "当前对话", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationSwitchResponse" } } } },
             "401": errorResponse,
             "404": errorResponse,
             "409": errorResponse,
@@ -1474,6 +1561,33 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/me/dictation/session": {
+        post: {
+          operationId: "createDictationSession",
+          summary: "实时听写签发：返回签好的一次性腾讯实时识别 wss 地址（30 秒内握手有效，SecretKey 不下发）；每人每分钟最多 6 次；响应 no-store；缺配置 503 DICTATION_REALTIME_NOT_CONFIGURED（前端退回录完再转）",
+          responses: {
+            "200": { description: "签好的地址与采音参数", content: { "application/json": { schema: { $ref: "#/components/schemas/DictationSessionResponse" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+            "429": errorResponse,
+            "503": errorResponse,
+          },
+        },
+      },
+      "/api/me/dictation/polish": {
+        post: {
+          operationId: "polishDictation",
+          summary: "听写后的轻度整理（去口头填充词和残句、处理改口、修明显的同音错字、理顺语序、补标点；已经干净的句子不送模型）。mode=sentence（缺省）逐句、不分点，超时默认 1.2 秒；mode=full 整段、列举时按「1. 」分行，超时按字数放宽（封顶 4 秒）。未配置、失败、超时或没通过防护时回原文 polished:false，仍是 200；原文超过 2000 字 413",
+          requestBody: jsonBody({ $ref: "#/components/schemas/DictationPolishRequest" }),
+          responses: {
+            "200": { description: "整理后的文字（或原文）", content: { "application/json": { schema: { $ref: "#/components/schemas/DictationPolishResponse" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "413": errorResponse,
+          },
+        },
+      },
       "/api/me/voiceprint": {
         get: {
           operationId: "getMyVoiceprint",
@@ -2138,6 +2252,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,
         ExecuteActionRequest: ExecuteActionRequest as JsonSchema,
         ConversationHistory: ConversationHistory as JsonSchema,
+        ArchivedConversationList: ArchivedConversationList as JsonSchema,
+        ConversationSwitchResponse: ConversationSwitchResponse as JsonSchema,
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
         ConversationSseEvent: ConversationSseEvent as JsonSchema,
         CreateBattlefieldRequest: CreateBattlefieldRequest as JsonSchema,
@@ -2229,6 +2345,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         DriIssueImportRequest: DriIssueImportRequest as JsonSchema,
         ResearchDoc: ResearchDoc as JsonSchema,
         IssueReceipt: IssueReceipt as JsonSchema,
+        IssueDecisionHistory: IssueDecisionHistory as JsonSchema,
+        MeetingDecisionHistoryResponse: MeetingDecisionHistoryResponse as JsonSchema,
         IssueDecideInput: IssueDecideInput as JsonSchema,
         IssueDecideOverrideInput: IssueDecideOverrideInput as JsonSchema,
         IssueDismissInput: IssueDismissInput as JsonSchema,
@@ -2344,6 +2462,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         StartMeetingRecordingResponse: StartMeetingRecordingResponse as JsonSchema,
         VoiceprintStatus: VoiceprintStatus as JsonSchema,
         DictationResult: DictationResult as JsonSchema,
+        DictationSessionResponse: DictationSessionResponse as JsonSchema,
+        DictationPolishRequest: DictationPolishRequest as JsonSchema,
+        DictationPolishResponse: DictationPolishResponse as JsonSchema,
         OnboardingResponse: OnboardingResponse as JsonSchema,
         CompleteOnboardingResponse: CompleteOnboardingResponse as JsonSchema,
         SeenMarksResponse: SeenMarksResponse as JsonSchema,

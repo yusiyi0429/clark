@@ -205,3 +205,14 @@ export function loadCompanyMemory(env: CompanyMemorySeedEnv): CompanyMemoryRepos
     },
   };
 }
+
+/** 括号里装着链接、wiki / docx 标识、revision 等后台信息的整段括注（一号位看不懂，也不该看到）。 */
+const TECH_PAREN_RE = /[（(][^（）()]*(?:https?:\/\/|wiki\s|docx\s|revision\s)[^（）()]*[）)]/gi;
+/** 正文里的裸链接（飞书 wiki / 妙记地址）。 */
+const URL_RE = /[ \t]*https?:\/\/[^\s）)」』，,；;]+/g;
+/** 资料文件全名《业务视角_TKOS_Inception_集团经营上下文与指标定义_v1.0_2026-10-10》→《集团经营上下文与指标定义》：去掉前缀段、版本和日期。 */
+const FILE_TITLE_RE = /《(?:业务视角|TKOS|Inception|_)+_([^《》]+?)(?:_v\d+(?:\.\d+)*)?(?:_\d{4}-\d{2}-\d{2})?》/g;
+/** 给人看的企业知识正文：去掉后台标识括注和链接，资料文件全名换成短名，其他原样保留。 */
+export function plainKnowledgeText(text: string): string {
+  return text.replace(TECH_PAREN_RE, "").replace(URL_RE, "").replace(FILE_TITLE_RE, "《$1》").replace(/[ \t]+\n/g, "\n");
+}

@@ -1,0 +1,132 @@
+/* 回答里的可定位来源（conversation/citations.tsx）：次要文字字号、低存在感，不抢正文。
+ * 平时（.plain）与深度讨论（.link）同一字号同一颜色，切换时正文不跳；可点时只多一条很淡的下划线与悬停色。 */
+.plain,
+.link {
+  font-size: 13px;
+  line-height: inherit;
+  color: #7a7f89;
+  overflow-wrap: anywhere;
+}
+
+.link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-weight: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-color: #7a7f8944;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 140ms ease, text-decoration-color 140ms ease;
+}
+.link:hover { color: #2f6bb4; text-decoration-color: #2f6bb466; }
+.link:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
+.link[data-cite-open] { color: #2f6bb4; }
+
+@media (prefers-reduced-motion: reduce) { .link { transition: none; } }
+@media (prefers-contrast: more) { .plain, .link { color: #4f5561; } .link { text-decoration-color: currentColor; } }
+
+/*
+ * 句末的出处标记（10/14）：一个 12px 见方的浅灰圆点，不占行高（行高 0、相对上移），正文读起来不被文件名打断。
+ * 悬停、聚焦变成链接色；热区向外扩到约 28px（手指也点得中），视觉不变。颜色沿用上面那一套，不加新色。
+ */
+.mark {
+  position: relative;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin: 0 1px 0 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  font-size: 12px;
+  line-height: 0;
+  vertical-align: 0.42em;
+  color: #7a7f89;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+.mark::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; }
+.dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+  transition: opacity 140ms ease;
+}
+.mark:hover, .mark[aria-describedby] { color: #2f6bb4; }
+.mark:hover .dot, .mark[aria-describedby] .dot { opacity: 1; }
+.mark:focus-visible { outline: 2px solid #3a83f788; outline-offset: 1px; }
+
+/* 电脑上悬停浮出的来源：资料名称（13）、所在段落或版本（12）、「打开原文」（12）。 */
+.pop {
+  position: fixed;
+  z-index: 1300;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid #1d1d1f24;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px #0f121729;
+  color: #25282e;
+  animation: popIn 120ms ease-out both;
+}
+.popName { margin: 0; font-size: 13px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.popMeta { margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: #7a7f89; }
+.popOpen, .sheetOpen {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #2f6bb4;
+  cursor: pointer;
+}
+.popOpen:hover { text-decoration: underline; text-underline-offset: 3px; }
+.popOpen:focus-visible, .sheetOpen:focus-visible, .sheetClose:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; border-radius: 4px; }
+@keyframes popIn { from { opacity: 0; transform: translateY(2px); } }
+
+/* 手机上点标记：从底部升起同样的内容。 */
+.sheetLayer { position: fixed; inset: 0; z-index: 1300; }
+.sheetVeil { position: absolute; inset: 0; border: 0; padding: 0; background: #0f121733; cursor: default; }
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 18px 20px max(20px, env(safe-area-inset-bottom));
+  border-radius: 18px 18px 0 0;
+  background: #fff;
+  box-shadow: 0 -12px 40px #0f121729;
+  color: #25282e;
+  animation: sheetUp 240ms cubic-bezier(.22, .72, .18, 1) both;
+}
+.grabber { position: absolute; top: 6px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: #1d1d1f24; }
+.sheetHead { display: flex; align-items: center; justify-content: space-between; margin: 0 -12px 4px 0; }
+.sheetLabel { font-size: 13px; color: #7a7f89; }
+.sheetClose { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: transparent; color: #7a7f89; cursor: pointer; }
+.sheetName { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.sheetMeta { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: #7a7f89; }
+.sheetOpen { min-height: 44px; margin-top: 8px; font-size: 13px; }
+@keyframes sheetUp { from { transform: translateY(100%); } }
+
+@media (prefers-reduced-motion: reduce) { .mark, .dot { transition: none; } .pop, .sheet { animation: none; } }
+:global([data-reduce-motion='true']) .pop, :global([data-reduce-motion='true']) .sheet { animation: none; }
+@media (prefers-contrast: more) { .mark { color: #4f5561; } .dot { opacity: 1; } .popMeta, .sheetMeta, .sheetLabel { color: #4f5561; } }

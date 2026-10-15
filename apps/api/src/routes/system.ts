@@ -35,7 +35,9 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
     };
     const status: Static<typeof HealthResponse>["status"] =
       database && dependencies.piRuntime && dependencies.modelSlots && dependencies.companyMemoryMcp ? "ok" : "degraded";
-    return { status, api: true, database, buildSha: env.buildSha, dependencies };
+    // 本体连通状态（启动时只读探测的结果，不含凭证与地址）；不影响 status。完全没配本体时不带这一项（与原响应一致）。
+    return { status, api: true, database, buildSha: env.buildSha, dependencies, ...(ctx.world && (env.worldApiUrl || env.worldAgentToken || env.worldTokenError) ? { world: ctx.world.status() } : {}),
+      ...(ctx.worldTk && env.worldTk && (env.worldTk.worldApiUrl || env.worldTk.worldAgentToken || env.worldTk.worldTokenError) ? { worldTk: ctx.worldTk.status() } : {}) };
   };
   app.get("/healthz", { schema: { response: { 200: HealthResponse } } }, healthz);
   app.get("/api/healthz", { schema: { response: { 200: HealthResponse } } }, healthz);

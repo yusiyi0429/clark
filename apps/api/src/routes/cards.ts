@@ -7,7 +7,7 @@ import { listMissionRoundCards } from "../missionRounds.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "../issues.js";
 import { getMeetingRow, hasMeetingNotice, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "../meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice, getMonthlyPlanRow, listMonthlyPlanRows, projectMonthlyPlanCard } from "../monthlyPlans.js";
-import { personDisplayNames } from "../people.js";
+import { isRealPerson, personDisplayNames } from "../people.js";
 import { projectRadarCard } from "../signals.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
@@ -15,7 +15,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
   const { q, env, fail, requireCEO, now, companyMemory, radar } = ctx;
 
   app.get("/api/people", { preHandler: requireCEO, schema: { response: { 200: PeopleDirectoryResponse } } }, async () => ({
-    people: companyMemory.searchPeople(undefined).map((person) => ({
+    people: companyMemory.searchPeople(undefined).filter(isRealPerson).map((person) => ({
       personId: person.personId,
       displayName: person.displayName,
       roles: [...person.roles],
@@ -26,7 +26,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
     const period = companyPeriod(at);
     const people = companyMemory.searchPeople(undefined);
     const [radarCard, battlefields, issues, capabilities, meetingRows, missions, monthlyNotice, rounds] = await Promise.all([
-      projectRadarCard(q, radar.providerStatus),
+      projectRadarCard(q, radar.providerStatus, at),
       listBattlefieldCards(q, period, personDisplayNames(companyMemory)),
       listPendingIssueCards(q, env.sessionSecret),
       listCapabilityCards(q),

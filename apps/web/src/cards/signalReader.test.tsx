@@ -63,30 +63,33 @@ describe("Signal 阅读", () => {
     expect(render(signalCard("web", "Web"))).toContain("Web · 2025/9/17");
   });
 
-  it("页头按 clark：信号详情眉题、返回信号列表、关闭雷达", () => {
+  it("信号页头沿用会议的紧凑阅读页，并返回信号列表", () => {
     const html = render(signalCard("outlet", "CNBC"));
-    expect(html).toContain("信号详情 · 雷达");
+    expect(html).toContain('class="ts-detail-header"');
+    expect(html).toContain(">信号详情<");
+    expect(html).toContain(">雷达<");
     expect(html).toContain("返回信号列表");
-    expect(html).toContain('aria-label="关闭雷达"');
+    expect(html).toContain("data-close-view");
     expect(html).toContain('data-radar-reader-layout="true"');
   });
 
-  it("标题是文章标题，三块内容：总结（含尚未确定）/ 对我们的影响（含战略锚点）/ 原文", () => {
+  it("标题是文章标题，三块内容：总结（含尚未确定）/ 对公司的影响（含战略锚点）/ 原文", () => {
     const html = render(signalCard("web", "Web", { assessment: { anchorId: "a1", location: { type: "company" }, summary: "摘要", strategicImpact: "影响", evidenceQuote: "", unknowns: ["是否适用于中国"], score: { relevance: 1, impact: 1, urgency: 1 } } }));
     expect(html).toContain(">欧盟就企业 AI 代理发布新规<");
     expect(html).toContain(">总结<");
     expect(html).toContain("尚未确定");
     expect(html).toContain("是否适用于中国");
-    expect(html).toContain(">对我们的影响<");
+    expect(html).toContain(">对公司的影响<");
     expect(html).toContain("战略锚点 · 企业 Agent 监管");
-    expect(html).toContain(">原文<");
+    expect(html).toContain('aria-label="原文"');
+    expect(html).toContain("以上是来源给出的摘要，没有读到全文");
   });
 
   it("原文：点进来就是全文，不再要按钮展开；出处行末一个低调的原文链接", () => {
     const html = render(signalCard("outlet", "CNBC"));
     expect(html).not.toContain("data-expanded");
     expect(html).not.toContain("展开全部摘录");
-    expect(html).toContain("检索服务返回的摘录，未宣称阅读全文");
+    expect(html).toContain("原文摘录");
     expect(html).toContain('aria-label="原文链接：欧盟就企业 AI 代理发布新规"');
     expect(html).not.toContain("阅读原文");
   });
@@ -94,9 +97,9 @@ describe("Signal 阅读", () => {
   it("出处行：逐篇抓取文章页的发布方写「发布方原文（自动抓取）」，检索/feed 摘录不宣称全文", () => {
     const fullText = render(signalCard("outlet", "量子位", { source: { type: "outlet", title: "文章", url: "https://www.qbitai.com/a", publishedAt: "2026-09-24T02:00:00.000Z", excerpt: "原文", fullText: true } }));
     expect(fullText).toContain("发布方原文（自动抓取） · 共 2 字 · 采集于");
-    expect(fullText).not.toContain("未宣称阅读全文");
+    expect(fullText).not.toContain("原文摘录");
     const excerpt = render(signalCard("outlet", "CNBC", { source: { type: "outlet", title: "文章", url: "https://www.cnbc.com/a", publishedAt: "2026-09-24T02:00:00.000Z", excerpt: "摘录", fullText: false } }));
-    expect(excerpt).toContain("检索服务返回的摘录，未宣称阅读全文 · 共 2 字 · 采集于");
+    expect(excerpt).toContain("原文摘录 · 共 2 字 · 采集于");
     expect(excerpt).not.toContain("发布方原文");
   });
 
@@ -132,6 +135,30 @@ describe("Signal 阅读", () => {
     expect(html).toContain('src="/api/signals/1/images/0"');
     expect(html).toContain("data-has-image");
     expect(renderToStaticMarkup(<SignalStory card={signalCard("outlet", "CNBC")} onOpen={() => undefined} />)).not.toContain("<img");
+    // 图走同源代理，且不带 Referer（防盗链站点直连时也不因 Referer 被拒）
+    expect(html).toContain('referrerPolicy="no-referrer"');
+  });
+
+  it("原文首图放在正文开头，原文里不再重复这一张；其余配图照常按位插入", () => {
+    const reading = {
+      title: "有图的信号", sourceLabel: "量子位", publishedAt: "2026-09-24T02:00:00.000Z", summary: "摘要", unknowns: [],
+      relation: { heading: "对公司的影响", text: "影响" }, excerpt: "第一段\n\n第二段", evidenceQuote: "", fullText: true,
+      collectedAt: "2026-09-24T02:00:00.000Z", url: "https://example.com/i",
+      images: [{ src: "/api/signals/1/images/0", after: 0 }, { src: "/api/signals/1/images/1", after: 1 }],
+    };
+    const html = renderToStaticMarkup(
+      <SignalArticle reading={reading} state={{}} pending={false} error={null} onUpdate={async () => true} onRetry={() => undefined} upNext={[]} />,
+    );
+    expect(html.match(/src="\/api\/signals\/1\/images\/0"/g)).toHaveLength(1);
+    // 首图是正文的第一张图：在简报之后、正文第一段之前。
+    expect(html.indexOf('src="/api/signals/1/images/0"')).toBeGreaterThan(html.indexOf("总结"));
+    expect(html.indexOf('src="/api/signals/1/images/0"')).toBeLessThan(html.indexOf("第一段"));
+    expect(html.indexOf('src="/api/signals/1/images/1"')).toBeGreaterThan(html.indexOf("第二段"));
+    const plain = renderToStaticMarkup(
+      <SignalArticle reading={{ ...reading, images: [] }} state={{}} pending={false} error={null} onUpdate={async () => true} onRetry={() => undefined} upNext={[]} />,
+    );
+    expect(plain).not.toContain("<img");
+    expect(plain).not.toContain("<figure");
   });
 
   it("成员版正文与公司版同一份排版：关系写「和你的方向」、正文用命中理由、标签写你的方向；没有尚未确定与配图", () => {
@@ -155,7 +182,7 @@ describe("Signal 阅读", () => {
     expect(html).toContain("直接回答了按结果收费能否被大客户接受");
     expect(html).toContain("你的方向 · Agent 的定价方式");
     expect(html).toContain("金融时报 · 2026/9/26");
-    expect(html).not.toContain("对我们的影响");
+    expect(html).not.toContain("对公司的影响");
     expect(html).not.toContain("战略锚点");
     expect(html).not.toContain("尚未确定");
     expect(html).not.toContain("<img");

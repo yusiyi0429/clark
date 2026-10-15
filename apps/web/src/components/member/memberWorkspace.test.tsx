@@ -23,7 +23,9 @@ describe("成员工作台外壳", () => {
     const html = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" />);
     expect(html).toContain('data-testid="global-controls"');
     expect(html).toContain('data-conversation-context="global"');
-    expect(html).toContain("查看“我的 Agent”的对话记录");
+    // D2 / D6：没有历史键；收起时是语音胶囊，打字面与对话层一起开合。
+    expect(html).toContain('data-composer="voice"');
+    expect(html).not.toContain("的对话记录");
   });
 
   it("任务卡在展开区内，首页 DOM 保留并暂停交互，左侧通知折成同一窄条", () => {

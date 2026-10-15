@@ -14,10 +14,17 @@
 .muted{margin:0;color:var(--ts-text-muted,#6b7482);font-size:12px;line-height:1.7}
 .people{display:flex;flex-wrap:wrap;gap:8px;max-height:240px;overflow:auto}
 .people label{display:flex;align-items:center;gap:6px;padding:8px 11px;border:1px solid #dce6f4;border-radius:12px;background:#fff;font-size:13px;cursor:pointer}
-.note{box-sizing:border-box;width:100%;resize:vertical;border:1px solid #dce6f4;border-radius:12px;padding:9px 11px;background:#fff;font:inherit;font-size:13px;line-height:1.6;color:inherit}
-.note:focus-visible{outline:2px solid #3a83f7;outline-offset:1px}
+/* 边、圆角、底色、字号、聚焦走 globals.css 的统一输入框样式，这里只管宽度 */
+.note{width:100%}
 .error{margin:0;color:#a44d3e;font-size:13px;line-height:1.7}
+/* 材料排印（data-type-scale="doc"，议题页）：「拉人进群」是控件，13 / 400，强调色；头像里的字是标签级 12 / 600。没有这个属性的页不变。 */
+:global([data-type-scale='doc']) .trigger.trigger{font-weight:var(--doc-weight-regular);color:var(--doc-ink-accent)}
+@media(min-width:960px){:global([data-type-scale='doc']) .trigger.trigger{font-size:var(--doc-type-meta)}}
+:global([data-type-scale='doc']) .avatars i,:global([data-type-scale='doc']) .avatar{font-size:var(--doc-type-tag);font-weight:var(--doc-weight-strong)}
 /* 触屏：「拉人进群」高度放到 40。 */
 @media(pointer:coarse){.trigger.trigger{min-height:40px;padding-inline:14px 12px}}
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
 @media(max-width:959px){.trigger.trigger{font-size:14px}}
+/* 「邀请成员」的图标平时不出现；手机宽的面板（单屏、双屏右页）页头里只留图标、44×44，宽度让给标题（docs/superpowers/specs/2026-10-12-mobile-foldable.md §3.3）。 */
+.inviteIcon{display:none;flex:none}
+@container pane (max-width:599px){.invite.invite{justify-content:center;width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border-radius:12px}.invite .inviteIcon{display:block}.invite .inviteLabel{display:none}}

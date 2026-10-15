@@ -11,13 +11,10 @@ import {
   type TRadarSourceItem,
 } from "@warmap/contracts";
 import {
-  calculateContextTokens,
   createAgentSession,
   createExtensionRuntime,
   defineTool,
-  getLastAssistantUsage,
   ModelRuntime,
-  shouldCompact,
   SessionManager,
   SettingsManager,
   type ResourceLoader,
@@ -30,41 +27,62 @@ import {
   type Model,
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import { plainKnowledgeText, type CompanyMemoryRepository } from "./companyMemory.js";
+import { formalTerms, formalTermsDeep } from "./formalTerms.js";
 import type { ConversationRuntime } from "./conversations.js";
 import { makeMemoryTools } from "./memoryTools.js";
 import { createCompanyMemoryMcpServer } from "./mcpCompanyMemory.js";
-import { HUMAN_WRITING_STYLE } from "./promptStyle.js";
+import { CONVERSATION_WRITING_STYLE } from "./promptStyle.js";
+import {
+  TIER_GUIDANCE, TIER_SETTINGS, cleanThought, createEscalationWatch, hasWriteIntent, latestSummaryHeading, routeTurn, thinkingHeadline, toolProgressLabel, toolResultDetail, withNotice,
+  type ConversationTier, type ThinkingTranslator, type ThoughtTranslator, type TierThinkingLevel, type TriageFn, type TurnRoute,
+} from "./conversationRouting.js";
+import { conversationModelDefinition, type ConversationModelApi } from "./conversationModel.js";
+import { HARD_HISTORY_TOKENS, HISTORY_WINDOW_ENTRY, estimateTextTokens, historyTokens } from "./conversationCompaction.js";
+import { conversationStreamSimple } from "./conversationStream.js";
+import { ConversationTurnError, classifyFailure, createTurnRecovery, recoveringStream, summarizeRecovery, turnRecovery } from "./conversationRecovery.js";
+import { createThinkingRelay } from "./conversationThinking.js";
+import { promptIntents, tierSystemPrompt, toolAllowed } from "./conversationPrompt.js";
+import {
+  battlefieldBriefs, focusGlobalContext, messageQuotes, pageBattlefield, pendingIssueBattlefield, referencedBattlefields, resolveBattlefieldId, resolveFocus,
+  type BattlefieldBrief,
+} from "./conversationFocus.js";
 import { unavailableWebSearchAdapter, type WebSearchAdapter } from "./webSearch.js";
 import type { Pool } from "pg";
 import { createObjectMaterial, editObjectMaterial, listObjectMaterials, readObjectMaterial, ObjectMaterialError } from "./objectMaterials.js";
 import { personDisplayNames } from "./people.js";
+import { collectMeetingEvidence, collectObjectEvidence } from "./meetingEvidence.js";
+import { issueDecisionHistory, meetingDecisionHistory } from "./issueDecisionHistory.js";
+import { withBeijingTimes } from "./agentTime.js";
+import { ANSWER_OPTIONS_RULES, DECISION_JUDGEMENT_RULES } from "./decisionJudgement.js";
+import { SOURCE_CITATION_RULES } from "./sourceCitations.js";
+import { RICH_BLOCK_RULES } from "./richBlocks.js";
 import { proposeMonthlyReviewSuggestion } from "./monthlyReviews.js";
 import { proposeMaterialEdit } from "./materialFeedback.js";
 import { applyMissionCardRevision, createMissionCardClarification } from "./missionCardAnnotations.js";
 import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { MISSION_CARD_WRITING_RULES } from "./missionCardWritingRules.js";
+import { AGENT_ROLES, RETRIEVE_SOURCES, annotateTurn, preview, traceTools, tracedStreamSimple, tracingEnabled, withAgent, withRetrieve } from "./tracing.js";
+import { logEvent } from "./observability.js";
 
 /** CEO 与 DRI Agent 共用的材料改写规则；能不能直接改按 canEdit（上传者和对象负责人），与 edit_material 是否开放一致。 */
 const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 currentObject.viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
 
-const SYSTEM_PROMPT = `# 角色
+export const SYSTEM_PROMPT = `# 角色
 
 你是天枢里 CEO 的 Agent，负责只读决策对话。用 CEO 所用的语言回复，避免空话。
 
 # 工作方式
 
 - 结论先行，再给依据。
-- 经营与战略问题按麦肯锡合伙人级别的顾问标准处理：深挖、结构化、给出取舍。
+- 经营与战略问题按资深战略顾问的标准处理：先界定问题和对标层级（同赛道、同商业模式、同资本路径），找出决定答案的关键分歧，用证据和推理给出取舍；数字写明口径和截至时间。
 - 问题立场不明确时用双向钢人论证，即把对立两方各自最强的版本摆出来，再下判断。
 
 # 每轮注入的上下文
 
-每轮输入是一个 JSON。\`currentObject\` 是当前页面对象的 Card 快照，含完整业务字段，Meeting 还附带本场关联 Issue。\`references\` 是本轮 CEO 显式引用的 Card 快照。\`globalContext\` 仅首页全局对话提供。\`message\` 是 CEO 本轮原话。
+每轮输入是一个 JSON：\`currentObject\` 是当前页面对象的 Card 快照（Meeting 附带关联的 Issue），\`references\` 是本轮 CEO 显式引用的 Card 快照，\`message\` 是 CEO 本轮原话，\`answerMode\` 是系统判定的回答档位（该查多少、写多长，回答里不提及）。优先使用 currentObject 与 references，不用历史对话猜测对象的最新状态。
 
-\`globalContext\` 是首页全局对话每轮自动带入的实时摘要，包含当前周期、战场、能力、Mission 总数、待决策 Issue 和月度计划状态。涉及某个战场、能力或 DRI 的 Mission 明细时调用 \`list_missions\`，不要从总数推断。
-
-优先使用 currentObject 与 references，不要用历史对话猜测当前对象的最新状态。
+\`globalContext\` 仅首页全局对话提供，是当前周期、战场、待决策 Issue 与月度计划的实时摘要；写着「同上一轮」时沿用本对话最近一次给出的那份。带 \`focus\` 时只展开了与本轮问题相关的战场，其余战场在 \`otherBattlefields\` 里各一行（名称、状态、待决议题数），用到它们的目标、进展或议题时先用 \`get_warmap_overview\` 按 battlefieldId 读取，不凭这一行下结论。涉及某个战场、能力或 DRI 的 Mission 明细时调用 \`list_missions\`，不要从总数推断。
 
 # 只读边界
 
@@ -78,34 +96,35 @@ ${MATERIAL_EDITING_RULES}
 
 # 工具
 
-- \`get_warmap_overview\`：读取当前周期的战场、能力、Mission 数、待决策 Issue 与月度计划状态。
-- \`list_missions\`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；CEO 问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。
-- \`list_pending_issues\`：当前所有待 CEO 决策的 Issue 实时清单。被问及当前战略议题、待决策事项或看板状态时必须调用，不要凭上下文推断。
-- \`list_sections\`：企业知识章节目录，先看目录再决定读哪里。
-- \`search_sections\`：在企业知识内按关键词定位相关章节。
-- \`get_passages\`：读取指定章节的段落正文。
-- \`search_people\`：稳定人员目录，把姓名解析为 personId。
-- \`read_outlet_feed\`：读取当前 Radar 已启用的 BBC、彭博、路透、金融时报、CNBC、经济学人等发布方媒体窗口内最新条目。它不是全文、历史库或全网关键词检索。
-- \`web_search\`：检索公开来源，仅在内部材料不足时使用。
+用途见各工具说明。CEO 问及当前战略议题、待决策事项或看板状态时调用 \`list_pending_issues\`，不凭上下文推断；问到公司定义、战略取舍，或要核对目标在本体里怎么登记时调用 \`read_ontology\`，本体里的草稿不是已批准的承诺。
 
 # 检索与证据
 
-先判断是否需要检索。纯推理、写作润色、加工已有材料和 CEO 明确要求不用查时直接回答，无需搜索。
+纯推理、写作润色、加工已有材料和 CEO 明确要求不用查时直接回答。具体公司、产品、人物、政策或市场的现状，数字、价格、规模、融资和财报，“最新”“近期”等时效问题，以及没有把握的外部事实，必须检索。
 
-以下问题必须检索：具体公司、产品、人物、政策或市场的现状；数字、价格、规模、融资和财报；“最新”“现在”“近期”等时效问题；以及你没有把握的外部事实。
+先内后外：公司内部事实先查企业知识与实时看板，按章节目录定位后只读需要的段落。CEO 问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源，只有它返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search：彼此不依赖的检索放在同一步里一起发出，额度用在关键分歧上，证据够了就停，不把检索计划写进回答。
 
-顺序是先内后外。公司内部事实先查企业知识与实时看板。CEO 问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源；该工具返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search。存在多个独立信息需求时，先定好最多 4 项证据问题再逐项检索；除非 CEO 追问，不要把检索计划写进回答。
+web_search 直接返回来源标题、URL 与摘要（本运行最多 8 次），摘要只能用于发现线索，不能当作最终证据；引用外部事实时给出标题与 URL，并用一句陈述交代依据为摘要、未查阅原文。
 
-web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，达到上限会中止本轮并报错。把额度用在关键分歧上，证据够了就停。博查摘要只能用于发现线索，不能当作最终证据。本运行没有读取网页原文的工具，所以引用外部事实时必须给出标题与 URL，并说明这是检索摘要、未经原文核验。
+搜不到就明说，不编造。工具报错或超时时，用一句话说清没读到什么、为什么，并给出下一步（例如稍后重试，或在依据面板直接打开原文），不凭印象补原文。没有来源、样本或可复核计算时，不给竞争重叠率、成功概率和置信度写精确百分比，可以用定性等级并说明依据。
 
-不要把全部企业知识章节拼接进上下文，按章节目录定位后只读需要的段落。搜不到就明说，不编造。材料重复或没有新增时换检索方向。搜索次数只是行为记录，不代表回答质量。
+${CONVERSATION_WRITING_STYLE}`;
 
-没有来源、样本或可复核计算时，不给竞争重叠率、成功概率和置信度写精确百分比；可以使用定性等级，并说明判断依据。
-
-${HUMAN_WRITING_STYLE}`;
+export { MATERIAL_EDITING_RULES };
 
 /** 成员的 DRI Agent：只读规则、证据标注与“企业知识”称谓同 CEO Agent；不给 CEO 决策面（战场总览、待决策议题）和首页全局上下文。 */
-function driSystemPrompt(displayName: string, personalCard = false): string {
+/** CEO 全局与对象对话：只读角色与证据规则，加上决策判断、图表块、回答末尾选项与句末出处（按档位裁剪见 conversationPrompt.ts）。 */
+export const CEO_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
+
+${DECISION_JUDGEMENT_RULES}
+
+${RICH_BLOCK_RULES}
+
+${ANSWER_OPTIONS_RULES}
+
+${SOURCE_CITATION_RULES}`;
+
+export function driSystemPrompt(displayName: string, personalCard = false): string {
   return `# 角色
 
 你是 ${displayName} 的 DRI Agent，天枢里只供 ${displayName} 本人使用的只读对话助手。用 ${displayName} 所用的语言回复，避免空话。
@@ -118,7 +137,7 @@ function driSystemPrompt(displayName: string, personalCard = false): string {
 
 # 每轮注入的上下文
 
-每轮输入是一个 JSON。\`currentObject\` 是当前页面对象的 Card 快照，没有时为 null。\`references\` 是本轮显式引用的 Card 快照。\`message\` 是 ${displayName} 本轮原话。
+每轮输入是一个 JSON。\`currentObject\` 是当前页面对象的 Card 快照，没有时为 null。\`references\` 是本轮显式引用的 Card 快照。\`message\` 是 ${displayName} 本轮原话。\`answerMode\` 是系统按问题判定的本轮回答档位，说明这一轮该查多少、写多长；回答里不提及。
 
 优先使用 currentObject 与 references，不要用历史对话猜测当前对象的最新状态。
 
@@ -148,19 +167,19 @@ ${personalCard ? "当前任务卡的正文、公开意见和轮次已放在 curr
 
 以下问题必须检索：具体公司、产品、人物、政策或市场的现状；数字、价格、规模、融资和财报；“最新”“现在”“近期”等时效问题；以及你没有把握的外部事实。
 
-顺序是先内后外。公司内部事实先查企业知识与${personalCard ? "当前卡资料" : " Mission 列表"}。问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源；该工具返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search。存在多个独立信息需求时，先定好最多 4 项证据问题再逐项检索；除非被追问，不要把检索计划写进回答。
+顺序是先内后外。公司内部事实先查企业知识与${personalCard ? "当前卡资料" : " Mission 列表"}。问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源；该工具返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search。存在多个独立信息需求时，先定好最多 4 项证据问题；彼此不依赖的检索放在同一步里一起发出，不要查完一项再查下一项；除非被追问，不要把检索计划写进回答。
 
-web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，达到上限会中止本轮并报错。把额度用在关键分歧上，证据够了就停。博查摘要只能用于发现线索，不能当作最终证据。本运行没有读取网页原文的工具，所以引用外部事实时必须给出标题与 URL，并说明这是检索摘要、未经原文核验。
+web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，达到上限会中止本轮并报错。把额度用在关键分歧上，证据够了就停。博查摘要只能用于发现线索，不能当作最终证据。本运行没有读取网页原文的工具，所以引用外部事实时必须给出标题与 URL，并用一句陈述交代依据为摘要、未查阅原文。
 
-不要把全部企业知识章节拼接进上下文，按章节目录定位后只读需要的段落。搜不到就明说，不编造。材料重复或没有新增时换检索方向。搜索次数只是行为记录，不代表回答质量。
+不要把全部企业知识章节拼接进上下文，按章节目录定位后只读需要的段落。搜不到就明说，不编造。工具报错或超时时，用一句话说清没读到什么、为什么，并给出下一步（例如稍后重试，或在依据面板直接打开原文），不要沉默，也不要凭印象补原文。材料重复或没有新增时换检索方向。搜索次数只是行为记录，不代表回答质量。
 
 没有来源、样本或可复核计算时，不给竞争重叠率、成功概率和置信度写精确百分比；可以使用定性等级，并说明判断依据。
 
-${HUMAN_WRITING_STYLE}`;
+${CONVERSATION_WRITING_STYLE}`;
 }
 
 /** DRI Agent 去掉的工具：它们读的是只给 CEO 看的决策面。 */
-const CEO_ONLY_TOOLS = new Set(["get_warmap_overview", "list_pending_issues"]);
+const CEO_ONLY_TOOLS = new Set(["get_warmap_overview", "list_pending_issues", "read_ontology"]);
 
 function resourceLoaderFor(systemPrompt: string): ResourceLoader {
   return {
@@ -178,9 +197,8 @@ function resourceLoaderFor(systemPrompt: string): ResourceLoader {
   };
 }
 
-const ceoResourceLoader = resourceLoaderFor(SYSTEM_PROMPT);
 
-const MISSION_CARD_EDITING_PROMPT = `# 当前任务卡的协作改写
+export const MISSION_CARD_EDITING_PROMPT = `# 当前任务卡的协作改写
 
 当前页面的任务卡正文改写是只读规则的例外。用户已经选择：仅本人准备期间、read_mission_card返回editable=true时，确定需要修改且明确怎么改时立即执行，不必等全部批注结束或再次确认。只能修改当前任务卡的任务字段，不能签发、确认或修改其他对象。未下发审核、本人已确认、开始汇总后或已确定时，正文与历史只读；需再改时请本人取消确认或请战场 DRI 退回本人重新确认，不能擅自替人执行这些动作，已确定后的实质改文也须战场 DRI 退回对应本人重新处理、确认。
 
@@ -204,6 +222,9 @@ export type PendingIssueSummary = {
   urgency: unknown;
   researchStatus: string;
   createdAt: string;
+  /** AI 候选议题：nature=ai_suggested，origin 是来源说明（dataOrigin.ts）。 */
+  nature?: "ai_suggested";
+  origin?: string;
 };
 
 export type PiConversationRuntimeOptions = {
@@ -216,14 +237,75 @@ export type PiConversationRuntimeOptions = {
   baseUrl: string;
   apiKey: string;
   modelId: string;
+  /** 主答模型的协议；不填按模型 id 推断（claude-* 走 Anthropic 协议），见 conversationModel.ts。 */
+  modelApi?: ConversationModelApi;
+  /** 主答模型的地址；不填时 Responses 用 baseUrl，Anthropic 协议用网关根地址 + /anthropic。 */
+  modelBaseUrl?: string;
+  /**
+   * 每档的主答模型（conversationModel.ts 的 conversationTierModels）；没写的档位用 modelId。
+   * modelApi、modelBaseUrl 只作用于 modelId 本身，其他模型按 id 推断协议与地址。
+   */
+  tierModels?: Partial<Record<ConversationTier, string>>;
+  /** Claude 的英文思考摘要按段译成中文后上屏（快模型）；不提供时英文段落不上屏，只显示「正在思考」。 */
+  translateThinking?: ThinkingTranslator;
+  /** 按档位覆盖思考强度（CONVERSATION_THINKING）；没写的档位沿用 TIER_SETTINGS。 */
+  tierThinking?: Partial<Record<ConversationTier, TierThinkingLevel>>;
+  /** 后台压缩用的模型（COMPACTION_MODEL，Responses、不开思考）。 */
   compactionModelId?: string;
+  /** 历史超过这么多 token 时这一轮走窗口兜底（缺省 HARD_HISTORY_TOKENS；评估「不压缩时答得怎样」时调大）。 */
+  hardHistoryTokens?: number;
   search?: WebSearchAdapter;
   /** 读取当前 Radar 已启用发布方 feed；未提供时不暴露 read_outlet_feed。 */
   outletFeed?: (signal: AbortSignal) => Promise<TRadarSourceItem[]>;
   globalContext?: () => Promise<Record<string, unknown>>;
+  /**
+   * 战场清单（id、编号、名称），给分诊判断这句提问涉及哪些战场（conversationFocus.ts）；只读、要快。
+   * 不提供时从 globalContext 里取（全局摘要可能要等本体快照，分诊最多等 0.3 秒）。
+   */
+  listBattlefields?: () => Promise<BattlefieldBrief[]>;
+  /** 本体只读（按需工具 read_ontology，不进每轮上下文包）；没接本体时不提供。返回 null 表示本体暂时读不到。 */
+  readOntology?: (args: { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string }) => Promise<Record<string, unknown> | null>;
   listMissions?: (filters: { period?: string; battlefieldId?: string; capabilityId?: string; ownerId?: string }, viewer?: { personId: string; role: "ceo" | "member" }) => Promise<unknown[]>;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
+  /** 每轮分档用的快模型分诊（conversationRouting.ts）；不提供时只按本地规则分档，定不了的走检索问答档。 */
+  triage?: TriageFn;
+  /** 推理摘要是英文时，把小标题译成一句中文要点（快模型）；不提供时英文摘要不上屏，只显示「正在思考」。 */
+  translateThought?: ThoughtTranslator;
+  /** 非深度档多久还没出正文就提示「需要更深入的分析」（毫秒，缺省 20 秒；测试用）。 */
+  escalateAfterMs?: number;
+  /** 一次模型调用连续多久没有任何新事件算卡住（缺省 MODEL_IDLE_TIMEOUT_MS，测试用）。 */
+  modelIdleMs?: number;
+  /** 单个工具最多等多久（缺省 TOOL_TIMEOUT_MS，测试用）。 */
+  toolTimeoutMs?: number;
+  /** 自动恢复两次尝试之间的等待（测试用，缺省按出错类型等 0.5–8 秒）。 */
+  recoverySleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 };
+
+/** 单个工具最多等这么久：超时按工具出错交还给模型（模型照实告诉一号位没查到），一轮不因一个卡住的工具停住。 */
+export const TOOL_TIMEOUT_MS = 90_000;
+/** 历史太长判断时给本轮输出留的余量（与 pi 的 reserveTokens 相同）。 */
+const OUTPUT_RESERVE_TOKENS = 16_384;
+/** 失败的一轮没有写出正文时，存进模型历史的那一句（下一轮模型知道上一问没答完）。 */
+const UNFINISHED_TURN_NOTE = "（上一轮回答没有完成，已中断。）";
+
+/** 主答失败时的备用顺序：先降档，再换另一档；同一个模型 id 只出现一次。 */
+const TIER_FALLBACK_ORDER: Record<ConversationTier, ConversationTier[]> = {
+  deep: ["deep", "grounded", "quick"],
+  grounded: ["grounded", "quick", "deep"],
+  quick: ["quick", "grounded", "deep"],
+};
+
+function withTimeout<T>(work: Promise<T>, ms: number, onTimeout: () => Error): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([work, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(onTimeout()), ms); (timer as { unref?: () => void }).unref?.(); })])
+    .finally(() => { if (timer) clearTimeout(timer); });
+}
+
+/** 工具外面包一层超时（pi 把 execute 抛出的错误作为工具出错交给模型）。 */
+function withToolTimeout<T extends { name: string; label?: string; execute: (...args: any[]) => Promise<any> }>(tool: T, ms: number): T {
+  return { ...tool, execute: (...args: unknown[]) => withTimeout(tool.execute(...args), ms,
+    () => new Error(`这一步（${tool.label ?? tool.name}）超过 ${Math.round(ms / 1000)} 秒没有返回，已跳过。请直接告诉一号位这一步没有查到，不要编造结果。`)) };
+}
 
 function normalizedBaseUrl(value: string): string {
   return value.replace(/\/+$/, "").replace(/\/responses$/, "");
@@ -270,6 +352,8 @@ function appendRecentMessages(
   manager: SessionManager,
   messages: { role: "user" | "assistant"; content: string; createdAt: string }[],
   modelId: string,
+  api: ConversationModelApi = "openai-responses",
+  provider = "warmap",
 ): void {
   for (const item of messages.slice(-20)) {
     const timestamp = new Date(item.createdAt).getTime();
@@ -277,8 +361,8 @@ function appendRecentMessages(
       ? { role: "user", content: item.content, timestamp }
       : {
           role: "assistant",
-          api: "openai-responses",
-          provider: "warmap",
+          api,
+          provider,
           model: modelId,
           content: [{ type: "text", text: item.content }],
           usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
@@ -286,6 +370,121 @@ function appendRecentMessages(
           timestamp,
         });
   }
+}
+
+/** 闲置重开时带进新会话的最近几条问答，与每条的字数上限（只要文字，不带工具往返、推理与上游条目）。 */
+export const IDLE_RESTART_RECENT_MESSAGES = 6;
+export const IDLE_RESTART_MESSAGE_CHARS = 1_200;
+
+/** 一段模型会话里最近一次压缩摘要；没压缩过（或记录读不出来）就没有。 */
+export function latestCompactionSummary(entries: unknown[], sessionId: string): string | undefined {
+  try {
+    const branch = SessionManager.inMemory(process.cwd(), { id: sessionId }, structuredClone(entries) as Parameters<typeof SessionManager.inMemory>[2]).getBranch();
+    for (let index = branch.length - 1; index >= 0; index -= 1) {
+      const entry = branch[index];
+      if (entry.type === "compaction" && entry.summary.trim()) return entry.summary;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+/**
+ * 闲置重开：新会话里先放上一段的压缩摘要（有就放，作为一条压缩记录，模型看到的是「此前对话的摘要」），
+ * 再接最近几条问答的文字（每条截到 IDLE_RESTART_MESSAGE_CHARS 字，从一条提问开始）。
+ */
+export function seedIdleRestart(
+  manager: SessionManager,
+  summary: string | undefined,
+  messages: { role: "user" | "assistant"; content: string; createdAt: string }[],
+  modelId: string,
+  api: ConversationModelApi,
+  provider: string,
+): void {
+  const recent = messages.slice(-IDLE_RESTART_RECENT_MESSAGES);
+  while (recent[0]?.role === "assistant") recent.shift();
+  const clipped = recent.map((item) => ({ ...item, content: item.content.length > IDLE_RESTART_MESSAGE_CHARS ? `${item.content.slice(0, IDLE_RESTART_MESSAGE_CHARS)}…` : item.content }));
+  appendRecentMessages(manager, clipped, modelId, api, provider);
+  if (summary) {
+    const firstKept = manager.getEntries().find((entry) => entry.type === "message")?.id ?? "";
+    manager.appendCompaction(summary, firstKept, 0);
+  }
+}
+
+/** 一次摘要的输出上限（含思考）。 */
+const COMPACTION_MAX_TOKENS = 12_000;
+
+/** 这条会话最近一轮主答是不是 Claude（Anthropic 协议）；一条会话里混着几个档位时按最近那一轮算。 */
+export function latestAnswerIsClaude(entries: ReturnType<SessionManager["getBranch"]>): boolean {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry.type !== "message" || entry.message.role !== "assistant") continue;
+    return entry.message.api === "anthropic-messages" || /^claude-/i.test(entry.message.model);
+  }
+  return false;
+}
+
+/** 每轮对话最多真正执行的外部检索次数。 */
+const SEARCH_LIMIT = 8;
+/** 每次检索交给模型的条数与每条摘要的字数上限。 */
+const SEARCH_RESULTS_FOR_MODEL = 8;
+const SEARCH_EXCERPT_CHARS = 500;
+/** 服务端预取（分诊给的检索词）最多等这么久；到时没回来的那几项不放进上下文，也不占检索额度。 */
+const PREFETCH_BUDGET_MS = 5_000;
+/** 到上限后又被退回这么多次检索，视为无视提示的异常循环，中止本轮。 */
+const SEARCH_REFUSALS_BEFORE_ABORT = 8;
+const SEARCH_LIMIT_NOTICE = `本轮检索已到上限（${SEARCH_LIMIT} 次），这是最后一次检索结果。请不要再调用 web_search，基于已检索到的结果和内部材料作答，并在回答中如实说明本轮检索已到上限、哪些点未能进一步核实。`;
+const SEARCH_LIMIT_REFUSAL = `本轮检索已到上限（${SEARCH_LIMIT} 次），这次没有执行检索。请停止调用 web_search，基于已检索到的结果和内部材料作答，并在回答中如实说明本轮检索已到上限、哪些点未能进一步核实。`;
+
+/** 企业知识只读工具的单次超时（巡检 P0-2）。 */
+export const MEMORY_TOOL_TIMEOUT_MS = 20_000;
+
+/** Claude（Anthropic 协议）主答模型所在的 provider；GPT 与压缩模型在 "warmap"。 */
+const ANTHROPIC_PROVIDER = "warmap-anthropic";
+
+/** 会话里记下每档第一次用的主答模型（自定义条目），同一段对话里同档位不换模型；记的模型已不再注册时改用当前配置。 */
+const TIER_MODEL_ENTRY = "warmap.tier-model";
+function stableTierModel(manager: SessionManager, tier: ConversationTier, configured: string, registered: string[]): string {
+  const recorded = manager.getEntries().flatMap((entry) => (entry.type === "custom" && entry.customType === TIER_MODEL_ENTRY
+    && (entry.data as { tier?: unknown } | undefined)?.tier === tier ? [(entry.data as { modelId?: unknown }).modelId] : []));
+  const previous = recorded.at(-1);
+  if (typeof previous === "string" && registered.includes(previous)) return previous;
+  manager.appendCustomEntry(TIER_MODEL_ENTRY, { tier, modelId: configured });
+  return configured;
+}
+
+/**
+ * 首页全局摘要（约 1 万 token）每轮都整包进历史。和上一轮一模一样时只写「同上一轮」：
+ * 上一份必须在最近一次压缩之后（压缩后历史里没有它了，就重新给全文）。
+ */
+const GLOBAL_CONTEXT_ENTRY = "warmap.global-context";
+export const GLOBAL_CONTEXT_UNCHANGED = "同上一轮";
+function unchangedGlobalContext(manager: SessionManager, context: Record<string, unknown>): Record<string, unknown> | string {
+  const hash = createHash("sha256").update(JSON.stringify(context)).digest("hex").slice(0, 32);
+  const branch = manager.getBranch();
+  for (let index = branch.length - 1; index >= 0; index -= 1) {
+    const entry = branch[index];
+    if (entry.type === "compaction") break;
+    if (entry.type === "custom" && entry.customType === GLOBAL_CONTEXT_ENTRY) {
+      if ((entry.data as { hash?: unknown } | undefined)?.hash === hash) return GLOBAL_CONTEXT_UNCHANGED;
+      break;
+    }
+  }
+  manager.appendCustomEntry(GLOBAL_CONTEXT_ENTRY, { hash });
+  return context;
+}
+
+/** 同一份系统提示复用同一个 resource loader（按档位拼出来的提示只有少数几种）。 */
+const resourceLoaders = new Map<string, ResourceLoader>();
+function cachedResourceLoader(prompt: string): ResourceLoader {
+  let loader = resourceLoaders.get(prompt);
+  if (!loader) {
+    loader = resourceLoaderFor(prompt);
+    if (resourceLoaders.size > 64) resourceLoaders.clear();
+    resourceLoaders.set(prompt, loader);
+  }
+  return loader;
 }
 
 export async function createPiConversationRuntime(options: PiConversationRuntimeOptions): Promise<ConversationRuntime> {
@@ -296,30 +495,59 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
   await client.connect(clientTransport);
 
   const call = async (name: string, args: Record<string, unknown>) => {
-    const result = await client.callTool({ name, arguments: args });
+    let result: Awaited<ReturnType<typeof client.callTool>>;
+    try {
+      // 企业知识是本机只读查询，正常毫秒级返回；单独设短超时，卡住时让 Agent 当轮说清楚原因，而不是拖到整轮 180 秒。
+      result = await client.callTool({ name, arguments: args }, undefined, { timeout: MEMORY_TOOL_TIMEOUT_MS });
+    } catch (cause) {
+      const timedOut = /timed? ?out/i.test(String((cause as Error)?.message)) || (cause as { code?: number })?.code === -32001;
+      throw new Error(timedOut
+        ? `企业知识 ${MEMORY_TOOL_TIMEOUT_MS / 1000} 秒内没有返回（${name}）。请直接告诉用户这次没读到企业知识原文，可以在依据面板里直接打开原文，或稍后重试。`
+        : `企业知识读取失败（${name}）：${(cause as Error)?.message ?? "未知原因"}。请直接告诉用户这次没读到，不要编造原文。`);
+    }
     const rawContent = Array.isArray(result.content)
       ? result.content as { type?: string; text?: string }[]
       : [];
     const content = rawContent
       .filter((item): item is { type: "text"; text: string } => item.type === "text" && typeof item.text === "string")
-      .map((item) => ({ type: "text" as const, text: item.text }));
+      // 回答里不要出现 wiki / docx 标识、revision 号：交给模型前就去掉这些后台括注；内部英文类型名、带编号的代号换成正式中文叫法（formalTerms.ts）。
+      .map((item) => ({ type: "text" as const, text: name === "search_people" ? item.text : formalTerms(plainKnowledgeText(item.text)) }));
     if (result.isError) throw new Error(content.map((item) => item.text).join("\n") || `${name} failed`);
     return { content, details: {} };
   };
   const mcpTools = [
     ...makeMemoryTools(call),
-    defineTool({ name: "search_people", label: "查询人员", description: "查询稳定人员目录", parameters: SearchPeopleInput, execute: async (_id, args) => call("search_people", args) }),
+    defineTool({ name: "search_people", label: "查询人员", description: "查询稳定人员目录", parameters: SearchPeopleInput,
+      execute: async (_id, args) => withRetrieve(RETRIEVE_SOURCES.peopleDirectory, () => ({ hasQuery: Boolean((args as { query?: unknown }).query) }),
+        () => call("search_people", args), (result) => ({ blocks: result.content.length })) }),
   ];
   const listPendingIssues = options.listPendingIssues;
   const boardTools = (viewer?: { personId: string; role: "ceo" | "member" }) => [
+    ...(options.readOntology ? [defineTool({
+      name: "read_ontology",
+      label: "读取本体",
+      description: "读取本体（tkos.world 业务世界）里登记的 Company、Strategy 与各战场的长期目标、本月目标（只读，带缓存，结果有截断）。part 只取一部分；battlefieldId 只取一个战场。",
+      parameters: Type.Object({
+        part: Type.Optional(Type.Union([Type.Literal("company"), Type.Literal("strategy"), Type.Literal("battlefields")])),
+        battlefieldId: Type.Optional(Type.String()),
+      }, { additionalProperties: false }),
+      execute: async (_id, args) => {
+        const result = await options.readOntology!(args as { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string });
+        const value = result ?? { available: false, note: "本体暂时读不到，按本地资料回答，不要说成本体里没有。" };
+        return { content: [{ type: "text" as const, text: JSON.stringify(formalTermsDeep(value)) }], details: value };
+      },
+    })] : []),
     ...(options.globalContext ? [defineTool({
       name: "get_warmap_overview",
       label: "WarMap 总览",
-      description: "读取当前周期的战场、能力、Mission 数、待决策 Issue 与月度计划状态（实时，只读）",
-      parameters: Type.Object({}, { additionalProperties: false }),
-      execute: async () => {
-        const overview = await options.globalContext!();
-        return { content: [{ type: "text" as const, text: JSON.stringify(overview) }], details: overview };
+      description: "读取当前周期的战场、能力、Mission 数、待决策 Issue 与月度计划状态（实时，只读）。不带参数返回全部战场的完整信息；带 battlefieldId 时完整返回这个战场（长期目标、本月目标、战役、复盘进展、待决议题），其余战场各一行摘要。",
+      parameters: Type.Object({ battlefieldId: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false }),
+      execute: async (_id, args) => {
+        const full = await options.globalContext!();
+        const wanted = typeof (args as { battlefieldId?: unknown }).battlefieldId === "string"
+          ? resolveBattlefieldId((args as { battlefieldId: string }).battlefieldId, battlefieldBriefs(full)) : undefined;
+        const overview = focusGlobalContext(full, wanted ? [wanted] : "all");
+        return { content: [{ type: "text" as const, text: JSON.stringify(formalTermsDeep(overview)) }], details: overview };
       },
     })] : []),
     ...(options.listMissions ? [defineTool({
@@ -334,7 +562,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       }, { additionalProperties: false }),
       execute: async (_id, filters) => {
         const missions = await options.listMissions!(filters, viewer);
-        return { content: [{ type: "text" as const, text: JSON.stringify({ missions }) }], details: { missions } };
+        return { content: [{ type: "text" as const, text: JSON.stringify(formalTermsDeep({ missions })) }], details: { missions } };
       },
     })] : []),
     ...(listPendingIssues ? [defineTool({
@@ -344,79 +572,214 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         parameters: Type.Object({}, { additionalProperties: false }),
         execute: async () => {
           const issues = await listPendingIssues();
-          return { content: [{ type: "text" as const, text: JSON.stringify({ issues }) }], details: { issues } };
+          return { content: [{ type: "text" as const, text: JSON.stringify(formalTermsDeep({ issues })) }], details: { issues } };
         },
     })] : []),
   ];
 
+  // 每档一个主答模型（快答 GPT、检索问答 Sonnet、深度 Opus，见 conversationModel.ts）；都注册在同一个 provider 下，各自的协议与地址。
+  const tierModelIds: Record<ConversationTier, string> = {
+    quick: options.tierModels?.quick ?? options.modelId,
+    grounded: options.tierModels?.grounded ?? options.modelId,
+    deep: options.tierModels?.deep ?? options.modelId,
+  };
+  const mainModelIds = [...new Set([options.modelId, ...Object.values(tierModelIds)])];
+  const mainModelDefinitions = mainModelIds.map((id) => conversationModelDefinition({ modelId: id, api: id === options.modelId ? options.modelApi : undefined,
+    baseUrl: normalizedBaseUrl(options.baseUrl), overrideBaseUrl: id === options.modelId ? options.modelBaseUrl : undefined }));
+  const definitionOf = (id: string) => mainModelDefinitions.find((item) => item.id === id) ?? mainModelDefinitions[0];
+  const compactionModelId = options.compactionModelId ?? options.modelId;
   const modelRuntime = await ModelRuntime.create({
     credentials: new InMemoryCredentialStore(),
     modelsStore: new InMemoryModelsStore(),
     modelsPath: null,
     refreshOnCreate: false,
   });
+  // 追踪启用时每次真实模型请求一个 llm 节点；外面再包一层：历史按目标模型过滤推理、缓存键按模型分开（conversationStream.ts）。
+  // pi 只在模型的协议与 provider 声明的协议一致时才走 provider 的 streamSimple，所以 Responses 与 Anthropic 协议各注册一个 provider，
+  // 两边都经过这层包装（10/13 之前 Claude 走 pi 内建实现，追踪和这层都不生效）。
+  // 最外层是自动恢复（conversationRecovery.ts）：一次调用出错就地重试、换备用模型或从断点续写，每次尝试各自经过历史整理与追踪。
+  const streamSimple = recoveringStream(conversationStreamSimple(tracedStreamSimple(options.streamSimple)), options.recoverySleep ? { sleep: options.recoverySleep } : {});
+  const responsesDefinitions = mainModelDefinitions.filter((item) => item.api !== "anthropic-messages");
+  const anthropicDefinitions = [...mainModelDefinitions.filter((item) => item.api === "anthropic-messages")];
   modelRuntime.registerProvider("warmap", {
     name: "WarMap OpenAI-compatible Responses",
     baseUrl: normalizedBaseUrl(options.baseUrl),
     api: "openai-responses",
-    streamSimple: options.streamSimple,
-    models: [...new Set([options.modelId, options.compactionModelId ?? options.modelId])].map((id) => ({
-      id,
-      name: id,
+    streamSimple,
+    // 主答模型打开思考，按每轮档位设 thinkingLevel（pi 映射到 reasoning.effort / Anthropic output_config.effort，网关已实测透传）；
+    // 压缩模型保持原样走 Responses。
+    models: [...responsesDefinitions, ...(mainModelIds.includes(compactionModelId) ? [] : [{
+      id: compactionModelId,
+      name: compactionModelId,
       api: "openai-responses" as const,
       reasoning: false,
       input: ["text" as const],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: 128_000,
       maxTokens: 16_384,
-    })),
+    }])],
   });
   await modelRuntime.setRuntimeApiKey("warmap", options.apiKey);
-  const model = modelRuntime.getModel("warmap", options.modelId);
-  if (!model) throw new Error(`Pi model not found: warmap/${options.modelId}`);
-  const compactionModel = modelRuntime.getModel("warmap", options.compactionModelId ?? options.modelId);
+  if (anthropicDefinitions.length) {
+    modelRuntime.registerProvider(ANTHROPIC_PROVIDER, {
+      name: "WarMap Anthropic Messages",
+      baseUrl: anthropicDefinitions[0].baseUrl,
+      api: "anthropic-messages",
+      streamSimple,
+      models: anthropicDefinitions,
+    });
+    await modelRuntime.setRuntimeApiKey(ANTHROPIC_PROVIDER, options.apiKey);
+  }
+  const providerOf = (id: string) => (anthropicDefinitions.some((item) => item.id === id) ? ANTHROPIC_PROVIDER : "warmap");
+  const modelOf = (id: string) => {
+    const found = modelRuntime.getModel(providerOf(id), id);
+    if (!found) throw new Error(`Pi model not found: ${providerOf(id)}/${id}`);
+    return found;
+  };
+  for (const id of mainModelIds) modelOf(id);
+  const compactionModel = modelRuntime.getModel(providerOf(compactionModelId), compactionModelId);
   if (!compactionModel) throw new Error(`Pi compaction model not found: warmap/${options.compactionModelId}`);
 
+  /**
+   * 后台压缩写摘要（conversationCompaction.ts 调用，不在任何一轮里），用 COMPACTION_MODEL。
+   * 每次调用经过同一层自动恢复（断网、5xx 时同模型重试）与追踪（在后台压缩的 LangSmith 节点下）。
+   */
+  const summarizeHistory: NonNullable<ConversationRuntime["summarizeHistory"]> = async ({ systemPrompt, prompt, signal }) => {
+    const attempts: { model: typeof compactionModel; reasoning?: "low" | "medium" | "high" }[] = [{ model: compactionModel }];
+    const errors: string[] = [];
+    for (const attempt of attempts) {
+      if (signal.aborted) break;
+      const message = await streamSimple(attempt.model, { systemPrompt, messages: [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }] }, {
+        apiKey: options.apiKey, maxTokens: COMPACTION_MAX_TOKENS, signal, sessionId: `compaction-${randomUUID()}`, cacheRetention: "none",
+        ...(attempt.reasoning && attempt.model.reasoning ? { reasoning: attempt.reasoning } : {}),
+      }).result();
+      const text = message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("").trim();
+      if (message.stopReason === "stop" && text && !message.content.some((block) => block.type === "toolCall")) {
+        return { text, usage: message.usage, model: attempt.model.id, ...(errors.length ? { fallbackFrom: attempts[0].model.id } : {}) };
+      }
+      errors.push(`${attempt.model.id}: ${message.errorMessage ?? message.stopReason}`.slice(0, 300));
+    }
+    throw new Error(`background summary failed (${errors.join("; ") || "aborted"})`);
+  };
+
   return {
-    promptHash: createHash("sha256").update(SYSTEM_PROMPT).digest("hex"),
-    modelSlot: "light",
+    promptHash: createHash("sha256").update(CEO_SYSTEM_PROMPT).digest("hex"),
+    modelSlot: "conversation",
     modelId: options.modelId,
+    summarizeHistory,
     async run(input) {
+      const runStartedAt = Date.now();
+      // 首页全局摘要提前开始读（可能要等本体快照，最多 2 秒），与分诊同时进行；结果在拼上下文包时再用。
+      const wantsGlobal = input.viewer.role === "ceo" && input.scope === "global" && Boolean(options.globalContext);
+      const globalLoad = wantsGlobal
+        ? options.globalContext!().then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }))
+        : undefined;
+      const battlefieldList: Promise<BattlefieldBrief[] | undefined> | undefined = !wantsGlobal ? undefined
+        : options.listBattlefields ? options.listBattlefields().catch(() => undefined)
+        : globalLoad!.then((loaded) => (loaded.ok ? battlefieldBriefs(loaded.value) : undefined));
+      // 「继续」上一轮：沿用那一轮的档位，不分诊、不再给开场说明；改不改东西、涉及哪些战场按原问题判断。
+      const resumeTier = input.resume?.tier;
+      const routedMessage = input.resume?.question ?? input.message;
+      // 先定本轮档位（本地规则 + 快模型分诊，最多 5 秒）与涉及的战场，与下面的工具和会话装配同时进行。
+      const routing: Promise<TurnRoute> = resumeTier
+        ? Promise.resolve({ tier: resumeTier, source: "rule", ...TIER_SETTINGS[resumeTier], writeIntent: hasWriteIntent(routedMessage) })
+        : routeTurn({
+        message: input.message,
+        previousUserMessage: [...(input.recentMessages ?? [])].reverse().find((item) => item.role === "user")?.content,
+        signal: input.signal,
+        triage: options.triage,
+        ...(battlefieldList ? { battlefields: battlefieldList } : {}),
+      });
       const search = options.search ?? unavailableWebSearchAdapter;
       let outletFeedRead = false;
+      // 每轮最多真正检索 SEARCH_LIMIT 次。到上限不让整轮作废：第 SEARCH_LIMIT 次照常返回结果并附上限说明，
+      // 之后的检索不执行、退回提示，模型据已有材料作答并在回答里说明。只有无视提示、一直调用检索的异常循环才中止本轮。
       let searchCount = 0;
+      let refusedSearches = 0;
       let searchLimitReached = false;
-      const searchBudgetError = Object.assign(new Error("Search limit reached (8)"), { code: "SEARCH_BUDGET_EXHAUSTED" });
+      const searchBudgetError = Object.assign(new Error(`Search limit reached (${SEARCH_LIMIT})`), { code: "SEARCH_BUDGET_EXHAUSTED" });
       let abortSearchLoop: (() => Promise<void>) | undefined;
+      // 交给模型的检索结果：去重，最多 SEARCH_RESULTS_FOR_MODEL 条，每条摘要截到 SEARCH_EXCERPT_CHARS 字，不带图片地址。
+      // 改前博查一次返回 20 条完整摘要，约 1 万 token（10/13 实测一次检索后输入涨了 0.94–1.07 万），深度档几轮下来上下文就到 11 万。
+      const searchForModel = async (args: { query: string; freshness?: "day" | "week" | "month" | "year"; domains?: string[] }) => {
+        const response = await search.search(args, input.signal);
+        const seen = new Set<string>();
+        const results = response.results.flatMap((result) => {
+          let url: string;
+          try {
+            url = new URL(result.url).toString();
+          } catch {
+            return [];
+          }
+          if (seen.has(url)) return [];
+          seen.add(url);
+          const { imageUrl: _image, provider: _provider, ...rest } = result as typeof result & { imageUrl?: string; provider?: string };
+          return [{ ...rest, url, excerpt: rest.excerpt.length > SEARCH_EXCERPT_CHARS ? `${rest.excerpt.slice(0, SEARCH_EXCERPT_CHARS)}…` : rest.excerpt }];
+        }).slice(0, SEARCH_RESULTS_FOR_MODEL);
+        return { results, warnings: response.warnings };
+      };
       const searchTool = defineTool({
         name: "web_search",
         label: "Web Search",
-        description: "仅在内部材料不足时检索当前外部事实；证据充分后停止",
+        description: `仅在内部材料不足时检索当前外部事实；证据充分后停止。每轮最多检索 ${SEARCH_LIMIT} 次，到上限后基于已有材料作答`,
         parameters: WebSearchInput,
         execute: async (_id, args) => {
-          searchCount += 1;
-          const response = await search.search(args, input.signal);
-          if (searchCount >= 8) {
-            searchLimitReached = true;
-            void abortSearchLoop?.();
-            throw searchBudgetError;
-          }
-          const seen = new Set<string>();
-          const results = response.results.flatMap((result) => {
-            let url: string;
-            try {
-              url = new URL(result.url).toString();
-            } catch {
-              return [];
+          if (searchCount >= SEARCH_LIMIT) {
+            refusedSearches += 1;
+            if (refusedSearches >= SEARCH_REFUSALS_BEFORE_ABORT) {
+              searchLimitReached = true;
+              void abortSearchLoop?.();
+              throw searchBudgetError;
             }
-            if (seen.has(url)) return [];
-            seen.add(url);
-            return [{ ...result, url }];
-          });
-          const value = { results, warnings: response.warnings };
+            throw new Error(SEARCH_LIMIT_REFUSAL);
+          }
+          searchCount += 1;
+          const value = { ...await searchForModel(args), ...(searchCount >= SEARCH_LIMIT ? { notice: SEARCH_LIMIT_NOTICE } : {}) };
           return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
         },
       });
+      /**
+       * 服务端预取：企业知识（先找相关章节，再读最相关一节的段落）与公开来源并行，最多等 PREFETCH_BUDGET_MS。
+       * 每一项照常发查证进度事件（界面上与模型自己查的一样显示）；公开来源计入本轮检索额度。失败或超时的项不放进上下文。
+       */
+      const prefetch = async (terms: NonNullable<TurnRoute["prefetch"]>) => {
+        let seq = 0;
+        const step = async <T>(name: string, args: Record<string, unknown>, work: () => Promise<T>) => {
+          const toolCallId = `prefetch-${++seq}`;
+          const label = toolProgressLabel(name, args);
+          input.emit({ type: "tool", phase: "started", toolCallId, name, ...(label ? { label } : {}) });
+          try {
+            const value = await work();
+            const detail = toolResultDetail(name, args, { details: value });
+            input.emit({ type: "tool", phase: "completed", toolCallId, name, isError: false, ...(detail ? { detail } : {}) });
+            return value;
+          } catch (cause) {
+            input.emit({ type: "tool", phase: "completed", toolCallId, name, isError: true });
+            throw cause;
+          }
+        };
+        const parse = (result: { content: { text: string }[] }) => { try { return JSON.parse(result.content.map((item) => item.text).join("")) as Record<string, unknown>; } catch { return {}; } };
+        const knowledge = terms.memory.map((query) => step("search_sections", { query }, async () => {
+          const found = parse(await call("search_sections", { query, limit: 3 }));
+          const sections = Array.isArray(found.results) ? found.results as { id?: string; section?: { id?: string } }[] : [];
+          const top = sections[0]?.id ?? sections[0]?.section?.id;
+          const passages = top ? parse(await call("get_passages", { sectionId: top, query, limit: 3 })) : null;
+          return { query, results: sections, ...(passages ? { passages } : {}) };
+        }));
+        const web = terms.web.filter(() => searchCount < SEARCH_LIMIT).map((query) => {
+          searchCount += 1;
+          return step("web_search", { query }, () => searchForModel({ query }).then((value) => ({ query, ...value })));
+        });
+        const settled = <T>(list: Promise<T>[]) => Promise.all(list.map((item) => Promise.race([
+          item.then((value) => ({ ok: true as const, value }), () => ({ ok: false as const })),
+          new Promise<{ ok: false }>((resolve) => { const timer = setTimeout(() => resolve({ ok: false }), PREFETCH_BUDGET_MS); (timer as { unref?: () => void }).unref?.(); }),
+        ])));
+        const [knowledgeResults, webResults] = await Promise.all([settled(knowledge), settled(web)]);
+        const pick = <T>(items: ({ ok: true; value: T } | { ok: false })[]) => items.flatMap((item) => (item.ok ? [item.value] : []));
+        const value = { knowledge: pick(knowledgeResults), web: pick(webResults) };
+        if (!value.knowledge.length && !value.web.length) return undefined;
+        return { note: "这是本轮开始前按这个问题预先检索到的企业知识与公开来源（与工具返回的格式相同，可以照样引用）。先用它们，够用就不要重复检索同样的内容；不够再自己查。", ...value };
+      };
       const outletFeedTools = options.outletFeed ? [defineTool({
         name: "read_outlet_feed",
         label: "限定发布方媒体",
@@ -558,48 +921,179 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
         },
       })] : [];
+      // CEO 读会议 / 议题的群材料与讨论、有效历史决定（与会前预审读的是同一份），只读；回答里的出处照抄返回的 cite / ref。
+      const evidenceTools = isCeo && !personalCard && options.materialPool ? (() => {
+        const pool = options.materialPool!;
+        const q = pool.query.bind(pool);
+        const names = personDisplayNames(options.companyMemory);
+        const target = Type.Object({ type: Type.Union([Type.Literal("meeting"), Type.Literal("issue")]), id: Type.String({ minLength: 1, maxLength: 100 }) }, { additionalProperties: false });
+        const result = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value });
+        const clip = (text: string | null) => (text && text.length > 20_000 ? `${text.slice(0, 20_000)}
+…（已截断，可用 read_material 读全文）` : text);
+        return [
+          defineTool({ name: "read_group_evidence", label: "读取群材料与讨论",
+            description: "读取某场会议（含其关联议题）或某个议题上的群材料最新版正文与群讨论原话，和会前预审读取的是同一份。返回每份材料的版本与引用标记、每条发言的作者/时间/性质。只读。群讨论是成员发言，不是决定。",
+            parameters: target,
+            execute: async (_id, args) => {
+              const evidence = args.type === "meeting"
+                ? await collectMeetingEvidence(q, args.id, input.viewer, { names })
+                : await collectObjectEvidence(q, [{ objectType: "issue", objectId: args.id }], input.viewer, { names });
+              if (!evidence) return result({ error: "OBJECT_NOT_FOUND", message: "对象不存在" });
+              return result(withBeijingTimes({
+                materials: evidence.materials.map((m) => ({ title: m.fileName, object: m.objectTitle, version: m.version, updatedAt: m.updatedAt, owner: m.owner.displayName,
+                  state: m.state, cite: m.sourceRef, revisionSummary: m.revisionSummary, text: clip(m.text), url: m.url })),
+                discussions: evidence.discussions.map((d) => ({ cite: d.sourceRef, object: d.objectTitle, author: d.author.displayName, at: d.at, stance: d.stance, content: d.content })),
+                skippedObjects: evidence.skippedObjects,
+                note: "群讨论是成员发言，不是组织决定；提案/意见要和已确认的决定分开。引用材料时写版本（如 v2），引用发言时写发言人和时间（时间已是北京时间）。",
+              }));
+            } }),
+          defineTool({ name: "read_decision_history", label: "读取有效历史决定",
+            description: "读取议题（或会议的每个关联议题）的历史分层：仍有效的已确认决定、已被替代或撤回的决定（不再约束）、此后实际发生的变化、本次待判断（不是决定）。只读。只有“仍有效”的已确认决定是约束。",
+            parameters: target,
+            execute: async (_id, args) => {
+              const ceo = { personId: input.viewer.personId, displayName: input.viewer.displayName };
+              const history = args.type === "meeting"
+                ? await meetingDecisionHistory(q, args.id, input.viewer, { names, ceo })
+                : await issueDecisionHistory(q, args.id, input.viewer, { names, ceo });
+              return result(history ? withBeijingTimes(history) : { error: "OBJECT_NOT_FOUND", message: "对象不存在" });
+            } }),
+        ];
+      })() : [];
       const recreated = !validRuntimeEntries(input.runtimeEntries, input.piSessionId);
-      const piSessionId = recreated ? randomUUID() : input.piSessionId;
+      // 闲置太久（路由层按 CONVERSATION_IDLE_RESTART_MS 判断）：模型侧换一条新会话，只带摘要和最近几轮问答的文字。
+      const idleRestart = Boolean(input.idleRestart) && !recreated && input.runtimeEntries.length > 0;
+      const idleSummary = idleRestart ? latestCompactionSummary(input.runtimeEntries, input.piSessionId) : undefined;
+      const piSessionId = recreated || idleRestart ? randomUUID() : input.piSessionId;
       const warning = recreated ? "Pi runtime entries were corrupted; rebuilt from current object and recent raw messages" : undefined;
       const manager = SessionManager.inMemory(
         process.cwd(),
         { id: piSessionId },
-        recreated ? undefined : structuredClone(input.runtimeEntries) as Parameters<typeof SessionManager.inMemory>[2],
+        recreated || idleRestart ? undefined : structuredClone(input.runtimeEntries) as Parameters<typeof SessionManager.inMemory>[2],
       );
+      // pi 自带的自动压缩全部关掉（轮前、轮中两次工具之间、轮末，都会让一号位干等）：压缩只在后台做（conversationCompaction.ts），
+      // 这一轮开始前路由层已把就绪的快照换进历史；历史仍太长时这一轮走窗口兜底（见 execute）。
+      const settings = SettingsManager.inMemory({ compaction: { enabled: false, reserveTokens: OUTPUT_RESERVE_TOKENS, keepRecentTokens: 20_000 }, retry: { enabled: false } });
+      const route = await routing;
+      const thinkingLevel = options.tierThinking?.[route.tier] ?? route.thinkingLevel;
+      // 本档的主答模型：同一段对话里同一档位一直用第一次用的那个（配置后来改了也不中途换），记在会话里。
+      const modelId = stableTierModel(manager, route.tier, tierModelIds[route.tier], mainModelIds);
+      const model = modelOf(modelId);
+      const anthropic = definitionOf(modelId).api === "anthropic-messages";
       if (recreated) {
-        appendRecentMessages(manager, input.recentMessages ?? [], options.modelId);
+        appendRecentMessages(manager, input.recentMessages ?? [], modelId, definitionOf(modelId).api, providerOf(modelId));
         input.emit({ type: "warning", code: "RUNTIME_RECREATED", message: warning! });
       }
-      const compactionSettings = { enabled: true, reserveTokens: 16_384, keepRecentTokens: 20_000 };
-      const settings = SettingsManager.inMemory({ compaction: compactionSettings, retry: { enabled: false } });
+      if (idleRestart) {
+        seedIdleRestart(manager, idleSummary, input.recentMessages ?? [], modelId, definitionOf(modelId).api, providerOf(modelId));
+        logEvent({ event: "conversation.idle_restart", runId: input.runId, scope: input.scope, previousEntries: input.runtimeEntries.length,
+          summary: Boolean(idleSummary), recentMessages: Math.min(IDLE_RESTART_RECENT_MESSAGES, input.recentMessages?.length ?? 0) });
+      }
+      // 档位先告诉路由层（整轮时限）和界面（预计用时；深度档带一段开场说明，界面立刻显示，也写进这条回答的开头）。
+      input.emit({ type: "route", tier: route.tier, source: route.source, expectSeconds: route.expectSeconds, timeoutMs: route.timeoutMs, model: modelId, ...(route.notice ? { notice: route.notice } : {}) });
+      // 分诊给了检索词：与会话装配同时，先替主答查好企业知识和公开来源，结果放进第一轮上下文，省掉一两轮工具往返。
+      const prefetching = route.prefetch ? prefetch(route.prefetch) : Promise.resolve(undefined);
+      // 系统提示与工具按档位、修改意图、本轮意图与页面裁剪（conversationPrompt.ts）。
+      const shape = { tier: route.tier, writeIntent: route.writeIntent, anthropic, intents: promptIntents(routedMessage, route), materials: materialTools.length > 0 };
+      const fullPrompt = personalCard ? `${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`
+        : isCeo ? CEO_SYSTEM_PROMPT
+        : driSystemPrompt(input.viewer.displayName);
+      const toolTimeoutMs = options.toolTimeoutMs ?? TOOL_TIMEOUT_MS;
+      const turnTools = [...mcpTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool]
+        .filter((tool) => toolAllowed(tool.name, shape))
+        .map((tool) => withToolTimeout(tool, toolTimeoutMs));
+      const systemPrompt = tierSystemPrompt(fullPrompt, shape, { materials: MATERIAL_EDITING_RULES });
+      // 本轮的自动恢复（conversationRecovery.ts）：主答候选按档位降档、再换另一家；恢复的每一步都告诉界面并记日志。
+      const candidateIds = [...new Set([modelId, ...TIER_FALLBACK_ORDER[route.tier].map((tier) => tierModelIds[tier]), ...mainModelIds])];
+      const recovery = createTurnRecovery({
+        emit: (event) => input.emit(event),
+        candidates: candidateIds.map((id) => modelOf(id)),
+        mainModelIds: new Set(mainModelIds),
+        ...(options.modelIdleMs ? { idleMs: options.modelIdleMs } : {}),
+        log: (entry) => logEvent({ ...entry, event: String(entry.event ?? "conversation.recovery"), runId: input.runId, scope: input.scope }),
+        claudeFallbackReasoning: "low",
+      });
       const { session } = await createAgentSession({
         model,
         modelRuntime,
-        resourceLoader: personalCard ? resourceLoaderFor(`${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`)
-          : isCeo ? ceoResourceLoader : resourceLoaderFor(driSystemPrompt(input.viewer.displayName)),
-        customTools: [...mcpTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...outletFeedTools, searchTool],
-        tools: [...COMPANY_MEMORY_TOOLS, ...viewerBoardTools.map((tool) => tool.name), ...missionCardTools.map((tool) => tool.name), ...materialTools.map((tool) => tool.name), ...reviewTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
+        resourceLoader: cachedResourceLoader(systemPrompt),
+        customTools: traceTools(turnTools),
+        tools: [...new Set([...COMPANY_MEMORY_TOOLS, ...turnTools.map((tool) => tool.name)])],
         sessionManager: manager,
         settingsManager: settings,
-        thinkingLevel: "off",
+        thinkingLevel,
       });
       abortSearchLoop = () => session.abort();
-      let checkpointDone = Promise.resolve();
+      // 非深度档中途升级提示：超过约 20 秒还没出正文、或连续多轮检索时告诉一号位还要多久（conversationRouting.ts）。
+      const escalation = createEscalationWatch({ tier: route.tier, timeoutMs: route.timeoutMs, startedAt: runStartedAt, afterMs: options.escalateAfterMs,
+        onEscalate: (event) => input.emit(event) });
+      let lastThinkingAt = 0;
+      let thinkingSummary = "";
+      let lastHeadline: string | undefined;
+      let lastHeading: string | undefined;
+      let translating = false;
+      /** 正文已经开始或本轮已结束：迟到的思考要点不再下发。 */
+      let thoughtsClosed = false;
+      const showThought = (headline: string) => {
+        if (thoughtsClosed || headline === lastHeadline) return;
+        lastHeadline = headline;
+        lastThinkingAt = Date.now();
+        input.emit({ type: "thinking", summary: headline });
+      };
+      // Claude 的思考摘要：逐段实时上屏，英文段落译成中文（conversationThinking.ts）。GPT 档仍走下面的英文小标题翻译。
+      const relay = anthropic ? createThinkingRelay({ signal: input.signal, translate: options.translateThinking,
+        emit: (delta) => { lastThinkingAt = Date.now(); input.emit({ type: "thinking", delta }); } }) : undefined;
+      const toolArgs = new Map<string, unknown>();
+      /** 已经流给界面、但还没落进一条完成的助手消息的正文：这一轮失败时把它作为一条回答存进模型历史。 */
+      let pendingText = "";
       const unsubscribe = session.subscribe((event) => {
         if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+          escalation.textStarted();
+          thoughtsClosed = true;
+          pendingText += event.assistantMessageEvent.delta;
           input.emit({ type: "message", delta: event.assistantMessageEvent.delta });
+        } else if (event.type === "message_update" && event.assistantMessageEvent.type === "thinking_start") {
+          // 模型开始思考（网关在推理开始时就给出推理块，约 2–3 秒）：立刻告诉界面，不等摘要。
+          thinkingSummary = "";
+          lastThinkingAt = Date.now();
+          input.emit({ type: "thinking" });
+        } else if (event.type === "message_update" && event.assistantMessageEvent.type === "thinking_delta") {
+          // 推理摘要（网宿上的 Sol 时有时无，实测都是英文）：中文要点直接带上；英文小标题交给快模型译成一句中文要点
+          // （同一时间只译一条，译不出就不显示）；都没有时最多每 5 秒报一次「还在想」。
+          if (relay) {
+            relay.push(event.assistantMessageEvent.delta);
+            if (Date.now() - lastThinkingAt >= 5_000) { lastThinkingAt = Date.now(); input.emit({ type: "thinking" }); }
+            return;
+          }
+          thinkingSummary += event.assistantMessageEvent.delta;
+          const headline = thinkingHeadline(thinkingSummary);
+          const heading = latestSummaryHeading(thinkingSummary);
+          if (headline && headline !== lastHeadline) {
+            showThought(headline);
+          } else if (!headline && heading && heading !== lastHeading && options.translateThought && !translating && !thoughtsClosed) {
+            lastHeading = heading;
+            translating = true;
+            void options.translateThought(heading, input.signal)
+              .then((text) => { const thought = text ? cleanThought(text) : undefined; if (thought) showThought(thought); })
+              .catch(() => undefined)
+              .finally(() => { translating = false; });
+          } else if (Date.now() - lastThinkingAt >= 5_000) {
+            lastThinkingAt = Date.now();
+            input.emit({ type: "thinking" });
+          }
+        } else if (event.type === "message_update" && event.assistantMessageEvent.type === "thinking_end") {
+          relay?.endBlock();
         } else if (event.type === "tool_execution_start") {
-          input.emit({ type: "tool", phase: "started", toolCallId: event.toolCallId, name: event.toolName });
+          toolArgs.set(event.toolCallId, event.args);
+          const label = toolProgressLabel(event.toolName, event.args);
+          input.emit({ type: "tool", phase: "started", toolCallId: event.toolCallId, name: event.toolName, ...(label ? { label } : {}) });
         } else if (event.type === "tool_execution_end") {
-          input.emit({ type: "tool", phase: "completed", toolCallId: event.toolCallId, name: event.toolName, isError: event.isError });
-        } else if (event.type === "compaction_start") {
-          input.emit({ type: "compaction", phase: "started" });
-        } else if (event.type === "compaction_end" && event.result) {
-          input.emit({ type: "compaction", phase: "completed" });
-          const header = manager.getHeader();
-          const entries = [...(header ? [header] : []), ...manager.getEntries()];
-          checkpointDone = checkpointDone.then(() => input.checkpoint?.(entries));
+          // 查证进度：这一步实际读到了什么，由系统按工具结果生成。
+          const detail = event.isError ? undefined : toolResultDetail(event.toolName, toolArgs.get(event.toolCallId), event.result);
+          toolArgs.delete(event.toolCallId);
+          input.emit({ type: "tool", phase: "completed", toolCallId: event.toolCallId, name: event.toolName, isError: event.isError, ...(detail ? { detail } : {}) });
         } else if (event.type === "message_end" && event.message.role === "assistant") {
+          if (event.message.stopReason !== "error" && event.message.stopReason !== "aborted") pendingText = "";
+          escalation.assistantToolCalls(event.message.content.flatMap((block) => (block.type === "toolCall" ? [block.name] : [])));
           const usage = event.message.usage;
           input.emit({
             type: "usage",
@@ -613,38 +1107,121 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       });
       const onAbort = () => void session.abort();
       input.signal.addEventListener("abort", onAbort, { once: true });
-      try {
-        if (input.signal.aborted) throw new Error("Conversation aborted");
-        const previousUsage = getLastAssistantUsage(manager.getEntries());
-        if (previousUsage && shouldCompact(calculateContextTokens(previousUsage), model.contextWindow, compactionSettings)) {
-          await session.setModel(compactionModel);
-          await session.compact("保留 CEO WarMap 当前对象、证据来源、未决问题和明确结论；不要引入新事实。");
-          await checkpointDone;
-          await session.setModel(model);
-        }
-        const prompt = JSON.stringify({
-          currentObject: input.currentObject,
-          references: input.referencesSnapshot,
-          globalContext: isCeo && input.scope === "global" && options.globalContext ? await options.globalContext() : null,
-          message: input.message,
-        });
-        await session.prompt(prompt, { expandPromptTemplates: false, source: "rpc" });
-        await checkpointDone;
-        if (searchLimitReached) throw searchBudgetError;
-        if (input.signal.aborted) throw new Error("Conversation aborted");
-        const last = [...session.messages].reverse().find((item) => item.role === "assistant");
-        if (!last || last.stopReason !== "stop") {
-          throw new Error(last?.errorMessage || `Pi stopped without success: ${last?.stopReason ?? "missing response"}`);
+      const agentRole = isCeo ? AGENT_ROLES.ceoAgent : AGENT_ROLES.driAgent;
+      let promptSent = false;
+      /**
+       * 这一轮没完成时要存的模型历史：本轮已经完成的工具往返原样保留（pi 回放时跳过出错的那条），
+       * 已经流给界面的正文作为一条回答接在后面；一个字都没写出时记一句「没有完成」。下一轮（或「继续」）据此接着说。
+       */
+      let persisted: { runtimeEntries: unknown[]; piSessionId: string } | undefined;
+      const persistFailure = () => {
+        if (persisted) return persisted;
+        if (promptSent) {
+          manager.appendMessage({ role: "assistant", api: definitionOf(modelId).api, provider: providerOf(modelId), model: modelId,
+            content: [{ type: "text", text: pendingText.trim() || UNFINISHED_TURN_NOTE }],
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+            stopReason: "stop", timestamp: Date.now() });
         }
         const header = manager.getHeader();
+        persisted = { runtimeEntries: [...(header ? [header] : []), ...manager.getEntries()], piSessionId };
+        return persisted;
+      };
+      const fail = (message: string, kind: ConstructorParameters<typeof ConversationTurnError>[1], code?: string) => {
+        const recoverySummary = summarizeRecovery(recovery);
+        return new ConversationTurnError(message, kind, { ...(code ? { code } : {}), ...persistFailure(), recoveries: recovery.recoveries, failures: recovery.failures,
+          ...(recoverySummary ? { recoverySummary } : {}) });
+      };
+      const execute = async () => {
+        if (input.signal.aborted) throw fail("Conversation aborted", "aborted");
+        // 这一轮开始前历史有多长（最近一次调用的真实用量；上一轮走过窗口兜底时按字数估算），在发出提问之前算。
+        const history = historyTokens(manager.getBranch());
+        // 本轮上下文包：当前对象、显式引用、首页实时摘要与已确认原则（retrieve:context-pack）。
+        const prefetched = await prefetching;
+        // 首页实时摘要按问题筛选战场：只展开相关战场，其余各一行（conversationFocus.ts）；判断不出时全量。
+        let focus: ReturnType<typeof resolveFocus> | undefined;
+        const scopedGlobal = async () => {
+          if (!globalLoad) return null;
+          const loaded = await globalLoad;
+          if (!loaded.ok) throw loaded.error;
+          const briefs = battlefieldBriefs(loaded.value);
+          const known = new Set(briefs.map((item) => item.id));
+          const page = pageBattlefield(routedMessage);
+          const pinned = [
+            ...(page ? [resolveBattlefieldId(page, briefs) ?? page] : []),
+            ...referencedBattlefields([input.currentObject, input.referencesSnapshot, messageQuotes(routedMessage)], known,
+              (issueId) => pendingIssueBattlefield(loaded.value, issueId)),
+          ].filter((id) => known.has(id));
+          focus = resolveFocus({ message: routedMessage, tier: route.tier, triage: route.battlefields, briefs, pinned });
+          return unchangedGlobalContext(manager, focusGlobalContext(loaded.value, focus));
+        };
+        const prompt = await withRetrieve(RETRIEVE_SOURCES.contextPack, () => ({ scope: input.scope, references: input.referencesSnapshot?.length ?? 0 }), async () => JSON.stringify({
+          currentObject: input.currentObject,
+          references: input.referencesSnapshot,
+          // 看板与预取的企业知识：内部写法先换成正式中文叫法（currentObject、references 留原文，修改类工具要按原文比对）。
+          globalContext: formalTermsDeep(await scopedGlobal()),
+          ...(prefetched ? { prefetched: formalTermsDeep(prefetched) } : {}),
+          answerMode: TIER_GUIDANCE[route.tier],
+          ...(input.resume ? { resume: input.resume.instruction } : {}),
+          message: input.message,
+        }), (packed) => ({ chars: packed.length, currentObject: Boolean(input.currentObject), references: input.referencesSnapshot?.length ?? 0,
+          globalContext: Boolean(globalLoad), prefetched: Boolean(prefetched), ...(focus ? { focus: focus === "all" ? "all" : focus.join(",") || "none" } : {}) }));
+        // 硬阈值兜底（永远不当场压缩）：历史超过 HARD_HISTORY_TOKENS，或加上本轮上下文包会装不下这个模型，
+        // 这一轮交给模型的是「已有压缩摘要 + 最近若干轮的文字」（window 模式，存下来的历史不变）；后台压缩路由层已经补起。
+        const historyLimit = Math.min(options.hardHistoryTokens ?? HARD_HISTORY_TOKENS, model.contextWindow - OUTPUT_RESERVE_TOKENS - estimateTextTokens(prompt));
+        if (history.tokens > historyLimit) {
+          recovery.history = "window";
+          manager.appendCustomEntry(HISTORY_WINDOW_ENTRY, { tokens: history.tokens, source: history.source, limit: historyLimit });
+          logEvent({ event: "conversation.compaction", runId: input.runId, scope: input.scope, status: "window_fallback", historyTokens: history.tokens,
+            tokensSource: history.source, limit: historyLimit, model: modelId });
+        }
+        session.setThinkingLevel(thinkingLevel);
+        promptSent = true;
+        await turnRecovery.run(recovery, () => session.prompt(prompt, { expandPromptTemplates: false, source: "rpc" }));
+        if (searchLimitReached) throw fail(searchBudgetError.message, "search_budget", "SEARCH_BUDGET_EXHAUSTED");
+        if (input.signal.aborted) throw fail("Conversation aborted", "aborted");
+        const last = [...session.messages].reverse().find((item) => item.role === "assistant");
+        if (!last || last.stopReason !== "stop") {
+          const message = last?.errorMessage || `Pi stopped without success: ${last?.stopReason ?? "missing response"}`;
+          // 原始报错留在运行记录里；分类决定给一号位怎么说、能不能「继续」。
+          const kind = last?.stopReason === "length" ? "length" : last?.stopReason === "aborted" ? "aborted"
+            : recovery.failures.at(-1)?.kind ?? classifyFailure(message);
+          throw fail(message, kind, kind === "content_filter" ? "CONTENT_FILTER" : undefined);
+        }
+        const header = manager.getHeader();
+        const recoverySummary = summarizeRecovery(recovery);
         return {
-          assistantMessage: session.getLastAssistantText() ?? "",
+          assistantMessage: withNotice(route.notice, session.getLastAssistantText() ?? ""),
           runtimeEntries: [...(header ? [header] : []), ...manager.getEntries()],
           piSessionId,
           ...(warning ? { recovery: { recreated: true as const, warning } } : {}),
+          ...(recoverySummary ? { recoverySummary } : {}),
         };
+      };
+      try {
+        if (!tracingEnabled()) return await execute();
+        return await withAgent(agentRole, execute, {
+          inputs: { scope: input.scope, message: preview(input.message) },
+          outputs: (result) => ({ assistantMessage: preview(result.assistantMessage) }),
+        });
+      } catch (cause) {
+        // 其他意外（上下文包读库失败等）也带上要存的历史，路由层照样保留已写出的部分。
+        if (cause instanceof ConversationTurnError) throw cause;
+        throw fail((cause as Error)?.message ?? String(cause), input.signal.aborted ? "aborted" : "internal",
+          (cause as { code?: string })?.code === "SEARCH_BUDGET_EXHAUSTED" ? "SEARCH_BUDGET_EXHAUSTED" : undefined);
       } finally {
+        // LangSmith：这一轮走过恢复就在 Turn 根节点上记下原模型、备用模型、原因与次数（只用白名单键）。
+        const summary = summarizeRecovery(recovery);
+        if (summary) annotateTurn({
+          recovery_original_model: summary.originalModel,
+          recovery_fallback_model: summary.fallbackModel,
+          recovery_reasons: summary.reasons.join(","),
+          recovery_actions: Object.entries(summary.actions).map(([action, count]) => `${action}:${count}`).join(","),
+          recovery_retries: summary.retries,
+        });
         input.signal.removeEventListener("abort", onAbort);
+        escalation.dispose();
+        relay?.close();
+        thoughtsClosed = true;
         unsubscribe();
         session.dispose();
       }

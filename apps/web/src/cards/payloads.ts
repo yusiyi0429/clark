@@ -42,10 +42,14 @@ export type IssuePayload = {
     createdAt: string;
     revokedAt: string | null;
     revokeReason: string | null;
+    /** 由会后条目确认产生的结论带来源；直接拍板的没有。 */
+    source?: { kind: "meeting-item"; meetingId: string; outcomeItemId: string };
   }[];
   dismissedAt: string | null;
   dismissReason: string | null;
   restoredAt?: string | null;
+  /** ai_suggested：AI 识别的候选议题（演示资料包），界面不再标来源（雷达来源另看 origin）；旧接口与真实议题没有这一项。 */
+  nature?: "ai_suggested";
 };
 
 /** 直接复用 packages/contracts 的投影契约，避免 Web 内再定义一份会漂移的类型。 */
@@ -61,6 +65,22 @@ export type RadarPayload = {
   unreadCount: number;
   lastScheduledAt: string | null;
   lastRun: { trigger: string; status: string; companyDay: string; warnings: string[]; startedAt?: string; completedAt?: string } | null;
+  /**
+   * 首页雷达卡的信号流：实时扫描到的、未忽略的信号按重要度（impact + urgency）高→低、再按发布时间新→旧，最多 6 条；
+   * 资料包预载的信号不在这里（只在雷达页）。source 是发布方（媒体名 / 公众号名 / 站点域名）；importance 三档，未评估为 null。
+   * origin 固定为 "scan"——旧接口没有这一项（那时信号流还混着预载信号），首页只认带 origin=scan 的。
+   */
+  latestSignals?: {
+    id: string;
+    title: string;
+    source: string;
+    publishedAt: string;
+    importance: "high" | "medium" | "low" | null;
+    read: boolean;
+    origin?: "scan";
+  }[];
+  /** 信号流对应的未读数：只数实时扫描到的（unreadCount 是雷达页口径，含预载信号）。旧接口没有这一项。 */
+  latestUnreadCount?: number;
   /** outlets 带当前启用的发布方中文名（names），「监测范围」据此如实列出。 */
   sources: Record<string, { configured: boolean; sourceCount: number; message: string; names?: string[] }>;
 };

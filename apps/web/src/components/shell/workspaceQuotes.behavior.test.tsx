@@ -46,7 +46,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 function setup() {
   const props: ComponentProps<typeof WorkspaceFrame> = { homeHref: "/me", viewerId: "sun", account: { displayName: "孙铭泽", role: "member" },
-    home: null, notifications: () => null, agentTitle: "我的 Agent", children: <Capture /> };
+    home: null, notifications: () => null, agentTitle: "天枢", children: <Capture /> };
   const render = (effects = true) => {
     for (let pass = 0; pass < 6; pass++) {
       h.stateIndex = 0; h.refIndex = 0; h.effectIndex = 0; h.dirty = false; h.queued = [];
@@ -76,6 +76,50 @@ describe("对象私聊引用草稿", () => {
     const { render } = setup(); api.quote("同一句"); render(); const old = h.ui!.quotes[0].id;
     api.quote("同一句"); render(); h.ui!.removeQuotes([old]); render();
     expect(h.ui!.quotes).toHaveLength(1); expect(h.ui!.quotes[0].id).not.toBe(old);
+  });
+  it("发送失败恢复引用（D5）：放回原来的位置，不覆盖、不重复期间新加的引用", () => {
+    const { render } = setup(); api.quote("第一句"); render();
+    const sent = h.ui!.quotes; h.ui!.removeQuotes(sent.map((item) => item.id)); render();
+    api.quote("期间新加的"); render();
+    h.ui!.restoreQuotes(sent); render();
+    expect(h.ui!.quotes.map((item) => item.text)).toEqual(["第一句", "期间新加的"]);
+    // 期间又引了同一句：只留新的那条，不重复。
+    const again = h.ui!.quotes.filter((item) => item.text === "第一句");
+    h.ui!.removeQuotes(again.map((item) => item.id)); render();
+    api.quote("第一句"); render();
+    h.ui!.restoreQuotes(again); render();
+    expect(h.ui!.quotes.filter((item) => item.text === "第一句")).toHaveLength(1);
+  });
+  it("发送失败晚到时已换了对象：不把旧引用放进新对象", () => {
+    const { render } = setup(); api.quote("旧对象里的一句"); render();
+    const sent = h.ui!.quotes; const restore = h.ui!.restoreQuotes; h.ui!.removeQuotes(sent.map((item) => item.id)); render();
+    h.pathname = "/me/mission-cards/card-02"; render();
+    restore(sent); render();
+    expect(h.ui!.quotes).toEqual([]);
+  });
+  it("对话正文里划词引用（B4）：进这条对话的引用条并聚焦输入框，全局对话层保持打开、不切回右列私聊", () => {
+    const { render } = setup();
+    h.ui!.setGlobalView(true); h.ui!.setHistoryOpen(true); render();
+    h.ui!.quoteInConversation("先保灯塔交付", { scope: "global" }); render();
+    expect(h.ui!.historyOpen).toBe(true);
+    expect(h.ui!.globalView).toBe(true);
+    expect(h.ui!.keyboard).toBe(true);
+    expect(h.ui!.quotes).toEqual([expect.objectContaining({ text: "先保灯塔交付", source: { scope: "global" } })]);
+    expect(h.ui!.prefill).toMatchObject({ text: "先保灯塔交付", source: { scope: "global" } });
+    // 对照：页面上的「引用提问」仍进当前对象私聊并收起对话层。
+    api.quote("页面上的一句"); render();
+    expect(h.ui!.historyOpen).toBe(false);
+  });
+  it("Esc 收起对话层时输入条一起回到胶囊（D6）", () => {
+    const { render } = setup();
+    vi.stubGlobal("HTMLElement", class {});
+    h.ui!.setKeyboard(true); h.ui!.setGlobalView(true); h.ui!.setHistoryOpen(true); render();
+    const calls = (window.addEventListener as unknown as { mock: { calls: [string, (event: unknown) => void][] } }).mock.calls;
+    const onKey = calls.filter(([type]) => type === "keydown").at(-1)![1];
+    onKey({ key: "Escape", isComposing: false, defaultPrevented: false, metaKey: false, ctrlKey: false, altKey: false }); render();
+    expect(h.ui!.historyOpen).toBe(false);
+    expect(h.ui!.globalView).toBe(false);
+    expect(h.ui!.keyboard).toBe(false);
   });
   it.each(["object", "viewer", "role"])("切换 %s 的首帧即不显示上一对象/身份的引用", (change) => {
     const { props, render } = setup(); api.quote("旧选文"); render();

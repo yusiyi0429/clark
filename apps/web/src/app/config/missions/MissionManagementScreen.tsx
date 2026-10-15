@@ -8,6 +8,7 @@ import type { Card } from "@/lib/api/client";
 import { useCardAction } from "@/lib/useCardAction";
 import { payloadOf, type MissionPayload } from "@/cards/payloads";
 import type { PersonOption } from "@/lib/api/server";
+import { Select } from "@/components/ui/Select";
 import { MissionStatus } from "@/components/MissionStatus";
 import m from "@/styles/mission-management.module.css";
 import c from "@/styles/config.module.css";
@@ -69,7 +70,7 @@ export function missionEditPatch(current: MissionDraft, draft: MissionDraft): { 
   if (!code) return { ok: false, error: "编号不能为空" };
   if (!title) return { ok: false, error: "Mission 标题不能为空" };
   if (!MISSION_PERIOD_PATTERN.test(period)) return { ok: false, error: "周期需为 YYYY-MM（月份 01–12）" };
-  if (!draft.ownerId) return { ok: false, error: "必须指定唯一 DRI" };
+  if (!draft.ownerId) return { ok: false, error: "必须指定唯一负责人" };
   if (!draft.capabilityId) return { ok: false, error: "必须选择主要能力域" };
   if (!outcome) return { ok: false, error: "Mission Outcome 不能为空" };
 
@@ -190,7 +191,7 @@ export function MissionManagementScreen({
           <p className={m.listMeta}>{missions.length} 条 · 按周期与能力域排序</p>
           <label className={m.search}>
             <Search aria-hidden="true" />
-            <input value={query} placeholder="按编号、标题或 DRI 搜索" aria-label="搜索 Mission" onChange={(event) => setQuery(event.target.value)} />
+            <input value={query} placeholder="按编号、标题或负责人搜索" aria-label="搜索 Mission" onChange={(event) => setQuery(event.target.value)} />
           </label>
           <div className={m.rows}>
             {visible.map(({ card, payload }) => (
@@ -247,15 +248,9 @@ export function MissionManagementScreen({
                   <Field label="周期">
                     <input value={draft.period} placeholder="2026-09" onChange={(event) => setDraft({ ...draft, period: event.target.value })} />
                   </Field>
-                  <Field label="唯一 DRI">
-                    <select value={draft.ownerId} onChange={(event) => setDraft({ ...draft, ownerId: event.target.value })}>
-                      <option value="">待指派</option>
-                      {people.map((person) => (
-                        <option key={person.personId} value={person.personId}>
-                          {person.displayName}
-                        </option>
-                      ))}
-                    </select>
+                  <Field label="唯一负责人">
+                    <Select aria-label="唯一负责人" value={draft.ownerId} onChange={(ownerId) => setDraft({ ...draft, ownerId })}
+                      options={[{ value: "", label: "待指派" }, ...people.map((person) => ({ value: person.personId, label: person.displayName }))]} />
                   </Field>
                 </div>
 
@@ -265,14 +260,8 @@ export function MissionManagementScreen({
 
                 <div className={m.fieldRow} data-columns="three">
                   <Field label="主要能力域">
-                    <select value={draft.capabilityId} onChange={(event) => setDraft({ ...draft, capabilityId: event.target.value })}>
-                      <option value="">未选择</option>
-                      {capabilities.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {`${item.code} ${item.name}`.trim()}
-                        </option>
-                      ))}
-                    </select>
+                    <Select aria-label="主要能力域" value={draft.capabilityId} onChange={(capabilityId) => setDraft({ ...draft, capabilityId })}
+                      options={[{ value: "", label: "未选择" }, ...capabilities.map((item) => ({ value: item.id, label: `${item.code} ${item.name}`.trim() }))]} />
                   </Field>
                   <Field label="关联战场">
                     <div className={m.choices}>

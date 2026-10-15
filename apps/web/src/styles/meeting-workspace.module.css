@@ -4,12 +4,14 @@
 
 /* 阅读页里的正文（clark dri .detailReading / .meetingPane）：一栏按 --reading-measure 放在阅读页正中，右列收起时跟着挪到新的正中；
    最上面一行状态、一行评审目的，下面是正在看的那一份。 */
-.reading{padding:12px calc(32px + var(--conversation-lane,0px)) 130px 32px;min-width:0;transition:padding-right 320ms cubic-bezier(.22,1,.36,1)}
-.reading>*{max-width:var(--reading-measure,880px);margin-inline:auto}
+.reading{padding:12px var(--conversation-lane,0px) 130px 0;min-width:0;transition:padding-right 320ms cubic-bezier(.22,1,.36,1)}
+/* 正文那一栏是二级页左侧阅读列（深度讨论 spec 末节）：正文 600、左右内边距 28（整宽 656），左侧略窄时内边距先让到 12。 */
+.reading>*{max-width:var(--material-column,656px);margin-inline:auto;box-sizing:border-box}
+@media (min-width: 960px){.reading>*{padding-inline:clamp(12px,calc((100% - var(--material-measure,600px)) / 2),28px)}}
 .pane{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
 .agenda{margin:0;padding-left:12px;border-left:2px solid var(--ts-border,#e3e8ef);font-size:var(--ts-type-body,14px);line-height:1.9;color:var(--ts-text-muted,#6b7482)}
 .material{display:flex;flex-direction:column;gap:16px;min-width:0;margin-top:8px}
-@media (min-width: 960px) and (max-width: 1000px){.reading{padding:12px calc(20px + var(--conversation-lane,0px)) 130px 20px}}
+@media (min-width: 960px) and (max-width: 1000px){.reading{padding:12px var(--conversation-lane,0px) 130px 0}}
 @media (max-width: 959px){.reading{padding:12px 18px 140px}}
 
 /* AI 预审页签顶部：编辑会议、返回编辑材料、重新预审，低调的文字钮；编辑会议的弹层挂在这一行下面。 */
@@ -17,7 +19,8 @@
 .toolbar>button{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:0;border-radius:8px;background:transparent;font:inherit;font-size:13px;color:#4f5866;cursor:pointer}
 .toolbar>button:hover{background:#1f35560d;color:#1f2a3d}
 .toolbar>button:disabled{opacity:.55;cursor:default}
-.workspace button:focus-visible,.workspace select:focus-visible,.workspace input:focus-visible,.workspace textarea:focus-visible{outline:3px solid #007aff60;outline-offset:2px}
+/* 文字输入 / 下拉的聚焦只换边色（globals.css 的统一输入框样式），这里的外框只给按钮 */
+.workspace button:focus-visible{outline:3px solid #007aff60;outline-offset:2px}
 
 .primaryAction.primaryAction{display:flex;align-items:center;gap:6px;padding:9px 14px;border:0;border-radius:10px;background:#007aff;color:#fff;font-size:13px;font-weight:500}
 .primaryAction.primaryAction:hover{background:#0069db}
@@ -27,7 +30,7 @@
 .editTitle{margin:0;font-size:13.5px;font-weight:600;color:#1d1d1f}
 .editField{display:flex;flex-direction:column;gap:4px}
 .editField>span{font-size:11.5px;color:#3c4350}
-.editField input,.editField select{box-sizing:border-box;width:100%;height:36px;border:1px solid #d9dde5;border-radius:9px;background:#f7f8fa;padding:0 12px;font:inherit;font-size:12.5px;color:#1d1d1f}
+.editField input,.editField select{width:100%;height:36px;padding:0 14px}
 .editSelectWrap{position:relative;display:block}
 .editSelectWrap select{appearance:none;padding-right:32px}
 .editChevron{position:absolute;top:50%;right:12px;transform:translateY(-50%);color:#6e6e73;pointer-events:none}
@@ -39,41 +42,174 @@
 .editSave:disabled{opacity:.5;cursor:default}
 .hiddenInput{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
-/* AI 预审：会前结论与评审目录在前，正文在后，一栏。 */
-.advisorShell{display:flex;flex-direction:column;gap:16px;min-width:0}
-.prioritySidebar{min-width:0;min-height:0;display:flex;flex-direction:column;gap:16px;box-sizing:border-box;padding:22px;border:1px solid #e6e9ed;border-radius:20px;background:#fff;scrollbar-width:thin}
-.readinessBlock{display:flex;flex-direction:column;gap:6px}
-.readinessBlock small,.coverage>small,.outlineHead small{display:block;color:#4f5866;font-size:11px}
-.readiness{align-self:flex-start;padding:5px 12px;border-radius:10px;background:#f1f3f6;color:#4f5866;font-size:12px;font-weight:600}
-.readiness[data-readiness=ready]{background:#e8f6ec;color:#2f7a44}
-.readiness[data-readiness=revise]{background:#fdf4e4;color:#8a6220}
-.readiness[data-readiness=blocked]{background:#fdecea;color:#a1443c}
+/*
+ * 议题决策工作区（feedback 15 / 10）：会议概况 → 每个关联议题一块 → 会议层面的判断。
+ * 目录（MeetingOutline）：宽屏在正文左侧随 .ts-detail 吸顶，不是另一个滚动框；窄屏、矮屏或放大时收成正文右上角一颗「目录」钮，
+ * 点开浮在正文上面，不挤正文。阅读容器（.reading/.pane/.readingGrid/.readingMain/.decisionWorkspace/.issueBlock）一律不设 overflow，
+ * 滚轮始终滚 .ts-detail（0b063c5 的修复）。
+ */
+.readingGrid{display:grid;grid-template-columns:minmax(0,1fr);row-gap:0;column-gap:28px;min-width:0}
+.readingMain{position:relative;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-width:0}
+.decisionWorkspace{display:flex;flex-direction:column;gap:16px;min-width:0}
+.tocAside{display:none}
+.tocBar{position:sticky;top:calc(var(--detail-header-height,48px) + 6px);z-index:3;display:flex;justify-content:flex-end;height:0}
+.tocToggle{display:inline-flex;align-items:center;gap:6px;height:32px;max-width:min(260px,72vw);padding:0 12px;border:1px solid #dfe5ee;border-radius:999px;background:#ffffffeb;box-shadow:0 6px 18px #10203a1f;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:#3c4350;font:inherit;font-size:12px;cursor:pointer}
+.tocToggle:hover{background:#fff}
+.tocCurrent{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0a5dc2}
+.tocPanel{position:absolute;top:38px;right:0;z-index:5;box-sizing:border-box;width:min(320px,calc(100vw - 32px));max-height:min(70vh,520px);padding:10px;overflow-y:auto;border:1px solid #e1e6ee;border-radius:16px;background:#fff;box-shadow:0 16px 40px #10203a2e}
+.tocHead{margin:0 0 6px;padding:0 10px;color:#4f5866;font-size:11px}
+.tocList,.tocSub{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.tocList button{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:7px 10px;border:0;border-radius:10px;background:transparent;color:#4f5866;font:inherit;font-size:12.5px;line-height:1.45;text-align:left;cursor:pointer}
+.tocList button:hover{background:#f4f6f9;color:#1d1d1f}
+.tocList button[data-active=true]{background:#e8f1ff;color:#0a5dc2;font-weight:500}
+.tocLabel{display:-webkit-box;min-width:0;overflow:hidden;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tocList em{flex:none;font-size:11px;font-style:normal;color:#6e6e73}
+.tocList em[data-tone=pending]{color:#b6342c}
+.tocList em[data-tone=decided]{color:#2f7a44}
+.tocSub{margin:2px 0 4px 12px;padding-left:8px;border-left:1px solid #e6e9ed}
+.tocSub button{padding:5px 10px;font-size:12px}
+.tocSub button[data-active=true]{background:transparent;color:#0a5dc2;font-weight:600}
+/* 窄屏时「目录」钮浮在正文右上角：页顶那一行状态给它让出位置，不被盖住；极窄面板只留图标和「目录」。 */
+.readingGrid[data-toc=true]>.readingMain>:first-child{padding-right:150px}
+@container pane (max-width: 520px){.tocCurrent{display:none}.readingGrid[data-toc=true]>.readingMain>:first-child{padding-right:90px}}
+/* 宽屏（面板 ≥940，且屏幕不矮）：目录一列 208，正文一列；正文那一栏仍按 --reading-measure 量宽。 */
+@container pane (min-width: 940px){
+ @media (min-height: 600px){
+  .reading>.pane[data-toc=true]{max-width:calc(var(--material-column,656px) + 236px)}
+  .readingGrid[data-toc=true]{grid-template-columns:208px minmax(0,1fr);align-items:start}
+  .readingGrid[data-toc=true]>.tocBar{display:none}
+  .readingGrid[data-toc=true]>.tocAside{position:sticky;top:calc(var(--detail-header-height,48px) + 14px);grid-row:1;grid-column:1;display:block;align-self:start;padding:6px 0}
+  .readingGrid[data-toc=true]>.readingMain{grid-row:1;grid-column:2}
+  .readingGrid[data-toc=true]>.readingMain>:first-child{padding-right:0}
+ }
+}
+
+/* 会议概况：预审结论、资料是否过期、整场判断、四输入边界、预审读了哪些资料。 */
+.overview{display:flex;flex-direction:column;gap:14px;padding:20px 24px;border:1px solid #e6e9ed;border-radius:20px;background:#fff}
+.overviewTop{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 18px}
+.overviewIssues{margin:0;color:#4f5866;font-size:12.5px}
+.overviewTop>.count{margin-left:auto}
+.briefLine{margin:12px 0 0;color:#1d1d1f;font-size:13px;line-height:1.75}
+.briefLine small{display:block;margin-bottom:2px;color:#6e6e73;font-size:12px}
+.overview .judgmentHero{padding:0;border:0;border-radius:0}
+.staleNotice{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border:1px solid #f0dcb4;border-radius:12px;background:#fdf8ec;color:#8a6220;font-size:12.5px;line-height:1.7}
+.staleNotice p{flex:1;min-width:min(100%,240px);margin:0}
+.staleNotice button{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid #e3c88f;border-radius:9px;background:#fff;color:#7a5418;font:inherit;font-size:12.5px;cursor:pointer}
+.staleNotice button:disabled{opacity:.55;cursor:default}
+.inputMaterials{display:flex;flex-direction:column;gap:4px}
+.inputMaterials>div{margin-top:0}
+.gapLine{margin:0;color:#8a6220;font-size:12px;line-height:1.7}
+.noQuestion{margin:0;padding:9px 12px;border-radius:10px;background:#f4f6f9;color:#4f5866;font-size:12.5px;line-height:1.7}
+.meetingLevel{display:flex;flex-direction:column;gap:16px;min-width:0}
+.blockLabel{display:flex;align-items:baseline;gap:8px;margin:6px 0 -4px!important;padding:0 4px;font-size:13px!important;font-weight:600!important;color:#4f5866}
+.blockLabel>span{font-size:11px;font-weight:400;color:#6e6e73}
+.prepSection{display:flex;flex-direction:column;gap:16px}
+
+/* 议题块：首屏核心判断，往下历史与变化、事实与依据、选项与后果、建议、你的决定、实际结果。 */
+.issueList{display:flex;flex-direction:column;gap:16px}
+.issueBlock{display:flex;flex-direction:column;min-width:0;padding:22px 24px 6px;border:1px solid #e6e9ed;border-radius:20px;background:#fff}
+.issueBlock[data-status=decided]{border-color:#d8ebdd}
+.issueBlock[data-flash=true],.decisionRecord[data-flash=true]{animation:anchorFlash 1.8s ease-out}
+.issueHead{display:flex;flex-direction:column;gap:6px;padding-bottom:14px}
+.issueEyebrow{margin:0;color:#6e6e73;font-size:11.5px}
+.issueHead h2{margin:0!important;color:#1d1d1f;font-size:18px!important;font-weight:600!important;line-height:1.5!important;overflow-wrap:anywhere}
+.issueHeadRow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.issueHeadRow .briefActions{margin:0}
+.issueState{padding:3px 9px;border-radius:999px;background:#fdf1e6;color:#9a5a12;font-size:11.5px;font-weight:600}
+.issueState[data-state=decided]{background:#e8f6ec;color:#2f7a44}
+.issueState[data-state=dismissed]{background:#f1f3f6;color:#6e6e73}
+.issueLink{padding:4px 6px;border:0;background:transparent;color:#0a5dc2;font:inherit;font-size:12px;cursor:pointer}
+.issueLink:hover{text-decoration:underline}
+.issueSection{padding:16px 0 18px;border-top:1px solid #1d1d1f0b}
+.sectionLabel{display:flex;align-items:baseline;gap:8px;margin:0 0 10px!important;color:#4f5866;font-size:13px!important;font-weight:600!important}
+.sectionLabel>span{font-size:11px;font-weight:400;color:#8a6220}
+.judgmentText{display:flex;flex-direction:column;gap:6px}
+.judgmentText+.judgmentText{margin-top:14px}
+.judgmentText strong{color:#1d1d1f;font-size:16px;font-weight:600;line-height:1.55}
+.judgmentText p,.judgmentText ul{margin:0;color:#3c4350;font-size:14px;line-height:1.85}
+/* 预研判断按要点列表显示（StructuredText）：列表与段落同字号，要点里的加粗不放大成标题字号 */
+.judgmentText ul{padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.judgmentText li strong{font-size:inherit;line-height:inherit}
+.keyLine{margin:12px 0 0;color:#3c4350;font-size:13px;line-height:1.7}
+.keyLine small{margin-right:8px;color:#6e6e73;font-size:11px}
+.questionCard{margin-top:14px;padding:14px 16px;border:1px solid #f0d9b0;border-radius:14px;background:#fffaf0}
+.questionCard>small{display:block;color:#8a6220;font-size:11px;font-weight:600}
+.questionCard strong{display:block;margin-top:4px;color:#1d1d1f;font-size:14px;font-weight:600;line-height:1.6}
+.questionCard>p{margin:4px 0 0;color:#3c4350;font-size:13px;line-height:1.75}
+.sinceLine{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:14px 0 0;color:#4f5866;font-size:12.5px;line-height:1.7}
+.sinceLine>small{margin-right:2px;color:#6e6e73;font-size:11px}
+.evidenceList{display:flex;flex-direction:column;gap:10px;margin:0 0 12px;padding:0;list-style:none}
+.evidenceList p{margin:0;color:#1d1d1f;font-size:13.5px;line-height:1.75}
+.evidenceList small{display:block;margin-top:2px;color:#6e6e73;font-size:11.5px}
+.evidenceList a{color:inherit;text-decoration:underline;text-underline-offset:3px}
+.analysisItem{margin-top:12px;padding-top:12px;border-top:1px dashed #1d1d1f14}
+.analysisItem:first-child{margin-top:0;padding-top:0;border-top:0}
+.analysisItem>small{display:block;color:#6e6e73;font-size:11px}
+.analysisItem strong{display:block;margin-top:2px;color:#1d1d1f;font-size:14px;font-weight:600;line-height:1.6}
+.analysisItem>p{margin:4px 0 0;color:#3c4350;font-size:13px;line-height:1.75}
+.judgmentText[data-checked=true],.questionCard[data-checked=true],.analysisItem[data-checked=true]{opacity:.64}
+.unknowns{margin-top:12px;padding:12px 14px;border-radius:12px;background:#f5f5f7}
+.unknowns small{display:block;margin-bottom:4px;color:#6e6e73;font-size:11px}
+.unknowns p{margin:0;color:#56565e;font-size:13px;line-height:1.7}
+.unknowns p+p{margin-top:4px}
+.optionList{display:flex;flex-direction:column;gap:10px;margin:0;padding:0;list-style:none}
+.optionItem{padding:12px 14px;border:1px solid #e9ecf1;border-radius:14px;background:#fafbfc}
+.optionItem[data-chosen=true]{border-color:#9cc1f0;background:#f5f9ff}
+.optionHead{display:flex;align-items:baseline;gap:10px}
+.optionHead>span{flex:none;color:#92979f;font-size:11px;font-variant-numeric:tabular-nums}
+.optionHead strong{color:#1d1d1f;font-size:14px;font-weight:600;line-height:1.6}
+.optionFrom{display:block;margin:2px 0 0 26px;color:#6e6e73;font-size:11px}
+.consequences{margin:6px 0 0;padding-left:44px;color:#3c4350;font-size:13px;line-height:1.7}
+.chooseButton{display:inline-flex;align-items:center;gap:6px;margin:10px 0 0 26px;padding:6px 12px;border:1px solid #9cc1f0;border-radius:10px;background:#fff;color:#0a5dc2;font:inherit;font-size:12.5px;font-weight:500;cursor:pointer}
+.issueSection>.chooseButton{margin-left:0}
+.chooseButton:hover{background:#eef5ff}
+.chooseButton:disabled{opacity:.55;cursor:default}
+.decisionForm{display:flex;flex-direction:column;gap:10px;margin:12px 0 0;padding:12px 14px;border:1px solid #cfe0f6;border-radius:12px;background:#fff}
+.decisionField{display:flex;flex-direction:column;gap:6px}
+.decisionField>span{color:#4f5866;font-size:11.5px}
+.decisionField textarea{width:100%;min-height:72px}
+.overrideCheck{display:flex;align-items:flex-start;gap:8px;color:#8a6220;font-size:12.5px;line-height:1.6}
+.overrideNote{margin:0 0 10px;padding:8px 12px;border-radius:10px;background:#fdf4e4;color:#8a6220;font-size:12.5px;line-height:1.6}
+.formActions{display:flex;flex-wrap:wrap;gap:8px}
+.confirmDecision{padding:8px 16px;border:0;border-radius:10px;background:#007aff;color:#fff;font:inherit;font-size:13px;font-weight:500;cursor:pointer}
+.confirmDecision:hover{background:#0069db}
+.confirmDecision:disabled{opacity:.5;cursor:default}
+.cancelDecision{padding:8px 14px;border:1px solid #d9dde5;border-radius:10px;background:#fff;color:#4f5866;font:inherit;font-size:13px;cursor:pointer}
+.formNote{margin:8px 0 0;color:#6e6e73;font-size:11.5px;line-height:1.6}
+.decisionForm .formNote{margin:0}
+.formError{margin:0;color:#a1443c;font-size:12px}
+.decidedLine{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border:1px solid #dce9e2;border-radius:10px;background:#f4f9f6;color:#2f7a44}
+.decidedLine p{margin:0;color:#1d1d1f;font-size:13.5px;line-height:1.7}
+.resultStatus{margin:0 0 10px;color:#4f5866;font-size:12.5px}
+.resultStatus b{color:#9a5a12;font-weight:600}
+.resultStatus b[data-state=decided]{color:#2f7a44}
+.resultStatus b[data-state=dismissed]{color:#6e6e73}
+.receiptList{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.receipt{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #dce9e2;border-radius:10px;background:#f4f9f6}
+.receipt[data-revoked=true]{border-color:#eceef2;background:#f7f8fa}
+.receipt>div{min-width:0}
+.receipt p{margin:0;color:#1d1d1f;font-size:13.5px;line-height:1.7;overflow-wrap:anywhere}
+.receipt del{color:#8a8f98}
+.receipt small{display:block;margin-top:2px;color:#5d7164;font-size:11.5px;line-height:1.6}
+.receipt[data-revoked=true] small{color:#6e6e73}
+.revokeButton{display:inline-flex;flex:none;align-items:center;gap:5px;padding:5px 10px;border:1px solid #d9dde5;border-radius:8px;background:#fff;color:#4f5866;font:inherit;font-size:12px;cursor:pointer}
+.revokeButton:disabled{opacity:.55;cursor:default}
+.outcomeGroup{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.outcomeGroup>small{color:#6e6e73;font-size:11px}
+.issueSection .error{margin-top:10px!important}
+@keyframes anchorFlash{0%,35%{box-shadow:0 0 0 3px #3a83f766}100%{box-shadow:0 0 0 0 transparent}}
+
+.coverage>small{display:block;color:#4f5866;font-size:11px}
 /* 一号位点评要点参考：amber 参考盒（#FDF4E4 r12 padding 14）。 */
 .leaderLens{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:12px;background:#fdf4e4}
 .leaderLens small{margin:0;color:#8a6220;font-size:12px;font-weight:600}
 .leaderLens ol{display:flex;flex-direction:column;gap:6px;margin:0;padding-left:18px;color:#8a6220;font-size:11px;line-height:18px}
-.sidebarIssues{display:flex;flex-direction:column;gap:12px;border-top:1px solid #eef0f4;padding-top:14px}
-.sidebarIssues>small{display:block;color:#4f5866;font-size:11px}
-.sidebarIssues .linkedIssue{flex-direction:column;align-items:stretch;gap:8px;padding:0;border-top:0}
-.sidebarIssues .linkedIssue h4{overflow:visible;white-space:normal;text-overflow:clip}
-.sidebarIssues .linkedIssue .briefActions{margin:0}
 .coverage{display:flex;flex-wrap:wrap;gap:6px}
 .coverage>small{flex-basis:100%}
 .coverage span{display:flex;justify-content:space-between;gap:8px;padding:5px 8px;border-radius:8px;background:#f7f8fa;color:#4f5866;font-size:11px}
 .coverage b{font-weight:600;color:#1d1d1f}
-/* 评审目录：items padding 8 10 r10，激活 #E8F1FF/#0A5DC2。 */
-.outline{display:flex;flex-direction:column;gap:4px;flex:1;min-height:0}
-.outlineHead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:0 0 4px}
-.outlineHead span{font-size:11px;font-variant-numeric:tabular-nums;color:#4f5866}
-.outline button{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;border:0;border-radius:10px;background:transparent;padding:8px 10px;font-size:12px;line-height:1.45;color:#4f5866}
-.outline button:hover{background:#f7f8fa;color:#1d1d1f}
-.outline button[data-active=true]{background:#e8f1ff;color:#0a5dc2;font-weight:500}
-.outline button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
-.outline button em{flex:none;font-style:normal;font-size:11px;font-variant-numeric:tabular-nums;color:#4f5866}
-
-/* Advisor Main：gap 16，卡片统一白 r20 stroke #E6E9ED。 */
-.advisorMain{min-width:0;display:flex;flex-direction:column;gap:16px}
-.advisorMain>*{width:100%;box-sizing:border-box;flex:none;scroll-margin-top:14px}
+/* 卡片统一白 r20 stroke #E6E9ED。 */
+.decisionWorkspace>*{width:100%;box-sizing:border-box;flex:none}
 .judgmentHero{display:flex;flex-direction:column;gap:8px;padding:24px 26px;border:1px solid #e6e9ed;border-radius:20px;background:#fff}
 .judgmentHero>small{color:#4f5866;font-size:11px;letter-spacing:1px}
 .judgmentHero h2{margin:0;font-size:19px!important;line-height:1.5!important;font-weight:600!important;color:#1d1d1f}
@@ -88,6 +224,8 @@
 .count{font-size:11px;color:#4f5866;font-variant-numeric:tabular-nums}
 .pairRow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 .pairRow .reviewSection{min-width:0}
+/* 会议层面的判断只剩一组时独占整行，不留半行空白。 */
+.pairRow>:only-child{grid-column:1/-1}
 .taskContext{border:1px solid #e6e9ed;border-radius:20px;background:#fff;padding:0 24px}
 .taskContext>summary{padding:14px 0;cursor:pointer;color:#4f5866;font-size:12px;font-weight:600}
 .taskContext>div{padding:11px 0;border-top:1px solid #1d1d1f0a}
@@ -107,10 +245,6 @@
 .quoteItem[data-question]:first-of-type{margin-top:0}
 .quoteItem[data-question][data-checked=true]{background:#f0f4fa;border-color:#f0f4fa;opacity:1}
 .quoteItem[data-question][data-checked=true] .entryTitle strong{text-decoration:none}
-.sources{margin-top:10px;color:#0a5dc2;font-size:12px}
-.sources summary{width:fit-content;cursor:pointer}
-.sources ul{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0;padding:0;list-style:none}
-.sources li{padding:4px 7px;border-radius:7px;background:#f0f1f3;color:#666c75}
 /* 卡内操作按钮统一 12px；已核对 = #E8F6EC/#2F7A44。 */
 .briefActions{display:flex;gap:8px;margin-top:10px}
 .briefActions button{display:flex;align-items:center;gap:4px;border:1px solid #d9dde5;border-radius:10px;background:#fff;padding:6px 11px;font-size:12px;color:#4f5866}
@@ -123,19 +257,10 @@
 .stageActions button:hover{background:#f7f8fa}
 .stageActions button:disabled{opacity:.5}
 
-/* 关联议题单行。 */
-.linkedIssue{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #1d1d1f0b}
-.linkedIssue:first-of-type{border-top:0}
-.linkedIssue small{flex:none;padding:3px 8px;border-radius:999px;background:#f1f3f6;color:#4f5866;font-size:11px}
-.linkedIssue h4{flex:1;min-width:0;margin:0!important;font-size:13px;font-weight:600;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.linkedIssue[data-read=true]{opacity:.62}
-.linkedIssue .briefActions{flex:none;margin:0;padding:0}
-
 /* 表单与反馈。 */
 .summaryEdit{display:block;margin:0 0 12px;font-size:12px;color:var(--ink-muted)}
 .summaryEdit>span{display:block;margin-bottom:6px;font-size:11px;color:var(--ink-muted)}
-.summaryEdit textarea,.summaryEdit select{width:100%;box-sizing:border-box;border:1px solid #d9dde5;border-radius:10px;background:#fff;padding:9px 12px;color:#2f343c;font:inherit;font-size:13px;line-height:1.6}
-.summaryEdit textarea{resize:vertical}
+.summaryEdit textarea,.summaryEdit select{width:100%}
 .error{display:flex;align-items:center;gap:7px;margin:0!important;border:1px solid #e7c9c5;border-radius:10px;background:#fdecea;padding:10px 12px;color:#a1443c;font-size:12px}
 .error button{border:1px solid #d9a49e;border-radius:8px;background:#fff;padding:5px 10px;font-size:12px;color:#a1443c}
 .empty{color:#6e6e73;font-size:12px}
@@ -158,23 +283,39 @@
 .decisionRecord{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid #eef0f4;border-radius:12px;background:#fff}
 .decisionRecord[data-kind=decision],.decisionRecord[data-kind=ceoJudgment]{border-color:#dce7f5;background:#f7faff}
 .itemHead{display:flex;align-items:flex-start;gap:10px}
-.kindBadge{flex:none;padding:3px 8px;border-radius:6px;background:#f1f3f6;color:#6e6e73;font-size:11px;font-weight:600;line-height:1.5}
+.kindBadge{flex:none;padding:3px 8px;border-radius:6px;background:#f1f3f6;color:#6e6e73;font-size:12px;font-weight:600;line-height:1.5}
 .decisionRecord[data-kind=decision] .kindBadge{background:#e8f1ff;color:#0a5dc2}
 .decisionRecord[data-kind=todo] .kindBadge{background:#e8f6ec;color:#2f7a44}
 .decisionRecord[data-kind=ceoJudgment] .kindBadge{background:#f3eefb;color:#6b4e9e}
 .itemText{min-width:0;margin:0;color:#1d1d1f;font-size:13px;font-weight:500;line-height:1.6}
-.decisionRecord .itemQuote{margin:0;border-left:1px solid #c9d4e2;padding:2px 0 2px 12px;color:#6b7686;font-size:12px;line-height:1.7}
+.decisionRecord .itemQuote{margin:0;border-left:1px solid #c9d4e2;padding:2px 0 2px 12px;color:#6b7686;font-size:13px;line-height:1.7}
 .itemMeta{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.itemMetaLeft{display:flex;align-items:center;gap:14px;color:#6e6e73;font-size:11px}
+.itemMetaLeft{display:flex;align-items:center;gap:14px;color:#6e6e73;font-size:13px}
+.overdue{padding:0 6px;border-radius:4px;background:#b6342c12;color:#9a3a32;font-size:12px;line-height:18px}
 .itemState[data-state=confirmed]{color:#2f7a44;font-weight:500}
 .itemState[data-state=pending]{color:#b6342c;font-weight:500}
 .itemActions{display:flex;gap:6px}
 .itemActions button{border:1px solid #d9dde5;border-radius:6px;background:#fff;padding:5px 10px;font-size:11px;color:#4f5866}
 .itemActions button[data-variant=confirm]{border-color:#2f7a4466;background:#e8f6ec;color:#2f7a44}
 .itemActions button:disabled{opacity:.55}
+/* 主决定下的子项：缩进、细竖线，没有自己的按钮，状态跟着主决定。 */
+.subDecisions{display:flex;flex-direction:column;gap:6px;margin:2px 0 0;padding:0 0 0 14px;border-left:1px solid #dce3ee;list-style:none}
+.subDecision{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.subDecision>p{min-width:0;margin:0;color:#4f5866;font-size:13px;line-height:1.6}
+.subDecision>.itemState{flex:none;font-size:12px}
+/* 待办收成一行（N 项待办已推给负责人），展开看明细。 */
+.actionDigest>summary{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none}
+.actionDigest>summary::-webkit-details-marker{display:none}
+.actionDigest>summary>.count{margin-left:auto;font-size:13px}
+.actionDigest>summary>svg{flex:none;color:#8a919c;transition:transform .2s ease}
+.actionDigest[open]>summary{margin-bottom:12px}
+.actionDigest[open]>summary>svg{transform:rotate(180deg)}
+.actionDigest>summary:focus-visible{outline:2px solid #96beff;outline-offset:4px;border-radius:6px}
 
 /* 响应式：积极信号与潜在风险两卡在窄幅改单列。 */
 @media(max-width:1400px){.pairRow{grid-template-columns:minmax(0,1fr)}}
+/* 深度讨论（并排）时按面板宽叠加同一档（平时态面板 ≤900 只出现在视口 ≤1400）。 */
+@container pane (max-width:900px){.pairRow{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:1000px){.editPopover{right:24px;left:24px;width:auto}}
 @media(prefers-reduced-motion:reduce){.workspace *{scroll-behavior:auto!important;transition:none!important}}
 
@@ -202,7 +343,7 @@
 .mappingTable th{text-align:left;padding:6px 8px;border-bottom:1px solid #e6e9ed;color:#8a919c;font-size:10px;font-weight:600;letter-spacing:.04em}
 .mappingTable td{padding:6px 8px;border-bottom:1px solid #f0f2f5;vertical-align:middle}
 .mappingTable tr[data-status=unmapped] td{background:#fff8e6}
-.mappingTable select{box-sizing:border-box;width:100%;max-width:220px;height:32px;padding:0 8px;border:1px solid #d9dde5;border-radius:9px;background:#f7f8fa;font-size:12px;color:#282c32}
+.mappingTable select{width:100%;max-width:220px;height:32px;padding:0 12px}
 .sampleTurns{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
 .sampleTurns li{padding:8px 10px;border:1px solid #eceef2;border-radius:10px;background:#fafbfc}
 .sampleTurns span{font-size:10px;color:#8a919c}
@@ -216,7 +357,117 @@
 .candidateConfirm:disabled{opacity:.5;cursor:not-allowed}
 .candidateReopen{display:flex;align-items:center;gap:6px;padding:9px 13px;border:1px solid #d9dde5;border-radius:10px;background:#fff;color:#3f4750;font-size:13px;cursor:pointer}
 .candidateReopen:hover{background:#f7f8fa}
-.candidateHeader button:focus-visible,.candidateFooter button:focus-visible,.candidateReopen:focus-visible,.mappingTable select:focus-visible{outline:2px solid #007aff88;outline-offset:2px}
+.candidateHeader button:focus-visible,.candidateFooter button:focus-visible,.candidateReopen:focus-visible{outline:2px solid #007aff88;outline-offset:2px}
 @media(max-width:900px){.candidateDialog{width:calc(100vw - 24px);max-height:calc(100dvh - 40px)}}
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
-@media(max-width:959px){.briefActions.briefActions>button,.summaryEdit.summaryEdit>span,.reviewSection.reviewSection>header>span,.readinessBlock.readinessBlock>small,.sidebarIssues.sidebarIssues>small,.linkedIssue.linkedIssue>small,.judgmentHero.judgmentHero>small{font-size:13px}.publishReceipt.publishReceipt,.summaryEdit.summaryEdit,.empty.empty,.warnings.warnings,.readiness.readiness{font-size:14px}}
+@media(max-width:959px){.briefActions.briefActions>button,.summaryEdit.summaryEdit>span,.reviewSection.reviewSection>header>span,.readinessBlock.readinessBlock>small,.judgmentHero.judgmentHero>small,.issueEyebrow.issueEyebrow,.issueState.issueState,.issueLink.issueLink,.sectionLabel.sectionLabel>span,.keyLine.keyLine>small,.sinceLine.sinceLine>small,.questionCard.questionCard>small,.analysisItem.analysisItem>small,.optionHead.optionHead>span,.optionFrom.optionFrom,.tocList.tocList em,.tocToggle.tocToggle{font-size:13px}.publishReceipt.publishReceipt,.summaryEdit.summaryEdit,.empty.empty,.warnings.warnings,.readiness.readiness,.formNote.formNote,.gapLine.gapLine,.overviewIssues.overviewIssues,.staleNotice.staleNotice,.resultStatus.resultStatus,.receipt.receipt small,.evidenceList.evidenceList small,.consequences.consequences,.overrideCheck.overrideCheck{font-size:14px}
+ .overview,.issueBlock{padding-inline:18px}.consequences{padding-left:22px}.optionFrom,.chooseButton{margin-left:0}.receipt{flex-direction:column}}
+@media(prefers-reduced-motion:reduce){.issueBlock[data-flash=true],.decisionRecord[data-flash=true]{animation:none;box-shadow:0 0 0 3px #3a83f766}}
+
+/* 已结束的会整页降一档（「归档」感）：阅读面偏暖灰、标题稍淡。阶段的判定见 MeetingHeader 的 meetingTimeline。 */
+.workspace[data-timeline=ended] :global(.ts-detail){--ts-reading-surface:#f6f5f2}
+.workspace[data-timeline=ended] :global(.ts-detail-header > h1){color:#566173}
+
+/* 会议标题右侧的「编辑会议」铅笔：和标题同一行、次墨、不抢标题；浮层用编辑表单原样式，只是不再绝对定位。 */
+.workspace .titleEdit{display:inline-grid;place-items:center;vertical-align:middle;width:28px;height:28px;min-width:0;margin-left:8px;padding:0;border:0;border-radius:8px;background:transparent;color:#8a919c}
+.workspace .titleEdit:hover{background:#1f35560d;color:#1f2a3d}
+.editFloat.editFloat{z-index:1000}
+.editDialog{box-sizing:border-box;display:flex;flex-direction:column;gap:10px;width:320px;padding:14px 16px;border:1px solid #e6e9ed;border-radius:14px;background:#fff;box-shadow:0 10px 28px #0a0f1e33;outline:none}
+@media(pointer:coarse){.workspace .titleEdit{width:40px;height:40px}}
+
+/* 重新预审进行中：旧报告还在页上，顶部一条明确的状态，旧内容整体变淡，避免「点了没反应」。 */
+.runningNotice{display:flex;align-items:center;gap:10px;margin:0 0 16px;padding:10px 14px;border:1px solid #d7e3f7;border-radius:10px;background:#f2f6fd;color:#2c4a7c;font-size:13px;line-height:1.6}
+.runningNotice svg{flex:none;animation:runningSpin 1s linear infinite}
+@keyframes runningSpin{to{transform:rotate(360deg)}}
+.material[data-running] .overview>:not(.runningNotice),.material[data-running] [data-outline]:not(.overview){opacity:.5;transition:opacity .2s}
+@media(prefers-reduced-motion:reduce){.runningNotice svg{animation:none}}
+
+/*
+ * AI 预审阅读区的字号口径（只作用在这块阅读区 data-type-pair=preflight，不影响其他页面）：正文 16、次要文字 13、标签 12，颜色不新增。
+ * 标题只比正文大一档：整场判断标题、议题标题 17（h1 / h2），小节标题（h3–h6）16 加粗；层级靠字重与墨色区分，行高按字号比例。
+ * 次要文字与标签两档只在鼠标的电脑上生效：手持（≤959）与触屏（pointer: coarse）沿用下面的点触下限（标签 13、辅助字 14），小字也要点得到、看得清。
+ * 取代原先整块强制 15 / 17 的 !important 规则（那一条把「整场判断」的 13 / 12 也压成了 15）。
+ */
+.readingGrid[data-type-pair=preflight] :is(p,li,blockquote,dd,td,a,strong,em,b,time,code,summary,h3,h4,h5,h6,input,select,textarea){font-size:16px}
+.readingGrid[data-type-pair=preflight] :is(p,li,blockquote,dd,td){line-height:1.75}
+.readingGrid[data-type-pair=preflight] :is(h3,h4,h5,h6){font-weight:600;line-height:1.6}
+.readingGrid[data-type-pair=preflight] :is(h1,h2),.readingGrid[data-type-pair=preflight] :is(h1,h2) *{font-size:17px;line-height:1.55;letter-spacing:0}
+.readingGrid[data-type-pair=preflight] .judgmentText p,.readingGrid[data-type-pair=preflight] .judgmentText ul,.readingGrid[data-type-pair=preflight] .questionCard strong,.readingGrid[data-type-pair=preflight] .analysisItem strong,.readingGrid[data-type-pair=preflight] .optionHead strong,.readingGrid[data-type-pair=preflight] .judgmentHero>p,.readingGrid[data-type-pair=preflight] .entryTitle,.readingGrid[data-type-pair=preflight] .entryTitle strong,.readingGrid[data-type-pair=preflight] .keyLine,.readingGrid[data-type-pair=preflight] .heroSummary span,.readingGrid[data-type-pair=preflight] .consequences,.readingGrid[data-type-pair=preflight] .entryBody,.readingGrid[data-type-pair=preflight] .itemText,.readingGrid[data-type-pair=preflight] .itemQuote,.readingGrid[data-type-pair=preflight] .subDecision>p,.readingGrid[data-type-pair=preflight] .unknowns p,.readingGrid[data-type-pair=preflight] .analysisItem>p,.readingGrid[data-type-pair=preflight] .questionCard>p{font-size:16px}
+.readingGrid[data-type-pair=preflight] small{color:#6b7280}
+@media(min-width:960px) and (pointer:fine){
+.readingGrid[data-type-pair=preflight] small,.readingGrid[data-type-pair=preflight] .briefLine small,.readingGrid[data-type-pair=preflight] .gapLine,.readingGrid[data-type-pair=preflight] .issueLink,.readingGrid[data-type-pair=preflight] .overviewIssues,.readingGrid[data-type-pair=preflight] .staleNotice,.readingGrid[data-type-pair=preflight] .noQuestion,.readingGrid[data-type-pair=preflight] .sinceLine,.readingGrid[data-type-pair=preflight] .empty,.readingGrid[data-type-pair=preflight] .warnings,.readingGrid[data-type-pair=preflight] .leaderLens small,.readingGrid[data-type-pair=preflight] .leaderLens ol,.readingGrid[data-type-pair=preflight] .lensAnswers,.readingGrid[data-type-pair=preflight] .formNote,.readingGrid[data-type-pair=preflight] .progressHead small,.readingGrid[data-type-pair=preflight] .progressHead span,.readingGrid[data-type-pair=preflight] .progressRecord>summary,.readingGrid[data-type-pair=preflight] .verdictLine>b,.readingGrid[data-type-pair=preflight] .tocList button,.readingGrid[data-type-pair=preflight] .tocSub button,.readingGrid[data-type-pair=preflight] .runningNotice,.readingGrid[data-type-pair=preflight] .evidenceList p,.readingGrid[data-type-pair=preflight] .decidedLine p,.readingGrid[data-type-pair=preflight] .receipt p,.readingGrid[data-type-pair=preflight] button,.readingGrid[data-type-pair=preflight] label{font-size:13px}
+.readingGrid[data-type-pair=preflight] .blockLabel>span,.readingGrid[data-type-pair=preflight] .sectionLabel>span,.readingGrid[data-type-pair=preflight] .keyLine small,.readingGrid[data-type-pair=preflight] .questionCard>small,.readingGrid[data-type-pair=preflight] .sinceLine>small,.readingGrid[data-type-pair=preflight] .analysisItem>small,.readingGrid[data-type-pair=preflight] .unknowns small,.readingGrid[data-type-pair=preflight] .optionHead>span,.readingGrid[data-type-pair=preflight] .optionFrom,.readingGrid[data-type-pair=preflight] .outcomeGroup>small,.readingGrid[data-type-pair=preflight] .coverage>small,.readingGrid[data-type-pair=preflight] .coverage span,.readingGrid[data-type-pair=preflight] .judgmentHero>small,.readingGrid[data-type-pair=preflight] .heroSummary small,.readingGrid[data-type-pair=preflight] .reviewSection header span,.readingGrid[data-type-pair=preflight] .count,.readingGrid[data-type-pair=preflight] .tocList em,.readingGrid[data-type-pair=preflight] .issueEyebrow,.readingGrid[data-type-pair=preflight] .issueState,.readingGrid[data-type-pair=preflight] .evidenceList small,.readingGrid[data-type-pair=preflight] .receipt small,.readingGrid[data-type-pair=preflight] .kindBadge,.readingGrid[data-type-pair=preflight] .divergenceGroup>small,.readingGrid[data-type-pair=preflight] .progressTime{font-size:12px}
+}
+
+/*
+ * 点触下限（手机端规范 §2 / §3.5；docs/superpowers/specs/2026-10-12-mobile-foldable.md）：手持（≤959）和触屏（pointer: coarse）下，
+ * 会议页上的小钮热区至少 44，文字 14–15。--touch-hit 只在这两种情形由 globals.css 定义，写 var(--touch-hit, 44px)；
+ * 鼠标的电脑（≥960 且 fine）整段不生效，一像素不变。只改尺寸，不碰阅读容器的 overflow（responsive-layout.test.ts 的 noNestedScroll）。
+ */
+@media (max-width: 959px), (pointer: coarse) {
+  /* 「结束会议 / 重新预审 / 取消会议 / 返回编辑材料」一排：每颗高 44；放不下就折行，不横向溢出（.toolbar 本来就 flex-wrap，这里把行距也拉开，上下两行不贴在一起）。
+     「取消会议」是破坏性动作，仍是和别的一样的无底色文字钮（次级），不抢「重新预审」。 */
+  .toolbar { gap: 8px; max-width: 100%; }
+  .toolbar > button { min-height: var(--touch-hit, 44px); padding: 0 14px; font-size: 14px; max-width: 100%; }
+  /* 会前准备阶段底部那一排（保存准备状态 / 取消会议）：同样 44 高，窄屏折行。 */
+  .stageActions { flex-wrap: wrap; }
+  .stageActions button { min-height: var(--touch-hit, 44px); font-size: 14px; }
+  /* 「目录」钮：零高度吸顶条里的那颗，32 → 44 高（浮在正文右上角，不占版面）；弹层顺着往下挪；条目一行 44。
+     字号要压过上面 13px 的双类名规则，所以也用双类名。 */
+  .tocToggle.tocToggle { height: var(--touch-hit, 44px); min-width: var(--touch-hit, 44px); padding: 0 14px; font-size: 14px; }
+  .tocPanel { top: calc(var(--touch-hit, 44px) + 6px); }
+  .tocList button { min-height: var(--touch-hit, 44px); font-size: 14px; }
+  .tocSub button { min-height: var(--touch-hit, 44px); font-size: 14px; }
+  .tocList.tocList em { font-size: 13px; }
+  /* 标题右侧「编辑会议」铅笔：视觉 28，热区 44（规范 §3.5）。 */
+  .workspace .titleEdit { width: var(--touch-hit, 44px); height: var(--touch-hit, 44px); }
+  /* 资料已更新提示里的「用最新资料重新预审」、选议题、确认 / 取消决定、撤回：文字钮统一 44 高。 */
+  .staleNotice button, .chooseButton, .confirmDecision, .cancelDecision, .revokeButton, .editCancel, .editSave, .candidateReopen {
+    min-height: var(--touch-hit, 44px);
+  }
+  .staleNotice button, .chooseButton, .cancelDecision, .revokeButton, .editCancel, .editSave, .candidateReopen { font-size: 14px; }
+  .confirmDecision { min-width: 72px; font-size: 14px; }
+  .issueLink { display: inline-flex; align-items: center; min-height: var(--touch-hit, 44px); font-size: 14px; }
+  /* 妙记候选弹层：关闭钮 30 → 44；底部三颗钮高 44，三颗放不下就折行。 */
+  .candidateHeader > button { width: var(--touch-hit, 44px); height: var(--touch-hit, 44px); }
+  .candidateFooter { flex-wrap: wrap; }
+  .candidateDiscard, .candidateCancel, .candidateConfirm { height: auto; min-height: var(--touch-hit, 44px); font-size: 14px; }
+  /* 会后页的「决定 / 待办」逐条确认（实测补漏）：每条右下的「确认 / 忽略」原来 11 字、29 高，「待办事项 · N 项已推给负责人」那一行 24 高。 */
+  .itemActions { gap: 8px; }
+  .itemActions button { min-height: var(--touch-hit, 44px); padding: 0 14px; border-radius: 10px; font-size: 14px; }
+  .actionDigest > summary { min-height: var(--touch-hit, 44px); }
+}
+/* 会后页的类型角标与区块计数：手持 13（原来 11–12）。 */
+@media (max-width: 959px) {
+  .kindBadge, .reviewSection header span { font-size: 13px; }
+}
+
+/* 会前预审过程（v4）：运行中整段展开，完成后收成一行可点开。字号只用 13（正文）/ 12（标签），颜色沿用本页已有的灰阶与运行提示蓝。 */
+.progressPanel{display:flex;flex-direction:column;gap:8px;margin:0 0 16px;padding:14px 16px;border:1px solid #d7e3f7;border-radius:12px;background:#f2f6fd}
+.progressHead{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.progressHead small{color:#2c4a7c;font-size:12px;font-weight:600}
+.progressHead span{color:#4f5866;font-size:12px;font-variant-numeric:tabular-nums}
+.progressNow{margin:0!important;color:#2c4a7c;font-size:13px;line-height:1.6}
+.progressThought{margin:0!important;color:#3c4350;font-size:13px;line-height:1.6}
+.progressThought small{margin-right:8px;color:#4f5866;font-size:12px}
+.progressList{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.progressStep{display:grid;grid-template-columns:36px 14px minmax(0,1fr);align-items:baseline;gap:6px;color:#3c4350;font-size:13px;line-height:1.6}
+.progressStep[data-state=active]{color:#2c4a7c}
+.progressTime{color:#6e6e73;font-size:12px;font-variant-numeric:tabular-nums}
+.progressMark{display:inline-flex;color:#6e6e73}
+.progressStep[data-state=active] .progressMark svg{animation:runningSpin 1s linear infinite}
+.progressText small{display:block;color:#4f5866;font-size:12px;line-height:1.6}
+.progressRecord{margin:0;padding:0 16px;border:1px solid #e6e9ed;border-radius:12px;background:#fff}
+.progressRecord>summary{padding:10px 0;cursor:pointer;color:#4f5866;font-size:12px}
+.progressRecord>.progressList{padding:0 0 12px}
+@media(prefers-reduced-motion:reduce){.progressStep[data-state=active] .progressMark svg{animation:none}}
+
+/* 材料自带的待决题、开放分歧、一号位追问的不同回答（v4）。 */
+.verdictLine{margin:8px 0 0!important;color:#4f5866;font-size:13px;line-height:22px}
+.verdictLine>b{margin-right:8px;color:#1d1d1f;font-size:12px;font-weight:600}
+.verdictLine>b[data-verdict=ceo]{color:#2c4a7c}
+.divergenceGroup{padding:8px 0 0}
+.divergenceGroup+.divergenceGroup{margin-top:6px;border-top:1px solid #1d1d1f0b}
+.divergenceGroup>small{display:block;padding:6px 0 0;color:#4f5866;font-size:12px;font-weight:600}
+.lensAnswers{display:flex;flex-direction:column;gap:4px;margin:6px 0 0;padding:0;list-style:none;color:#8a6220;font-size:12px;line-height:18px}
+.lensAnswers b{margin-right:6px;font-weight:600}

@@ -22,6 +22,11 @@ const FRAMED = new Set(["issue", "meeting", "radar", "signal", "monthly-plan"]);
 /** 对象页：在 CEO 工作面主区原地打开的一张 Card。关闭 / 切换走外壳的开合（C-01）。 */
 export function DetailPanel({ initialCards, scope, label, mark = null, thread }: Props) {
   const [cards, setCards] = useState(initialCards);
+  // 工具后的单对象回读可能先于路由刷新返回：同一对象保留更新的版本，切换对象仍使用新集合。
+  useEffect(() => setCards((current) => initialCards.map((incoming) => {
+    const existing = current.find((card) => card.id === incoming.id);
+    return existing && existing.version > incoming.version ? existing : incoming;
+  })), [initialCards]);
   const [threadActive, setThreadActive] = useState(thread?.active ?? false);
   const { navigate, close, viewerId } = useWorkspace();
   useEffect(() => {
@@ -38,7 +43,7 @@ export function DetailPanel({ initialCards, scope, label, mark = null, thread }:
   const onCard = useCallback((updated: Card) => {
     setCards((current) => {
       const exists = current.some((card) => card.id === updated.id);
-      return exists ? current.map((card) => (card.id === updated.id ? updated : card)) : [...current, updated];
+      return exists ? current.map((card) => (card.id === updated.id && card.version <= updated.version ? updated : card)) : [...current, updated];
     });
   }, []);
   // Card 里的「关闭 / 返回首页」回到打开它的工作面，其余链接在对象间切换。

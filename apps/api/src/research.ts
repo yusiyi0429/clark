@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import { ResearchDoc, type TResearchDoc } from "@warmap/contracts";
-import { getIssueRow, type IssueRow } from "./issues.js";
+import { getIssueRow, TRIGGER_NOT_STARTED, type IssueRow } from "./issues.js";
 import { findForbiddenPhrase } from "./promptStyle.js";
 
 export type ResearchInput = {
@@ -30,6 +30,39 @@ export type ResearchService = {
 export const RESEARCH_FAILED = "research_failed";
 export const INVALID_RESEARCH_DOC = "invalid_research_doc";
 
+/** 「还没有预研」的几种失败：导入时没带预研、创建后没触发、进程重启打断。模型真跑失败的不在其中。 */
+export const RESUMABLE_RESEARCH_CODES = ["IMPORTED_WITHOUT_RESEARCH", TRIGGER_NOT_STARTED, "research_interrupted"] as const;
+
+/**
+ * 场次启动后补跑预研（演示环境，由 app 在 onReady 调用）：待决议题里还没有预研的（pending，或上面几种失败），
+ * 按创建顺序、最多 concurrency 个同时在后台跑；已有预研的、模型真跑失败的不动。stopped() 为真后不再开新的。
+ * 返回补跑的议题数；一条失败不影响其他条，失败照常显示为可重新预研。
+ */
+export async function resumeResearch(
+  q: (sql: string, params?: unknown[]) => Promise<{ rows: { id: string }[] }>,
+  service: Pick<ResearchService, "start">,
+  { concurrency = 3, stopped = () => false }: { concurrency?: number; stopped?: () => boolean } = {},
+): Promise<number> {
+  const rows = (await q(
+    `SELECT id FROM issues
+      WHERE status = 'pending'
+        AND (research->'doc' IS NULL OR jsonb_typeof(research->'doc') = 'null')
+        AND (research->>'status' = 'pending'
+             OR (research->>'status' = 'failed' AND research->'error'->>'code' = ANY($1::text[])))
+      ORDER BY created_at, id`,
+    [[...RESUMABLE_RESEARCH_CODES]],
+  )).rows;
+  let next = 0;
+  const worker = async () => {
+    while (next < rows.length && !stopped()) {
+      const { id } = rows[next++];
+      await service.start(id).catch(() => undefined);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), rows.length) }, worker));
+  return rows.length;
+}
+
 /** 只检查用户可见的散文字段；evidence 逐字引文与 sources 不受限。 */
 function findForbiddenPhraseInResearchDoc(doc: TResearchDoc): string | null {
   const fields = [doc.summary, ...doc.options.flatMap((option) => option.consequences), ...doc.unknowns];
@@ -44,12 +77,17 @@ function findForbiddenPhraseInResearchDoc(doc: TResearchDoc): string | null {
  * 预研生命周期：pending/failed/ready → running（version 条件）→ ready 或 failed。
  * 成功整份写 doc；失败只写 error，不自动 retry 或升档；旧 run 不能覆盖新 run。
  */
+export const RESEARCH_TIMEOUT_MS = 180_000;
+
 export function createResearchService({
   pool,
   runner,
+  researchTimeoutMs = RESEARCH_TIMEOUT_MS,
 }: {
   pool: Pool;
   runner: ResearchRunner;
+  /** 单次预研的硬超时。 */
+  researchTimeoutMs?: number;
 }): ResearchService {
   const q = pool.query.bind(pool);
   const inflight = new Set<Promise<void>>();
@@ -65,19 +103,31 @@ export function createResearchService({
     const row = await getIssueRow(q, issueId);
     if (!row || row.status !== "pending" || row.research.status !== "running" || row.research.runId !== runId) return;
     try {
-      const candidate = await runner(
-        {
-          issue: {
-            id: row.id,
-            title: row.title,
-            origin: row.origin,
-            originRef: row.origin_ref,
-            location: row.location,
-            urgency: row.urgency,
+      // 模型调用可能一直不返回：超时即失败，让卡上重新出现「重新预研」，不会永远卡在 running。
+      const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(Object.assign(new Error("预研超时，请重试"), { code: RESEARCH_FAILED }));
+        }, researchTimeoutMs);
+      });
+      const candidate = await Promise.race([
+        runner(
+          {
+            issue: {
+              id: row.id,
+              title: row.title,
+              origin: row.origin,
+              originRef: row.origin_ref,
+              location: row.location,
+              urgency: row.urgency,
+            },
           },
-        },
-        new AbortController().signal,
-      );
+          controller.signal,
+        ),
+        timeout,
+      ]).finally(() => clearTimeout(timer));
       if (!Value.Check(ResearchDoc, candidate)) {
         throw Object.assign(new Error("ResearchDoc candidate 不符合严格 schema"), { code: INVALID_RESEARCH_DOC });
       }

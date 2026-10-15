@@ -11,7 +11,7 @@ export function MissionGroupTranscript({ entries }: { entries: MissionGroupEntry
     const f = entry.feedback;
     return <article className={s.message} key={f.id} data-feedback-id={f.id}>
       <header><strong>{f.authorName}</strong><time dateTime={f.createdAt}>{monthDayTime(f.createdAt)}</time></header>
-      <div className={s.meta}>{f.kind === "suggestion" ? "修改建议" : f.kind === "quote" ? "引用评论" : "公开意见"}{f.sourceVersion ? ` · v${f.sourceVersion}` : ""}{f.late ? " · 截止后留言" : ""}</div>
+      <div className={s.meta}>{f.kind === "suggestion" ? "修改建议" : f.kind === "quote" ? "批注" : "公开意见"}{f.sourceVersion ? ` · v${f.sourceVersion}` : ""}{f.late ? " · 截止后留言" : ""}</div>
       {f.quote ? <blockquote>{f.quote}</blockquote> : null}
       {f.original && f.kind === "suggestion" ? <blockquote><b>原文</b>{f.original}</blockquote> : null}
       {f.proposed ? <div className={s.proposed}><b>建议改为</b>{f.proposed}</div> : null}

@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { MeetingOutcomeState, NotificationList, TaskView, type TPostMeetingCandidate } from "@warmap/contracts";
 import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
@@ -445,12 +445,10 @@ describe("战略项与截止日期的确定性校验", () => {
     expect(result.items[1]).toMatchObject({ kind: "todo", dueDate: "2026-06-08" });
   });
 
-  it("缺字段、字段用错类别、日期不存在、说明超过两句、引文不在 turn 里的条目进入 warnings", () => {
+  it("缺字段、日期不存在、说明超过两句、引文不在 turn 里的条目进入 warnings", () => {
     const result = assess([
       { ...strategic, title: undefined },
       { ...strategic, judgmentKind: undefined },
-      { ...CANDIDATE.items[1], title: "不该有标题" },
-      { ...strategic, dueDate: "2026-06-08" },
       { ...CANDIDATE.items[1], dueDate: "2026-02-30" },
       { ...strategic, brief: "第一句。第二句。第三句。" },
       { ...strategic, quote: "我周五前提交资源排期" },
@@ -461,12 +459,104 @@ describe("战略项与截止日期的确定性校验", () => {
     expect(result.warnings.map((warning) => warning.reason)).toEqual([
       "strategic 缺少 title、brief 或 judgmentKind",
       "strategic 缺少 title、brief 或 judgmentKind",
-      "title 与 brief 只允许用于 strategic",
-      "dueDate 只允许用于 todo",
       "dueDate 不是有效日期: 2026-02-30",
       "brief 最多两句话",
       "quote 不是被引用 turn 中的连续引文",
     ]);
+  });
+
+  it("多填了别的类型才用的字段：只丢掉这些字段、整条保留，并在日志里记一条警告", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const result = assess([
+        { ...CANDIDATE.items[1], title: "不该有标题", brief: "不适用", judgmentKind: "company_direction", parentIndex: 0 },
+        { ...strategic, dueDate: "2026-06-08" },
+        { ...CANDIDATE.items[0] },
+      ]);
+      expect(result).toMatchObject({ ok: true, warnings: [] });
+      if (!result.ok) return;
+      expect(result.items).toHaveLength(3);
+      expect(result.items[0]).toMatchObject({ kind: "todo", text: CANDIDATE.items[1].text, judgmentKind: null, parentItemId: null });
+      expect(result.items[0]).not.toHaveProperty("title");
+      expect(result.items[0]).not.toHaveProperty("brief");
+      expect(result.items[1]).toMatchObject({ kind: "strategic", title: strategic.title });
+      expect(result.items[1]).not.toHaveProperty("dueDate");
+      expect(result.items[2]).toMatchObject({ kind: "todo", dueDate: "2026-06-08" });
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(String(warn.mock.calls[0][0])).toContain("brief(占位), judgmentKind, parentIndex, title");
+      expect(String(warn.mock.calls[1][0])).toContain("dueDate");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("decision 顺手带了 judgmentKind 和 parentIndex：去掉这两个字段，作为主决定保留", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const decision = { kind: "decision", text: "CEO 去谈外部承诺", turnId: "turn-003", quote: "外部承诺我自己去谈" };
+      const result = assess([
+        CANDIDATE.items[2],
+        // parentIndex 指向自己、指向 todo，都不是子决定
+        { ...decision, judgmentKind: "external_commitment", parentIndex: 1 },
+        { ...decision, judgmentKind: "major_risk", parentIndex: 0 },
+        // 真的子决定照旧挂在主决定下
+        { ...decision, text: "子决定", parentIndex: 1, judgmentKind: "company_direction" },
+      ]);
+      expect(result).toMatchObject({ ok: true, warnings: [] });
+      if (!result.ok) return;
+      expect(result.items.map((item) => [item.kind, item.judgmentKind, item.parentItemId])).toEqual([
+        ["todo", null, null],
+        ["decision", null, null],
+        ["decision", null, null],
+        ["decision", null, "item-2"],
+      ]);
+      expect(String(warn.mock.calls[0][0])).toContain("#2 (decision) 丢掉不适用的字段: judgmentKind, parentIndex");
+      expect(String(warn.mock.calls[1][0])).toContain("#3 (decision) 丢掉不适用的字段: judgmentKind, parentIndex");
+      expect(String(warn.mock.calls[2][0])).toContain("#4 (decision) 丢掉不适用的字段: judgmentKind");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("「不适用」、null、空串、-1 这类占位值当没填，不废掉整份候选也不拒收这一条", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const placeholders = { ownerPersonId: "不适用", issueId: null, judgmentKind: "不适用", parentIndex: -1, title: "", brief: "N/A", dueDate: "无" };
+      const result = assess([
+        { kind: "decision", text: "CEO 去谈外部承诺", turnId: "turn-003", quote: "外部承诺我自己去谈", ...placeholders },
+        { ...CANDIDATE.items[2], ...placeholders },
+        { ...strategic, ...placeholders, title: strategic.title, brief: strategic.brief, judgmentKind: strategic.judgmentKind },
+        // 战略项的必填项只填了占位，照旧按缺字段拒收
+        { ...strategic, title: "不适用" },
+      ]);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.items.map((item) => [item.kind, item.ownerPersonId, item.issueId, item.judgmentKind, item.parentItemId])).toEqual([
+        ["decision", null, null, null, null],
+        ["todo", null, null, null, null],
+        ["strategic", null, null, "company_direction", null],
+      ]);
+      expect(result.items[1]).not.toHaveProperty("dueDate");
+      expect(result.warnings.map((warning) => warning.reason)).toEqual(["strategic 缺少 title、brief 或 judgmentKind"]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("丢掉不适用字段之后，适用字段的真错误照旧拒收", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const result = assess([{ ...CANDIDATE.items[1], dueDate: "2026-02-30", judgmentKind: "company_direction" }]);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.items).toHaveLength(0);
+      expect(result.warnings.map((warning) => warning.reason)).toEqual(["dueDate 不是有效日期: 2026-02-30"]);
+      // 字段缺失、类型不对：整份候选不合 schema
+      expect(assess([{ ...CANDIDATE.items[0], quote: undefined }])).toMatchObject({ ok: false });
+      expect(assess([{ ...CANDIDATE.items[0], parentIndex: "0" }])).toMatchObject({ ok: false });
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("标题超过 40 字、说明超过 120 字、日期格式不对时整份候选不合 schema", () => {

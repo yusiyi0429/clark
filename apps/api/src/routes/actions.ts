@@ -25,7 +25,7 @@ import { executeCancelMeeting, executeCreateMeeting, executeEditMeetingDetails, 
 import { executeEditMaterials } from "../meetingMaterials.js";
 import { executeRegeneratePreflight, executeRetryPreflight, executeRunPreflight } from "../meetingPreflight.js";
 import { executeEditMission } from "../missions.js";
-import { personDisplayNames } from "../people.js";
+import { isRealPerson, personDisplayNames } from "../people.js";
 import { executeRetryMonthlyPlanDraft, executeSignMonthlyPlan, executeUpdateMonthlyPlanDraft } from "../monthlyPlans.js";
 import { startSignedMissionDrafts } from "../missionRounds.js";
 import { executeConfirmItem, executeDismissItem, executeReplaceTranscript, executeRetryOutcome, executeRevokeEffect } from "../outcome.js";
@@ -179,7 +179,12 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       }
 
       if (scope.objectType === "issue") {
-        const result = await executeIssueAction(pool, env.sessionSecret, scope, fingerprint, req.body.input);
+        // 指派主责只能指给公司名单里的真人；操作人的显示名也从同一份名单取。
+        const people = scope.actionType === "issue.assign"
+          ? { actorId: req.person!.personId, people: new Map(companyMemory.searchPeople(undefined)
+            .filter((person) => isRealPerson(person) || person.personId === req.person!.personId).map((person) => [person.personId, person.displayName])) }
+          : undefined;
+        const result = await executeIssueAction(pool, env.sessionSecret, scope, fingerprint, req.body.input, people);
         if (!result.ok) {
           return fail(reply, result.status, result.code, result.message, result.latestCard ? { latestCard: result.latestCard } : undefined);
         }

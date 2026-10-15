@@ -9,7 +9,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObjec
 import { createPortal } from "react-dom";
 import { Check, MessageSquarePlus, RotateCcw, Trash2, X } from "lucide-react";
 import type {
-  TMaterialAnnotationView, TMaterialBlockHistoryEntry, TMaterialDetailResponse, TMaterialEditProposalView, TMaterialRemovedView, TMaterialView,
+  TMaterialAnnotationView, TMaterialBlockHistoryEntry, TMaterialDetailResponse, TMaterialEditProposalView, TMaterialRemovedView,
+  TMaterialRevisionOrigin, TMaterialView,
 } from "@warmap/contracts";
 import s from "./material-annotations.module.css";
 
@@ -223,14 +224,19 @@ export function ProposalBanner({ proposal, onDecide }: { proposal: TMaterialEdit
   </section>;
 }
 
-/** 悬停在改过的段落上：历次改动（新的在前），每次的批注、原文、谁、何时；别人的批注写明谁采用的。 */
+/** 这一版是有人上传（或资料包导入）的新版本，不是 Agent 改的；没有 origin 的旧数据按 Agent 改的看。 */
+export const uploadedVersion = (revision: { origin?: TMaterialRevisionOrigin } | null | undefined) =>
+  revision?.origin === "upload" || revision?.origin === "import";
+
+/** 悬停在改过的段落上：历次改动（新的在前），每次的批注、原文、谁、何时；别人的批注写明谁采用的；上传的新版本写谁上传的。 */
 export function HistoryCard({ history }: { history: TMaterialBlockHistoryEntry[] }) {
   return <div className={s.history} role="note">
     {history.map((entry) => <div key={entry.version} className={s.entry}>
       {entry.annotation ? <p className={s.note}><strong>{entry.annotation.author.displayName}</strong> 批注「{entry.annotation.quote.slice(0, 40)}」：{entry.annotation.body}</p> : null}
       {entry.kind === "modified" ? <p className={s.before}>原来：{entry.before}</p> : <p className={s.before}>这段是新加的</p>}
-      <small>第 {entry.version} 版 · {entry.annotation && entry.requestedBy && entry.annotation.author.personId !== entry.requestedBy.personId
-        ? `${entry.requestedBy.displayName}采用` : `${entry.requestedBy?.displayName ?? "Agent"}让 Co-Agent 改的`} · {date(entry.at)}</small>
+      <small>第 {entry.version} 版 · {uploadedVersion(entry) ? entry.requestedBy ? `${entry.requestedBy.displayName}上传` : "上传的新版本"
+        : entry.annotation && entry.requestedBy && entry.annotation.author.personId !== entry.requestedBy.personId
+          ? `${entry.requestedBy.displayName}采用` : `${entry.requestedBy?.displayName ?? "Agent"}让 Co-Agent 改的`} · {date(entry.at)}</small>
     </div>)}
   </div>;
 }

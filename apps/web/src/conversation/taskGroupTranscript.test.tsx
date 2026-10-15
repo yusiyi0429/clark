@@ -14,6 +14,6 @@ it("事项群组沿用右列记录和输入条，展示 Co-Agent 开场且随时
 
 it("离群后输入条只读", () => {
   const composer = renderToStaticMarkup(<MissionGroupComposer cardId="task-1" taskId="task-1" phase="open" readOnly channels={[]} channel="group" onChannel={() => {}} narrow={false} mobileOpen={false} onMobileOpen={() => {}} onHeightChange={() => {}} reference={null} onRemoveReference={() => {}} busy={false} onSend={async () => true} />);
-  expect(composer).toContain("你已不在这个群");
+  expect(composer).toContain("已退出该群组");
   expect(composer).toMatch(/<textarea[^>]*disabled/);
 });

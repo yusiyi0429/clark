@@ -28,6 +28,12 @@ describe("材料阅读", () => {
     expect(html).toContain("下载");
     expect(html).toContain(">删除</button>");
   });
+  it("素材性质：AI 整理的素材在来历后标注「AI 整理」；真实材料与旧接口（没有这一项）不标", () => {
+    expect(render({ ...material, nature: "ai_generated" })).toContain("AI 整理");
+    expect(render({ ...material, nature: "ai_generated" })).not.toContain("演示");
+    expect(render({ ...material, nature: "real" })).not.toContain("AI 生成");
+    expect(render()).not.toContain("AI 生成");
+  });
   it("非上传者没有删除；旧版有回到最新；PDF 有只读说明", () => {
     expect(render({ ...material, canDelete: false })).not.toContain(">删除</button>");
     expect(render(material, { ...detail, version: 1, latest: false })).toContain("回到最新");
@@ -39,6 +45,30 @@ describe("材料阅读", () => {
       lastRevision: { version: 1, requestedBy: material.owner, summary: "新写规划", at: material.createdAt, annotation: null } };
     expect(render(first, { ...detail, material: first, version: 1, latest: true, revision: first.lastRevision,
       revisions: [first.lastRevision], blocks: [{ text: "初稿", change: null, history: [] }] })).toContain("第 1 版 · Agent 按孙铭泽的要求新写");
+  });
+  it("Agent 改的版本：写「X让 Agent 改了 N 处」，悬停原文写「让 Agent 改的」", () => {
+    const html = render();
+    expect(html).toContain("第 2 版 · 孙铭泽让 Agent 改了 3 处");
+    expect(html).not.toContain("上传的新版本");
+  });
+  it("资料包导入 / 上传的新版本：写「X上传的新版本 · 改动说明」，不写「让 Agent 改了」、不数改动处", () => {
+    const chen = { personId: "chen-yan", displayName: "陈砚" };
+    const v2 = { version: 2, requestedBy: chen, summary: "按九月回款数据更新中位数", at: "2026-10-08T02:00:00Z", annotation: null, origin: "import" as const };
+    const v1 = { version: 1, requestedBy: null, summary: null, at: material.createdAt, annotation: null, origin: "import" as const };
+    const imported = { ...material, lastRevision: v2 };
+    const html = render(imported, { ...detail, material: imported, revision: v2, revisions: [v2, v1] });
+    expect(html).toContain("第 2 版 · 陈砚上传的新版本 · 按九月回款数据更新中位数 · ");
+    expect(html).not.toContain("让 Agent 改");
+    expect(html).not.toContain("3 处");
+    const uploaded = { ...v2, origin: "upload" as const, summary: null };
+    expect(render({ ...material, lastRevision: uploaded }, { ...detail, revision: uploaded, revisions: [uploaded, v1] }))
+      .toContain("第 2 版 · 陈砚上传的新版本 · ");
+    // 看旧版：上传的新版本也不数改动处。
+    const html2 = { ...material, format: "html" as const, fileName: "方案.html", version: 3 };
+    const older = render(html2, { ...detail, material: html2, version: 2, latest: false, revision: v2,
+      blocks: [{ text: "<p>新方案</p>", change: { kind: "modified", before: "<p>旧方案</p>", spans: [] }, history: [] }] });
+    expect(older).toContain("这是第 2 版，不是最新");
+    expect(older).not.toContain("1 处</button>");
   });
   it("修改过的 Markdown 块仍按格式显示", () => {
     const formatted = { ...detail, blocks: [{ text: "**新判断**", change: { kind: "modified" as const,

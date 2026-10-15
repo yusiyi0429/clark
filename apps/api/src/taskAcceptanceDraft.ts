@@ -5,6 +5,7 @@ import { runCandidateAgent } from "./candidateAgentRuntime.js";
 import type { AppEnv } from "./app.js";
 import type { Query } from "./meetingStore.js";
 import { taskStandards } from "./tasks.js";
+import { ADDRESS_STYLE } from "./promptStyle.js";
 
 /** 起草验收看到的东西：完成标准、材料正文摘录、最近的进展；只读。 */
 export type AcceptanceDraftInput = {
@@ -30,18 +31,20 @@ const Candidate = Type.Object({
   deliverableMaterialIds: Type.Array(Type.String(), { maxItems: 30 }),
 }, { additionalProperties: false });
 
-const PROMPT = `你替推进人起草一件执行事项的验收，只调用 submit_candidate 提交 {standards, verdict, deliverableMaterialIds}。
+export const TASK_ACCEPTANCE_PROMPT = `你替推进人起草一件执行事项的验收，只调用 submit_candidate 提交 {standards, verdict, deliverableMaterialIds}。
 - 对输入 standards 里的每一条完成标准（按 index）判断是否已经达到。只依据输入里的材料摘录和进展；找不到依据就判没达到，不推测、不编造。
 - evidence 写一句依据：引用材料名或进展里的原话。依据来自某份材料时 materialId 填那份材料的 id，否则填 null。
 - verdict 用一句中文写这件事交付了什么，不超过 80 字，只写事实，不写套话。
 - deliverableMaterialIds 选应作为交付结果的材料（最终版文档、成品链接）；草稿和参考资料不选，拿不准就不选。
-- 没有完成标准时 standards 交空数组，只写 verdict 和交付结果。`;
+- 没有完成标准时 standards 交空数组，只写 verdict 和交付结果。
+
+${ADDRESS_STYLE}`;
 
 export function createTaskAcceptanceAgent(pool: Pool, env: AppEnv): TaskAcceptanceAgent {
   return { async draft(input, ref, signal) {
     const result = await runCandidateAgent({
       query: pool.query.bind(pool), kind: "task-acceptance-draft", objectRef: { type: "task", id: ref.taskId }, personId: ref.personId,
-      input, prompt: PROMPT, schema: Candidate, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
+      input, prompt: TASK_ACCEPTANCE_PROMPT, schema: Candidate, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
       modelId: env.lightModel, modelSlot: "light", signal,
     });
     return result.candidate;

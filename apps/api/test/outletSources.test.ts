@@ -174,6 +174,8 @@ describe("发布方级来源 outlets", () => {
     // 目录里的真实 URL 抓不到（测试 fetch 返回 badArticle）→ 退回摘要，不冒充
     expect(items[0].excerpt).toBe("摘要 teaser");
     expect(items[0].title).toBe("GPT-6 开源");
+    // 逐条记下：这条没抓到全文，阅读页不能再按目录把它标成发布方原文
+    expect(items[0].sourceRef).toMatchObject({ outletId: "qbitai", fullText: false });
 
     const qbitai = RADAR_OUTLETS.find((outlet) => outlet.outletId === "qbitai")!;
     const runtimeOk = createOutletFeedAdapter({
@@ -196,7 +198,36 @@ describe("发布方级来源 outlets", () => {
       { src: "https://cdn.qbitai.com/one.jpg", after: 0 },
       { src: "https://cdn.qbitai.com/two.jpg", after: 1 },
     ]);
+    expect(full[0].sourceRef).toMatchObject({ outletId: "qbitai", fullText: true });
     expect(articleFetches).toBeGreaterThanOrEqual(1);
+  });
+
+  it("fullText outlet：改版后找不到量子位正文容器时退到通用提取；通用提取也不足 200 字仍退回摘要", async () => {
+    const qbitai = RADAR_OUTLETS.find((outlet) => outlet.outletId === "qbitai")!;
+    const rss = (slug: string) => `<?xml version="1.0"?><rss version="2.0"><channel>
+<item><title><![CDATA[改版文章]]></title><link>https://www.qbitai.com/2026/09/${slug}.html</link>
+  <pubDate>Mon, 21 Sep 2026 09:00:00 GMT</pubDate><description><![CDATA[摘要 teaser]]></description></item>
+</channel></rss>`;
+    const paragraph = (n: number) => `<p>第${n}段：新版页面把正文放进了 main 里的 article 标签，旧的 div.article 容器已经不存在了，通用提取仍要取到完整正文。</p>`;
+    const redesigned = `<html><body><nav><a href="/">首页</a></nav><main><article><h1>改版文章</h1>${paragraph(1)}<img src="/wp-content/uploads/a.jpg" width="800">${paragraph(2)}${paragraph(3)}</article></main><footer>页脚</footer></body></html>`;
+    const run = (slug: string, page: string) => createOutletFeedAdapter({
+      outlets: [{ ...qbitai, channels: [{ kind: "rss", url: "https://www.qbitai.com/feed" }] }],
+      now: () => FIXED_NOW,
+      fetch: (async (url: string | URL | globalThis.Request) => {
+        const body = String(url).endsWith("/feed") ? rss(slug) : page;
+        return { ok: true, status: 200, text: async () => body } as Response;
+      }) as typeof fetch,
+    }).fetchLatest({ outletIds: ["qbitai"], lookbackHours: WINDOW_HOURS }, new AbortController().signal);
+
+    const [generic] = await run("redesigned", redesigned);
+    expect(generic.excerpt.split(/\n{2,}/)[0].startsWith("第1段")).toBe(true);
+    expect(generic.excerpt).not.toContain("首页");
+    expect(generic.images).toEqual([{ src: "https://www.qbitai.com/wp-content/uploads/a.jpg", after: 0 }]);
+    expect(generic.sourceRef).toMatchObject({ fullText: true });
+
+    const [short] = await run("short", "<html><body><article><p>只有一句。</p></article></body></html>");
+    expect(short.excerpt).toBe("摘要 teaser");
+    expect(short.sourceRef).toMatchObject({ fullText: false });
   });
 
   it("Atom：链接取 rel=alternate（或不写 rel）的 href，时间取 published 或 updated，摘要取 summary 或 content 并去标签", async () => {

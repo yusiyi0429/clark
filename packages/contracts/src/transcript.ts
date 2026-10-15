@@ -156,7 +156,7 @@ export const PostMeetingItem = Type.Object(
     ownerPersonId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
     issueId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
     judgmentKind: Type.Optional(CeoJudgmentKind),
-    /** reopenWhen 指向同一候选内父 decision 的下标。 */
+    /** reopenWhen 指向同一候选内父 decision 的下标；decision 带它时是子决定，指向排在前面的主决定（只分一层），随主决定一起确认／忽略／撤回。 */
     parentIndex: Type.Optional(Type.Integer({ minimum: 0 })),
     /** strategic 必填：标题不超过 40 字，说明一两句不超过 120 字。 */
     title: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
@@ -224,6 +224,7 @@ export const MeetingOutcomeItem = Type.Object(
     ownerPersonId: Type.Union([Type.String(), Type.Null()]),
     issueId: Type.Union([Type.String(), Type.Null()]),
     judgmentKind: Type.Union([CeoJudgmentKind, Type.Null()]),
+    /** reopenWhen 的父 decision；decision 带它时是子决定，指向主决定。 */
     parentItemId: Type.Union([Type.String(), Type.Null()]),
     review: Type.Union([OutcomeReview, Type.Null()]),
     /** 只有 strategic 带标题与说明；Optional 保证旧 Meeting JSONB 继续可读。 */
@@ -231,6 +232,8 @@ export const MeetingOutcomeItem = Type.Object(
     brief: Type.Optional(Type.String({ minLength: 1 })),
     /** todo 的截止日期（YYYY-MM-DD）。 */
     dueDate: Type.Optional(Type.String({ minLength: 1 })),
+    /** 决定的作用范围：battlefieldIds 为空表示集团层面，一个是单个战场，多个是跨战场。没有时按关联议题判断。 */
+    scope: Type.Optional(Type.Object({ battlefieldIds: Type.Array(Type.String({ minLength: 1 }), { maxItems: 50 }) }, { additionalProperties: false })),
   },
   { additionalProperties: false },
 );

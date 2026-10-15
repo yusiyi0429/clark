@@ -2,15 +2,18 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Pool, QueryResult } from "pg";
+import type { Usage } from "@earendil-works/pi-ai";
 import type {
   TCardReference,
   TConversationAttachment,
   TConversationAttachmentInfo,
+  TArchivedConversationList,
   TConversationHistory,
   TConversationScope,
   TReferenceSnapshot,
 } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { TurnRecoverySummary } from "./conversationRecovery.js";
 import type { ParsedMaterial } from "./materialParser.js";
 import { roleOf, type SessionRole } from "./memberAccess.js";
 import { getIssueRow, projectIssueCard } from "./issues.js";
@@ -29,7 +32,18 @@ export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
   | { type: "warning"; code: "RUNTIME_RECREATED"; message: string }
   | { type: "compaction"; phase: "started" | "completed" }
-  | { type: "tool"; phase: "started" | "completed"; toolCallId: string; name: string; isError?: boolean }
+  | { type: "tool"; phase: "started" | "completed"; toolCallId: string; name: string; isError?: boolean; label?: string; detail?: string }
+  /** 本轮档位（conversationRouting.ts）：路由层据此设整轮时限，界面据此显示预计用时；深度档带开场说明。 */
+  | { type: "route"; tier: "quick" | "grounded" | "deep"; source: "rule" | "model" | "fallback"; expectSeconds: number; timeoutMs: number; notice?: string; model?: string }
+  /**
+   * 模型在思考。summary：GPT 推理摘要里的一句中文要点；delta：Claude 思考摘要的中文正文（逐段追加，英文段落已译成中文，conversationThinking.ts）。
+   * 都不带时只是「还在想」的心跳。
+   */
+  | { type: "thinking"; summary?: string; delta?: string }
+  /** 非深度档中途升级：需要更深入的分析，预计还需约 expectSeconds 秒（notice 是给界面的整句）。 */
+  | { type: "escalation"; reason: "slow" | "retrieval"; expectSeconds: number; notice: string }
+  /** 上游出错后正在自动恢复（conversationRecovery.ts）：notice 是给进度行的一句中文。 */
+  | { type: "recovery"; reason: string; action: "retry" | "fallback" | "trim" | "continue" | "skip"; attempt: number; notice: string }
   | { type: "usage"; input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number };
 
 export type ConversationRuntime = {
@@ -51,12 +65,29 @@ export type ConversationRuntime = {
     signal: AbortSignal;
     emit: (event: ConversationRuntimeEvent) => void;
     checkpoint?: (runtimeEntries: unknown[]) => Promise<void>;
+    /**
+     * 「继续」上一轮没完成的回答：沿用那一轮的档位（tier）；question 是那一轮的原问题，instruction 是交给模型的续写 / 重答说明
+     * （放进上下文包的 resume 字段，不当作一号位的原话）。
+     */
+    resume?: { tier?: "quick" | "grounded" | "deep"; question: string; instruction: string };
+    /**
+     * 这条对话闲置超过 CONVERSATION_IDLE_RESTART_MS：模型侧换一条新的会话，只带压缩摘要和最近几轮问答的文字
+     * （不回放之前的工具往返、推理与上游条目）。界面上的历史不变。
+     */
+    idleRestart?: boolean;
   }): Promise<{
     assistantMessage: string;
     runtimeEntries: unknown[];
     piSessionId?: string;
     recovery?: { recreated: true; warning: string };
+    /** 这一轮走过恢复（重试、换备用模型、精简历史、续写）时的汇总；没有就是一路顺利。 */
+    recoverySummary?: TurnRecoverySummary;
   }>;
+  /**
+   * 后台压缩写摘要（conversationCompaction.ts）：不在任何一轮里调用，用后台压缩模型（出错换备用模型）。
+   * 没有时（测试、未配置模型）不做后台压缩，只靠窗口兜底。
+   */
+  summarizeHistory?(input: { systemPrompt: string; prompt: string; signal: AbortSignal }): Promise<{ text: string; usage?: Usage; model: string; fallbackFrom?: string }>;
   close?(): Promise<void>;
 };
 
@@ -290,33 +321,164 @@ export async function resolveReferenceSnapshots(
   return { snapshots };
 }
 
-/** 这个人在这个页面的主对话：最早的未删除行（028 已把多余会话并进它）。 */
-const MAIN_CONVERSATION_SQL =
-  "SELECT id FROM conversations WHERE owner_id = $1 AND scope = $2 AND deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1";
+/**
+ * 这个人在这个页面的当前对话：最早的未删除、未归档行（028 已把多余会话并进它；「新建对话」把旧的归档，067）。
+ * 同一时刻只有一条：新建、切回都在「人 × scope」锁里先归档旧的再放出新的。
+ */
+export const ACTIVE_CONVERSATION_WHERE = "owner_id = $1 AND scope = $2 AND deleted_at IS NULL AND archived_at IS NULL";
+const MAIN_CONVERSATION_SQL = `SELECT id FROM conversations WHERE ${ACTIVE_CONVERSATION_WHERE} ORDER BY created_at ASC, id ASC LIMIT 1`;
 
-export async function getConversationHistory(q: Query, owner: string, scope: TConversationScope): Promise<TConversationHistory> {
-  const conversation = await q(MAIN_CONVERSATION_SQL, [owner, scope]);
-  const conversationId = conversation.rows[0]?.id as string | undefined;
-  if (!conversationId) return { scope, messages: [] };
+/**
+ * 闲置这么久之后的下一轮，模型侧只带摘要重新开始（压缩摘要 + 最近几轮问答的文字），不再回放之前的工具往返与上游条目；
+ * 界面上的历史照常显示，一号位感觉不到（piConversationRuntime.ts 的 idleRestart）。
+ */
+export const CONVERSATION_IDLE_RESTART_MS = 12 * 60 * 60 * 1000;
+
+type MessageRow = { sequence: number; role: string; content: string; references_snapshot: unknown; attachments: TConversationAttachment[];
+  run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null };
+
+function historyMessage(row: MessageRow): TConversationHistory["messages"][number] {
+  const note = row.recovery_note;
+  return {
+    sequence: row.sequence,
+    role: row.role as "user" | "assistant",
+    content: row.content,
+    referencesSnapshot: row.references_snapshot as TConversationHistory["messages"][number]["referencesSnapshot"],
+    attachments: row.attachments.map(conversationAttachmentInfo),
+    runId: row.run_id,
+    createdAt: row.created_at.toISOString(),
+    ...(note && typeof note.text === "string" && note.text
+      ? { recoveryNote: { text: note.text, detail: typeof note.detail === "string" ? note.detail : "" } } : {}),
+  };
+}
+
+async function conversationMessages(q: Query, conversationId: string): Promise<TConversationHistory["messages"]> {
   const result = await q(
-    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at
+    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at, m.recovery_note
        FROM conversation_messages m
       WHERE m.conversation_id = $1
       ORDER BY m.sequence`,
     [conversationId],
   );
+  return (result.rows as MessageRow[]).map(historyMessage);
+}
+
+/** 已归档、有内容的历史对话（空的归档不算：界面上没有可看的）。 */
+const ARCHIVED_WITH_MESSAGES = `FROM conversations c
+  WHERE c.owner_id = $1 AND c.scope = $2 AND c.deleted_at IS NULL AND c.archived_at IS NOT NULL
+    AND EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id)`;
+
+export async function getConversationHistory(q: Query, owner: string, scope: TConversationScope): Promise<TConversationHistory> {
+  const conversation = await q(MAIN_CONVERSATION_SQL, [owner, scope]);
+  const conversationId = conversation.rows[0]?.id as string | undefined;
+  const archived = Number((await q(`SELECT count(*)::int AS count ${ARCHIVED_WITH_MESSAGES}`, [owner, scope])).rows[0]?.count ?? 0);
+  return { scope, messages: conversationId ? await conversationMessages(q, conversationId) : [], archivedCount: archived };
+}
+
+/** 历史对话列表：新归档的在前；首问取第一条用户消息（前 4000 字，带着引用与页面前缀，界面解析后再截标题）。 */
+export async function listArchivedConversations(q: Query, owner: string, scope: TConversationScope): Promise<TArchivedConversationList> {
+  const result = await q(
+    `SELECT c.id, c.archived_at,
+            (SELECT left(m.content, 4000) FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user' ORDER BY m.sequence LIMIT 1) AS first_question,
+            (SELECT min(m.created_at) FROM conversation_messages m WHERE m.conversation_id = c.id) AS started_at,
+            (SELECT max(m.created_at) FROM conversation_messages m WHERE m.conversation_id = c.id) AS last_at,
+            (SELECT count(*)::int FROM conversation_messages m WHERE m.conversation_id = c.id) AS message_count
+       ${ARCHIVED_WITH_MESSAGES}
+      ORDER BY c.archived_at DESC, c.id DESC
+      LIMIT 200`,
+    [owner, scope],
+  );
   return {
-    scope,
-    messages: result.rows.map((row) => ({
-      sequence: row.sequence as number,
-      role: row.role as "user" | "assistant",
-      content: row.content as string,
-      referencesSnapshot: row.references_snapshot,
-      attachments: (row.attachments as TConversationAttachment[]).map(conversationAttachmentInfo),
-      runId: row.run_id as string,
-      createdAt: (row.created_at as Date).toISOString(),
+    conversations: result.rows.map((row) => ({
+      id: row.id as string,
+      firstQuestion: (row.first_question as string | null) ?? "",
+      startedAt: (row.started_at as Date).toISOString(),
+      lastAt: (row.last_at as Date).toISOString(),
+      archivedAt: (row.archived_at as Date).toISOString(),
+      messageCount: row.message_count as number,
     })),
   };
+}
+
+/** 只读回看一段历史对话：只认这个人在这个页面自己归档的那一条。 */
+export async function getArchivedConversationHistory(q: Query, owner: string, scope: TConversationScope, id: string): Promise<TConversationHistory | null> {
+  if (!SESSION_ID_PATTERN.test(id)) return null;
+  const found = await q(
+    "SELECT id FROM conversations WHERE id = $3 AND owner_id = $1 AND scope = $2 AND deleted_at IS NULL AND archived_at IS NOT NULL",
+    [owner, scope, id],
+  );
+  if (!found.rows[0]) return null;
+  return { scope, messages: await conversationMessages(q, id) };
+}
+
+export type ConversationSwitch =
+  | { status: "ok"; conversationId: string | null; archived: boolean }
+  | { status: "busy" }
+  | { status: "not_found" };
+
+/**
+ * 在「人 × scope」锁里切换当前对话（锁与轮次同一键空间：有一轮回答还没结束就不切，返回 busy）。
+ * - 新建（target 不给）：当前对话有内容就归档、建一条空白的；当前对话本来就是空的（或还没有）就不动。
+ * - 切回（target 给了）：那一条必须是这个人在这个页面归档的；当前对话（有没有内容都一样）归档，那一条放出来。
+ * 只改 archived_at，不删任何行。
+ */
+export async function switchConversation(pool: Pool, owner: string, scope: TConversationScope, target?: string): Promise<ConversationSwitch> {
+  if (target !== undefined && !SESSION_ID_PATTERN.test(target)) return { status: "not_found" };
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_xact_lock(hashtext($1)) AS locked", [`${owner}|${scope}`]);
+    if (!locked.rows[0]?.locked) {
+      await client.query("ROLLBACK");
+      return { status: "busy" };
+    }
+    if (target !== undefined) {
+      const found = await client.query(
+        "SELECT id FROM conversations WHERE id = $3 AND owner_id = $1 AND scope = $2 AND deleted_at IS NULL AND archived_at IS NOT NULL FOR UPDATE",
+        [owner, scope, target],
+      );
+      if (!found.rows[0]) {
+        await client.query("ROLLBACK");
+        return { status: "not_found" };
+      }
+    }
+    const current = await client.query<{ id: string; has_messages: boolean }>(
+      `SELECT c.id, EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id) AS has_messages
+         FROM conversations c
+        WHERE c.owner_id = $1 AND c.scope = $2 AND c.deleted_at IS NULL AND c.archived_at IS NULL
+        ORDER BY c.created_at ASC, c.id ASC FOR UPDATE OF c`,
+      [owner, scope],
+    );
+    let archived = false;
+    let conversationId: string | null;
+    if (target === undefined && !current.rows.some((row) => row.has_messages)) {
+      // 当前对话还是空的（或还没有）：已经是一条空白对话，不再多建一条。
+      conversationId = current.rows[0]?.id ?? null;
+    } else {
+      // 当前的先归档（防御：万一有多条未归档的，一并归档），再放出目标或新建一条。
+      if (current.rows.length) {
+        await client.query("UPDATE conversations SET archived_at = now() WHERE id = ANY($1::uuid[])", [current.rows.map((row) => row.id)]);
+        archived = current.rows.some((row) => row.has_messages);
+      }
+      if (target !== undefined) {
+        await client.query("UPDATE conversations SET archived_at = NULL WHERE id = $1", [target]);
+        conversationId = target;
+      } else {
+        conversationId = randomUUID();
+        await client.query(
+          "INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, $3, $4)",
+          [conversationId, owner, scope, randomUUID()],
+        );
+      }
+    }
+    await client.query("COMMIT");
+    return { status: "ok", conversationId, archived };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**

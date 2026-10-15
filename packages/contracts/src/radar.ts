@@ -163,23 +163,32 @@ export const RadarSources = Type.Object({
   outlets: Type.Optional(Type.Array(RadarOutletSource, { maxItems: 20 })),
 }, { additionalProperties: false });
 
+/**
+ * 采集时逐条记下的原文完整度：true = excerpt 是从文章页 / read_article 提取的全文；
+ * 缺省或 false = 退回了检索摘要、feed 摘要或公众号 digest。阅读页据此标「发布方原文」还是「原文摘录」。
+ */
+const SourceFullText = Type.Optional(Type.Boolean());
+
 export const RadarSourceRef = Type.Union([
   Type.Object({
     type: Type.Literal("web-search"),
     provider: Type.String({ minLength: 1, maxLength: 100 }),
     query: Type.String({ minLength: 1, maxLength: 500 }),
+    fullText: SourceFullText,
   }, { additionalProperties: false }),
   Type.Object({
     type: Type.Literal("wechat-account"),
     provider: Type.String({ minLength: 1, maxLength: 100 }),
     accountId: Type.String({ minLength: 1, maxLength: 200 }),
     accountName: Type.String({ minLength: 1, maxLength: 200 }),
+    fullText: SourceFullText,
   }, { additionalProperties: false }),
   Type.Object({
     type: Type.Literal("outlet"),
     provider: Type.Literal("publisher-feed"),
     outletId: Type.String({ minLength: 1, maxLength: 100 }),
     outletName: Type.String({ minLength: 1, maxLength: 200 }),
+    fullText: SourceFullText,
   }, { additionalProperties: false }),
 ]);
 
@@ -238,6 +247,11 @@ export const RadarCandidate = Type.Object({
     urgency: Type.Integer({ minimum: 0, maximum: 5 }),
   }, { additionalProperties: false }),
   promotion: RadarPromotionCandidate,
+  /**
+   * 与输入 existingIssues 中某条现有议题是同一个决策问题时填该议题 id：不新建议题，
+   * 本条信号作为该议题的补充依据挂上（代码仍校验 id 存在、待决策、同一战场）。
+   */
+  attachToIssueId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
 }, { additionalProperties: false });
 
 export const RadarCandidateSubmission = Type.Object({

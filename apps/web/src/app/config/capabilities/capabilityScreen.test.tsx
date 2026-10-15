@@ -74,7 +74,9 @@ describe("能力管理页 CSS 基线", () => {
   it("编辑弹层 440 宽、输入框与保存按钮取设计色值", () => {
     expect(source).toContain("width:320px;background:#fff;border-radius:14px;outline:1px solid #e6e9ed");
     expect(source).toContain(".wide{width:440px;max-width:calc(100% - 48px)}");
-    expect(source).toContain("height:36px;border:0;outline:1px solid #d9dde5;border-radius:9px;background:#f7f8fa");
+    // 边、圆角、底色、聚焦走 globals.css 的统一输入框样式，这里只管宽高。
+    expect(source).toContain(".field input,.field select{width:100%;height:36px;padding:0 14px}");
+    expect(source).not.toMatch(/.field[^{]*:focus{outline:2px/);
     expect(source).toContain(".support{display:flex;flex-direction:column;gap:4px;max-height:132px");
     expect(source).toContain(".save{background:#007aff");
   });

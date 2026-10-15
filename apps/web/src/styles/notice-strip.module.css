@@ -22,3 +22,5 @@
 @media(prefers-reduced-motion:reduce){.strip{animation:none}.strip button{transition:none}}
 @media(prefers-reduced-transparency:reduce){.strip{background-image:linear-gradient(160deg,#435473,#34415c)}.strip button{background:#30394a}}
 @media(prefers-contrast:more){.strip{border-color:#fff}.strip button,.current{border-color:#fff}}
+/* 触屏的工作台（pointer:coarse，规范 §1）：打开详情后左侧窄条上的圆钮 42 → 44。 */
+@media(pointer:coarse){.strip button{width:44px;height:44px}}

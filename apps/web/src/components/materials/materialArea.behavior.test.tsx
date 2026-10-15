@@ -128,4 +128,31 @@ describe("材料区操作", () => {
     expect(markup).toContain("新增");
     expect(markup).toContain("加上");
   });
+
+  it("展开改动记录、悬停改过的字：导入的新版本写「陈砚上传」，Agent 改的照旧写「让 Agent 改」", () => {
+    const chen = { personId: "chen-yan", displayName: "陈砚" };
+    const v1 = { version: 1, requestedBy: null, summary: null, at: material.createdAt, annotation: null, origin: "import" as const };
+    const reader = (origin: "import" | "agent") => {
+      const v2 = { version: 2, requestedBy: chen, summary: "按九月回款数据更新", at: "2026-10-08T02:00:00Z", annotation: null, origin };
+      const md = { ...material, version: 2, lastRevision: v2 };
+      const detail: TMaterialDetailResponse = { material: md, version: 2, latest: true, revision: v2, revisions: [v2, v1],
+        blocks: [{ text: "中位数27天", change: { kind: "modified", before: "中位数25天", spans: [{ text: "中位数", changed: false }, { text: "27", changed: true }, { text: "天", changed: false }] }, history: [] }],
+        annotations: [], removed: [], proposals: [] };
+      // 0：改动记录展开；1：悬停第 0 段。
+      hooks.values = [true, 0]; hooks.index = 0;
+      return renderToStaticMarkup(MaterialReader({ material: md, detail, base: "/api/materials/issue/issue-1", onRemove: () => undefined, onVersion: () => undefined }));
+    };
+    const imported = reader("import");
+    expect(imported).toContain("第 2 版 · 陈砚上传的新版本 · 按九月回款数据更新 · ");
+    expect(imported).toContain("第 2 版 · 陈砚上传 · ");
+    expect(imported).toContain("第 1 版 · 甲 · ");
+    expect(imported).toContain("上传原件");
+    expect(imported).toContain("原来：中位数25天");
+    expect(imported).toMatch(/<small>陈砚上传的新版本 · /);
+    expect(imported).not.toContain("让 Agent 改");
+    const edited = reader("agent");
+    expect(edited).toContain("第 2 版 · 陈砚让 Agent 改了 1 处 · ");
+    expect(edited).toMatch(/<small>陈砚让 Agent 改的 · /);
+    expect(edited).not.toContain("陈砚上传");
+  });
 });

@@ -8,7 +8,7 @@ const ui = vi.hoisted(() => ({ buttons: new Map<string, (event: unknown) => Prom
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
   return { ...actual, useEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => {
-    if (deps?.length === 2 && typeof deps[0] === "boolean" && (deps[1] as { refresh?: unknown })?.refresh === ui.refresh) ui.refreshEffect = effect;
+    if (deps?.length === 2 && (typeof deps[0] === "number" || deps[0] === null) && (deps[1] as { refresh?: unknown })?.refresh === ui.refresh) ui.refreshEffect = effect;
     return actual.useEffect(effect, deps);
   } };
 });

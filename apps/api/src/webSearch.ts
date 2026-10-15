@@ -4,6 +4,7 @@ import type {
   TWebSearchResponse as WebSearchResponse,
   TWebSearchResult as WebSearchResult,
 } from "@warmap/contracts";
+import { RETRIEVE_SOURCES, withRetrieve } from "./tracing.js";
 
 export type WebSearchAdapter = {
   search(input: WebSearchInput, signal: AbortSignal): Promise<WebSearchResponse>;
@@ -85,9 +86,9 @@ export function createBochaWebSearchAdapter({
     const wait = startAt - now();
     if (wait > 0) await sleep(wait, signal);
   }
-  return {
+  const adapter = {
     configured: Boolean(apiKey),
-    async search(input, signal): Promise<WebSearchResponse> {
+    async search(input: WebSearchInput, signal: AbortSignal): Promise<WebSearchResponse> {
       if (!apiKey) throw new Error("Web Search provider 未配置 BOCHA_API_KEY");
       const query = input.domains?.length
         ? `${input.query} ${input.domains.map((domain) => `site:${domain}`).join(" OR ")}`
@@ -127,6 +128,15 @@ export function createBochaWebSearchAdapter({
       }
       const data = Object.keys(obj(body.data)).length > 0 ? obj(body.data) : body;
       const pages = obj(data.webPages).value;
+      // 博查的 images 与网页结果分开返回：只认 hostPageUrl 与某条网页完全对得上的图，不把别家的图张冠李戴。
+      const imageByPage = new Map<string, string>();
+      const imageList = obj(data.images).value;
+      for (const raw of Array.isArray(imageList) ? imageList : []) {
+        const image = obj(raw);
+        const host = str(image.hostPageUrl);
+        const src = str(image.contentUrl) || str(image.thumbnailUrl);
+        if (host && /^https?:\/\//.test(src) && src.length <= 1000 && !imageByPage.has(host)) imageByPage.set(host, src);
+      }
       const results: WebSearchResult[] = [];
       for (const raw of Array.isArray(pages) ? pages : []) {
         const item = obj(raw);
@@ -140,9 +150,16 @@ export function createBochaWebSearchAdapter({
           continue;
         }
         const publishedAt = dateTime(item.datePublished);
-        results.push({ title, url, excerpt, provider: "bocha", ...(publishedAt ? { publishedAt } : {}) });
+        const imageUrl = imageByPage.get(url);
+        results.push({ title, url, excerpt, provider: "bocha", ...(publishedAt ? { publishedAt } : {}), ...(imageUrl ? { imageUrl } : {}) });
       }
       return { results, warnings: results.length === 0 ? ["Bocha 未返回可用的 title/URL/excerpt 结果"] : [] };
     },
+  };
+  return {
+    configured: adapter.configured,
+    // 每次真实博查请求一个 retrieve:web-search 节点（对话、预研、雷达共用这个实例）。
+    search: (input, signal) => withRetrieve(RETRIEVE_SOURCES.webSearch, () => ({ query: input.query, domains: input.domains, freshness: input.freshness }),
+      () => adapter.search(input, signal), (response) => ({ results: response.results.map((item) => ({ title: item.title, url: item.url })), warnings: response.warnings })),
   };
 }

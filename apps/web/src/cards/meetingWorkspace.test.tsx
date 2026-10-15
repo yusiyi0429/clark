@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
 import type { TTranscriptCandidateProjection } from "@warmap/contracts";
-import { MeetingCard, confirmTranscriptInput, fromCompanyInput, meetingNow, offsetLabel, speakerMappingError, speakerMappingRows, toCompanyInput } from "./MeetingCard";
-import { meetingDayWord, meetingSlot } from "@/components/meeting/MeetingHeader";
+import { MeetingCard, confirmTranscriptInput, fromCompanyInput, meetingNow, offsetLabel, preflightErrorText, speakerMappingError, speakerMappingRows, toCompanyInput } from "./MeetingCard";
+import { meetingCountdown, meetingDayWord, meetingSlot, meetingTimeline, meetingTimelineLabel } from "@/components/meeting/MeetingHeader";
 
 // 会议页读取外壳的首页集合（关联议题的位置名）；单测里给一个空集合。
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ homeCards: [], closing: false }) }));
@@ -22,7 +22,7 @@ function entry(id: string, kind: string, title: string, body: string) {
 }
 
 /** W4：leader_lens 已是 3–5 条陈述性追问，不再是带免责声明的单条点评。 */
-const LEADER_QUESTIONS = ["为什么现在必须选择渠道投入？", "如果只能保留一个战场，砍掉哪个？", "什么证据会推翻当前推荐？"];
+const LEADER_QUESTIONS = ["决策时机必须选择渠道投入？", "如果只能保留一个战场，砍掉哪个？", "什么证据会推翻当前推荐？"];
 
 export function meetingCard(payloadOverrides: Record<string, unknown>, actions: Card["actions"] = []): Card {
   return {
@@ -129,6 +129,17 @@ const candidateBase: TTranscriptCandidateProjection = {
 };
 
 describe("Meeting 页头（clark 会议页，C-08）", () => {
+  it("预审正文和一号位追问使用已保存的草稿改写，原条目仍作来源", () => {
+    const original = meetingCard({});
+    const draft = (original.payload as { draft: object }).draft;
+    const html = render(meetingCard({ draft: { ...draft, editsByEntryId: {
+      e1: "核心判断已根据新证据改写。", e2: "战略关系已改写。", e3: "一号位的新追问。",
+    } } }));
+    for (const text of ["核心判断已根据新证据改写。", "战略关系已改写。", "一号位的新追问。"]) expect(html).toContain(text);
+    expect(html).not.toContain("但必须绑定 90 天时效复盘");
+    expect(html).not.toContain(LEADER_QUESTIONS[0]);
+    expect(html).toContain("memory:e1");
+  });
   it("成员只读模式沿用计划时段和材料下拉钮，不出现 CEO 的会议操作", () => {
     const card = meetingCard({ purpose: "对齐预算", preflight: { status: "ready", brief: "预审摘要", readiness: "ready" },
       materials: [{ id: "m1", fileName: "预算.pdf", mimeType: "application/pdf", sizeBytes: 1024, receivedBy: "CEO", providedBy: null, uploadedAt: "2026-09-28" }] },
@@ -138,7 +149,8 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     for (const key of ["draft", "transcript", "transcriptCandidate", "recording"]) delete payload[key];
     const html = render(card, true);
     expect(html).toContain("data-header-lead");
-    expect(html).toContain("会议记录");
+    // 会前没有会议记录，页头不放会议记录入口，也不放「会前预审 ｜ 会议记录」切换。
+    expect(html).not.toContain("data-header-switch");
     expect(html).toContain("data-header-tools");
     expect(html).toContain("预审摘要");
     expect(html).toContain("对齐预算");
@@ -162,7 +174,7 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     expect(html).not.toMatch(/<button[^>]*>确认/);
   });
 
-  it("页头：返回、计划时段、会名、材料下拉钮那一格、会议记录入口；这一版没有开始会议，也没有四段进度条", () => {
+  it("页头：返回、计划时段、会名、材料下拉钮那一格；会前没有会议记录入口；这一版没有开始会议，也没有四段进度条", () => {
     const html = render(meetingCard({}));
     expect(html).toContain("返回总览");
     expect(html).toContain("data-header-lead");
@@ -170,23 +182,24 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     expect(html).toContain("23:30");
     expect(html).toContain('id="meeting-title"');
     expect(html).toContain("data-header-tools");
-    expect(html).toContain("data-header-whole");
-    expect(html).toContain("会议记录");
+    expect(html).not.toContain("data-header-switch");
+    expect(html).not.toContain('role="radio"');
     expect(html).not.toContain("开始会议");
     expect(html).not.toContain("会议阶段");
     expect(html).not.toContain("Outcome 复核</span>");
   });
 
-  it("材料上面一行灰字：谁主持、谁参会、这一刻的一件事", () => {
+  it("材料上面一行灰字：谁主持、谁参会；预审结论句不再单独写（只在预审进行中写「会前预审中」）", () => {
     const html = render(meetingCard({}));
-    expect(html).toContain("林晓主持 · 参会：林晓、陈珂 · 会前预审 · 可提交");
+    expect(html).toContain("林晓主持 · 参会：林晓、陈珂");
+    expect(html).not.toMatch(/预审：(材料|建议)/);
   });
 
-  it("这一版页头不放开始会议／计时；开完了由状态行写这场会开完了", () => {
+  it("这一版页头不放开始会议／计时；开完了由状态行写会议已结束", () => {
     expect(render(meetingCard({ status: "cancelled" }))).not.toContain("开始会议");
     const ended = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z" }));
     expect(ended).not.toContain("已开完");
-    expect(ended).toContain("这场会开完了");
+    expect(ended).toContain("会议已结束");
     expect(ended).not.toContain("开始会议");
   });
 
@@ -198,6 +211,44 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     expect(meetingDayWord("2026-09-26T06:00:00.000Z", now)).toBe("后天");
     expect(meetingDayWord("2026-09-23T06:00:00.000Z", now)).toBe("昨天");
     expect(meetingDayWord("2026-09-30T06:00:00.000Z", now)).toBe("9 月 30 日");
+  });
+
+  it("会议阶段一眼可辨：沿用 meetingPhase 的已结束，没结束的按开始时刻分即将开 / 进行中；已取消归已结束", () => {
+    const at = Date.parse("2026-09-24T05:00:00.000Z");
+    expect(meetingTimeline("idle", "2026-09-24T06:00:00.000Z", at)).toBe("upcoming");
+    expect(meetingTimeline("idle", "2026-09-24T04:30:00.000Z", at)).toBe("live");
+    expect(meetingTimeline("live", "2026-09-24T06:00:00.000Z", at)).toBe("live");
+    expect(meetingTimeline("ended", "2026-09-24T06:00:00.000Z", at)).toBe("ended");
+    expect(meetingTimeline("idle", "2026-09-24T06:00:00.000Z", at, true)).toBe("ended");
+  });
+
+  it("即将开写相对时间（公司时区）：今天写还有几小时 / 几分钟，再远写明天、后天、日期", () => {
+    const at = new Date("2026-09-24T03:00:00.000Z"); // 北京 11:00
+    expect(meetingCountdown("2026-09-24T06:00:00.000Z", at)).toBe("还有 3 小时");
+    expect(meetingCountdown("2026-09-24T06:40:00.000Z", at)).toBe("还有 3 小时");
+    expect(meetingCountdown("2026-09-24T03:20:00.000Z", at)).toBe("还有 20 分钟");
+    expect(meetingCountdown("2026-09-24T03:00:20.000Z", at)).toBe("还有 1 分钟");
+    expect(meetingCountdown("2026-09-25T01:00:00.000Z", at)).toBe("明天");
+    expect(meetingCountdown("2026-09-30T06:00:00.000Z", at)).toBe("9 月 30 日");
+  });
+
+  it("已结束写「已结束 · 月/日」，已取消写「已取消 · 月/日」", () => {
+    expect(meetingTimelineLabel("ended", "2026-10-08T08:00:00.000Z", new Date("2026-10-10T00:00:00Z"))).toBe("已结束 · 10/8");
+    expect(meetingTimelineLabel("ended", "2026-10-08T08:00:00.000Z", new Date("2026-10-10T00:00:00Z"), true)).toBe("已取消 · 10/8");
+    expect(meetingTimelineLabel("live", "2026-10-08T08:00:00.000Z", new Date())).toBe("会议中");
+  });
+
+  it("页头时间段与整页带着阶段：已结束是灰色对勾 + 已结束，未开是橙点 + 相对时间", () => {
+    const ended = render(meetingCard({ hasEnded: true }));
+    expect(ended).toMatch(/data-header-lead[^>]*data-timeline="ended"/);
+    expect(ended).toContain("已结束 · 9/24");
+    expect(ended).toMatch(/data-testid="meeting-workspace"[^>]*data-timeline="ended"|data-timeline="ended"[^>]*data-testid="meeting-workspace"/);
+    const upcoming = render(meetingCard({ scheduledAt: "2099-09-24T14:00:00.000Z", endsAt: "2099-09-24T15:30:00.000Z" }));
+    expect(upcoming).toMatch(/data-header-lead[^>]*data-timeline="upcoming"/);
+    expect(upcoming).toContain("9 月 24 日");
+    expect(upcoming).not.toContain("已结束");
+    const cancelled = render(meetingCard({ status: "cancelled" }));
+    expect(cancelled).toContain("已取消 · 9/24");
   });
 
   it("开完之后录音在转写：会议记录页写明进度，转写失败提示改用妙记", () => {
@@ -232,23 +283,24 @@ describe("Meeting 会前预审", () => {
     expect(html).toContain("战略一致性判断");
   });
 
-  it("关联议题移到左侧预审状态之后，保留三个 chips", () => {
+  it("关联议题成为议题块：块头保留已阅、带到会议、打开议题，预审判断收进议题块", () => {
     const html = render(meetingCard({ issueIds: ["issue:1"] }));
     expect(html).toContain('aria-label="关联议题"');
     expect(html).not.toContain('data-section="issues"');
-    // 左栏在正文之前：关联议题必须排在正文的「战略一致性判断」之前。
+    // 单议题会议：战略一致性等预审判断都属于这个议题，排在议题块里。
     expect(html.indexOf("关联议题")).toBeLessThan(html.indexOf("战略一致性判断"));
     expect(html).toContain("已阅");
     expect(html).toContain("带到会议");
-    expect(html).toContain("打开 Issue");
+    expect(html).toContain("打开议题");
+    expect(html).not.toContain("打开 Issue");
   });
 
-  it("scheduled 会议在 Header 给出编辑会议入口，只有服务端下发了 opaque action 才渲染", () => {
+  it("scheduled 会议在标题右侧给出编辑会议铅笔，只有服务端下发了 opaque action 才渲染", () => {
     const withAction = render(meetingCard({}, [{ actionId: "a1", actionType: "meeting.edit_details", label: "编辑会议" }]));
-    expect(withAction).toContain("编辑会议");
+    expect(withAction).toContain('aria-label="编辑会议"');
     expect(render(meetingCard({}))).not.toContain("编辑会议");
-    // 编辑弹层默认收起；非 scheduled 的会议不提供入口
-    expect(withAction).not.toContain('aria-label="编辑会议"');
+    // 编辑浮层默认收起：表单字段不在页上；非 scheduled 的会议不提供入口
+    expect(withAction).not.toContain("会议标题");
     expect(render(meetingCard({ status: "held" }, [{ actionId: "a1", actionType: "meeting.edit_details", label: "编辑会议" }]))).not.toContain("编辑会议");
   });
 
@@ -257,6 +309,22 @@ describe("Meeting 会前预审", () => {
     expect(html).not.toContain('data-testid="meeting-chat-sidebar"');
     expect(html).not.toContain('data-testid="conversation-dock"');
   });
+
+  it("预审失败：给 CEO 看中文原因与重试，不露出服务端内部原话", () => {
+    const failed = (code: string, message: string) => {
+      const base = meetingCard({}).payload as { preflight: Record<string, unknown> };
+      return render(meetingCard({ preflight: { ...base.preflight, status: "failed", error: { code, message, at: "2025-09-23T00:00:00.000Z" } } },
+        [{ actionId: "r1", actionType: "meeting.retry_preflight", label: "重试预审" }]));
+    };
+    const badRef = failed("invalid_source_ref", "Preflight sourceRef 不在允许来源内: memory:kd-company.md#s1#p2");
+    expect(badRef).toContain("本次预审有依据与该会议资料不符，结果未保存。");
+    expect(badRef).toContain("重试预审");
+    expect(badRef).not.toContain("sourceRef 不在允许来源内");
+    expect(failed("preflight_agent_failed", "Candidate agent did not call submit_candidate")).toContain("本次预审未完成。");
+    // 已经是中文的原因照原样显示。
+    expect(failed("preflight_interrupted", "预审在进程重启前未完成，请显式重试")).toContain("预审在进程重启前未完成，请显式重试");
+    expect(preflightErrorText({ code: "invalid_preflight_candidate", message: "Preflight 出现翻案句：x" })).toBe("本次预审返回内容不完整，结果未保存。");
+  });
 });
 
 describe("Meeting 编辑会议弹层 CSS 基线", () => {
@@ -264,7 +332,8 @@ describe("Meeting 编辑会议弹层 CSS 基线", () => {
 
   it("320 宽弹层取设计色值", () => {
     expect(source).toContain("width:320px;padding:14px 16px;border:1px solid #e6e9ed;border-radius:14px");
-    expect(source).toContain("height:36px;border:1px solid #d9dde5;border-radius:9px;background:#f7f8fa");
+    // 输入框的边、圆角、底色、聚焦走 globals.css 的统一输入框样式，弹层里只留宽高。
+    expect(source).toContain(".editField input,.editField select{width:100%;height:36px;padding:0 14px}");
     expect(source).toContain(".editSave{background:#007aff");
   });
 });
@@ -307,11 +376,13 @@ describe("Meeting Outcome 复核", () => {
     expect(html).toContain('data-state="pending"');
     expect(html).toContain('data-state="open"');
     expect(html).toContain("仅展示，不产生效果");
-    expect(html).toContain("3 条发言已保存 · warmap-transcript.v1");
-    // 每条只渲染服务端下发的真实 Action。
-    expect(html).toContain("撤回");
-    expect(html).toContain("确认");
-    expect(html).toContain("忽略");
+    expect(html).toContain("3 条发言已保存");
+    // 会议记录页不出现英文内部名词。
+    for (const term of ["Transcript", "warmap-transcript", "Action Item", "Outcome candidate", "confirmed effect"]) expect(html).not.toContain(term);
+    // 每条只渲染服务端下发的真实 Action；待办会后自动推给负责人，这里只看，不出确认 / 忽略按钮。
+    expect(html).toContain(">撤回<");
+    expect(html).not.toContain(">忽略<");
+    expect(html).not.toContain(">推送<");
   });
 });
 
@@ -342,13 +413,13 @@ describe("妙记 Markdown 候选预览", () => {
     const unresolved = render(meetingCard({ transcriptCandidate: candidateBase }, [confirmAction]));
     expect(unresolved).toContain("还有 1 位说话人未映射，确认不可用");
     expect(unresolved).toContain('data-status="unmapped"');
-    expect(buttonMarkup(unresolved, "确认并写入 Transcript")).toContain("disabled");
+    expect(buttonMarkup(unresolved, "确认并写入逐字稿")).toContain("disabled");
 
     const resolved = { ...candidateBase, speakers: candidateBase.speakers.map((speaker) => ({ ...speaker, suggestedPersonId: speaker.suggestedPersonId ?? "p3" })) };
     const html = render(meetingCard({ transcriptCandidate: resolved }, [confirmAction]));
     expect(html).not.toContain("未映射，确认不可用");
     expect(html).not.toContain('data-status="unmapped"');
-    expect(buttonMarkup(html, "确认并写入 Transcript")).not.toContain("disabled");
+    expect(buttonMarkup(html, "确认并写入逐字稿")).not.toContain("disabled");
   });
 
   it("清除与确认按钮只按服务端下发的 opaque action 渲染", () => {
@@ -358,11 +429,11 @@ describe("妙记 Markdown 候选预览", () => {
         { actionId: "d1", actionType: "meeting.discard_transcript_candidate", label: "清除候选" },
       ]),
     );
-    expect(withActions).toContain("确认并写入 Transcript");
+    expect(withActions).toContain("确认并写入逐字稿");
     expect(withActions).toContain("清除候选");
 
     const withoutActions = render(meetingCard({ transcriptCandidate: candidateBase }));
-    expect(withoutActions).not.toContain("确认并写入 Transcript");
+    expect(withoutActions).not.toContain("确认并写入逐字稿");
     expect(withoutActions).not.toContain("清除候选");
   });
 

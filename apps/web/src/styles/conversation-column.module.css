@@ -13,7 +13,7 @@
  *
  * 左边的材料和右列是同一块面板：宿主把阅读页右侧两个角改成直角、不留间隙，右列只有左边一条线，
  * 右侧两个角接着阅读页的圆角。收起钮是骑在这条线上的一个小把手，线走到哪它跟到哪。
- * 材质是浅色：「我的 Agent」近白带一点晨雾蓝，事项群组暖一点。
+ * 材质是浅色：「天枢」近白带一点晨雾蓝，事项群组暖一点。
  */
 
 .host {
@@ -42,6 +42,13 @@
 
   /* 阅读页里正文那一栏的宽度：右列收起、阅读页铺满右边时，正文跟着挪到新的正中。 */
   --reading-measure: 880px;
+
+  /*
+   * 二级页左侧阅读列（议题、会议、战场、月度计划；conversation/desk/deskLayout 的 MATERIAL_*）：正文固定 600、左右内边距各 28，整宽 656。
+   * 深度讨论展开 / 收起时够宽就不变宽、只平移；不够宽时在开始那一帧一次落到新宽（desk/materialFreeze）。
+   */
+  --material-measure: 600px;
+  --material-column: 656px;
 
   /*
    * 宿主读的三个数：右列展开时阅读页右边两个角是直角、接着右列；收起时阅读页铺满右边，两个角圆回来
@@ -364,9 +371,50 @@
   .host:has(.root[data-mobile-open]) .composer.composer[data-composer] { z-index: 1050; }
 }
 
+/* ── 深度讨论（并排，讨论台首演版）：⤢ 键；右列原地加宽，左侧材料让位，不覆盖 ─────────────────────
+ * 宽度写在宿主的 --conversation-open-width 上（desk/deskLayout.ts：至少视口 55%，左侧材料最窄 460），右列、左侧 .mainArea 的
+ * margin-right、输入条、Co-Agent 胶囊都读它。切换那一下根节点带 data-desk-shift：过渡 240ms（平时收起 / 展开仍是 320ms）。
+ */
+.deskKey.deskKey {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--column-header-top) + (var(--column-header-height) - 32px) / 2);
+  right: 52px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--glass-light-fill);
+  box-shadow: var(--glass-light-rim), var(--glass-light-shadow);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  color: #56657a;
+  transition: color 160ms ease;
+}
+.deskKey.deskKey:hover { color: #1f2a3d; }
+.deskKey.deskKey:focus-visible { outline: 2px solid #3a83f7; outline-offset: 2px; }
+.header[data-kind='agent'][data-has-desk-key] { padding-inline: 92px; }
+.header[data-kind='group'][data-has-desk-key] { padding-right: 92px; }
+
+@media (min-width: 960px) {
+  .root[data-desk-shift] .column { transition-duration: 240ms; }
+  .root[data-desk-shift] .jelly { transition: right 240ms var(--conversation-ease); }
+  .host:has(.root[data-desk-shift]) .composer.composer[data-composer] { transition: width 240ms var(--conversation-ease); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .root[data-desk-shift] .jelly, .host:has(.root[data-desk-shift]) .composer.composer[data-composer] { transition: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) { .deskKey.deskKey { background: #f8f9fb; -webkit-backdrop-filter: none; backdrop-filter: none; } }
+@media (prefers-contrast: more) { .deskKey.deskKey { border-color: #5b6b85; } }
+
 /* ── 对话正文 ─────────────────── */
 
 .log {
+  /* 划词「引用」的浮钮按这里定位（B4）。 */
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -378,6 +426,8 @@
 
 @media (min-width: 1600px) { .log { padding-inline: 24px; } }
 @media (min-width: 960px) and (max-width: 1000px) { .log { padding-inline: 16px; } }
+/* 深度讨论：对话列很宽时正文行长不超过 880（居中），宽出来的是两侧留白，不是更长的行。 */
+.root[data-desk] .log { padding-inline: max(28px, calc((100% - 880px) / 2)); }
 
 /* 会议在录音时，小屏浮层里胶囊在页头下面：正文再让出胶囊那一截。 */
 @media (max-width: 959px) {
@@ -471,9 +521,20 @@
 .header[data-kind='group'] .headerTitle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .header[data-kind='group'] .headerTitle > svg { flex: none; }
 
+/* 天枢页头：标题下面一行 13px 弱色小字写当前对话对象；两行合起来不超过页头高度，长了省略。 */
+.headerStack { display: flex; flex-direction: column; align-items: center; min-width: 0; max-width: 100%; }
+.headerStack .headerTitle { height: 28px; }
+.header .headerSub { margin: -2px 0 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #8a919c; font-size: 13px; font-weight: 400; line-height: 18px; }
+
 /* Agent：标志用品牌的两色渐变，字用字标那一款字（登录页那一枚同一套）。 */
 .headerMark { flex: none; width: 20px; height: 20px; }
 .wordmark { font-family: var(--font-wordmark), "Microsoft YaHei UI", sans-serif; font-size: 17px; font-weight: 400; letter-spacing: 0.06em; }
+
+/*
+ * ↓ 回到最新（D3）：按 panel 定位、水平居中，底边在输入条上沿之上 12px ——
+ * 输入条离右列下沿 12px（窄屏再加安全区），高是 --conversation-composer-height，所以 12 + 高 + 12。
+ */
+.panel .latestJump { position: absolute; left: 0; right: 0; bottom: calc(var(--conversation-composer-height, 48px) + 24px + env(safe-area-inset-bottom, 0px)); }
 
 /* 谁看得到这条线、它能做什么，写在正文底下那一行（C-02）。 */
 .footnote { flex: none; margin: 0; padding: 4px 20px 0; font-size: 10.5px; line-height: 1.7; text-align: center; text-wrap: balance; word-break: keep-all; overflow-wrap: anywhere; color: #979ea8; }
@@ -482,8 +543,21 @@
 @media (max-width: 959px) {
   .root, .root[data-coagent='lasting'] { --column-header-top: 8px; --column-header-height: 40px; }
   .header { padding-inline: 56px; }
+  /* 点触下限 44（docs/superpowers/specs/2026-10-12-mobile-foldable.md §3.3）：全屏对话层右上角的收起钮。 */
+  .close.close { top: 6px; right: 6px; width: 44px; min-width: 44px; height: 44px; }
 }
 
 @media (prefers-reduced-transparency: reduce) {
   .header::before { -webkit-backdrop-filter: none; backdrop-filter: none; background: linear-gradient(180deg, var(--column-surface) 0%, var(--column-surface) 70%, transparent 100%); }
 }
+
+/* 天枢页头左上角那颗很小的「+ 新对话」（ConversationArchive）：低对比度灰色，不加底色，和页头标题互不挤占。 */
+.newKey.newKey {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--column-header-top) + (var(--column-header-height) - 28px) / 2);
+  left: 12px;
+}
+
+/* 三折叠双屏（600–959）：外壳是两栏 grid，右列根节点留在文档流里会多撑出一行，右页底部空出一截；它的子元素都是浮层，根节点本身不占位置。 */
+@media (min-width: 600px) and (max-width: 959px) { .root { position: fixed; } }

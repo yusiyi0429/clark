@@ -1,0 +1,73 @@
+/*
+ * 二级页的类型切换（components/SegmentedSwitch.tsx）：未选中的段只有字，没有外框；选中的段一颗胶囊，浅蓝底、深蓝字。
+ * 各段之间留一道缝，各自成形。字号 14，和页头标题（14～15）站在一起不显小。底色过渡 160ms，减少动效时不过渡。
+ * 选中与否字重不变，切换时各段不挪位置。
+ */
+
+.switch {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.segment {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #5b6677;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.segment:hover { color: #1f2a3d; background: rgb(31 53 86 / 5%); }
+
+.segment[aria-checked='true'],
+.segment[aria-checked='true']:hover {
+  background: #e4eefc;
+  color: #1c4f94;
+  cursor: default;
+}
+
+.segment:focus-visible { outline: 2px solid #3a83f7; outline-offset: 2px; }
+
+.segment svg { flex: none; }
+
+/* 材料排印（data-type-scale="doc"，议题页）：切换是控件，字号取辅助级 13、字重 400；未选中次墨，选中强调色。没有这个属性的页不变。 */
+:global([data-type-scale='doc']) .segment { font-size: var(--doc-type-meta); font-weight: var(--doc-weight-regular); color: var(--doc-ink-2); }
+:global([data-type-scale='doc']) .segment:hover { color: var(--doc-ink-1); }
+:global([data-type-scale='doc']) .segment[aria-checked='true'],
+:global([data-type-scale='doc']) .segment[aria-checked='true']:hover { color: var(--doc-ink-accent); }
+
+@media (max-width: 599px) {
+  .segment { padding: 0 10px; }
+}
+
+/*
+ * 点触下限（docs/superpowers/specs/2026-10-12-mobile-foldable.md §2）：手持与触屏每段高 36，上下各补 4 的透明热区到 44；
+ * 原来手机上反而缩到 28，是照电脑缩的。鼠标的电脑不变（30）。
+ */
+@media (max-width: 959px), (pointer: coarse) {
+  .segment { position: relative; height: 36px; }
+  .segment::after { content: ''; position: absolute; inset: -4px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segment { transition: none; }
+}
+
+:global([data-reduce-motion='true']) .segment { transition: none; }

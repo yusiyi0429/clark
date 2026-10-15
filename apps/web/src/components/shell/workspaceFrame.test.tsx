@@ -53,7 +53,7 @@ afterEach(() => vi.unstubAllGlobals());
 function render(homeHref: "/" | "/me" = "/me") {
   navigation.cursor = 0;
   return renderToStaticMarkup(
-    <WorkspaceFrame homeHref={homeHref} viewerId="viewer" account={{ displayName: "成员", role: homeHref === "/me" ? "member" : "ceo" }} home={<p>保留首页</p>} notifications={() => <p>保留通知</p>} agentTitle="我的 Agent">
+    <WorkspaceFrame homeHref={homeHref} viewerId="viewer" account={{ displayName: "成员", role: homeHref === "/me" ? "member" : "ceo" }} home={<p>保留首页</p>} notifications={() => <p>保留通知</p>} agentTitle="天枢">
       <Capture />
     </WorkspaceFrame>,
   );

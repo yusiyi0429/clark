@@ -67,14 +67,15 @@
 @keyframes chipIn { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
 
 /* 输入行：照 01 锁屏输入框的样子（16 圆角、发丝边、顶光），在卡里用实白底，不再叠一层模糊。 */
-.field { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 52px; padding: 4px 16px 4px 4px; border: 1px solid var(--onboarding-edge); border-radius: var(--onboarding-control-radius); background: var(--surface); box-shadow: var(--onboarding-highlight), var(--onboarding-shadow); transition: border-color var(--onboarding-feedback); }
-.field:focus-within { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
-.field[data-invalid] { border-color: var(--onboarding-error); }
-.field[data-invalid]:focus-within { outline-color: var(--onboarding-error); }
+/* 边画在外层（里面的 input / textarea 无边）：边色、圆角、底色、悬停与聚焦取 globals.css 的统一输入框变量，聚焦只换边色 */
+.field { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 52px; padding: 4px 16px 4px 4px; border: 1px solid var(--field-border); border-radius: var(--field-radius-line); background: var(--field-bg); transition: border-color 140ms ease; }
+.field:hover { border-color: var(--field-border-hover); }
+.field:focus-within { border-color: var(--field-border-focus); }
+.field[data-invalid], .field[data-invalid]:focus-within { border-color: var(--onboarding-error); }
 .field[data-disabled] { background: var(--morning-start); }
-.field input { flex: 1; min-width: 0; height: 44px; padding: 0 12px; border: 0; border-radius: var(--onboarding-inset-radius); outline: none; background: transparent; color: var(--onboarding-ink); font: 16px/1.5 var(--font-sans); caret-color: var(--onboarding-blue); }
-.field textarea { flex: 1 1 0; min-width: 0; min-height: 44px; max-height: calc(4lh + 20px); padding: 10px 12px; border: 0; border-radius: var(--onboarding-inset-radius); outline: none; background: transparent; color: var(--onboarding-ink); font: 16px/1.5 var(--font-sans); caret-color: var(--onboarding-blue); resize: none; field-sizing: content; overflow-wrap: anywhere; }
-.field :is(input, textarea)::placeholder { color: var(--onboarding-faint); opacity: 1; }
+.field input { flex: 1; min-width: 0; height: 44px; padding: 0 12px; border: 0; border-radius: var(--onboarding-inset-radius); outline: none; background: transparent; color: var(--field-ink); font: var(--field-font)/var(--field-line) var(--font-sans); caret-color: var(--field-caret); }
+.field textarea { flex: 1 1 0; min-width: 0; min-height: 44px; max-height: calc(4lh + 20px); padding: 10px 12px; border: 0; border-radius: var(--onboarding-inset-radius); outline: none; background: transparent; color: var(--field-ink); font: var(--field-font)/var(--field-line) var(--font-sans); caret-color: var(--field-caret); resize: none; field-sizing: content; overflow-wrap: anywhere; }
+.field :is(input, textarea)::placeholder { color: var(--field-placeholder); opacity: 1; }
 .field :is(input, textarea):disabled { cursor: not-allowed; }
 .field :is(input, textarea):disabled::placeholder { color: color-mix(in srgb, var(--onboarding-faint) 70%, transparent); }
 .editField { min-height: 48px; padding-block: 1px; }

@@ -100,6 +100,9 @@ describe("openapi contract", () => {
         "/api/me/notifications",
         "/api/me/seen",
         "/api/me/voiceprint",
+        "/api/me/dictation",
+        "/api/me/dictation/session",
+        "/api/me/dictation/polish",
         "/healthz",
       ]),
     );

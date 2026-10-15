@@ -1,0 +1,32 @@
+/*
+ * 议题页页头的「更多 ⋯」与它的两个弹层（cards/IssueMoreMenu.tsx）。
+ * 触发钮：32×32 的透明圆角钮，次墨，悬停浅灰底（和「邀请成员」图标钮同一种）；触屏 / 手持 / 手机宽的面板 44×44。
+ * 菜单浮层与菜单项走 material-tabs.module.css（材料菜单同一套毛玻璃），这里只把触屏下的行高补到 44。
+ * 弹层：说明 13 次墨；原因输入框边、圆角、底色、聚焦走 globals.css 的统一输入框样式，这里只管宽度与间距。
+ */
+
+.more.more {
+  display: inline-flex; flex: none; align-items: center; justify-content: center;
+  width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 10px;
+  background: transparent; color: var(--doc-ink-2, #5d636c);
+}
+.more.more:hover, .more.more[data-hovered='true'], .more.more[aria-expanded='true'] { background: #eef2f7; color: var(--doc-ink-1, #1f2329); }
+.more.more:focus-visible { outline: 2px solid #3a83f7; outline-offset: 2px; }
+
+.list .row.row { height: 38px; min-height: 38px; }
+
+.lead { margin: 0 0 12px; font-size: var(--doc-type-meta, 13px); line-height: var(--doc-lh-meta, 20px); color: var(--doc-ink-2, #5d636c); }
+.joinDialog { padding: 18px; background: #f9fbff; color: var(--ts-text, #1f2a3d); }
+
+.title { margin: 0 0 8px; font-size: 16px; font-weight: 600; line-height: 24px; color: #242529; }
+.field { display: flex; flex-direction: column; gap: 6px; margin: 14px 0 0; font-size: 13px; line-height: 20px; color: #5d636c; }
+.field input { width: 100%; }
+
+@media (max-width: 959px), (pointer: coarse) {
+  .more.more { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+  .list .row.row { height: 44px; min-height: 44px; }
+  .field input { min-height: var(--touch-hit, 44px); }
+}
+@container pane (max-width: 599px) {
+  .more.more { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+}

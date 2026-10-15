@@ -7,7 +7,7 @@ import { readColumnMode } from "./useColumnMode";
 import type { ConversationData } from "./useConversation";
 
 const noop = () => undefined;
-const agent: ConversationChannel[] = [{ id: "agent", kind: "agent", label: "我的 Agent", title: "CEO Agent", unread: 0 }];
+const agent: ConversationChannel[] = [{ id: "agent", kind: "agent", label: "天枢", title: "天枢", subtitle: "围绕：灯塔议题", unread: 0 }];
 
 function data(patch: Partial<ConversationData> = {}): ConversationData {
   return { scope: "issue:1", streaming: false, attachments: [], removeAttachment: noop, send: async () => true, stop: noop, ...patch } as unknown as ConversationData;
@@ -32,16 +32,17 @@ function composer(patch: Partial<Parameters<typeof ColumnComposer>[0]> = {}) {
 }
 
 describe("二级页右列（clark ConversationColumn）", () => {
-  it("页头写明是谁的 Agent；收起后留一颗「我的 Agent」频道钮", () => {
+  it("页头写明天枢和当前对话对象；收起后留一颗「天枢」频道钮", () => {
     const html = renderToStaticMarkup(
       <ConversationColumn channels={agent} channel="agent" onChannel={noop} mode="expanded" onMode={noop} mobileOpen={false} onMobileOpen={noop} composerHeight={90} ariaLabel="灯塔 · 对话" testId="rail">
         <p>正文</p>
       </ConversationColumn>,
     );
-    expect(html).toContain("CEO Agent");
+    expect(html).toContain("天枢");
+    expect(html).toContain("围绕：灯塔议题");
     expect(html).toContain('data-mode="expanded"');
     expect(html).toContain('aria-label="收起对话栏"');
-    expect(html).toContain("展开对话栏：我的 Agent");
+    expect(html).toContain("展开对话栏：天枢");
   });
 
   it("收起偏好只认 strip，其余一律展开", () => {
@@ -53,16 +54,16 @@ describe("二级页右列（clark ConversationColumn）", () => {
 });
 
 describe("右列底下的两行输入条", () => {
-  it("只有「我的 Agent」时宽屏不画频道开关；窄屏画这一颗，作为打开浮层的入口", () => {
+  it("只有「天枢」时宽屏不画频道开关；窄屏画这一颗，作为打开浮层的入口", () => {
     expect(composer()).not.toContain("data-channel-switch");
     const narrow = composer({ narrow: true });
     expect(narrow).toContain("data-channel-switch");
-    expect(narrow).toContain("我的 Agent");
+    expect(narrow).toContain("天枢");
   });
 
-  it("提示文字是「问你的 Agent…」，空着时右端是能按的麦克风（语音输入）", () => {
+  it("提示文字是「与天枢讨论…」，空着时右端是能按的麦克风（语音输入）", () => {
     const html = composer();
-    expect(html).toContain('placeholder="问你的 Agent…"');
+    expect(html).toContain('placeholder="与天枢讨论…"');
     expect(html).toContain('aria-label="语音输入"');
     expect(html).toContain('data-state="mic"');
     expect(html).not.toContain("语音对话尚未接入");
@@ -87,5 +88,53 @@ describe("右列底下的两行输入条", () => {
     const html = composer({ data: data({ attachments: [{ id: "a1", fileName: "纪要.pdf", mimeType: "application/pdf" }] }) });
     expect(html).toContain("纪要.pdf");
     expect(html).toContain('aria-label="移除附件 纪要.pdf"');
+  });
+});
+
+describe("深度讨论（并排）在右列里", () => {
+  const rail = (patch: Partial<Parameters<typeof ConversationColumn>[0]> = {}, body = <p>正文</p>) => renderToStaticMarkup(
+    <ConversationColumn channels={agent} channel="agent" onChannel={noop} mode="expanded" onMode={noop} mobileOpen={false} onMobileOpen={noop}
+      composerHeight={90} ariaLabel="标准交付 · 对话" testId="rail" {...patch}>
+      {body}
+    </ConversationColumn>,
+  );
+  /** 从右列面板开始到正文之间的标签序列：切换时这一段不能变（变了就是重挂了正文）。 */
+  const pathToBody = (html: string, marker = "正文") => html.slice(html.indexOf("<aside"), html.indexOf(marker)).replace(/<button[\s\S]*?<\/button>/g, "").match(/<\w+/g);
+
+  it("平时：列头右侧一颗「深度讨论」键（aria-expanded=false）；宿主不给 onDesk 就没有", () => {
+    const html = rail({ onDesk: noop });
+    expect(html).toContain('aria-label="深度讨论"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("data-desk-key");
+    expect(html).toContain("data-has-desk-key");
+    expect(html).not.toContain("data-desk=");
+    expect(rail()).not.toContain("深度讨论");
+  });
+
+  it("展开：键变「收起」，收起对话栏的把手不画；页头标题不变、不加字；没有右栏、抽屉、inert", () => {
+    const html = rail({ onDesk: noop, deskWidth: 600 });
+    expect(html).toContain('data-desk="true"');
+    expect(html).toContain('aria-label="收起"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).not.toContain("收起对话栏");
+    expect(html).toContain("天枢");
+    expect(html).toContain("围绕：灯塔议题");
+    expect(html).not.toContain("data-desk-stage");
+    expect(html).not.toContain("data-drawer");
+    expect(html).not.toContain("对象与台账");
+    // 只有收起后的那一溜频道钮是 inert 的（右列展开着）；右列本身不 inert。
+    expect(html.slice(html.indexOf("<aside"), html.indexOf("</aside>"))).not.toContain("inert");
+  });
+
+  it("窄屏（浮层）一律当没给", () => {
+    expect(rail({ onDesk: noop, deskWidth: null })).not.toContain("data-desk=");
+  });
+
+  it("回答流式输出中切换：正文前面的包裹层不变（对话、滚动区、草稿不重挂）", () => {
+    const streaming = <div role="log"><p>已经输出的一段</p><span data-streaming>正文</span></div>;
+    const plain = pathToBody(rail({ onDesk: noop }, streaming));
+    expect(plain).not.toBeNull();
+    expect(pathToBody(rail({ onDesk: noop, deskWidth: 600 }, streaming))).toEqual(plain);
+    expect(pathToBody(rail({ onDesk: noop, deskWidth: 680 }, streaming))).toEqual(plain);
   });
 });

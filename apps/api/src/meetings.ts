@@ -13,7 +13,7 @@ import type { ParsedMaterial } from "./materialParser.js";
 import { replaceMeetingMaterials } from "./meetingMaterials.js";
 import { syncMeetingMembers, threadIntroInput } from "./threads.js";
 import { postThreadIntro, type ThreadIntroAgent } from "./threadIntro.js";
-import { runPreflight, type PreflightAgent } from "./meetingPreflight.js";
+import { startPreflight, type PreflightAgent } from "./meetingPreflight.js";
 import {
   appendFingerprint,
   commit,
@@ -184,7 +184,7 @@ export async function executeCreateMeeting(
   if (isNew) {
     scheduleMeetingIntro(pool, companyMemory, introAgent, created.id, created.lead_dri_id,
       created.participants.map((person) => person.personId).filter((id) => id !== created.lead_dri_id), [created.lead_dri_id]);
-    await runPreflight(pool, companyMemory, preflightAgent, created.id);
+    await startPreflight(pool, companyMemory, preflightAgent, created.id);
   }
   const row = await getMeetingRow(pool.query.bind(pool), created.id);
   return { card: projectMeetingCard(row ?? created, secret) };
@@ -245,7 +245,7 @@ export async function createConfigMeeting(
     const stored = await replaceMeetingMaterials(pool, secret, created.id, input.materials, input.materialStorageDir);
     if ("error" in stored) return stored;
   }
-  await runPreflight(pool, companyMemory, preflightAgent, created.id);
+  await startPreflight(pool, companyMemory, preflightAgent, created.id);
   const row = await getMeetingRow(pool.query.bind(pool), created.id);
   return { card: projectMeetingCard(row ?? created, secret) };
 }
@@ -279,7 +279,7 @@ export async function executeJoinMeeting(
   });
   // 关联 Issue 变化后会前材料随之重建；重放/无变化不重跑
   if (!("error" in outcome) && !outcome.conflict && !outcome.replayed) {
-    await runPreflight(pool, companyMemory, preflightAgent, input.meetingId);
+    await startPreflight(pool, companyMemory, preflightAgent, input.meetingId);
     return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), input.meetingId))!, secret) };
   }
   return outcome;
@@ -618,6 +618,6 @@ export async function importDriMeeting(
   }
   scheduleMeetingIntro(pool, companyMemory, introAgent, meetingId, resolved.lead.personId,
     resolved.participants.map((person) => person.personId).filter((id) => id !== resolved.lead.personId), [resolved.lead.personId]);
-  await runPreflight(pool, companyMemory, preflightAgent, meetingId);
+  await startPreflight(pool, companyMemory, preflightAgent, meetingId);
   return { status: 201, card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), meetingId))!, secret) };
 }

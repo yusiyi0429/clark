@@ -3,11 +3,9 @@
  *
  * 材料区要尽可能给材料留空间、其他按钮精简不抢眼（用户 2026-09-29 定）：页头下面不再另起一排页签胶囊，
  * 这一页的材料收进页头右边一颗下拉钮。钮上写此刻看的那一份；按下去一张下拉单，当前那一份打勾，最后一项「添加材料」。
- * 页头里那个整场入口（会议记录）和下拉钮一样高、一样的低调按钮，当前时淡蓝底、蓝字。
  */
 
-.trigger.trigger,
-.whole.whole {
+.trigger.trigger {
   position: relative;
   flex: none;
   gap: 6px;
@@ -27,17 +25,14 @@
 .trigger.trigger { min-width: 0; max-width: 240px; }
 
 .trigger.trigger:hover,
-.trigger.trigger[aria-expanded='true'],
-.whole.whole:hover { background: rgb(31 53 86 / 6%); color: #1f2a3d; }
+.trigger.trigger[aria-expanded='true'] { background: rgb(31 53 86 / 6%); color: #1f2a3d; }
 
-.whole.whole[data-selected='true'] {
-  background: var(--pill-current-agent, #eaf2ff);
-  color: var(--pill-current-ink-agent, #2f6fd6);
-  font-weight: 600;
-}
+/* 材料排印（data-type-scale="doc"，议题页）：页头的材料下拉钮是控件，13 / 400 次墨，悬停主墨。没有这个属性的页不变。 */
+:global([data-type-scale='doc']) .trigger.trigger { font-weight: 400; color: var(--doc-ink-2); }
+:global([data-type-scale='doc']) .trigger.trigger:hover,
+:global([data-type-scale='doc']) .trigger.trigger[aria-expanded='true'] { color: var(--doc-ink-1); }
 
-.trigger.trigger:focus-visible,
-.whole.whole:focus-visible { outline: 2px solid #3a83f7; outline-offset: 2px; }
+.trigger.trigger:focus-visible { outline: 2px solid #3a83f7; outline-offset: 2px; }
 .item.item:focus-visible { outline: 2px solid #3a83f7; outline-offset: -2px; }
 
 .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -95,7 +90,7 @@
   border-radius: 10px;
   background: transparent;
   color: #1f2a3d;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   text-align: left;
   white-space: nowrap;
@@ -109,9 +104,9 @@
 .item.item[aria-current='true'] > svg { color: currentColor; }
 .item > .label { flex: 1 1 auto; }
 .check { flex: none; margin-left: 8px; }
-.hint { flex: none; margin-left: 4px; color: #8a95a5; font-size: 11px; font-weight: 400; }
+.hint { flex: none; margin-left: 4px; color: #8a95a5; font-size: 12px; font-weight: 400; }
 /* 等本人采用 / 不采用的批注：蓝底白字的小圆角数字，下拉钮上是合计。 */
-.count { flex: none; display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: #2f6fd6; color: #fff; font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
+.count { flex: none; display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: #2f6fd6; color: #fff; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
 .item.item:disabled, .item.item[data-disabled='true'] { color: #8a95a5; background: transparent; cursor: default; }
 .item.item:disabled > svg, .item.item[data-disabled='true'] > svg { color: currentColor; }
 
@@ -131,10 +126,12 @@
   .popover.popover { box-shadow: inset 0 0 0 1px #5b6b85; }
 }
 
-/* 页头挤的时候，两颗都只留图标（会议记录）或收窄（下拉钮），标题优先。 */
+/* 页头挤的时候下拉钮收窄，标题优先。 */
 @media (max-width: 1250px) {
-  .whole.whole { width: 32px; min-width: 32px; padding: 0; justify-content: center; }
-  .whole .label { display: none; }
+  .trigger.trigger { max-width: 160px; }
+}
+/* 深度讨论（并排）时视口仍宽、左侧面板却窄到 582：按面板宽叠加同一档（平时态面板 ≤780 只出现在视口 ≤1250，样子不变）。 */
+@container pane (max-width: 780px) {
   .trigger.trigger { max-width: 160px; }
 }
 
@@ -143,7 +140,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .trigger.trigger, .whole.whole { transition: none; }
+  .trigger.trigger { transition: none; }
 }
 
 /*
@@ -152,7 +149,7 @@
  */
 .add.addNext { margin-top: 0; }
 .add.addNext::before { content: none; }
-.section { position: relative; margin: 9px 0 0; padding: 6px 10px 2px; color: #8a95a5; font-size: 11.5px; font-weight: 500; line-height: 16px; }
+.section { position: relative; margin: 9px 0 0; padding: 6px 10px 2px; color: #8a95a5; font-size: 12px; font-weight: 500; line-height: 16px; }
 .section::before { content: ''; position: absolute; top: -5px; left: 8px; right: 8px; height: 1px; background: rgb(31 53 86 / 10%); }
 .working { display: inline-flex; align-items: center; gap: 5px; color: #2f64b8; }
 .pulse { flex: none; width: 6px; height: 6px; border-radius: 50%; background: #3a83f7; animation: material-menu-pulse 1.2s ease-in-out infinite; }

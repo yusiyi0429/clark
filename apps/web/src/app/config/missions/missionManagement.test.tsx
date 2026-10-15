@@ -113,7 +113,7 @@ describe("Mission 配置草稿与 patch", () => {
       [{ period: "2026/09" }, "周期需为 YYYY-MM（月份 01–12）"],
       [{ period: "2026-99" }, "周期需为 YYYY-MM（月份 01–12）"],
       [{ period: "2026-00" }, "周期需为 YYYY-MM（月份 01–12）"],
-      [{ ownerId: "" }, "必须指定唯一 DRI"],
+      [{ ownerId: "" }, "必须指定唯一负责人"],
       [{ capabilityId: "" }, "必须选择主要能力域"],
       [{ outcome: "" }, "Mission Outcome 不能为空"],
     ];
@@ -134,7 +134,7 @@ describe("Mission 配置页渲染", () => {
     expect(html).toContain("MISSION SETTINGS");
     expect(html).toContain("Mission 配置");
     expect(html).toContain("1 条 · 按周期与能力域排序");
-    expect(html).toContain("按编号、标题或 DRI 搜索");
+    expect(html).toContain("按编号、标题或负责人搜索");
     expect(html).toContain("LHR-A");
   });
 

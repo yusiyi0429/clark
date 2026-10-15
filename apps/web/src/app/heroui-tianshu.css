@@ -80,18 +80,14 @@
   --separator-secondary: var(--hairline);
   --separator-tertiary: var(--hairline-strong);
 
-  /* 输入框 */
+  /* 输入框：边、悬停边、聚焦边、占位字、圆角（--field-border / -hover / -focus / -placeholder / -radius）
+     取 globals.css 里统一输入框样式的值，这里不再赋值（赋了会把统一取值盖掉） */
   --field-background: var(--surface);
   --field-foreground: var(--ink);
-  --field-placeholder: var(--ink-faint);
-  --field-border: var(--rule);
   --field-border-width: 1px;
-  --field-border-hover: var(--hairline-strong);
-  --field-border-focus: var(--brand-deep);
   --field-hover: var(--surface);
   --field-focus: var(--surface);
   --field-shadow: none;
-  --field-radius: calc(var(--radius) * 1.1);
 
   /* 焦点、链接、分段控件 */
   --focus: var(--brand-deep);

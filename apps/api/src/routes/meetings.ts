@@ -10,9 +10,12 @@ import { importTranscript } from "../outcome.js";
 import { createTranscriptCandidate } from "../transcriptCandidate.js";
 import { projectMemberMeetingCardFromCard } from "../memberCards.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
+import { registerDecisionHistoryRoutes } from "./decisionHistory.js";
 
 export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void {
   const { pool, q, env, companyMemory, fail, requireCEO, requirePerson, outcome, materialStorageDir, materialMultipartLimitError, respond, respondTranscriptImport, maxTranscriptBytes } = ctx;
+  // 议题有效历史（H05）只读接口：GET /api/issues/:id/history、GET /api/meetings/:id/history
+  registerDecisionHistoryRoutes(app, ctx);
 
   app.post(
     "/api/meetings/:id/transcript",

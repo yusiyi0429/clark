@@ -1,5 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
-import { IssueLocation, IssueUrgencyLevel } from "./issues.js";
+import { IssueLocation, IssueNature, IssueUrgencyLevel } from "./issues.js";
 import { MissionAnchor } from "./config.js";
 import { MonthlyPlanExportStatus } from "./monthlyPlans.js";
 
@@ -12,6 +12,10 @@ export const BattlefieldPendingIssue = Type.Object(
     title: Type.String(),
     urgency: IssueUrgencyLevel,
     location: IssueLocation,
+    /** ai_suggested：AI 识别的候选议题（界面标「AI 建议」）；省略即真实议题。 */
+    nature: Type.Optional(IssueNature),
+    /** 议题由雷达自动升级（issues.origin = radar）时为 true，界面在「AI 建议」前加雷达小图标；其余来源省略。 */
+    fromRadar: Type.Optional(Type.Literal(true)),
   },
   { additionalProperties: false },
 );

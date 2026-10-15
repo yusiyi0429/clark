@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TPersonalRadarJudgeSubmission, TPersonalRadarRun, TRadarDirection, TRadarSourceItem } from "@warmap/contracts";
+import { fetchArticles, fullTextKeepsQuotes, type ArticleFetcher } from "./articleText.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import type { GithubTrendingReader, TrendingRepo, TrendingSince } from "./githubTrending.js";
 import { roleOf } from "./memberAccess.js";
@@ -137,6 +138,7 @@ export function createPersonalRadarService({
   outlets,
   judge,
   trending,
+  articleText,
   now = () => new Date(),
   scanTimeoutMs = SCAN_TIMEOUT_MS,
 }: {
@@ -149,6 +151,8 @@ export function createPersonalRadarService({
   judge: PersonalRadarJudge;
   /** GitHub Trending 读取器（02b）；没接上时榜单来源只写 warning。 */
   trending?: GithubTrendingReader;
+  /** 给要保存的检索条目抓原文页全文；不传就只存检索摘要。个人信号表没有配图列，这里只换正文。 */
+  articleText?: ArticleFetcher;
   now?: () => Date;
   scanTimeoutMs?: number;
 }): PersonalRadarService {
@@ -333,6 +337,17 @@ export function createPersonalRadarService({
         right.candidate.relevance - left.candidate.relevance || newestFirst(left.source, right.source));
       const kept = ranked.slice(0, remaining);
       if (ranked.length > kept.length) warnings.push(`今天的 ${DAILY_CAP} 条名额已满，另有 ${ranked.length - kept.length} 条没有保存`);
+      // 检索条目的全文：判定（含引文）是对着检索摘要做的，只给确定要保存的检索条目抓原文页；
+      // 全文逐字包含引文才替换，否则保留摘要，引文永远是原文子串
+      const searchKept = kept.filter(({ source }) => (source.sourceRef as { type?: string } | null)?.type === "web-search");
+      const articles = articleText && searchKept.length
+        ? await fetchArticles(searchKept.map(({ source }) => ({ url: source.url, title: source.title })), articleText, { signal: abort.signal })
+        : new Map();
+      for (const entry of searchKept) {
+        const article = articles.get(entry.source.url);
+        if (!fullTextKeepsQuotes(entry.source.excerpt, article, [entry.candidate.evidenceQuote])) continue;
+        entry.source = { ...entry.source, excerpt: article.text, sourceRef: { ...(entry.source.sourceRef as object), fullText: true } };
+      }
       const directionText = new Map(directions.map((direction) => [direction.id, direction.text]));
       let createdSignals = 0;
       for (const { candidate, source } of kept) {

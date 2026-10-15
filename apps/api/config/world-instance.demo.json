@@ -1,0 +1,24 @@
+{
+  "label": "演示范围（集团演示 1）",
+  "scope_id": "8c18bcbb-f60c-4472-b336-778bf4780a75",
+  "domains": {
+    "company": "df06952f-a49c-4a40-9672-48e8a0dd3075",
+    "eo": "3114d7d7-f9ad-4695-a7d8-0652d3c64c9a",
+    "aidc": "9cf91c07-ed85-49e1-9326-bcbf12fe7a42",
+    "ciyuan": "d03d51c3-683b-4ec5-a7bc-ef73fdcac5a7",
+    "fangdongdong": "3f9cfd57-eadb-4981-9e17-19bee9e32e90"
+  },
+  "principals": {
+    "demo-aidc": "776d028c-7138-4c36-86d5-be4cb9c2073f",
+    "demo-ciyuan": "7fcdc8c1-356b-4599-a2ed-8e03578c96a8",
+    "demo-fangdongdong": "7b137ed1-21d8-4ee8-a121-2b3980e6717e",
+    "demo-tianshu": "553069bc-19bb-4183-a542-a0b1490e44e9"
+  },
+  "anchors": {
+    "company": "679fd209-63cd-4d00-9d9a-9a0ebecbae59",
+    "strategy": "9b44aebd-b872-456e-bcf2-9fd8f1abcbad"
+  },
+  "people": {},
+  "reads": true,
+  "writes": false
+}

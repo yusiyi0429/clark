@@ -30,7 +30,7 @@ function heldMeeting(items: unknown[], actions: Card["actions"] = []): Card {
 const STRATEGIC = item("s1", "strategic", { title: "东南亚改为主战场", brief: "把东南亚从试点升级为主战场，下季度预算向它倾斜。", judgmentKind: "company_direction" });
 
 describe("会后纪要（会议记录页）", () => {
-  it("分成会议纪要、会议共识、按负责人分组的 Action Item、提给 CEO 的战略议题", () => {
+  it("分成会议纪要、会议共识、按负责人分组的待办事项、提给 CEO 的战略议题", () => {
     const html = renderToStaticMarkup(
       <MeetingCard
         card={heldMeeting([
@@ -47,12 +47,40 @@ describe("会后纪要（会议记录页）", () => {
     expect(html).toContain("会议纪要");
     expect(html).toContain("定了两期投入。");
     expect(html).toContain("会议共识");
-    expect(html).toContain("Action Item");
-    expect(html).toContain("已推送给林晓");
-    expect(html).toContain("CEO 的事，只留在纪要");
+    expect(html).toContain("待办事项");
+    expect(html).not.toContain("Action Item");
+    expect(html).toContain("已推给林晓");
+    expect(html).toContain("一号位事项，仅记入纪要");
     expect(html).toContain("提给 CEO 的战略议题");
     expect(html).toContain("东南亚改为主战场");
-    expect(html).toContain("等 CEO 确认");
+    expect(html).toContain("待 CEO 确认");
+  });
+
+  it("会议共识以主决定分组：子项缩进、没有自己的按钮；待办收成一行「N 项待办已推给负责人」，没有推送按钮", () => {
+    const pushed = (id: string) => item(id, "todo", { ownerPersonId: "p1", review: { status: "confirmed", effectRef: `task:${id}` } });
+    const sign = (actionType: string, itemId: string) => ({ actionId: `${actionType}:${itemId}`, actionType, label: actionType, itemId });
+    const html = renderToStaticMarkup(
+      <MeetingCard
+        card={heldMeeting([
+          item("m1", "decision", { parentItemId: null }), item("c1", "decision", { parentItemId: "m1" }), item("c2", "decision", { parentItemId: "m1" }),
+          item("m2", "decision", { parentItemId: null }), pushed("a1"), pushed("a2"),
+        ], [sign("meeting.confirm_item", "m1"), sign("meeting.dismiss_item", "m1"), sign("meeting.confirm_item", "m2"), sign("meeting.dismiss_item", "m2"),
+          sign("meeting.revoke_effect", "a1"), sign("meeting.revoke_effect", "a2")] as Card["actions"])}
+        collection={[]}
+        onCard={noop}
+        onNavigate={noop}
+      />,
+    );
+    expect(html).toContain("会议共识");
+    expect(html.match(/>2 条</g)).toHaveLength(1);
+    expect(html).toContain("c1 的内容");
+    expect((html.match(/aria-label="含 2 项"/g) ?? [])).toHaveLength(1);
+    // 子项那一层没有按钮：确认 / 忽略只出现两次（两条主决定各一组）
+    expect(html.match(/>确认</g)).toHaveLength(2);
+    expect(html.match(/>忽略</g)).toHaveLength(2);
+    expect(html).toContain("2 项待办已推给负责人");
+    expect(html).not.toContain(">推送<");
+    expect(html).not.toContain(">撤回<");
   });
 
   it("战略议题确认后写明交给 Co-Agent 更新本体；不同意写明", () => {
@@ -63,7 +91,7 @@ describe("会后纪要（会议记录页）", () => {
   });
 });
 
-describe("CEO 通知栏「需要你确认」", () => {
+describe("CEO 通知栏「待一号位确认」", () => {
   const actions = [
     { actionId: "c1", actionType: "meeting.confirm_item", label: "确认", itemId: "s1" },
     { actionId: "d1", actionType: "meeting.dismiss_item", label: "不同意", itemId: "s1" },
@@ -78,7 +106,7 @@ describe("CEO 通知栏「需要你确认」", () => {
 
   it("标题加一两句话把事情说全，卡上直接确认或不同意", () => {
     const html = renderToStaticMarkup(<StrategicConfirmCard cards={[heldMeeting([STRATEGIC], actions)]} onCard={noop} onNavigate={noop} />);
-    expect(html).toContain("需要你确认");
+    expect(html).toContain("待一号位确认");
     expect(html).toContain("东南亚改为主战场");
     expect(html).toContain("把东南亚从试点升级为主战场");
     expect(html).toContain(">确认<");

@@ -7,7 +7,7 @@
  *   「今天 14:00–15:30」。它站在眉题的位置，会议页不再另写眉题。
  * - `MeetingClock`：页头右边单独一颗胶囊（`data-header-end`）。会前写「开始会议」；按下去换成计时（「会议中」和走着的
  *   分:秒）；点计时弹出一小块，里面是「这场会开完了」。开完之后写「已开完」和几点，不能再按。
- * - `MeetingHeaderActions`：把上面两样和胶囊右端这个对象自己的那一样（会议记录入口）按页头的约定排好。
+ * - `MeetingHeaderActions`：把上面两样和页头右边那一样（会开完了是「会前预审 ｜ 会议记录」两段切换）按页头的约定排好。
  * - `MeetingStatus`：材料上面一行灰字：谁主持、几人参会这类事实，再加这一刻的一件事。
  *
  * 「开始会议」同时开始录音（useMeetingRecorder），计时只是这一页的状态；「这场会开完了」停下录音、交给服务端转写，
@@ -70,6 +70,54 @@ export function localClock(at: string): string {
   return date.toLocaleString("zh-CN", { timeZone: COMPANY_TIMEZONE, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+/**
+ * 这场会在时间线上的哪一段，全站一个颜色（页头时间段、整页、通知栏黑卡的左条）：橙＝即将开、红＝进行中、灰＝已结束。
+ * 已结束沿用 `meetingPhase`（后台记了开完、时间已过（hasEnded，含「待确认／待导入记录」）、已开完、已复核）；已取消也归这一段。
+ * 没结束的：这一页按过「开始会议」，或者已经到了开始时刻，就是进行中；否则即将开。
+ */
+export type MeetingTimeline = "upcoming" | "live" | "ended";
+
+export function meetingTimeline(phase: MeetingPhase, scheduledAt: string, now: number, cancelled = false): MeetingTimeline {
+  if (phase === "ended" || cancelled) return "ended";
+  if (phase === "live") return "live";
+  return Date.parse(scheduledAt) <= now ? "live" : "upcoming";
+}
+
+/** 即将开的相对时间：今天写「还有 3 小时」「还有 20 分钟」；不是今天写明天、后天、日期（公司时区的日历日）。 */
+export function meetingCountdown(scheduledAt: string, now: Date): string {
+  const word = meetingDayWord(scheduledAt, now);
+  if (word !== "今天") return word;
+  const ms = Date.parse(scheduledAt) - now.getTime();
+  if (ms < 3_600_000) return `还有 ${Math.max(1, Math.ceil(ms / 60_000))} 分钟`;
+  return `还有 ${Math.floor(ms / 3_600_000)} 小时`;
+}
+
+const monthDay = (iso: string) => new Date(iso).toLocaleDateString("zh-CN", { timeZone: COMPANY_TIMEZONE, month: "numeric", day: "numeric" });
+
+/** 时间段前面那几个字：「还有 3 小时」／「会议中」／「已结束 · 10/8」。 */
+export function meetingTimelineLabel(timeline: MeetingTimeline, scheduledAt: string, now: Date, cancelled = false): string {
+  if (timeline === "upcoming") return meetingCountdown(scheduledAt, now);
+  if (timeline === "live") return "会议中";
+  return `${cancelled ? "已取消" : "已结束"} · ${monthDay(scheduledAt)}`;
+}
+
+/** 这一刻（毫秒），每 `every` 毫秒走一次；首帧就是渲染那一刻。 */
+function useNow(every: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), every);
+    return () => window.clearInterval(timer);
+  }, [every]);
+  return now;
+}
+
+/** 页头时间段要用的阶段与那几个字；即将开的每 30 秒重算一次，到点自己变成进行中。 */
+export function useMeetingTimeline({ phase, scheduledAt, cancelled = false }: { phase: MeetingPhase; scheduledAt: string; cancelled?: boolean }) {
+  const now = useNow(30_000);
+  const timeline = meetingTimeline(phase, scheduledAt, now, cancelled);
+  return { timeline, label: meetingTimelineLabel(timeline, scheduledAt, new Date(now), cancelled) };
+}
+
 /** 开会以来过了几秒。时刻由定时器取，不在渲染里取；没在开会就不跑。 */
 function useElapsed(startedAt: number | undefined): number {
   const [now, setNow] = useState<number | null>(null);
@@ -86,12 +134,26 @@ function useElapsed(startedAt: number | undefined): number {
   return startedAt !== undefined && now !== null ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0;
 }
 
-/** 页头胶囊里标题前面那一段：日子一小段灰字，时段是整排最醒目的字。读屏读「计划时间 今天 14:00 至 15:30」。 */
-export function MeetingSlotLabel({ day, slot }: { day: string; slot: MeetingSlot }) {
+/**
+ * 页头胶囊里标题前面那一段：日子一小段灰字，时段是整排最醒目的字。读屏读「计划时间 今天 14:00 至 15:30」。
+ * 给了 `timeline` 时，日子那一段换成这场会的阶段：橙点 + 相对时间（即将开）、红点呼吸 +「会议中 mm:ss」（进行中）、
+ * 灰色对勾 +「已结束 · 10/8」（已结束，时段也跟着变灰）。
+ */
+export function MeetingSlotLabel({ day, slot, timeline, label, since }: { day: string; slot: MeetingSlot; timeline?: MeetingTimeline; label?: string; since?: number }) {
   return (
-    <span className={s.slot} data-header-lead>
+    <span className={s.slot} data-header-lead data-timeline={timeline}>
       <span className={s.sr}>计划时间</span>
-      <span className={s.slotDay}>{day}</span>
+      {timeline ? (
+        <span className={s.slotState}>
+          {timeline === "ended" ? <Check size={13} strokeWidth={2.4} aria-hidden className={s.slotMark} /> : <i className={s.slotDot} aria-hidden />}
+          <span className={s.slotWord}>
+            {label}
+            {timeline === "live" && since !== undefined ? <LiveElapsed since={since} /> : null}
+          </span>
+        </span>
+      ) : (
+        <span className={s.slotDay}>{day}</span>
+      )}
       <span className={s.slotTime}>
         <time>{slot.startsAt}</time>
         <span aria-hidden>–</span>
@@ -102,13 +164,19 @@ export function MeetingSlotLabel({ day, slot }: { day: string; slot: MeetingSlot
   );
 }
 
+/** 「会议中」后面走着的分:秒（和 MeetingClock 同一个写法）。 */
+function LiveElapsed({ since }: { since: number }) {
+  const seconds = useElapsed(since);
+  return <time className={s.slotElapsed} suppressHydrationWarning> {elapsed(seconds)}</time>;
+}
+
 export function MeetingClock({
   phase,
   startedAt,
   endedAt,
   ending,
   caption = "会议中",
-  note = "计时只在这一页。按下这一下，这场会记为已开完，接着在「会议记录」里导入妙记或逐字稿；不取消飞书日程。",
+  note = "计时仅在本页显示。点击后将会议标记为已结束，随后在「会议记录」中导入妙记或逐字稿；飞书日程不受影响。",
   onStart,
   onEnd,
 }: {
@@ -152,7 +220,7 @@ export function MeetingClock({
         </Button>
       ) : phase === "live" ? (
         <Popover isOpen={open} onOpenChange={setOpen}>
-          <Button className={s.press} key="live" aria-label={`${caption}，已开 ${time}。打开可以结束会议`}>
+          <Button className={s.press} key="live" aria-label={`${caption}，已开 ${time}。展开可结束会议`}>
             <span className={s.dot} aria-hidden />
             <span className={s.readout} aria-hidden>
               <span className={s.caption}>{caption}</span>
@@ -177,7 +245,7 @@ export function MeetingClock({
                     onEnd();
                   }}
                 >
-                  这场会开完了
+                  结束会议
                 </Button>
               </Popover.Dialog>
             </TianshuPortalTheme>
@@ -187,7 +255,7 @@ export function MeetingClock({
         <span className={s.still} key="ended">
           <Check size={16} strokeWidth={2} aria-hidden />
           <span className={s.readout}>
-            <span className={s.caption}>已开完</span>
+            <span className={s.caption}>已结束</span>
             {ended ? <time className={s.time}>{ended}</time> : null}
           </span>
         </span>
@@ -197,13 +265,17 @@ export function MeetingClock({
 }
 
 /**
- * 会议页页头里的那几样，按页头的约定排好：标题前面是计划时段，胶囊右端是 `children`（会议记录入口），
+ * 会议页页头里的那几样，按页头的约定排好：标题前面是计划时段，右边是 `children`（会开完了的「会前预审 ｜ 会议记录」两段切换），
  * 页头右边单独一颗开始会议／计时（`clock` 为空时不放，例如已取消的会）。
  */
-export function MeetingHeaderActions({ day, slot, clock, children }: { day: string; slot: MeetingSlot; clock?: ReactNode; children?: ReactNode }) {
+export function MeetingHeaderActions({ day, slot, clock, children, timeline, label, since }: {
+  day: string; slot: MeetingSlot; clock?: ReactNode; children?: ReactNode;
+  /** 这场会的阶段（见 meetingTimeline）；给了就把日子换成阶段那几个字。 */
+  timeline?: MeetingTimeline; label?: string; since?: number;
+}) {
   return (
     <>
-      <MeetingSlotLabel day={day} slot={slot} />
+      <MeetingSlotLabel day={day} slot={slot} timeline={timeline} label={label} since={since} />
       {children}
       {clock}
     </>
@@ -216,7 +288,7 @@ export function MeetingStatus({ phase, facts, now, endedAt }: { phase: MeetingPh
     const at = endedAt ? localClock(endedAt) : "";
     return (
       <p className={s.status} data-phase="ended">
-        {["这场会开完了", at && `记于 ${at}`, now].filter(Boolean).join(" · ")}
+        {["会议已结束", at && `记于 ${at}`, now].filter(Boolean).join(" · ")}
       </p>
     );
   }

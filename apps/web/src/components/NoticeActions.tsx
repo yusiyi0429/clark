@@ -53,7 +53,7 @@ export function NoticeActions({
   const apply = async (run: () => Promise<NoticeOutcome>) => {
     setBusy(true);
     setError(undefined);
-    const outcome = await run().catch((): NoticeOutcome => ({ ok: false, error: "没办成，网络断了，请重试。" }));
+    const outcome = await run().catch((): NoticeOutcome => ({ ok: false, error: "操作未完成：网络连接中断，请重试。" }));
     setBusy(false);
     if (!outcome.ok) return setError(outcome.error);
     setOpen(false);

@@ -6,6 +6,7 @@
  * 并告诉主持人。按钮就是会议卡片上那条条目的签名动作（meeting.confirm_item / meeting.dismiss_item）。
  */
 
+import { useRouter } from "next/navigation";
 import { useCallback, useRef } from "react";
 import { browserApi, type Card, type CardAction } from "@/lib/api/client";
 import { interpretActionResponse } from "@/lib/actionResponse";
@@ -33,10 +34,11 @@ export function pendingStrategicItems(cards: Card[]): { card: Card; item: Strate
 
 export function StrategicConfirmCard({ cards, onCard, onNavigate }: { cards: Card[]; onCard: (card: Card) => void; onNavigate: (href: string, from?: Element | null) => void }) {
   // 办成之后先在卡上写回执，淡出之后才把新 Card 交出去 —— 否则这一条立刻从列表里消失，回执也跟着没了。
+  const router = useRouter();
   const settledCards = useRef(new Map<string, Card>());
 
   const execute = useCallback(async (noticeId: string, action: CardAction | undefined, settled: string): Promise<NoticeOutcome> => {
-    if (!action) return { ok: false, error: "这一条现在不能在这里处理，点开会议看看。" };
+    if (!action) return { ok: false, error: "该条目当前无法在此处理，请在会议页查看。" };
     const { data, error, response } = await browserApi.POST("/api/actions/execute", { body: { actionId: action.actionId, input: {} } });
     const outcome = interpretActionResponse(response.status, data as { cards?: Card[] } | undefined, error);
     if (outcome.kind === "unauthorized") {
@@ -55,9 +57,9 @@ export function StrategicConfirmCard({ cards, onCard, onNavigate }: { cards: Car
     (noticeId: string) => {
       const card = settledCards.current.get(noticeId);
       settledCards.current.delete(noticeId);
-      if (card) onCard(card);
+      if (card) { onCard(card); router.refresh(); }
     },
-    [onCard],
+    [onCard, router],
   );
 
   const notices: ActionNotice[] = pendingStrategicItems(cards).map(({ card, item, confirm, dismiss }) => {
@@ -70,10 +72,10 @@ export function StrategicConfirmCard({ cards, onCard, onNavigate }: { cards: Car
       onOpen: (from) => onNavigate(`/meetings/${card.objectRef.id}`, from),
       buttons: [
         { label: "确认", emphasis: true, run: () => execute(id, confirm, "已确认，交给 Co-Agent 更新本体") },
-        { label: "不同意", run: () => execute(id, dismiss, "已记下不同意，已告诉主持人") },
+        { label: "不同意", run: () => execute(id, dismiss, "已记录不同意，并通知主持人") },
       ],
     };
   });
 
-  return <ActionNoticeCard id="strategic" title="需要你确认" subtitle="会议里的战略议题" mark="meeting" notices={notices} onSettled={onSettled} />;
+  return <ActionNoticeCard id="strategic" title="待一号位确认" subtitle="会议里的战略议题" mark="meeting" notices={notices} onSettled={onSettled} />;
 }

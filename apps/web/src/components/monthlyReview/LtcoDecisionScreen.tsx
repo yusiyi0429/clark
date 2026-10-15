@@ -39,7 +39,7 @@ export function LtcoDecisionScreen({ review }: { review: TMonthlyReviewPayload }
   const inFlight = useRef(false);
   const month = monthOf(review.period);
   const next = monthOf(review.nextPeriod);
-  useRegisterDetail(useMemo(() => ({ scope: "global", label: `${month} 月复盘 · LTO 审视`, mark: "monthly" as const, cards: NO_CARDS }), [month]));
+  useRegisterDetail(useMemo(() => ({ scope: "global", label: `${month} 月复盘 · 长期目标审视`, mark: "monthly" as const, cards: NO_CARDS }), [month]));
 
   const decide = review.actions.find((candidate) => candidate.actionType === "monthly-review.decide_ltco");
   const ltcoChanged = ltcoText.trim() !== "" && ltcoText.trim() !== review.ltco.current.trim();
@@ -66,11 +66,11 @@ export function LtcoDecisionScreen({ review }: { review: TMonthlyReviewPayload }
   const decided = review.ltco.decision;
   const revising = choice === "revise" && Boolean(decide) && !decided;
   const unitName = (unit: Unit) => `${unit.subjectCode ? `${unit.subjectCode} ` : ""}${unit.subjectName}`;
-  const groups = [{ title: "战场 LTO", units: review.ltco.units.filter((unit) => unit.subjectType === "battlefield") }].filter((group) => group.units.length);
+  const groups = [{ title: "战场长期目标", units: review.ltco.units.filter((unit) => unit.subjectType === "battlefield") }].filter((group) => group.units.length);
   const windowText = `${windowLabel(review.ltco.window.start)} – ${windowLabel(review.ltco.window.end)}`;
 
   return <div className={s.screen}>
-    <DetailFrame title="LTO 审视" subtitle={`${month} 月复盘 · 窗口 ${windowText} · 下一步：${next} 月 PO`} onBack={() => workspace.navigate(`/reviews/${review.period}`)}>
+    <DetailFrame title="长期目标审视" subtitle={`${month} 月复盘 · 窗口 ${windowText} · 下一步：${next} 月目标`} onBack={() => workspace.navigate(`/reviews/${review.period}`)}>
       <div className={s.content}><div className={`${s.document} ${r.ltco}`}>
         {error ? <p className={s.error} role="alert">{error}</p> : null}
         {suggestion ? <section className={r.suggestion} aria-label="Co-Agent 建议">
@@ -78,25 +78,25 @@ export function LtcoDecisionScreen({ review }: { review: TMonthlyReviewPayload }
           <p>{suggestion.rationale}</p>
         </section> : null}
 
-        {decided ? <p className={`${s.readonly} ${s.readonly}`}>{monthDayTime(decided.decidedAt)} 已决定{decided.decision === "keep" ? "保持不变" : `修订${decided.ltcoAfter !== decided.ltcoBefore ? "公司 LTO" : ""}${decided.units.length ? `${decided.ltcoAfter !== decided.ltcoBefore ? "和" : ""} ${decided.units.length} 个战场 LTO` : ""}`}，窗口滑到 {windowText}。</p> : decide ? <div className={r.choices} role="radiogroup" aria-label="LTO 是否修订">
+        {decided ? <p className={`${s.readonly} ${s.readonly}`}>{monthDayTime(decided.decidedAt)} 已决定{decided.decision === "keep" ? "保持不变" : `修订${decided.ltcoAfter !== decided.ltcoBefore ? "公司长期目标" : ""}${decided.units.length ? `${decided.ltcoAfter !== decided.ltcoBefore ? "和" : ""} ${decided.units.length} 个战场长期目标` : ""}`}，窗口滑到 {windowText}。</p> : decide ? <div className={r.choices} role="radiogroup" aria-label="长期目标是否修订">
           <label className={r.choice}>
             <input type="radio" name="ltco" value="keep" checked={choice === "keep"} onChange={() => setChoice("keep")} disabled={pending} />
             <strong>保持不变</strong>
-            <span>战略没有变，沿用现在的公司 LTO 和各战场 LTO，窗口滑到 {windowText}，直接生成 {next} 月 PO 草案。</span>
+            <span>战略没有变，沿用现在的公司长期目标和各战场长期目标，窗口滑到 {windowText}，直接生成 {next} 月目标草案。</span>
           </label>
           <label className={r.choice}>
             <input type="radio" name="ltco" value="revise" checked={choice === "revise"} onChange={() => setChoice("revise")} disabled={pending} />
             <strong>修订</strong>
-            <span>在下面直接改，新窗口的最后一个月也要覆盖到；Co-Agent 建议改的地方已经预填。只写回改过的，{next} 月 PO 按新的 LTO 拆分。</span>
+            <span>在下面直接改，新窗口的最后一个月也要覆盖到；Co-Agent 建议改的地方已经预填。只写回改过的，{next} 月目标按新的长期目标拆分。</span>
           </label>
-        </div> : <p className={`${s.readonly} ${s.readonly}`}>公司月度复盘确认后才能审视 LTO。</p>}
+        </div> : <p className={`${s.readonly} ${s.readonly}`}>公司月度复盘确认后才能审视长期目标。</p>}
 
-        <p className={r.window}>LTO 窗口：{windowText}（每月审视时往后滑一个月）</p>
-        <section aria-label="公司 LTO">
-          <h2 className={r.label}>公司 LTO</h2>
+        <p className={r.window}>长期目标窗口：{windowText}（每月审视时往后滑一个月）</p>
+        <section aria-label="公司长期目标">
+          <h2 className={r.label}>公司长期目标</h2>
           {revising
-            ? <textarea className={r.editor} aria-label="修订后的公司 LTO" value={ltcoText} rows={4} maxLength={4000} disabled={pending} onChange={(event) => setLtcoText(event.target.value)} />
-            : <p className={r.ltcoText}>{(decided?.ltcoAfter ?? review.ltco.current) || "还没有填写公司 LTO"}</p>}
+            ? <textarea className={r.editor} aria-label="修订后的公司长期目标" value={ltcoText} rows={4} maxLength={4000} disabled={pending} onChange={(event) => setLtcoText(event.target.value)} />
+            : <p className={r.ltcoText}>{(decided?.ltcoAfter ?? review.ltco.current) || "还没有填写公司长期目标"}</p>}
           {revising && ltcoChanged ? <p className={r.unitSuggest}>已改动 · 原文：{review.ltco.current || "（空）"}</p> : null}
         </section>
 
@@ -111,7 +111,7 @@ export function LtcoDecisionScreen({ review }: { review: TMonthlyReviewPayload }
               return <li key={key} className={r.unitGoal} data-changed={(revising && changed) || after ? "" : undefined}>
                 <strong>{unitName(unit)}</strong>
                 {revising
-                  ? <textarea aria-label={`${unitName(unit)}的 LTO`} value={unitTexts[key] ?? ""} maxLength={4000} disabled={pending} onChange={(event) => setUnitTexts({ ...unitTexts, [key]: event.target.value })} />
+                  ? <textarea aria-label={`${unitName(unit)}的长期目标`} value={unitTexts[key] ?? ""} maxLength={4000} disabled={pending} onChange={(event) => setUnitTexts({ ...unitTexts, [key]: event.target.value })} />
                   : <p>{after ?? unit.current ?? "未填写"}</p>}
                 {suggested ? <span className={r.unitSuggest}>Co-Agent 建议修订：{suggested.rationale}</span> : null}
                 {revising && suggested ? <span className={s.inlineActions}>
@@ -126,9 +126,9 @@ export function LtcoDecisionScreen({ review }: { review: TMonthlyReviewPayload }
         {decide && !decided ? <>
           <div className={r.bar}>
             <Button variant="primary" className={s.primary} isDisabled={pending || nothingChanged || (choice === "revise" && (emptyUnit || clearsLtco))} onPress={() => void submit()}>
-              {pending ? "正在确认…" : choice === "keep" ? "保持不变，生成下月 PO" : "确认修订，生成下月 PO"}
+              {pending ? "正在确认…" : choice === "keep" ? "保持不变，生成下月目标" : "确认修订，生成下月目标"}
             </Button>
-            <p className={`${s.hint} ${r.hint}`}>确认后 Co-Agent 会带上这次复盘，把 LTO 拆成 {next} 月 PO 起草月度计划，你在计划页协商、签发。</p>
+            <p className={`${s.hint} ${r.hint}`}>确认后 Co-Agent 会带上这次复盘，把长期目标拆成 {next} 月目标起草月度计划，你在计划页协商、签发。</p>
           </div>
           {nothingChanged ? <p className={s.hint}>还没有改动；不改的话请选「保持不变」。</p> : null}
         </> : null}

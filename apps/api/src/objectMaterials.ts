@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Pool } from "pg";
-import type { TAddMaterialLinkRequest, TMaterialDetailResponse, TMaterialObjectType, TMaterialView } from "@warmap/contracts";
+import type { TAddMaterialLinkRequest, TMaterialDetailResponse, TMaterialObjectType, TMaterialRevisionOrigin, TMaterialView } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 import type { ObjectParsedMaterial } from "./materialParser.js";
 import { MAX_MATERIAL_HTML_CHARS, MAX_MATERIAL_TEXT_CHARS } from "./materialParser.js";
@@ -22,15 +22,34 @@ type MaterialRow = { id: string; object_type: TMaterialObjectType; object_id: st
   format: "markdown" | "pdf" | "docx" | "html" | "link"; size_bytes: number; page_count: number | null; storage_key: string | null;
   url: string | null; working: boolean;
   origin: "upload" | "agent"; owner_id: string; current_version: number; created_at: Date; updated_at: Date;
+  /** 素材性质（migration 063）；没有这一列的旧库读出来是 undefined，按 real。 */
+  nature?: "real" | "ai_generated";
   revision_version: number | null; revision_by: string | null; revision_summary: string | null; revision_at: Date | null;
+  revision_origin: TMaterialRevisionOrigin | null;
   annotation_id: string | null; quote: string; annotation_body: string; author_id: string };
+/** origin：这一版是 Agent 改的（agent），还是有人上传 / 资料包导入的新版本（upload / import）。 */
 type RevisionRow = { version: number; body: string; requested_by: string | null; summary: string | null; created_at: Date;
-  annotation_id: string | null; quote: string; annotation_body: string; author_id: string };
+  origin: TMaterialRevisionOrigin; annotation_id: string | null; quote: string; annotation_body: string; author_id: string };
 const COLUMNS = `m.*, r.version AS revision_version, r.requested_by AS revision_by,
-  r.summary AS revision_summary, r.created_at AS revision_at, r.annotation_id, a.quote, a.body AS annotation_body, a.author_id,
+  r.summary AS revision_summary, r.created_at AS revision_at, r.origin AS revision_origin, r.annotation_id, a.quote, a.body AS annotation_body, a.author_id,
   EXISTS (SELECT 1 FROM material_annotations w WHERE w.material_id=m.id AND w.status IN ('queued','applying')) AS working`;
 const JOIN = `LEFT JOIN material_revisions r ON r.material_id=m.id AND r.version=m.current_version
   LEFT JOIN material_annotations a ON a.id=r.annotation_id`;
+
+/**
+ * 材料时间用所在应用的时钟：演示场次的“现在”是资料截至时间，现场上传或修改的版本才会排在导入的历史版本之后。
+ * 按连接池登记（每个演示场次一个池）；没登记时用真实时钟。同一材料的新版本时间不早于上一版。
+ */
+const poolClocks = new WeakMap<Pool, () => Date>();
+export function setMaterialClock(pool: Pool, clock: () => Date) { poolClocks.set(pool, clock); }
+// 现场上传、现场修改发生在真实时间：演示场次的固定时钟早于真实时间时以真实时间为准（巡检 P1-16：刚上传的材料显示成 10/10 17:08）。
+const clockOf = (pool: Pool) => new Date(Math.max(poolClocks.get(pool)?.().getTime() ?? 0, Date.now()));
+/** 新材料的时间：不早于同一事项下已有材料（演示场次时钟固定在资料截至时间，相同时间会让排序不稳定）。 */
+async function nextMaterialAt(q: Query, pool: Pool, ref: ThreadRef): Promise<Date> {
+  const last = await q("SELECT max(created_at) AS at FROM object_materials WHERE object_type=$1 AND object_id=$2", [ref.objectType, ref.objectId]);
+  const lastAt = last.rows[0]?.at ? new Date(last.rows[0].at as string).getTime() : 0;
+  return new Date(Math.max(clockOf(pool).getTime(), lastAt + 1000));
+}
 
 export async function canAccessObjectMaterials(q: Query, ref: ThreadRef, viewer: MaterialViewer): Promise<boolean> {
   if (await isActiveMember(q, ref, viewer.personId)) return true;
@@ -71,7 +90,7 @@ async function viewerAccess(q: Query, ref: ThreadRef, viewer: MaterialViewer): P
 function person(id: string, names: Map<string, string>) { return { personId: id, displayName: names.get(id) ?? id }; }
 function revision(row: RevisionRow, names: Map<string, string>) {
   return { version: row.version, requestedBy: row.requested_by ? person(row.requested_by, names) : null,
-    summary: row.summary, at: row.created_at.toISOString(), annotation: annotationRef(row, names) };
+    summary: row.summary, at: row.created_at.toISOString(), annotation: annotationRef(row, names), origin: row.origin };
 }
 function view(row: MaterialRow, viewer: MaterialViewer, names: Map<string, string>, access: ViewerAccess): TMaterialView {
   const editable = row.format === "markdown" || row.format === "html";
@@ -84,7 +103,8 @@ function view(row: MaterialRow, viewer: MaterialViewer, names: Map<string, strin
     lastRevision: (row.current_version > 1 || row.origin === "agent") && row.revision_at ? {
       version: row.revision_version!, requestedBy: person(row.revision_by!, names),
       summary: row.revision_summary!, at: row.revision_at.toISOString(), annotation: annotationRef(row, names),
-    } : null, working: row.working };
+      origin: row.revision_origin ?? "agent",
+    } : null, working: row.working, nature: row.nature === "ai_generated" ? "ai_generated" : "real" };
 }
 async function rowFor(q: Query, ref: ThreadRef, id: string): Promise<MaterialRow> {
   const result = await q(`SELECT ${COLUMNS} FROM object_materials m ${JOIN}
@@ -98,6 +118,17 @@ export async function listObjectMaterials(q: Query, ref: ThreadRef, viewer: Mate
     WHERE m.object_type=$1 AND m.object_id=$2 AND m.deleted_at IS NULL ORDER BY m.created_at,m.id`, [ref.objectType, ref.objectId]);
   const access = await viewerAccess(q, ref, viewer);
   return { materials: (rows.rows as MaterialRow[]).map((row) => view(row, viewer, names, access)), canUpload: rows.rows.length < 30 };
+}
+/**
+ * 只知道材料 id 时找它挂在哪个对象下（对话回答里的 material:<id>@v<n> 引用不带对象）：权限同材料清单，
+ * 没有权限、已删除、不存在一律按不存在处理，不暴露别的对象。
+ */
+export async function locateObjectMaterial(q: Query, id: string, viewer: MaterialViewer) {
+  const result = await q("SELECT object_type, object_id, file_name, format, current_version FROM object_materials WHERE id=$1 AND deleted_at IS NULL", [id]);
+  const row = result.rows[0] as { object_type: TMaterialObjectType; object_id: string; file_name: string; format: string; current_version: number } | undefined;
+  if (!row || !(await canAccessObjectMaterials(q, { objectType: row.object_type, objectId: row.object_id }, viewer)))
+    throw new ObjectMaterialError(404, "MATERIAL_NOT_FOUND", "材料不存在");
+  return { materialId: id, objectType: row.object_type, objectId: row.object_id, fileName: row.file_name, format: row.format, version: row.current_version };
 }
 export async function getObjectMaterial(q: Query, ref: ThreadRef, id: string, viewer: MaterialViewer, names: Map<string, string>) {
   await requireMaterialAccess(q, ref, viewer);
@@ -167,11 +198,11 @@ export async function uploadObjectMaterial(pool: Pool, ref: ThreadRef, viewer: M
     moved = true;
     const format = parsed.mimeType === "text/markdown" ? "markdown" : parsed.mimeType === "text/html" ? "html"
       : parsed.mimeType === "application/pdf" ? "pdf" : "docx";
-    const now = new Date();
+    const now = await nextMaterialAt(q, pool, ref);
     await q(`INSERT INTO object_materials(id,object_type,object_id,file_name,format,size_bytes,page_count,storage_key,sha256,origin,owner_id,created_at,updated_at)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'upload',$10,$11,$11)`,
       [id, ref.objectType, ref.objectId, parsed.fileName, format, parsed.sizeBytes, parsed.pageCount ?? null, storageKey, parsed.sha256, viewer.personId, now]);
-    await q("INSERT INTO material_revisions(material_id,version,body,created_at) VALUES($1,1,$2,$3)", [id, parsed.source ?? parsed.extractedText, now]);
+    await q("INSERT INTO material_revisions(material_id,version,body,created_at,origin) VALUES($1,1,$2,$3,'upload')", [id, parsed.source ?? parsed.extractedText, now]);
     await startTaskByOwner(q, ref, viewer.personId);
     const row = await rowFor(q, ref, id);
     if (ref.objectType === "meeting") await postCoAgentMessage(q, ref, `${viewer.displayName}上传了《${parsed.fileName}》`, [viewer.personId]);
@@ -221,10 +252,10 @@ export async function addObjectMaterialLink(pool: Pool, ref: ThreadRef, viewer: 
     }
     const count = await q("SELECT count(*)::int AS n FROM object_materials WHERE object_type=$1 AND object_id=$2 AND deleted_at IS NULL", [ref.objectType, ref.objectId]);
     if (count.rows[0].n >= 30) throw new ObjectMaterialError(409, "MATERIAL_LIMIT", "这件事最多保存 30 份材料");
-    const id = randomUUID(), now = new Date();
+    const id = randomUUID(), now = await nextMaterialAt(q, pool, ref);
     await q(`INSERT INTO object_materials(id,object_type,object_id,file_name,format,size_bytes,url,origin,owner_id,created_at,updated_at)
       VALUES($1,$2,$3,$4,'link',0,$5,'upload',$6,$7,$7)`, [id, ref.objectType, ref.objectId, title, url.href, viewer.personId, now]);
-    await q("INSERT INTO material_revisions(material_id,version,body,created_at) VALUES($1,1,$2,$3)", [id, url.href, now]);
+    await q("INSERT INTO material_revisions(material_id,version,body,created_at,origin) VALUES($1,1,$2,$3,'upload')", [id, url.href, now]);
     await startTaskByOwner(q, ref, viewer.personId);
     const material = view(await rowFor(q, ref, id), viewer, names, await viewerAccess(q, ref, viewer));
     await client.query("COMMIT");
@@ -280,8 +311,10 @@ export async function editObjectMaterial(pool: Pool, ref: ThreadRef, id: string,
       if (current.format === "markdown" && body.length > MAX_MATERIAL_TEXT_CHARS) fail("MATERIAL_TEXT_TOO_LARGE", "修改后超过 100,000 字");
     }
     const version = current.current_version + 1;
-    const now = new Date();
-    await q("INSERT INTO material_revisions(material_id,version,body,requested_by,summary,agent_run_id,created_at,annotation_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+    const last = await q("SELECT max(created_at) AS at FROM material_revisions WHERE material_id=$1", [id]);
+    const lastAt = last.rows[0]?.at ? new Date(last.rows[0].at as string).getTime() : 0;
+    const now = new Date(Math.max(clockOf(pool).getTime(), lastAt + 1000));
+    await q("INSERT INTO material_revisions(material_id,version,body,requested_by,summary,agent_run_id,created_at,annotation_id,origin) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'agent')",
       [id, version, body, viewer.personId, summary.trim(), runId, now, transaction?.annotationId ?? null]);
     await q("UPDATE object_materials SET current_version=$2,updated_at=$3 WHERE id=$1", [id, version, now]);
     await startTaskByOwner(q, ref, viewer.personId);
@@ -305,10 +338,10 @@ export async function createObjectMaterial(pool: Pool, ref: ThreadRef, viewer: M
     if (fileName.length < 4 || fileName.length > 240 || /[\\/\u0000-\u001f]/.test(fileName) || !body.trim()
       || body.length > MAX_MATERIAL_TEXT_CHARS || !summary.trim() || summary.length > 200)
       throw new ObjectMaterialError(400, "INVALID_MATERIAL", "材料标题、正文或说明不合法");
-    const id = randomUUID(), now = new Date();
+    const id = randomUUID(), now = await nextMaterialAt(q, pool, ref);
     await q(`INSERT INTO object_materials(id,object_type,object_id,file_name,format,size_bytes,origin,owner_id,created_at,updated_at)
       VALUES($1,$2,$3,$4,'markdown',$5,'agent',$6,$7,$7)`, [id, ref.objectType, ref.objectId, fileName, Buffer.byteLength(body), viewer.personId, now]);
-    await q("INSERT INTO material_revisions(material_id,version,body,requested_by,summary,agent_run_id,created_at) VALUES($1,1,$2,$3,$4,$5,$6)",
+    await q("INSERT INTO material_revisions(material_id,version,body,requested_by,summary,agent_run_id,created_at,origin) VALUES($1,1,$2,$3,$4,$5,$6,'agent')",
       [id, body, viewer.personId, summary.trim(), runId, now]);
     await startTaskByOwner(q, ref, viewer.personId);
     await postCoAgentMessage(q, ref, `按${viewer.displayName}的要求新写了《${fileName}》：${summary.trim()}`, [viewer.personId]);

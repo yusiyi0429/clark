@@ -46,8 +46,9 @@
 .say { margin: 0; }
 .fieldLabel { color: var(--notice-muted); font-size: 12px; line-height: 1.5; }
 .field { display: grid; gap: 6px; min-width: 0; }
+/* 字号、行高、边与聚焦走 globals.css 的统一输入框样式（HeroUI 的文本框也对齐了），这里只管宽度 */
 .field input,
-.field textarea { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; font-size: 14px; line-height: 1.6; color: var(--notice-ink); }
+.field textarea { width: 100%; min-width: 0; }
 .hint { color: var(--notice-muted); font-size: 11px; line-height: 1.5; }
 
 .dues { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
@@ -108,8 +109,6 @@
   .actions.actions > button,
   .formActions.formActions > button,
   .dues.dues button { min-height: 36px; }
-  .field input,
-  .field textarea { font-size: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

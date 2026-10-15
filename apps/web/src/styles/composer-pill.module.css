@@ -61,6 +61,8 @@
 .pill[data-dictating] { grid-template-areas: 'field field field' 'action action action'; }
 .pill[data-dictating][data-references] { grid-template-areas: 'references references references' 'field field field' 'action action action'; }
 .pill[data-dictating] .leading { display: none; }
+/* 听写文字的下划线（DictationMirror 叠在文字框上）跟着频道的灰字走。 */
+.pill { --dictation-underline: color-mix(in srgb, var(--tone-muted) 75%, transparent); }
 
 .references { grid-area: references; display: flex; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .references::-webkit-scrollbar { display: none; }
@@ -283,3 +285,15 @@
 }
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
 @media(max-width:959px){.badge.badge{min-width:19px;height:19px;padding:0 5px;font-size:13px;top:-7px;right:-7px}}
+
+/*
+ * 点触下限（docs/superpowers/specs/2026-10-12-mobile-foldable.md §3.3）：手持与触屏时右下角的麦克风 / 发送 / 停止、附件到 44，
+ * 频道钮（窄屏上按它打开对话层）高 40、透明热区上下补到 44。麦克风仍在右下，单手拇指够得着。鼠标的电脑不变。
+ */
+@media (max-width: 959px), (pointer: coarse) {
+  .actionButton.actionButton { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+  .tool { width: 44px; min-width: 44px; height: 44px; }
+  .segment.segment { position: relative; height: 40px; min-height: 40px; padding: 0 14px; font-size: 14px; }
+  .segment.segment::after { content: ''; position: absolute; inset: -2px 0; }
+  .pill { padding-bottom: 6px; }
+}

@@ -12,10 +12,10 @@
 .goal p { margin: 0 0 8px; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
 .goal p:last-child { margin-bottom: 0; }
 .goal .muted { color: var(--ink-muted); }
-.editor { width: 100%; min-height: 96px; resize: vertical; box-sizing: border-box; border: 1px solid var(--hairline); border-radius: var(--onboarding-control-radius); padding: 10px 12px; background: var(--surface); color: var(--ink); font: inherit; line-height: 1.8; outline: none; transition: border-color 160ms ease; }
-.editor:hover { border-color: var(--hairline-strong); }
-.editor:focus-visible { border-color: var(--onboarding-blue); outline: 2px solid color-mix(in oklab, var(--onboarding-blue) 30%, transparent); outline-offset: 1px; }
-.editor[data-dirty] { border-color: color-mix(in oklab, var(--onboarding-blue) 55%, var(--hairline)); }
+/* 文字框的边、圆角、底色、字号、悬停与聚焦都走 globals.css 的统一输入框样式，这里只管宽高；改过未存的框边色深一档（不用蓝） */
+.editor { width: 100%; min-height: 96px; }
+.editor[data-dirty] { border-color: color-mix(in oklab, var(--field-border-focus) 40%, var(--field-border)); }
+.editor[data-dirty]:focus { border-color: var(--field-border-focus); }
 .sources { margin: 6px 0 0; color: var(--ink-faint); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .sources a { color: var(--brand-deep); text-decoration: underline; text-underline-offset: 3px; }
 .suggestion { display: grid; gap: 8px; margin-top: 10px; padding: 12px 14px; border: 1px solid color-mix(in oklab, var(--onboarding-blue) 22%, var(--surface)); border-radius: var(--onboarding-inset-radius); background: color-mix(in oklab, var(--onboarding-blue) 5%, var(--surface)); font-size: 14px; line-height: 1.75; }
@@ -34,8 +34,7 @@
 .bar .hint { flex: 1 1 240px; }
 .returnBox { display: grid; gap: 8px; width: 100%; }
 .returnBox label { color: var(--ink); font-size: 14px; font-weight: 600; }
-.returnBox textarea { width: 100%; min-height: 72px; box-sizing: border-box; resize: vertical; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-control-radius); padding: 10px 12px; background: var(--surface); color: var(--ink); font: inherit; line-height: 1.7; outline: none; }
-.returnBox textarea:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+.returnBox textarea { width: 100%; min-height: 72px; }
 .working { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-radius: var(--onboarding-inset-radius); background: color-mix(in oklab, var(--onboarding-blue) 6%, var(--surface)); color: var(--brand-deep); font-size: 14px; }
 .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--onboarding-blue); animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
@@ -52,8 +51,7 @@
 .comment p { margin: 0; color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .empty { margin: 12px 0 0; color: var(--ink-faint); font-size: 14px; }
 .composer { display: grid; gap: 8px; margin-top: 16px; }
-.composer textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 72px; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-control-radius); padding: 10px 12px; background: var(--surface); color: var(--ink); font: inherit; line-height: 1.7; outline: none; }
-.composer textarea:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+.composer textarea { width: 100%; min-height: 72px; }
 .feedback { margin: 40px 0 0; color: var(--ink-faint); font-size: 13px; line-height: 1.7; }
 .feedback a { margin-left: 6px; color: var(--brand-deep); text-decoration: underline; text-underline-offset: 3px; }
 
@@ -72,10 +70,9 @@
 .rowReturn { grid-column: 1 / -1; }
 .judgments { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; counter-reset: judgment; }
 .judgment { display: grid; gap: 6px; counter-increment: judgment; }
-.judgment input, .judgment textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--hairline); border-radius: var(--onboarding-control-radius); padding: 8px 12px; background: var(--surface); color: var(--ink); font: inherit; line-height: 1.75; outline: none; }
+.judgment input, .judgment textarea { width: 100%; }
 .judgment input { font-weight: 600; }
-.judgment textarea { min-height: 72px; resize: vertical; }
-.judgment input:focus-visible, .judgment textarea:focus-visible { border-color: var(--onboarding-blue); outline: 2px solid color-mix(in oklab, var(--onboarding-blue) 30%, transparent); }
+.judgment textarea { min-height: 72px; }
 .judgmentTitle { color: var(--ink); font-size: 16px; font-weight: 600; }
 .judgmentTitle::before { content: counter(judgment) ". "; color: var(--ink-faint); }
 .judgment p { margin: 0; color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; }
@@ -92,8 +89,7 @@
 .unitGoal[data-changed] { border-color: color-mix(in oklab, var(--onboarding-blue) 45%, var(--hairline)); }
 .unitGoal strong { color: var(--ink); font-size: 15px; font-weight: 600; }
 .unitGoal p { margin: 0; color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
-.unitGoal textarea { width: 100%; box-sizing: border-box; min-height: 80px; resize: vertical; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-control-radius); padding: 10px 12px; background: var(--surface); color: var(--ink); font: inherit; line-height: 1.75; outline: none; }
-.unitGoal textarea:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+.unitGoal textarea { width: 100%; min-height: 80px; }
 .unitSuggest { color: var(--brand-deep); font-size: 13px; }
 .focusList { margin: 0; padding-left: 22px; display: grid; gap: 6px; color: var(--ink-muted); line-height: 1.8; }
 .label { margin: 0 0 8px; color: var(--ink-faint); font-size: 13px; font-weight: 600; }
@@ -105,8 +101,7 @@
 .choice input { margin: 5px 0 0; accent-color: var(--onboarding-blue); width: 18px; height: 18px; }
 .choice strong { color: var(--ink); font-size: 15px; font-weight: 600; }
 .choice span { grid-column: 2; color: var(--ink-muted); font-size: 14px; line-height: 1.7; }
-.choice textarea { grid-column: 1 / -1; width: 100%; min-height: 140px; box-sizing: border-box; resize: vertical; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-control-radius); padding: 10px 12px; background: var(--surface); color: var(--ink); font: inherit; line-height: 1.8; outline: none; }
-.choice textarea:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+.choice textarea { grid-column: 1 / -1; width: 100%; min-height: 140px; }
 
 @media (max-width: 759px) {
   .row { grid-template-columns: 1fr; }
@@ -115,7 +110,7 @@
   .goal { padding: 12px 14px; }
 }
 @media (max-width: 959px) { .sources { font-size: 13px; } .rowOwner, .rowAssess, .evidence, .history { font-size: 14px; } }
-@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } .editor { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
 
 /* 个人复盘：本月 Mission 列表（对照基准）与三条起草路径。 */
 .missions { display: grid; gap: 10px; margin: 4px 0 0; padding: 0; list-style: none; }

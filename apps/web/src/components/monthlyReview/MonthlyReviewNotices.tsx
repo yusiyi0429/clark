@@ -44,11 +44,11 @@ export function useMonthlyReviewNotices(ceo = false): { notices: TMonthlyReviewN
 
 const DETAIL: Record<TMonthlyReviewNotice["kind"], string> = {
   personal_todo: "对照自己的 Mission Card 写这个月的复盘",
-  item_todo: "由你的 Agent 起草，改好后提交给 CEO",
+  item_todo: "由天枢起草，改好后提交给 CEO",
   item_participant: "你负责这里的 Mission，可以补充事实、风险和修订意见",
   items_to_review: "看自评和 Co-Agent 的偏差评估，逐项确认或打回",
-  summary_pending: "公司月度复盘已汇总，确认后审视 LTO",
-  ltco_pending: "决定后开始生成下月 PO",
+  summary_pending: "公司月度复盘已汇总，确认后审视长期目标",
+  ltco_pending: "决定后开始生成下月目标",
 };
 
 /** 通知栏里的「月末复盘」一组；没有待办时不出现。 */

@@ -186,7 +186,7 @@ describe("Issue → Meeting Card/Action user journey", () => {
       expect(payload.issueIds).toEqual([issue.id]);
       expect(payload.preflight.status).toBe("ready");
       expect(payload.preflight.entries.map((entry: { id: string }) => entry.id)).toEqual([
-        "entry-1", "entry-2", "entry-3", "entry-4", "entry-5", "entry-6", "entry-7", "entry-8", "entry-9", "entry-10", "entry-11",
+        "entry-1", "entry-2", "entry-3", "entry-4", "entry-5", "entry-6", "entry-7",
       ]);
       expect(payload.preflight).toMatchObject({
         readiness: "revise",
@@ -589,7 +589,8 @@ describe("Candidate Preflight", () => {
       expect(agent.calls).toHaveLength(2);
       expect(agent.calls[1]).toMatchObject({
         inputCoverage: { relatedMeeting: "available" },
-        relatedMeeting: { id: first.meetingId, status: "held", sourceRefs: [`meeting:${first.meetingId}`, `transcript:${first.meetingId}`] },
+        relatedMeetings: [{ id: first.meetingId, status: "held", matchedBy: expect.arrayContaining(["shared_issue"]),
+          sourceRefs: [`meeting:${first.meetingId}`, `transcript:${first.meetingId}`] }],
       });
     } finally {
       await t.close();
@@ -617,11 +618,15 @@ describe("Candidate Preflight", () => {
   });
 });
 
-  it("rejects an advisor candidate whose leader_lens block is missing", async () => {
+  it("rejects a CEO question that cannot say why now / why CEO", async () => {
     const agent: PreflightAgent = {
       async generate(input) {
         const candidate = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
-        candidate.entries = candidate.entries.filter((entry) => entry.kind !== "leader_lens");
+        candidate.entries = candidate.entries.map((entry) => {
+          if (entry.kind !== "leader_lens") return entry;
+          const { ceoDecision: _dropped, ...rest } = entry;
+          return rest;
+        });
         return { candidate };
       },
     };
@@ -630,7 +635,7 @@ describe("Candidate Preflight", () => {
       const { card } = await readyMeeting(t, "dri-meeting-invalid-structure");
       expect(card.payload.preflight).toMatchObject({
         status: "failed",
-        error: { code: "invalid_preflight_candidate", message: "leader_lens 必须为 3–5 条" },
+        error: { code: "invalid_preflight_candidate", message: "leader_lens「华南转化依据」必须说明为什么现在、为什么需要 CEO 判断" },
       });
     } finally {
       await t.close();
@@ -1056,7 +1061,7 @@ describe("Meeting 计划结束时间与「这场会开完了」", () => {
       const { cookie, meetingId, card } = await readyMeeting(t, "dri-end-100");
       const created = card as unknown as ActionCard;
       const end = actionOf(created, "meeting.end");
-      expect(end.label).toBe("这场会开完了");
+      expect(end.label).toBe("结束会议");
 
       const ended = await execute(t, cookie, end.actionId);
       expect(ended.statusCode).toBe(200);
@@ -1206,6 +1211,97 @@ describe("startup recovery of an interrupted preflight", () => {
       } finally {
         await app.close();
       }
+    });
+  });
+});
+
+describe("预审在后台跑（巡检 P1-5/6）", () => {
+  /** 模型要等放行才回：接口不能等它。 */
+  function gatedAgent() {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const inner = fakeAgent();
+    const agent: FakeAgent & { release: () => void } = {
+      background: true,
+      calls: inner.calls,
+      release: () => release(),
+      async generate(input) { await gate; return inner.generate(input); },
+    };
+    return agent;
+  }
+  async function waitReady(t: TestApp, cookie: string, meetingId: string) {
+    for (let i = 0; i < 100; i += 1) {
+      const card = (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie } })).json().cards[0];
+      if (card.payload.preflight.status !== "running") return card;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error("预审一直没跑完");
+  }
+
+  it("新建会议、加入已有会议都在预审跑完前返回「预审中」，跑完后变为 ready", async () => {
+    const agent = gatedAgent();
+    const t = await createTestApp({}, undefined, { preflightAgent: agent });
+    try {
+      const issue = await createIssue(t, "bg-preflight-1");
+      const cookie = await t.loginCookie();
+      const created = await execute(t, cookie, await issueAction(t, cookie, issue.id, "issue.create_meeting"), { ...MEETING_INPUT, issueIds: [issue.id] });
+      expect(created.statusCode).toBe(200);
+      const meetingId = created.json().cards[0].objectRef.id as string;
+      expect(created.json().cards[0].payload.preflight.status).toBe("running");
+      const second = await createIssue(t, "bg-preflight-2");
+      const joined = await execute(t, cookie, await issueAction(t, cookie, second.id, "issue.join_meeting"), { meetingId });
+      expect(joined.statusCode).toBe(200);
+      expect(joined.json().cards[0].payload.issueIds).toEqual(expect.arrayContaining([issue.id, second.id]));
+      expect(joined.json().cards[0].payload.preflight.status).toBe("running");
+      agent.release();
+      const ready = await waitReady(t, cookie, meetingId);
+      expect(ready.payload.preflight.status).toBe("ready");
+      // 两次触发都跑了，但只有最后一次的结果落库：条目覆盖两条议题
+      const refs = ready.payload.preflight.entries.flatMap((entry: { sourceRefs: string[] }) => entry.sourceRefs);
+      expect(refs).toEqual(expect.arrayContaining([`issue:${issue.id}`, `issue:${second.id}`]));
+    } finally {
+      agent.release();
+      await t.close();
+    }
+  });
+});
+
+describe("启动后补跑会前预审（巡检 P1-17）", () => {
+  it("没跑过的、被重启打断的预审在启动后自动在后台重跑，说明文案是人话", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      const setup = await buildApp({ pool, env: testEnv, preflightAgent: fakeAgent() });
+      const ids: string[] = [];
+      try {
+        for (const n of [1, 2]) {
+          const issue = await setup.inject({ method: "POST", url: "/api/dri/issues", headers: { authorization: `Bearer ${testEnv.driServiceToken}` },
+            payload: { externalId: `dri-resume-${n}`, submitterPersonId: "person-fixture-002", title: `补跑议题 ${n}`, whyNow: "窗口临近",
+              sourceRef: `dri://planning/resume-${n}`, location: { level: "battlefield", battlefieldId: "growth" } } });
+          const created = await setup.inject({ method: "POST", url: "/api/dri/meetings", headers: { authorization: `Bearer ${testEnv.driServiceToken}` },
+            payload: { ...MEETING_INPUT, externalId: `dri-resume-meeting-${n}`, issueIds: [issue.json().cards[0].objectRef.id] } });
+          ids.push(created.json().cards[0].objectRef.id as string);
+        }
+      } finally { await setup.close(); }
+      const stale = (status: string) => JSON.stringify({ status, pendingSince: "2026-05-02T01:00:00.000Z", runId: null, entries: [], basis: "", brief: "", error: null, generatedAt: null });
+      await db.query("UPDATE meetings SET preflight = $2::jsonb WHERE id = $1", [ids[0], stale("pending")]);
+      await db.query("UPDATE meetings SET preflight = $2::jsonb WHERE id = $1", [ids[1], stale("running")]);
+      expect(await recoverInterruptedPreflight(db.query.bind(db), { now: () => new Date("2026-05-02T03:00:00.000Z") })).toBe(2);
+      const interrupted = (await db.query("SELECT preflight FROM meetings WHERE id = $1", [ids[1]])).rows[0].preflight;
+      expect(interrupted.error.message).toBe("会前预审还没完成，可以重新预审。");
+      expect(interrupted.error.message).not.toMatch(/进程|显式/);
+
+      const agent = { ...fakeAgent(), background: true };
+      const app = await buildApp({ pool, env: testEnv, preflightAgent: agent });
+      try {
+        await app.ready();
+        let statuses: string[] = [];
+        for (let i = 0; i < 100; i += 1) {
+          statuses = (await db.query("SELECT preflight->>'status' AS s FROM meetings WHERE id = ANY($1::uuid[]) ORDER BY id", [ids])).rows.map((row) => row.s);
+          if (statuses.every((status) => status === "ready")) break;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        expect(statuses).toEqual(["ready", "ready"]);
+      } finally { await app.close(); }
     });
   });
 });

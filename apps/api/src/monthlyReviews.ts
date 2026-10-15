@@ -379,7 +379,7 @@ export function projectMonthlyReview(
   } else if (row.status === "summarizing" && row.summary.status === "failed") {
     actions.push(action("monthly-review.retry_summary", "重新生成"));
   } else if (row.status === "ltco_pending") {
-    actions.push(action("monthly-review.decide_ltco", "决定 LTO"));
+    actions.push(action("monthly-review.decide_ltco", "决定长期目标"));
   }
   const decision = row.ltco_decision;
   return {
@@ -756,7 +756,7 @@ export async function executeMonthlyReviewAction(
           const units: StoredLtcoDecision["units"] = [];
           if (decisionInput.decision === "revise") {
             for (const unit of decisionInput.units ?? []) {
-              if (unit.subjectType !== "battlefield") return reviewError(400, "INVALID_SUBJECT", "LTO 审视只包含公司与战场，能力域目标保持原样");
+              if (unit.subjectType !== "battlefield") return reviewError(400, "INVALID_SUBJECT", "长期目标审视只包含公司与战场，能力域目标保持原样");
               const current = (await client.query("SELECT six_month_outcome FROM battlefield_config WHERE id = $1 FOR UPDATE", [unit.subjectId])).rows[0] as { six_month_outcome: string } | undefined;
               if (!current) return reviewError(400, "INVALID_SUBJECT", "长期目标对应的单元不存在");
               if (current.six_month_outcome === unit.sixMonthOutcome) continue;
@@ -881,7 +881,7 @@ export async function listMonthlyReviewNotices(q: Query, viewer: ReviewViewer): 
     if (review.status === "ltco_pending") {
       notices.push({
         id: `monthly-review:${review.id}:ltco`, kind: "ltco_pending", period: review.period,
-        text: `${month}复盘已完成 · 待决定 LTO`, href: `/reviews/${review.period}/ltco`, createdAt: review.updated_at.toISOString(),
+        text: `${month}复盘已完成 · 待决定长期目标`, href: `/reviews/${review.period}/ltco`, createdAt: review.updated_at.toISOString(),
       });
     }
   }

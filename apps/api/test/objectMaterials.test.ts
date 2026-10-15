@@ -17,7 +17,11 @@ const multipart = (name: string, body: string, mime = "text/markdown") => {
 describe("会议群组材料", () => {
   it("主持成员上传、读取和删除；Agent 改 Markdown；非成员拒绝，CEO 始终可访问", async () => {
     const storage = await mkdtemp(join(tmpdir(), "meeting-material-test-"));
-    const t = await createTestApp({ materialStorageDir: storage });
+    let currentObject: Record<string, unknown> | null = null;
+    const t = await createTestApp({ materialStorageDir: storage }, { async run(input) {
+      currentObject = input.currentObject as Record<string, unknown>;
+      return { assistantMessage: "已读", runtimeEntries: input.runtimeEntries };
+    } });
     try {
       const issue = await t.createIssue();
       const created = await t.app.inject({ method: "POST", url: "/api/dri/meetings",
@@ -35,6 +39,27 @@ describe("会议群组材料", () => {
         headers: { cookie: member, origin: t.publicOrigin, ...part.headers }, payload: part.payload });
       expect(uploaded.statusCode, uploaded.body).toBe(201);
       const materialId = uploaded.json().id as string;
+      // 会议材料原件存在 objects/meeting/... 下，下载要能读到（巡检 P0-1）。
+      const original = await t.app.inject({ method: "GET", url: `${base}/${materialId}/file`, headers: { cookie: member } });
+      expect(original.statusCode, original.body).toBe(200);
+      expect(original.body).toContain("旧结论");
+      expect(original.headers["content-type"]).toContain("text/markdown");
+      // 原件丢了也不 404：退化为下载解析后的正文。
+      const key = (await t.sql("SELECT storage_key FROM object_materials WHERE id=$1", [materialId]))[0].storage_key as string;
+      expect(key).toMatch(/^objects\/meeting\//);
+      await rm(join(storage, key), { force: true });
+      const fallback = await t.app.inject({ method: "GET", url: `${base}/${materialId}/file`, headers: { cookie: member } });
+      expect(fallback.statusCode, fallback.body).toBe(200);
+      expect(fallback.body).toContain("旧结论");
+      expect(fallback.headers["content-disposition"]).toContain(encodeURIComponent("讨论.md"));
+      const turn = await t.app.inject({ method: "POST", url: `/api/conversations/meeting:${id}/messages`,
+        headers: { cookie: member, origin: t.publicOrigin, accept: "text/event-stream" },
+        payload: { message: "把这份材料的结论改写", viewingMaterialId: materialId } });
+      expect(turn.statusCode, turn.body).toBe(200);
+      expect(currentObject?.viewingMaterial).toMatchObject({ id: materialId, version: 1, editable: true, canEdit: true });
+      expect((await t.app.inject({ method: "POST", url: `/api/conversations/issue:${issue.objectRef.id}/messages`,
+        headers: { cookie: ceo, origin: t.publicOrigin, accept: "text/event-stream" },
+        payload: { message: "不能借会议材料跨对象读取", viewingMaterialId: materialId } })).statusCode).toBe(404);
       expect((await t.app.inject({ method: "GET", url: base, headers: { cookie: member } })).json().materials[0])
         .toMatchObject({ id: materialId, canDelete: true });
       expect((await t.app.inject({ method: "GET", url: `${base}/${materialId}`, headers: { cookie: member } })).statusCode).toBe(200);
@@ -252,5 +277,22 @@ describe("议题材料", () => {
       await expect(parseMaterialBatch([{ filename: "会议.html", mimetype: "text/html", buffer: Buffer.from("<p>会议</p>") }]))
         .rejects.toMatchObject({ code: "UNSUPPORTED_MATERIAL_TYPE" });
     } finally { await t.close(); }
+  }, 20_000);
+});
+
+describe("现场上传的材料时间（巡检 P1-16）", () => {
+  it("场次时钟停在资料截至时间时，刚上传的材料仍按真实时间记", async () => {
+    const storage = await mkdtemp(join(tmpdir(), "material-clock-test-"));
+    const t = await createTestApp({ materialStorageDir: storage }, undefined, { monthlyNow: () => new Date("2026-05-31T09:08:00.000Z") });
+    try {
+      const issue = await t.createIssue();
+      const cookie = await t.loginCookie();
+      const part = multipart("现场.md", "# 现场\n\n刚传的");
+      const before = Date.now();
+      const uploaded = await t.app.inject({ method: "POST", url: `/api/materials/issue/${issue.objectRef.id}`,
+        headers: { cookie, origin: t.publicOrigin, ...part.headers }, payload: part.payload });
+      expect(uploaded.statusCode, uploaded.body).toBe(201);
+      expect(new Date(uploaded.json().createdAt).getTime()).toBeGreaterThanOrEqual(before - 1000);
+    } finally { await t.close(); await rm(storage, { recursive: true, force: true }); }
   }, 20_000);
 });

@@ -213,7 +213,7 @@ describe("CEO 复盘总览与 LTO 审视", () => {
     expect(html).toContain("2026 年 10 月 – 2027 年 3 月");
     expect(html).not.toContain("交付可复用");
     expect(html).toMatch(/<input[^>]*(checked=""[^>]*value="keep"|value="keep"[^>]*checked="")/);
-    ui.buttons.get("保持不变，生成下月 PO")!.onPress!();
+    ui.buttons.get("保持不变，生成下月目标")!.onPress!();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(ui.post).toHaveBeenCalledWith("/api/monthly-reviews/actions/execute", { body: { actionId: "sig-monthly-review.decide_ltco", input: { decision: "keep" } } });
     expect(ui.navigate).toHaveBeenCalledWith("/plans/2026-10");
@@ -230,7 +230,7 @@ describe("LTO 审视：战场 LTO", () => {
     expect(html).toMatch(/<input[^>]*(checked=""[^>]*value="revise"|value="revise"[^>]*checked="")/);
     expect(html).toContain("聚焦两家标杆客户");
     expect(html).toContain("Co-Agent 建议修订：第三家延期");
-    ui.buttons.get("确认修订，生成下月 PO")!.onPress!();
+    ui.buttons.get("确认修订，生成下月目标")!.onPress!();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(ui.post).toHaveBeenCalledWith("/api/monthly-reviews/actions/execute", { body: { actionId: "sig-monthly-review.decide_ltco",
       input: { decision: "revise", units: [{ subjectType: "battlefield", subjectId: "bf-01", sixMonthOutcome: "聚焦两家标杆客户" }] } } });

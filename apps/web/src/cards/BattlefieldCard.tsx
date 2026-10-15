@@ -103,7 +103,7 @@ export function BattlefieldCard({ card, collection, onNavigate }: CardRenderProp
                 <ChevronRight size={12} aria-hidden="true" />
               </button>
             </div>
-            {payload.sixMonthOutcome ? <strong>LTO · {payload.sixMonthOutcome}</strong> : null}
+            {payload.sixMonthOutcome ? <strong>长期目标 · {payload.sixMonthOutcome}</strong> : null}
             {missionsOpen ? (
               <ul id={`missions-${id}`} className={s.missionList} aria-label={`${payload.name}的 Mission`}>
                 {missions.map((mission) => {

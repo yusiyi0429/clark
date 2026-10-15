@@ -358,6 +358,8 @@ export const NotificationKind = Type.Union([
   Type.Literal("thread_member_added"),
   /** 外部工具替推进人提交了验收，推进人收到「等你验收」。 */
   Type.Literal("task_submitted"),
+  /** 一号位把议题指派给本人主责（issue.assign）；objectType=issue。 */
+  Type.Literal("issue_assigned"),
 ]);
 
 /** 通知只指向对象；text 在读取时按对象当前状态组合。 */

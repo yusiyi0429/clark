@@ -1,0 +1,13 @@
+/* 来源标注：来自雷达的议题一枚浅灰小标签（雷达图标 + 「雷达」），战况面模拟指标一枚「模拟数据」（同一档），不加说明文字。颜色跟着所在文字走，白底和黑卡上都是淡淡的一层。 */
+.tag{
+  display:inline-flex;align-items:center;flex:none;vertical-align:.1em;
+  margin-left:6px;padding:0 5px;border-radius:4px;
+  font-size:12px;line-height:17px;font-weight:400;letter-spacing:0;white-space:nowrap;
+  color:color-mix(in srgb,currentColor 78%,transparent);
+  background:color-mix(in srgb,currentColor 9%,transparent);
+}
+/* 雷达小标签：字前一枚 12px 雷达图标，跟字同色，不另加强调。 */
+.radar{flex:none;margin-right:3px;color:inherit;vertical-align:-2px}
+@media(prefers-contrast:more){.tag{color:inherit;background:none;border:1px solid currentColor}}
+/* 手持（≤959）字号下限：标签 13（docs/superpowers/specs/2026-10-12-mobile-foldable.md §2）；电脑仍是 12。 */
+@media(max-width:959px){.tag{font-size:13px;line-height:18px}}

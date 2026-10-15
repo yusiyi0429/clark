@@ -1,7 +1,7 @@
 import type { QueryResult } from "pg";
 import type { AssistantMessageEventStream, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { PersonalRadarJudgeSubmission } from "@warmap/contracts";
-import { runCandidateAgent } from "./candidateAgentRuntime.js";
+import { runCandidateAgent, type CandidateThinkingLevel } from "./candidateAgentRuntime.js";
 import { HUMAN_WRITING_STYLE } from "./promptStyle.js";
 import type { PersonalRadarJudge } from "./personalRadar.js";
 
@@ -24,6 +24,8 @@ export function createPersonalRadarJudge(options: {
   baseUrl: string;
   apiKey: string;
   modelId: string;
+  /** PERSONAL_RADAR_THINKING（agentModels.ts）；不给时不开思考，与原来一致。 */
+  thinkingLevel?: CandidateThinkingLevel;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
   /** 只用于 LangSmith run 名。 */
   personName?: (personId: string) => string | undefined;

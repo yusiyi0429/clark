@@ -3,8 +3,9 @@ import { AddMaterialLinkRequest, CreateMaterialAnnotationRequest, DecideMaterial
   RestoreMaterialRemovedRequest, ThreadObjectId } from "@warmap/contracts";
 import { MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch, readStoredMaterial, type ObjectParsedMaterial } from "../materialParser.js";
 import { renderMaterialPreview } from "../materialPreview.js";
+import { materialParagraphs } from "../materialText.js";
 import { personDisplayNames } from "../people.js";
-import { ObjectMaterialError, addObjectMaterialLink, deleteObjectMaterial, getObjectMaterialDetail, listObjectMaterials, readObjectMaterial,
+import { ObjectMaterialError, addObjectMaterialLink, deleteObjectMaterial, getObjectMaterialDetail, listObjectMaterials, locateObjectMaterial, readObjectMaterial,
   uploadObjectMaterial, type MaterialViewer } from "../objectMaterials.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
 import { createMaterialAnnotation, decideMaterialAnnotation, decideMaterialProposal, restoreMaterialRemoved } from "../materialFeedback.js";
@@ -39,6 +40,12 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, anno
     throw cause;
   };
 
+  // 依据面板：对话回答里的群材料引用只带材料 id，先问它在哪个对象下，再按对象读那一版正文。静态段优先于 :objectType。
+  app.get("/api/materials/locate/:materialId", { preHandler: requirePerson,
+    schema: { params: Type.Object({ materialId: Type.String({ format: "uuid" }) }) } }, async (req, reply) => {
+    try { return await locateObjectMaterial(q, req.params.materialId, viewer(req.person!)); }
+    catch (cause) { return error(reply, cause); }
+  });
   app.get("/api/materials/:objectType/:objectId", { preHandler: requirePerson, schema: { params } }, async (req, reply) => {
     try { return await listObjectMaterials(q, req.params, viewer(req.person!), names); }
     catch (cause) { return error(reply, cause); }
@@ -114,16 +121,36 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, anno
     try {
       const material = await readObjectMaterial(q, req.params, req.params.materialId, viewer(req.person!));
       if (material.format === "link") return fail(reply, 404, "MATERIAL_NO_FILE", "链接没有原件，请直接打开链接");
-      let data: Buffer;
-      try { data = material.format === "html" || !material.storageKey ? Buffer.from(material.body)
-        : await readStoredMaterial(materialStorageDir, material.storageKey); }
-      catch { return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料原件不存在"); }
-      const mime = material.format === "pdf" ? "application/pdf" : material.format === "docx"
+      let data: Buffer | undefined;
+      if (material.format === "html" || !material.storageKey) data = Buffer.from(material.body);
+      else {
+        try { data = await readStoredMaterial(materialStorageDir, material.storageKey); }
+        catch { data = undefined; }
+      }
+      // 原件丢失（例如换了存储目录）时退化为下载解析后的正文：Markdown 原样给 .md，PDF / Word 给抽取出的文字 .txt。
+      const textOnly = !data;
+      if (!data) {
+        if (!material.body.trim()) return fail(reply, 404, "MATERIAL_NOT_FOUND", "这份材料的原件和正文都找不到了");
+        data = Buffer.from(material.body);
+      }
+      const mime = textOnly ? (material.format === "markdown" ? "text/markdown; charset=utf-8" : "text/plain; charset=utf-8")
+        : material.format === "pdf" ? "application/pdf" : material.format === "docx"
         ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         : material.format === "html" ? "text/html; charset=utf-8" : "text/markdown; charset=utf-8";
-      const fileName = material.format === "html" ? material.fileName.replace(/\.htm$/i, ".html") : material.fileName;
+      const fileName = material.format === "html" ? material.fileName.replace(/\.htm$/i, ".html")
+        : textOnly && material.format !== "markdown" ? `${material.fileName.replace(/\.(?:pdf|docx)$/i, "")}（正文）.txt` : material.fileName;
       return reply.type(mime).header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
         .header("x-content-type-options", "nosniff").send(data);
+    } catch (cause) { return error(reply, cause); }
+  });
+  // 依据直达（feedback 14）：某一版的正文段落，编号与预审的 material:<id>@v<n>#p<k> 一致；只读，权限同材料详情。
+  app.get("/api/materials/:objectType/:objectId/:materialId/text", { preHandler: requirePerson,
+    schema: { params: itemParams, querystring: versionQuery } }, async (req, reply) => {
+    try {
+      const material = await readObjectMaterial(q, req.params, req.params.materialId, viewer(req.person!), req.query.version);
+      const paragraphs = materialParagraphs(material.body, material.format);
+      return { materialId: req.params.materialId, fileName: material.fileName, format: material.format, version: material.version,
+        currentVersion: material.currentVersion, readable: paragraphs.length > 0, paragraphs, url: material.url ?? null };
     } catch (cause) { return error(reply, cause); }
   });
   app.get("/api/materials/:objectType/:objectId/:materialId/preview", {

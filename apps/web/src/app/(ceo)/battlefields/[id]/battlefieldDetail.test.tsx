@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
+
 import { WorkspaceTestProvider } from "@/components/shell/testing";
 import { BattlefieldDetailScreen, missionsByOwner, type BattlefieldTab } from "./BattlefieldDetailScreen";
 
@@ -60,12 +61,14 @@ describe("战场二级页", () => {
     expect(groups[0].missions.map((item) => item.code)).toEqual(["01-1", "01-3"]);
   });
 
-  it("页头是战场名 + 「待决策 / 进展」切换；负责人是别人时写出负责人", () => {
+  it("页头是战场名 + 「决策 / 战况」切换；负责人是别人时写出负责人", () => {
     const html = render("decisions");
     expect(html).toContain(">增长战场<");
-    expect(html).toContain('aria-label="战场视角"');
-    expect(html).toContain(">待决策<");
-    expect(html).toContain(">进展<");
+    expect(html).toContain('role="radiogroup" aria-label="战场视角"');
+    expect(html).toMatch(/role="radio"[^>]*aria-checked="true"[^>]*>决策</);
+    expect(html).toContain(">决策<");
+    expect(html).toContain(">战况<");
+    expect(html).not.toContain(">待决策<");
     expect(html).toContain("负责人 · 白田田");
   });
 
@@ -95,9 +98,9 @@ describe("战场二级页", () => {
     expect(html).toContain("较早反馈");
   });
 
-  it("CEO 兼任负责人：「进展」页签带皇冠，不再写负责人", () => {
+  it("CEO 兼任负责人：「战况」页签带皇冠，不再写负责人", () => {
     const html = render("decisions", battlefield({ ownerId: "person-ceo", ownerDisplayName: "刘明华" }), "person-ceo");
-    expect(html).toContain('aria-label="进展（你是这个战场的负责人）"');
+    expect(html).toContain('aria-label="战况（一号位为本战场负责人）"');
     expect(html).not.toContain("负责人 · 刘明华");
   });
 
@@ -105,6 +108,7 @@ describe("战场二级页", () => {
     const html = render("decisions", battlefield({ period: null, target: null, latestFeedback: null, feedback: [], pendingIssues: [] }));
     expect(html).toContain("尚未签发当月目标");
     expect(html).toContain("尚未收到负责人反馈");
-    expect(html).toContain("暂无待决策议题");
+    expect(html).toContain(">无待决策议题<");
+    expect(html).not.toContain("暂无待决策议题");
   });
 });

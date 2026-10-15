@@ -57,6 +57,21 @@ describe("材料批注", () => {
     expect(html).toContain("这段是新加的");
   });
 
+  it("上传或资料包导入的新版本在历史卡里写「X上传」，不写「让 Co-Agent 改的」；Agent 改的照旧", () => {
+    const html = renderToStaticMarkup(<HistoryCard history={[
+      { version: 3, kind: "modified", before: "中位数27天", requestedBy: person, at: "2026-10-09T06:20:00Z", annotation: null, origin: "agent" },
+      { version: 2, kind: "modified", before: "中位数25天", requestedBy: uploader, at: "2026-10-08T06:20:00Z", annotation: null, origin: "import" },
+    ]} />);
+    expect(html).toContain("第 2 版 · 王创峰上传");
+    expect(html).not.toContain("王创峰让 Co-Agent 改的");
+    expect(html).toContain("第 3 版 · 孙铭泽让 Co-Agent 改的");
+    const uploaded = renderToStaticMarkup(<HistoryCard history={[
+      { version: 2, kind: "added", before: "", requestedBy: uploader, at: "2026-10-08T06:20:00Z", annotation: null, origin: "upload" },
+    ]} />);
+    expect(uploaded).toContain("第 2 版 · 王创峰上传");
+    expect(uploaded).not.toContain("Co-Agent");
+  });
+
   it("修改提议显示摘要、前两处改动与「按这个改 / 忽略」；不能改的人提的写明是谁", () => {
     const proposal: TMaterialEditProposalView = { id: "p1", materialId: "m1", version: 2, summary: "按讨论把会期改到周五", proposedBy: person, proposedFor: person, status: "pending", createdAt: "2026-10-05T06:20:00Z",
       changes: [{ before: "周三", after: "周五" }, { before: "10 点", after: "14 点" }, { before: "A", after: "B" }] };

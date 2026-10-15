@@ -6,6 +6,7 @@ import { Button } from "ts-design/primitives";
 import type { TMonthPlanResponse, TTaskView } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { WorkspaceContext, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { dateFromPointer, draftFromPlan, planChanges, saveBody, type PlanGroup, type Step } from "./planDraft";
 import s from "./month-plan.module.css";
@@ -241,8 +242,8 @@ export function MonthPlan({ plan, onSaved, onDirtyChange }: { plan: TMonthPlanRe
                 </div>
                 {plan.editable && active?.group === g && active.index === index && <div className={s.inlineEdit} onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); setActive(null); } }}>
                   <label>标题<input value={item.title} maxLength={120} onChange={event => edit(g, index, { title: event.target.value })} /></label>
-                  <label>开始<input type="date" value={item.startDate} onChange={event => edit(g, index, { startDate: event.target.value })} /></label>
-                  <label>截止<input type="date" value={item.dueDate} onChange={event => edit(g, index, { dueDate: event.target.value })} /></label>
+                  <label>开始<DatePicker label="开始" size="compact" value={item.startDate} max={item.dueDate || undefined} onChange={startDate => edit(g, index, { startDate })} /></label>
+                  <label>截止<DatePicker label="截止" size="compact" value={item.dueDate} min={item.startDate || undefined} onChange={dueDate => edit(g, index, { dueDate })} /></label>
                   <div className={s.stepActions}>{group.missionId && <><button type="button" disabled={index === 0} onClick={() => { reorder(g, index, -1); setActive({ group: g, index: index - 1 }); }}>上移</button><button type="button" disabled={index === group.items.length - 1} onClick={() => { reorder(g, index, 1); setActive({ group: g, index: index + 1 }); }}>下移</button></>}
                     {(!item.taskId || item.status === "not_started" && item.source !== "meeting") && <button type="button" onClick={() => void remove(g, index, item)}>删除</button>}
                     {item.taskId && <button type="button" onClick={event => workspace.navigate(`/me/tasks/${encodeURIComponent(item.taskId!)}`, event.currentTarget)}>打开事项 <ArrowUpRight size={13} aria-hidden="true" /></button>}

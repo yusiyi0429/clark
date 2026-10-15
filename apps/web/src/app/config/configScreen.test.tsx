@@ -26,14 +26,17 @@ describe("配置页渲染", () => {
   });
 
   it("按设计顺序渲染 LTCO 与四张卡片，议题标题硬限 25 字", () => {
-    const order = ["公司长期目标（LTO）", "新建会议", "新建议题", "新建战场", "新建能力"];
+    const order = ["公司长期目标", "新建会议", "新建议题", "新建战场", "新建能力"];
     const positions = order.map((title) => html.indexOf(title));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(html).toContain('maxLength="25"');
     expect(html.match(/type="submit"/g)).toHaveLength(5);
-    // 返回首页 + 管理 Mission + 退出登录 + 管理战场 + 管理能力：五个次级入口，都不提交表单
-    expect(html.match(/type="button"/g)).toHaveLength(5);
+    // 返回首页 + 管理 Mission + 退出登录 + 管理战场 + 管理能力：五个次级入口，都不提交表单；
+    // 另有 6 个统一下拉 / 日期的触发器（主持人、会议日期、会议时刻、所属战场、决定期限、战场负责人），同样不提交
+    const triggers = html.match(/data-slot="field-trigger"/g) ?? [];
+    expect(triggers).toHaveLength(6);
+    expect((html.match(/type="button"/g) ?? []).length - triggers.length).toBe(5);
   });
 
   it("战场/能力表单按设计收编号、顺序、六个月目标", () => {
@@ -68,7 +71,9 @@ describe("配置页渲染", () => {
     expect(html).toContain('<option value="person-1"');
     // DRI 下拉只取 dri 角色；负责人下拉取全量人员（含 CEO），并可待指派
     expect(html).toContain('<option value="person-2"');
-    expect(html).toMatch(/<option value=""( selected="")?>待指派<\/option>/);
+    expect(html).toMatch(/<option value="__select-empty__"( selected="")?>待指派<\/option>/);
+    expect(html).not.toContain('type="datetime-local"');
+    expect(html).not.toContain('type="date"');
   });
 });
 
@@ -86,12 +91,15 @@ describe("配置页 CSS 基线", () => {
     expect(source).toContain(".ltco{grid-column:1/-1;height:236px}");
     expect(source).toContain(".tall{height:610px}");
     expect(source).toContain(".pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}");
-    expect(source).toContain(".field textarea{box-sizing:border-box;width:100%;min-height:82px");
-    expect(source).toContain(".ltcoInput{box-sizing:border-box;width:100%;min-height:82px");
+    expect(source).toContain(".field textarea{width:100%;min-height:82px}");
+    expect(source).toContain(".ltcoInput{width:100%;min-height:82px}");
   });
 
   it("输入框、图标芯片、上传条与页脚按钮取设计色值", () => {
-    expect(source).toContain("height:44px;border:0;outline:1px solid #d9dde5;border-radius:10px;background:#f7f8fa");
+    // 输入框的边、圆角、底色、聚焦走 globals.css 的统一输入框样式（--field-*），这里只管宽高；不再有 outline 描边与蓝色粗聚焦框。
+    expect(source).toContain(".field input,.field select{width:100%;height:44px;padding:0 16px}");
+    expect(source).not.toMatch(/.field[^{]*:focus{outline:2px/);
+    expect(source).not.toContain("resize:vertical");
     expect(source).toContain(".iconChip{position:absolute;top:22px;right:24px");
     expect(source).toContain("background:#e8f1ff;color:#0a5dc2");
     expect(source).toContain("top:322px;left:24px;right:24px");

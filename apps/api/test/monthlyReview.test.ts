@@ -548,7 +548,7 @@ describe("MonthlyReview company summary and LTCO", () => {
       expect(review.summary.confirmedAt).toBe(SEPT_15.toISOString());
       expect(review.actions.map((action: any) => action.actionType)).toEqual(["monthly-review.decide_ltco"]);
       const ltcoNotice = (await c.t.app.inject({ method: "GET", url: "/api/me/monthly-reviews", headers: { cookie: c.ceo } })).json().notices;
-      expect(ltcoNotice).toEqual([expect.objectContaining({ kind: "ltco_pending", text: "9 月复盘已完成 · 待决定 LTO", href: "/reviews/2026-09/ltco" })]);
+      expect(ltcoNotice).toEqual([expect.objectContaining({ kind: "ltco_pending", text: "9 月复盘已完成 · 待决定长期目标", href: "/reviews/2026-09/ltco" })]);
     } finally {
       await c.t.close();
     }

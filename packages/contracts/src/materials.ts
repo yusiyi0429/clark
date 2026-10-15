@@ -11,6 +11,7 @@ export const MaterialObjectType = Type.Union([Type.Literal("issue"), Type.Litera
  * link：执行事项里放进来的外部链接（design-12）。没有原件、不抓外部页面、不能批注、Agent 不能改。
  */
 export const MaterialFormat = Type.Union([Type.Literal("markdown"), Type.Literal("pdf"), Type.Literal("docx"), Type.Literal("html"), Type.Literal("link")]);
+export const MaterialNature = Type.Union([Type.Literal("real"), Type.Literal("ai_generated")]);
 
 const MaterialPerson = Type.Object(
   { personId: Type.String({ minLength: 1 }), displayName: Type.String({ minLength: 1 }) },
@@ -26,7 +27,17 @@ export const MaterialAnnotationRef = Type.Union([
   Type.Null(),
 ]);
 
-/** 某一版是谁让 Agent 改的；上传的第 1 版 requestedBy、summary 为 null。 */
+/**
+ * 这一版是怎么来的：agent 是 Agent 按 requestedBy 的要求改的（含采用批注、恢复段落），或 Agent 新写的第 1 版；
+ * upload 是有人上传的（原件、链接或上传的新版本）；import 是客户资料包导入的版本（例如资料里某人上传的新版本）。
+ * 第 1 版是原件，页面不按它显示；迁移前的旧数据一律是 agent。
+ */
+export const MaterialRevisionOrigin = Type.Union([Type.Literal("agent"), Type.Literal("upload"), Type.Literal("import")]);
+
+/**
+ * 某一版是谁改的、怎么来的：origin 为 agent 时 requestedBy 是让 Agent 改的人；upload / import 时是上传这一版的人，summary 是改动说明。
+ * 上传的第 1 版 requestedBy、summary 为 null。
+ */
 export const MaterialRevisionView = Type.Object(
   {
     version: Type.Integer({ minimum: 1 }),
@@ -35,6 +46,8 @@ export const MaterialRevisionView = Type.Object(
     /** ISO 8601 */
     at: Type.String({ minLength: 1 }),
     annotation: MaterialAnnotationRef,
+    /** 没给时按 agent 看（旧服务端）。 */
+    origin: Type.Optional(MaterialRevisionOrigin),
   },
   { additionalProperties: false },
 );
@@ -67,10 +80,12 @@ export const MaterialView = Type.Object(
     /** 等本人「采用 / 不采用」的批注条数（别人保存的）；不能改这份时为 0。 */
     pending: Type.Integer({ minimum: 0 }),
     canDelete: Type.Boolean(),
-    /** 最近一次 Agent 修改；只有第 1 版时为 null。 */
+    /** 当前这一版的修改记录（Agent 改的或上传 / 导入的新版本，看 origin）；只有第 1 版时为 null（Agent 新写的第 1 版除外）。 */
     lastRevision: Type.Union([MaterialRevisionView, Type.Null()]),
     /** Co-Agent 正在按批注改这一份（有排队中或正在改的批注）。 */
     working: Type.Boolean(),
+    /** 素材性质：real 真实材料；ai_generated 没有真实件、由 AI 生成的演示素材（界面标注）。旧接口没有这一项，按 real。 */
+    nature: Type.Optional(MaterialNature),
   },
   { additionalProperties: false },
 );
@@ -105,7 +120,7 @@ export const MaterialBlockChange = Type.Union([
   Type.Object({ kind: Type.Literal("removed"), before: Type.String() }, { additionalProperties: false }),
 ]);
 
-/** 一段文字的一次改动（悬停时显示）：改之前的原文、谁让改的、按哪条批注。 */
+/** 一段文字的一次改动（悬停时显示）：改之前的原文、谁让改的（或谁上传的新版本，看 origin）、按哪条批注。 */
 export const MaterialBlockHistoryEntry = Type.Object(
   {
     version: Type.Integer({ minimum: 2 }),
@@ -115,6 +130,8 @@ export const MaterialBlockHistoryEntry = Type.Object(
     requestedBy: Type.Union([MaterialPerson, Type.Null()]),
     at: Type.String({ minLength: 1 }),
     annotation: MaterialAnnotationRef,
+    /** 这一版怎么来的，同 MaterialRevisionView.origin；没给时按 agent 看。 */
+    origin: Type.Optional(MaterialRevisionOrigin),
   },
   { additionalProperties: false },
 );
@@ -255,6 +272,8 @@ export const MaterialDetailResponse = Type.Object(
 
 export type TMaterialObjectType = Static<typeof MaterialObjectType>;
 export type TMaterialFormat = Static<typeof MaterialFormat>;
+export type TMaterialNature = Static<typeof MaterialNature>;
+export type TMaterialRevisionOrigin = Static<typeof MaterialRevisionOrigin>;
 export type TMaterialRevisionView = Static<typeof MaterialRevisionView>;
 export type TMaterialView = Static<typeof MaterialView>;
 export type TMaterialListResponse = Static<typeof MaterialListResponse>;

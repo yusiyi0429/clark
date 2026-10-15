@@ -145,6 +145,15 @@ describe("migration", () => {
         "057_battlefield_participants.sql",
         "058_material_annotation_authority.sql",
         "059_task_cover.sql",
+        "060_issue_decision_history.sql",
+        "061_import_facts_and_discussion_stance.sql",
+        "062_material_revision_origin.sql",
+        "063_material_nature.sql",
+        "064_radar_issue_ai_suggested.sql",
+        "065_issue_assignee.sql",
+        "066_trace_threads.sql",
+        "067_conversation_archive.sql",
+        "068_conversation_compactions.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -152,7 +161,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(59);
+      expect(Number(again.rows[0].count)).toBe(68);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(
@@ -325,6 +334,69 @@ describe("migration", () => {
       expect(await messages("0d")).toHaveLength(3);
       const live = await db.query("SELECT id FROM conversations WHERE deleted_at IS NULL ORDER BY id");
       expect(live.rows.map((row) => row.id)).toEqual([id("0a"), id("0c"), id("0d")]);
+    });
+  });
+  /** 064 给已有的雷达升级议题补上 AI 建议标注；其他来源的议题不动。 */
+  it("backfills nature=ai_suggested on existing radar-promoted issues only", async () => {
+    await createTestDb(async ({ db }: TestDb) => {
+      const files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith(".sql") && Number(f.split("_")[0]) <= 63).sort();
+      await db.query("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+      for (const file of files) {
+        await db.query(await readFile(join(MIGRATIONS_DIR, file), "utf8"));
+        await db.query("INSERT INTO schema_migrations(id,filename) VALUES($1,$2)", [Number(file.split("_")[0]), file]);
+      }
+      const insert = (id: string, origin: string, ref: unknown) => db.query(`INSERT INTO issues (id, version, origin, origin_ref, title, location, urgency, status, research)
+        VALUES ($1, 1, $2, $3::jsonb, '议题', '{"level":"company","relatedBattlefieldIds":[]}'::jsonb, '{"level":"gray"}'::jsonb, 'pending', '{"status":"pending"}'::jsonb)`, [id, origin, JSON.stringify(ref)]);
+      await insert("00000000-0000-4000-8000-000000000001", "radar", { signalId: "s-1", summary: "x" });
+      await insert("00000000-0000-4000-8000-000000000002", "dri", { externalId: "e-1" });
+      await insert("00000000-0000-4000-8000-000000000003", "ceo", { type: "ceo" });
+      await migrate(db);
+      const rows = Object.fromEntries((await db.query("SELECT id, origin_ref FROM issues")).rows.map((row) => [row.id, row.origin_ref]));
+      expect(rows["00000000-0000-4000-8000-000000000001"]).toEqual({ signalId: "s-1", summary: "x", nature: "ai_suggested" });
+      expect(rows["00000000-0000-4000-8000-000000000002"]).toEqual({ externalId: "e-1" });
+      expect(rows["00000000-0000-4000-8000-000000000003"]).toEqual({ type: "ceo" });
+    });
+  });
+  it("067 在已有对话的库上执行：只加可空列，已有会话仍是当前对话、消息与模型历史不动，可重复执行", async () => {
+    await createTestDb(async ({ db }: TestDb) => {
+      const files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith(".sql") && Number(f.split("_")[0]) <= 66).sort();
+      await db.query("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+      for (const file of files) {
+        await db.query(await readFile(join(MIGRATIONS_DIR, file), "utf8"));
+        await db.query("INSERT INTO schema_migrations (id, filename) VALUES ($1, $2)", [Number(file.split("_")[0]), file]);
+      }
+      await db.query(`INSERT INTO conversations (id, owner_id, scope, pi_session_id, runtime_entries)
+        VALUES ('00000000-0000-4000-8000-000000000001', 'person-a', 'global', '10000000-0000-4000-8000-000000000001', '[{"entry":1}]'::jsonb)`);
+      await db.query(`INSERT INTO conversation_messages (conversation_id, sequence, role, content, run_id)
+        VALUES ('00000000-0000-4000-8000-000000000001', 1, 'user', '问', '20000000-0000-4000-8000-000000000001')`);
+      await migrate(db);
+      await migrate(db);
+      const [row] = (await db.query("SELECT archived_at, runtime_entries FROM conversations")).rows;
+      expect(row).toEqual({ archived_at: null, runtime_entries: [{ entry: 1 }] });
+      expect((await db.query("SELECT content, recovery_note FROM conversation_messages")).rows).toEqual([{ content: "问", recovery_note: null }]);
+      expect((await db.query("SELECT count(*)::int AS n FROM schema_migrations WHERE id = 67")).rows).toEqual([{ n: 1 }]);
+      expect((await db.query("SELECT indexname FROM pg_indexes WHERE indexname = 'conversations_owner_scope_active_idx'")).rows).toHaveLength(1);
+    });
+  });
+  it("068 后台压缩快照：只新增表，已有会话的模型历史不动；同一条会话同一时刻只能有一份在做", async () => {
+    await createTestDb(async ({ db }: TestDb) => {
+      const files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith(".sql") && Number(f.split("_")[0]) <= 67).sort();
+      await db.query("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+      for (const file of files) {
+        await db.query(await readFile(join(MIGRATIONS_DIR, file), "utf8"));
+        await db.query("INSERT INTO schema_migrations (id, filename) VALUES ($1, $2)", [Number(file.split("_")[0]), file]);
+      }
+      await db.query(`INSERT INTO conversations (id, owner_id, scope, pi_session_id, runtime_entries)
+        VALUES ('00000000-0000-4000-8000-000000000001', 'person-a', 'global', '10000000-0000-4000-8000-000000000001', '[{"entry":1}]'::jsonb)`);
+      await migrate(db);
+      await migrate(db);
+      expect((await db.query("SELECT runtime_entries FROM conversations")).rows).toEqual([{ runtime_entries: [{ entry: 1 }] }]);
+      const running = (id: string) => db.query(`INSERT INTO conversation_compactions (id, conversation_id, pi_session_id, status, trigger_kind, first_kept_entry_id,
+          covered_entry_id, leaf_entry_id, covered_entries, covered_turns, kept_turns, tokens_before, tokens_source, history_tokens_folded, history_tokens_kept)
+        VALUES ($1, '00000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'running', 'after_turn', 'a', 'b', 'c', 1, 1, 1, 1, 'usage', 1, 1)
+        ON CONFLICT (conversation_id) WHERE status = 'running' DO NOTHING RETURNING id`, [id]);
+      expect((await running("30000000-0000-4000-8000-000000000001")).rowCount).toBe(1);
+      expect((await running("30000000-0000-4000-8000-000000000002")).rowCount).toBe(0);
     });
   });
 });
