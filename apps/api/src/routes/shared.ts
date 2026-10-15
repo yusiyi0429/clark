@@ -1,3 +1,4 @@
+import type { PersonalDistillation } from '../personalDistillation.js';
 import type { PersonalMemory } from '../personalMemory.js';
 import type { PeopleDirectory } from "../peopleDirectory.js";
 import { timingSafeEqual } from "node:crypto";
@@ -59,6 +60,7 @@ export type RouteContext = {
   companyMemory: CompanyMemoryRepository;
   peopleDirectory: PeopleDirectory;
   personalMemory: PersonalMemory;
+  personalDistillation: PersonalDistillation;
   preflight: PreflightAgent;
   outcome: PostMeetingAgent;
   runtime: ConversationRuntime;

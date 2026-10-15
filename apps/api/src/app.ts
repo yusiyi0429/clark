@@ -1,3 +1,4 @@
+import { createPersonalDistillation } from './personalDistillation.js';
 import { createPersonalMemory } from './personalMemory.js';
 import { registerPersonalMemoryRoutes } from './routes/personalMemory.js';
 import { loadPeopleDirectory } from "./peopleDirectory.js";
@@ -122,6 +123,7 @@ export async function buildApp({
   pool,
   env,
   conversationRuntime,
+  personalDistillationStream,
   radarService,
   personalRadarService,
   researchService,
@@ -148,6 +150,7 @@ export async function buildApp({
   pool: Pool;
   env: AppEnv;
   conversationRuntime?: ConversationRuntime;
+  personalDistillationStream?: Parameters<typeof createPersonalDistillation>[0]["streamSimple"];
   radarService?: RadarService;
   /** 个人雷达扫描队列；缺省为不扫描的桩（server.ts 注入与公司雷达共用博查与发布方 adapter 的真实服务）。 */
   personalRadarService?: PersonalRadarService;
@@ -340,9 +343,13 @@ export async function buildApp({
 
   app.setNotFoundHandler((_req, reply) => fail(reply, 404, "NOT_FOUND", "路径不存在"));
 
+  const personalDistillation = createPersonalDistillation({ pool, memory: personalMemory, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.lightModel, streamSimple: personalDistillationStream });
+  personalDistillation.start();
+  app.addHook('onClose', async () => personalDistillation.close());
 
   const ctx: RouteContext = {
     personalMemory,
+    personalDistillation,
     pool,
     q,
     env,

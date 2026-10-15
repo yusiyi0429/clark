@@ -2,6 +2,7 @@ import { readHomeCards } from "./cards.js";
 import { readMemberHome } from "./me.js";
 import { buildSceneAnchor } from "../sceneAnchor.js";
 import { boundedText, readableValue, type ReferenceView } from "../conversationAnchor.js";
+import { isExplicitMemoryRequest } from '../personalDistillation.js';
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
@@ -242,6 +243,19 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
            VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
           [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
         );
+        // Explicit memory changes are durable before the main model starts, even if its answer fails.
+        let memoryClarification: string | undefined;
+        const learnsPersonal = !req.params.scope.startsWith('mission-card:');
+        let personalEpoch = learnsPersonal ? (await ctx.personalMemory.readOwn(owner)).epoch : row.memory_epoch;
+        if (learnsPersonal && isExplicitMemoryRequest(req.body.message)) {
+          const explicitJob = await ctx.personalDistillation.enqueue(client, { personId: owner, conversationId: row.id, throughSequence: userSequence, kind: 'explicit', epoch: personalEpoch });
+          await ctx.personalDistillation.processNext(owner);
+          const state = await ctx.personalDistillation.status(explicitJob);
+          memoryClarification = state?.clarification ?? (state?.status !== 'succeeded' ? '个人记忆修改尚未完成，已保存请求稍后重试。' : undefined);
+          personalEpoch = (await ctx.personalMemory.readOwn(owner)).epoch;
+          // A successful correction invalidates both Pi and historical context immediately.
+          row = (await client.query<typeof row>('SELECT id,pi_session_id,runtime_entries,memory_epoch,memory_history_cutoff FROM conversations WHERE id=$1', [row.id])).rows[0];
+        }
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
              FROM conversation_messages
@@ -312,7 +326,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         }, conversationTurnTimeoutMs);
         timeout.unref();
         try {
-          const result = await runtime.run({
+          const result = memoryClarification ? { assistantMessage: memoryClarification, runtimeEntries: [] } : await runtime.run({
             scope: req.params.scope,
             runId,
             viewer: { personId: owner, displayName: personDisplayNames(peopleDirectory).get(owner) ?? owner, role: person.role },
@@ -382,6 +396,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
                 WHERE id = $1`,
               [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage)],
             );
+            if (learnsPersonal) await ctx.personalDistillation.enqueue(client, {
+              personId: owner, conversationId: row.id, throughSequence: userSequence, kind: 'natural',
+              epoch: personalEpoch,
+            });
             await client.query("COMMIT");
             runStatus = "succeeded";
             runOutput = { assistantMessage: result.assistantMessage };
