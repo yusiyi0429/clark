@@ -11,6 +11,14 @@ export default function EntryMetadata({data:incoming}){
  useEffect(()=>setUpdated(null),[incoming]);
  const data=updated?.roundId===incoming.roundId?updated:incoming;
  const audit=data.roundAudit;
+ // Business findings and field-length findings answer different questions; show them apart.
+ const issues=audit?.issues||[],readerIssues=issues.filter(x=>x.fieldPath),businessIssues=issues.filter(x=>!x.fieldPath);
+ const groups=Object.entries(businessIssues.reduce((g,x)=>{(g[x.type||'未分类']??=[]).push(x);return g;},{}));
+ const issueSummary=audit?.status==='completed'?`${businessIssues.length} 项业务问题、${readerIssues.length} 处字数超限`:undefined;
+ const layerName={po:'PO 层',mission:'Mission 层',task:'Task 层',final:'总校验',format:'精简'};
+ const iterationText=Object.entries((audit?.iterations||[]).reduce((g,x)=>{const r=(g[x.layer]??={rounds:0,revised:new Set()});r.rounds=Math.max(r.rounds,x.round);x.revised.forEach(k=>r.revised.add(k));return g;},{})).map(([layer,r])=>`${layerName[layer]||layer}验证 ${r.rounds} 轮${r.revised.size?`，修改 ${r.revised.size} 个领域`:''}`).join('；');
+ const unitLabel=key=>data.units?.find(u=>u.key===key||u.id===key)?.name||(key==='company'?'公司':key);
+ const unitName=key=>data.units?.find(u=>u.key===key||u.id===key)?.name||key||'跨领域计划';
  async function refresh(){const r=await fetch('/api/data');if(!r.ok)throw Error('无法刷新审核结果，请重试');const value=await r.json();if(value.roundId===incoming.roundId)setUpdated(value);}
  const model=data.generationModel;
  const time=data.sourceTime&&new Date(data.sourceTime);
@@ -19,16 +27,21 @@ export default function EntryMetadata({data:incoming}){
   <p>第 {data.round} 轮 · 资料读取于 {date}（北京时间）</p>
   <dl>
    <div><dt>生成耗时</dt><dd>{formatGenerationDuration(data.generationTiming)}</dd></div>
-   {data.auditStatus&&<div><dt>本轮检查</dt><dd><AuditStatus status={data.auditStatus} issueCount={data.auditIssueCount} gapCount={data.auditGapCount} roundId={data.roundId} memberId="member-01" ceo={data.auditStatus!=='completed'} onComplete={refresh}/>
+   {data.auditStatus&&<div><dt>本轮检查</dt><dd><AuditStatus status={data.auditStatus} issueCount={data.auditIssueCount} issueSummary={issueSummary} gapCount={data.auditGapCount} roundId={data.roundId} memberId="member-01" ceo={data.auditStatus!=='completed'} onComplete={refresh}/>
     {audit?.status==='completed'&&<details className="entry-audit-details"><summary>查看需要修改的计划和待补资料</summary>
      <p>需要修改：计划之间有冲突、重复，或责任不清。待补资料：现有材料不足，还不能核实。以下是模型检查结果，需负责人确认，不代表已修订。</p>
-     <h3>需要修改的计划（{audit.issues?.length||0}）</h3>
-     {!(audit.issues?.length)&&<p>本次未发现需要修改的计划，不代表所有计划已确认。</p>}
-     {(audit.issues||[]).map((x,i)=><article key={i}><strong>{i+1}. {data.units?.find(u=>u.key===x.unitKey||u.id===x.unitKey)?.name||x.unitKey||'跨领域计划'} · {x.cardTitle||'计划组合'}</strong><p>问题：{x.problem}</p><p>影响：{x.impact}</p>{x.exceptionReason&&<p>模型给出的保留理由：{x.exceptionReason}。仍需人工核对，不算达标。</p>}</article>)}
+     {iterationText&&<p>逐层验证与修改：{iterationText}。下面是验证轮数用完后仍未解决的问题。</p>}
+     <h3>业务问题（{businessIssues.length}）</h3>
+     {!businessIssues.length&&<p>本次未发现业务问题，不代表所有计划已确认。</p>}
+     {groups.map(([type,list])=><div key={type} className="entry-audit-group"><h4>{type}（{list.length}）</h4>
+      {list.map((x,i)=><article key={i}><strong>{i+1}. {x.layer&&`[${layerName[x.layer]||x.layer}] `}{unitName(x.unitKey)} · {x.cardTitle||'计划组合'}</strong><p>问题：{x.problem}</p><p>影响：{x.impact}</p>{x.exceptionReason&&<p>模型给出的保留理由：{x.exceptionReason}。仍需人工核对，不算达标。</p>}</article>)}
+     </div>)}
+     {readerIssues.length>0&&<details className="entry-audit-reader"><summary>字数超限（{readerIssues.length} 处）</summary><ol>{readerIssues.map((x,i)=><li key={i}>{unitName(x.unitKey)} · {x.cardTitle} · {x.fieldLabel}：{x.actual}/{x.limit} 字</li>)}</ol></details>}
      <h3>待补资料（{audit.gaps?.length||0}）</h3>
      <ol>{(audit.gaps||[]).map((x,i)=><li key={i}>{typeof x==='string'?x:x.description||x.problem||x.detail||x.reason||'资料内容未说明，请重新核对'}</li>)}</ol>
     </details>}
    </dd></div>}
+   {data.versionNotices?.length>0&&<div><dt>资料新版本</dt><dd>{data.versionNotices.map((n,i)=><p key={i}>{unitLabel(n.unit)}「{n.title}」：本轮用第 {n.usedVersion} 版，本体已有第 {n.latestVersion} 版。要换成新版，请更新资料清单后重开。</p>)}</dd></div>}
    <div><dt>数据来源</dt><dd>{sourceNames[data.sourceMode]||data.sourceMode||'旧轮未记录'}{data.sourceTitles?.length>0&&<span className="entry-source-titles">{data.sourceTitles.join('、')}</span>}</dd></div>
    <div><dt>技能版本</dt><dd>本轮 {data.skill} · 当前可用 {data.availableSkill}</dd></div>
    <div><dt>生成模型</dt><dd>{model?.model||model?.id||'本轮未记录'}{model?.reasoningEffort&&` · 推理强度 ${model.reasoningEffort}`}</dd></div>

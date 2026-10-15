@@ -2,7 +2,7 @@ import {readFile,readdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 export async function loadSkillSnapshot(root){
  // Evaluation answers and historical cases must not enter a blind generation.
- const generationReferences=new Set(['contracts.md','quality-bars.md','method.md','feasibility.md','templates.md','reader-format.md','revision-loop.md','organization-context.md','validation.md']);
+ const generationReferences=new Set(['contracts.md','quality-bars.md','method.md','feasibility.md','templates.md','reader-format.md','revision-loop.md','organization-context.md','validation.md','round-stages.md']);
  const paths=['SKILL.md',...(await readdir(new URL('references/',root))).filter(p=>generationReferences.has(p)).sort().map(p=>'references/'+p)];
  const files=await Promise.all(paths.map(async path=>{const content=await readFile(new URL(path,root),'utf8');return {path,content,hash:createHash('sha256').update(content).digest('hex')};}));
  const rules=files.map(f=>`\n--- ${f.path} ---\n${f.content}`).join('\n');

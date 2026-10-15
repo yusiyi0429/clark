@@ -24,9 +24,15 @@ test('失败不再开新领域；等待在途领域保存后才返回失败',asy
  fail(Error('test-failure'));await tick();assert.equal(returned,false);assert.deepEqual(started,[1,2]);
  finish();await checked;assert.deepEqual(saved,[2]);
 });
-test('支持三路但保持上限；非法并发不能启动任务',async()=>{
+test('支持多路但保持上限；非法并发不能启动任务',async()=>{
  let count=0;await runRoundPool([],()=>count++,3);assert.equal(count,0);
- for(const concurrency of [0,5,1.5])await assert.rejects(()=>runRoundPool([1],()=>count++,concurrency),/并发数/);
+ for(const concurrency of [0,51,1.5])await assert.rejects(()=>runRoundPool([1],()=>count++,concurrency),/并发数/);
  let active=0,peak=0;await runRoundPool([1,2,3,4],async()=>{peak=Math.max(peak,++active);await tick();active--;},3);
  assert.equal(peak,3);
+});
+test('五路并行：前五个同时开始，一个完成立即补位',async()=>{
+ const started=[],releases=new Map();
+ const flight=runRoundPool([1,2,3,4,5,6,7],async id=>{started.push(id);await new Promise(resolve=>releases.set(id,resolve));},5);
+ assert.deepEqual(started,[1,2,3,4,5]);releases.get(3)();await tick();assert.deepEqual(started,[1,2,3,4,5,6]);
+ for(const id of [1,2,4,5,6])releases.get(id)();await tick();releases.get(7)();await flight;
 });

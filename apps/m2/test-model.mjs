@@ -40,3 +40,11 @@ test('模型失败或截断不假装成功',async()=>{
  const bad=await createModelGateway({env:{DECODING_API_KEY:'test'},transport:async()=>({ok:false,status:401})});await assert.rejects(()=>bad.complete([]),/401/);
 });
 test('Nexus 只得到当前领域公开消息，不得到私聊或其他群',()=>{const rows=[{channel:'private',author:'私人',text:'private-sentinel'},{channel:'group',scope:'eo',author:'其他群',text:'other-sentinel'},{channel:'group',scope:'bf01',author:'甲',text:'公开意见'}];assert.deepEqual(selectDiscussion(rows,{shared:true,scope:'bf01'}),[{author:'甲',text:'公开意见'}]);assert.deepEqual(selectDiscussion(rows,{shared:false}),[{author:'私人',text:'private-sentinel'}]);});
+test('GPT（wangsu/gpt-6.1-sol）：不流式、用 max_completion_tokens、思考强度走 reasoning_effort，不发 DeepSeek 专用参数',async()=>{
+ let body;const g=await createModelGateway({env:{DECODING_API_KEY:'test',DECODING_MODEL:'wangsu/gpt-6.1-sol'},transport:async(url,options)=>{body=JSON.parse(options.body);return {ok:true,headers:{get:()=> 'application/json'},json:async()=>({choices:[{message:{content:'{"ok":true}'},finish_reason:'stop'}]})};}});
+ await g.complete([{role:'user',content:'JSON'}],{json:true,thinking:true,reasoningEffort:'high',maxTokens:65536});
+ assert.equal(body.stream,undefined);assert.equal(body.max_completion_tokens,65536);assert.equal(body.max_tokens,undefined);
+ assert.equal(body.reasoning_effort,'high');assert.equal(body.enable_thinking,undefined);assert.deepEqual(body.response_format,{type:'json_object'});
+ const unknown=await createModelGateway({env:{DECODING_API_KEY:'test',DECODING_MODEL:'some/unverified-model'},transport:async()=>{throw Error('不应发出')}});
+ await assert.rejects(()=>unknown.complete([{role:'user',content:'x'}],{thinking:true}),/未核实拆解思考参数/);
+});
