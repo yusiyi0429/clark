@@ -91,7 +91,7 @@ export function createPersonalDistillation(options: {
           for (const change of result.changes) {
             if (change.evidence.some(evidence => !boundedMessages.some(message => message.sequence === evidence.sequence && message.content.includes(evidence.quote)))) throw new Error('INVALID_USER_EVIDENCE');
             if (!change.evidence.some(evidence => evidence.sequence === job.through_sequence)) throw new Error('NO_CURRENT_USER_EVIDENCE');
-            if (job.kind === 'explicit' && change.inferred) throw new Error('INVALID_EXPLICIT_EVIDENCE');
+            if ((job.kind === 'explicit' || change.operation === 'remove') && change.inferred) throw new Error('INVALID_EXPLICIT_EVIDENCE');
             const blockedMatch = blocked.find(item => item.key === change.matchedBlockedAttributeKey || item.key === change.attributeKey);
             if (change.matchedBlockedAttributeKey && !blockedMatch) throw new Error('UNKNOWN_BLOCKED_ATTRIBUTE');
             if (job.kind === 'natural' && (blockedMatch || (blockedAttributesIncomplete && change.operation === 'add'))) continue;
@@ -108,7 +108,10 @@ export function createPersonalDistillation(options: {
             changes.push({ operation: change.operation, attributeKey: change.attributeKey, title: change.title, text: change.text });
           }
           if (result.clarification && changes.length) throw new Error('AMBIGUOUS_MEMORY_CHANGE');
-          if (changes.length) await memory.apply(job.person_id, { expectedRevision: doc.revision, epoch: effectiveEpoch, changes, ... (job.kind === 'explicit' ? { explicit: true, explicitJobId: job.id } : {}) }, client);
+          if (changes.length) {
+            const explicitMutation = job.kind === 'explicit' || changes.some(change => change.operation === 'remove');
+            await memory.apply(job.person_id, { expectedRevision: doc.revision, epoch: effectiveEpoch, changes, ...(explicitMutation ? { explicit: true, explicitJobId: job.id } : {}) }, client);
+          }
           await client.query("UPDATE personal_memory_jobs SET status='succeeded',error_code=NULL,clarification=$2 WHERE id=$1", [job.id, result.clarification || null]);
         } catch (error) {
           if (closing.signal.aborted) {

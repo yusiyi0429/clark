@@ -239,18 +239,28 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           [row.id],
         );
         const userSequence = next.rows[0].sequence;
-        await client.query(
-          `INSERT INTO conversation_messages
-             (conversation_id, sequence, role, content, references_snapshot, attachments, run_id)
-           VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
-          [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
-        );
+        let explicitJob: string | undefined;
+        await client.query('BEGIN');
+        try {
+          await client.query(
+            `INSERT INTO conversation_messages
+               (conversation_id, sequence, role, content, references_snapshot, attachments, run_id)
+             VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
+            [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
+          );
+          if (learnsPersonal) explicitJob = await ctx.personalDistillation.enqueue(client, {
+            personId: owner, conversationId: row.id, throughSequence: userSequence, kind: 'explicit', epoch: personalEpoch,
+          });
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
         // Explicit memory changes are durable before the main model starts, even if its answer fails.
         let memoryClarification: string | undefined;
         if (learnsPersonal && isExplicitMemoryRequest(req.body.message)) {
-          const explicitJob = await ctx.personalDistillation.enqueue(client, { personId: owner, conversationId: row.id, throughSequence: userSequence, kind: 'explicit', epoch: personalEpoch });
           await ctx.personalDistillation.processNext(owner, client);
-          const state = await ctx.personalDistillation.status(explicitJob, client);
+          const state = await ctx.personalDistillation.status(explicitJob!, client);
           memoryClarification = state?.clarification ?? (state?.status === 'superseded' ? '个人记忆已被其他操作更新，请重新明确这次修改。' : state?.status === 'failed' ? '个人记忆修改未能确认完成，请稍后查看并重试。' : state?.status !== 'succeeded' ? '个人记忆修改尚未完成，已保存请求稍后重试。' : undefined);
           personalEpoch = Number((await client.query("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0);
           // A successful correction invalidates both Pi and historical context immediately.
