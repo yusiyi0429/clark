@@ -252,15 +252,16 @@ export function createPersonalMemory({ pool, storageDir }: {
             unavailable: true;
         }> { const entry = handles.get(input.handle); if (!entry || entry.personId !== personId)
             return { unavailable: true };
-            if (input.cursor && !/^\d+$/.test(input.cursor)) return { unavailable: true };
+            const prefix = `${input.handle}:`;
+            if (input.cursor && (!input.cursor.startsWith(prefix) || !/^\d+$/.test(input.cursor.slice(prefix.length)))) return { unavailable: true };
             const doc = await api.readOwn(personId), item = doc.sections.find(item => item.id === entry.id);
             if (doc.revision !== entry.revision || !item) return { unavailable: true };
-            const offset = Number(input.cursor ?? 0);
+            const offset = Number(input.cursor?.slice(prefix.length) ?? 0);
             if (!Number.isSafeInteger(offset) || offset > item.text.length) return { unavailable: true };
             let text = boundedText(item.text.slice(offset), 6000);
             const page = () => {
                 const next = offset + text.length;
-                return { title: boundedText(item.title, 300), text, more: next < item.text.length, ...(next < item.text.length ? { cursor: String(next) } : {}) };
+                return { title: boundedText(item.title, 300), text, more: next < item.text.length, ...(next < item.text.length ? { cursor: `${prefix}${next}` } : {}) };
             };
             while (Buffer.byteLength(JSON.stringify(page())) > 8192) text = boundedText(text, Math.floor(Buffer.byteLength(text) * 0.8));
             return page();

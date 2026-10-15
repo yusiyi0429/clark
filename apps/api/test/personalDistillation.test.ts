@@ -93,6 +93,8 @@ test('an ambiguous explicit request asks for clarification without editing unrel
  const app=await buildApp({pool,env:{...testEnv,personalMemoryStorageDir:storageDir},personalDistillationStream:()=>candidate({changes:[],clarification:'你想忘掉徒步偏好，还是表达偏好？'}),conversationRuntime:{async run(){calls++;throw new Error('should clarify first');}}});
  try{const login=await app.inject({method:'POST',url:'/api/auth/login',headers:{origin:testEnv.publicOrigin},payload:{loginId:TEST_CEO.loginId,passcode:TEST_CEO.passcode}});const headers={cookie:(login.headers['set-cookie'] as string).split(';')[0],origin:testEnv.publicOrigin};
  const reply=await app.inject({method:'POST',url:'/api/conversations/global/messages',headers,payload:{message:'忘掉那个偏好。'}});expect(reply.body).toContain('completed');const history=await app.inject({url:'/api/conversations/global/messages',headers});expect(history.body).toContain('你想忘掉');expect(calls).toBe(0);expect((await memory.readOwn(TEST_CEO.personId)).sections).toHaveLength(2);
+ const worker=createPersonalDistillation({pool,memory,baseUrl:testEnv.piBaseUrl,apiKey:'test',modelId:'test',streamSimple:()=>{throw new Error('No second classification before clarification');}});
+ expect(await worker.processNext(TEST_CEO.personId)).toBe(false);
  }finally{await app.close();await rm(storageDir,{recursive:true,force:true});}
  });
 });
@@ -157,4 +159,22 @@ test('a removal found during natural distillation creates a forget barrier again
  try{const memory=createPersonalMemory({pool,storageDir}),id=randomUUID();await memory.apply('alice',{expectedRevision:0,epoch:0,changes:[{operation:'add',attributeKey:'drink',text:'喜欢咖啡。'}]});await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user','我通常喜欢咖啡。',$2),($1,2,'user','饮食偏好要整理，现在我不喝咖啡了。',$2)",[id,randomUUID()]);let calls=0;const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:()=>{calls++;return candidate({changes:[{operation:calls===1?'remove':'add',attributeKey:'drink',title:'饮食偏好',text:calls===1?'':'喜欢咖啡。',inferred:false,evidence:[{sequence:calls===1?2:1,quote:calls===1?'饮食偏好要整理，现在我不喝咖啡了。':'我通常喜欢咖啡。'}]}],clarification:''});}});
  await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:2,kind:'natural',epoch:0});const old=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:1,kind:'natural',epoch:0});await worker.processNext();await worker.processNext();expect(await worker.status(old)).toMatchObject({status:'superseded'});expect((await memory.readOwn('alice')).markdown).not.toContain('咖啡');expect(await memory.readBlocked('alice')).toMatchObject([{key:'drink',text:'喜欢咖啡。'}]);expect(calls).toBe(1);
  }finally{await rm(storageDir,{recursive:true,force:true});}});
+});
+
+test('the current long user message keeps its tail intent and evidence while older context is bounded', async () => {
+ await createTestDb(async ({db,pool}) => { await migrate(db); const storageDir = await mkdtemp(join(tmpdir(),'distill-long-query-'));
+ try {
+  const memory=createPersonalMemory({pool,storageDir}), id=randomUUID(); await memory.apply('alice',{expectedRevision:0,epoch:0,changes:[{operation:'add',attributeKey:'drink',text:'喜欢咖啡。'}]});
+  const intent='忘掉我的咖啡偏好。', content='背景'.repeat(9000)+intent;
+  await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);
+  await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user',$2,$4),($1,2,'user',$3,$4)",[id,'无关旧前文'.repeat(3000),content,randomUUID()]);
+  let current=''; const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:(_model,context)=>{
+   const user=context.messages[0]; const input=JSON.parse(typeof user.content==='string'?user.content:(user.content[0] as {text:string}).text).input;
+   current=input.messages.find((message:{sequence:number})=>message.sequence===2).content;
+   return candidate({changes:[{operation:'remove',attributeKey:'drink',title:'饮食偏好',text:'',inferred:false,evidence:[{sequence:2,quote:intent}]}],clarification:''});
+  }});
+  const job=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:2,kind:'explicit',epoch:0}); await worker.processNext();
+  expect(current.length).toBe(content.length); expect(current.endsWith(intent)).toBe(true); expect(await worker.status(job)).toMatchObject({status:'succeeded'}); expect((await memory.readOwn('alice')).sections).toEqual([]);
+ } finally { await rm(storageDir,{recursive:true,force:true}); }
+ });
 });

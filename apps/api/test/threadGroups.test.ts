@@ -27,7 +27,10 @@ describe("议题与会议群", () => {
       expect((await call(f, f.third, "GET", "/api/me/notifications")).json().notifications[0]).toMatchObject({
         kind: "task_collaborator_added", objectType: "task", objectId: id,
       });
-      await waitFor(async () => (await f.t.sql("SELECT 1 FROM thread_messages WHERE object_type='task' AND object_id=$1", [id])).length === 1);
+      await waitFor(async () => {
+        const thread = (await call(f, f.third, "GET", `/api/threads/task/${id}`)).json();
+        return thread.messages.filter((message: { content: string }) => message.content.includes("邀请测试丙")).length === 1;
+      });
       expect((await call(f, f.member, "GET", `/api/me/tasks/${id}`)).json().task.version).toBe(task.version + 1);
       expect((await call(f, f.third, "POST", `/api/threads/task/${id}/leave`)).statusCode).toBe(204);
       expect((await call(f, f.member, "GET", `/api/me/tasks/${id}`)).json().task.version).toBe(task.version + 2);

@@ -126,3 +126,53 @@ test('ephemeral tool bodies exist only in the current provider turn even when a 
     expect(results).toHaveLength(2); expect(results.every(item => item.toolCallId === 'reused-id')).toBe(true);
   } finally { await runtime.close?.(); }
 });
+
+test('production main chat expands a long Personal section losslessly using only per-turn short cursors', async () => {
+  const content = '协作偏好：\\"先明确边界\\"，然后讨论细节。\n'.repeat(180).trim();
+  let calls = 0, expanded = '';
+  const t = await createTestApp({}, undefined, { conversationStream: (_model, context) => {
+    calls++;
+    if (calls > 1) {
+      const result = context.messages.at(-1); if (result?.role !== 'toolResult') throw new Error('missing reference result');
+      const text = result.content.filter(item => item.type === 'text').map(item => item.text).join('');
+      expect(Buffer.byteLength(text)).toBeLessThanOrEqual(8192); const page = JSON.parse(text); expanded += page.text;
+      if (!page.more) return response();
+      expect(page.cursor).toMatch(/^PC\d+$/);
+      return response({ name: 'read_reference', arguments: { handle: 'P1', cursor: page.cursor } });
+    }
+    return response({ name: 'read_reference', arguments: { handle: 'P1' } });
+  } });
+  try {
+    const cookie = await t.loginCookie(), headers = { cookie, origin: t.publicOrigin };
+    expect((await t.app.inject({ method: 'PUT', url: '/api/me/memory/personal', headers, payload: { expectedRevision: 0, markdown: `# Personal\n\n## 协作偏好\n\n${content}` } })).statusCode).toBe(200);
+    expect((await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '谈谈协作偏好' } })).body).toContain('event: done');
+    expect(expanded).toBe(content); expect(calls).toBeGreaterThan(2);
+  } finally { await t.close(); }
+});
+
+test('all memory read tools expose live bodies to this turn but persist only paired placeholders', async () => {
+  const requests = [
+    { name: 'read_anchor', arguments: { handle: 'A1' } },
+    { name: 'query_company', arguments: {} },
+    { name: 'search_memory', arguments: { module: 'personal', query: '偏好' } },
+    { name: 'read_reference', arguments: { handle: 'P1' } },
+    { name: 'read_reference', arguments: { handle: 'C1' } },
+  ];
+  let calls = 0;
+  const live: string[] = [];
+  const runtime = await createPiConversationRuntime({ ...options,
+    company: { read: async () => ({ status: 'ready', entries: [{ handle: 'internal-company', title: '公司章节', text: 'COMPANY_TOOL_ONLY' }] }) },
+    personal: { select: async () => [{ handle: 'internal-personal', kind: 'personal', title: '偏好', text: 'PERSONAL_TOOL_ONLY' }], readReference: async () => ({ title: '偏好', text: 'PERSONAL_TOOL_ONLY' }) },
+    streamSimple: (_model, context) => {
+      if (calls) live.push(JSON.stringify(context.messages.at(-1)));
+      return calls < requests.length ? response(requests[calls++]) : response();
+    },
+  });
+  try {
+    const result = await runtime.run({ scope: 'global', viewer: { personId: 'alice', displayName: '甲', role: 'ceo' }, message: '依次查询', currentObject: null, referencesSnapshot: [], runtimeEntries: [], piSessionId: randomUUID(), signal: new AbortController().signal, emit: () => undefined,
+      anchor: { view: { scene: '首页', summary: '目录', items: [], more: false }, read: async () => ({ text: 'ANCHOR_TOOL_ONLY' }) } });
+    expect(live[0]).toContain('ANCHOR_TOOL_ONLY'); expect(live[1]).toContain('COMPANY_TOOL_ONLY');
+    expect(live[2]).toContain('PERSONAL_TOOL_ONLY'); expect(live[3]).toContain('PERSONAL_TOOL_ONLY'); expect(live[4]).toContain('COMPANY_TOOL_ONLY');
+    expect(JSON.stringify(result.runtimeEntries)).not.toMatch(/ANCHOR_TOOL_ONLY|COMPANY_TOOL_ONLY|PERSONAL_TOOL_ONLY/);
+  } finally { await runtime.close?.(); }
+});

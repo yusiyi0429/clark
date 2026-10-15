@@ -412,7 +412,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
                 WHERE id = $1`,
               [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage)],
             );
-            if (learnsPersonal) await ctx.personalDistillation.enqueue(client, {
+            if (learnsPersonal && !memoryClarification) await ctx.personalDistillation.enqueue(client, {
               personId: owner, conversationId: row.id, throughSequence: userSequence, kind: 'natural',
               epoch: personalEpoch,
             });

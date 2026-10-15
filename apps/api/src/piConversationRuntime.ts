@@ -446,6 +446,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const companyHandles = new Map<string, string>();
       const companyCursors = new Map<string, { cursor: string; query?: string }>();
       const personalHandles = new Map<string, string>();
+      const personalCursors = new Map<string, { handle: string; cursor: string }>();
       const personalView = async (query: string) => {
         if (!options.personal) return { status: 'not_configured', entries: [] };
         try {
@@ -491,7 +492,15 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             if (options.personal) {
               const handle = personalHandles.get(args.handle);
               if (!handle) return result({ status: 'unavailable', message: '参考不属于本轮记忆。' });
-              try { return memoryResult(await options.personal.readReference(input.viewer.personId, { handle, cursor: args.cursor })); }
+              const continuation = args.cursor ? personalCursors.get(args.cursor) : undefined;
+              if (args.cursor && (!continuation || continuation.handle !== handle)) return result({ status: 'unavailable', message: '参考游标不属于本轮章节。' });
+              try {
+                const value = await options.personal.readReference(input.viewer.personId, { handle, cursor: continuation?.cursor });
+                if (!value || typeof value !== 'object' || !('cursor' in value) || typeof value.cursor !== 'string') return memoryResult(value);
+                const cursor = `PC${personalCursors.size + 1}`;
+                personalCursors.set(cursor, { handle, cursor: value.cursor });
+                return memoryResult({ ...value, cursor });
+              }
               catch { return result({ status: 'unavailable', message: '个人记忆暂时不可用。' }); }
             }
             return result({ status: 'unavailable', message: '参考不存在、已变化或不可见。' });

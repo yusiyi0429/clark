@@ -64,9 +64,11 @@ export function createPersonalDistillation(options: {
           const messages = (await client.query<{ sequence: number; content: string }>(`SELECT m.sequence,m.content FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
             WHERE c.id=$1 AND c.owner_id=$2 AND c.deleted_at IS NULL AND m.role='user' AND m.sequence<=$3 AND (m.sequence>c.memory_history_cutoff OR ($4::boolean AND m.sequence=$3))
             ORDER BY m.sequence DESC LIMIT 12`, [job.conversation_id, job.person_id, job.through_sequence, canRebaseExplicit])).rows;
-          let remaining = 16000;
+          const currentMessage = messages.find(message => message.sequence === job.through_sequence);
+          // HTTP bounds the current query to 20,000 characters. Preserve all of it, including tail intent.
+          let remaining = Math.max(16000, currentMessage?.content.length ?? 0);
           const boundedMessages = messages.flatMap(message => {
-            const content = message.content.slice(0, Math.min(8000, remaining));
+            const content = message.sequence === job.through_sequence ? message.content : message.content.slice(0, Math.min(8000, remaining));
             remaining -= content.length;
             return content ? [{ ...message, content }] : [];
           }).reverse();

@@ -87,13 +87,17 @@ test('a valid long Personal section remains recallable and can be read losslessl
     await migrate(db); const storageDir = await mkdtemp(join(tmpdir(), 'personal-long-'));
     try {
       const memory = createPersonalMemory({ pool, storageDir }); const content = '协作偏好：\\"先明确边界\\"，然后讨论细节。\n'.repeat(180).trim();
-      await memory.replaceOwn('alice', { expectedRevision: 0, markdown: `# Personal\n\n## 协作偏好\n\n${content}` });
+      await memory.replaceOwn('alice', { expectedRevision: 0, markdown: `# Personal\n\n## 协作偏好\n\n${content}\n\n## 兴趣\n\n喜欢徒步。` });
       const refs = await memory.select('alice', '协作偏好'); expect(refs).toHaveLength(1); expect(Buffer.byteLength(JSON.stringify(refs[0]))).toBeLessThanOrEqual(4096);
       let cursor: string | undefined, reconstructed = '', pages = 0;
       do {
         const page = await memory.readReference('alice', { handle: refs[0].handle, ...(cursor ? { cursor } : {}) }) as { text: string; more?: boolean; cursor?: string };
         expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(8192); reconstructed += page.text; cursor = page.cursor;
         expect(++pages).toBeLessThan(20);
+        if (pages === 1 && cursor) {
+          const other = (await memory.select('alice', '徒步')).find(ref => ref.title === '兴趣')!;
+          expect(await memory.readReference('alice', { handle: other.handle, cursor })).toEqual({ unavailable: true });
+        }
       } while (cursor);
       expect(reconstructed).toBe(content); expect(pages).toBeGreaterThan(1);
     } finally { await rm(storageDir, { recursive: true, force: true }); }
