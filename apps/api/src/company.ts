@@ -130,16 +130,29 @@ export function createCompanyMemory(env: CompanyEnv): CompanyReader {
             if (markdown.length > 1_000_000) throw new Error('Company coverage exceeds supported size');
             const scope = createHash('sha256').update(JSON.stringify([env.worldApiUrl, domains])).digest('hex');
             const root = join(env.companyStorageDir ?? '/tmp/warmap-company', scope);
-            const generation = randomUUID();
-            const dir = join(root, 'generations', generation);
-            await mkdir(dir, { recursive: true, mode: 0o700 });
-            await writeFile(join(dir, 'Company.md'), markdown, { encoding: 'utf8', mode: 0o600 });
-            await writeFile(join(dir, 'state.json'), JSON.stringify({ domains, heads, checkedAt: new Date().toISOString() }), { encoding: 'utf8', mode: 0o600 });
-            signal.throwIfAborted();
+            let unchanged = false;
+            try {
+              const current = JSON.parse(await readFile(join(root, 'current.json'), 'utf8')) as { generation: string };
+              if (/^[a-f0-9-]{36}$/.test(current.generation)) {
+                const directory = join(root, 'generations', current.generation);
+                const state = JSON.parse(await readFile(join(directory, 'state.json'), 'utf8')) as { heads: WorldHead[] };
+                unchanged = fingerprint(state.heads) === fingerprint(heads) && await readFile(join(directory, 'Company.md'), 'utf8') === markdown;
+              }
+            } catch { /* Missing/corrupt projections are rebuilt exclusively from the fresh authorized World read above. */ }
+            if (!unchanged) {
+              const generation = randomUUID();
+              const dir = join(root, 'generations', generation);
+              await mkdir(dir, { recursive: true, mode: 0o700 });
+              await writeFile(join(dir, 'Company.md'), markdown, { encoding: 'utf8', mode: 0o600 });
+              await writeFile(join(dir, 'state.json'), JSON.stringify({ domains, heads, checkedAt: new Date().toISOString() }), { encoding: 'utf8', mode: 0o600 });
+              signal.throwIfAborted();
+              if (JSON.stringify(await authorizedDomains()) !== JSON.stringify(domains)) return unavailableScope;
+              const pointer = join(root, `${generation}.tmp`);
+              await writeFile(pointer, JSON.stringify({ generation }), { encoding: 'utf8', mode: 0o600 });
+              await rename(pointer, join(root, 'current.json'));
+            }
+            // Even an unchanged generation must not be consumed after access was revoked while comparing artifacts.
             if (JSON.stringify(await authorizedDomains()) !== JSON.stringify(domains)) return unavailableScope;
-            const pointer = join(root, `${generation}.tmp`);
-            await writeFile(pointer, JSON.stringify({ generation }), { encoding: 'utf8', mode: 0o600 });
-            await rename(pointer, join(root, 'current.json'));
             const ranked = relevantEntries(entries, request.query);
             const filtered = ranked.entries.filter((entry) => !request.handle || entry.handle === request.handle);
             const cursor = request.cursor === undefined ? 0 : Number(request.cursor);

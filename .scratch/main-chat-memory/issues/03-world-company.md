@@ -28,3 +28,9 @@ Each ticket uses one implement subagent in an isolated worktree; red/green evide
 - HTTP external transport and public runtime test seam, no real provider or World credentials used. Tool response UTF-8 budget <=8 KiB verified with long Chinese text.
 - Worktree install: offline install lacked cached metadata; normal independent workspace installation completed. `pnpm test -- file` selected more than requested and was interrupted; focused checks now invoke Vitest with explicit file path.
 - Formal Standards/Spec review is pending root's concurrency slot grant. This checkpoint is not ticket resolution.
+
+### Freshness and generation ablation
+
+- Repeated reads still call World list/detail and recheck dependency heads; no TTL or cached fact fallback was introduced. When freshly normalized content and dependency heads equal the current generation, the existing immutable generation is retained instead of writing duplicate files.
+- Public Company test suite: 8/8 passed; API TypeScript passed. Additional artifact smoke inspection of two unchanged reads plus one changed read produced two generations (initial + changed), preserving current pointer on the unchanged read.
+- Ablation: Removing per-person grants would let an all-powerful bearer act as every user; default-deny test rejects that. Removing final grant recheck reproduces the mid-read revocation test failure. Removing Chinese bigram retrieval loses Chinese query recall. Keeping deterministic projection avoids an unvalidated extra organizer model and never invents new factual claims.

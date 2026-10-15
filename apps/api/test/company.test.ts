@@ -150,4 +150,18 @@ describe('World company public read boundary', () => {
     } finally { await t.close(); }
   });
 
+  it('rechecks World on unchanged reads and returns revised facts without relying on a TTL', async () => {
+    const t = await setup();
+    try {
+      await t.company.read(viewer, {}, new AbortController().signal);
+      const firstReads = t.requests.length;
+      await t.company.read(viewer, {}, new AbortController().signal);
+      expect(t.requests.length).toBeGreaterThan(firstReads);
+      t.object.business.object_version++;
+      t.object.business.blocks[0].value.text = '新版方向：优先客户留存';
+      const result = await t.company.read(viewer, {}, new AbortController().signal);
+      expect(result.entries.map((entry) => entry.text).join('')).toContain('新版方向：优先客户留存');
+    } finally { await t.close(); }
+  });
+
 });
