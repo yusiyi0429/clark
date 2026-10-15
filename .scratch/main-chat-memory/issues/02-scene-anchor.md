@@ -27,3 +27,10 @@ Each ticket uses one implement subagent in an isolated worktree; red/green evide
 - Attachment extraction moved from query to Reference; full backend reader pages6KiB, rechecks ownership/content and per-run cursor. Ticket03 wires shared read_reference tool to this callback.
 - Relevant API run:39/39 passed before extra pagination/attachment cases; expanded HTTP suite21/21 passed; Pi16/16 passed. Web conversation86/86; contracts75/75. API/Web full runs and typechecks recorded after review below.
 - Migration060 replaces derived execution state on the first schema2 turn, restoring recent raw discussion and preserving original messages.
+
+## Two-axis review
+
+- Standards (fed15706be1107b327fd670e8e21534fd9cdc5b6...891de30): one P3 handwritten wire DTO. Fixed by deriving AnchorSelection from generated OpenAPI components; Web typecheck passed.
+- Spec: two P2 findings: omitted member battlefield targets/radar/weeklySync; frozen viewing-material metadata. Both reproduced with failing HTTP/runtime tests before fixes. Member-visible workspace summaries now join the authorized index; material is re-read under current viewer and frozen snapshot comparison returns conflict when changed. Both targeted regressions pass; API typecheck passes.
+- Web full suite completed814/814, contracts75/75. API full run stopped by parent instruction to reserve full integrated run for ticket07; no full API result claimed.
+- No new dependency, general plugin framework, shell access, World write capability, or excluded-feature behavior was introduced. Shared projection exports replace duplicated route reads; page/attachment machine metadata stays out of model text. Budget adaptation retains raw query and existing tool pairs.

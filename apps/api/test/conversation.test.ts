@@ -1,3 +1,4 @@
+import { createObjectMaterial, editObjectMaterial } from "../src/objectMaterials.js";
 import { describe, expect, it } from "vitest";
 import { createTestApp } from "./helpers.js";
 import { CONVERSATION_TURN_TIMEOUT_MS } from "../src/app.js";
@@ -62,6 +63,49 @@ describe("Conversation HTTP/SSE public seam", () => {
         headers: { cookie, origin: t.publicOrigin }, payload: { message: "当前页面有什么" } })).statusCode).toBe(200);
       const cards = (await t.app.inject({ url: "/api/cards/home", headers: { cookie: ceo } })).json().cards;
       expect(ceoItems).toBe(cards.length);
+    } finally { await t.close(); }
+  });
+
+  it("includes a member's visible battlefield targets even without tasks or Missions", async () => {
+    let seen = false;
+    const runtime: ConversationRuntime = { async run(input) {
+      expect(JSON.stringify(input.anchor!.view)).toContain("成员独有战场");
+      const item = input.anchor!.view.items.find(item => item.title === "成员独有战场")!;
+      expect(JSON.stringify(await input.anchor!.read({ handle: item.handle }))).toContain("本月目标还没出来");
+      seen = true;
+      return { assistantMessage: "已理解", runtimeEntries: [] };
+    } };
+    const t = await createTestApp({}, runtime);
+    try {
+      const ceo = await t.loginCookie();
+      expect((await t.app.inject({ method: "POST", url: "/api/config/battlefields", headers: { cookie: ceo, origin: t.publicOrigin },
+        payload: { code: "99", sortOrder: 990, name: "成员独有战场", ownerId: "person-fixture-002", sixMonthOutcome: "长期方向" } })).statusCode).toBe(201);
+      const member = await t.memberCookie();
+      await t.app.inject({ method: "POST", url: "/api/conversations/global/messages", headers: { cookie: member, origin: t.publicOrigin }, payload: { message: "解释我的目标" } });
+      expect(seen).toBe(true);
+    } finally { await t.close(); }
+  });
+
+  it("reports a conflict when the currently viewed material changes during a turn", async () => {
+    let changeMaterial: () => Promise<unknown>;
+    let checked = false;
+    const runtime: ConversationRuntime = { async run(input) {
+      await changeMaterial();
+      expect(await input.anchor!.read({ handle: "A1" })).toMatchObject({ conflict: true });
+      checked = true;
+      return { assistantMessage: "请刷新材料", runtimeEntries: [] };
+    } };
+    const t = await createTestApp({}, runtime);
+    try {
+      const cookie = await t.loginCookie();
+      const issue = await t.createIssue();
+      const ref = { objectType: "issue" as const, objectId: issue.objectRef.id };
+      const viewer = { personId: "person-fixture-001", role: "ceo" as const, displayName: "测试甲" };
+      const material = await createObjectMaterial(t.pool, ref, viewer, "当前材料", "原版", "创建", null);
+      changeMaterial = () => editObjectMaterial(t.pool, ref, material.id, viewer, 1, [{ find: "原版", replace: "新版" }], "更新", null);
+      await t.app.inject({ method: "POST", url: `/api/conversations/issue:${ref.objectId}/messages`, headers: { cookie, origin: t.publicOrigin },
+        payload: { message: "解释这份材料", viewingMaterialId: material.id } });
+      expect(checked).toBe(true);
     } finally { await t.close(); }
   });
 

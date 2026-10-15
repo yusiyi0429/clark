@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { components } from "@/lib/api/schema";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
 
 /**
@@ -16,7 +17,7 @@ export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
 /** clark 的三段思考：尚无事件 = 思考；开始用工具 = 快速查证；首个文字 = 整理回答。 */
 export type ThinkingStage = "thinking" | "researching" | "answering";
-export type AnchorSelection = { cardId: string; version: number; selectedText?: string };
+export type AnchorSelection = NonNullable<components["schemas"]["ConversationMessageRequest"]["anchorSelection"]>;
 export type CardRef = { cardId: string; version: number };
 
 export function messagesEndpoint(scope: string): string {

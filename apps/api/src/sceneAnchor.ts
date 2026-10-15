@@ -46,7 +46,8 @@ export async function buildSceneAnchor(options: {
         const entry = catalog.find(({ item }) => item.handle === activeHandle);
         const latest = entry && available.get(entry.snapshot.cardId);
         if (!entry || !latest) return { unavailable: true, message: "页面项不存在或不可见" };
-        if (latest.version !== entry.snapshot.version || JSON.stringify(latest.payload) !== JSON.stringify(entry.snapshot.payload)) return { conflict: true, message: "页面内容已更新，请刷新后继续" };
+        if (latest.version !== entry.snapshot.version || JSON.stringify(latest.payload) !== JSON.stringify(entry.snapshot.payload)
+          || JSON.stringify((latest as unknown as { viewingMaterial?: unknown }).viewingMaterial) !== JSON.stringify((entry.snapshot as unknown as { viewingMaterial?: unknown }).viewingMaterial)) return { conflict: true, message: "页面内容已更新，请刷新后继续" };
         const fullText = JSON.stringify(readableValue(latest.payload));
         const text = boundedText(fullText.slice(textOffset), 5800);
         const next = textOffset + text.length;

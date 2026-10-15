@@ -95,8 +95,17 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
       const pageSnapshots = async () => {
         if (req.params.scope !== "global") {
           const current = await scopeObjectFor(person, req.params.scope);
-          if (current.visible && current.snapshot && object.snapshot && Object.hasOwn(object.snapshot, "viewingMaterial"))
-            Object.assign(current.snapshot, { viewingMaterial: (object.snapshot as unknown as { viewingMaterial: unknown }).viewingMaterial });
+          if (current.visible && current.snapshot && req.body.viewingMaterialId) {
+            const [objectType, objectId] = req.params.scope.split(":", 2);
+            if (objectType !== "issue" && objectType !== "task") return [];
+            try {
+              const names = personDisplayNames(companyMemory);
+              const material = await getObjectMaterial(q, { objectType, objectId }, req.body.viewingMaterialId,
+                { personId: owner, role: person.role, displayName: names.get(owner) ?? owner }, names);
+              Object.assign(current.snapshot, { viewingMaterial: { id: material.id, fileName: material.fileName,
+                version: material.version, editable: material.editable, canEdit: material.canEdit, ...(material.url ? { url: material.url } : {}) } });
+            } catch { return []; }
+          }
           return current.visible && current.snapshot ? [current.snapshot] : [];
         }
         if (person.role === "ceo") return (await readHomeCards(ctx, person)).cards.map(card => ({
@@ -107,7 +116,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           ...home.work.missionCards.map(card => `mission-card:${card.cardId}`)];
         const projected = await Promise.all(scopes.map(scope => getScopeObject(q, scope, env.sessionSecret,
           { person, people: peopleDirectory.searchPeople(undefined), now: ctx.now() })));
-        return projected.flatMap(result => result.visible && result.snapshot ? [result.snapshot] : []);
+        const workspaceItem = (id: string, kind: string, title: string, payload: unknown) => ({
+          cardId: id, version: 1, kind, title, objectRef: { type: kind, id, version: 1 }, payload,
+        });
+        return [
+          ...home.work.battlefields.map(field => workspaceItem(`member-battlefield:${field.id}`, "battlefield", field.name, { period: home.work.period, ...field })),
+          workspaceItem("member-radar", "radar", "我的雷达", home.radar),
+          workspaceItem("member-weekly-sync", "weekly-sync", "本周同步", home.weeklySync),
+          ...projected.flatMap(result => result.visible && result.snapshot ? [result.snapshot] : []),
+        ];
       };
       let anchor;
       try {
