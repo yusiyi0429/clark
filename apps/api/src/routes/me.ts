@@ -131,7 +131,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   });
 
   app.get("/api/me/notifications", { preHandler: requireMember }, async (req) => ({
-    notifications: await listMyNotifications(q, companyMemory, req.person!.personId),
+    notifications: await listMyNotifications(q, peopleDirectory, req.person!.personId),
   }));
 
   app.get("/api/me/threads/unread", { preHandler: requireMember, schema: { response: { 200: UnreadThreadsResponse } } }, async (req) =>

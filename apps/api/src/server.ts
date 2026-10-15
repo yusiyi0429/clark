@@ -1,3 +1,4 @@
+import { loadPeopleDirectory } from "./peopleDirectory.js";
 import { join } from "node:path";
 import { buildApp, DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR, type AppEnv } from "./app.js";
 import { migrate } from "./migrate.js";
@@ -77,8 +78,9 @@ try {
   client.release();
 }
 
+const peopleDirectory = loadPeopleDirectory(env);
 const companyMemory = loadCompanyMemory(env);
-await assignLegacyConversations(pool.query.bind(pool), companyMemory);
+await assignLegacyConversations(pool.query.bind(pool), peopleDirectory);
 const outletAdapter = createOutletFeedAdapter({});
 // 雷达与对话 web_search 共用一个博查实例：同一 BOCHA_API_KEY 的请求间隔与 429 重试只在一处生效
 const bochaSearch = createBochaWebSearchAdapter({ apiKey: process.env.BOCHA_API_KEY });
@@ -118,7 +120,7 @@ const radarService = createRadarService({
 // 个人雷达（ADR-0021）与公司雷达共用博查（同一请求间隔）和发布方 feed adapter；判定用轻模型
 const personalRadarService = createPersonalRadarService({
   pool,
-  companyMemory,
+  companyMemory: peopleDirectory,
   web: radarWeb,
   outlets: outletAdapter,
   judge: createPersonalRadarJudge({
@@ -126,7 +128,7 @@ const personalRadarService = createPersonalRadarService({
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     modelId: env.lightModel,
-    personName: (personId) => personDisplayNames(companyMemory).get(personId),
+    personName: (personId) => personDisplayNames(peopleDirectory).get(personId),
   }),
   // 02b：GitHub Trending 没有订阅源、检索也限定不了站点，直接读榜单页面
   trending: createGithubTrendingReader(),
@@ -149,7 +151,7 @@ const monthlyReviewService = createMonthlyReviewService({
   pool,
   companyMemory,
   personalDraft: { storageDir: env.conversationAttachmentStorageDir ?? DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR,
-    agent: createPersonalReviewDraftAgent({ ...reviewAgentOptions, personName: (personId) => personDisplayNames(companyMemory).get(personId) }) },
+    agent: createPersonalReviewDraftAgent({ ...reviewAgentOptions, personName: (personId) => personDisplayNames(peopleDirectory).get(personId) }) },
   agents: {
     draft: createMonthlyReviewDraftAgent(reviewAgentOptions),
     assess: createMonthlyReviewAssessAgent(reviewAgentOptions),
@@ -177,7 +179,7 @@ await recoverInterruptedOutcome(pool.query.bind(pool));
 const recordingService = createMeetingRecordingService({
   pool,
   storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR,
-  companyMemory,
+  companyMemory: peopleDirectory,
 });
 await recordingService.recoverInterrupted();
 const app = await buildApp({

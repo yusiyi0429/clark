@@ -48,8 +48,8 @@ export async function isActiveMember(q: Query, ref: ThreadRef, personId: string)
 }
 
 /** 在群里的人，按加入先后；名字与身份现查人员目录。 */
-export async function listMembers(q: Query, companyMemory: PeopleDirectory, ref: ThreadRef): Promise<TThreadMember[]> {
-  const people = new Map(companyMemory.searchPeople(undefined).map((person) => [person.personId, person]));
+export async function listMembers(q: Query, peopleDirectory: PeopleDirectory, ref: ThreadRef): Promise<TThreadMember[]> {
+  const people = new Map(peopleDirectory.searchPeople(undefined).map((person) => [person.personId, person]));
   const result = await q(
     "SELECT person_id FROM thread_members WHERE object_type = $1 AND object_id = $2 AND left_at IS NULL ORDER BY joined_at, person_id",
     [ref.objectType, ref.objectId],
@@ -67,7 +67,7 @@ export async function listMembers(q: Query, companyMemory: PeopleDirectory, ref:
 /** 不给 after 取最近 limit 条（打开群组）；给了取 after 之后的 limit 条（轮询）。都按 id 升序。 */
 export async function listMessages(
   q: Query,
-  companyMemory: PeopleDirectory,
+  peopleDirectory: PeopleDirectory,
   ref: ThreadRef,
   after?: number,
   limit = 200,
@@ -84,13 +84,13 @@ export async function listMessages(
         WHERE object_type = $1 AND object_id = $2 AND id > $3 ORDER BY id LIMIT $4`,
       [ref.objectType, ref.objectId, after, limit],
     );
-  const names = personDisplayNames(companyMemory);
+  const names = personDisplayNames(peopleDirectory);
   return result.rows.map((row) => projectMessage(row as MessageRow, names));
 }
 
 export async function postMessage(
   q: Query,
-  companyMemory: PeopleDirectory,
+  peopleDirectory: PeopleDirectory,
   ref: ThreadRef,
   authorId: string,
   input: { content: string; quote?: TThreadQuote },
@@ -101,7 +101,7 @@ export async function postMessage(
      RETURNING ${MESSAGE_COLUMNS}`,
     [ref.objectType, ref.objectId, authorId, input.content, input.quote ? JSON.stringify(input.quote) : null],
   );
-  return projectMessage(result.rows[0] as MessageRow, personDisplayNames(companyMemory));
+  return projectMessage(result.rows[0] as MessageRow, personDisplayNames(peopleDirectory));
 }
 
 /** Co-Agent 的群消息；指定已知情的人读到这条，其余在群成员保留未读。 */
@@ -149,8 +149,8 @@ function meetingSlot(start: Date, end: Date): string {
   return `${day} ${part(start, { weekday: "short" })} ${time(start)}–${time(end)}`;
 }
 
-export async function threadIntroInput(q: Query, companyMemory: PeopleDirectory, ref: ThreadRef, inviterId: string, newcomers: string[], note?: string): Promise<IntroInput> {
-  const names = personDisplayNames(companyMemory);
+export async function threadIntroInput(q: Query, peopleDirectory: PeopleDirectory, ref: ThreadRef, inviterId: string, newcomers: string[], note?: string): Promise<IntroInput> {
+  const names = personDisplayNames(peopleDirectory);
   let title = "";
   let description = "";
   if (ref.objectType === "issue") {

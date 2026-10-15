@@ -295,7 +295,7 @@ export async function buildApp({
   await ensureMaterialStorage(conversationAttachmentStorageDir);
   const recordingStorageDir = env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR;
   await ensureMaterialStorage(recordingStorageDir);
-  const recordings = recordingService ?? createMeetingRecordingService({ pool, storageDir: recordingStorageDir, companyMemory });
+  const recordings = recordingService ?? createMeetingRecordingService({ pool, storageDir: recordingStorageDir, companyMemory: peopleDirectory });
   // 关闭时只停轮询：在途的识别停在 transcribing，下次启动 recoverInterrupted 接着轮询
   app.addHook("onClose", async () => recordings.close());
 

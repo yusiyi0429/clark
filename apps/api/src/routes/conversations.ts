@@ -35,7 +35,7 @@ const SECTION_LABELS: Record<string, string> = {
 };
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requirePerson, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, peopleDirectory } = ctx;
+  const { pool, q, env, fail, requirePerson, requestContext, runtime, conversationAttachmentStorageDir, conversationTurnTimeoutMs, peopleDirectory } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
   // 我的 Agent 按「人 × 页面」私有；任务卡 scope 始终复查对象成员及当前拍板权。

@@ -55,7 +55,7 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
 }
 
 /** 我的通知：未读在前，最近 50 条。 */
-export async function listMyNotifications(q: Query, companyMemory: PeopleDirectory, personId: string): Promise<TNotificationView[]> {
+export async function listMyNotifications(q: Query, peopleDirectory: PeopleDirectory, personId: string): Promise<TNotificationView[]> {
   const result = await q(
     `SELECT n.id::text, n.kind, n.object_type, n.object_id, n.actor_id, n.created_at, n.read_at,
             t.title AS task_title, t.return_reason, m.title AS meeting_title, i.title AS issue_title,
@@ -69,7 +69,7 @@ export async function listMyNotifications(q: Query, companyMemory: PeopleDirecto
       LIMIT 50`,
     [personId],
   );
-  const names = personDisplayNames(companyMemory);
+  const names = personDisplayNames(peopleDirectory);
   return (result.rows as NotificationRow[]).map((row) => ({
     id: row.id,
     kind: row.kind,

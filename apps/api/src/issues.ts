@@ -450,11 +450,11 @@ export type DriImportResult =
  */
 export async function importDriIssue(
   pool: Pool,
-  companyMemory: PeopleDirectory,
+  peopleDirectory: PeopleDirectory,
   body: TDriIssueImportRequest,
   secret: string,
 ): Promise<DriImportResult> {
-  if (!companyMemory.searchPeople(undefined).some((person) => person.personId === body.submitterPersonId)) {
+  if (!peopleDirectory.searchPeople(undefined).some((person) => person.personId === body.submitterPersonId)) {
     return { status: 400, code: "INVALID_SUBMITTER", message: "提交人不在 company-people.v1 人员目录中", fieldErrors: { submitterPersonId: "unknown personId" } };
   }
   const location = normalizeLocation(body.location);

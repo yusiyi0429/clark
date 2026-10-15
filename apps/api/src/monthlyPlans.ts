@@ -248,7 +248,7 @@ function planError(status: number, code: string, message: string, fieldErrors?: 
  */
 export async function executeUpdateMonthlyPlanDraft(
   pool: Pool,
-  companyMemory: PeopleDirectory,
+  peopleDirectory: PeopleDirectory,
   secret: string,
   scope: ActionScope,
   input: TUpdateMonthlyPlanDraftRequest,
@@ -262,7 +262,7 @@ export async function executeUpdateMonthlyPlanDraft(
     if (row.generation.status === "pending" || row.generation.status === "running") {
       return planError(409, "MONTHLY_PLAN_DRAFT_RUNNING", "草案正在生成，请等待本轮结束后再编辑");
     }
-    const people = new Set(companyMemory.searchPeople(undefined).map((person) => person.personId));
+    const people = new Set(peopleDirectory.searchPeople(undefined).map((person) => person.personId));
     for (const todo of input.todos ?? []) {
       if (!people.has(todo.ownerId)) {
         return planError(400, "INVALID_OWNER", "todo ownerId 不在 company-people.v1 人员目录中", { ownerId: "unknown personId" });
@@ -408,11 +408,11 @@ type DriMonthlyFeedbackResult =
  */
 export async function appendDriMonthlyFeedback(
   pool: Pool,
-  companyMemory: PeopleDirectory,
+  peopleDirectory: PeopleDirectory,
   body: TDriMonthlyPlanFeedbackRequest | TDriMonthlyPlanTodoFeedbackRequest,
   secret: string,
 ): Promise<DriMonthlyFeedbackResult> {
-  const submitter = companyMemory.searchPeople(undefined).find((person) => person.personId === body.submitterPersonId);
+  const submitter = peopleDirectory.searchPeople(undefined).find((person) => person.personId === body.submitterPersonId);
   if (!submitter || !submitter.roles.includes("dri")) {
     return {
       status: 422,
@@ -561,7 +561,7 @@ async function refreshOntologyAnchors(client: PoolClient, row: MonthlyPlanRow): 
  */
 export async function executeSignMonthlyPlan(
   pool: Pool,
-  companyMemory: PeopleDirectory,
+  peopleDirectory: PeopleDirectory,
   secret: string,
   scope: ActionScope,
   fingerprint: string,
@@ -597,7 +597,7 @@ export async function executeSignMonthlyPlan(
       return planError(400, "INVALID_PLAN_CONTENT", "todo 必须有标题与 sourceRef", { todos: "title/sourceRef required" });
     }
     // owner 必须是 company-people.v1 稳定 personId
-    const people = new Set(companyMemory.searchPeople(undefined).map((person) => person.personId));
+    const people = new Set(peopleDirectory.searchPeople(undefined).map((person) => person.personId));
     const unknownOwner = row.todos.find((todo) => !people.has(todo.ownerId));
     if (unknownOwner) {
       return planError(400, "INVALID_OWNER", `todo ownerId 不在 company-people.v1 人员目录中: ${unknownOwner.ownerId}`, { ownerId: "unknown personId" });

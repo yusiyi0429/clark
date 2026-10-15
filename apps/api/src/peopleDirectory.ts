@@ -45,7 +45,6 @@ export function loadPeople(seedPath: string): DirectoryPerson[] {
   return people;
 }
 
-
 export function loadPeopleDirectory(env: PeopleDirectoryEnv): PeopleDirectory {
   const people = loadPeople(env.companyPeopleSeed);
   return {
