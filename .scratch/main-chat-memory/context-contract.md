@@ -1,11 +1,11 @@
 # 主私聊上下文开发规格：Anchor 与 Reference
 
-Status: ready-for-agent（方案与离线验证完成；生产切换依赖 World 读取联调）
+Status: implemented locally — 逐票与整体审查完成；真实 World/模型联调未执行
 日期：2026-10-15
 
 ## 1. 范围与完成目标
 
-改造 apps/web 主私聊 → apps/api Conversation API → Pi Runtime 的上下文与长期记忆，不开发群组消息、任务卡批注或 apps/m2。移除旧 CompanyMemory MCP 的共同依赖适配见工单 05，不因此扩展其他产品能力。
+改造 apps/web 主私聊 → apps/api Conversation API → Pi Runtime 的上下文与长期记忆，不开发群组消息、任务卡批注或 apps/m2。移除旧 CompanyMemory MCP 的共同依赖适配见工单 06，不因此扩展其他产品能力。
 
 交付目标：用户本轮 Query 明确、当前场景 Anchor 可靠、Reference 相关有界；Company 只有 World 一个事实源，Personal 每人私有；历史上下文不累积过期 Anchor 或自动固化长期记忆。
 
