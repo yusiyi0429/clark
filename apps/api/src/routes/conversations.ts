@@ -99,7 +99,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             const [objectType, objectId] = req.params.scope.split(":", 2);
             if (objectType !== "issue" && objectType !== "task") return [];
             try {
-              const names = personDisplayNames(companyMemory);
+              const names = personDisplayNames(peopleDirectory);
               const material = await getObjectMaterial(q, { objectType, objectId }, req.body.viewingMaterialId,
                 { personId: owner, role: person.role, displayName: names.get(owner) ?? owner }, names);
               Object.assign(current.snapshot, { viewingMaterial: { id: material.id, fileName: material.fileName,
@@ -350,6 +350,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
               `UPDATE conversations
                   SET runtime_entries = CASE WHEN memory_epoch=$6 THEN $2::jsonb ELSE '[]'::jsonb END,
                       context_schema_version = 2,
+                      memory_history_cutoff = CASE WHEN memory_epoch=$6 THEN memory_history_cutoff ELSE GREATEST(memory_history_cutoff,$7) END,
                       pi_session_id = CASE WHEN memory_epoch=$6 THEN $3 ELSE pi_session_id END,
                       runtime_updated_at = now(),
                       recreated_at = CASE WHEN $4::boolean THEN now() ELSE recreated_at END,
@@ -362,6 +363,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
                 result.recovery?.recreated === true,
                 result.recovery?.warning ?? null,
                 row.memory_epoch,
+                userSequence + 1,
               ],
             );
             await client.query(

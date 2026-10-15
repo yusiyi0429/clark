@@ -43,3 +43,19 @@ test('main chat receives clean personal references and forget discards pre-forge
         await t.close();
     }
 });
+
+test('a finishing pre-forget turn cannot resurrect its runtime checkpoint or old history', async()=>{
+ let start!:()=>void,finish!:()=>void;
+ const started=new Promise<void>(resolve=>{start=resolve;}),release=new Promise<void>(resolve=>{finish=resolve;});
+ let calls=0;const inputs:Parameters<import('../src/conversations.js').ConversationRuntime['run']>[0][]=[];
+ const t=await createTestApp({}, {async run(input){inputs.push(input);calls++;if(calls===1){start();await release;await input.checkpoint?.([{stale:'先给结论'}]);}return {assistantMessage:'这是一条旧助手回答，先给结论。',runtimeEntries:[{stale:'先给结论'}]};}});
+ try{const cookie=await t.loginCookie(),headers={cookie,origin:t.publicOrigin};
+ const doc=(await t.app.inject({method:'PUT',url:'/api/me/memory/personal',headers,payload:{expectedRevision:0,markdown:'# Personal\n\n## 协作偏好\n\n先给结论。'}})).json();
+ const pending=t.app.inject({method:'POST',url:'/api/conversations/global/messages',headers,payload:{message:'帮我分析'}}).then(result=>result);
+ await started;
+ const forgotten=await t.app.inject({method:'POST',url:'/api/me/memory/personal/forget',headers,payload:{expectedRevision:1,sectionIds:[doc.sections[0].id]}});expect(forgotten.statusCode).toBe(200);
+ finish();await pending;
+ await t.app.inject({method:'POST',url:'/api/conversations/global/messages',headers,payload:{message:'继续'}});
+ expect(inputs[1].runtimeEntries).toEqual([]);expect(inputs[1].recentMessages).toEqual([]);
+ }finally{finish();await t.close();}
+});

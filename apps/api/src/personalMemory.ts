@@ -37,18 +37,30 @@ const fault = (code: string) => Object.assign(new Error(code), { code });
 function sections(markdown: string, previous: PersonalSection[] = []): PersonalSection[] {
     const result: PersonalSection[] = [];
     let title = '个人记忆';
-    for (const block of markdown.split(/\n\s*\n/)) {
-        const text = clean(block);
-        if (!text)
-            continue;
-        if (/^#{1,6} /.test(text)) {
-            title = text.replace(/^#+\s*/, '');
-            continue;
+    let attribute: string | undefined;
+    let lines: string[] = [];
+    function flush() {
+        const text = clean(lines.join('\n'));
+        if (text) {
+            const available = previous.filter(item => !result.some(saved => saved.id === item.id));
+            const matching = available.find(item => item.text === text);
+            const sameTitle = available.filter(item => item.title === title);
+            result.push({id:attribute ?? matching?.id ?? (sameTitle.length===1 ? sameTitle[0].id : randomUUID()),title,text});
         }
-        result.push({ id: block.match(/<!-- attribute:([a-zA-Z0-9_-]+) -->/)?.[1] ?? previous.find(item => item.text === text)?.id ?? randomUUID(), title, text });
+        lines = [];
+        attribute = undefined;
     }
+    for (const line of markdown.split('\n')) {
+        const heading = line.match(/^#{1,6} (.+)$/);
+        const key = line.match(/^<!-- attribute:([a-zA-Z0-9_.:-]+) -->$/);
+        if (heading) { flush(); title = heading[1]; }
+        else if (key) { if (clean(lines.join('\n'))) flush(); attribute = key[1]; }
+        else lines.push(line);
+    }
+    flush();
     return result;
 }
+
 const serialize = (items: PersonalSection[]) => '# Personal\n\n' + items.map(item => `## ${item.title}\n\n<!-- attribute:${item.id} -->\n${item.text}`).join('\n\n') + '\n';
 const document = (state: State, body: string): PersonalDocument => ({ revision: state.revision, epoch: state.epoch, markdown: clean(body) || '# Personal\n', sections: sections(body) });
 export function createPersonalMemory({ pool, storageDir }: {
@@ -164,6 +176,7 @@ export function createPersonalMemory({ pool, storageDir }: {
             expectedRevision: number;
             epoch: number;
             changes: PersonalChange[];
+            explicit?: boolean;
         }) {
             return locked(personId, async (client, state, path, body) => {
                 if (state.epoch !== input.epoch || state.revision !== input.expectedRevision)
@@ -171,7 +184,8 @@ export function createPersonalMemory({ pool, storageDir }: {
                 const exclusions = new Set((await client.query('SELECT attribute_key FROM personal_memory_exclusions WHERE person_id=$1', [personId])).rows.map(row => row.attribute_key));
                 const items = sections(body);
                 for (const change of input.changes) {
-                    if (exclusions.has(change.attributeKey))
+                    if (!/^[a-zA-Z0-9_.:-]{1,160}$/.test(change.attributeKey)) throw fault('INVALID_PERSONAL_CHANGE');
+                    if (exclusions.has(change.attributeKey) && !input.explicit)
                         continue;
                     const index = items.findIndex(item => item.id === change.attributeKey);
                     if (change.operation === 'remove') {
@@ -179,19 +193,32 @@ export function createPersonalMemory({ pool, storageDir }: {
                             items.splice(index, 1);
                     }
                     else if (change.text?.trim()) {
-                        const item = { id: change.attributeKey, title: change.title ?? '个人记忆', text: clean(change.text) };
+                        const item = { id: change.attributeKey, title: clean(change.title ?? '个人记忆').replace(/[\r\n]+/g,' '), text: clean(change.text) };
                         if (index >= 0)
                             items[index] = item;
                         else
                             items.push(item);
                     }
                 }
-                return write(client, state, path, personId, items);
+                if (input.explicit) await invalidate(client, personId, state, input.changes.filter(change=>change.operation==='remove').map(change=>change.attributeKey));
+                const saved = await write(client, state, path, personId, items);
+                if (input.explicit) for (const change of input.changes) {
+                    if (change.operation!=='remove') await client.query('DELETE FROM personal_memory_exclusions WHERE person_id=$1 AND attribute_key=$2',[personId,change.attributeKey]);
+                }
+                return saved;
             });
         },
         async select(personId: string, query: string): Promise<PersonalReference[]> {
             const doc = await api.readOwn(personId);
-            const grams = (text: string) => new Set(text.toLowerCase().match(/[a-z0-9]+|[\u4e00-\u9fff]{1,2}/g) ?? []), terms = grams(query);
+            const grams = (text: string) => {
+                const terms = text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+                for (const run of text.match(/[\u4e00-\u9fff]+/g) ?? []) {
+                    for (let index=0; index<run.length-1; index++) terms.push(run.slice(index,index+2));
+                    if (run.length===1) terms.push(run);
+                }
+                return new Set(terms);
+            };
+            const terms = grams(query);
             let bytes = 0;
             return doc.sections.map(item => ({ item, score: [...grams(item.title + ' ' + item.text)].filter(term => terms.has(term)).length, stable: /协作|沟通|表达|偏好/.test(item.title) })).filter(row => row.score > 0 || row.stable).sort((a, b) => b.score - a.score).flatMap(({ item, stable, score }) => { const size = Buffer.byteLength(item.text); if (size > 4096 || bytes + size > (stable && score === 0 ? 2048 : 8192))
                 return []; bytes += size; const handle = randomUUID(); handles.set(handle, { personId, revision: doc.revision, id: item.id }); if (handles.size > 1024)
