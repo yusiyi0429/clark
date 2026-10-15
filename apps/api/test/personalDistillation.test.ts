@@ -7,7 +7,7 @@ import { createAssistantMessageEventStream, type AssistantMessage } from '@earen
 import { createTestDb } from './helpers.js';
 import { migrate } from '../src/migrate.js';
 import { createPersonalMemory } from '../src/personalMemory.js';
-import { createPersonalDistillation } from '../src/personalDistillation.js';
+import { createPersonalDistillation, isExplicitMemoryRequest } from '../src/personalDistillation.js';
 
 const usage = { input:1, output:1, cacheRead:0, cacheWrite:0,totalTokens:2,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0} };
 function candidate(value: unknown) {
@@ -176,5 +176,34 @@ test('the current long user message keeps its tail intent and evidence while old
   const job=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:2,kind:'explicit',epoch:0}); await worker.processNext();
   expect(current.length).toBe(content.length); expect(current.endsWith(intent)).toBe(true); expect(await worker.status(job)).toMatchObject({status:'succeeded'}); expect((await memory.readOwn('alice')).sections).toEqual([]);
  } finally { await rm(storageDir,{recursive:true,force:true}); }
+ });
+});
+
+test.each(['clarification', 'failed', 'noop'] as const)('natural learning respects the same-turn explicit classification across restart: %s', async mode => {
+ await createTestDb(async ({db,pool}) => { await migrate(db); const storageDir=await mkdtemp(join(tmpdir(),'distill-classification-barrier-'));
+ try {
+  const memory=createPersonalMemory({pool,storageDir}), id=randomUUID();
+  await memory.apply('alice',{expectedRevision:0,epoch:0,changes:[{operation:'add',attributeKey:'drink',text:'喜欢咖啡。'}]});
+  const quote=mode==='noop'?'我通常先给结论。':'把档案里那项拿掉。';
+  expect(isExplicitMemoryRequest(quote)).toBe(false);
+  await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);
+  await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user',$2,$3)",[id,quote,randomUUID()]);
+  let naturalCalls=0;
+  const options={pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:(_model:unknown,context:import('@earendil-works/pi-ai').Context)=>{
+   const message=context.messages[0]; const input=JSON.parse(typeof message.content==='string'?message.content:(message.content[0] as {text:string}).text).input;
+   if(input.kind==='explicit') {if(mode==='failed')throw new Error('classification unavailable');return candidate({changes:[],clarification:mode==='clarification'?'想拿掉哪一项？':''});}
+   naturalCalls++;
+   return candidate({changes:[mode==='noop'?{operation:'add',attributeKey:'communication',title:'偏好',text:'通常先给结论。',inferred:false,evidence:[{sequence:1,quote}]}:{operation:'remove',attributeKey:'drink',title:'偏好',text:'',inferred:false,evidence:[{sequence:1,quote}]}],clarification:''});
+  }};
+  const worker=createPersonalDistillation(options);
+  const explicit=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:1,kind:'explicit',epoch:0});
+  const natural=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:1,kind:'natural',epoch:0});
+  for(let attempt=0;attempt<(mode==='failed'?3:1);attempt++)await worker.processNext('alice');
+  expect(await worker.status(explicit)).toMatchObject({status:mode==='failed'?'failed':'succeeded'});
+  await createPersonalDistillation(options).processNext('alice');
+  expect((await memory.readOwn('alice')).markdown).toContain('喜欢咖啡');
+  expect(naturalCalls).toBe(mode==='noop'?1:0);
+  expect(await worker.status(natural)).toMatchObject({status:mode==='noop'?'succeeded':'superseded'});
+ } finally {await rm(storageDir,{recursive:true,force:true});}
  });
 });

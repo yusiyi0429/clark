@@ -52,6 +52,16 @@ export function createPersonalDistillation(options: {
         if (!job) return false;
         await client.query('UPDATE personal_memory_jobs SET attempts=attempts+1 WHERE id=$1', [job.id]);
         try {
+          if (job.kind === 'natural') {
+            const explicit = (await client.query<{ status: string; clarification: string | null }>(
+              "SELECT status,clarification FROM personal_memory_jobs WHERE person_id=$1 AND conversation_id=$2 AND through_sequence=$3 AND kind='explicit'",
+              [job.person_id, job.conversation_id, job.through_sequence],
+            )).rows[0];
+            if (explicit && (explicit.status !== 'succeeded' || explicit.clarification?.trim())) {
+              await client.query("UPDATE personal_memory_jobs SET status='superseded',error_code='EXPLICIT_CLASSIFICATION_UNRESOLVED' WHERE id=$1", [job.id]);
+              return true;
+            }
+          }
           const doc = await memory.readOwn(job.person_id, client);
           const lastExplicitJob = (await client.query<{last_explicit_job_id:string|null}>("SELECT last_explicit_job_id FROM memory_documents WHERE module='personal' AND scope_key=$1", [job.person_id])).rows[0]?.last_explicit_job_id;
           const canRebaseExplicit = job.kind === 'explicit' && lastExplicitJob !== null && lastExplicitJob !== undefined && BigInt(lastExplicitJob) <= BigInt(job.id);

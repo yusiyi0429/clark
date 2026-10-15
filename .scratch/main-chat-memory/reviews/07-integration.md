@@ -66,3 +66,11 @@ Each ordinary successful turn can cause an explicit-intent classification and a 
 ## Integrated commit selection
 
 Own code: `ec30929`, `aed5a3d`, `3861244`. This branch also contains copied dependency commits `6fff41d`/`7a58f73`/`0b1a043`/`1ae2d5d` from Tickets05–06; the parent integration branch already has their original equivalents and should skip these copies.
+
+## Final PR follow-up: same-turn clarification barrier
+
+The parent’s independent PR-level Spec review found a further P2 after Ticket07’s reviews at `3861244`: a non-regex request could leave both explicit and natural jobs queued; the explicit classification could ask for clarification without changing the memory epoch, then the natural job could delete the unresolved attribute. The synchronous route guard alone covered only requests processed before the main reply.
+
+The worker now checks an existing explicit job for the same person/conversation/user sequence before running a natural job. An unresolved, failed, or clarification-bearing classification supersedes natural processing without calling the model or applying changes. A successful ordinary no-op permits natural learning; a missing explicit row preserves existing direct/legacy natural-job behavior. This is a worker-side intent barrier, independent of phrase matching or process restart.
+
+Public worker RED: clarification and terminal-failure scenarios both allowed the queued natural job to delete `drink`; successful no-op already passed. GREEN: the complete distillation file (16 tests) plus Personal HTTP routes (5 tests), **21/21 passed**, and API typecheck passed. Logs: `/tmp/memory07-explicit-barrier-red.log`, `/tmp/memory07-explicit-barrier-green.log`, `/tmp/memory07-explicit-barrier-tsc.log`. No broad suite was repeated. Parent independently reviews this final delta before delivery; earlier Ticket07 zero-unresolved counts apply to their stated fixed tip.
