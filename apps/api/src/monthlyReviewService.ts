@@ -1,3 +1,4 @@
+import { readCompanyContext } from "./companyContext.js";
 import type { Pool, QueryResult } from "pg";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -11,7 +12,7 @@ import {
   type TMonthlyReviewSubjectType,
   type TMonthlyReviewSummaryCandidate,
 } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { CompanyContext } from "./companyContext.js";
 import { ltoWindow } from "./monthlyCycle.js";
 import { ensurePersonalReviews, getPersonalReview, personalReviewContext, readPersonalReviewMaterials, recoverStalePersonalReviewDrafts,
   PERSONAL_REVIEW_FIELDS, type PersonalReviewDraftInput, type PersonalReviewDraftRun } from "./personalReviews.js";
@@ -44,7 +45,8 @@ export type MonthlyReviewMaterials = {
   weeklyProgress: { date: string; missionTitle: string; taskTitle: string; author: string; body: string }[];
   personalReviews: { personId: string; status: string; selfReview: TMonthlyReviewSelfReview | null; note: string | null }[];
   comments: { author: string; body: string; createdAt: string }[];
-  companyMemory: { sectionId: string; title: string; passageId: string; text: string; sourceRef: string }[];
+  companyMemory: { title: string; text: string }[];
+  companyStatus?: string;
 };
 export type MonthlyReviewDraftInput = { period: string; subject: Subject; target: string | null } & MonthlyReviewMaterials;
 export type MonthlyReviewAssessInput = MonthlyReviewDraftInput & {
@@ -125,7 +127,7 @@ export function createMonthlyReviewService({
 }: {
   pool: Pool;
   agents: MonthlyReviewAgents;
-  companyMemory: CompanyMemoryRepository;
+  companyMemory: CompanyContext;
   now?: () => Date;
   retryDelayMs?: number;
   personalDraft: { storageDir: string; agent: MonthlyReviewAgent<PersonalReviewDraftInput> };
@@ -208,12 +210,10 @@ export function createMonthlyReviewService({
       WHERE p.created_at >= $1 AND p.created_at < $2 AND m.period = $3 AND
         ${battlefield ? "m.battlefield_ids @> jsonb_build_array($4::text)" : "m.capability_id = $4"}
       ORDER BY p.created_at DESC, p.id DESC LIMIT 60`, [start, end, item.period, item.subject_id])).rows as MonthlyReviewMaterials["weeklyProgress"];
-    const memory: MonthlyReviewMaterials["companyMemory"] = [];
-    for (const section of companyMemory.searchSections(item.subject_name, 4)) {
-      for (const passage of companyMemory.getPassages(section.id, item.subject_name, 4).passages) {
-        if (memory.length < 4) memory.push({ sectionId: section.id, title: section.title, passageId: passage.id, text: passage.text, sourceRef: passage.sourceRef });
-      }
-    }
+    const company = await readCompanyContext(companyMemory, item.subject_name);
+    const memory: MonthlyReviewMaterials["companyMemory"] = company.entries.slice(0, 4).map((entry) => ({
+      title: entry.title, text: entry.text,
+    }));
     return {
       period: item.period,
       subject: { type: item.subject_type, id: item.subject_id, code: item.subject_code, name: item.subject_name, sixMonthOutcome: item.six_month_outcome },
@@ -230,6 +230,7 @@ export function createMonthlyReviewService({
       [item.review_id, item.subject_id])).rows.map((row) => ({ ...row, selfReview: row.status === "submitted" ? row.selfReview : null })) as MonthlyReviewMaterials["personalReviews"],
       comments: await comments(item.id),
       companyMemory: memory,
+      companyStatus: company.status,
     };
   }
 

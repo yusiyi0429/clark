@@ -23,7 +23,7 @@
 |---|---|---|
 | 00 | `00-技术实现路线.md` | 模块依赖、纵向切片、阶段门槛 |
 | 01 | `01-基础设施与契约.md` | Monorepo、TypeBox/OpenAPI、PostgreSQL、鉴权、Card/Action |
-| 02 | `02-Pi与四层记忆.md` | Pi Runtime、Conversation、Search、compaction、CompanyMemory MCP |
+| 02 | `02-Pi与四层记忆.md` | Pi Runtime、Conversation、Search、compaction、Company / Personal（替代旧 MCP，ADR-0027） |
 | 03 | `03-Radar与Issue预研.md` | Scheduler、Signal、自动 Issue、ResearchDoc、直接决定 |
 | 04 | `04-Meeting与Outcome.md` | Preflight、Transcript、Outcome、逐项效果与撤回 |
 | 05 | `05-MonthlyPlan与DRI集成.md` | 月度计划、普通待办、DRI import/export、战场投影 |

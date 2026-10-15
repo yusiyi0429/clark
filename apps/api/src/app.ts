@@ -9,7 +9,7 @@ import type { Pool } from "pg";
 import { RadarSources, type TApiError, type TRadarSources } from "@warmap/contracts";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
-import { loadCompanyMemory, type CompanyMemorySeedEnv } from "./companyMemory.js";
+import { createCompanyContext, type CompanyContextEnv } from "./companyContext.js";
 import { globalConversationContext, listConversationMissions } from "./conversationContext.js";
 import { createPiConversationRuntime } from "./piConversationRuntime.js";
 import type { WebSearchAdapter } from "./webSearch.js";
@@ -21,7 +21,7 @@ import type { ResearchService } from "./research.js";
 import type { PreflightAgent } from "./meetingPreflight.js";
 import { createPreflightAgent } from "./preflightAgent.js";
 import { onOutcomeReviewed, pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
-import { createCompanyMemory, type CompanyEnv } from "./company.js";
+import { type CompanyEnv, type CompanyReader } from "./company.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { createWorldMeetingService } from "./worldMeetingEvents.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
@@ -101,7 +101,6 @@ export type AppEnv = {
   missionCardKnownMissionsFile?: string;
   driServiceToken: string;
   ontologyServiceToken?: string;
-  mcpServiceToken: string;
   buildSha: string;
   piBaseUrl: string;
   piApiKey: string;
@@ -117,13 +116,14 @@ export type AppEnv = {
   conversationAttachmentStorageDir?: string;
   /** 会议录音卷（分片、拼好的 webm、转码后的 mp3、厂商原文）；与材料卷隔离。 */
   recordingStorageDir?: string;
-} & CompanyMemorySeedEnv & WorldEnv & CompanyEnv;
+} & CompanyContextEnv & WorldEnv & CompanyEnv;
 
 export async function buildApp({
   pool,
   env,
   conversationRuntime,
   personalDistillationStream,
+  companyReader,
   radarService,
   personalRadarService,
   researchService,
@@ -151,6 +151,7 @@ export async function buildApp({
   env: AppEnv;
   conversationRuntime?: ConversationRuntime;
   personalDistillationStream?: Parameters<typeof createPersonalDistillation>[0]["streamSimple"];
+  companyReader?: CompanyReader;
   radarService?: RadarService;
   /** 个人雷达扫描队列；缺省为不扫描的桩（server.ts 注入与公司雷达共用博查与发布方 adapter 的真实服务）。 */
   personalRadarService?: PersonalRadarService;
@@ -188,7 +189,7 @@ export async function buildApp({
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
   const personalMemory = createPersonalMemory({ pool, storageDir: env.personalMemoryStorageDir ?? "/tmp/warmap-personal-memory" });
   const peopleDirectory = loadPeopleDirectory(env);
-  const companyMemory = loadCompanyMemory(env);
+  const companyMemory = createCompanyContext(env, companyReader);
   const preflight = preflightAgent ?? await createPreflightAgent({
     query: pool.query.bind(pool),
     companyMemory,
@@ -212,7 +213,7 @@ export async function buildApp({
   } : undefined;
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     peopleDirectory,
-    company: createCompanyMemory(env),
+    company: companyMemory.company,
     personal: personalMemory,
     materialPool: pool,
     missionCardSecret: env.sessionSecret,

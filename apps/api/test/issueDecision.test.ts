@@ -14,7 +14,7 @@ import type { ConversationRuntime } from "../src/conversations.js";
 import type { AssistantMessage, AssistantMessageEventStream, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { createResearchAgentRunner } from "../src/researchAgent.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 
 const RESEARCH_DOC: TResearchDoc = {
   summary: "渠道政策调整需要 CEO 决定投入节奏",
@@ -1006,7 +1006,7 @@ describe("strict ResearchDoc candidate tool", () => {
     const contexts: Context[] = [];
     const runner = createResearchAgentRunner({
       query: db.query.bind(db),
-      companyMemory: loadCompanyMemory(testEnv),
+      companyMemory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-heavy",

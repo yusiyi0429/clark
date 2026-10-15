@@ -15,7 +15,7 @@ judgments（关键经营判断）：每条把结果、最低充分证据、对�
 nextFocus（下周期经营重点）：作为下一轮定目标的输入，不提前代写 PO、任务指派或排期。
 escalations（待上层决策事项）：列出需要 CEO 拍板的事，没有就写空串。
 多条内容用「1. 」「2. 」开头分行。用第一人称、以负责人的口吻写自评。没有依据的内容写「缺少材料：…」，不能写成「没有开展工作」，不编造数字或进展。
-sources 只能指向输入中的真实依据（如个人复盘 personId、todo id、feedback id、mission id、CompanyMemory passage id、sourceRef 或周报日期），引用周报时写上日期，不得虚构。
+sources 只能指向输入中的真实依据（如个人复盘 personId、todo id、feedback id、mission id、输入业务材料的 sourceRef 或周报日期），引用周报时写上日期，不得虚构。
 你只生成草稿，负责人修改后才会提交。
 
 ${HUMAN_WRITING_STYLE}`;

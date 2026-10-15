@@ -22,7 +22,7 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import { createBochaWebSearchAdapter, type WebSearchAdapter } from "../src/webSearch.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import { createPostMeetingAgent } from "../src/postMeetingAgent.js";
 import { validateTranscript } from "../src/outcome.js";
@@ -147,13 +147,17 @@ async function step2Models() {
 
 async function step3PiLoop() {
   log("[3/4] Pi 自主 web_search Tool loop：最多 1 轮，搜索预算 ≤2（含第 1 步共 ≤3）");
-  const companyMemory = loadCompanyMemory({
-    companyMemorySeedDir: resolveSeed(required("COMPANY_MEMORY_SEED_DIR")),
+  const companyMemory = createCompanyContext({
     companyPeopleSeed: resolveSeed(required("COMPANY_PEOPLE_SEED")),
+    worldApiUrl: process.env.TKOS_WORLD_API_URL,
+    worldAgentToken: process.env.TKOS_WORLD_AGENT_TOKEN,
+    companyWorldAccessFile: process.env.COMPANY_WORLD_ACCESS_FILE,
+    companySystemPersonId: process.env.COMPANY_SYSTEM_PERSON_ID,
   });
   const bocha = budgetedBocha(createBochaWebSearchAdapter({ apiKey: required("BOCHA_API_KEY") }));
   const runtime = await createPiConversationRuntime({
-    companyMemory,
+    peopleDirectory: companyMemory,
+    company: companyMemory.company,
     baseUrl: required("PI_BASE_URL"),
     apiKey: required("PI_API_KEY"),
     modelId: required("LIGHT_MODEL"),

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context } from "@earendil-works/pi-ai";
 import type { TRadarScanResponse, TRadarSourceItem } from "@warmap/contracts";
 import { buildApp } from "../src/app.js";
-import { loadCompanyMemory, type MemoryPerson } from "../src/companyMemory.js";
+import { createCompanyContext, type MemoryPerson } from "../src/companyContext.js";
 import { migrate } from "../src/migrate.js";
 import { createPersonalRadarJudge } from "../src/personalRadarAgent.js";
 import { createPersonalRadarService, type PersonalRadarJudge, type PersonalRadarJudgeInput } from "../src/personalRadar.js";
@@ -801,7 +801,7 @@ describe("接口排队到扫描完成", () => {
       await migrate(db);
       await seedTestAccess(db);
       const radar = createPersonalRadarService({
-        pool, companyMemory: loadCompanyMemory(testEnv),
+        pool, companyMemory: createCompanyContext(testEnv),
         web: fakeWeb(() => [webItem("https://example.com/flow")]), outlets: fakeOutlets(), judge: acceptAll(), now: () => NOW,
       });
       const app = await buildApp({

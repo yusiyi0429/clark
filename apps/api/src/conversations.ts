@@ -22,7 +22,7 @@ import { canReadMonthlyReviewItem, getMonthlyReviewItem } from "./monthlyReviews
 import { getSignalCard } from "./signals.js";
 import { getPersonalMissionCard } from "./personalMissionCards.js";
 import { canReadTask, getTaskView } from "./tasks.js";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
 
 import type { ConversationAnchor, ReferenceView } from "./conversationAnchor.js";

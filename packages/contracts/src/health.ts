@@ -5,7 +5,8 @@ export const HealthDependencies = Type.Object(
   {
     piRuntime: Type.Boolean(),
     modelSlots: Type.Boolean(),
-    companyMemoryMcp: Type.Boolean(),
+    peopleDirectory: Type.Boolean(),
+    companyConfigured: Type.Boolean(),
     search: Type.Boolean(),
     wechat: Type.Boolean(),
     outlets: Type.Boolean(),

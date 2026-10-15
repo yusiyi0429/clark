@@ -7,7 +7,7 @@ import {
   type Context,
   type Model,
 } from "@earendil-works/pi-ai";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import type { Pool } from "pg";
@@ -110,7 +110,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     const made = await createObjectMaterial(t.pool, ref, CEO_VIEWER, "讨论材料", "今天开会。今天复盘。", "起草", null);
     let calls = 0;
     const results: string[] = [];
-    const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(testEnv), materialPool: t.pool,
+    const runtime = await createPiConversationRuntime({ peopleDirectory: createCompanyContext(testEnv), materialPool: t.pool,
       baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
       streamSimple: (_model, context) => {
         calls++;
@@ -162,7 +162,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
   it("only offers material tools in issue, task and meeting scopes", async () => {
     const toolsByScope: string[][] = [];
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv), materialPool: { query: async () => ({ rows: [] }) } as unknown as Pool,
+      peopleDirectory: createCompanyContext(testEnv), materialPool: { query: async () => ({ rows: [] }) } as unknown as Pool,
       baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
       streamSimple: (_model, context) => {
         toolsByScope.push(context.tools?.map((tool) => tool.name) ?? []);
@@ -197,7 +197,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     const made = await createObjectMaterial(t.pool, ref, MEMBER_VIEWER, "方案", "今天开会。", "起草", null);
     const tools: string[][] = [];
     let calls = 0, toolResult = "";
-    const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(t.env), materialPool: t.pool,
+    const runtime = await createPiConversationRuntime({ peopleDirectory: createCompanyContext(t.env), materialPool: t.pool,
       baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
       streamSimple: (_model, context) => {
         calls++;
@@ -230,7 +230,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
   it("does not call the model when the public abort signal is already aborted", async () => {
     let modelCalls = 0;
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-light",
@@ -263,7 +263,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     const contexts: Context[] = [];
     const search = createFakeWebSearchAdapter({});
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-light",
@@ -307,7 +307,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     });
     let turn = 0;
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-light",
@@ -348,7 +348,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     let modelCalls = 0;
     const seenModels: string[] = [];
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-light",
@@ -391,7 +391,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     const checkpoints: unknown[][] = [];
     let regularCalls = 0;
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-light",
@@ -462,7 +462,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     let lightTurns = 0;
     const highUsage = { ...usage, input: 120_000, totalTokens: 120_002 };
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-light",
@@ -530,7 +530,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     const contexts: Context[] = [];
     const emitted: unknown[] = [];
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-light",
@@ -580,7 +580,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     };
 
     const runtimeOptions = {
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-light",
@@ -659,7 +659,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       return stream(message([{ type: "text", text }], "stop"));
     };
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-light",
@@ -700,7 +700,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
   it("main chat does not expose local company-fact board tools even when configured", async () => {
     let reads = 0;
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+      peopleDirectory: createCompanyContext(testEnv), baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
       listPendingIssues: async () => { reads++; return []; },
       streamSimple: (_model, context) => {
         expect(context.tools?.map((tool) => tool.name)).not.toContain("list_pending_issues");
@@ -720,7 +720,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
     const contexts: Context[] = [];
     let globalContextReads = 0;
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-light",

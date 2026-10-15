@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { PersonalReviewPayload, PersonalReviewBoard, MonthlyCycle, type TMonthlyReviewSelfReview } from "@warmap/contracts";
 import { signActionId } from "../src/actionToken.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { ensureMainConversation, storeConversationAttachments } from "../src/conversations.js";
 import { ensurePersonalReviews, PERSONAL_REVIEW_FIELDS, type PersonalReviewDraftInput } from "../src/personalReviews.js";
 import type { MonthlyReviewAgents, MonthlyReviewDraftInput } from "../src/monthlyReviewService.js";
@@ -92,11 +92,11 @@ describe("个人复盘创建、投影和权限", () => {
       expect(board.rows[0]).toMatchObject({ status: "draft", draftSource: "co_agent" });
       expect(f.personalCalls).toHaveLength(1);
       expect(f.personalCalls[0]).toMatchObject({ missions: [{ outcome: "承诺结果" }], attachments: [], messages: [] });
-      expect(await ensurePersonalReviews(f.t.pool, id, loadCompanyMemory(testEnv).searchPeople(undefined), later)).toEqual([]);
+      expect(await ensurePersonalReviews(f.t.pool, id, createCompanyContext(testEnv).searchPeople(undefined), later)).toEqual([]);
       expect((await f.call(f.ceo, "GET", "/api/monthly-cycle")).json().cycle).toMatchObject({ startedAt: later.toISOString(), deadlineAt: "2026-10-04T03:00:00.000Z", stage: "personal_reviews" });
       await f.t.sql("UPDATE monthly_reviews SET status='summarizing' WHERE id=$1", [id]);
       await seedMission(f.t, TEST_CEO.personId);
-      expect(await ensurePersonalReviews(f.t.pool, id, loadCompanyMemory(testEnv).searchPeople(undefined), later)).toEqual([]);
+      expect(await ensurePersonalReviews(f.t.pool, id, createCompanyContext(testEnv).searchPeople(undefined), later)).toEqual([]);
       expect(await f.board()).toBeNull();
     } finally { await f.close(); }
   });
@@ -342,12 +342,12 @@ describe("跨月工作台与任务卡起草", () => {
       const seen: MissionCardDraftInput[] = [];
       const candidate = { missions: [1, 2].map((n) => ({ capabilityCode: "01", title: `任务${n}`, why: "原因", outcome: "结果", timeBoundary: "10月完成验收", tradeoffs: "优先当前结果", successEvidence: ["证据"], boundaries: "边界", keyPath: "路径",
         milestones: ["10/12 验收"], resources: "资源", dependencies: "依赖", humanAgentSplit: "分工", risk: "风险", retrospect: "待复盘", basis: "上月独立 Mission 和个人复盘" })) };
-      const forbidden = await executeDraftMissionRound(f.t.pool, loadCompanyMemory(testEnv).searchPeople(undefined), testEnv.sessionSecret,
+      const forbidden = await executeDraftMissionRound(f.t.pool, createCompanyContext(testEnv).searchPeople(undefined), testEnv.sessionSecret,
         { personId: TEST_CEO.personId, role: "ceo" }, { actionType: "mission-round.draft", objectType: "mission-round-slot", objectId: "growth:2026-10", objectVersion: 1 },
         "test-ceo-cannot-draft", () => START, undefined, { async generate(input) { seen.push(input); return { candidate }; } });
       expect(forbidden).toMatchObject({ error: { status: 403 } });
       expect(seen).toEqual([]);
-      const result = await executeDraftMissionRound(f.t.pool, loadCompanyMemory(testEnv).searchPeople(undefined), testEnv.sessionSecret,
+      const result = await executeDraftMissionRound(f.t.pool, createCompanyContext(testEnv).searchPeople(undefined), testEnv.sessionSecret,
         { personId: TEST_MEMBER.personId, role: "member" }, { actionType: "mission-round.draft", objectType: "mission-round-slot", objectId: "growth:2026-10", objectVersion: 1 },
         "test-carryover", () => START, undefined, { async generate(input) { seen.push(input); return { candidate }; } });
       expect(result).toHaveProperty("card");

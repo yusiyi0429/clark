@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import type { TPersonalMissionCardPayload } from "@warmap/contracts";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import { MissionCardAnnotationCandidate, type MissionCardAnnotationAgent } from "./missionCardAnnotationAgent.js";
 import { applyMissionCardRevision, type MissionCardAnnotationRow } from "./missionCardAnnotations.js";
 import { fieldText, getPersonalMissionCard, visiblePersonalMissionCard } from "./personalMissionCards.js";

@@ -1,3 +1,4 @@
+import { readCompanyContext } from "./companyContext.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, QueryResult } from "pg";
 import { Value } from "@sinclair/typebox/value";
@@ -8,7 +9,7 @@ import {
   type TMonthlyPlanFeedback,
   type TMonthlyPlanTodo,
 } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { CompanyContext } from "./companyContext.js";
 import { getRegisteredBattlefieldIds, findUnregisteredBattlefieldId } from "./battlefields.js";
 import { getRegisteredCapabilityIds, findUnregisteredCapabilityId } from "./capabilities.js";
 import { companyPeriod, getMonthlyPlanRow, projectMonthlyFeedback, type MonthlyPlanRow, type StoredMonthlyFeedback } from "./monthlyPlans.js";
@@ -40,7 +41,8 @@ export type MonthlyDraftAgentInput = {
   ltco: string;
   /** 按 sortOrder 的战场长期配置（含战略锚点）：本月战场结果的长期约束，不作为当月结果原样复制。 */
   battlefields: { battlefieldId: string; code: string; name: string; sixMonthOutcome: string; missionAnchors: TMissionAnchor[] }[];
-  companyMemory: { sectionId: string; title: string; sourceRef: string; passages: { id: string; text: string; sourceRef: string }[] }[];
+  companyMemory: { title: string; text: string }[];
+  companyStatus?: string;
 };
 
 export type MonthlyDraftAgent = {
@@ -108,7 +110,7 @@ export function createMonthlyPlanService({
 }: {
   pool: Pool;
   agent: MonthlyDraftAgent;
-  companyMemory: CompanyMemoryRepository;
+  companyMemory: CompanyContext;
   now?: () => Date;
 }): MonthlyPlanService {
   const q = pool.query.bind(pool);
@@ -142,20 +144,10 @@ export function createMonthlyPlanService({
         }
       : null;
 
-    // 按已确认方向标题检索相关 CompanyMemory 段落，只读注入，不开放业务库遍历
-    const memory: MonthlyDraftAgentInput["companyMemory"] = [];
-    for (const direction of confirmedDirections.slice(0, 5)) {
-      for (const match of companyMemory.searchSections(direction.title, 2)) {
-        if (memory.some((section) => section.sectionId === match.id)) continue;
-        const passages = companyMemory.getPassages(match.id, undefined, 2);
-        memory.push({
-          sectionId: match.id,
-          title: match.title,
-          sourceRef: match.sourceRef,
-          passages: passages.passages.map((passage) => ({ id: passage.id, text: passage.text, sourceRef: passage.sourceRef })),
-        });
-      }
-    }
+    const company = await readCompanyContext(companyMemory, confirmedDirections.slice(0, 5).map((item) => item.title).join(" "));
+    const memory: MonthlyDraftAgentInput["companyMemory"] = company.entries.slice(0, 6).map((entry) => ({
+      title: entry.title, text: entry.text,
+    }));
 
     return {
       period: row.period,
@@ -186,6 +178,7 @@ export function createMonthlyPlanService({
         },
       ),
       companyMemory: memory.slice(0, 6),
+      companyStatus: company.status,
     };
   }
 

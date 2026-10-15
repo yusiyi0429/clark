@@ -77,7 +77,7 @@ _Avoid_: 本地按钮成功态、会后行动分派
 _Avoid_: 工作日、浏览器本地日期
 
 **Person**:
-CompanyMemory 人员目录中具有稳定 personId 的人。显示姓名和角色可以变化，业务引用始终使用 personId。
+PeopleDirectory 稳定人员目录中具有稳定 personId 的人。显示姓名和角色可以变化，业务引用始终使用 personId。
 _Avoid_: 由姓名临时生成的身份、自由文本参与人
 
 **Monthly Plan**:
@@ -157,7 +157,7 @@ _Avoid_: 通用页面 DSL、独立业务对象
 _Avoid_: 对话指令、前端业务回调、Agent 工具调用
 
 **Agent Runtime**:
-Pi SDK 在 TypeScript API 服务中提供 agent loop、Tool 调用、Session 和上下文压缩。生产 Runtime 不加载用户级 Pi 配置，只显式开放场景 Prompt、Web Search 和只读 CompanyMemory MCP；它不拥有 Conversation 原文、业务对象或 Company Memory。
+Pi SDK 在 TypeScript API 服务中提供 agent loop、Tool 调用、Session 和上下文压缩。生产 Runtime 不加载用户级 Pi 配置，只显式开放场景 Prompt、Web Search 和授权只读 Company/Personal 参考能力；它不拥有 Conversation 原文、业务对象或公司事实。
 _Avoid_: 业务数据库、组织 Action 执行器、四层记忆的唯一事实源
 
 **Four-layer Memory**:
@@ -169,12 +169,21 @@ _Avoid_: Runtime 自有数据库、单一超长 Prompt、把四层都交给 Agen
 _Avoid_: 跨所有页面共享的聊天历史、自然语言命令入口、Runtime 唯一持有的历史
 
 **Company Memory**:
-Agent 通过只读 CompanyMemory MCP 按目录和相关段落读取的公司认知底座。CEO WarMap 当前不把单次决定或对话直接写回；同一 MCP 预留给未来 DRI Agent 和 CoAgent 复用。
-_Avoid_: WarMap 业务对象库、自动接收所有新产出的知识库
+从 TKOSWORLD 授权范围整理的可读公司事实投影。World 是公司事实唯一权威；Company.md 是可重建阅读材料，不是第三份业务事实库。Agent 只读，产品流程负责 World 写回。模型只消费业务正文、日期与状态，内部来源和版本元数据留在后端。后台雷达、预审等使用显式授权的系统 personId，服务 token 不代表全公司可见。
+_Avoid_: 本地 Markdown 公司事实源、CompanyMemory MCP、Agent 自动写回 World
 
-**Memory Update Proposal**:
-未来每日统一复盘从产出文件、已确认业务对象和全部已保存 Conversation 中形成，并与 Company Memory 对比后的认知更新候选；只有 CEO 确认后才能生效。
-_Avoid_: 实时自动写回、单条 Receipt 的副本
+**Personal Memory**:
+每人独立的 Personal.md，保存本人长期偏好与协作约束，主私聊自然蒸馏并支持本人查看、纠正和遗忘；公司事实归 Company。
+_Avoid_: 用户必须先说记住、公司事实备用库、跨用户共享记忆
+
+**Anchor**:
+用户当前场景中本轮 Query 之外最重要的场景上下文，来自有权读取的 Card 业务投影。它采用有界摘要和可展开索引，临时放在最新用户消息附近；描述当前页面，不代表公司事实权威。
+_Avoid_: 高于 Query 的指令、数据库全量快照、持久化进用户原话
+
+**Reference**:
+按需消费的参考信息，包括 Company、Personal、显式引用、附件、过去轮次和外部只读结果。系统规则与 Skill Procedure 仍保留各自执行语义，不能因归入参考视角而降低安全或指令优先级。
+_Avoid_: 全文常驻 Prompt、与 Anchor 混为事实权威
+
 
 **Open Meeting Item**:
 会议中尚未收敛的事项，只在 Meeting Outcome 中展示，不自动或手动转成 Issue。

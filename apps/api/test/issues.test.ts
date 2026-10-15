@@ -198,7 +198,7 @@ describe("DRI service Issue import", () => {
       try {
         expect((await app.inject({ method: "POST", url: "/api/dri/issues", payload: DRI_IMPORT })).statusCode).toBe(401);
         expect((await postDri(app, DRI_IMPORT, "wrong-token")).statusCode).toBe(401);
-        expect((await postDri(app, DRI_IMPORT, testEnv.mcpServiceToken)).statusCode).toBe(401);
+        expect((await postDri(app, DRI_IMPORT, "retired-company-token")).statusCode).toBe(401);
         const cookie = await login(app, db);
         const ceoSession = await app.inject({ method: "POST", url: "/api/dri/issues", headers: { cookie }, payload: DRI_IMPORT });
         expect(ceoSession.statusCode).toBe(401);

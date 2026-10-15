@@ -40,7 +40,7 @@ export type MissionCardDraftInput = {
   previousCard: { missions: Record<string, unknown>[] } | null;
   previousReview: TMonthlyReviewSelfReview | null;
   capabilities: { code: string; name: string }[];
-  companyMemory: { title: string; sourceRef: string; passages: { text: string; sourceRef: string }[] }[];
+  companyMemory: { title: string; text: string }[];
   /** 本人这个月已写好的任务原文（飞书任务卡、本体已建 Mission 的导出）；没有为空数组。 */
   knownMissions: { kind: string; title: string | null; sourceRef: string | null; markdown: string }[];
 };

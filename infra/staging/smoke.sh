@@ -20,7 +20,7 @@ if [ "$DRY_RUN" = 1 ]; then
 smoke: dry-run（未发请求）。步骤：
   1. GET  ${ORIGIN}/healthz                 Web 进程存活 + BUILD_SHA
   2. GET  ${ORIGIN}/api/healthz             API health（database/Pi/modelSlots/MCP/search/wechat + BUILD_SHA）
-  3. POST ${ORIGIN}/mcp/company-memory      未授权 MCP 必须 401
+  3. POST ${ORIGIN}/mcp/company-memory      已停用的 CompanyMemory MCP 必须 404
   4. POST ${ORIGIN}/api/auth/login          真实 CEO 登录（需要 CEO_LOGIN_ID + CEO_PASSCODE）
   5. GET  ${ORIGIN}/api/cards/home          首页 Card
   6. GET  ${ORIGIN}/api/cards/radar         Radar Card（provider 配置如实显示）
@@ -55,7 +55,7 @@ check "api database" '"database":true' "$api"
 echo "      dependencies: $(grep -o '"dependencies":{[^}]*}' <<<"$api")"
 
 mcp_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$ORIGIN/mcp/company-memory" -H 'content-type: application/json' -d '{}')
-[ "$mcp_code" = "401" ] && echo "PASS  MCP 未授权 401" || { echo "FAIL  MCP 未授权应为 401，实际 $mcp_code"; failures=$((failures + 1)); }
+[ "$mcp_code" = "404" ] && echo "PASS  CompanyMemory 旧端点已停用 404" || { echo "FAIL  CompanyMemory 旧端点应为 404，实际 $mcp_code"; failures=$((failures + 1)); }
 
 cookie=$(mktemp)
 trap 'rm -f "$cookie"' EXIT

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createTestApp, type TestApp, TEST_CEO, TEST_MEMBER } from "./helpers.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { readMissionCardForAgent } from "../src/mcpMissionCards.js";
 import { getPersonalMissionCard, setMissionCardOwnerConfirmation } from "../src/personalMissionCards.js";
 import { createMissionCardReviewQueue } from "../src/missionCardReviewQueue.js";
@@ -43,7 +43,7 @@ async function fixture(reviewAgent: MissionCardReviewAgent = defaultReview, anno
   };
   const noteInput = (id: string, more: Record<string, unknown> = {}) => ({ clientId: randomUUID(), sourceRound: 1, missionId: id, field: "outcome", sourceVersion: 1,
     sourceText: SOURCE, quote: "权限", prefix: "完成首轮用户", suffix: "验收。", startOffset: 6, body: "请明确权限验收边界", ...more });
-  const people = loadCompanyMemory(t.env).searchPeople(undefined);
+  const people = createCompanyContext(t.env).searchPeople(undefined);
   return { t, a, b, round, ceo, dri, summary, execute, confirm, noteInput, people, setNow(at: Date) { now = at; } };
 }
 

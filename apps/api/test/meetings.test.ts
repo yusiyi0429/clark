@@ -7,7 +7,7 @@ import { Client } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import { Card, MeetingCardPayload, type TPreflightCandidate } from "@warmap/contracts";
 import { buildApp } from "../src/app.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { migrate } from "../src/migrate.js";
 import { createTestApp, createTestDb, preflightCandidate, seedTestAccess, testEnv, TEST_LOGIN, type TestApp } from "./helpers.js";
 import { recoverInterruptedPreflight, runPreflight, type PreflightAgent, type PreflightAgentInput } from "../src/meetingPreflight.js";
@@ -507,7 +507,7 @@ describe("Candidate Preflight", () => {
           signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
         }),
       };
-      await runPreflight(pool, loadCompanyMemory(testEnv), agent, meetingId, { timeoutMs: 30 });
+      await runPreflight(pool, createCompanyContext(testEnv), agent, meetingId, { timeoutMs: 30 });
       const row = await db.query("SELECT preflight FROM meetings WHERE id = $1", [meetingId]);
       expect(row.rows[0].preflight).toMatchObject({ status: "failed", error: { code: "preflight_agent_failed" } });
       expect(String((row.rows[0].preflight as { error: { message: string } }).error.message)).toContain("Preflight exceeded 30ms");

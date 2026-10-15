@@ -1,3 +1,4 @@
+import { readCompanyContext, companyProse } from "./companyContext.js";
 import type { QueryResult } from "pg";
 import type { AssistantMessageEventStream, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
@@ -5,7 +6,7 @@ import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { RadarSources, ResearchDoc, type TRadarSources } from "@warmap/contracts";
 import { runCandidateAgent } from "./candidateAgentRuntime.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { CompanyContext } from "./companyContext.js";
 import type { ResearchInput, ResearchRunner } from "./research.js";
 import type { RadarOutletAdapter } from "./radar.js";
 import { resolveConfiguredOutletIds } from "./outletSources.js";
@@ -24,7 +25,7 @@ ${HUMAN_WRITING_STYLE}`;
 /** ponytail: 预研只注入 Issue/来源与相关 CompanyMemory 段落；需要实时外部检索时再给 candidate agent 加 web_search tool（Provider 由 Ticket 16 装载）。 */
 export function createResearchAgentRunner(options: {
   query: (sql: string, params?: unknown[]) => Promise<QueryResult>;
-  companyMemory: CompanyMemoryRepository;
+  companyMemory: CompanyContext;
   baseUrl: string;
   apiKey: string;
   modelId: string;
@@ -32,12 +33,7 @@ export function createResearchAgentRunner(options: {
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 }): ResearchRunner {
   return async (input: ResearchInput, signal) => {
-    // 按议题标题检索相关公司记忆段落，只读注入，不开放业务库遍历
-    const companyMemoryPassages = options.companyMemory
-      .searchSections(input.issue.title, 3)
-      .flatMap((match) => options.companyMemory.getPassages(match.id, undefined, 2).passages)
-      .slice(0, 6)
-      .map((passage) => ({ id: passage.id, text: passage.text, sourceRef: passage.sourceRef }));
+    const company = companyProse(await readCompanyContext(options.companyMemory, input.issue.title, signal));
     const outletConfig = options.outlets
       ? await options.query("SELECT lookback_hours, sources FROM radar_config WHERE id = 'default'")
       : undefined;
@@ -58,7 +54,7 @@ export function createResearchAgentRunner(options: {
       query: options.query,
       kind: "issue-research",
       objectRef: { type: "issue", id: input.issue.id },
-      input: { ...input, companyMemoryPassages },
+      input: { ...input, company },
       prompt: RESEARCH_PROMPT,
       schema: ResearchDoc,
       baseUrl: options.baseUrl,

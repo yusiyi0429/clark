@@ -10,7 +10,7 @@ import {
   type TPreflightCandidate,
 } from "@warmap/contracts";
 import type { ActionScope } from "./actionToken.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import {
   LEADER_LENS_FORBIDDEN_PHRASES,
   LEADER_LENS_FORBIDDEN_TEXT,
@@ -62,7 +62,7 @@ export type PreflightAgent = {
 };
 export async function executeRunPreflight(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
@@ -81,7 +81,7 @@ export async function executeRunPreflight(
 }
 async function executeExplicitPreflight(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
@@ -112,7 +112,7 @@ async function executeExplicitPreflight(
 
 export const executeRetryPreflight = (
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
@@ -121,7 +121,7 @@ export const executeRetryPreflight = (
 
 export const executeRegeneratePreflight = (
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
@@ -183,7 +183,7 @@ function findForbiddenPhraseInPreflight(candidate: TPreflightCandidate): string 
 /** 运行一次会前预审：严格候选校验失败可见，Agent 失败不自动重试。 */
 export async function runPreflight(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   meetingId: string,
   { timeoutMs = PREFLIGHT_TIMEOUT_MS }: { timeoutMs?: number } = {},
@@ -251,7 +251,6 @@ export async function runPreflight(
       ...issues.map((issue) => `issue:${issue.id}`),
     ]);
     for (const material of meeting.materials) allowedSourceRefs.add(`material:${material.id}`);
-    for (const section of companyMemory.listSections()) allowedSourceRefs.add(`memory:${section.id}`);
     for (const ref of relatedMeeting?.sourceRefs ?? []) allowedSourceRefs.add(ref);
     for (const issue of issues) {
       if (!useUploadedMaterials && issue.research && (issue.research as { doc?: unknown }).doc) allowedSourceRefs.add(`research:${issue.id}`);

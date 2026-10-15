@@ -5,7 +5,7 @@ import {
   type Context,
 } from "@earendil-works/pi-ai";
 import { createResearchAgentRunner } from "../src/researchAgent.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { migrate } from "../src/migrate.js";
 import { createTestDb, testEnv } from "./helpers.js";
 import type { RadarOutletAdapter } from "../src/radar.js";
@@ -103,7 +103,7 @@ describe("issue pre-research publisher feed", () => {
       const outlets = fakeOutletAdapter();
       const runner = createResearchAgentRunner({
         query: db.query.bind(db),
-        companyMemory: loadCompanyMemory(testEnv),
+        companyMemory: createCompanyContext(testEnv),
         baseUrl: "https://provider.invalid/v1/responses",
         apiKey: "test-key",
         modelId: "fake-heavy",
@@ -138,7 +138,7 @@ describe("issue pre-research publisher feed", () => {
       const outlets = fakeOutletAdapter();
       const runner = createResearchAgentRunner({
         query: db.query.bind(db),
-        companyMemory: loadCompanyMemory(testEnv),
+        companyMemory: createCompanyContext(testEnv),
         baseUrl: "https://provider.invalid/v1/responses",
         apiKey: "test-key",
         modelId: "fake-heavy",
@@ -154,4 +154,54 @@ describe("issue pre-research publisher feed", () => {
       expect(outlets.calls).toEqual([]);
     });
   });
+});
+
+describe("shared Company consumption", () => {
+  it("does not read company facts without an explicit service person", async () => {
+    let reads = 0;
+    const contexts: Context[] = [];
+    const companyMemory = createCompanyContext(testEnv, { async read() {
+      reads++;
+      return { status: "ready", entries: [{ handle: "company:private", title: "私密", text: "不应被读取的内容" }] };
+    } });
+    const runner = createResearchAgentRunner({
+      query: async () => ({ rows: [] }) as any,
+      companyMemory, baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-heavy",
+      streamSimple: (_model, context) => {
+        contexts.push(context);
+        return stream([{ type: "toolCall", id: "submit-1", name: "submit_candidate", arguments: doc("内部材料") }], "toolUse");
+      },
+    });
+    await runner(input, new AbortController().signal);
+    expect(reads).toBe(0);
+    expect(JSON.stringify(contexts[0].messages)).toContain("coverage_unavailable");
+    expect(JSON.stringify(contexts[0].messages)).not.toContain("不应被读取的内容");
+  });
+});
+
+it("shared research consumes every Company page as prose without internal source metadata", async () => {
+  const contexts: Context[] = [];
+  const viewers: unknown[] = [];
+  const cursors: (string | undefined)[] = [];
+  const companyMemory = createCompanyContext({ ...testEnv, companySystemPersonId: "person-fixture-001" }, { async read(viewer, request) {
+    viewers.push(viewer); cursors.push(request.cursor);
+    return request.cursor ? { status: "ready", entries: [{ handle: "company:secret-2", title: "本期结果", text: "本期优先改善续约率。" }] }
+      : { status: "ready", entries: [{ handle: "company:secret-1", title: "经营战略", text: "优先服务存量客户。" }], nextCursor: "next-page" };
+  } });
+  const runner = createResearchAgentRunner({
+    query: async () => ({ rows: [] }) as any,
+    companyMemory, baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-heavy",
+    streamSimple: (_model, context) => {
+      contexts.push(context);
+      return stream([{ type: "toolCall", id: "submit-1", name: "submit_candidate", arguments: doc("内部材料") }], "toolUse");
+    },
+  });
+  await runner(input, new AbortController().signal);
+  expect(cursors).toEqual([undefined, "next-page"]);
+  expect(viewers).toEqual([{ personId: "person-fixture-001", role: "ceo" }, { personId: "person-fixture-001", role: "ceo" }]);
+  const modelInput = JSON.stringify(contexts[0].messages);
+  expect(modelInput).toContain("优先服务存量客户。");
+  expect(modelInput).toContain("本期优先改善续约率。");
+  expect(modelInput).not.toContain("company:secret");
+  expect(contexts[0].tools?.map((tool) => tool.name)).toEqual(["submit_candidate"]);
 });

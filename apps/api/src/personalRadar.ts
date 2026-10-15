@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TPersonalRadarJudgeSubmission, TPersonalRadarRun, TRadarDirection, TRadarSourceItem } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { GithubTrendingReader, TrendingRepo, TrendingSince } from "./githubTrending.js";
 import { roleOf } from "./memberAccess.js";
 import type { Query } from "./meetingStore.js";
@@ -141,7 +141,7 @@ export function createPersonalRadarService({
   scanTimeoutMs = SCAN_TIMEOUT_MS,
 }: {
   pool: Pool;
-  companyMemory: Pick<CompanyMemoryRepository, "searchPeople">;
+  companyMemory: Pick<PeopleDirectory, "searchPeople">;
   /** 与公司雷达共用的博查 adapter：从不传 domains（博查实测忽略 site:）。 */
   web: RadarWebAdapter;
   /** 与公司雷达共用的发布方 feed adapter，直接用目录 id 调用。 */

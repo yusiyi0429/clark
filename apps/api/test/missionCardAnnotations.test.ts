@@ -6,7 +6,7 @@ import { createTestApp, type TestApp } from "./helpers.js";
 import type { MissionCardAnnotationAgent } from "../src/missionCardAnnotationAgent.js";
 import { applyMissionCardRevision, createMissionCardAnnotation } from "../src/missionCardAnnotations.js";
 import { createMissionCardAnnotationQueue } from "../src/missionCardAnnotationQueue.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { testEnv } from "./helpers.js";
 import { readMissionCardForAgent } from "../src/mcpMissionCards.js";
 
@@ -111,7 +111,7 @@ describe("任务卡正文批注", () => {
         expect.objectContaining({ field: "timeBoundary", before: "本月底完成", after: current.timeBoundary }),
         expect.objectContaining({ field: "tradeoffs", before: "优先闭环", after: current.tradeoffs }),
       ]));
-      const people = loadCompanyMemory(t.env).searchPeople(undefined);
+      const people = createCompanyContext(t.env).searchPeople(undefined);
       const agent = await readMissionCardForAgent(t.pool.query.bind(t.pool), people, t.env.sessionSecret,
         { personId: "person-fixture-002", role: "member" }, f.card, new Date(START));
       expect(agent!.missions[0]).toMatchObject({ timeBoundary: current.timeBoundary, tradeoffs: current.tradeoffs });
@@ -255,7 +255,7 @@ describe("任务卡正文批注", () => {
 
   it("同卡两条批注串行，第二条读取第一条改后的版本，多队列也只改一次", async () => {
     const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(START), missionCardAnnotationAgent: noChange });
-    const people = loadCompanyMemory(testEnv).searchPeople(undefined), seen: number[] = [];
+    const people = createCompanyContext(testEnv).searchPeople(undefined), seen: number[] = [];
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const agent: MissionCardAnnotationAgent = { async generate(request) {
@@ -281,7 +281,7 @@ describe("任务卡正文批注", () => {
 
   it("恢复中断的批注，并在私聊已修改同批注时停止后台工作，不报失败或重复写回", async () => {
     const t = await createTestApp({}, undefined, { monthlyNow: () => new Date(START), missionCardAnnotationAgent: noChange });
-    const people = loadCompanyMemory(testEnv).searchPeople(undefined), person = { personId: "person-fixture-002", role: "member" as const };
+    const people = createCompanyContext(testEnv).searchPeople(undefined), person = { personId: "person-fixture-002", role: "member" as const };
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const generate = vi.fn(async () => {

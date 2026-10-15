@@ -11,7 +11,7 @@ import type { ResearchService } from "../src/research.js";
 import type { PreflightAgent } from "../src/meetingPreflight.js";
 import type { DriExporter } from "../src/meetingStore.js";
 import { createMonthlyPlanService, type MonthlyDraftAgent, type MonthlyPlanService } from "../src/monthlyDraft.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { createMonthlyReviewService, type MonthlyReviewAgents, type MonthlyReviewService } from "../src/monthlyReviewService.js";
 import type { OntologyUpdater, PostMeetingAgent } from "../src/outcome.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
@@ -94,15 +94,12 @@ export async function createTestDb(fn: (t: TestDb) => Promise<void>): Promise<vo
 }
 
 const FIXTURE_PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people.json", import.meta.url));
-const FIXTURE_MEMORY_DIR = fileURLToPath(new URL("./fixtures/company-memory", import.meta.url));
 
 export const testEnv: AppEnv = {
   sessionSecret: "test-session-secret",
   sessionMaxAgeSeconds: 60 * 60 * 8,
   publicOrigin: "https://warmap.local",
   driServiceToken: "dri-token-test",
-  mcpServiceToken: "mcp-token-test",
-  companyMemorySeedDir: FIXTURE_MEMORY_DIR,
   companyPeopleSeed: FIXTURE_PEOPLE_SEED,
   piBaseUrl: "https://provider.invalid/v1/responses",
   piApiKey: "test-key",
@@ -191,7 +188,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "publicOrigin">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "publicOrigin">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
@@ -237,10 +234,10 @@ export async function createTestApp(
   const env = { ...testEnv, ...seedOverrides };
   const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, ...appRuntimeOptions } = runtimeOptions;
   const monthlyPlans = monthlyDraftAgent
-    ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
+    ? createMonthlyPlanService({ pool, companyMemory: createCompanyContext(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;
   const monthlyReviews = monthlyReviewAgents
-    ? createMonthlyReviewService({ pool, companyMemory: loadCompanyMemory(env), agents: monthlyReviewAgents, now: monthlyNow, retryDelayMs: monthlyReviewRetryDelayMs,
+    ? createMonthlyReviewService({ pool, companyMemory: createCompanyContext(env), agents: monthlyReviewAgents, now: monthlyNow, retryDelayMs: monthlyReviewRetryDelayMs,
       personalDraft: { storageDir: env.conversationAttachmentStorageDir ?? DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR,
         agent: monthlyReviewAgents.personal ?? { async generate() { return { candidate: {
           overall: { text: "缺少材料", sources: [] }, judgments: { text: "缺少材料", sources: [] },
@@ -248,7 +245,7 @@ export async function createTestApp(
         } }; } } } })
     : undefined;
   const recordings = recordingDeps
-    ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, companyMemory: loadCompanyMemory(env), deps: recordingDeps })
+    ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, companyMemory: createCompanyContext(env), deps: recordingDeps })
     : undefined;
   const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, recordingService: recordings, now: monthlyNow,
     threadIntroAgent: { async generate(input) { return { message: `${input.inviter}邀请${input.newcomers.join("、")}加入「${input.title}」，请查看对象进展。` }; } },

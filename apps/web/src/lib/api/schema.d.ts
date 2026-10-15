@@ -4909,7 +4909,8 @@ export interface components {
             dependencies: {
                 piRuntime: boolean;
                 modelSlots: boolean;
-                companyMemoryMcp: boolean;
+                peopleDirectory: boolean;
+                companyConfigured: boolean;
                 search: boolean;
                 wechat: boolean;
                 outlets: boolean;

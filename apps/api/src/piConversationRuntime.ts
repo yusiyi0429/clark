@@ -33,7 +33,6 @@ import {
 } from "@earendil-works/pi-ai";
 import type { CompanyReader } from "./company.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
 import type { ConversationRuntime } from "./conversations.js";
 import { HUMAN_WRITING_STYLE } from "./promptStyle.js";
 import { unavailableWebSearchAdapter, type WebSearchAdapter } from "./webSearch.js";
@@ -202,8 +201,7 @@ export type PendingIssueSummary = {
 
 export type PiConversationRuntimeOptions = {
   /** Compatibility for directory-only callers until legacy MCP contraction. */
-  companyMemory?: CompanyMemoryRepository;
-  peopleDirectory?: PeopleDirectory;
+  peopleDirectory: PeopleDirectory;
   company?: CompanyReader;
   personal?: {
     select(personId: string, query: string): Promise<{ handle: string; kind: 'personal'; title: string; text: string }[]>;
@@ -290,7 +288,7 @@ function appendRecentMessages(
 }
 
 export async function createPiConversationRuntime(options: PiConversationRuntimeOptions): Promise<ConversationRuntime> {
-  const directory = options.peopleDirectory ?? options.companyMemory;
+  const directory = options.peopleDirectory;
   if (!directory) throw new Error('PeopleDirectory is required');
   const result = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }], details: value });
   const peopleTool = defineTool({ name: 'search_people', label: '查询人员', description: '查询稳定登录人员目录；不能据此推断公司目标或业务职责', parameters: SearchPeopleInput,

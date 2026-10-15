@@ -5,7 +5,7 @@ import {
   type TMonthlyDraftCandidate,
 } from "@warmap/contracts";
 import { buildApp } from "../src/app.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { migrate } from "../src/migrate.js";
 import { createMonthlyPlanService, type MonthlyDraftAgent, type MonthlyDraftAgentInput } from "../src/monthlyDraft.js";
 import { signActionId } from "../src/actionToken.js";
@@ -267,8 +267,8 @@ describe("MonthlyDraft Agent", () => {
       expect(input.confirmedDirections).toEqual([
         expect.objectContaining({ title: "月球基地渠道投入是否调整", decisionText: "六月前完成渠道投入调整" }),
       ]);
-      // 相关 CompanyMemory 段落随已确认方向注入
-      expect(input.companyMemory.length).toBeGreaterThan(0);
+      // 未配置 World 时不能使用旧 Markdown 公司事实。
+      expect(input.companyMemory).toEqual([]);
       expect(input.previousPlan).toMatchObject({ period: "2026-05" });
       expect(input.driFeedback).toEqual([expect.objectContaining({ externalId: "dri-retro-may", text: "渠道复核已完成" })]);
       expect(mayPlanId).toBeTruthy();
@@ -661,7 +661,7 @@ describe("startup recovery of an interrupted MonthlyPlan draft", () => {
       const agent = fakeAgent();
       const service = createMonthlyPlanService({
         pool,
-        companyMemory: loadCompanyMemory(testEnv),
+        companyMemory: createCompanyContext(testEnv),
         agent,
         now: () => new Date("2026-06-15T02:00:00Z"),
       });

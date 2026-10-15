@@ -13,7 +13,7 @@ import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "./radarSourc
 import { createOutletFeedAdapter } from "./outletSources.js";
 import { createBochaWebSearchAdapter } from "./webSearch.js";
 import { recoverInterruptedResearch } from "./issues.js";
-import { loadCompanyMemory } from "./companyMemory.js";
+import { createCompanyContext } from "./companyContext.js";
 import { assignLegacyConversations } from "./conversations.js";
 import { createResearchService } from "./research.js";
 import { createResearchAgentRunner } from "./researchAgent.js";
@@ -47,9 +47,10 @@ const env: AppEnv = {
   worldApiUrl: process.env.TKOS_WORLD_API_URL,
   worldAgentToken: process.env.TKOS_WORLD_AGENT_TOKEN,
   companyWorldAccessFile: process.env.COMPANY_WORLD_ACCESS_FILE,
-  companyStorageDir: process.env.COMPANY_STORAGE_DIR,
-  mcpServiceToken: requiredEnv("COMPANY_MEMORY_MCP_TOKEN"),
-  companyMemorySeedDir: requiredEnv("COMPANY_MEMORY_SEED_DIR"),
+  companyStorageDir: join(process.env.MEMORY_STORAGE_DIR ?? "/var/lib/warmap/memory", "company"),
+  memoryStorageDir: process.env.MEMORY_STORAGE_DIR,
+  personalMemoryStorageDir: join(process.env.MEMORY_STORAGE_DIR ?? "/var/lib/warmap/memory", "personal"),
+  companySystemPersonId: process.env.COMPANY_SYSTEM_PERSON_ID,
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
   companyName: process.env.COMPANY_NAME,
   missionCardDraftsDir: process.env.MISSION_CARD_DRAFTS_DIR,
@@ -81,7 +82,7 @@ try {
 }
 
 const peopleDirectory = loadPeopleDirectory(env);
-const companyMemory = loadCompanyMemory(env);
+const companyMemory = createCompanyContext(env);
 await assignLegacyConversations(pool.query.bind(pool), peopleDirectory);
 const outletAdapter = createOutletFeedAdapter({});
 // 雷达与对话 web_search 共用一个博查实例：同一 BOCHA_API_KEY 的请求间隔与 429 重试只在一处生效
@@ -189,6 +190,7 @@ const app = await buildApp({
   env,
   now,
   radarService,
+  companyReader: companyMemory.company,
   personalRadarService,
   researchService,
   monthlyPlanService,

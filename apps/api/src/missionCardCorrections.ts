@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TCreateMissionCardCorrectionRequest, TDecideMissionCardCorrectionRequest, TMissionCardCorrectionView } from "@warmap/contracts";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { canApprove, correctionPeriodClosed, type MissionRoundPerson } from "./missionRounds.js";
 import { currentMissions, fieldText, normalizedProposal, projectCorrection, proposalProblem, visiblePersonalMissionCard, type CorrectionRow } from "./personalMissionCards.js";

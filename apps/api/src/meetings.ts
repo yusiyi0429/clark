@@ -7,7 +7,7 @@ import type {
   TSupplementRequest,
 } from "@warmap/contracts";
 import type { ActionScope } from "./actionToken.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import { getIssueRow, projectIssueCard } from "./issues.js";
 import type { ParsedMaterial } from "./materialParser.js";
 import { replaceMeetingMaterials } from "./meetingMaterials.js";
@@ -34,7 +34,7 @@ import {
 } from "./meetingStore.js";
 
 function resolveParticipants(
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   input: { leadDriId: string; ceoParticipantId: string; participants: string[] },
 ): { participants: TMeetingParticipant[]; ceo: TMeetingParticipant; lead: TMeetingParticipant } | { error: MeetingActionError } {
   const byId = new Map(companyMemory.searchPeople(undefined).map((person) => [person.personId, person]));
@@ -62,7 +62,7 @@ function resolveParticipants(
   };
 }
 
-function scheduleMeetingIntro(pool: Pool, companyMemory: CompanyMemoryRepository, agent: ThreadIntroAgent | undefined,
+function scheduleMeetingIntro(pool: Pool, companyMemory: PeopleDirectory, agent: ThreadIntroAgent | undefined,
   meetingId: string, inviterId: string, newcomers: string[], existingIds: string[]): void {
   if (!agent || !newcomers.length) return;
   setImmediate(() => { void (async () => {
@@ -105,7 +105,7 @@ function validateDraft(draft: TMeetingDraft, row: MeetingRow): MeetingActionErro
 }
 export async function executeCreateMeeting(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
@@ -197,7 +197,7 @@ export async function executeCreateMeeting(
  */
 export async function createConfigMeeting(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   input: { title: string; scheduledAt: string; endsAt?: string; leadDriId: string; issueIds?: string[]; materials?: ParsedMaterial[]; materialStorageDir: string },
@@ -252,7 +252,7 @@ export async function createConfigMeeting(
 
 export async function executeJoinMeeting(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
@@ -323,7 +323,7 @@ export async function executeUpdateDraft(
  */
 export async function executeEditMeetingDetails(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   secret: string,
   scope: ActionScope,
   input: { title?: string; scheduledAt?: string; endsAt?: string; leadDriId?: string },
@@ -381,7 +381,7 @@ export async function executeEditMeetingDetails(
 
 export async function executeRequestSupplement(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   exporter: DriExporter | undefined,
   secret: string,
   scope: ActionScope,
@@ -539,7 +539,7 @@ function meetingRequestFingerprint(body: {
 /** DRI 服务导入 Meeting 元数据：稳定 Person 目录 + 已存在 Issue，重复导入返回原对象。 */
 export async function importDriMeeting(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  companyMemory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   body: {

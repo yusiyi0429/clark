@@ -31,10 +31,11 @@ services:
     entrypoint:
       - sh
       - -c
-      - mkdir -p /var/lib/warmap/meeting_materials /var/lib/warmap/conversation_attachments /var/lib/warmap/meeting_recordings && chown -R 1000:1000 /var/lib/warmap/meeting_materials /var/lib/warmap/conversation_attachments /var/lib/warmap/meeting_recordings
+      - mkdir -p /var/lib/warmap/meeting_materials /var/lib/warmap/conversation_attachments /var/lib/warmap/meeting_recordings /var/lib/warmap/memory && chmod 700 /var/lib/warmap/memory && chown -R 1000:1000 /var/lib/warmap/meeting_materials /var/lib/warmap/conversation_attachments /var/lib/warmap/meeting_recordings /var/lib/warmap/memory
     volumes:
       - meeting_materials:/var/lib/warmap/meeting_materials
       - conversation_attachments:/var/lib/warmap/conversation_attachments
+      - memory:/var/lib/warmap/memory
       - meeting_recordings:/var/lib/warmap/meeting_recordings
 
   # 公众号账号级来源的独立 AGPL sidecar：官方镜像、不 vendor 源码、无 ports（不经 Caddy）。
@@ -86,9 +87,10 @@ services:
       ONTOLOGY_SERVICE_TOKEN: ${ONTOLOGY_SERVICE_TOKEN:-}
       TKOS_WORLD_API_URL: ${TKOS_WORLD_API_URL:-}
       TKOS_WORLD_AGENT_TOKEN: ${TKOS_WORLD_AGENT_TOKEN:-}
-      COMPANY_MEMORY_MCP_TOKEN: ${COMPANY_MEMORY_MCP_TOKEN:?COMPANY_MEMORY_MCP_TOKEN required}
-      # 单一来源：seed/memory/ CompanyMemory Markdown 目录 + 真实人员名单，均只读挂载；生产可换 host 路径并同步覆盖
-      COMPANY_MEMORY_SEED_DIR: /repo/seed/memory
+      # 人员目录与授权文件只读挂载；记忆正文写入独立持久卷
+      COMPANY_WORLD_ACCESS_FILE: ${COMPANY_WORLD_ACCESS_FILE:-}
+      COMPANY_SYSTEM_PERSON_ID: ${COMPANY_SYSTEM_PERSON_ID:-}
+      MEMORY_STORAGE_DIR: /var/lib/warmap/memory
       COMPANY_PEOPLE_SEED: /repo/seed/company-people.json
       MISSION_CARD_DRAFTS_DIR: ${MISSION_CARD_DRAFTS_DIR:-/repo/seed/placeholders}
       MISSION_CARD_KNOWN_MISSIONS_FILE: ${MISSION_CARD_KNOWN_MISSIONS_FILE:-/repo/seed/imports/2026-10-known-missions.json}
@@ -126,6 +128,7 @@ services:
     volumes:
       - meeting_materials:/var/lib/warmap/meeting_materials
       - conversation_attachments:/var/lib/warmap/conversation_attachments
+      - memory:/var/lib/warmap/memory
       - meeting_recordings:/var/lib/warmap/meeting_recordings
       - ../seed:/repo/seed:ro
     depends_on:
@@ -166,6 +169,7 @@ services:
       - api
 
 volumes:
+  memory:
   pgdata:
   meeting_materials:
   conversation_attachments:

@@ -1,6 +1,6 @@
 # CEO WarMap 的站内入口（火山方案 B）。
 # 宿主机 Nginx 终止 TLS，把整个域名转发到 127.0.0.1:3130（compose 映射到这里的 :80），不按路径拆；
-# 这里只做站内分流：/api/*（含 SSE、multipart）与 /mcp/company-memory 直达 API，其余到 Web。
+# 这里只做站内分流：/api/*（含 SSE、multipart）与 /mcp/me 直达 API，其余到 Web。
 {
 	servers {
 		# 信任宿主机 Nginx（经 Docker 网桥进来，属私有网段）带来的 X-Forwarded-For/Proto，原样转给上游

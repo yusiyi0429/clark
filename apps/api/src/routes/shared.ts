@@ -10,7 +10,7 @@ import type { Pool } from "pg";
 import type { TApiError, TCardCollection } from "@warmap/contracts";
 import { SESSION_COOKIE, parseCookies, readSessionToken } from "../session.js";
 import { canSwitchView, canUseMemberView, currentSessionVersion, roleOf, type SessionRole } from "../memberAccess.js";
-import type { CompanyMemoryRepository } from "../companyMemory.js";
+import type { CompanyContext } from "../companyContext.js";
 import type { ConversationRuntime } from "../conversations.js";
 import type { DriExporter, MeetingActionOutcome, Query } from "../meetingStore.js";
 import type { PreflightAgent } from "../meetingPreflight.js";
@@ -57,7 +57,7 @@ export type RouteContext = {
   pool: Pool;
   q: Query;
   env: AppEnv;
-  companyMemory: CompanyMemoryRepository;
+  companyMemory: CompanyContext;
   peopleDirectory: PeopleDirectory;
   personalMemory: PersonalMemory;
   personalDistillation: PersonalDistillation;

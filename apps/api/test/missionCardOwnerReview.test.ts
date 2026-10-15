@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { applyMissionCardRevision, createMissionCardAnnotation, resolveMissionCardAnnotation } from "../src/missionCardAnnotations.js";
 import { createMissionCardAnnotationQueue } from "../src/missionCardAnnotationQueue.js";
 import { closeDueRounds } from "../src/missionRounds.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { signActionId } from "../src/actionToken.js";
 import type { MissionCardReviewAgent } from "../src/missionCardReview.js";
 import { createTestApp } from "./helpers.js";
@@ -31,7 +31,7 @@ async function setup() {
     await t.sql(`INSERT INTO missions (id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,success_evidence,personal_mission_card_id,source_ref,source_document_id,source_revision,source_title)
       VALUES ($1::text,1,$1::text,'2026-10','任务',$2,'method','["growth"]','原始结果','["证据"]',$1::uuid,'fixture://source','fixture',1,'真实起草测试来源')`, [id, owner]);
   }
-  const member = await t.memberCookie(), ceo = await t.loginCookie(), people = loadCompanyMemory(t.env).searchPeople(undefined);
+  const member = await t.memberCookie(), ceo = await t.loginCookie(), people = createCompanyContext(t.env).searchPeople(undefined);
   const get = (url: string, cookie = ceo) => t.app.inject({ method: "GET", url, headers: { cookie } });
   const post = (url: string, payload: unknown, cookie = ceo) => t.app.inject({ method: "POST", url, payload, headers: { cookie, origin: t.publicOrigin } });
   const page = async (id = card, cookie = member) => {

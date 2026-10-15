@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context } from "@earendil-works/pi-ai";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { createMissionCardAnnotation } from "../src/missionCardAnnotations.js";
 import { readMissionCardForAgent } from "../src/mcpMissionCards.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
@@ -55,7 +55,7 @@ describe("Mission card private Agent tools", () => {
       expect(denied.isError).toBe(true);
       expect(denied.value.code).toBe("PERSONAL_MISSION_CARD_NOT_FOUND");
 
-      const people = loadCompanyMemory(f.t.env).searchPeople(undefined);
+      const people = createCompanyContext(f.t.env).searchPeople(undefined);
       const annotation = await createMissionCardAnnotation(f.t.pool, people, f.t.env.sessionSecret,
         { personId: TEST_MEMBER.personId, role: "member" }, f.card,
         { clientId: randomUUID(), missionId: "execution-one", field: "outcome", sourceRound: 1, sourceVersion: 1, sourceText: "目标",
@@ -118,7 +118,7 @@ describe("Mission card private Agent tools", () => {
     const contexts: Context[] = [];
     const events: ConversationRuntimeEvent[] = [];
     let callIndex = 0;
-    const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(f.t.env), materialPool: f.t.pool,
+    const runtime = await createPiConversationRuntime({ peopleDirectory: createCompanyContext(f.t.env), materialPool: f.t.pool,
       missionCardSecret: f.t.env.sessionSecret, now: () => new Date("2026-10-10T02:00:00Z"),
       baseUrl: "https://provider.invalid/v1/responses", apiKey: "test", modelId: "fake-light",
       streamSimple: (_model, context) => {
@@ -176,7 +176,7 @@ describe("Mission card private Agent tools", () => {
     const events: ConversationRuntimeEvent[] = [];
     const contexts: Context[] = [];
     let calls = 0;
-    const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(f.t.env), materialPool: f.t.pool,
+    const runtime = await createPiConversationRuntime({ peopleDirectory: createCompanyContext(f.t.env), materialPool: f.t.pool,
       missionCardSecret: f.t.env.sessionSecret, now: () => new Date("2026-10-10T02:00:00Z"),
       baseUrl: "https://provider.invalid/v1/responses", apiKey: "test", modelId: "fake-light",
       streamSimple: (_model, context) => {
@@ -203,7 +203,7 @@ describe("Mission card private Agent tools", () => {
       // 被本人确认后再定向退回的新窗口，旧生成请求不得静默换轮。
       await f.t.sql("UPDATE personal_mission_cards SET owner_confirmed_at=$2 WHERE id=$1", [f.card, "2026-10-10T02:00:00Z"]);
       await f.t.sql("UPDATE mission_rounds SET status='reviewing' WHERE id=$1", [f.round]);
-      const closedRead = await readMissionCardForAgent(f.t.pool.query.bind(f.t.pool), loadCompanyMemory(f.t.env).searchPeople(undefined),
+      const closedRead = await readMissionCardForAgent(f.t.pool.query.bind(f.t.pool), createCompanyContext(f.t.env).searchPeople(undefined),
         f.t.env.sessionSecret, { personId: TEST_MEMBER.personId, role: "member" }, f.card, new Date("2026-10-10T02:00:00Z"));
       expect(closedRead).toMatchObject({ editable: false, round: 1 });
       const progress = (await call(f, f.ceo, "GET", `/api/mission-rounds/${f.round}`)).json().cards[0];
