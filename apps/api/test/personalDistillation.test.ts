@@ -32,6 +32,9 @@ test('durable worker distills only own user messages and duplicate delivery is h
    expect((await memory.readOwn('alice')).markdown).toContain('先看结论');
    expect(contexts.join('')).not.toContain('十家客户');expect(contexts.join('')).not.toContain('张三');
    expect(await worker.status(job)).toMatchObject({status:'succeeded',attempts:1});
+   const audit=await db.query("SELECT input_snapshot,candidate_output,error FROM agent_runs WHERE kind='personal-memory-distillation'");
+   expect(audit.rows[0]).toMatchObject({input_snapshot:{redacted:true},candidate_output:{redacted:true}});
+   expect(JSON.stringify(audit.rows)).not.toContain('先看结论');
    expect(await worker.processNext()).toBe(false);expect(calls).toBe(1);
   } finally {await rm(storageDir,{recursive:true,force:true});}
  });
@@ -41,13 +44,15 @@ test('main reply success queues natural learning, restart consumes it, and faile
  const { buildApp }=await import('../src/app.js');const { testEnv,seedTestAccess,TEST_CEO }=await import('./helpers.js');
  await createTestDb(async({db,pool})=>{await migrate(db);await seedTestAccess(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-http-'));let failReply=false;let mode='learn';
  const memory=createPersonalMemory({pool,storageDir});
- const provider=()=>candidate(mode==='learn'?{changes:[{operation:'add',attributeKey:'communication_order',title:'沟通偏好',text:'先看结论。',evidence:[{sequence:1,quote:'我一直先看结论。'}],inferred:false}],clarification:''}:{changes:[{operation:'remove',attributeKey:'communication_order',title:'沟通偏好',text:'',evidence:[{sequence:3,quote:'忘掉先看结论这个偏好。'}],inferred:false}],clarification:''});
+ // A brand-new scope still inherits the person's current epoch after earlier edits.
+ await memory.replaceOwn(TEST_CEO.personId,{expectedRevision:0,markdown:'# Personal\n'});
+ const provider=()=>candidate(mode==='learn'?{changes:[{operation:'add',attributeKey:'communication_order',title:'沟通偏好',text:'先看结论。',evidence:[{sequence:1,quote:'我一直先看结论。'}],inferred:false}],clarification:''}:{changes:[{operation:'remove',attributeKey:'communication_order',title:'沟通偏好',text:'',evidence:[{sequence:3,quote:'删除先看结论这个偏好。'}],inferred:false}],clarification:''});
  const app=await buildApp({pool,env:{...testEnv,personalMemoryStorageDir:storageDir},personalDistillationStream:provider,conversationRuntime:{async run(input){if(failReply)throw new Error('provider failed');return {assistantMessage:'明白',runtimeEntries:input.runtimeEntries};}}});
  try {const login=await app.inject({method:'POST',url:'/api/auth/login',headers:{origin:testEnv.publicOrigin},payload:{loginId:TEST_CEO.loginId,passcode:TEST_CEO.passcode}});const headers={cookie:(login.headers['set-cookie'] as string).split(';')[0],origin:testEnv.publicOrigin};
  await app.inject({method:'POST',url:'/api/conversations/global/messages',headers,payload:{message:'我一直先看结论。'}});
  const worker=createPersonalDistillation({pool,memory,baseUrl:testEnv.piBaseUrl,apiKey:'test',modelId:'test',streamSimple:provider});await worker.processNext(TEST_CEO.personId);
  expect((await app.inject({url:'/api/me/memory/personal',headers})).json().markdown).toContain('先看结论');
- failReply=true;mode='forget';const reply=await app.inject({method:'POST',url:'/api/conversations/global/messages',headers,payload:{message:'忘掉先看结论这个偏好。'}});
+ failReply=true;mode='forget';const reply=await app.inject({method:'POST',url:'/api/conversations/global/messages',headers,payload:{message:'删除先看结论这个偏好。'}});
  expect(reply.body).toContain('RUNTIME_FAILED');expect((await memory.readOwn(TEST_CEO.personId)).markdown).not.toContain('先看结论');
  }finally{await app.close();await rm(storageDir,{recursive:true,force:true});}
  });
@@ -108,5 +113,32 @@ test('a malformed structured submission has a bounded model call budget',async()
  await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-budget-'));
  try{const id=randomUUID(),memory=createPersonalMemory({pool,storageDir});await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user','我通常先看结论。',$2)",[id,randomUUID()]);let calls=0;
  const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:()=>{calls++;if(calls>2)throw new Error('test cap');return candidate({invalid:'submission'});}});const idJob=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:1,kind:'natural',epoch:0});await worker.processNext();expect(calls).toBe(2);expect(await worker.status(idJob)).toMatchObject({status:'pending',attempts:1});expect((await memory.readOwn('alice')).sections).toHaveLength(0);
+ }finally{await rm(storageDir,{recursive:true,force:true});}});
+});
+
+test('newer explicit intents survive an earlier explicit epoch change, while a manual forget cancels old intents',async()=>{
+ await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-intents-'));
+ try{const memory=createPersonalMemory({pool,storageDir}),first=randomUUID(),second=randomUUID();
+ await memory.apply('alice',{expectedRevision:0,epoch:0,changes:[{operation:'add',attributeKey:'drink',text:'喜欢咖啡。'},{operation:'add',attributeKey:'communication',text:'先看结论。'}]});
+ for(const [id,scope,text] of [[first,'global','更正：我喜欢喝茶。'],[second,'task:test','更正：我想先看依据。']]){await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice',$2,$3)",[id,scope,randomUUID()]);await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user',$2,$3)",[id,text,randomUUID()]);}
+ let calls=0;const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:()=>{calls++;return candidate({changes:[{operation:'update',attributeKey:calls===1?'drink':'communication',title:'偏好',text:calls===1?'喜欢喝茶。':'先看依据。',inferred:false,evidence:[{sequence:1,quote:calls===1?'更正：我喜欢喝茶。':'更正：我想先看依据。'}]}],clarification:''});}});
+ const a=await worker.enqueue(db,{personId:'alice',conversationId:first,throughSequence:1,kind:'explicit',epoch:0}),b=await worker.enqueue(db,{personId:'alice',conversationId:second,throughSequence:1,kind:'explicit',epoch:0});await worker.processNext();await worker.processNext();
+ expect(await worker.status(a)).toMatchObject({status:'succeeded'});expect(await worker.status(b)).toMatchObject({status:'succeeded'});expect((await memory.readOwn('alice')).markdown).toContain('先看依据');expect((await memory.readOwn('alice')).markdown).toContain('喜欢喝茶');
+ const doc=await memory.readOwn('alice');await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,2,'user','更正：我又喜欢咖啡了。',$2)",[first,randomUUID()]);const pending=await worker.enqueue(db,{personId:'alice',conversationId:first,throughSequence:2,kind:'explicit',epoch:doc.epoch});await memory.forgetOwn('alice',{expectedRevision:doc.revision,sectionIds:['communication']});await worker.processNext();expect(await worker.status(pending)).toMatchObject({status:'superseded'});expect(calls).toBe(2);expect((await memory.readOwn('alice')).markdown).not.toContain('喜欢咖啡');
+ }finally{await rm(storageDir,{recursive:true,force:true});}});
+});
+
+test('a held route connection is reused through worker and personal writes even when the pool is full',async()=>{
+ await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-pool-'));const held:import('pg').PoolClient[]=[];
+ try{const memory=createPersonalMemory({pool,storageDir}),id=randomUUID();await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user','我通常先看结论。',$2)",[id,randomUUID()]);
+ const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:()=>candidate({changes:[{operation:'add',attributeKey:'communication',title:'沟通',text:'先看结论。',inferred:false,evidence:[{sequence:1,quote:'我通常先看结论。'}]}],clarification:''})});await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:1,kind:'natural',epoch:0});held.push(...await Promise.all(Array.from({length:4},()=>pool.connect())));
+ expect(await worker.processNext('alice',db)).toBe(true);expect((await memory.readOwn('alice',db)).markdown).toContain('先看结论');
+ }finally{held.forEach(connection=>connection.release());await rm(storageDir,{recursive:true,force:true});}});
+});
+
+test('an incomplete exclusion view pauses automatic additions instead of silently dropping old forget barriers',async()=>{
+ await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-capacity-'));
+ try{const memory=createPersonalMemory({pool,storageDir}),id=randomUUID();const saved=await memory.apply('alice',{expectedRevision:0,epoch:0,changes:Array.from({length:100},(_,i)=>({operation:'add' as const,attributeKey:`old_${i}`,text:`过去偏好${i}。`}))});await memory.forgetOwn('alice',{expectedRevision:saved.revision,sectionIds:saved.sections.map(s=>s.id)});
+ await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user','我通常先看结论。',$2)",[id,randomUUID()]);const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:()=>candidate({changes:[{operation:'add',attributeKey:'new',title:'沟通',text:'先看结论。',inferred:false,evidence:[{sequence:1,quote:'我通常先看结论。'}]}],clarification:''})});const job=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:1,kind:'natural',epoch:(await memory.readOwn('alice')).epoch});await worker.processNext();expect(await worker.status(job)).toMatchObject({status:'succeeded'});expect((await memory.readOwn('alice')).sections).toHaveLength(0);
  }finally{await rm(storageDir,{recursive:true,force:true});}});
 });

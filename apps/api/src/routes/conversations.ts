@@ -249,10 +249,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         let memoryClarification: string | undefined;
         if (learnsPersonal && isExplicitMemoryRequest(req.body.message)) {
           const explicitJob = await ctx.personalDistillation.enqueue(client, { personId: owner, conversationId: row.id, throughSequence: userSequence, kind: 'explicit', epoch: personalEpoch });
-          await ctx.personalDistillation.processNext(owner);
-          const state = await ctx.personalDistillation.status(explicitJob);
-          memoryClarification = state?.clarification ?? (state?.status !== 'succeeded' ? '个人记忆修改尚未完成，已保存请求稍后重试。' : undefined);
-          personalEpoch = ((await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0);
+          await ctx.personalDistillation.processNext(owner, client);
+          const state = await ctx.personalDistillation.status(explicitJob, client);
+          memoryClarification = state?.clarification ?? (state?.status === 'superseded' ? '个人记忆已被其他操作更新，请重新明确这次修改。' : state?.status === 'failed' ? '个人记忆修改未能确认完成，请稍后查看并重试。' : state?.status !== 'succeeded' ? '个人记忆修改尚未完成，已保存请求稍后重试。' : undefined);
+          personalEpoch = Number((await client.query("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0);
           // A successful correction invalidates both Pi and historical context immediately.
           row = (await client.query<typeof row>('SELECT id,pi_session_id,runtime_entries,context_schema_version,memory_epoch,memory_history_cutoff FROM conversations WHERE id=$1', [row.id])).rows[0];
         }

@@ -12,7 +12,6 @@ import {
   type ResourceLoader,
 } from "@earendil-works/pi-coding-agent";
 import {
-  streamSimple as defaultStreamSimple,
   InMemoryCredentialStore,
   InMemoryModelsStore,
   type AssistantMessageEventStream,
@@ -46,6 +45,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   /** 只读辅助工具（如 CompanyMemory MCP）：与 submit_candidate 一同进入工具白名单。 */
   extraTools?: ReturnType<typeof defineTool<any>>[];
   signal?: AbortSignal;
+  redactObservability?: boolean;
   maxModelCalls?: number;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 }): Promise<{ runId: string; candidate: Static<T> }> {
@@ -55,7 +55,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   await options.query(
     `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
      VALUES ($1, $2, $3::jsonb, 'running', $4, $5, $6::jsonb)`,
-    [runId, options.kind, JSON.stringify(options.objectRef ?? null), options.modelSlot ?? "heavy", promptHash, JSON.stringify(options.input)],
+    [runId, options.kind, JSON.stringify(options.objectRef ?? null), options.modelSlot ?? "heavy", promptHash, JSON.stringify(options.redactObservability ? { redacted: true } : options.input)],
   );
 
   const resourceLoader: ResourceLoader = {
@@ -84,15 +84,11 @@ export async function runCandidateAgent<T extends TSchema>(options: {
       modelsPath: null,
       refreshOnCreate: false,
     });
-    let modelCalls = 0;
     modelRuntime.registerProvider("warmap", {
       name: "WarMap OpenAI-compatible Responses",
       baseUrl: normalizedBaseUrl(options.baseUrl),
       api: "openai-responses",
-      streamSimple: options.maxModelCalls === undefined ? options.streamSimple : (providerModel, context, streamOptions) => {
-        if (++modelCalls > options.maxModelCalls!) throw new Error('CANDIDATE_MODEL_BUDGET_EXHAUSTED');
-        return (options.streamSimple ?? defaultStreamSimple)(providerModel, context, streamOptions);
-      },
+      streamSimple: options.streamSimple,
       models: [{
         id: options.modelId,
         name: options.modelId,
@@ -104,6 +100,14 @@ export async function runCandidateAgent<T extends TSchema>(options: {
         maxTokens: 16_384,
       }],
     });
+    if (options.maxModelCalls !== undefined) {
+      const stream = modelRuntime.streamSimple.bind(modelRuntime);
+      let modelCalls = 0;
+      modelRuntime.streamSimple = (providerModel, context, streamOptions) => {
+        if (++modelCalls > options.maxModelCalls!) throw new Error('CANDIDATE_MODEL_BUDGET_EXHAUSTED');
+        return stream(providerModel, context, streamOptions);
+      };
+    }
     await modelRuntime.setRuntimeApiKey("warmap", options.apiKey);
     const model = modelRuntime.getModel("warmap", options.modelId);
     if (!model) throw new Error(`Pi model not found: warmap/${options.modelId}`);
@@ -151,7 +155,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
       `UPDATE agent_runs
           SET status = 'succeeded', candidate_output = $2::jsonb, usage = $3::jsonb, completed_at = now()
         WHERE id = $1`,
-      [runId, JSON.stringify(candidate), JSON.stringify(usage ?? null)],
+      [runId, JSON.stringify(options.redactObservability ? { redacted: true } : candidate), JSON.stringify(usage ?? null)],
     );
     logBatchRun({ runId, kind: options.kind, modelId: options.modelId, objectRef: options.objectRef, startedAt, status: "succeeded" });
     void recordAgentTrace({
@@ -162,8 +166,8 @@ export async function runCandidateAgent<T extends TSchema>(options: {
       objectRef: options.objectRef,
       personId: options.personId,
       personName: options.personName,
-      inputs: options.input,
-      outputs: candidate,
+      inputs: options.redactObservability ? { redacted: true } : options.input,
+      outputs: options.redactObservability ? { redacted: true } : candidate,
       toolEvents: [{ name: "submit_candidate", isError: false }],
       usage: usage ?? null,
       status: "succeeded",
@@ -172,7 +176,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
     });
     return { runId, candidate };
   } catch (cause) {
-    const error = (cause as Error).message || String(cause);
+    const error = options.redactObservability ? "PRIVATE_CANDIDATE_FAILED" : (cause as Error).message || String(cause);
     await options.query(
       `UPDATE agent_runs
           SET status = $2, error = $3, usage = $4::jsonb, completed_at = now()
@@ -189,8 +193,8 @@ export async function runCandidateAgent<T extends TSchema>(options: {
       objectRef: options.objectRef,
       personId: options.personId,
       personName: options.personName,
-      inputs: options.input,
-      outputs: candidate,
+      inputs: options.redactObservability ? { redacted: true } : options.input,
+      outputs: options.redactObservability ? { redacted: true } : candidate,
       toolEvents: [{ name: "submit_candidate", isError: !candidate }],
       usage: usage ?? null,
       error,

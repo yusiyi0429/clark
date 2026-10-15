@@ -112,7 +112,7 @@ export function createPersonalMemory({ pool, storageDir }: {
             if (!connection) client.release();
         }
     }
-    async function invalidate(client: PoolClient, personId: string, state: State, keys: string[], previous:PersonalSection[]) {
+    async function invalidate(client: PoolClient, personId: string, state: State, keys: string[], previous:PersonalSection[], explicitJobId?: string) {
         await client.query('BEGIN');
         try {
             const cutoffs = (await client.query('SELECT c.id,COALESCE(MAX(m.sequence),0)::integer AS sequence FROM conversations c LEFT JOIN conversation_messages m ON m.conversation_id=c.id WHERE c.owner_id=$1 GROUP BY c.id', [personId])).rows;
@@ -122,7 +122,7 @@ export function createPersonalMemory({ pool, storageDir }: {
             for (const key of keys)
                 await client.query('INSERT INTO personal_memory_exclusions(person_id,attribute_key,through_job_id,conversation_cutoffs,title,text) VALUES($1,$2,$3,$4::jsonb,$5,$6) ON CONFLICT(person_id,attribute_key) DO UPDATE SET through_job_id=EXCLUDED.through_job_id,conversation_cutoffs=EXCLUDED.conversation_cutoffs,title=EXCLUDED.title,text=EXCLUDED.text,created_at=now()', [personId, key, throughJob, JSON.stringify(Object.fromEntries(cutoffs.map(row => [row.id, row.sequence]))),previous.find(item=>item.id===key)?.title ?? "",previous.find(item=>item.id===key)?.text.slice(0,2048) ?? ""]);
             state.epoch++;
-            await client.query("UPDATE memory_documents SET epoch=$2 WHERE module='personal' AND scope_key=$1", [personId, state.epoch]);
+            await client.query("UPDATE memory_documents SET epoch=$2,last_explicit_job_id=$3 WHERE module='personal' AND scope_key=$1", [personId, state.epoch, explicitJobId ?? null]);
             await client.query("UPDATE conversations c SET runtime_entries='[]'::jsonb,pi_session_id=$2,memory_epoch=$3,memory_history_cutoff=COALESCE((SELECT MAX(sequence) FROM conversation_messages WHERE conversation_id=c.id),0) WHERE owner_id=$1", [personId, randomUUID(), state.epoch]);
             await client.query('COMMIT');
         }
@@ -179,7 +179,8 @@ export function createPersonalMemory({ pool, storageDir }: {
             epoch: number;
             changes: PersonalChange[];
             explicit?: boolean;
-        }) {
+            explicitJobId?: string;
+        }, connection?: PoolClient) {
             return locked(personId, async (client, state, path, body) => {
                 if (state.epoch !== input.epoch || state.revision !== input.expectedRevision)
                     throw fault('MEMORY_VERSION_CONFLICT');
@@ -203,16 +204,16 @@ export function createPersonalMemory({ pool, storageDir }: {
                             items.push(item);
                     }
                 }
-                if (input.explicit) await invalidate(client, personId, state, input.changes.filter(change=>change.operation==='remove').map(change=>change.attributeKey),previous);
+                if (input.explicit) await invalidate(client, personId, state, input.changes.filter(change=>change.operation==='remove').map(change=>change.attributeKey),previous,input.explicitJobId);
                 const saved = await write(client, state, path, personId, items);
                 if (input.explicit) for (const change of input.changes) {
                     if (change.operation!=='remove') await client.query('DELETE FROM personal_memory_exclusions WHERE person_id=$1 AND attribute_key=$2',[personId,change.attributeKey]);
                 }
                 return saved;
-            });
+            }, connection);
         },
-        readBlocked(personId:string) {
-            return locked(personId, async(client)=> (await client.query<{key:string;title:string;text:string;throughJobId:string;conversationCutoffs:Record<string,number>}>(`SELECT attribute_key AS key,title,text,through_job_id::text AS "throughJobId",conversation_cutoffs AS "conversationCutoffs" FROM personal_memory_exclusions WHERE person_id=$1 ORDER BY created_at DESC LIMIT 100`,[personId])).rows);
+        readBlocked(personId:string, connection?: PoolClient) {
+            return locked(personId, async(client)=> (await client.query<{key:string;title:string;text:string;throughJobId:string;conversationCutoffs:Record<string,number>}>(`SELECT attribute_key AS key,title,text,through_job_id::text AS "throughJobId",conversation_cutoffs AS "conversationCutoffs" FROM personal_memory_exclusions WHERE person_id=$1 ORDER BY created_at DESC LIMIT 100`,[personId])).rows, connection);
         },
         async select(personId: string, query: string, connection?: PoolClient): Promise<PersonalReference[]> {
             const doc = await api.readOwn(personId, connection);

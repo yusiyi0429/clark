@@ -13,3 +13,5 @@ CREATE TABLE personal_memory_jobs (
   UNIQUE(person_id,conversation_id,through_sequence,kind)
 );
 CREATE INDEX personal_memory_jobs_pending ON personal_memory_jobs(id) WHERE status='pending';
+
+ALTER TABLE memory_documents ADD COLUMN last_explicit_job_id bigint;

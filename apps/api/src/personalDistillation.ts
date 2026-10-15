@@ -19,7 +19,7 @@ type JobInput = { personId: string; conversationId: string; throughSequence: num
 type Job = { id: string; person_id: string; conversation_id: string; through_sequence: number; kind: JobInput['kind']; epoch: number; attempts: number };
 export type PersonalDistillation = ReturnType<typeof createPersonalDistillation>;
 export function isExplicitMemoryRequest(message: string): boolean {
-  return /忘(?:掉|记)|别再|不再|不是|改成|更正|纠正|记忆|记住|forget|remember|correction|no longer/i.test(message);
+  return /忘(?:掉|记)|别再|不再|不是|不喜欢|不想|不爱|不要(?:记|存|保|留)|删除|删掉|移除|清除|清空|改成|更正|纠正|记忆|记住|forget|remember|correction|no longer|delete|remove|stop (?:saving|remembering)|do not (?:save|remember)/i.test(message);
 }
 export function createPersonalDistillation(options: {
   pool: Pool; memory: PersonalMemory; baseUrl: string; apiKey: string; modelId: string;
@@ -34,13 +34,13 @@ export function createPersonalDistillation(options: {
     [input.personId, input.conversationId, input.throughSequence, input.kind, input.epoch]);
     return result.rows[0]?.id;
   }
-  async function status(id: string) {
-    const result = await pool.query('SELECT status,attempts,error_code AS "errorCode",clarification FROM personal_memory_jobs WHERE id=$1', [id]);
+  async function status(id: string, connection?: PoolClient) {
+    const result = await (connection ?? pool).query('SELECT status,attempts,error_code AS "errorCode",clarification FROM personal_memory_jobs WHERE id=$1', [id]);
     return result.rows[0];
   }
-  async function processNext(personId?: string): Promise<boolean> {
+  async function processNext(personId?: string, connection?: PoolClient): Promise<boolean> {
     if (closing.signal.aborted) return false;
-    const client = await pool.connect();
+    const client = connection ?? await pool.connect();
     let lock: string | undefined;
     try {
       const jobs = await client.query<Job>(`SELECT * FROM personal_memory_jobs WHERE status='pending' AND ($1::text IS NULL OR person_id=$1) ORDER BY (kind='explicit') DESC,id LIMIT 20`, [personId ?? null]);
@@ -52,14 +52,18 @@ export function createPersonalDistillation(options: {
         if (!job) return false;
         await client.query('UPDATE personal_memory_jobs SET attempts=attempts+1 WHERE id=$1', [job.id]);
         try {
-          const doc = await memory.readOwn(job.person_id);
-          if (doc.epoch !== job.epoch) {
+          const doc = await memory.readOwn(job.person_id, client);
+          const lastExplicitJob = (await client.query<{last_explicit_job_id:string|null}>("SELECT last_explicit_job_id FROM memory_documents WHERE module='personal' AND scope_key=$1", [job.person_id])).rows[0]?.last_explicit_job_id;
+          const canRebaseExplicit = job.kind === 'explicit' && lastExplicitJob !== null && lastExplicitJob !== undefined && BigInt(lastExplicitJob) <= BigInt(job.id);
+          if (doc.epoch !== job.epoch && !canRebaseExplicit) {
             await client.query("UPDATE personal_memory_jobs SET status='superseded',error_code='MEMORY_EPOCH_CHANGED' WHERE id=$1", [job.id]);
             return true;
           }
+          const effectiveEpoch = doc.epoch;
+          const resumingExplicit = job.kind === 'explicit' && lastExplicitJob === job.id;
           const messages = (await client.query<{ sequence: number; content: string }>(`SELECT m.sequence,m.content FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
-            WHERE c.id=$1 AND c.owner_id=$2 AND c.deleted_at IS NULL AND m.role='user' AND m.sequence<=$3 AND m.sequence>c.memory_history_cutoff
-            ORDER BY m.sequence DESC LIMIT 12`, [job.conversation_id, job.person_id, job.through_sequence])).rows;
+            WHERE c.id=$1 AND c.owner_id=$2 AND c.deleted_at IS NULL AND m.role='user' AND m.sequence<=$3 AND (m.sequence>c.memory_history_cutoff OR ($4::boolean AND m.sequence=$3))
+            ORDER BY m.sequence DESC LIMIT 12`, [job.conversation_id, job.person_id, job.through_sequence, canRebaseExplicit])).rows;
           let remaining = 16000;
           const boundedMessages = messages.flatMap(message => {
             const content = message.content.slice(0, Math.min(8000, remaining));
@@ -69,7 +73,7 @@ export function createPersonalDistillation(options: {
           if (!messages.some(message => message.sequence === job.through_sequence)) {
             await client.query("UPDATE personal_memory_jobs SET status='superseded',error_code='HISTORY_EXCLUDED' WHERE id=$1", [job.id]); return true;
           }
-          const allBlocked = await memory.readBlocked(job.person_id);
+          const allBlocked = await memory.readBlocked(job.person_id, client);
           let blockedBudget = 16000;
           const blocked = allBlocked.flatMap(item => {
             const size = item.title.length + item.text.length;
@@ -82,7 +86,7 @@ export function createPersonalDistillation(options: {
           signal.throwIfAborted();
           const { candidate: result } = await runCandidateAgent({ query: client.query.bind(client), kind: 'personal-memory-distillation', personId: job.person_id,
             input: { kind: job.kind, currentSequence: job.through_sequence, messages: boundedMessages, memory: doc.sections, blockedAttributes: blocked, blockedAttributesIncomplete }, prompt, schema: Candidate,
-            baseUrl: options.baseUrl, apiKey: options.apiKey, modelId: options.modelId, modelSlot: 'light', maxModelCalls: 2, streamSimple: options.streamSimple, signal });
+            baseUrl: options.baseUrl, apiKey: options.apiKey, modelId: options.modelId, modelSlot: 'light', maxModelCalls: 2, redactObservability: true, streamSimple: options.streamSimple, signal });
           const changes: PersonalChange[] = [];
           for (const change of result.changes) {
             if (change.evidence.some(evidence => !boundedMessages.some(message => message.sequence === evidence.sequence && message.content.includes(evidence.quote)))) throw new Error('INVALID_USER_EVIDENCE');
@@ -95,7 +99,7 @@ export function createPersonalDistillation(options: {
             if (job.kind === 'explicit' && blockedAttributesIncomplete && change.operation === 'add' && !blockedMatch) throw new Error('MEMORY_EXCLUSIONS_NEED_REVIEW');
             const existing = doc.sections.find(section => section.id === change.attributeKey);
             if (change.operation === 'remove' && !existing) {
-              if (job.kind === 'explicit') throw new Error('UNKNOWN_PERSONAL_ATTRIBUTE');
+              if (job.kind === 'explicit' && !resumingExplicit) throw new Error('UNKNOWN_PERSONAL_ATTRIBUTE');
               continue;
             }
             if (change.operation === 'update' && !existing) throw new Error('UNKNOWN_PERSONAL_ATTRIBUTE');
@@ -104,7 +108,7 @@ export function createPersonalDistillation(options: {
             changes.push({ operation: change.operation, attributeKey: change.attributeKey, title: change.title, text: change.text });
           }
           if (result.clarification && changes.length) throw new Error('AMBIGUOUS_MEMORY_CHANGE');
-          if (changes.length) await memory.apply(job.person_id, { expectedRevision: doc.revision, epoch: job.epoch, changes, ... (job.kind === 'explicit' ? { explicit: true } : {}) });
+          if (changes.length) await memory.apply(job.person_id, { expectedRevision: doc.revision, epoch: effectiveEpoch, changes, ... (job.kind === 'explicit' ? { explicit: true, explicitJobId: job.id } : {}) }, client);
           await client.query("UPDATE personal_memory_jobs SET status='succeeded',error_code=NULL,clarification=$2 WHERE id=$1", [job.id, result.clarification || null]);
         } catch (error) {
           if (closing.signal.aborted) {
@@ -112,14 +116,14 @@ export function createPersonalDistillation(options: {
             return false;
           }
           const code = (error as { code?: string }).code ?? (error as Error).message;
-          await client.query("UPDATE personal_memory_jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,error_code=$2 WHERE id=$1", [job.id, code.slice(0, 100)]);
+          await client.query("UPDATE personal_memory_jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,error_code=$2 WHERE id=$1", [job.id, /^[A-Z][A-Z0-9_]{0,99}$/.test(code) ? code : 'MODEL_GENERATION_FAILED']);
         }
         return true;
       }
       return false;
     } finally {
       if (lock) await client.query('SELECT pg_advisory_unlock(hashtext($1))', [lock]).catch(() => undefined);
-      client.release();
+      if (!connection) client.release();
     }
   }
   let timer: ReturnType<typeof setInterval> | undefined;
