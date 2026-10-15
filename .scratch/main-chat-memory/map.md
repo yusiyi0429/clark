@@ -12,7 +12,7 @@ Status: implementation-in-progress
 | 04 | [04-personal-memory](issues/04-personal-memory.md) | 01 | ready-for-agent |
 | 05 | [05-natural-distillation](issues/05-natural-distillation.md) | 04 | ready-for-agent |
 | 06 | [06-remove-legacy-mcp](issues/06-remove-legacy-mcp.md) | 01、03 | ready-for-agent |
-| 07 | [07-integrate-review](issues/07-integrate-review.md) | 02–06 | ready-for-agent |
+| 07 | [07-integrate-review](issues/07-integrate-review.md) | 02–06 | resolved; final PR review owned by parent |
 
 [批准的拆分与测试边界](ticket-breakdown.md) · [上下文规格](context-contract.md) · [记忆设计](memory-design.md) · [研究与预验证](validation.md) · [验收样例](evaluation-cases.json)
 
@@ -25,3 +25,7 @@ Scene Anchor end-to-end implemented on isolated memory/02-anchor. Commits891de30
 ## Ticket03 result
 
 World company facts now use an explicitly scoped read-only reader and governed Company projection. Main private chat consumes bounded `query_company` / memory reference tools with per-turn short handles, version-bound continuations, current access checks and no local/Markdown fact fallback. 26 focused tests and API typecheck passed; both review axes completed and both initial P2 Spec findings were corrected. See [Ticket03](issues/03-world-company.md) and [review](reviews/03-world-company.md). Live World coverage/authorization remains an external acceptance item.
+
+## Ticket07 result
+
+Main HTTP/Pi/Personal assembly, legacy raw-history rebuild, temporary tool-result isolation, bounded JSON expansion and correction/forget integration completed. See [the integration report](reviews/07-integration.md) for exact full-run/focused results and independent Ticket07 review, and [30-case matrix](acceptance-matrix.md) for mechanism coverage versus unrun live/semantic acceptance. Parent integrates the own commits and completes the separate final PR-level review.

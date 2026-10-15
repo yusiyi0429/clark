@@ -3,6 +3,8 @@
 日期：2026-10-15
 范围：开发方案的技术可行性，不是生产发布验收。
 
+实施后的机制验收与实际检查记录见 [Ticket07 集成报告](reviews/07-integration.md) 和 [30条覆盖矩阵](acceptance-matrix.md)。下文保留实施前的研究/原型证据，不作为当前生产实现已通过真实模型或 World 验收的声明。
+
 ## 研究依据与适用边界
 
 1. [Anthropic：Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) 将上下文视为有限资源，讨论按需展开、压缩和外部记忆。这里据此选择“简短 Anchor 目录 + 按需正文”，不是全量复制业务库。文章不证明本项目的具体 token 配额或文件结构最优。
