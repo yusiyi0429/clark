@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,stat,unlink,rmdir} from 'node:fs/promises';
+import {mkdtemp,readFile,stat,unlink,rmdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createCollaborationState,applyAction,currentVersion,cardStatus} from './governance.mjs';
@@ -73,4 +73,14 @@ test('持久化、单进程锁和并发版本冲突：不会覆盖别人修订',
   await store.close();store=null;store=await openCollaborationStore(path,seed());assert.equal(currentVersion(store.snapshot().cards.bf01).number,2);
   assert.equal(JSON.parse(await readFile(path)).audit.length,1);assert.equal((await stat(path)).mode&0o777,0o600);
  }finally{if(store)await store.close();await unlink(path).catch(()=>{});await rmdir(dir);}
+});
+test('Store read() shares one frozen state; snapshot() stays a private copy',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'m2-store-read-'));const store=await openCollaborationStore(join(dir,'state.json'),seed());
+ try{
+  const live=store.read();assert.equal(store.read(),live);assert.ok(Object.isFrozen(live.cards.bf01.versions[0].content));
+  assert.throws(()=>{live.cards.bf01.versions.push({});},TypeError);
+  const copy=store.snapshot();copy.cards.bf01.versions.push({});assert.equal(store.read().cards.bf01.versions.length,1);
+  const returned=await store.transact(s=>{s.sequence=(s.sequence||0)+1;return s;});returned.cards.bf01.versions.push({});
+  assert.notEqual(store.read(),live);assert.equal(store.read().cards.bf01.versions.length,1);assert.ok(Object.isFrozen(store.read()));
+ }finally{await store.close();await rm(dir,{recursive:true,force:true});}
 });

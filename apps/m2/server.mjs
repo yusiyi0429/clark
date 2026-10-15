@@ -7,7 +7,7 @@ import {nexusSystemPrompt,publicEvidence,candidateCards,validateNexusResult,revi
 import {createCollaborationState,currentVersion,canRead} from './governance.mjs';
 import {openCollaborationStore} from './collaboration-store.mjs';
 import {memberActor,sharedProjection} from './shared-projection.mjs';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {generateRound,validateRound} from './round-runner.mjs';
 import {loadPublishedRound08,loadPublishedRound09,loadOntologyCandidate,loadBootstrap,skillLocation} from './deployment-data.mjs';
 import {createLegacyAuth} from './legacy-auth.mjs';
@@ -40,10 +40,10 @@ const loadedSkill=await loadSkillSnapshot(skillRoot),rules=loadedSkill.rules;
 const gateway=await createModelGateway();
 const ready=gateway.status.ready;
 const store=await openCollaborationStore(process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),bootstrap.state);
-const currentUnits=()=>store.snapshot().round?.units||units;
-const liveUnits=()=>{const s=store.snapshot();const visit=n=>({...currentVersion(s.cards[n.id]).content,children:n.children.map(visit)});return currentUnits().map(visit);};
+const liveUnitsFrom=s=>{const visit=n=>({...currentVersion(s.cards[n.id]).content,children:n.children.map(visit)});return (s.round?.units||units).map(visit);};
+const liveUnits=()=>liveUnitsFrom(store.snapshot());
 const liveNodes=()=>allNodes(liveUnits());
-const actorFor=id=>memberActor(id,store.snapshot());
+const actorFor=id=>memberActor(id,store.read());
 let roundFlight=false,auditFlight=false;
 if(store.snapshot().roundJob?.status==='running')await store.transact(s=>{s.roundJob.status='failed';s.roundJob.error='服务重启中断了生成，旧轮未受影响，可续跑未完成部分';return s;});
 if(store.snapshot().roundAuditJob?.status==='running')await store.transact(s=>{s.roundAuditJob.status='failed';s.roundAuditJob.error='服务重启中断了审核，当前计划保留，可重试审核';s.sequence++;return s;});
@@ -75,6 +75,12 @@ async function scheduleNexus(scope,memberId,event){
 }
 async function privateMessage(memberId,author,text,context){return store.transact(state=>{state.messages.push({id:randomUUID(),memberId,author,text,context,shareable:author==='Agent',channel:'private',createdAt:new Date().toISOString()});state.sequence++;return state;});}
 const json=(res,code,value)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(value));};
+// Pages poll these reads every 1.5s. The browser revalidates with the ETag, so an unchanged body is not sent again.
+const etagged=body=>({body,etag:'"'+createHash('sha1').update(body).digest('base64url')+'"'});
+function revalidated(req,res,{body,etag},contentType='application/json; charset=utf-8'){const headers={'Content-Type':contentType,'Cache-Control':'private, no-cache','Vary':'Cookie','ETag':etag,'X-Content-Type-Options':'nosniff'};if(req.headers['if-none-match']===etag){res.writeHead(304,headers);return res.end();}res.writeHead(200,headers);res.end(body);}
+// A state is replaced, never changed, on each write, so a body built from it stays valid for that state.
+const readCache=new WeakMap();
+function cachedRead(state,key,build){let bodies=readCache.get(state);if(!bodies)readCache.set(state,bodies=new Map());if(!bodies.has(key))bodies.set(key,etagged(JSON.stringify(build())));return bodies.get(key);}
 async function body(req){let s='';for await(const b of req){s+=b;if(s.length>100000)throw new Error('请求太大');}const value=JSON.parse(s);if(req.m2Session?.memberId)value.memberId=req.m2Session.memberId;return value;}
 export const server=createServer(async(req,res)=>{
  let analyzedScope,analyzedRound,streamReply=false,streamTimer;
@@ -88,7 +94,7 @@ export const server=createServer(async(req,res)=>{
   if(req.m2Session.memberId){route.searchParams.set('member',req.m2Session.memberId);}
   if(route.pathname==='/api/session'&&req.method==='GET')return json(res,200,{authenticated:true,...req.m2Session});
   if(route.pathname==='/api/ontology/status'&&req.method==='GET')return json(res,200,await ontologyConnectionStatus());
-  if(route.pathname==='/api/collaboration'&&req.method==='GET')return json(res,200,sharedProjection(store.snapshot(),actorFor(route.searchParams.get('member'))));
+  if(route.pathname==='/api/collaboration'&&req.method==='GET'){const state=store.read(),member=route.searchParams.get('member');return revalidated(req,res,cachedRead(state,'collaboration:'+member,()=>sharedProjection(state,memberActor(member,state))));}
   if(req.url==='/api/rounds/import-published'&&req.method==='POST'){
    const b=await body(req);if(!actorFor(b.memberId).ceo)return json(res,403,{error:'请由公司负责人载入新轮'});
    if(![8,9,10].includes(b.round))return json(res,400,{error:'可载入第8、9轮及本体生成候选第10轮'});
@@ -97,7 +103,7 @@ export const server=createServer(async(req,res)=>{
    await store.transact(old=>{if(old.round?.id===round.id)throw Object.assign(Error(`第${b.round}轮已载入，不能清空当前讨论重新导入`),{status:409});if(b.expectedSequence!==old.sequence)throw Object.assign(Error('协作记录有更新，请核对后再导入'),{status:409});return activateIndependentRound(old,round);});
    return json(res,200,{ok:true,round:round.number,counts:round.counts,roundId:round.id});
   }
-  if(route.pathname==='/api/rounds'&&req.method==='GET'){const state=store.snapshot(),actor=actorFor(req.m2Session.memberId);return json(res,200,{auditJob:actor.ceo?state.roundAuditJob||null:null,job:generationView(state.roundJob,actor)});}
+  if(route.pathname==='/api/rounds'&&req.method==='GET'){const state=store.read(),member=req.m2Session.memberId;return revalidated(req,res,cachedRead(state,'rounds:'+member,()=>{const actor=memberActor(member,state);return {auditJob:actor.ceo?state.roundAuditJob||null:null,job:generationView(state.roundJob,actor)};}));}
   if(req.url==='/api/rounds'&&req.method==='POST'){
    const b=await body(req);if(!actorFor(b.memberId).ceo)return json(res,403,{error:'请由公司负责人开始新轮次'});
    if(b.sourceMode&&!['ontology','feishu'].includes(b.sourceMode))return json(res,400,{error:'请选择本体或飞书基础资料'});
@@ -154,7 +160,7 @@ export const server=createServer(async(req,res)=>{
    if(['message','comment'].includes(b.action.type)){const event=next[b.action.type==='comment'?'comments':'messages'].at(-1);if(!event.acceptedProposalId)await scheduleNexus(event.scope,actor.id,event);}
    return json(res,200,sharedProjection(next,actor));
   }
-  if(req.url==='/api/data'){const state=store.snapshot(),actor=actorFor(req.m2Session.memberId);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return json(res,200,{session:req.m2Session,units:liveUnits().filter(u=>canRead(actorFor(req.m2Session.memberId),store.snapshot().cards[u.id])),round:store.snapshot().round?.number||6,roundId:store.snapshot().round?.id||null,skill:store.snapshot().round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,auditStatus:store.snapshot().round?.audit?.status||null,auditIssueCount:store.snapshot().round?.audit?.issues?.length||0,auditGapCount:store.snapshot().round?.audit?.gaps?.length||0,sourceTime:store.snapshot().round?.input.retrievedAt||input.retrievedAt,...metadata});}
+  if(req.url==='/api/data'){const state=store.read(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id])),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
   if(['/api/agent','/api/nexus'].includes(req.url)&&req.method==='POST'){
    const b=await body(req), n=liveNodes().find(n=>n.id===b.context?.selection?.id),roundAtStart=store.snapshot().round?.id;
    if(!ready)return json(res,503,{error:'模型服务尚未配置。需在服务器配置 DECODING_API_BASE、DECODING_MODEL、DECODING_API_KEY；密钥不进入浏览器。'});
@@ -236,9 +242,10 @@ const result=await gateway.complete([{role:'system',content:nexusSystemPrompt+'\
   }
   if(req.method!=='GET')return json(res,405,{error:'不支持此操作'});
   const path=req.url?.split('?')[0]; const allowed={'/':'index.html','/app.js':'dist/app.js','/app.css':'dist/app.css'};
-  if(/^\/avatars\/member-0[1-9]\.png$/.test(path)){const image=await readFile(new URL('assets'+path,root));res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff'});return res.end(image);}
+  if(/^\/avatars\/(member-0[1-9]|personal-agent)\.png$/.test(path)){const image=await readFile(new URL('assets'+path,root));res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'private, max-age=86400','X-Content-Type-Options':'nosniff'});return res.end(image);}
   if(!allowed[path])return json(res,404,{error:'不存在'});
-  const data=await readFile(new URL(allowed[path],root));res.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(data);
+  // Revalidate instead of no-store: an unchanged build answers 304 rather than resending the bundle.
+  const data=await readFile(new URL(allowed[path],root));return revalidated(req,res,etagged(data),path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'text/html; charset=utf-8');
  }catch(e){if(analyzedScope)await nexusActivity(analyzedScope,{running:false,error:e.status?e.message:'分析未完成，反馈已保存，请重试'},analyzedRound);const error=e.status?e.message:'回答中断，请重试；未保存不完整回答。';if(streamReply){if(!res.destroyed)res.end(JSON.stringify({type:'error',error})+'\n');}else json(res,e.status||500,{error,code:e.code});}finally{clearInterval(streamTimer);if(analyzedScope)nexusRunning.delete(analyzedScope);}
 });
 server.on('close',()=>{nexusClosing=true;for(const timer of nexusTimers.values())clearTimeout(timer);store.close();});
