@@ -52,3 +52,42 @@ test('main reply success queues natural learning, restart consumes it, and faile
  }finally{await app.close();await rm(storageDir,{recursive:true,force:true});}
  });
 });
+
+test('forget supersedes pending older jobs across restart and malformed evidence retries at most twice',async()=>{
+ await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-exclusion-'));
+ try {const memory=createPersonalMemory({pool,storageDir}),id=randomUUID();
+ await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);
+ await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user','我一直喜欢徒步。',$2)",[id,randomUUID()]);
+ const saved=await memory.apply('alice',{expectedRevision:0,epoch:0,changes:[{operation:'add',attributeKey:'hobby',text:'喜欢徒步。'}]});let calls=0;
+ const opts={pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:()=>{calls++;return candidate({changes:[{operation:'add',attributeKey:'hobby',title:'兴趣',text:'喜欢徒步。',inferred:false,evidence:[{sequence:1,quote:'不存在的本人消息'}]}],clarification:''});}};
+ const worker=createPersonalDistillation(opts),stale=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:1,kind:'natural',epoch:saved.epoch});
+ await memory.forgetOwn('alice',{expectedRevision:saved.revision,sectionIds:['hobby']});await createPersonalDistillation(opts).processNext();
+ expect(await worker.status(stale)).toMatchObject({status:'superseded'});expect(calls).toBe(0);expect((await memory.readOwn('alice')).markdown).not.toContain('徒步');
+ await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,2,'user','我一直喜欢游泳。',$2)",[id,randomUUID()]);
+ const job=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:2,kind:'natural',epoch:(await memory.readOwn('alice')).epoch});
+ await worker.processNext();await worker.processNext();await worker.processNext();expect(await worker.processNext()).toBe(false);
+ expect(await worker.status(job)).toMatchObject({status:'failed',attempts:3,errorCode:'INVALID_USER_EVIDENCE'});expect(calls).toBe(3);
+ }finally{await rm(storageDir,{recursive:true,force:true});}
+ });
+});
+
+test('a later unrelated turn cannot rewrite a preference using only an older quote',async()=>{
+ await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-new-evidence-'));
+ try {const memory=createPersonalMemory({pool,storageDir}),id=randomUUID();await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);
+ await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user','我喜欢咖啡。',$2),($1,3,'user','今天帮我写封信。',$2)",[id,randomUUID()]);
+ const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:()=>candidate({changes:[{operation:'add',attributeKey:'drink',title:'偏好',text:'喜欢咖啡。',inferred:false,evidence:[{sequence:1,quote:'我喜欢咖啡。'}]}],clarification:''})});
+ const job=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:3,kind:'natural',epoch:0});await worker.processNext();
+ expect(await worker.status(job)).toMatchObject({status:'pending',errorCode:'NO_CURRENT_USER_EVIDENCE'});expect((await memory.readOwn('alice')).sections).toHaveLength(0);
+ }finally{await rm(storageDir,{recursive:true,force:true});}});
+});
+
+test('an ambiguous explicit request asks for clarification without editing unrelated attributes',async()=>{
+ const {buildApp}=await import('../src/app.js');const {testEnv,seedTestAccess,TEST_CEO}=await import('./helpers.js');
+ await createTestDb(async({db,pool})=>{await migrate(db);await seedTestAccess(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-ambiguous-'));const memory=createPersonalMemory({pool,storageDir});
+ await memory.apply(TEST_CEO.personId,{expectedRevision:0,epoch:0,changes:[{operation:'add',attributeKey:'hobby',text:'喜欢徒步。'},{operation:'add',attributeKey:'communication',text:'先看结论。'}]});let calls=0;
+ const app=await buildApp({pool,env:{...testEnv,personalMemoryStorageDir:storageDir},personalDistillationStream:()=>candidate({changes:[],clarification:'你想忘掉徒步偏好，还是表达偏好？'}),conversationRuntime:{async run(){calls++;throw new Error('should clarify first');}}});
+ try{const login=await app.inject({method:'POST',url:'/api/auth/login',headers:{origin:testEnv.publicOrigin},payload:{loginId:TEST_CEO.loginId,passcode:TEST_CEO.passcode}});const headers={cookie:(login.headers['set-cookie'] as string).split(';')[0],origin:testEnv.publicOrigin};
+ const reply=await app.inject({method:'POST',url:'/api/conversations/global/messages',headers,payload:{message:'忘掉那个偏好。'}});expect(reply.body).toContain('completed');const history=await app.inject({url:'/api/conversations/global/messages',headers});expect(history.body).toContain('你想忘掉');expect(calls).toBe(0);expect((await memory.readOwn(TEST_CEO.personId)).sections).toHaveLength(2);
+ }finally{await app.close();await rm(storageDir,{recursive:true,force:true});}
+ });
+});

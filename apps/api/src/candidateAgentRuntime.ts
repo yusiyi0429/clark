@@ -134,6 +134,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
     const onAbort = () => void session!.abort();
     options.signal?.addEventListener("abort", onAbort, { once: true });
     try {
+      options.signal?.throwIfAborted();
       await session.prompt(JSON.stringify({ input: options.input }), { expandPromptTemplates: false, source: "rpc" });
     } finally {
       options.signal?.removeEventListener("abort", onAbort);

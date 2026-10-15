@@ -6,7 +6,7 @@ import type { PersonalMemory, PersonalChange } from './personalMemory.js';
 const Candidate = Type.Object({
   changes: Type.Array(Type.Object({
     operation: Type.Union([Type.Literal('add'), Type.Literal('update'), Type.Literal('remove')]),
-    attributeKey: Type.String({ pattern: '^[a-zA-Z0-9_-]{1,100}$' }),
+    attributeKey: Type.String({ pattern: '^[a-zA-Z0-9_.:-]{1,160}$' }),
     title: Type.String({ maxLength: 100 }), text: Type.String({ maxLength: 2000 }),
     evidence: Type.Array(Type.Object({ sequence: Type.Integer(), quote: Type.String({ minLength: 1, maxLength: 2000 }) }, { additionalProperties: false }), { minItems: 1, maxItems: 5 }),
     inferred: Type.Boolean(),
@@ -25,6 +25,7 @@ export function createPersonalDistillation(options: {
   streamSimple?: Parameters<typeof runCandidateAgent>[0]['streamSimple'];
 }) {
   const { pool, memory } = options;
+  const closing = new AbortController();
   async function enqueue(client: Pick<PoolClient, 'query'>, input: JobInput): Promise<string> {
     const result = await client.query<{ id: string }>(`INSERT INTO personal_memory_jobs(person_id,conversation_id,through_sequence,kind,epoch)
       SELECT $1,$2,$3,$4,$5 WHERE EXISTS(SELECT 1 FROM conversations WHERE id=$2 AND owner_id=$1 AND scope NOT LIKE 'mission-card:%')
@@ -37,6 +38,7 @@ export function createPersonalDistillation(options: {
     return result.rows[0];
   }
   async function processNext(personId?: string): Promise<boolean> {
+    if (closing.signal.aborted) return false;
     const client = await pool.connect();
     let lock: string | undefined;
     try {
@@ -56,17 +58,25 @@ export function createPersonalDistillation(options: {
           }
           const messages = (await client.query<{ sequence: number; content: string }>(`SELECT m.sequence,m.content FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
             WHERE c.id=$1 AND c.owner_id=$2 AND c.deleted_at IS NULL AND m.role='user' AND m.sequence<=$3 AND m.sequence>c.memory_history_cutoff
-            ORDER BY m.sequence DESC LIMIT 12`, [job.conversation_id, job.person_id, job.through_sequence])).rows.reverse();
+            ORDER BY m.sequence DESC LIMIT 12`, [job.conversation_id, job.person_id, job.through_sequence])).rows;
+          let remaining = 16000;
+          const boundedMessages = messages.flatMap(message => {
+            const content = message.content.slice(0, Math.min(8000, remaining));
+            remaining -= content.length;
+            return content ? [{ ...message, content }] : [];
+          }).reverse();
           if (!messages.some(message => message.sequence === job.through_sequence)) {
             await client.query("UPDATE personal_memory_jobs SET status='superseded',error_code='HISTORY_EXCLUDED' WHERE id=$1", [job.id]); return true;
           }
-          const signal = AbortSignal.timeout(15_000);
+          const signal = AbortSignal.any([AbortSignal.timeout(15_000), closing.signal]);
+          signal.throwIfAborted();
           const { candidate: result } = await runCandidateAgent({ query: client.query.bind(client), kind: 'personal-memory-distillation', personId: job.person_id,
-            input: { kind: job.kind, currentSequence: job.through_sequence, messages, memory: doc.sections }, prompt, schema: Candidate,
+            input: { kind: job.kind, currentSequence: job.through_sequence, messages: boundedMessages, memory: doc.sections }, prompt, schema: Candidate,
             baseUrl: options.baseUrl, apiKey: options.apiKey, modelId: options.modelId, modelSlot: 'light', streamSimple: options.streamSimple, signal });
           const changes: PersonalChange[] = [];
           for (const change of result.changes) {
-            if (change.evidence.some(evidence => !messages.some(message => message.sequence === evidence.sequence && message.content.includes(evidence.quote)))) throw new Error('INVALID_USER_EVIDENCE');
+            if (change.evidence.some(evidence => !boundedMessages.some(message => message.sequence === evidence.sequence && message.content.includes(evidence.quote)))) throw new Error('INVALID_USER_EVIDENCE');
+            if (!change.evidence.some(evidence => evidence.sequence === job.through_sequence)) throw new Error('NO_CURRENT_USER_EVIDENCE');
             if (job.kind === 'explicit' && (change.inferred || !change.evidence.some(evidence => evidence.sequence === job.through_sequence))) throw new Error('INVALID_EXPLICIT_EVIDENCE');
             const existing = doc.sections.find(section => section.id === change.attributeKey);
             if (change.operation === 'remove' && !existing) continue;
@@ -79,6 +89,10 @@ export function createPersonalDistillation(options: {
           if (changes.length) await memory.apply(job.person_id, { expectedRevision: doc.revision, epoch: job.epoch, changes, ... (job.kind === 'explicit' ? { explicit: true } : {}) });
           await client.query("UPDATE personal_memory_jobs SET status='succeeded',error_code=NULL,clarification=$2 WHERE id=$1", [job.id, result.clarification || null]);
         } catch (error) {
+          if (closing.signal.aborted) {
+            await client.query("UPDATE personal_memory_jobs SET attempts=GREATEST(attempts-1,0) WHERE id=$1", [job.id]);
+            return false;
+          }
           const code = (error as { code?: string }).code ?? (error as Error).message;
           await client.query("UPDATE personal_memory_jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,error_code=$2 WHERE id=$1", [job.id, code.slice(0, 100)]);
         }
@@ -98,6 +112,6 @@ export function createPersonalDistillation(options: {
   };
   return { enqueue, processNext, status,
     start() { if (!timer) { timer = setInterval(tick, 1000); timer.unref(); tick(); } },
-    async close() { if (timer) clearInterval(timer); timer = undefined; await running; },
+    async close() { if (timer) clearInterval(timer); timer = undefined; closing.abort(new Error('DISTILLATION_SHUTDOWN')); await running; },
   };
 }

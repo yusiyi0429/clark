@@ -231,6 +231,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           return { handle, title: turnReferences[index].title, kind: turnReferences[index].kind, text,
             more: next < fullText.length, ...(next < fullText.length ? { cursor: `${runId}:${handle}:${next}` } : {}) };
         };
+        const learnsPersonal = !req.params.scope.startsWith('mission-card:');
+        let personalEpoch = learnsPersonal ? ((await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0) : row.memory_epoch;
         const next = await client.query<{ sequence: number }>(
           `SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence
              FROM conversation_messages WHERE conversation_id = $1`,
@@ -245,16 +247,14 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         );
         // Explicit memory changes are durable before the main model starts, even if its answer fails.
         let memoryClarification: string | undefined;
-        const learnsPersonal = !req.params.scope.startsWith('mission-card:');
-        let personalEpoch = learnsPersonal ? (await ctx.personalMemory.readOwn(owner)).epoch : row.memory_epoch;
         if (learnsPersonal && isExplicitMemoryRequest(req.body.message)) {
           const explicitJob = await ctx.personalDistillation.enqueue(client, { personId: owner, conversationId: row.id, throughSequence: userSequence, kind: 'explicit', epoch: personalEpoch });
           await ctx.personalDistillation.processNext(owner);
           const state = await ctx.personalDistillation.status(explicitJob);
           memoryClarification = state?.clarification ?? (state?.status !== 'succeeded' ? '个人记忆修改尚未完成，已保存请求稍后重试。' : undefined);
-          personalEpoch = (await ctx.personalMemory.readOwn(owner)).epoch;
+          personalEpoch = ((await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0);
           // A successful correction invalidates both Pi and historical context immediately.
-          row = (await client.query<typeof row>('SELECT id,pi_session_id,runtime_entries,memory_epoch,memory_history_cutoff FROM conversations WHERE id=$1', [row.id])).rows[0];
+          row = (await client.query<typeof row>('SELECT id,pi_session_id,runtime_entries,context_schema_version,memory_epoch,memory_history_cutoff FROM conversations WHERE id=$1', [row.id])).rows[0];
         }
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
