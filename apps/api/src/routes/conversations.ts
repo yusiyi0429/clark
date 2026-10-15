@@ -293,10 +293,20 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
         };
 
-        const personalReferences = await ctx.personalMemory.select(owner, req.body.message).catch((error:unknown) => {
+        const beforePersonal = await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner]);
+        let personalReferences = await ctx.personalMemory.select(owner, req.body.message,client).catch((error:unknown) => {
           app.log.error({code:(error as {code?:string}).code}, "personal memory reference unavailable");
           return [];
         });
+        // Recheck the durable barrier after asynchronous assembly; a completed forget wins.
+        const memoryBarrier = (await client.query<{memory_epoch:number;memory_history_cutoff:number}>("SELECT memory_epoch,memory_history_cutoff FROM conversations WHERE id=$1",[row.id])).rows[0];
+        const afterPersonal = (await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0;
+        if (memoryBarrier.memory_epoch !== row.memory_epoch) {
+          row.runtime_entries = [];
+          recent.rows = [];
+          row.memory_epoch = memoryBarrier.memory_epoch;
+        }
+        if (afterPersonal !== (beforePersonal.rows[0]?.epoch ?? 0)) personalReferences = [];
         const timeout = setTimeout(() => {
           abort.abort(Object.assign(new Error("Conversation turn exceeded 180 seconds"), { code: "TURN_TIMEOUT" }));
         }, conversationTurnTimeoutMs);

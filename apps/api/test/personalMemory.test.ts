@@ -33,7 +33,7 @@ test('forget blocks stale jobs, invalidates issued references, preserves unrelat
             const saved = await memory.replaceOwn('alice', { expectedRevision: 0, markdown: '# Personal\n\n## 协作偏好\n\n先给结论。\n\n## 兴趣\n\n周末喜欢徒步。' });
             const references = await memory.select('alice', '徒步');
             const forgotten = await memory.forgetOwn('alice', { expectedRevision: 1, sectionIds: [saved.sections[1].id] });
-            expect(forgotten.markdown).not.toContain('徒步');
+            expect(forgotten.markdown).not.toContain('徒步');expect((await memory.readBlocked('alice'))[0]).toMatchObject({key:saved.sections[1].id,title:'兴趣',text:'周末喜欢徒步。'});
             expect(forgotten.markdown).toContain('结论');
             await expect(memory.apply('alice', { expectedRevision: 1, epoch: saved.epoch, changes: [{ operation: 'add', attributeKey: 'old', text: '徒步' }] })).rejects.toMatchObject({ code: 'MEMORY_VERSION_CONFLICT' });
             expect(await memory.readReference('alice', { handle: references[0].handle })).toEqual({ unavailable: true });
