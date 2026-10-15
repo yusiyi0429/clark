@@ -1,4 +1,4 @@
-import { readCompanyContext, companyProse } from "./companyContext.js";
+import { createCompanyReference } from "./companyReference.js";
 import type { QueryResult } from "pg";
 import type { AssistantMessageEventStream, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
@@ -22,7 +22,7 @@ sources.url 与 evidence.sourceUrl 只接受真实 http(s) 地址，整份提交
 
 ${HUMAN_WRITING_STYLE}`;
 
-/** ponytail: 预研只注入 Issue/来源与相关 CompanyMemory 段落；需要实时外部检索时再给 candidate agent 加 web_search tool（Provider 由 Ticket 16 装载）。 */
+/** ponytail: 预研只注入 Issue/来源与相关授权 World Company 正文；需要实时外部检索时再给 candidate agent 加 web_search tool（Provider 由 Ticket 16 装载）。 */
 export function createResearchAgentRunner(options: {
   query: (sql: string, params?: unknown[]) => Promise<QueryResult>;
   companyMemory: CompanyContext;
@@ -33,7 +33,8 @@ export function createResearchAgentRunner(options: {
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 }): ResearchRunner {
   return async (input: ResearchInput, signal) => {
-    const company = companyProse(await readCompanyContext(options.companyMemory, input.issue.title, signal));
+    const companyReference = createCompanyReference(options.companyMemory, signal);
+    const company = await companyReference.read({ query: input.issue.title });
     const outletConfig = options.outlets
       ? await options.query("SELECT lookback_hours, sources FROM radar_config WHERE id = 'default'")
       : undefined;
@@ -62,7 +63,7 @@ export function createResearchAgentRunner(options: {
       modelId: options.modelId,
       modelSlot: "heavy",
       signal,
-      ...(outletTools.length ? { extraTools: outletTools } : {}),
+      extraTools: [companyReference.tool, ...outletTools],
       ...(options.streamSimple ? { streamSimple: options.streamSimple } : {}),
     });
     return result.candidate;

@@ -557,7 +557,7 @@ async function refreshOntologyAnchors(client: PoolClient, row: MonthlyPlanRow): 
 
 /**
  * CEO 签发：锁计划 → 校验必核对项/owner/sourceRef/状态/version → 同一事务重建 Radar anchors 并生成导出快照。
- * 不写 CompanyMemory，也不创建 Mission、Todo 实体或完成百分比。
+ * 不写 World 公司事实，也不创建 Mission、Todo 实体或完成百分比。
  */
 export async function executeSignMonthlyPlan(
   pool: Pool,

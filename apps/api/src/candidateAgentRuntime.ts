@@ -42,7 +42,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   apiKey: string;
   modelId: string;
   modelSlot?: "light" | "heavy";
-  /** 只读辅助工具（如 CompanyMemory MCP）：与 submit_candidate 一同进入工具白名单。 */
+  /** 只读辅助工具（如授权 Company 查询）：与 submit_candidate 一同进入工具白名单。 */
   extraTools?: ReturnType<typeof defineTool<any>>[];
   signal?: AbortSignal;
   redactObservability?: boolean;

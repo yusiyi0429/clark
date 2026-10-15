@@ -669,7 +669,7 @@ export async function executeConfirmItem(
         ownerName: row.participants.find((person) => person.personId === ownerId)?.displayName, title: row.title }, item);
       item.review = { status: "confirmed", effectRef: taskId ? `task:${taskId}` : effectRef };
     } else if (item.kind === "ceoJudgment") {
-      // CEO 判断只保留在 MeetingOutcome，不直接写 CompanyMemory
+      // CEO 判断只保留在 MeetingOutcome，不直接写 World 公司事实
       item.review = { status: "confirmed", effectRef };
     } else {
       const parent = item.parentItemId ? items.find((candidate) => candidate.id === item.parentItemId) : undefined;

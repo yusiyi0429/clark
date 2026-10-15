@@ -21,7 +21,7 @@ const MONTHLY_DRAFT_FAILED = "monthly_draft_failed";
 const INVALID_MONTHLY_DRAFT = "invalid_monthly_candidate";
 const MONTHLY_DRAFT_INTERRUPTED = "monthly_draft_interrupted";
 
-/** Draft Agent 只读输入：已确认方向、上月复盘、DRI 反馈与相关 CompanyMemory 段落。 */
+/** Draft Agent 只读输入：已确认方向、上月复盘、DRI 反馈与相关授权 World Company 正文。 */
 export type MonthlyDraftAgentInput = {
   period: string;
   confirmedDirections: { issueId: string; title: string; decisionText: string; optionId: string | null }[];
@@ -178,7 +178,7 @@ export function createMonthlyPlanService({
         },
       ),
       companyMemory: memory.slice(0, 6),
-      companyStatus: company.status,
+      companyStatus: company.nextCursor ? "partial" : company.status,
     };
   }
 

@@ -445,7 +445,7 @@ export type DriImportResult =
   | { status: 400 | 409; code: string; message: string; fieldErrors?: Record<string, string> };
 
 /**
- * DRI 服务导入：CompanyMemory MCP 稳定 personId 校验身份，domain 校验 location，
+ * DRI 服务导入：PeopleDirectory 稳定 personId 校验身份，domain 校验 location，
  * red 额外要求可解析 decisionBy 和 reason；相同 externalId 同内容返回原对象。
  */
 export async function importDriIssue(

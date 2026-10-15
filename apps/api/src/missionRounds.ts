@@ -688,7 +688,8 @@ export async function completeMissionRoundDraft(
             OR (m.personal_mission_card_id IS NULL AND m.battlefield_ids @> jsonb_build_array($1::text) AND NOT EXISTS (SELECT 1 FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id WHERE r.battlefield_id=$1 AND r.period=$2 AND c.owner_id=$3)))
         ORDER BY m.code`,
       [row.battlefield_id, previousPeriod(row.period), owner.owner_id])).rows as PreviousMission[];
-      const matches = memory ? (await readCompanyContext(memory, `${battlefield.name} ${names.get(owner.owner_id) ?? owner.owner_id}`)).entries : [];
+      const company = memory ? await readCompanyContext(memory, `${battlefield.name} ${names.get(owner.owner_id) ?? owner.owner_id}`) : undefined;
+      const matches = company?.entries ?? [];
       const input: MissionCardDraftInput = {
         period: row.period,
         battlefield: { id: row.battlefield_id, code: battlefield.code, name: battlefield.name, sixMonthOutcome: battlefield.six_month_outcome, missionAnchors: battlefield.mission_anchors },
@@ -698,6 +699,7 @@ export async function completeMissionRoundDraft(
         previousReview: (await q("SELECT self_review FROM personal_reviews WHERE person_id=$1 AND period=$2 AND status='submitted' ORDER BY submitted_at DESC LIMIT 1",
           [owner.owner_id, previousPeriod(row.period)])).rows[0]?.self_review ?? null, capabilities,
         companyMemory: matches.slice(0, 3).map(({ title, text }) => ({ title, text })),
+        companyStatus: company?.nextCursor ? "partial" : company?.status ?? "not_configured",
         knownMissions: known.filter((item) => item.personId === owner.owner_id)
           .map((item) => ({ kind: item.kind, title: item.title ?? null, sourceRef: item.sourceRef ?? null, markdown: item.markdown })),
       };

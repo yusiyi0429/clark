@@ -124,7 +124,7 @@ describe("issue pre-research publisher feed", () => {
       });
 
       const result = await runner(input, new AbortController().signal) as { evidence: { sourceTitle: string }[] };
-      expect(contexts[0].tools?.map((tool) => tool.name).sort()).toEqual(["read_outlet_feed", "submit_candidate"]);
+      expect(contexts[0].tools?.map((tool) => tool.name).sort()).toEqual(["query_company", "read_outlet_feed", "submit_candidate"]);
       expect(result.evidence[0].sourceTitle).toBe("彭博：Treasury basis trade");
       expect(outlets.calls).toEqual([{ outletIds: ["bloomberg", "ft"], lookbackHours: 48 }]);
     });
@@ -150,7 +150,7 @@ describe("issue pre-research publisher feed", () => {
       });
 
       await runner(input, new AbortController().signal);
-      expect(contexts[0].tools?.map((tool) => tool.name)).toEqual(["submit_candidate"]);
+      expect(contexts[0].tools?.map((tool) => tool.name).sort()).toEqual(["query_company", "submit_candidate"]);
       expect(outlets.calls).toEqual([]);
     });
   });
@@ -193,15 +193,18 @@ it("shared research consumes every Company page as prose without internal source
     companyMemory, baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-heavy",
     streamSimple: (_model, context) => {
       contexts.push(context);
+      if (contexts.length === 1) return stream([{ type: "toolCall", id: "company-next", name: "query_company", arguments: { query: "渠道策略", cursor: "CP1" } }], "toolUse");
       return stream([{ type: "toolCall", id: "submit-1", name: "submit_candidate", arguments: doc("内部材料") }], "toolUse");
     },
   });
   await runner(input, new AbortController().signal);
   expect(cursors).toEqual([undefined, "next-page"]);
   expect(viewers).toEqual([{ personId: "person-fixture-001", role: "ceo" }, { personId: "person-fixture-001", role: "ceo" }]);
-  const modelInput = JSON.stringify(contexts[0].messages);
+  const modelInput = JSON.stringify(contexts.at(-1)!.messages);
   expect(modelInput).toContain("优先服务存量客户。");
   expect(modelInput).toContain("本期优先改善续约率。");
   expect(modelInput).not.toContain("company:secret");
-  expect(contexts[0].tools?.map((tool) => tool.name)).toEqual(["submit_candidate"]);
+  expect(modelInput).not.toContain("next-page");
+  expect(JSON.stringify(contexts[0].messages)).not.toContain("本期优先改善续约率。");
+  expect(contexts[0].tools?.map((tool) => tool.name).sort()).toEqual(["query_company", "submit_candidate"]);
 });

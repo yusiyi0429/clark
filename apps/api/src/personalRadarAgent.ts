@@ -17,7 +17,7 @@ ${HUMAN_WRITING_STYLE}`;
 
 /**
  * 个人雷达判定：轻模型，只开放 submit_candidate。
- * 不给 CompanyMemory 工具：个人方向是本人写的一句话，不和公司战略对比。
+ * 不给 Company 公司事实工具：个人方向是本人写的一句话，不和公司战略对比。
  */
 export function createPersonalRadarJudge(options: {
   query: (sql: string, params?: unknown[]) => Promise<QueryResult>;

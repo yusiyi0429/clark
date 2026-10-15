@@ -230,7 +230,7 @@ export function createMonthlyReviewService({
       [item.review_id, item.subject_id])).rows.map((row) => ({ ...row, selfReview: row.status === "submitted" ? row.selfReview : null })) as MonthlyReviewMaterials["personalReviews"],
       comments: await comments(item.id),
       companyMemory: memory,
-      companyStatus: company.status,
+      companyStatus: company.nextCursor ? "partial" : company.status,
     };
   }
 

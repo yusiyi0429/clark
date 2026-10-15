@@ -5,7 +5,7 @@
 const REDACTED = "[REDACTED]";
 // camelCase 先拆成 kebab-case，避免 `totalTokens` 被当作 token 误删。
 const SECRET_KEY = /(^|[-_])(password|passwd|passcode|secret|cookie|token|authorization|credential|api-key)($|[-_])/;
-/** 完整 CompanyMemory passage 与完整 Transcript 不进入日志/trace。 */
+/** 完整 Company 正文 与完整 Transcript 不进入日志/trace。 */
 const BULK_KEY = /(^|[-_])(passage|passages|transcript)($|[-_])/;
 
 function isSensitive(key: string): boolean {
