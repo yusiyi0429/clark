@@ -5,6 +5,7 @@ import {
   Card,
   CardCollection,
   ExecuteActionRequest,
+  PersonalMemoryDocument, ReplacePersonalMemoryRequest, ForgetPersonalMemoryRequest,
   ConversationHistory,
   ConversationMessageRequest,
   ConversationSseEvent,
@@ -657,6 +658,13 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "404": errorResponse,
           },
         },
+      },
+      "/api/me/memory/personal": {
+        get: { operationId: "getPersonalMemory", responses: { "200": {description:"本人个人记忆",content:{"application/json":{schema:{$ref:"#/components/schemas/PersonalMemoryDocument"}}}}, "401": errorResponse, "503": errorResponse } },
+        put: { operationId: "replacePersonalMemory", requestBody: jsonBody({$ref:"#/components/schemas/ReplacePersonalMemoryRequest"}), responses: { "200": {description:"更新后的个人记忆",content:{"application/json":{schema:{$ref:"#/components/schemas/PersonalMemoryDocument"}}}}, "400":errorResponse,"401":errorResponse,"409":errorResponse,"413":errorResponse,"503":errorResponse } },
+      },
+      "/api/me/memory/personal/forget": {
+        post: {operationId:"forgetPersonalMemory",requestBody:jsonBody({$ref:"#/components/schemas/ForgetPersonalMemoryRequest"}),responses:{"200":{description:"遗忘后的个人记忆",content:{"application/json":{schema:{$ref:"#/components/schemas/PersonalMemoryDocument"}}}},"400":errorResponse,"401":errorResponse,"404":errorResponse,"409":errorResponse,"503":errorResponse}},
       },
       "/api/conversations/{scope}/messages": {
         get: {
@@ -2138,6 +2146,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,
         ExecuteActionRequest: ExecuteActionRequest as JsonSchema,
         ConversationHistory: ConversationHistory as JsonSchema,
+        PersonalMemoryDocument: PersonalMemoryDocument as JsonSchema,
+        ReplacePersonalMemoryRequest: ReplacePersonalMemoryRequest as JsonSchema,
+        ForgetPersonalMemoryRequest: ForgetPersonalMemoryRequest as JsonSchema,
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
         ConversationSseEvent: ConversationSseEvent as JsonSchema,
         CreateBattlefieldRequest: CreateBattlefieldRequest as JsonSchema,

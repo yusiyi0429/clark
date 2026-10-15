@@ -1,3 +1,4 @@
+import type { PersonalMemory } from '../personalMemory.js';
 import type { PeopleDirectory } from "../peopleDirectory.js";
 import { timingSafeEqual } from "node:crypto";
 import { Type, type TSchema } from "@sinclair/typebox";
@@ -57,6 +58,7 @@ export type RouteContext = {
   env: AppEnv;
   companyMemory: CompanyMemoryRepository;
   peopleDirectory: PeopleDirectory;
+  personalMemory: PersonalMemory;
   preflight: PreflightAgent;
   outcome: PostMeetingAgent;
   runtime: ConversationRuntime;

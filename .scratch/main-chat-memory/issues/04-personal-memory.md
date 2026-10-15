@@ -17,3 +17,9 @@ Status: ready-for-agent
 ## Execution
 
 Each ticket uses one implement subagent in an isolated worktree; red/green evidence and Standards/Spec review evidence must be recorded before resolution. User-approved public seams and fixed point are in ticket-breakdown.md.
+
+### Checkpoint 2026-10-15
+- RED: public Personal module missing (15:50), own HTTP returned404 (15:53), runtime personal reference absent (15:54).
+- GREEN: 4 public service/HTTP/main-chat tests pass (15:55); API typecheck and contracts/OpenAPI generation pass.
+- Isolated real PostgreSQL databases and real temporary files; provider controlled at ConversationRuntime boundary.
+- Additional failure/recovery and concurrent forget coverage plus two-axis review are in progress; this is a buildable dependency checkpoint, not ticket completion.

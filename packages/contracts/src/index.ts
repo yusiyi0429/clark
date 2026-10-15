@@ -28,3 +28,4 @@ export * from "./memberHome.js";
 export * from "./personalRadar.js";
 export * from "./ontologySync.js";
 export * from "./missionCardAnnotations.js";
+export * from './personalMemory.js';

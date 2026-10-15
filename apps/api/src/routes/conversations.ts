@@ -147,15 +147,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
       let runOutput: unknown;
       try {
         // 主对话 = 这个人最早未删除的会话；不存在则在锁内惰性创建。
-        let row: { id: string; pi_session_id: string; runtime_entries: unknown[]; context_schema_version?: number };
-        const existing = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[]; context_schema_version?: number }>(
-          "SELECT id, pi_session_id, runtime_entries, context_schema_version FROM conversations WHERE owner_id = $1 AND scope = $2 AND deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1",
+        let row: { id: string; pi_session_id: string; runtime_entries: unknown[]; context_schema_version?:number; memory_epoch:number; memory_history_cutoff:number };
+        const existing = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[]; context_schema_version?:number; memory_epoch:number; memory_history_cutoff:number }>(
+          "SELECT id, pi_session_id, runtime_entries, context_schema_version, memory_epoch, memory_history_cutoff FROM conversations WHERE owner_id = $1 AND scope = $2 AND deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1",
           [owner, req.params.scope],
         );
         if (existing.rows[0]) {
           row = existing.rows[0];
         } else {
-          row = { id: randomUUID(), pi_session_id: randomUUID(), runtime_entries: [] };
+          row = { id: randomUUID(), pi_session_id: randomUUID(), runtime_entries: [], memory_epoch:0, memory_history_cutoff:0 };
           await client.query(
             "INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, $3, $4)",
             [row.id, owner, req.params.scope, row.pi_session_id],
@@ -228,9 +228,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
              FROM conversation_messages
-            WHERE conversation_id = $1 AND run_id <> $2
+            WHERE conversation_id = $1 AND run_id <> $2 AND sequence > $3
             ORDER BY sequence DESC LIMIT 20`,
-          [row.id, runId],
+          [row.id, runId, row.memory_history_cutoff],
         );
         await client.query(
           `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
@@ -276,6 +276,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
         };
 
+        const personalReferences = await ctx.personalMemory.select(owner, req.body.message).catch((error:unknown) => {
+          app.log.error({code:(error as {code?:string}).code}, "personal memory reference unavailable");
+          return [];
+        });
         const timeout = setTimeout(() => {
           abort.abort(Object.assign(new Error("Conversation turn exceeded 180 seconds"), { code: "TURN_TIMEOUT" }));
         }, conversationTurnTimeoutMs);
@@ -287,7 +291,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             viewer: { personId: owner, displayName: personDisplayNames(peopleDirectory).get(owner) ?? owner, role: person.role },
             message: req.body.message,
             anchor,
-            references: boundedReferences,
+            references: [...boundedReferences, ...personalReferences].filter((reference, index, all) => all.slice(0, index + 1).reduce((bytes, item) => bytes + Buffer.byteLength(JSON.stringify(item)), 0) <= 24576),
             readReference,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,
@@ -303,8 +307,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             emit,
             checkpoint: async (runtimeEntries) => {
               await client.query(
-                "UPDATE conversations SET runtime_entries = $2::jsonb, context_schema_version = 2, runtime_updated_at = now() WHERE id = $1",
-                [row.id, JSON.stringify(runtimeEntries)],
+                "UPDATE conversations SET runtime_entries = $2::jsonb, context_schema_version = 2, runtime_updated_at = now() WHERE id = $1 AND memory_epoch = $3",
+                [row.id, JSON.stringify(runtimeEntries), row.memory_epoch],
               );
             },
           });
@@ -327,9 +331,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             );
             await client.query(
               `UPDATE conversations
-                  SET runtime_entries = $2::jsonb,
+                  SET runtime_entries = CASE WHEN memory_epoch=$6 THEN $2::jsonb ELSE '[]'::jsonb END,
                       context_schema_version = 2,
-                      pi_session_id = $3,
+                      pi_session_id = CASE WHEN memory_epoch=$6 THEN $3 ELSE pi_session_id END,
                       runtime_updated_at = now(),
                       recreated_at = CASE WHEN $4::boolean THEN now() ELSE recreated_at END,
                       runtime_warning = COALESCE($5, runtime_warning)
@@ -340,6 +344,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
                 result.piSessionId ?? row.pi_session_id,
                 result.recovery?.recreated === true,
                 result.recovery?.warning ?? null,
+                row.memory_epoch,
               ],
             );
             await client.query(

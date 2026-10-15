@@ -1,3 +1,5 @@
+import { createPersonalMemory } from './personalMemory.js';
+import { registerPersonalMemoryRoutes } from './routes/personalMemory.js';
 import { loadPeopleDirectory } from "./peopleDirectory.js";
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { Value } from "@sinclair/typebox/value";
@@ -107,6 +109,7 @@ export type AppEnv = {
   /** 可选 LangSmith adapter；缺失时完全 no-op（.tech/07 §7）。 */
   langsmithApiKey?: string;
   langsmithProject?: string;
+  personalMemoryStorageDir?: string;
   materialStorageDir?: string;
   /** 会话附件 API 卷；与 Meeting 材料卷隔离。 */
   conversationAttachmentStorageDir?: string;
@@ -333,7 +336,10 @@ export async function buildApp({
 
   app.setNotFoundHandler((_req, reply) => fail(reply, 404, "NOT_FOUND", "路径不存在"));
 
+  const personalMemory = createPersonalMemory({ pool, storageDir: env.personalMemoryStorageDir ?? "/tmp/warmap-personal-memory" });
+
   const ctx: RouteContext = {
+    personalMemory,
     pool,
     q,
     env,
@@ -378,6 +384,7 @@ export async function buildApp({
   registerConfigRoutes(app, ctx);
   registerRadarRoutes(app, ctx);
   registerConversationRoutes(app, ctx);
+  registerPersonalMemoryRoutes(app, ctx);
   registerMeetingRoutes(app, ctx);
   registerMaterialRoutes(app, ctx, materialAnnotationAgent);
   registerActionRoutes(app, ctx);
