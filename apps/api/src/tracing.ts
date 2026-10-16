@@ -61,6 +61,8 @@ export const AGENT_ROLES = {
   threadIntro: "thread-intro",
   /** 对话历史的后台压缩（conversationCompaction.ts）：挂在这段对话同一个 Thread 下，自成一个 Turn。 */
   conversationCompaction: "conversation-compaction",
+  /** 个人记忆的后台提炼（personalDistillation.ts）：按人分业务会话。 */
+  personalMemoryDistillation: "personal-memory-distillation",
 } as const;
 export type AgentRole = (typeof AGENT_ROLES)[keyof typeof AGENT_ROLES] | string;
 
@@ -72,6 +74,10 @@ export const RETRIEVE_SOURCES = {
   webSearch: "web-search",
   outletFeed: "outlet-feed",
   wechatFeed: "wechat-feed",
+  /** 本体只读公司事实（company.ts，query_company）。 */
+  worldCompany: "world-company",
+  /** 本人个人记忆（personalMemory.ts）。 */
+  personalMemory: "personal-memory",
 } as const;
 export type RetrieveSource = (typeof RETRIEVE_SOURCES)[keyof typeof RETRIEVE_SOURCES];
 
@@ -918,6 +924,7 @@ export const CANDIDATE_AGENTS: Record<string, { role: AgentRole; prefix: string 
   "battlefield-judgment": { role: AGENT_ROLES.battlefieldSync, prefix: "bf" },
   "task-acceptance-draft": { role: AGENT_ROLES.taskAcceptanceDraft, prefix: "tsk" },
   "thread-intro": { role: AGENT_ROLES.threadIntro, prefix: "thr" },
+  "personal-memory-distillation": { role: AGENT_ROLES.personalMemoryDistillation, prefix: "pmd" },
 };
 
 export function candidateAgent(kind: string): { role: AgentRole; prefix: string } {

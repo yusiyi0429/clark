@@ -152,6 +152,9 @@ import {
   NotificationList,
   MarkNotificationsSeenRequest,
   VoiceprintStatus,
+  PersonalMemoryDocument,
+  ReplacePersonalMemoryRequest,
+  ForgetPersonalMemoryRequest,
   DictationResult,
   DictationSessionResponse,
   DictationPolishRequest,
@@ -1588,6 +1591,24 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/me/memory/personal": {
+        get: {
+          operationId: "getPersonalMemory", summary: "读取本人的个人记忆（只有本人可见）",
+          responses: { "200": { description: "本人个人记忆", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryDocument" } } } }, "401": errorResponse, "503": errorResponse },
+        },
+        put: {
+          operationId: "replacePersonalMemory", summary: "本人整份改写个人记忆；版本不符 409",
+          requestBody: jsonBody({ $ref: "#/components/schemas/ReplacePersonalMemoryRequest" }),
+          responses: { "200": { description: "更新后的个人记忆", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryDocument" } } } }, "400": errorResponse, "401": errorResponse, "409": errorResponse, "413": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/me/memory/personal/forget": {
+        post: {
+          operationId: "forgetPersonalMemory", summary: "本人忘掉指定的个人记忆条目",
+          requestBody: jsonBody({ $ref: "#/components/schemas/ForgetPersonalMemoryRequest" }),
+          responses: { "200": { description: "遗忘后的个人记忆", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryDocument" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
       "/api/me/voiceprint": {
         get: {
           operationId: "getMyVoiceprint",
@@ -2461,6 +2482,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingRecording: MeetingRecording as JsonSchema,
         StartMeetingRecordingResponse: StartMeetingRecordingResponse as JsonSchema,
         VoiceprintStatus: VoiceprintStatus as JsonSchema,
+        PersonalMemoryDocument: PersonalMemoryDocument as JsonSchema,
+        ReplacePersonalMemoryRequest: ReplacePersonalMemoryRequest as JsonSchema,
+        ForgetPersonalMemoryRequest: ForgetPersonalMemoryRequest as JsonSchema,
         DictationResult: DictationResult as JsonSchema,
         DictationSessionResponse: DictationSessionResponse as JsonSchema,
         DictationPolishRequest: DictationPolishRequest as JsonSchema,

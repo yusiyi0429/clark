@@ -59,6 +59,8 @@ export type ConversationRuntime = {
     currentObject: TReferenceSnapshot | null;
     runId?: string;
     referencesSnapshot: TReferenceSnapshot[];
+    /** 与本轮原话相关的本人个人记忆（只有本人可见）；放进上下文包的 personalMemory。 */
+    personalMemory?: { title: string; text: string }[];
     recentMessages?: { role: "user" | "assistant"; content: string; createdAt: string }[];
     runtimeEntries: unknown[];
     piSessionId: string;

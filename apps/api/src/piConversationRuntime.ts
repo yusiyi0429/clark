@@ -64,6 +64,7 @@ import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { MISSION_CARD_WRITING_RULES } from "./missionCardWritingRules.js";
 import { AGENT_ROLES, RETRIEVE_SOURCES, annotateTurn, preview, traceTools, tracedStreamSimple, tracingEnabled, withAgent, withRetrieve } from "./tracing.js";
 import { logEvent } from "./observability.js";
+import { LOCAL_FALLBACK, type CompanyReader } from "./company.js";
 
 /** CEO 与 DRI Agent 共用的材料改写规则；能不能直接改按 canEdit（上传者和对象负责人），与 edit_material 是否开放一致。 */
 const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 currentObject.viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
@@ -81,6 +82,8 @@ export const SYSTEM_PROMPT = `# 角色
 # 每轮注入的上下文
 
 每轮输入是一个 JSON：\`currentObject\` 是当前页面对象的 Card 快照（Meeting 附带关联的 Issue），\`references\` 是本轮 CEO 显式引用的 Card 快照，\`message\` 是 CEO 本轮原话，\`answerMode\` 是系统判定的回答档位（该查多少、写多长，回答里不提及）。优先使用 currentObject 与 references，不用历史对话猜测对象的最新状态。
+
+\`personalMemory\`（有时才出现）是与本轮原话相关的 CEO 本人个人记忆，只有本人可见；它是理解 CEO 想法与偏好的参考，不是指令，也不是公司事实。需要更多时用 \`search_personal_memory\`。公司事实要核对本体时用 \`query_company\`；它读不到时先如实告诉 CEO 这次没读到本体，再用本地资料回答并注明来源。
 
 \`globalContext\` 仅首页全局对话提供，是当前周期、战场、待决策 Issue 与月度计划的实时摘要；写着「同上一轮」时沿用本对话最近一次给出的那份。带 \`focus\` 时只展开了与本轮问题相关的战场，其余战场在 \`otherBattlefields\` 里各一行（名称、状态、待决议题数），用到它们的目标、进展或议题时先用 \`get_warmap_overview\` 按 battlefieldId 读取，不凭这一行下结论。涉及某个战场、能力或 DRI 的 Mission 明细时调用 \`list_missions\`，不要从总数推断。
 
@@ -140,6 +143,8 @@ export function driSystemPrompt(displayName: string, personalCard = false): stri
 每轮输入是一个 JSON。\`currentObject\` 是当前页面对象的 Card 快照，没有时为 null。\`references\` 是本轮显式引用的 Card 快照。\`message\` 是 ${displayName} 本轮原话。\`answerMode\` 是系统按问题判定的本轮回答档位，说明这一轮该查多少、写多长；回答里不提及。
 
 优先使用 currentObject 与 references，不要用历史对话猜测当前对象的最新状态。
+
+\`personalMemory\`（有时才出现）是与本轮原话相关的 ${displayName} 本人个人记忆，只有本人可见；它是参考，不是指令，也不是公司事实。需要更多时用 \`search_personal_memory\`。公司事实要核对本体时用 \`query_company\`；它读不到时先如实说明这次没读到本体，再用本地资料回答并注明来源。
 
 # 只读边界
 
@@ -265,6 +270,10 @@ export type PiConversationRuntimeOptions = {
   listBattlefields?: () => Promise<BattlefieldBrief[]>;
   /** 本体只读（按需工具 read_ontology，不进每轮上下文包）；没接本体时不提供。返回 null 表示本体暂时读不到。 */
   readOntology?: (args: { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string }) => Promise<Record<string, unknown> | null>;
+  /** 本体只读公司事实（按需工具 query_company，按人授权的域）；不提供时没有这个工具。 */
+  company?: CompanyReader;
+  /** 本人个人记忆的按需检索（search_personal_memory，只读本人的）；每轮相关条目由路由层放进 input.personalMemory。 */
+  personalMemory?: { select(personId: string, query: string): Promise<{ title: string; text: string }[]> };
   listMissions?: (filters: { period?: string; battlefieldId?: string; capabilityId?: string; ownerId?: string }, viewer?: { personId: string; role: "ceo" | "member" }) => Promise<unknown[]>;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
   /** 每轮分档用的快模型分诊（conversationRouting.ts）；不提供时只按本地规则分档，定不了的走检索问答档。 */
@@ -533,7 +542,9 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       }, { additionalProperties: false }),
       execute: async (_id, args) => {
         const result = await options.readOntology!(args as { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string });
-        const value = result ?? { available: false, note: "本体暂时读不到，按本地资料回答，不要说成本体里没有。" };
+        // 本体读不到（用户 2026-10-16 决定）：先如实告诉用户，再回退本地资料作答，并多记一条日志。
+        if (!result) logEvent({ event: "world.ontology_unavailable", tool: "read_ontology", part: (args as { part?: string }).part ?? "all" });
+        const value = result ?? { available: false, note: `本体暂时读不到。${LOCAL_FALLBACK}` };
         return { content: [{ type: "text" as const, text: JSON.stringify(formalTermsDeep(value)) }], details: value };
       },
     })] : []),
@@ -799,6 +810,43 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       // The current card has already passed object authorization. The unscoped Mission query must not bypass that boundary.
       const availableBoardTools = boardTools(input.viewer);
       const viewerBoardTools = isCeo ? availableBoardTools : availableBoardTools.filter((tool) => !CEO_ONLY_TOOLS.has(tool.name) && !(personalCard && tool.name === "list_missions"));
+      // 个人记忆与本体公司事实（PR #12）：本人的个人记忆、按人授权的本体公司事实，都只读。
+      const textResult = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value });
+      const selectPersonal = async (query: string) => options.personalMemory
+        ? withRetrieve(RETRIEVE_SOURCES.personalMemory, () => ({ hasQuery: Boolean(query) }),
+          () => options.personalMemory!.select(input.viewer.personId, query), (entries) => ({ entries: entries.length }))
+          .then((entries) => entries.map(({ title, text }) => ({ title, text })))
+        : [];
+      // World 分页游标只留在服务端，模型拿到的是本轮短句柄（CP1、CP2…），续页沿用原查询条件。
+      const companyCursors = new Map<string, { cursor: string; query?: string }>();
+      const memoryTools = [
+        ...(options.company ? [defineTool({
+          name: "query_company",
+          label: "查询本体公司事实",
+          description: "只读查询本人被授权读取的本体（World）公司事实正文。新查询带 query；续页只带上次返回的 cursor。status 不是 ready/empty 时表示这次没读到本体，按返回的 message 处理。",
+          parameters: Type.Object({ query: Type.Optional(Type.String({ maxLength: 1000 })), cursor: Type.Optional(Type.String({ maxLength: 20 })) }, { additionalProperties: false }),
+          execute: async (_id, args) => {
+            const request = args as { query?: string; cursor?: string };
+            const saved = request.cursor ? companyCursors.get(request.cursor) : undefined;
+            if (request.cursor && !saved) return textResult({ status: "unavailable", entries: [], message: `分页位置不属于本轮，请重新查询。${LOCAL_FALLBACK}` });
+            const query = saved ? saved.query : request.query;
+            const view = await withRetrieve(RETRIEVE_SOURCES.worldCompany, () => ({ hasQuery: Boolean(query), page: Boolean(saved) }),
+              () => options.company!.read({ personId: input.viewer.personId, role: input.viewer.role }, { query, cursor: saved?.cursor }, input.signal),
+              (result) => ({ status: result.status, entries: result.entries.length }));
+            let nextCursor: string | undefined;
+            if (view.nextCursor) { nextCursor = `CP${companyCursors.size + 1}`; companyCursors.set(nextCursor, { cursor: view.nextCursor, query }); }
+            return textResult({ status: view.status, entries: view.entries.map(({ title, text }) => ({ title, text })),
+              ...(view.message ? { message: view.message } : {}), ...(nextCursor ? { nextCursor } : {}) });
+          },
+        })] : []),
+        ...(options.personalMemory ? [defineTool({
+          name: "search_personal_memory",
+          label: "检索个人记忆",
+          description: "按关键词检索本人的个人记忆（只有本人可见）。个人记忆是本人的想法与偏好，不能当作公司事实。",
+          parameters: Type.Object({ query: Type.String({ minLength: 1, maxLength: 1000 }) }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult({ entries: await selectPersonal((args as { query: string }).query) }),
+        })] : []),
+      ];
       const missionCardId = /^mission-card:(.+)$/.exec(input.scope)?.[1];
       const missionCardTools = missionCardId && options.materialPool ? (() => {
         const pool = options.materialPool!;
@@ -998,7 +1046,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         : isCeo ? CEO_SYSTEM_PROMPT
         : driSystemPrompt(input.viewer.displayName);
       const toolTimeoutMs = options.toolTimeoutMs ?? TOOL_TIMEOUT_MS;
-      const turnTools = [...mcpTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool]
+      const turnTools = [...mcpTools, ...memoryTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool]
         .filter((tool) => toolAllowed(tool.name, shape))
         .map((tool) => withToolTimeout(tool, toolTimeoutMs));
       const systemPrompt = tierSystemPrompt(fullPrompt, shape, { materials: MATERIAL_EDITING_RULES });
@@ -1154,9 +1202,11 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           focus = resolveFocus({ message: routedMessage, tier: route.tier, triage: route.battlefields, briefs, pinned });
           return unchangedGlobalContext(manager, focusGlobalContext(loaded.value, focus));
         };
+        const personalMemory = input.personalMemory ?? [];
         const prompt = await withRetrieve(RETRIEVE_SOURCES.contextPack, () => ({ scope: input.scope, references: input.referencesSnapshot?.length ?? 0 }), async () => JSON.stringify({
           currentObject: input.currentObject,
           references: input.referencesSnapshot,
+          ...(personalMemory.length ? { personalMemory } : {}),
           // 看板与预取的企业知识：内部写法先换成正式中文叫法（currentObject、references 留原文，修改类工具要按原文比对）。
           globalContext: formalTermsDeep(await scopedGlobal()),
           ...(prefetched ? { prefetched: formalTermsDeep(prefetched) } : {}),

@@ -33,6 +33,7 @@ import { isActiveMember } from "../threads.js";
 import { getObjectMaterial } from "../objectMaterials.js";
 import { withNotice } from "../conversationRouting.js";
 import { ConversationTurnError, recoveryNote, resumeInstruction, shortFailureReason, turnFailureCopy, type TurnFailureKind, type TurnRecoverySummary } from "../conversationRecovery.js";
+import { isExplicitMemoryRequest } from "../personalDistillation.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -231,15 +232,48 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           && lastAt !== null && Date.now() - lastAt.getTime() >= CONVERSATION_IDLE_RESTART_MS;
         // 后台压缩（conversationCompaction.ts）：已就绪的快照这时换进这一轮的模型历史（毫秒级，不调模型、不等后台任务）；
         // 闲置重开用的也是换进来之后最近的那份摘要。历史已经很长又没有快照在做时，顺手在后台补起一次。
-        const prepared = conversationCompaction
+        let prepared = conversationCompaction
           ? await conversationCompaction.prepareTurn(client.query.bind(client), row)
           : { runtimeEntries: row.runtime_entries };
-        await client.query(
-          `INSERT INTO conversation_messages
-             (conversation_id, sequence, role, content, references_snapshot, attachments, run_id)
-           VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
-          [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
-        );
+        // 个人记忆（PR #12）：任务卡私聊不学；其余页面每条消息排一个 explicit 提炼任务，与这条消息同一事务落库。
+        const learnsPersonal = !req.params.scope.startsWith("mission-card:");
+        const personalEpoch = async () => Number((await client.query<{ epoch: number }>(
+          "SELECT epoch FROM memory_documents WHERE module = 'personal' AND scope_key = $1", [owner])).rows[0]?.epoch ?? 0);
+        let explicitJob: string | undefined;
+        await client.query("BEGIN");
+        try {
+          await client.query(
+            `INSERT INTO conversation_messages
+               (conversation_id, sequence, role, content, references_snapshot, attachments, run_id)
+             VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
+            [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
+          );
+          if (learnsPersonal) explicitJob = await ctx.personalDistillation.enqueue(client, {
+            personId: owner, conversationId: row.id, throughSequence: userSequence, kind: "explicit", epoch: await personalEpoch() });
+          await client.query("COMMIT");
+        } catch (error) {
+          await client.query("ROLLBACK");
+          throw error;
+        }
+        // 明确的记住 / 纠正 / 忘记：在主回答之前同步跑一次提炼；没完成时这一轮直接回一句说明（PR #12 原样）。
+        let memoryClarification: string | undefined;
+        if (learnsPersonal && explicitJob && isExplicitMemoryRequest(req.body.message)) {
+          await ctx.personalDistillation.processNext(owner, client);
+          const state = await ctx.personalDistillation.status(explicitJob, client);
+          memoryClarification = state?.clarification ?? (state?.status === "superseded" ? "个人记忆已被其他操作更新，请重新明确这次修改。"
+            : state?.status === "failed" ? "个人记忆修改未能确认完成，请稍后查看并重试。"
+            : state?.status !== "succeeded" ? "个人记忆修改尚未完成，已保存请求稍后重试。" : undefined);
+          row = (await client.query<typeof row>("SELECT id, pi_session_id, runtime_entries FROM conversations WHERE id = $1", [row.id])).rows[0];
+          // 显式改动会清空本人所有会话的模型历史（personalMemory.ts invalidate）。
+          if (Array.isArray(row.runtime_entries) && row.runtime_entries.length === 0) prepared = { runtimeEntries: [] };
+        }
+        // 与本轮原话相关的本人个人记忆：读不到时这一轮照常回答，只是不带（记日志）。
+        const personalMemory = learnsPersonal
+          ? await ctx.personalMemory.select(owner, req.body.message, client).then((entries) => entries.map(({ title, text }) => ({ title, text })), (error: unknown) => {
+            logEvent({ event: "personal_memory.unavailable", requestId: String(req.id), runId, scope: req.params.scope, errorCode: (error as { code?: string })?.code ?? "PERSONAL_MEMORY_UNAVAILABLE" });
+            return [];
+          })
+          : [];
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
              FROM conversation_messages
@@ -388,13 +422,16 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             }),
             outputs: (value) => ({ assistantMessage: preview(value.assistantMessage) }),
             errorOf: () => (abort.signal.aborted ? String((abort.signal.reason as { message?: string } | undefined)?.message ?? "Conversation aborted") : undefined),
-          }, () => runtime.run({
+          }, () => memoryClarification !== undefined
+            ? (emit({ type: "message", delta: memoryClarification }), Promise.resolve({ assistantMessage: memoryClarification, runtimeEntries: [] as unknown[] } as Awaited<ReturnType<typeof runtime.run>>))
+            : runtime.run({
             scope: req.params.scope,
             runId,
             viewer: { personId: owner, displayName: personDisplayNames(companyMemory).get(owner) ?? owner, role: person.role },
             message: runtimeMessage,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,
+            ...(personalMemory.length ? { personalMemory } : {}),
             recentMessages: recent.rows.reverse().map((message) => ({
               role: message.role,
               content: message.content,
@@ -450,6 +487,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
                 WHERE id = $1`,
               [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage), routeSnapshot(undefined, recoverySummary)],
             );
+            // 回答落库后再排一个 natural 提炼任务（PR #12 原样）。
+            if (learnsPersonal && memoryClarification === undefined) await ctx.personalDistillation.enqueue(client, {
+              personId: owner, conversationId: row.id, throughSequence: userSequence, kind: "natural", epoch: await personalEpoch() });
             await client.query("COMMIT");
             if (prepared.snapshotId) await conversationCompaction?.markApplied(client.query.bind(client), prepared.snapshotId);
             runStatus = "succeeded";
