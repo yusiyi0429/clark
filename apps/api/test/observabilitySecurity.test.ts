@@ -97,14 +97,14 @@ describe("structured logs and redaction", () => {
     });
   });
 
-  it("keeps Company availability metadata while excluding new reference bodies from logs and traces", () => {
+  it("keeps authorized Company bodies and availability metadata while redacting credentials", () => {
     expect(redactSecrets({
       company: { status: "ready", entries: [{ title: "经营战略", text: "应保密的公司正文" }], more: true, nextCursor: "CP1" },
       companyMemory: [{ title: "公司结果", text: "旧消费字段的新公司正文" }],
-      companyStatus: "partial", totalTokens: 10,
+      companyStatus: "partial", totalTokens: 10, apiKey: "credential",
     })).toEqual({
-      company: { status: "ready", entries: "[REDACTED]", more: true, nextCursor: "[REDACTED]" },
-      companyMemory: "[REDACTED]", companyStatus: "partial", totalTokens: 10,
+      company: { status: "ready", entries: [{ title: "经营战略", text: "应保密的公司正文" }], more: true, nextCursor: "CP1" },
+      companyMemory: [{ title: "公司结果", text: "旧消费字段的新公司正文" }], companyStatus: "partial", totalTokens: 10, apiKey: "[REDACTED]",
     });
   });
 

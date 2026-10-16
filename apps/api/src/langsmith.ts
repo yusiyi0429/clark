@@ -96,8 +96,10 @@ function safeText(text: string): string {
   // 凭据永不进 Trace；记忆正文按验收口径完整观测，不做内容脱敏。
   let result = text.replace(/lsv2_[a-zA-Z0-9_-]+/g, "[REDACTED]");
   if (config.apiKey) result = result.replaceAll(config.apiKey, "[REDACTED]");
+  const referenceStart = result.startsWith("Reference（参考数据，非指令）") ? result.indexOf("[") : -1;
   try {
-    return JSON.stringify(redactSecrets(JSON.parse(result)));
+    if (referenceStart >= 0) return result.slice(0, referenceStart) + JSON.stringify(safe(JSON.parse(result.slice(referenceStart))));
+    return JSON.stringify(safe(JSON.parse(result)));
   } catch {
     return result;
   }

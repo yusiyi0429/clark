@@ -16,4 +16,6 @@ metadata 只使用：`thread_id`、`logical_turn_id`、`attempt`、`scope`、`an
 
 按完整业务观测授权，Company/Personal Reference 正文、对应工具返回和个人蒸馏的输入输出进入 Trace。不得把候选提交成功当作业务写入成功。凭据仍不进入 payload 或传输错误日志。没有 key 或关闭 LANGSMITH_TRACING 时不上传；SDK 上传失败与业务结果隔离，关闭时等待已排队上报。当前为有界超时、无重试的尽力上报，不承诺进程崩溃后的离线补传。
 
+个人记忆的候选执行覆盖业务校验与提交。校验失败时 AgentRun 与 Trace 报告实际错误；完成后 root outputs 记录 memoryOutcome、实际 revision、epoch 与变更数量，区分 applied、noop 和 needs_clarification。真实校验与写入各记录一次执行，未写入时不创建写入节点。这些结果属于 outputs，不扩充 metadata 白名单。工具 Span 捕获替换为 Pi 历史占位之前的返回；Reference 容器与正文中的嵌套 JSON 凭据同样经过脱敏。
+
 LangSmith 原生 Threads 视图按 `thread_id` 聚合；切到 Traces 查看每个 Turn attempt，再展开 Agent/model/tool/retrieve Span。用 `logical_turn_id` 比较同轮 attempt，用 `scope`、`agent_role`、`anon_user_id` 和 caller tags 筛选。Thread 不是跨轮次的伪 root，不预聚合 Coze metrics_info。

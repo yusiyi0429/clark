@@ -467,7 +467,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           if (!options.company) return { status: 'not_configured', entries: [], message: '公司事实读取尚未配置。' };
           if (request.cursor && !companyCursors.has(request.cursor)) return { status: 'unavailable', entries: [], message: '分页位置不属于本轮参考，请重新查询。' };
           const continuation = request.cursor ? companyCursors.get(request.cursor) : undefined;
-          const query = request.query ?? continuation?.query;
+          const query = continuation ? continuation.query : request.query;
           const view = await traceRetrieval("company", () => options.company!.read(input.viewer, { ...request, query, cursor: continuation?.cursor }, input.signal));
           let nextCursor: string | undefined;
           if (view.nextCursor) { nextCursor = `CP${companyCursors.size + 1}`; companyCursors.set(nextCursor, { cursor: view.nextCursor, query }); }
@@ -478,8 +478,11 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           }) };
         };
         const companyTools = [
-          defineTool({ name: 'query_company', label: '查询公司事实', description: '只读查询当前授权范围的 World 正式公司内容；返回可读 Company。状态、草稿与日期不可当作确认结果。不可用时不能用页面或旧历史补事实。支持关键词及后续分页。',
-            parameters: Type.Object({ query: Type.Optional(Type.String({ maxLength: 1000 })), cursor: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false }),
+          defineTool({ name: 'query_company', label: '查询公司事实', description: '只读查询当前授权范围的 World 正式公司内容；返回可读 Company。状态、草稿与日期不可当作确认结果。不可用时不能用页面或旧历史补事实。新查询可带 query；续页只带 cursor，沿用原查询条件。',
+            parameters: Type.Union([
+              Type.Object({ query: Type.Optional(Type.String({ maxLength: 1000 })) }, { additionalProperties: false }),
+              Type.Object({ cursor: Type.String({ minLength: 1, maxLength: 100 }) }, { additionalProperties: false }),
+            ]),
             execute: async (_id, args) => memoryResult(await companyView(args)) }),
           defineTool({ name: 'search_memory', label: '检索记忆', description: '按需检索公司事实或本人个人记忆；公司正式事实只来自 World，个人偏好不能证明公司目标。',
             parameters: Type.Object({ module: Type.Union([Type.Literal('company'), Type.Literal('personal')]), query: Type.String({ maxLength: 1000 }) }, { additionalProperties: false }),
@@ -650,7 +653,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           modelRuntime,
           resourceLoader: personalCard ? resourceLoaderFor(`${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`)
             : isCeo ? ceoResourceLoader : resourceLoaderFor(driSystemPrompt(input.viewer.displayName)),
-          customTools: [...anchorTools.map(ephemeralTool), peopleTool, ...companyTools.map(ephemeralTool), ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...outletFeedTools, searchTool].map(traceTool),
+          customTools: [...anchorTools.map(traceTool).map(ephemeralTool), traceTool(peopleTool), ...companyTools.map(traceTool).map(ephemeralTool), ...[...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...outletFeedTools, searchTool].map(traceTool)],
           tools: ["read_anchor", "search_people", ...companyTools.map((tool) => tool.name), ...viewerBoardTools.map((tool) => tool.name), ...missionCardTools.map((tool) => tool.name), ...materialTools.map((tool) => tool.name), ...reviewTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
           sessionManager: manager,
           settingsManager: settings,

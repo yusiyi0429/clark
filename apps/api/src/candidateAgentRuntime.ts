@@ -21,7 +21,7 @@ import {
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { logEvent } from "./observability.js";
-import { currentTraceIdentity, withTurnTrace, withAgentTrace, traceModelStream, traceTool, type TraceIdentity } from "./langsmith.js";
+import { currentTraceIdentity, withTurnTrace, withAgentTrace, traceModelStream, traceTool, setTraceOutcome, type TraceIdentity } from "./langsmith.js";
 import { traceThread, traceAttempt } from "./traceIdentity.js";
 import { v7 } from "uuid";
 
@@ -50,6 +50,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   extraTools?: ReturnType<typeof defineTool<any>>[];
   signal?: AbortSignal;
   maxModelCalls?: number;
+  finalizeCandidate?: (candidate: Static<T>) => Promise<Record<string, unknown>>;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 }): Promise<{ runId: string; candidate: Static<T> }> {
   const runId = randomUUID();
@@ -155,6 +156,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
         unsubscribe();
       }
       if (!candidate) throw new Error("Candidate agent did not call submit_candidate");
+      const outcome = await options.finalizeCandidate?.(candidate);
       await options.query(
         `UPDATE agent_runs
             SET status = 'succeeded', candidate_output = $2::jsonb, usage = $3::jsonb, completed_at = now()
@@ -162,6 +164,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
         [runId, JSON.stringify(candidate), JSON.stringify(usage ?? null)],
       );
       logBatchRun({ runId, kind: options.kind, modelId: options.modelId, objectRef: options.objectRef, startedAt, status: "succeeded" });
+      if (outcome) setTraceOutcome(outcome);
       return { runId, candidate };
     } catch (cause) {
       const error = (cause as Error).message || String(cause);

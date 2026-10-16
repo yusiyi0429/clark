@@ -253,7 +253,7 @@ export async function createTestApp(
   const personalDistillationStream = runtimeOptions.personalDistillationStream ?? (() => {
     const stream = createAssistantMessageEventStream();
     const message: AssistantMessage = { role: "assistant", api: "openai-responses", provider: "warmap", model: "test",
-      content: [{ type: "toolCall", id: randomUUID(), name: "submit_candidate", arguments: { changes: [], clarification: "" } }],
+      content: [{ type: "toolCall", id: randomUUID(), name: "submit_candidate", arguments: { status: "noop", changes: [], clarification: "" } }],
       stopReason: "toolUse", timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
     queueMicrotask(() => stream.push({ type: "done", reason: "toolUse", message }));
     return stream;

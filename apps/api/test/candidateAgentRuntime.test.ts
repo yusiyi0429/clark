@@ -51,6 +51,67 @@ function stream(content: AssistantMessage["content"], stopReason: AssistantMessa
 
 const Candidate = Type.Object({ summary: Type.String({ minLength: 1 }) }, { additionalProperties: false });
 
+it("finishes business validation before reporting candidate execution success", async () => {
+  await createTestDb(async ({ db }) => {
+    await migrate(db);
+    const transport = captureTraceTransport();
+    configureLangSmith({ apiKey: "test-key", tracing: true, fetchImplementation: transport.fetchImplementation });
+    let finalized = false;
+    try {
+      const result = await runCandidateAgent({
+        query: db.query.bind(db), kind: "personal-memory-distillation", input: {},
+        prompt: "提交候选。", schema: Candidate,
+        baseUrl: "https://provider.invalid/v1", apiKey: "test", modelId: "fake-heavy",
+        streamSimple: () => stream([{ type: "toolCall", id: "submit-finalize", name: "submit_candidate", arguments: { summary: "当前偏好" } }], "toolUse"),
+        finalizeCandidate: async (value) => {
+          expect(value.summary).toBe("当前偏好");
+          const current = await db.query("SELECT status FROM agent_runs WHERE kind='personal-memory-distillation'");
+          expect(current.rows[0].status).toBe("running");
+          finalized = true;
+          return { status: "succeeded", memoryOutcome: "applied", revision: 1 };
+        },
+      });
+      expect(finalized).toBe(true);
+      expect((await db.query("SELECT status FROM agent_runs WHERE id=$1", [result.runId])).rows[0].status).toBe("succeeded");
+      await flushLangSmith();
+      const root = transport.sent.find(item => item.method === "POST" && item.body.name.startsWith("turn:"))!;
+      expect(transport.sent.find(item => item.method === "PATCH" && item.url.endsWith(root.body.id))?.body.outputs)
+        .toMatchObject({ status: "succeeded", memoryOutcome: "applied", revision: 1 });
+    } finally {
+      await flushLangSmith();
+      configureLangSmith({});
+    }
+  });
+});
+
+it("reports finalization failures on the run and trace rather than accepting them as saved memory", async () => {
+  await createTestDb(async ({ db }) => {
+    await migrate(db);
+    const transport = captureTraceTransport();
+    configureLangSmith({ apiKey: "test-key", tracing: true, fetchImplementation: transport.fetchImplementation });
+    try {
+      await expect(runCandidateAgent({
+        query: db.query.bind(db), kind: "personal-memory-distillation", input: {},
+        prompt: "提交候选。", schema: Candidate,
+        baseUrl: "https://provider.invalid/v1", apiKey: "test", modelId: "fake-heavy",
+        streamSimple: () => stream([{ type: "toolCall", id: "submit-rejected", name: "submit_candidate", arguments: { summary: "旧证据" } }], "toolUse"),
+        finalizeCandidate: async () => { throw new Error("NO_CURRENT_USER_EVIDENCE"); },
+      })).rejects.toThrow("NO_CURRENT_USER_EVIDENCE");
+      expect((await db.query("SELECT status,error FROM agent_runs WHERE kind='personal-memory-distillation'")).rows)
+        .toEqual([{ status: "failed", error: "NO_CURRENT_USER_EVIDENCE" }]);
+      await flushLangSmith();
+      const runs = transport.sent.filter(item => item.method === "POST" && item.body.run_type === "chain");
+      for (const run of runs) {
+        expect(transport.sent.find(item => item.method === "PATCH" && item.url.endsWith(run.body.id))?.body.error)
+          .toContain("NO_CURRENT_USER_EVIDENCE");
+      }
+    } finally {
+      await flushLangSmith();
+      configureLangSmith({});
+    }
+  });
+});
+
 describe("batch candidate runtime public seam", () => {
   it("accepts only a strict submit_candidate Tool result and saves an observable AgentRun", async () => {
     await createTestDb(async ({ db }) => {

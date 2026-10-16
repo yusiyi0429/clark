@@ -11,6 +11,10 @@ import { createPersonalDistillation, isExplicitMemoryRequest } from '../src/pers
 
 const usage = { input:1, output:1, cacheRead:0, cacheWrite:0,totalTokens:2,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0} };
 function candidate(value: unknown) {
+  if (value && typeof value === 'object' && 'changes' in value && !('status' in value)) {
+    const result = value as { changes: unknown[]; clarification: string };
+    value = { ...result, status: result.clarification ? 'needs_clarification' : result.changes.length ? 'apply' : 'noop' };
+  }
   const events=createAssistantMessageEventStream();
   const call={type:'toolCall' as const,id:randomUUID(),name:'submit_candidate',arguments:value as Record<string,unknown>};
   const final:AssistantMessage={role:'assistant',api:'openai-responses',provider:'warmap',model:'test',content:[call],usage,stopReason:'toolUse',timestamp:Date.now()};
@@ -33,8 +37,9 @@ test('durable worker distills only own user messages and duplicate delivery is h
    expect(contexts.join('')).not.toContain('十家客户');expect(contexts.join('')).not.toContain('张三');
    expect(await worker.status(job)).toMatchObject({status:'succeeded',attempts:1});
    const audit=await db.query("SELECT input_snapshot,candidate_output,error FROM agent_runs WHERE kind='personal-memory-distillation'");
-   expect(audit.rows[0]).toMatchObject({input_snapshot:{redacted:true},candidate_output:{redacted:true}});
-   expect(JSON.stringify(audit.rows)).not.toContain('先看结论');
+   expect(audit.rows[0]).toMatchObject({input_snapshot:{currentSequence:1},candidate_output:{status:'apply',changes:[{attributeKey:'communication_order'}]},error:null});
+   expect(JSON.stringify(audit.rows)).toContain('先看结论');
+   expect(JSON.stringify(audit.rows)).not.toContain('apiKey');
    expect(await worker.processNext()).toBe(false);expect(calls).toBe(1);
   } finally {await rm(storageDir,{recursive:true,force:true});}
  });
@@ -205,5 +210,54 @@ test.each(['clarification', 'failed', 'noop'] as const)('natural learning respec
   expect(naturalCalls).toBe(mode==='noop'?1:0);
   expect(await worker.status(natural)).toMatchObject({status:mode==='noop'?'succeeded':'superseded'});
  } finally {await rm(storageDir,{recursive:true,force:true});}
+ });
+});
+
+
+test('current learning contract distinguishes history context from current evidence', async () => {
+ await createTestDb(async ({db,pool}) => { await migrate(db); const storageDir=await mkdtemp(join(tmpdir(),'distill-current-contract-'));
+ try {
+  const memory=createPersonalMemory({pool,storageDir}), id=randomUUID();
+  await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);
+  await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user','我一直用中文沟通。',$2),($1,3,'user','我通常先看结论。',$2)",[id,randomUUID()]);
+  let prompt=''; let schema:unknown;
+  const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:(_model,context)=>{
+   prompt=context.systemPrompt ?? ''; schema=context.tools?.find(tool=>tool.name==='submit_candidate')?.parameters;
+   return candidate({status:'apply',changes:[{operation:'add',attributeKey:'communication',title:'沟通偏好',text:'通常先看结论。',inferred:false,evidence:[{sequence:3,quote:'我通常先看结论。'}]}],clarification:''});
+  }});
+  const job=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:3,kind:'natural',epoch:0}); await worker.processNext();
+  expect(prompt).toContain('currentSequence'); expect(prompt).toContain('历史消息仅用于理解指代'); expect(prompt).toContain('明确记住、纠正、忘记或重新授权'); expect(JSON.stringify(schema)).toContain('needs_clarification');
+  expect(await worker.status(job)).toMatchObject({status:'succeeded'}); expect((await memory.select('alice','给我建议'))[0].text).toContain('先看结论');
+ } finally { await rm(storageDir,{recursive:true,force:true}); }
+ });
+});
+
+test.each([
+ {status:'noop',changes:true,clarification:''},
+ {status:'apply',changes:true,clarification:'已记住你的偏好。'},
+ {status:'needs_clarification',changes:false,clarification:''},
+] as const)('invalid candidate outcome is rejected atomically: $status / $clarification',async result=>{
+ await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-outcome-'));
+ try {const memory=createPersonalMemory({pool,storageDir}),id=randomUUID();
+  await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);
+  await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user','我通常先看结论。',$2)",[id,randomUUID()]);
+  const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:()=>candidate({...result,changes:result.changes?[{operation:'add',attributeKey:'communication',title:'沟通偏好',text:'通常先看结论。',inferred:false,evidence:[{sequence:1,quote:'我通常先看结论。'}]}]:[]})});
+  const job=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:1,kind:'natural',epoch:0}); await worker.processNext();
+  expect(await worker.status(job)).toMatchObject({status:'pending',errorCode:'INVALID_CANDIDATE_STATUS'});expect((await memory.readOwn('alice')).revision).toBe(0);
+ } finally {await rm(storageDir,{recursive:true,force:true});}
+ });
+});
+
+
+test.each([false,true])('old-only evidence rejects the batch even when the historical preference is already stored: %s',async stored=>{
+ await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-old-batch-'));
+ try {const memory=createPersonalMemory({pool,storageDir}),id=randomUUID();
+  if(stored)await memory.apply('alice',{expectedRevision:0,epoch:0,changes:[{operation:'add',attributeKey:'language',title:'沟通偏好',text:'长期使用中文沟通。'}]});
+  await db.query("INSERT INTO conversations(id,owner_id,scope,pi_session_id) VALUES($1,'alice','global',$2)",[id,randomUUID()]);
+  await db.query("INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id) VALUES($1,1,'user','我长期使用中文沟通。',$2),($1,3,'user','我通常先看结论。',$2)",[id,randomUUID()]);
+  const worker=createPersonalDistillation({pool,memory,baseUrl:'https://provider.invalid/v1',apiKey:'test',modelId:'test',streamSimple:()=>candidate({status:'apply',changes:[{operation:'add',attributeKey:'language',title:'沟通偏好',text:'长期使用中文沟通。',inferred:false,evidence:[{sequence:1,quote:'我长期使用中文沟通。'}]},{operation:'add',attributeKey:'order',title:'沟通偏好',text:'通常先看结论。',inferred:false,evidence:[{sequence:3,quote:'我通常先看结论。'}]}],clarification:''})});
+  const job=await worker.enqueue(db,{personId:'alice',conversationId:id,throughSequence:3,kind:'natural',epoch:0});await worker.processNext();
+  expect(await worker.status(job)).toMatchObject({status:'pending',errorCode:'NO_CURRENT_USER_EVIDENCE'});const doc=await memory.readOwn('alice');expect(doc.revision).toBe(stored?1:0);expect(doc.markdown).not.toContain('先看结论');
+ }finally{await rm(storageDir,{recursive:true,force:true});}
  });
 });

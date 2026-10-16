@@ -223,7 +223,7 @@ test("real model stream boundaries carry usage and first-token events; missing d
     });
 });
 
-test("concurrent private subagents retain their own identities and redact memory on every span", async () => {
+test("concurrent subagents retain their own identities and authorized memory bodies", async () => {
   const transport = captureTraceTransport();
   configureLangSmith({
     apiKey: "test-key",
@@ -303,7 +303,7 @@ test("concurrent private subagents retain their own identities and redact memory
               );
               await stream.result();
             },
-            { private: true, inputs: { text: "PRIVATE_MEMORY_BODY" } },
+            { inputs: { text: "PRIVATE_MEMORY_BODY" } },
           ),
         ),
       ),
@@ -329,10 +329,11 @@ test("concurrent private subagents retain their own identities and redact memory
         .extra.metadata.ls_agent_type,
     ).toBe("subagent");
   }
-  expect(JSON.stringify(transport.sent)).not.toContain("PRIVATE_MEMORY_BODY");
+  expect(JSON.stringify(transport.sent)).toContain("PRIVATE_MEMORY_BODY");
+  expect(JSON.stringify(transport.sent)).not.toContain("test-key");
 });
 
-test("normal model traces retain the query but exclude governed memory bodies and titles", async () => {
+test("normal model traces retain the query and authorized memory bodies and titles", async () => {
   const transport = captureTraceTransport();
   configureLangSmith({
     apiKey: "test-key",
@@ -430,14 +431,15 @@ test("normal model traces retain the query but exclude governed memory bodies an
   );
   await flushLangSmith();
   const payload = JSON.stringify(transport.sent);
-  for (const secret of [
+  for (const reference of [
     "PRIVATE_TITLE",
     "PRIVATE_BODY",
     "COMPANY_TITLE",
     "COMPANY_BODY",
     "COMPANY_TOOL_BODY",
   ])
-    expect(payload).not.toContain(secret);
+    expect(payload).toContain(reference);
+  expect(payload).not.toContain("test-key");
   expect(payload).toContain("PUBLIC_QUERY");
   expect(payload).toContain("ATTACHMENT_PUBLIC");
 });

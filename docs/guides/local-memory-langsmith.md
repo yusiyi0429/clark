@@ -45,6 +45,6 @@ World 服务令牌不授予成员额外可见范围。授权文件示例结构�
 
 记录请求 ID、追踪链接、记忆版本及实际结果。失败项保持失败，缺少外部资源的项目标为未验证。查询最近一页追踪不能证明完整历史。
 
-已知个人蒸馏存在 `NO_CURRENT_USER_EVIDENCE` 整批失败问题。`submit_candidate` 成功只表示候选已提交，不表示业务校验通过或个人记忆已写入。
+个人蒸馏只学习本轮内容，历史消息用于理解指代。检查候选状态 apply、noop 或 needs_clarification，以及后续校验和写入节点；`submit_candidate` 成功只表示候选已提交。最终 memoryOutcome、revision 和变更数量才说明业务处理结果。故意提交只引用历史的变更时，应看到 `NO_CURRENT_USER_EVIDENCE` 且记忆保持不变。
 
 协议见 [ADR-0028](../adr/0028-langsmith-thread-turn-spans.md)。记忆边界见 [ADR-0027](../adr/0027-company-world-and-personal-memory.md)。
