@@ -49,7 +49,6 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   /** 只读辅助工具（如授权 Company 查询）：与 submit_candidate 一同进入工具白名单。 */
   extraTools?: ReturnType<typeof defineTool<any>>[];
   signal?: AbortSignal;
-  redactObservability?: boolean;
   maxModelCalls?: number;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 }): Promise<{ runId: string; candidate: Static<T> }> {
@@ -60,7 +59,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
     await options.query(
       `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
        VALUES ($1, $2, $3::jsonb, 'running', $4, $5, $6::jsonb)`,
-      [runId, options.kind, JSON.stringify(options.objectRef ?? null), options.modelSlot ?? "heavy", promptHash, JSON.stringify(options.redactObservability ? { redacted: true } : options.input)],
+      [runId, options.kind, JSON.stringify(options.objectRef ?? null), options.modelSlot ?? "heavy", promptHash, JSON.stringify(options.input)],
     );
 
     const resourceLoader: ResourceLoader = {
@@ -160,12 +159,12 @@ export async function runCandidateAgent<T extends TSchema>(options: {
         `UPDATE agent_runs
             SET status = 'succeeded', candidate_output = $2::jsonb, usage = $3::jsonb, completed_at = now()
           WHERE id = $1`,
-        [runId, JSON.stringify(options.redactObservability ? { redacted: true } : candidate), JSON.stringify(usage ?? null)],
+        [runId, JSON.stringify(candidate), JSON.stringify(usage ?? null)],
       );
       logBatchRun({ runId, kind: options.kind, modelId: options.modelId, objectRef: options.objectRef, startedAt, status: "succeeded" });
       return { runId, candidate };
     } catch (cause) {
-      const error = options.redactObservability ? "PRIVATE_CANDIDATE_FAILED" : (cause as Error).message || String(cause);
+      const error = (cause as Error).message || String(cause);
       await options.query(
         `UPDATE agent_runs
             SET status = $2, error = $3, usage = $4::jsonb, completed_at = now()
@@ -178,7 +177,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
     } finally {
       session?.dispose();
     }
-  }, { private: options.redactObservability, inputs: options.input });
+  }, { inputs: options.input });
   const active=currentTraceIdentity();
   if (active && (!options.trace || options.trace.parentLogicalTurnId === active.logicalTurnId)) return execute();
   const logicalTurnId = options.trace?.logicalTurnId ?? v7();
@@ -186,7 +185,7 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   const threadId = await traceThread(options.query, options.trace?.businessKey ?? `candidate:${options.personId ?? 'system'}:${scope}`);
   const attempt = await traceAttempt(options.query, threadId, logicalTurnId);
   const identity: TraceIdentity = { threadId, logicalTurnId, attempt, scope, userId: options.personId, agentRole: options.kind, caller: options.trace?.caller ?? 'worker' };
-  return withTurnTrace(identity, execute, { rootId: runId, private: options.redactObservability, inputs: options.input });
+  return withTurnTrace(identity, execute, { rootId: runId, inputs: options.input });
 }
 
 function logBatchRun(input: {

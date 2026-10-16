@@ -91,6 +91,6 @@ pnpm --filter @warmap/web dev --hostname 127.0.0.1 --port 3100
 3. 在浏览器开发者工具记录一次请求的 `logicalTurnId`。验证失败后的原样重试沿用它并生成 `#a2` 新 root；不要为了重试更改消息、引用或附件。不同输入应使用新 ID。成功请求的重复投递应返回保存的回答，不新建执行 Trace，也不重复保存用户消息。
 4. 自然表达稳定个人偏好，等待后台蒸馏后打开个人记忆检查；再明确纠正或遗忘，检查后续回答与记忆变化。个人记忆与公司事实分开；另一登录人不能读取本人的 Personal。
 5. 在授权 World 中已有公司事实的条件下提问，检查 Company 内容可读、没有来源哈希，Agent 不写回 World。选中可见 Card 后提问“解释这个”，确认 Anchor 与该 Card 对应，跨轮不会复用旧页面正文。
-6. 检查模型返回用量与真实首 token 事件；没有返回或事件时保留缺口。确认 Company/Personal Reference 正文、个人蒸馏内容和凭据未进入 Trace。关闭 `LANGSMITH_TRACING` 并重启 API，聊天仍应可用。
+6. 检查模型返回用量与真实首 token 事件；没有返回或事件时保留缺口。Trace 按验收口径完整观测记忆正文与蒸馏内容，仅凭据（API key、token、password 等字段）不进入 Trace。关闭 `LANGSMITH_TRACING` 并重启 API，聊天仍应可用。
 
 轨迹契约见 [ADR-0028](../../adr/0028-langsmith-thread-turn-spans.md)，记忆边界见 [ADR-0027](../../adr/0027-company-world-and-personal-memory.md)。

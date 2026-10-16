@@ -94,12 +94,12 @@ export function createPersonalDistillation(options: {
             return [{ key: item.key, title: item.title, text: item.text }];
           });
           const blockedAttributesIncomplete = allBlocked.length >= 100 || blocked.length < allBlocked.length;
-          const signal = AbortSignal.any([AbortSignal.timeout(15_000), closing.signal]);
+          const signal = AbortSignal.any([AbortSignal.timeout(30_000), closing.signal]);
           signal.throwIfAborted();
           const { candidate: result } = await runCandidateAgent({ query: client.query.bind(client), kind: 'personal-memory-distillation', personId: job.person_id,
             trace: { businessKey: `conversation:${job.conversation_id}`, logicalTurnId: `personal-memory-job-${job.id}`, scope: 'personal-memory', caller: connection ? 'web' : 'worker', parentLogicalTurnId: currentMessage?.logical_turn_id },
             input: { kind: job.kind, currentSequence: job.through_sequence, messages: boundedMessages, memory: doc.sections, blockedAttributes: blocked, blockedAttributesIncomplete }, prompt, schema: Candidate,
-            baseUrl: options.baseUrl, apiKey: options.apiKey, modelId: options.modelId, modelSlot: 'light', maxModelCalls: 2, redactObservability: true, streamSimple: options.streamSimple, signal });
+            baseUrl: options.baseUrl, apiKey: options.apiKey, modelId: options.modelId, modelSlot: 'light', maxModelCalls: 2, streamSimple: options.streamSimple, signal });
           const changes: PersonalChange[] = [];
           for (const change of result.changes) {
             if (change.evidence.some(evidence => !boundedMessages.some(message => message.sequence === evidence.sequence && message.content.includes(evidence.quote)))) throw new Error('INVALID_USER_EVIDENCE');

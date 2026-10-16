@@ -23,7 +23,6 @@ type TraceContext = {
   identity: TraceIdentity;
   parent?: RunTree;
   agent?: RunTree;
-  private: boolean;
   outcome: { outputs?: Record<string, unknown>; error?: string };
 };
 const context = new AsyncLocalStorage<TraceContext>();
@@ -35,12 +34,6 @@ let config: {
   identitySalt: string;
   apiKey?: string;
 } = { project: "clark_oct", identitySalt: "warmap" };
-const memoryTools = new Set([
-  "read_anchor",
-  "query_company",
-  "search_memory",
-  "read_reference",
-]);
 const machine = (name: string) =>
   name.toLowerCase().replace(/[^a-z0-9_./-]/g, "-");
 
@@ -100,26 +93,9 @@ export async function flushLangSmith(): Promise<void> {
   while (pending.size) await Promise.all([...pending]);
 }
 function safeText(text: string): string {
+  // 凭据永不进 Trace；记忆正文按验收口径完整观测，不做内容脱敏。
   let result = text.replace(/lsv2_[a-zA-Z0-9_-]+/g, "[REDACTED]");
   if (config.apiKey) result = result.replaceAll(config.apiKey, "[REDACTED]");
-  if (result.startsWith("Reference（")) {
-    const split = result.indexOf("[");
-    try {
-      const refs = JSON.parse(result.slice(split));
-      return (
-        result.slice(0, split) +
-        JSON.stringify(
-          refs.map((ref: Record<string, unknown>) =>
-            ref.kind === "personal" || ref.kind === "company"
-              ? { handle: ref.handle, kind: ref.kind, text: "[REDACTED]" }
-              : ref,
-          ),
-        )
-      );
-    } catch {
-      return "[REDACTED REFERENCE]";
-    }
-  }
   try {
     return JSON.stringify(redactSecrets(JSON.parse(result)));
   } catch {
@@ -166,7 +142,7 @@ function start(
   const fields = {
     name,
     run_type,
-    inputs: active.private ? { redacted: true } : safe(inputs ?? {}),
+    inputs: safe(inputs ?? {}),
     metadata: metadata(active.identity, extra),
     tags: [`caller:${machine(active.identity.caller)}`],
     tracingEnabled: true,
@@ -193,13 +169,11 @@ function end(run: RunTree | undefined, outputs?: unknown, error?: unknown) {
   if (!run) return;
   const active = context.getStore();
   const message = error
-    ? active?.private
-      ? "PRIVATE_AGENT_FAILED"
-      : safeText(error instanceof Error ? error.message : String(error))
+    ? safeText(error instanceof Error ? error.message : String(error))
     : undefined;
   enqueue(
     run
-      .end(active?.private ? { redacted: true } : safe(outputs ?? {}), message)
+      .end(safe(outputs ?? {}), message)
       .then(async () => {
         await posted.get(run);
         await run.patchRun();
@@ -222,11 +196,10 @@ export function setTraceOutcome(
 export async function withTurnTrace<T>(
   identity: TraceIdentity,
   fn: () => Promise<T>,
-  options: { rootId?: string; inputs?: unknown; private?: boolean } = {},
+  options: { rootId?: string; inputs?: unknown } = {},
 ): Promise<T> {
   const state: TraceContext = {
     identity,
-    private: options.private ?? false,
     outcome: {},
   };
   return context.run(state, async () => {
@@ -251,14 +224,13 @@ export async function withTurnTrace<T>(
 export async function withAgentTrace<T>(
   role: string,
   fn: () => Promise<T>,
-  options: { private?: boolean; inputs?: unknown } = {},
+  options: { inputs?: unknown } = {},
 ): Promise<T> {
   const active = context.getStore();
   if (!active) return fn();
   const state = {
     ...active,
     identity: { ...active.identity, agentRole: machine(role) },
-    private: active.private || options.private === true,
   };
   return context.run(state, async () => {
     const agent = start(`agent:${machine(role)}`, "chain", options.inputs, {
@@ -284,19 +256,18 @@ export function traceTool<
     execute: async (...args: Parameters<T["execute"]>) => {
       const active = context.getStore();
       if (!active) return tool.execute(...args);
-      const hide = active.private || memoryTools.has(tool.name);
       const run = start(
         `tool:${machine(tool.name)}`,
         "tool",
-        hide ? { redacted: true } : args[1],
+        args[1],
         { ls_tool_name: tool.name },
       );
       return context.run(
-        { ...active, parent: run, private: active.private },
+        { ...active, parent: run },
         async () => {
           try {
             const value = await tool.execute(...args);
-            end(run, hide ? { redacted: true } : value);
+            end(run, value);
             return value;
           } catch (error) {
             end(run, undefined, error);
@@ -343,9 +314,7 @@ function messages(value: Context): Record<string, unknown>[] {
         return {
           role: "tool",
           tool_call_id: message.toolCallId,
-          content: memoryTools.has(message.toolName)
-            ? "[REDACTED]"
-            : safe(message.content),
+          content: safe(message.content),
         };
       const content =
         typeof message.content === "string"
@@ -420,27 +389,23 @@ export function traceModelStream(
           }
         : undefined;
     // Usage is a top-level model output contract, never invented parent metrics or metadata.
-    const output = active.private
-      ? { redacted: true }
-      : {
-          choices: message
-            ? [{ message: messages({ messages: [message] }).at(-1) }]
-            : [],
-        };
+    const output = {
+      choices: message
+        ? [{ message: messages({ messages: [message] }).at(-1) }]
+        : [],
+    };
     if (run) {
       const errorText =
         error ||
         message?.stopReason === "error" ||
         message?.stopReason === "aborted"
-          ? active.private
-            ? "PRIVATE_MODEL_FAILED"
-            : safeText(
-                error instanceof Error
-                  ? error.message
-                  : typeof error === "string"
-                    ? error
-                    : (message?.errorMessage ?? "MODEL_REQUEST_FAILED"),
-              )
+          ? safeText(
+              error instanceof Error
+                ? error.message
+                : typeof error === "string"
+                  ? error
+                  : (message?.errorMessage ?? "MODEL_REQUEST_FAILED"),
+            )
           : undefined;
       enqueue(
         run
