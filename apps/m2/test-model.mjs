@@ -32,8 +32,8 @@ test('服务器环境变量和密钥文件可用于非 Mac 部署',async()=>{
  const g=await createModelGateway({env:{TOKENHUB_API_KEY:'env-only'},readLocalSecret:async()=>{throw Error('不应读取');}});assert.equal(g.status.ready,true);
  let path;const f=await createModelGateway({env:{DECODING_API_KEY_FILE:'/server/private/key'},readSecretFile:async p=>{path=p;return 'file-secret\n';}});assert.equal(f.status.ready,true);assert.equal(path,'/server/private/key');
 });
-test('仅文档指定地址允许 HTTP，拒绝任意 HTTP 和地址内凭证',async()=>{
- for(const base of ['http://other.example/v1','http://115.191.26.230:8001/api/openai/v1','http://115.191.26.230:8000/other/v1','https://name:secret@other.example/v1'])await assert.rejects(()=>createModelGateway({env:{DECODING_API_BASE:base}}),/HTTPS/);
+test('模型接口只用 HTTPS（含 TokenHub 旧的 IP 地址），拒绝地址内凭证',async()=>{
+ for(const base of ['http://other.example/v1','http://115.191.26.230:8000/api/openai/v1','http://115.191.26.230:8000/other/v1','https://name:secret@other.example/v1'])await assert.rejects(()=>createModelGateway({env:{DECODING_API_BASE:base}}),/HTTPS/);
 });
 test('模型失败或截断不假装成功',async()=>{
  const g=await createModelGateway({env:{DECODING_API_KEY:'test'},transport:async()=>({ok:true,json:async()=>({choices:[{finish_reason:'length',message:{content:'不完整'}}]})})});await assert.rejects(()=>g.complete([]),/不完整/);
