@@ -5,8 +5,11 @@ vi.mock("react", () => ({ useCallback: (callback: unknown) => callback, useEffec
 import { useConversation } from "./useConversation";
 
 const dispatch = vi.fn();
+/** 每一轮都有的「发出 / 结束」通知单独记，下面只看业务刷新事件。 */
+const turns: { type: string; options: { detail: unknown } }[] = [];
 beforeEach(() => {
-  vi.stubGlobal("window", { dispatchEvent: dispatch, location: { assign: vi.fn() } });
+  turns.length = 0;
+  vi.stubGlobal("window", { dispatchEvent: (event: { type: string; options: { detail: unknown } }) => (/^conversation-turn-/.test(event.type) ? turns.push(event) : dispatch(event)), location: { assign: vi.fn() } });
   vi.stubGlobal("CustomEvent", class { constructor(public type: string, public options: { detail: unknown }) {} });
   dispatch.mockClear();
 });
@@ -40,5 +43,31 @@ describe("任务卡私聊工具完成后同步正文与批注", () => {
       .mockResolvedValue({ ok: true, json: async () => ({ messages: [] }) }));
     await useConversation("mission-card:card-01").send("读这段", []);
     expect(dispatch).not.toHaveBeenCalled();
+  });
+});
+
+describe("材料修改后即时刷新", () => {
+  it.each(["edit_material", "create_material", "propose_material_edit"])("%s 成功后重读当前对象材料", async (name) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(streamedTool(name))
+      .mockResolvedValue({ ok: true, json: async () => ({ messages: [] }) }));
+    await useConversation("meeting:meeting-01").send("修改这份材料", []);
+    expect(dispatch.mock.calls[0][0]).toMatchObject({ type: "materials-changed", options: { detail: { scope: "meeting:meeting-01" } } });
+  });
+
+});
+
+describe("每一轮的发出 / 结束通知（月度计划逐段意见据此重读）", () => {
+  it("发出时带这句原文，结束时（成功或失败）各通知一次，都带本对话的 scope", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(streamedTool("read_business_object"))
+      .mockResolvedValue({ ok: true, json: async () => ({ messages: [] }) }));
+    await useConversation("monthly-plan:p1").send("现金流要写进去", []);
+    expect(turns.map((event) => event.type)).toEqual(["conversation-turn-sent", "conversation-turn-settled"]);
+    expect(turns[0].options.detail).toEqual({ scope: "monthly-plan:p1", content: "现金流要写进去" });
+    expect(turns[1].options.detail).toEqual({ scope: "monthly-plan:p1" });
+    turns.length = 0;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({ code: "TURN_IN_PROGRESS" }) })
+      .mockResolvedValue({ ok: true, json: async () => ({ messages: [] }) }));
+    expect(await useConversation("monthly-plan:p1").send("再说一句", [])).toBe(false);
+    expect(turns.map((event) => event.type)).toEqual(["conversation-turn-sent", "conversation-turn-settled"]);
   });
 });

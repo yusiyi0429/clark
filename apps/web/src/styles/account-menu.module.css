@@ -54,7 +54,9 @@
     box-shadow: var(--onboarding-highlight), var(--onboarding-shadow);
   }
   .chip.chip:hover { background: var(--surface); }
-  .chip .avatar { background: var(--neutral-wash); color: var(--ink-muted); }
+  /* 点触下限 44（docs/superpowers/specs/2026-10-12-mobile-foldable.md §3.1）：首页最后那颗个人胶囊，字 15。 */
+  .chip.chip { height: 44px; min-height: 44px; border-radius: 22px; padding-left: 5px; font-size: 15px; }
+  .chip .avatar { width: 34px; height: 34px; background: var(--neutral-wash); color: var(--ink-muted); }
   .chip.chip:focus-visible, .avatarButton.avatarButton:focus-visible { outline-color: var(--onboarding-blue); }
 }
 
@@ -145,8 +147,8 @@
 
 .form { display: grid; gap: 12px; }
 .field { display: grid; gap: 6px; font-size: 12.5px; color: #3c4350; }
-.field input { box-sizing: border-box; width: 160px; height: 40px; padding: 0 14px; border: 1px solid #d9dde5; border-radius: 10px; background: #f7f8fa; font: inherit; font-size: 18px; letter-spacing: .4em; color: #1d1d1f; }
-.field input:focus { outline: 2px solid #3a83f7; outline-offset: 1px; background: #fff; }
+/* 码输入框：大字加宽字距，边与聚焦走 globals.css 的统一输入框样式 */
+.field input { width: 160px; height: 40px; padding: 0 14px; font-size: 18px; letter-spacing: .4em; }
 .formActions { display: flex; justify-content: flex-end; }
 .primary.primary { min-height: 36px; padding: 0 16px; border-radius: 10px; background: #2f6fd6; color: #fff; font-size: 13.5px; font-weight: 600; }
 .primary.primary:disabled { opacity: .5; }
@@ -164,3 +166,8 @@
 @media (max-width: 759px) { .dialog.wide { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); padding: 16px 16px 20px; } }
 @media (prefers-reduced-motion: reduce) { .dialogLink svg { transition: none; } .dialogLink:hover svg { transform: none; } }
 .version { margin: 4px 0 0; color: var(--ink-faint); font-size: 11px; line-height: 1.5; text-align: right; font-variant-numeric: tabular-nums; user-select: all; }
+
+/* 触屏的工作台（pointer:coarse，规范 §1）：通知栏左下角的个人胶囊 44 高。 */
+@media (pointer: coarse) {
+  .chip.chip { height: 44px; min-height: 44px; border-radius: 22px; }
+}

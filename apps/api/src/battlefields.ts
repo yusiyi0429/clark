@@ -413,7 +413,7 @@ export async function listBattlefieldCards(q: Query, period: string, ownerNames:
   );
   const plan = planResult.rowCount === 1 ? (planResult.rows[0] as ConfirmedPlanRow) : null;
   const issues = await q(
-    `SELECT id, title, urgency->>'level' AS urgency, location
+    `SELECT id, title, urgency->>'level' AS urgency, location, origin_ref->>'nature' AS nature, origin
        FROM issues
       WHERE status = 'pending' AND location->>'level' = 'battlefield'
       ORDER BY created_at DESC, id`,
@@ -448,13 +448,15 @@ export async function listBattlefieldCards(q: Query, period: string, ownerNames:
       missionAnchors: battlefield.missionAnchors ?? [],
       period: plan?.period ?? null,
       target,
-      pendingIssues: (issues.rows as { id: string; title: string; urgency: string; location: unknown }[])
+      pendingIssues: (issues.rows as { id: string; title: string; urgency: string; location: unknown; nature: string | null; origin: string }[])
         .filter((issue) => (issue.location as { battlefieldId?: string }).battlefieldId === battlefield.id)
         .map((issue) => ({
           id: issue.id,
           title: issue.title,
           urgency: issue.urgency as TBattlefieldCardPayload["pendingIssues"][number]["urgency"],
           location: issue.location as TBattlefieldCardPayload["pendingIssues"][number]["location"],
+          ...(issue.nature === "ai_suggested" ? { nature: "ai_suggested" as const } : {}),
+          ...(issue.origin === "radar" ? { fromRadar: true as const } : {}),
         })),
       todos,
       latestFeedback: feedback[0] ?? null,

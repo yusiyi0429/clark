@@ -49,7 +49,7 @@ export function ReferenceProvider({ children, onLimit }: { children: ReactNode; 
         ? previous.filter((item) => !usable.some((card) => card.id === item.id))
         : [...previous, ...usable.filter((card) => !previous.some((item) => item.id === card.id))];
       if (next.length > MAX_REFERENCES) {
-        onLimit(`最多同时引用 ${MAX_REFERENCES} 张卡片。`);
+        onLimit(`最多同时批注 ${MAX_REFERENCES} 项。`);
         return;
       }
       commit(next);
@@ -74,11 +74,20 @@ export function useReferences(): ReferenceApi | null {
 }
 
 /** 卡片旁的引用键（clark `ReferenceButton`）：打开键的兄弟节点，不嵌套按钮。一组卡片时整组引用 / 取消。 */
+/** 引用按钮说的是引用了什么：一张卡写卡名；多张写「X 的 N 个议题」（或「N 项」）。 */
+export function referenceTarget(title: string, cards: Card[]): string {
+  if (cards.length <= 1) return title;
+  const issues = cards.every((card) => card.kind === "issue");
+  return `${title}${/[A-Za-z0-9]$/.test(title) ? " " : ""}的 ${cards.length} ${issues ? "个议题" : "项"}`;
+}
+
 export function ReferenceButton({ cards, title, corner = false }: { cards: Card[]; title: string; corner?: boolean }) {
   const context = useReferences();
   const usable = cards.filter((card) => REFERENCEABLE.has(card.kind));
   if (!context || !usable.length) return null;
   const selected = usable.every((card) => context.items.some((item) => item.id === card.id));
+  // 整体卡、战场卡引用的是卡上列出的议题，不是这张卡本身：写清楚引用了几项（巡检 P2-25）。
+  const what = referenceTarget(title, usable);
   return (
     <HeroButton
       variant="ghost"
@@ -87,9 +96,9 @@ export function ReferenceButton({ cards, title, corner = false }: { cards: Card[
       type="button"
       className={`${s.quoteButton} ${corner ? s.corner : ""}`}
       data-reference-id={usable.map((card) => card.id).join(" ")}
-      aria-label={`${selected ? "取消引用" : "引用到全局对话"}：${title}`}
+      aria-label={`${selected ? "取消批注" : "批注到对话"}：${what}`}
       aria-pressed={selected}
-      title={selected ? "已引用到全局对话 · 点击移除" : "引用到全局对话"}
+      title={selected ? `已批注${what} · 点击移除` : `批注${what}到对话`}
       onPress={() => context.toggle(usable)}
     >
       {selected ? <Check size={14} /> : <Quote size={14} />}
@@ -106,23 +115,28 @@ function previewText(card: Card): string {
   return "";
 }
 
-/** 输入条里的引用托盘（clark `ReferenceTray`）：chip 可预览、可移除，多于一张时可清空；附件同一排。 */
+/**
+ * 输入条里的引用托盘（clark `ReferenceTray`）：chip 可预览、可移除，多于一张时可清空；附件同一排。
+ * 待发送的文字引用（quotes，D4）也排在这一行最前面：引用都在输入框里，文字行上方。
+ */
 export function ReferenceTray({
   items,
   onRemove,
   onClear,
   attachments = [],
   onRemoveAttachment,
+  quotes,
 }: {
   items: Card[];
   onRemove: (id: string) => void;
   onClear: () => void;
   attachments?: Attachment[];
   onRemoveAttachment?: (id: string) => void;
+  quotes?: ReactNode;
 }) {
   const [preview, setPreview] = useState<string | null>(null);
   const item = items.find((card) => card.id === preview);
-  if (!items.length && !attachments.length) return null;
+  if (!items.length && !attachments.length && !quotes) return null;
   return (
     <div
       className={s.tray}
@@ -135,7 +149,8 @@ export function ReferenceTray({
         }
       }}
     >
-      <div className={s.chips} aria-label="已引用卡片">
+      <div className={s.chips} aria-label="已批注内容">
+        {quotes}
         {items.map((card) => (
           <div className={s.chip} key={card.id}>
             <HeroButton
@@ -149,7 +164,7 @@ export function ReferenceTray({
             >
               {card.title}
             </HeroButton>
-            <HeroButton variant="ghost" size="sm" type="button" onPress={() => onRemove(card.id)} aria-label={`移除引用：${card.title}`}>
+            <HeroButton variant="ghost" size="sm" type="button" onPress={() => onRemove(card.id)} aria-label={`移除批注：${card.title}`}>
               <X size={12} />
             </HeroButton>
           </div>
@@ -167,15 +182,15 @@ export function ReferenceTray({
         ))}
       </div>
       {items.length > 1 ? (
-        <HeroButton variant="ghost" size="sm" isIconOnly className={s.clear} type="button" onPress={onClear} aria-label="清空引用" title="清空引用">
+        <HeroButton variant="ghost" size="sm" isIconOnly className={s.clear} type="button" onPress={onClear} aria-label="清空批注" title="清空批注">
           <X size={13} />
         </HeroButton>
       ) : null}
       {item ? (
-        <section className={s.preview} aria-label={`引用内容：${item.title}`}>
+        <section className={s.preview} aria-label={`批注内容：${item.title}`}>
           <header>
             <span>{KIND_LABEL[item.kind] ?? item.kind}</span>
-            <HeroButton variant="ghost" size="sm" type="button" aria-label="关闭引用预览" onPress={() => setPreview(null)}>
+            <HeroButton variant="ghost" size="sm" type="button" aria-label="关闭批注预览" onPress={() => setPreview(null)}>
               <X size={15} />
             </HeroButton>
           </header>

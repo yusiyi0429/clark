@@ -2,15 +2,34 @@ import { describe, expect, it } from "vitest";
 import { createTestApp } from "./helpers.js";
 import { CONVERSATION_TURN_TIMEOUT_MS } from "../src/app.js";
 import type { ConversationRuntime } from "../src/conversations.js";
+import { ConversationTurnError } from "../src/conversationRecovery.js";
 
 function parseSse(body: string): unknown[] {
   return body
     .trim()
     .split("\n\n")
-    .map((block) => JSON.parse(block.split("\n").find((line) => line.startsWith("data: "))!.slice(6)));
+    .flatMap((block) => {
+      const line = block.split("\n").find((candidate) => candidate.startsWith("data: "));
+      return line ? [JSON.parse(line.slice(6))] : [];
+    });
 }
 
 describe("Conversation HTTP/SSE public seam", () => {
+  it("reports provider refusal in Chinese, keeps a note in the transcript and preserves business data", async () => {
+    const t = await createTestApp({}, { async run() { throw Object.assign(new Error("Response incomplete: content_filter"), { code: "CONTENT_FILTER" }); } });
+    try {
+      const cookie = await t.loginCookie(), issue = await t.createIssue();
+      const response = await t.app.inject({ method: "POST", url: `/api/conversations/issue:${issue.objectRef.id}/messages`,
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "请精炼左侧文字" } });
+      expect(parseSse(response.body)).toEqual([expect.objectContaining({ type: "error", code: "CONTENT_FILTER",
+        message: "模型服务没有受理这次请求（内容审核未通过）。问题已保留，可以换个说法后重试。", partial: false })]);
+      const messages = (await t.conversationState(`issue:${issue.objectRef.id}`)).messages;
+      expect(messages.map(message => message.role)).toEqual(["user", "assistant"]);
+      expect(messages[1].content).toBe("（这次回答没有完成：模型服务没有受理这次请求。）");
+      expect((await t.sql("SELECT title,version,status FROM issues WHERE id=$1", [issue.objectRef.id]))[0]).toEqual({ title: issue.title, version: 1, status: "pending" });
+      expect((await t.sql("SELECT status,error FROM agent_runs WHERE kind='conversation'"))[0]).toEqual({ status: "failed", error: "Response incomplete: content_filter" });
+    } finally { await t.close(); }
+  });
   it("authenticates history reads and returns an empty stable global scope", async () => {
     const t = await createTestApp();
     try {
@@ -24,7 +43,7 @@ describe("Conversation HTTP/SSE public seam", () => {
         headers: { cookie },
       });
       expect(history.statusCode).toBe(200);
-      expect(history.json()).toEqual({ scope: "global", messages: [] });
+      expect(history.json()).toEqual({ scope: "global", messages: [], archivedCount: 0 });
     } finally {
       await t.close();
     }
@@ -149,11 +168,11 @@ describe("Conversation HTTP/SSE public seam", () => {
       expect(parseSse(response.body)).toEqual(expect.arrayContaining([
         expect.objectContaining({ type: "compaction", phase: "started" }),
         expect.objectContaining({ type: "compaction", phase: "completed" }),
-        expect.objectContaining({ type: "error", code: "RUNTIME_FAILED" }),
+        expect.objectContaining({ type: "error", code: "RUNTIME_FAILED", resume: "retry" }),
       ]));
       const state = await t.conversationState("global");
       expect(state.runtimeEntries).toEqual(compactedEntries);
-      expect(state.messages.map((message) => message.content)).toEqual(["触发压缩"]);
+      expect(state.messages.map((message) => message.content)).toEqual(["触发压缩", "（这次回答没有完成：天枢处理时出错。）"]);
     } finally {
       await t.close();
     }
@@ -235,7 +254,7 @@ describe("Conversation HTTP/SSE public seam", () => {
     }
   });
 
-  it("streams an honest error and never persists a fake assistant success", async () => {
+  it("streams an honest Chinese error, keeps the written part with a note and never reports success", async () => {
     const runtime: ConversationRuntime = {
       async run(input): Promise<never> {
         input.emit({ type: "message", delta: "partial" });
@@ -254,11 +273,14 @@ describe("Conversation HTTP/SSE public seam", () => {
       const events = parseSse(response.body) as { type: string; status?: string; message?: string }[];
       expect(events).toEqual(expect.arrayContaining([
         expect.objectContaining({ type: "message", delta: "partial" }),
-        expect.objectContaining({ type: "error", message: "provider failed" }),
+        expect.objectContaining({ type: "error", code: "RUNTIME_FAILED", resume: "continue", partial: true,
+          message: expect.stringContaining("已写出的部分保留在上方，点「继续」从断点接着写") }),
       ]));
       expect(events.some((event) => event.type === "done" && event.status === "completed")).toBe(false);
+      expect(JSON.stringify(events)).not.toContain("provider failed");
       const state = await t.conversationState("global");
-      expect(state.messages.map((m) => m.role)).toEqual(["user"]);
+      expect(state.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+      expect(state.messages[1].content).toBe("partial\n\n（这次回答在这里中断了，以上是已经写出的部分。）");
       expect(state.runtimeEntries).toEqual([]);
       expect(await t.agentRuns()).toEqual([expect.objectContaining({
         status: "failed", error: "provider failed", candidate_output: null,
@@ -315,15 +337,15 @@ describe("Conversation HTTP/SSE public seam", () => {
       expect(parseSse(response.body)).toContainEqual(expect.objectContaining({
         type: "error",
         code: "SEARCH_BUDGET_EXHAUSTED",
-        message: "Search limit reached (8)",
+        message: expect.stringContaining("这一轮的外部检索次数已经用完"),
       }));
     } finally {
       await t.close();
     }
   });
 
-  it("enforces the public 180 second turn timeout without persisting partial output", async () => {
-    expect(CONVERSATION_TURN_TIMEOUT_MS).toBe(180_000);
+  it("has no 180 second hard cap: the absolute cap is 10 minutes, and hitting it keeps the partial answer with a note", async () => {
+    expect(CONVERSATION_TURN_TIMEOUT_MS).toBe(600_000);
     const runtime: ConversationRuntime = {
       async run(input): Promise<never> {
         input.emit({ type: "message", delta: "partial" });
@@ -342,18 +364,97 @@ describe("Conversation HTTP/SSE public seam", () => {
       });
       expect(parseSse(response.body)).toEqual(expect.arrayContaining([
         expect.objectContaining({ type: "message", delta: "partial" }),
-        expect.objectContaining({ type: "error", code: "TURN_TIMEOUT" }),
+        expect.objectContaining({ type: "error", code: "TURN_TIMEOUT", resume: "continue", partial: true, message: expect.stringContaining("已写出的部分保留在上方") }),
       ]));
-      expect((await t.conversationState("global")).messages.map((message) => message.role)).toEqual(["user"]);
+      const messages = (await t.conversationState("global")).messages;
+      expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+      expect(messages[1].content).toMatch(/^partial\n\n（回答持续了 \d+ 分钟仍未写完，以上是已写出的部分。）$/);
       expect(await t.agentRuns()).toEqual([expect.objectContaining({
-        status: "aborted", error: "Conversation turn exceeded 180 seconds", candidate_output: null,
+        status: "aborted", error: expect.stringMatching(/^Conversation turn exceeded \d+ seconds$/), candidate_output: null,
       })]);
     } finally {
       await t.close();
     }
   });
 
-  it("aborts Pi when the SSE client disconnects and does not save an assistant message", async () => {
+  it("does not cut a long answer by the tier time limit: as long as events keep coming the turn runs to the end", async () => {
+    const notice = "这个问题涉及赛道格局的战略判断，需要更深入地查证和推演。";
+    const runtime: ConversationRuntime = {
+      async run(input) {
+        // 档位说「通常 40 毫秒」，这一轮写了 400 毫秒：不截断。
+        input.emit({ type: "route", tier: "deep", source: "model", expectSeconds: 90, timeoutMs: 40, notice });
+        let body = "";
+        for (let index = 0; index < 20; index += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          const delta = `第${index}段。`;
+          body += delta;
+          input.emit({ type: "message", delta });
+        }
+        return { assistantMessage: `${notice}\n\n${body}`, runtimeEntries: [] };
+      },
+    };
+    // 卡住阈值 150 毫秒（每 20 毫秒就有新事件），绝对上限 10 秒。
+    const t = await createTestApp({}, runtime, { conversationTurnTimeoutMs: 10_000, conversationStallTimeoutMs: 150 });
+    try {
+      const cookie = await t.loginCookie();
+      const response = await t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "深度" } });
+      const events = parseSse(response.body);
+      expect(events[0]).toMatchObject({ type: "route", tier: "deep", notice, timeoutMs: 10_000 });
+      expect(events.at(-1)).toMatchObject({ type: "done", status: "completed" });
+      expect(events.some((event) => (event as { type: string }).type === "error")).toBe(false);
+      const messages = (await t.conversationState("global")).messages;
+      expect(messages[1].content).toBe(`${notice}\n\n${Array.from({ length: 20 }, (_, index) => `第${index}段。`).join("")}`);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("writes SSE heartbeats while the model is quiet so proxies and the browser keep the connection", async () => {
+    const runtime: ConversationRuntime = {
+      async run(input) {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        input.emit({ type: "message", delta: "想完了" });
+        return { assistantMessage: "想完了", runtimeEntries: [] };
+      },
+    };
+    const t = await createTestApp({}, runtime, { conversationHeartbeatMs: 20 });
+    try {
+      const cookie = await t.loginCookie();
+      const response = await t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "慢一点" } });
+      expect(response.body).toMatch(/^: ping$/m);
+      expect(parseSse(response.body).at(-1)).toMatchObject({ type: "done", status: "completed" });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("explains a timeout with nothing written yet, keeps a note in the transcript and offers to answer again", async () => {
+    const runtime: ConversationRuntime = {
+      async run(input): Promise<never> {
+        input.emit({ type: "route", tier: "deep", source: "rule", expectSeconds: 90, timeoutMs: 30, notice: "这个问题涉及集团层面的战略判断，需要更深入地查证和推演。" });
+        await new Promise<void>((resolve) => input.signal.addEventListener("abort", () => resolve(), { once: true }));
+        throw input.signal.reason;
+      },
+    };
+    const t = await createTestApp({}, runtime, { conversationTurnTimeoutMs: 30 });
+    try {
+      const cookie = await t.loginCookie();
+      const response = await t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "深度" } });
+      expect(parseSse(response.body)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "error", code: "TURN_TIMEOUT", resume: "retry", partial: false, message: expect.stringContaining("点「重新回答」") }),
+      ]));
+      const messages = (await t.conversationState("global")).messages;
+      expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+      expect(messages[1].content).toBe("这个问题涉及集团层面的战略判断，需要更深入地查证和推演。\n\n（这次回答没有完成：持续时间超过上限。）");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("when the SSE client disconnects (stop button or closed page) aborts Pi but keeps what was written", async () => {
     let aborted = false;
     const runtime: ConversationRuntime = {
       async run(input) {
@@ -381,7 +482,7 @@ describe("Conversation HTTP/SSE public seam", () => {
       await response.body!.getReader().read();
       controller.abort();
       let runs: Record<string, unknown>[] = [];
-      for (let i = 0; i < 20; i += 1) {
+      for (let i = 0; i < 50; i += 1) {
         runs = await t.agentRuns();
         if (aborted && runs[0]?.status === "aborted") break;
         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -389,8 +490,63 @@ describe("Conversation HTTP/SSE public seam", () => {
       expect(aborted).toBe(true);
       expect(runs).toEqual([expect.objectContaining({ status: "aborted" })]);
       const state = await t.conversationState("global");
-      expect(state.messages.map((m) => m.role)).toEqual(["user"]);
+      expect(state.messages.map((m) => m.content)).toEqual(["disconnect", "partial\n\n（已停止，以上是停止前写出的部分。）"]);
+      // 运行时没有给出这一轮的模型历史（不是它自己报的失败）：不采信它返回的东西。
       expect(state.runtimeEntries).toEqual([]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("persists the model history a failed turn hands back and lets 继续 resume it with the same tier", async () => {
+    const seen: { message: string; resume?: unknown; entries: unknown[] }[] = [];
+    let turn = 0;
+    const runtime: ConversationRuntime = {
+      async run(input) {
+        turn += 1;
+        seen.push({ message: input.message, resume: input.resume, entries: input.runtimeEntries });
+        if (turn === 1) {
+          input.emit({ type: "route", tier: "deep", source: "rule", expectSeconds: 90, timeoutMs: 1, notice: "这个问题涉及集团层面的战略判断，需要更深入地查证和推演。" });
+          input.emit({ type: "recovery", reason: "network", action: "continue", attempt: 2, notice: "和模型服务的网络连接中断了，正在从断点接着写（第 1 次）" });
+          input.emit({ type: "message", delta: "第一段判断。" });
+          throw new ConversationTurnError("terminated", "network", { runtimeEntries: [{ type: "session", partial: "第一段判断。" }], recoveries: 3 });
+        }
+        input.emit({ type: "message", delta: "第二段接着写。" });
+        return { assistantMessage: "第二段接着写。", runtimeEntries: [...input.runtimeEntries, { turn: 2 }] };
+      },
+    };
+    const t = await createTestApp({}, runtime);
+    try {
+      const cookie = await t.loginCookie();
+      const send = (payload: Record<string, unknown>) => t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload });
+      const first = parseSse((await send({ message: "集团该怎么定位？" })).body) as { type: string; runId: string; code?: string; message?: string }[];
+      expect(first).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "recovery", action: "continue" }),
+        expect.objectContaining({ type: "error", code: "NETWORK_INTERRUPTED", resume: "continue", partial: true }),
+      ]));
+      const error = first.find((event) => event.type === "error")!;
+      expect(error.message).toMatch(/网络连接中断了.*已自动恢复 1 次仍未成功.*点「继续」从断点接着写/);
+      expect(error.message).not.toMatch(/terminated|暂不可用/);
+      let state = await t.conversationState("global");
+      expect(state.runtimeEntries).toEqual([{ type: "session", partial: "第一段判断。" }]);
+      expect(state.messages.map((message) => message.content)).toEqual(["集团该怎么定位？",
+        "这个问题涉及集团层面的战略判断，需要更深入地查证和推演。\n\n第一段判断。\n\n（这次回答在这里中断了，以上是已经写出的部分。）"]);
+
+      const resumed = parseSse((await send({ message: "继续", resumeRunId: error.runId })).body);
+      expect(resumed.at(-1)).toMatchObject({ type: "done", status: "completed" });
+      expect(seen[1].message).toBe("继续");
+      expect(seen[1].entries).toEqual([{ type: "session", partial: "第一段判断。" }]);
+      expect(seen[1].resume).toMatchObject({ tier: "deep", question: "集团该怎么定位？", instruction: expect.stringContaining("结尾是「这个问题涉及集团层面的战略判断，需要更深入地查证和推演。\n\n第一段判断。」") });
+      expect((seen[1].resume as { instruction: string }).instruction).not.toContain("（这次回答在这里中断了");
+      state = await t.conversationState("global");
+      expect(state.messages.map((message) => message.content).slice(2)).toEqual(["继续", "第二段接着写。"]);
+      // 那一轮的原问题记在「继续」这一轮上：再中断再点「继续」，接的仍是同一个问题。
+      expect((await t.agentRuns())[1]).toMatchObject({ input_snapshot: { message: "集团该怎么定位？", resumeOf: error.runId } });
+
+      const stranger = await send({ message: "继续", resumeRunId: "11111111-1111-4111-8111-111111111111" });
+      expect(stranger.statusCode).toBe(404);
+      expect(stranger.json()).toMatchObject({ code: "RESUME_NOT_FOUND" });
     } finally {
       await t.close();
     }

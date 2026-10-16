@@ -1,0 +1,175 @@
+/*
+ * 对话里的富内容块（conversation/richBlocks；docs/superpowers/specs/2026-10-10-discussion-desk-design.md「对话里的富内容块」）。
+ * 对话面是浅色阅读面（data-tone=light）。显示规范（parse.ts 开头、spec「富内容块的显示规范」）：宽度与正文栏同宽（100%，不设上限），
+ * 内容在宽度里先压缩、再换行，实在放不下才横向滚动，并在两侧渐隐、下方提示。新增的图形、图表类块都用 .frame / .block 这一套外框。
+ * 字号：标题 14 / 600，数值 16 / 600，名称与次级 13，提示 12；数字等宽（tabular-nums）。
+ * 完成度色阶同首页战况面（home-dashboard.module.css）：≥80% 绿 #178a6b、50–80% 蓝 #3b6fc9、<50% 琥珀 #bf7a10、0% 中性灰 #8e959e。
+ * 颜色只上条与圆点，数字与文字都是墨色；完成度始终另有文字。
+ * 路线图状态（已确认 / 计划 / 推断）与「现在」只用现有的蓝 #3b6fc9 与灰阶，推断用虚线描边区分；图示（visual）的颜色在 iframe 里由注入的 CSS 变量给。
+ */
+.frame{width:100%;margin:18px 0 22px}
+.frame + .frame{margin-top:-6px}
+
+.block{margin:0;padding:14px 16px 16px;border:1px solid #e6e9ee;border-radius:14px;background:#fbfbfc;font-size:13px;line-height:1.55;color:#25282e}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px;margin:0 0 12px}
+.title{font-size:14px;font-weight:600;line-height:1.5;color:#1d1d1f;overflow-wrap:anywhere}
+.meta{font-size:12px;line-height:1.5;color:#7a7f89;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ── 指标对比条 ── */
+.block .metrics{list-style:none;display:flex;flex-direction:column;gap:14px;margin:0;padding:0}
+.metric{--band:#8e959e;min-width:0}
+/* 正文 .prose 的 ul / li / p 样式（缩进、圆点、外边距）不进块里：选择器多一档。 */
+.block .metric,.block .node{margin:0;list-style:none}
+.block .metric{padding:0}
+.metric[data-band=good]{--band:#178a6b}
+.metric[data-band=steady]{--band:#3b6fc9}
+.metric[data-band=low]{--band:#bf7a10}
+.metricHead{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.label{min-width:0;font-size:13px;line-height:1.5;color:#666d76;overflow-wrap:anywhere}
+.percent{flex:none;font-size:16px;font-weight:600;line-height:1.3;color:#1d1d1f;font-variant-numeric:tabular-nums}
+.figures{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:2px;line-height:1.45;font-variant-numeric:tabular-nums}
+.figures>b{font-size:16px;font-weight:600;color:#1d1d1f}
+.target{font-size:13px;color:#858b94;white-space:nowrap}
+.gap{margin-left:auto;padding-left:10px;font-size:12px;color:#7a7f89;white-space:nowrap}
+.bar{position:relative;display:block;height:6px;margin:7px 0 0;border-radius:3px;background:#1d1d1f0f;overflow:hidden}
+.fill{position:absolute;inset:0 auto 0 0;border-radius:3px;background:var(--band);transform-origin:left center;animation:barGrow 520ms cubic-bezier(.22,.72,.18,1) 80ms both}
+.block .note{margin:6px 0 0;font-size:12px;line-height:1.55;color:#7a7f89}
+@keyframes barGrow{from{transform:scaleX(0)}}
+
+/* ── 时间线 ── */
+.progress{position:relative;height:4px;margin:-4px 0 14px;border-radius:2px;background:#1d1d1f0f;overflow:hidden}
+.progressFill{position:absolute;inset:0 auto 0 0;border-radius:2px;background:#3b6fc9}
+/*
+ * 节点的排法（RichBlocks Timeline 量轨道宽度，parse.ts timelineLayout 决定）：
+ * - row：一行等分整个正文栏宽度（节点 ≥88）；
+ * - wrap：一行放不下时按均匀的列数换行（最多 3 行），行与行之间空 16；
+ * - scroll（以及量到宽度之前）：一行横向滚动，每个节点 112；还有节点没露出来的一侧渐隐，下方一行提示。
+ */
+.track{overflow-x:auto;overflow-y:hidden;margin:0 -16px -6px;padding:0 16px 6px;scrollbar-width:thin;overscroll-behavior-x:contain}
+.track:focus-visible{outline:2px solid #3b6fc966;outline-offset:2px;border-radius:8px}
+.block .nodes{position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(112px,1fr);gap:0;margin:0;padding:0;list-style:none;min-width:calc(var(--count) * 112px)}
+.block[data-layout=row] .nodes{grid-auto-columns:minmax(0,1fr);min-width:0}
+.block[data-layout=wrap] .nodes{grid-auto-flow:row;grid-template-columns:repeat(var(--columns),minmax(0,1fr));row-gap:16px;min-width:0}
+.track[data-more-end]{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 40px),transparent)}
+.track[data-more-start]{-webkit-mask-image:linear-gradient(to right,transparent,#000 40px);mask-image:linear-gradient(to right,transparent,#000 40px)}
+.track[data-more-start][data-more-end]{-webkit-mask-image:linear-gradient(to right,transparent,#000 40px,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(to right,transparent,#000 40px,#000 calc(100% - 40px),transparent)}
+.scrollHint{margin:8px 0 0;font-size:12px;line-height:1.5;color:#7a7f89}
+/* 贯穿的细线：每个节点画自己那一格（第一个从点的中心起，最后一个到点的中心止）；换行时行尾、行首通到边上，读得出接着下一行。 */
+.block .node{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;padding:0 6px;text-align:center}
+.block .node::before{content:'';position:absolute;top:6px;left:0;right:0;height:1px;background:#d6dae0}
+.block .node:first-child::before{left:50%}
+.block .node:last-child::before{right:50%}
+.dot{position:relative;z-index:1;width:13px;height:13px;margin:0 0 8px;border:2px solid #1d1d1f;border-radius:50%;background:#fbfbfc;box-sizing:border-box}
+.node[data-phase=past] .dot{border-color:#b4b9c1;background:#b4b9c1}
+.node[data-phase=now] .dot{border-color:#3b6fc9;background:#3b6fc9;box-shadow:0 0 0 4px #3b6fc924}
+.node[data-kind=deadline] .dot{border-radius:2px;transform:rotate(45deg) scale(.86);border-color:#bf7a10;background:#bf7a10}
+.date{font-size:12px;line-height:1.5;color:#7a7f89;font-variant-numeric:tabular-nums;white-space:nowrap}
+.node[data-phase=now] .date{color:#2f5fae;font-weight:600}
+.nodeLabel{font-size:13px;line-height:1.5;color:#25282e;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.node[data-phase=past] .nodeLabel{color:#7a7f89}
+.kindTag{margin-top:2px;font-size:11px;line-height:1.4;color:#a0660c}
+
+/* ── 路线图（roadmap；版式 richBlocks/roadmapLayout.ts，尺寸与那里的常量一致：行高 30、刻度行 22） ──
+ * 状态不加新颜色：已确认 = 蓝色实条，计划 = 灰色实条，推断 = 灰色虚线框、无底、名称次级字色；圆点同一套。
+ * 「现在」= 一条 #3b6fc9 竖线，刻度行里写「现在」。滚动时泳道名贴住左边。
+ */
+.rmTrack{padding-bottom:4px}
+.rmCanvas{position:relative}
+.rmAxis{position:relative;height:22px;margin:0 0 2px}
+.rmTick{position:absolute;top:0;padding-left:4px;font-size:12px;line-height:20px;color:#7a7f89;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rmTick[data-hidden]{visibility:hidden}
+.rmNowLabel{position:absolute;top:0;width:30px;text-align:center;font-size:12px;line-height:20px;font-weight:600;color:#2f5fae;white-space:nowrap}
+.rmGrid{position:absolute;top:22px;right:0;bottom:0;left:0;pointer-events:none}
+.rmGridLine{position:absolute;top:0;bottom:0;width:1px;background:#1d1d1f0d}
+.rmNowLine{position:absolute;top:-2px;bottom:0;width:1px;margin-left:-.5px;background:#3b6fc9;z-index:2}
+.rmLane{position:relative;padding:8px 0 4px;border-top:1px solid #eef0f3}
+.rmAxis + .rmGrid + .rmLane{border-top:0;padding-top:2px}
+.block .rmLaneLabel{position:sticky;left:0;z-index:3;display:inline-block;max-width:100%;margin:0 0 4px;padding:0 6px 0 0;font-size:13px;font-weight:500;line-height:20px;color:#25282e;background:#fbfbfc;overflow-wrap:anywhere}
+.block .rmRows{position:relative;margin:0;padding:0;list-style:none}
+.block .rmItem{position:absolute;left:0;right:0;height:30px;margin:0;padding:0;list-style:none}
+/* 一项 = 上面一行名称（12/16）+ 下面一道 8px 细条；单点是 10px 圆点，圆心在细条的中线上。名称带块底色，「现在」竖线从名称后面穿过不压字。 */
+.rmLabel{position:absolute;top:1px;z-index:3;padding:0 3px 0 0;font-size:12px;line-height:16px;color:#25282e;white-space:nowrap;background:#fbfbfc}
+.rmMark{position:absolute;top:18px;height:8px;border-radius:4px;box-sizing:border-box}
+.rmItem[data-shape=point] .rmMark{top:17px;height:10px;border-radius:50%;z-index:3}
+.rmItem[data-status=confirmed] .rmMark{border:1px solid #3b6fc9;background:#3b6fc9}
+.rmItem[data-status=planned] .rmMark{border:1px solid #b4b9c1;background:#b4b9c1}
+.rmItem[data-status=inferred] .rmMark{border:1px dashed #8e959e;background:transparent}
+.rmItem[data-shape=point][data-status=confirmed] .rmMark{border-width:2px}
+.rmItem[data-shape=point][data-status=planned] .rmMark{border-width:2px;border-color:#8e959e;background:#fbfbfc}
+.rmItem[data-shape=point][data-status=inferred] .rmMark{border-width:1.5px;background:#fbfbfc}
+.rmItem[data-status=inferred] .rmLabel{color:#666d76}
+.block .rmLegend{display:flex;flex-wrap:wrap;gap:4px 14px;margin:8px 0 0;padding:0;list-style:none;font-size:12px;line-height:1.5;color:#7a7f89}
+.block .rmLegend li{display:inline-flex;align-items:center;gap:6px;margin:0;padding:0}
+.rmSwatch{display:inline-block;width:16px;height:8px;border-radius:4px;box-sizing:border-box}
+.rmLegend [data-status=confirmed] .rmSwatch{border:1px solid #3b6fc9;background:#3b6fc9}
+.rmLegend [data-status=planned] .rmSwatch{border:1px solid #b4b9c1;background:#b4b9c1}
+.rmLegend [data-status=inferred] .rmSwatch{border:1px dashed #8e959e}
+
+/* ── 图示（visual；清洗与沙箱 richBlocks/visualSandbox.ts）：外框同一套，左右内边距收窄到 8，让图示多 16 的宽度；iframe 透明、无边框。 ── */
+.block.visual{padding:12px 8px 10px}
+.visual .head{margin:0 8px 8px;align-items:center}
+.visualZoom{display:grid;place-items:center;width:28px;height:28px;margin:-4px -6px -4px auto;border:0;border-radius:8px;background:transparent;color:#7a7f89;cursor:pointer}
+.visualZoom:hover{background:#1d1d1f0a;color:#2f6bb4}
+.visualZoom:focus-visible{outline:2px solid #3b6fc9;outline-offset:1px}
+.visualHolder{position:relative;width:100%;overflow:hidden}
+.visualHolder>.shimmer{margin:8px}
+.visualFrame{display:block;width:100%;border:0;background:transparent;opacity:0;transition:opacity 160ms ease}
+.visual[data-ready] .visualFrame{opacity:1}
+.visual .scrollHint{margin:6px 8px 0}
+.visualFailed{margin:0;font-size:13px;line-height:1.55;color:#666d76}
+.visualSource{margin:8px 0 0;font-size:12px;color:#7a7f89}
+.visualSource summary{width:fit-content;cursor:pointer;line-height:1.5}
+.block .visualSource pre{max-height:240px;margin:8px 0 0;padding:10px 12px;overflow:auto;border-radius:8px;background:#1d1d1f0a;color:#25282e;font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* ── 骨架（流式中没收全） ── */
+.skeleton{margin:18px 0 22px;padding:14px 16px 16px;border:1px dashed #dfe3e8;border-radius:14px;background:#fbfbfc}
+.skeleton .head{margin-bottom:12px}
+.pending{font-size:12px;color:#8a8f98}
+.shimmer{display:block;height:8px;margin:0 0 10px;border-radius:4px;background:linear-gradient(90deg,#1d1d1f0a 0%,#1d1d1f14 40%,#1d1d1f0a 80%);background-size:200% 100%;animation:shimmer 1.4s ease-in-out infinite}
+.shimmer[data-short]{width:62%;margin-bottom:0}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:-100% 0}}
+
+/* ── 缩略卡（收起态大块） ── */
+.thumb{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"icon text" "icon hint";column-gap:12px;row-gap:2px;align-items:center;width:100%;min-height:44px;margin:0;padding:12px 14px;border:1px solid #e6e9ee;border-radius:14px;background:#fbfbfc;color:inherit;font:inherit;text-align:left;cursor:pointer;transition:border-color 160ms ease,background-color 160ms ease}
+.thumb:hover{border-color:#cfd5dd;background:#f6f7f9}
+.thumb:focus-visible{outline:2px solid #3b6fc9;outline-offset:2px}
+.thumbIcon{grid-area:icon;display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:#1d1d1f0a;color:#4a515b}
+.thumbText{grid-area:text;display:flex;flex-wrap:wrap;align-items:baseline;column-gap:10px;min-width:0}
+.thumbTitle{font-size:14px;font-weight:600;line-height:1.5;color:#1d1d1f;overflow-wrap:anywhere}
+.thumbSummary{font-size:13px;line-height:1.5;color:#666d76;font-variant-numeric:tabular-nums}
+.thumbHint{grid-area:hint;display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:1.5;color:#8a8f98}
+.thumb:hover .thumbHint{color:#2f6bb4}
+
+/* ── 手机 / 窄屏的展开：底部全屏 sheet ── */
+.sheetLayer{position:fixed;inset:0;z-index:1200}
+.sheetVeil{position:absolute;inset:0;border:0;padding:0;background:#0f121733;cursor:default}
+.sheet{position:absolute;inset:max(12px,env(safe-area-inset-top)) 0 0;display:flex;flex-direction:column;border-radius:18px 18px 0 0;background:#fff;box-shadow:0 -12px 40px #0f121729;animation:sheetUp 260ms cubic-bezier(.22,.72,.18,1) both;transition:transform 160ms ease;color:#25282e}
+.sheetHead{position:relative;flex:none;display:flex;align-items:center;gap:8px;min-height:60px;padding:14px 8px 6px 20px;touch-action:none;cursor:grab}
+.grabber{position:absolute;top:6px;left:50%;width:36px;height:4px;margin-left:-18px;border-radius:2px;background:#1d1d1f24}
+.sheetTitle{flex:1;min-width:0;margin:0;font-size:16px;font-weight:600;line-height:1.5;color:#1d1d1f;overflow-wrap:anywhere}
+.sheetClose{flex:none;display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:transparent;color:#4a515b;cursor:pointer}
+.sheetClose:hover{background:#1d1d1f0a}
+.sheetClose:focus-visible{outline:2px solid #3b6fc9;outline-offset:-2px}
+/* 正文两向都可滚：时间线在 sheet 里横向滚动看完。 */
+.sheetBody{flex:1;min-height:0;overflow:auto;padding:4px 16px max(24px,env(safe-area-inset-bottom));overscroll-behavior:contain}
+.sheetBody .block{border:0;padding:4px 0 0;background:none}
+.sheetBody .track{margin:0;padding:0 0 10px}
+.sheetBody .head>.title{display:none}
+.sheetBody .block .rmLaneLabel,.sheetBody .rmLabel{background:#fff}
+.sheetBody .rmItem[data-shape=point][data-status=planned] .rmMark,.sheetBody .rmItem[data-shape=point][data-status=inferred] .rmMark{background:#fff}
+.sheetBody .block.visual{padding:4px 0 0}
+.sheetBody .visual .head{margin:0}
+@keyframes sheetUp{from{transform:translateY(100%)}}
+
+/* 手持（≤959）字号下限 13（docs/superpowers/specs/2026-10-12-mobile-foldable.md §2）。 */
+@media(max-width:959px){
+  .label,.target,.nodeLabel{font-size:14px}
+  .date,.meta,.gap,.note,.thumbHint,.kindTag,.pending,.scrollHint,.rmTick,.rmNowLabel,.rmLabel,.rmLegend,.visualSource{font-size:13px}
+}
+@media(max-width:599px){
+  .block,.skeleton{padding:12px 14px 14px}
+  .track{margin:0 -14px -6px;padding:0 14px 6px}
+}
+@media(prefers-reduced-motion:reduce){.fill,.shimmer,.sheet{animation:none}.sheet,.visualFrame{transition:none}}
+:global([data-reduce-motion='true']) .fill,:global([data-reduce-motion='true']) .shimmer,:global([data-reduce-motion='true']) .sheet{animation:none}
+@media(prefers-contrast:more){.block,.thumb,.skeleton{border-color:#8a8f98}.label,.target,.meta,.date,.thumbSummary,.thumbHint,.note,.gap,.scrollHint,.rmTick,.rmLegend,.visualFailed{color:#444}}

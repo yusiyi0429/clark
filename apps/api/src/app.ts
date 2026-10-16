@@ -1,3 +1,4 @@
+import { setMaterialClock } from "./objectMaterials.js";
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { Value } from "@sinclair/typebox/value";
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
@@ -7,24 +8,31 @@ import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import { loadCompanyMemory, type CompanyMemorySeedEnv } from "./companyMemory.js";
 import { globalConversationContext, listConversationMissions } from "./conversationContext.js";
+import { listBattlefieldRows } from "./battlefields.js";
+import { createResponsesThinkingTranslator, createResponsesThoughtTranslator, createResponsesTriage } from "./conversationRouting.js";
+import { conversationModelApi, conversationTierModels, parseTierThinking } from "./conversationModel.js";
 import { createPiConversationRuntime } from "./piConversationRuntime.js";
 import type { WebSearchAdapter } from "./webSearch.js";
 import type { ConversationRuntime } from "./conversations.js";
+import { createConversationCompaction, type ConversationCompactionOptions } from "./conversationCompaction.js";
 import type { RadarOutletAdapter, RadarService } from "./radar.js";
 import type { PersonalRadarService } from "./personalRadar.js";
 import { resolveConfiguredOutletIds } from "./outletSources.js";
-import type { ResearchService } from "./research.js";
-import type { PreflightAgent } from "./meetingPreflight.js";
-import { createPreflightAgent } from "./preflightAgent.js";
+import { resumeResearch, type ResearchService } from "./research.js";
+import { resumePreflights, type PreflightAgent } from "./meetingPreflight.js";
+import { createPreflightAgent, createPreflightThoughtTranslator, preflightThinkingLevel } from "./preflightAgent.js";
+import { agentModel, type AgentModelEnv } from "./agentModels.js";
 import { onOutcomeReviewed, pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
+import { companyPeriod } from "./monthlyPlans.js";
+import { createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
 import { createWorldMeetingService } from "./worldMeetingEvents.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import type { DriExporter } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
 import type { MonthlyReviewService } from "./monthlyReviewService.js";
 import { logEvent } from "./observability.js";
-import { configureLangSmith } from "./langsmith.js";
+import { clientTagFor, enterRequestClient, tracingEnabled } from "./tracing.js";
 import { ensureMaterialStorage } from "./materialParser.js";
 import {
   createFail,
@@ -46,6 +54,7 @@ import { registerConfigRoutes } from "./routes/config.js";
 import { registerRadarRoutes } from "./routes/radar.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerMeetingRoutes } from "./routes/meetings.js";
+import { registerKnowledgeRoutes } from "./routes/knowledge.js";
 import { registerMaterialRoutes } from "./routes/materials.js";
 import type { MaterialAnnotationAgent } from "./materialAnnotationAgent.js";
 import type { MissionCardAnnotationAgent } from "./missionCardAnnotationAgent.js";
@@ -66,12 +75,25 @@ import { registerMonthlyReviewRoutes } from "./routes/monthlyReviews.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
+import { realRealtimeSessionDeps, type RealtimeSessionDeps } from "./tencentAsrRealtime.js";
+import { realDictationPolishDeps, type DictationPolishDeps } from "./dictationPolish.js";
 import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js";
 import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAcceptanceDraft.js";
+import { personDisplayNames } from "./people.js";
+import { issueOriginFields } from "./dataOrigin.js";
 
 type ValidationItem = { instancePath?: string; dataPath?: string; message?: string };
 
-export const CONVERSATION_TURN_TIMEOUT_MS = 180_000;
+/**
+ * 一轮对话的绝对上限：只防死循环，不用来截断正常的长回答（10/13 起取消 180 秒硬上限）。
+ * 是否卡住按进展判断：一次模型调用连续 90 秒没有任何新事件就就地恢复（conversationRecovery.ts），
+ * 整轮连续 CONVERSATION_STALL_TIMEOUT_MS 没有任何事件（恢复本身也卡住了）才停下，已写出的部分保留。
+ */
+export const CONVERSATION_TURN_TIMEOUT_MS = 600_000;
+/** 整轮连续这么久没有任何事件（没有思考、正文、工具、恢复进度）才停下；要长于单次模型调用的卡住阈值（90 秒）加上恢复的等待。 */
+export const CONVERSATION_STALL_TIMEOUT_MS = 150_000;
+/** SSE 心跳：每隔这么久写一行注释，代理与浏览器不会因为长时间没有数据把连接当成断了。 */
+export const CONVERSATION_HEARTBEAT_MS = 15_000;
 /** warmap-transcript.v1 单文件上限；Web multipart 与 service API 共用。 */
 export const MAX_TRANSCRIPT_BYTES = 1024 * 1024;
 const DEFAULT_MATERIAL_STORAGE_DIR = "/tmp/warmap-meeting-materials";
@@ -103,14 +125,29 @@ export type AppEnv = {
   lightModel: string;
   heavyModel: string;
   compactionModel: string;
-  /** 可选 LangSmith adapter；缺失时完全 no-op（.tech/07 §7）。 */
-  langsmithApiKey?: string;
-  langsmithProject?: string;
+  /** 一号位 / DRI 对话的主答模型；不配时用 heavyModel（10/13 止血：对话从 light 换到 Sol 档并打开思考）。 */
+  conversationModel?: string;
+  /** 主答模型的协议（openai-responses / anthropic-messages）；不配按模型 id 推断，claude-* 走 Anthropic 协议。 */
+  conversationApi?: string;
+  /** 主答模型的地址；不配时 Responses 用 PI_BASE_URL，Anthropic 协议用网关根地址 + /anthropic。 */
+  conversationBaseUrl?: string;
+  /** 按档位覆盖思考强度，如「quick=low,grounded=medium,deep=high」；不配沿用 conversationRouting.ts 的 TIER_SETTINGS。 */
+  conversationThinking?: string;
+  /** 对话每轮分档的快模型分诊；不配时用 lightModel（关思考）。 */
+  triageModel?: string;
+  /** 会前预审模型；不配时用 heavyModel（10/13：预审从 light 换到 Sol 档并打开思考）。 */
+  preflightModel?: string;
+  /** 会前预审思考强度（off / low / medium / high / xhigh）；不配时 high。 */
+  preflightThinking?: string;
+  /** 会后提取等候选 Agent 的模型与思考强度（OUTCOME_MODEL 等，agentModels.ts）；不配时与之前一致。 */
+  agentModels?: AgentModelEnv;
   materialStorageDir?: string;
   /** 会话附件 API 卷；与 Meeting 材料卷隔离。 */
   conversationAttachmentStorageDir?: string;
   /** 会议录音卷（分片、拼好的 webm、转码后的 mp3、厂商原文）；与材料卷隔离。 */
   recordingStorageDir?: string;
+  /** 第二个只读实例（词元云集 TK scope）：resolveWorldTkEnv 给出；不设 TKOS_WORLD_TK_INSTANCE 时为空（关闭）。 */
+  worldTk?: WorldEnv;
 } & CompanyMemorySeedEnv & WorldEnv;
 
 export async function buildApp({
@@ -129,6 +166,8 @@ export async function buildApp({
   recordingService,
   voiceprintDeps = realVoiceprintDeps,
   dictationDeps = realDictationDeps,
+  dictationRealtimeDeps,
+  dictationPolishDeps = realDictationPolishDeps,
   threadIntroAgent,
   taskAcceptanceAgent,
   materialAnnotationAgent,
@@ -138,6 +177,11 @@ export async function buildApp({
   webSearch,
   outlets,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
+  conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
+  conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
+  conversationCompactionOptions,
+  backgroundPreflight = true,
+  resumeResearchOnReady = false,
   now = () => new Date(),
 }: {
   pool: Pool;
@@ -161,6 +205,10 @@ export async function buildApp({
   voiceprintDeps?: VoiceprintDeps;
   /** 输入框语音转文字用的 ffmpeg 与火山极速版；缺省为真实实现（测试注入假实现）。 */
   dictationDeps?: DictationDeps;
+  /** 实时听写签发用的配置读取与真实时钟；缺省为真实实现（测试只覆盖其中几项）。 */
+  dictationRealtimeDeps?: Partial<RealtimeSessionDeps>;
+  /** 听写快速整理用的方舟配置与客户端；缺省为真实实现（测试注入假实现）。 */
+  dictationPolishDeps?: DictationPolishDeps;
   threadIntroAgent?: ThreadIntroAgent;
   taskAcceptanceAgent?: TaskAcceptanceAgent;
   materialAnnotationAgent?: MaterialAnnotationAgent;
@@ -173,24 +221,42 @@ export async function buildApp({
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
   outlets?: RadarOutletAdapter;
   conversationTurnTimeoutMs?: number;
+  conversationStallTimeoutMs?: number;
+  conversationHeartbeatMs?: number;
+  /** 对话历史后台压缩的阈值等（conversationCompaction.ts；测试用，缺省按模块常量）。 */
+  conversationCompactionOptions?: Omit<ConversationCompactionOptions, "query" | "summarize">;
+  /** 默认 true：内建的真实预审 Agent 在后台跑。测试夹具关掉，避免后台写入和断言抢版本号。 */
+  backgroundPreflight?: boolean;
+  /** 演示场次启用：启动后在后台为还没有预研的待决议题补跑预研（并发 3 个），会前预审等它跑完再补跑。默认关：正式环境仍等 CEO 显式重试。 */
+  resumeResearchOnReady?: boolean;
   /** 业务时钟；通知与战场投影按公司月读取同一持久对象。 */
   now?: () => Date;
 }): Promise<FastifyInstance> {
-  configureLangSmith({ apiKey: env.langsmithApiKey, project: env.langsmithProject });
+  // 材料上传与修订按本应用的业务时钟记时间（演示场次＝资料截至时间），与回执、计划修订同一时钟。
+  setMaterialClock(pool, now);
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
   const companyMemory = loadCompanyMemory(env);
-  const preflight = preflightAgent ?? await createPreflightAgent({
+  // 分诊与思考翻译用的快模型（TRIAGE_MODEL，不配时 LIGHT_MODEL）；TRIAGE_MODEL 出错时退回 LIGHT_MODEL 再试一次。
+  const fastModels = { modelId: env.triageModel || env.lightModel, fallbackModelId: env.lightModel };
+  // 真实预审 Agent 在后台跑：建会、加入会议、重试预审的接口写完就返回（巡检 P1-5/6）；注入的测试替身保持同步，除非自己声明 background。
+  const preflight: PreflightAgent = preflightAgent ?? { ...await createPreflightAgent({
     query: pool.query.bind(pool),
     companyMemory,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
-    modelId: env.lightModel,
-  });
+    // 预审换 Sol 档并打开思考（PREFLIGHT_MODEL / PREFLIGHT_THINKING 可改）；英文思考小标题由快模型译成中文要点。
+    modelId: env.preflightModel || env.heavyModel,
+    thinkingLevel: preflightThinkingLevel(env.preflightThinking),
+    translateThought: env.piBaseUrl && env.piApiKey
+      ? createPreflightThoughtTranslator({ baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...fastModels })
+      : undefined,
+  }), background: backgroundPreflight };
+  // 会后提取：OUTCOME_MODEL / OUTCOME_THINKING 可改，不配时 HEAVY_MODEL、不开思考（agentModels.ts）。
   const outcome = outcomeAgent ?? createPostMeetingAgent({
     query: pool.query.bind(pool),
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
-    modelId: env.heavyModel,
+    ...agentModel(env.agentModels, "outcome", { modelId: env.heavyModel }),
   });
   const readOutletFeed = outlets ? async (signal: AbortSignal) => {
     const config = await pool.query("SELECT lookback_hours, sources FROM radar_config WHERE id = 'default'");
@@ -200,6 +266,23 @@ export async function buildApp({
     if (!outletIds.length) throw new Error("Radar 未配置启用的发布方媒体来源");
     return outlets.fetchLatest({ outletIds, lookbackHours: row.lookback_hours }, signal);
   } : undefined;
+  // 本体（tkos.world）只读集成：未配置时 reader 不发请求；读失败一律回退本地，不影响启动和页面。
+  // 读取时间用真实时钟（演示场次的业务时钟是资料截至时间，不能用来标「读自本体」的时刻）。
+  const world = createWorldReader({ q: pool.query.bind(pool), env });
+  // 第二个只读实例（TK scope，写死只读）：默认关闭；开了也只做健康探测和快照缓存，还没接进战场卡与 read_ontology。
+  const worldTk = env.worldTk ? createWorldReader({ q: pool.query.bind(pool), env: env.worldTk }) : undefined;
+  const baseGlobalContext = () => globalConversationContext(pool.query.bind(pool), now(), personDisplayNames(companyMemory));
+  // 每轮上下文包不加本体摘要（对话质量诊断 §4-G：上下文包每轮整包进历史）；只把战场长期目标换成本体版本（字数不增），本体内容经按需工具 read_ontology 读。
+  const globalContext = async () => {
+    const context = await baseGlobalContext();
+    const snapshot = world.enabled ? await world.snapshot(2_000).catch(() => null) : null;
+    return snapshot ? mergeWorldGoalsIntoContext(context, snapshot) : context;
+  };
+  const readOntology = world.enabled ? async (query: OntologyQuery) => {
+    const snapshot = await world.snapshot().catch(() => null);
+    return snapshot ? ontologyToolResult(snapshot, companyPeriod(now()), query) : null;
+  } : undefined;
+  const tierModels = conversationTierModels({ defaultModel: env.heavyModel, conversationModel: env.conversationModel });
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     companyMemory,
     materialPool: pool,
@@ -207,16 +290,35 @@ export async function buildApp({
     now,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
-    modelId: env.lightModel,
+    // 按档位选主答模型：CONVERSATION_MODEL 不配时快答 HEAVY_MODEL、检索问答 Sonnet、深度 Opus；配一个 id 时三档都用它（conversationModel.ts）。
+    modelId: tierModels.quick,
+    tierModels,
+    ...(env.conversationApi ? { modelApi: conversationModelApi(tierModels.quick, env.conversationApi) } : {}),
+    ...(env.conversationBaseUrl ? { modelBaseUrl: env.conversationBaseUrl } : {}),
+    ...(env.conversationThinking ? { tierThinking: parseTierThinking(env.conversationThinking) } : {}),
     compactionModelId: env.compactionModel,
+    triage: env.piBaseUrl && env.piApiKey
+      ? createResponsesTriage({ baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...fastModels })
+      : undefined,
+    // 英文推理摘要的小标题译成一句中文思考要点（与分诊同一个快模型、关思考）。
+    translateThought: env.piBaseUrl && env.piApiKey
+      ? createResponsesThoughtTranslator({ baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...fastModels })
+      : undefined,
+    // Claude 的英文思考摘要按段译成中文上屏（同一个快模型、关思考）。
+    translateThinking: env.piBaseUrl && env.piApiKey
+      ? createResponsesThinkingTranslator({ baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...fastModels })
+      : undefined,
     search: webSearch,
     outletFeed: readOutletFeed,
-    globalContext: () => globalConversationContext(pool.query.bind(pool), new Date()),
+    globalContext,
+    // 给分诊判断问题涉及哪些战场：只读战场配置表，不等本体快照。
+    listBattlefields: async () => (await listBattlefieldRows(pool.query.bind(pool))).map(({ id, code, name }) => ({ id, code, name })),
+    readOntology,
     listMissions: (filters, viewer) => listConversationMissions(pool.query.bind(pool), filters, viewer),
     // 对话只读工具：实时待决策 Issue 清单（不含签名 Action，不可写入）。
     listPendingIssues: async () => {
       const result = await pool.query(
-        `SELECT id, title, location, urgency, research->>'status' AS research_status, created_at
+        `SELECT id, title, location, urgency, research->>'status' AS research_status, created_at, origin_ref
            FROM issues WHERE status = 'pending' ORDER BY created_at, id`,
       );
       return result.rows.map((row) => ({
@@ -226,6 +328,7 @@ export async function buildApp({
         urgency: row.urgency,
         researchStatus: String(row.research_status ?? "none"),
         createdAt: new Date(row.created_at).toISOString(),
+        ...issueOriginFields(row.origin_ref),
       }));
     },
   });
@@ -245,19 +348,53 @@ export async function buildApp({
   // 线上链路是 宿主机 Nginx → Caddy → API，两跳都经 Docker 内网：信任内网地址上的代理，
   // req.ip（登录限流的键）才是用户而不是 Caddy；用户在最前面伪造的 X-Forwarded-For 越不过第一个公网地址
   const app = Fastify({ logger: false, trustProxy: "loopback,uniquelocal" }).withTypeProvider<TypeBoxTypeProvider>();
+  // LangSmith 接入方（tags client:*）：按请求路径与部署判定，本请求派生的 Agent 执行都带它。追踪未启用时不注册。
+  // 回调式 hook：enterWith 之后同步调用 done，后续处理函数继承这个上下文。
+  if (tracingEnabled()) {
+    const sandboxDeployment = Boolean(env.demoLoginId);
+    app.addHook("onRequest", (req, _reply, done) => {
+      try { enterRequestClient(clientTagFor(req.url, sandboxDeployment)); } catch { /* 追踪失败不影响请求 */ }
+      done();
+    });
+  }
   // 未注入真实 Runner 时不虚构预研：Issue 保留 pending，等显式配置
   const research = researchService ?? {
     async start() {},
     async executeRun() {},
     async idle() {},
   };
+  // 启动后在后台补跑：先补还没有预研的议题（演示场次），再补没跑过或被打断的会前预审——预审要读议题预研，等预研跑完（成功或失败）再开始。
+  const resumeResearchFirst = resumeResearchOnReady && Boolean(researchService);
+  let closing = false;
+  if (preflight.background || resumeResearchFirst) app.addHook("onReady", async () => {
+    void (async () => {
+      if (resumeResearchFirst) {
+        await resumeResearch(pool.query.bind(pool), research, { concurrency: 3, stopped: () => closing }).catch(() => app.log.error("research resume failed"));
+      }
+      if (preflight.background && !closing) {
+        await resumePreflights(pool, companyMemory, preflight).catch(() => app.log.error("preflight resume failed"));
+      }
+    })();
+  });
+  // 对话历史的后台压缩：运行时提供写摘要的模型时才做（测试替身没有就只靠窗口兜底）。
+  const conversationCompaction = createConversationCompaction({
+    query: pool.query.bind(pool),
+    ...(runtime.summarizeHistory ? { summarize: runtime.summarizeHistory.bind(runtime) } : {}),
+    ...conversationCompactionOptions,
+  });
+  app.addHook("onReady", async () => {
+    void conversationCompaction.recoverInterrupted().catch(() => app.log.error("conversation compaction recovery failed"));
+  });
   app.addHook("onClose", async () => {
+    closing = true;
     await research.idle();
     await personalRadar.idle();
+    await conversationCompaction.idle();
     await runtime.close?.();
   });
   const q = pool.query.bind(pool);
-  if (worldConfigured(env)) {
+  // 写回只在实例配置允许时启用（MVP 原配置照旧；演示范围第 1 期只读，不写本体）。
+  if (worldConfigured(env) && world.status().writes) {
     const worldMeetings = createWorldMeetingService(pool, new WorldClient(q, env), env.publicOrigin, now);
     const unsubscribe = onOutcomeReviewed(pool, worldMeetings.schedule);
     app.addHook("onClose", async () => { unsubscribe(); await worldMeetings.close(); });
@@ -331,7 +468,19 @@ export async function buildApp({
 
   app.setNotFoundHandler((_req, reply) => fail(reply, 404, "NOT_FOUND", "路径不存在"));
 
+  // 启动时验证本体连通（只读，后台进行）：失败只记进健康状态，不影响启动。
+  // 第二个只读实例（TK）配了的话排在主实例之后探测：两个实例串行，不并发。
+  const tkConfigured = Boolean(env.worldTk && worldConfigured(env.worldTk));
+  if (worldConfigured(env) || tkConfigured) app.addHook("onReady", async () => {
+    void (async () => {
+      if (worldConfigured(env)) await world.check().catch(() => undefined);
+      if (worldTk && tkConfigured) await worldTk.check().catch(() => undefined);
+    })();
+  });
+
   const ctx: RouteContext = {
+    world,
+    worldTk,
     pool,
     q,
     env,
@@ -349,12 +498,17 @@ export async function buildApp({
     recordings,
     voiceprints: voiceprintDeps,
     dictation: dictationDeps,
+    dictationRealtime: { ...realRealtimeSessionDeps, ...dictationRealtimeDeps },
+    dictationPolish: dictationPolishDeps,
     threadIntroAgent: threadIntroAgent ?? createThreadIntroAgent(pool, env),
     missionCardDraftAgent: missionCardDraftAgent ?? createMissionCardDraftAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.heavyModel }),
     taskAcceptanceAgent: taskAcceptanceAgent ?? createTaskAcceptanceAgent(pool, env),
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,
+    conversationStallTimeoutMs,
+    conversationHeartbeatMs,
+    conversationCompaction,
     maxTranscriptBytes: MAX_TRANSCRIPT_BYTES,
     now,
     requestContext,
@@ -377,6 +531,7 @@ export async function buildApp({
   registerConversationRoutes(app, ctx);
   registerMeetingRoutes(app, ctx);
   registerMaterialRoutes(app, ctx, materialAnnotationAgent);
+  registerKnowledgeRoutes(app, ctx);
   registerActionRoutes(app, ctx);
   registerDriRoutes(app, ctx);
   registerOntologyRoutes(app, ctx);

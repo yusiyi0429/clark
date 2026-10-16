@@ -1,16 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Card } from "@/lib/api/client";
 import { ColumnComposer } from "./ColumnComposer";
 import { ConversationColumn, conversationStyles as cs, type ConversationChannel } from "./ConversationColumn";
 import { ConversationDock } from "./ConversationDock";
 import { ConversationHistorySheet } from "./ConversationHistorySheet";
 import { AttachmentStatus } from "./ConversationAttachments";
-import { ConversationNotice, ConversationThinking, ConversationTurns } from "./Transcript";
+import { ConversationHistoryState, conversationOwner } from "./ConversationHistoryState";
+import { ConversationNotice, ConversationStatusSlot, JumpToLatest } from "./Transcript";
+import { ConversationTimeline } from "./ConversationTimeline";
+import { ArchiveEntry, ConversationArchive, NewConversationKey, useArchivePanel } from "./ConversationArchive";
+import { SelectionToolbar, useSelectionQuote } from "@/components/SelectionQuote";
+import { useConversationScroll } from "./useConversationScroll";
 import { useReferences } from "./references";
+import { useExitPresence } from "@/lib/motion";
 import { useColumnMode } from "./useColumnMode";
+import { useDeskColumnWidth, useViewportWidth } from "./desk/useDeskLayout";
+import { DESK_MIN_VIEWPORT } from "./desk/deskLayout";
 import { useConversation, type ConversationData } from "./useConversation";
+import { useStableCallback } from "./stableCallback";
 import { useMissionGroup } from "./useMissionGroup";
 import { useThreadGroup } from "./useTaskGroup";
 import { ThreadMembersMenu } from "./ThreadMembersMenu";
@@ -21,12 +31,17 @@ import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
 import { useListening } from "@/components/coagent/presence";
 import { useCoAgentSkin } from "@/components/coagent/skin";
 import type { DetailGroup } from "./missionCardGroup";
-import type { QuotePrefill, TextQuote } from "./quotes";
+import { MESSAGE_REPLY, type QuotePrefill, type QuoteSource, type TextQuote } from "./quotes";
 import groupStyles from "@/styles/mission-group.module.css";
 import w from "@/styles/app-shell.module.css";
 
-export type ConversationTarget = { scope: string; label: string; group?: DetailGroup };
-const GLOBAL: ConversationTarget = { scope: "global", label: "我的 Agent" };
+/** 对话层退场时长：与 app-shell.module.css 里 historySink 的时长一致。 */
+export const SHEET_EXIT_MS = 220;
+
+export type ConversationTarget = { scope: string; label: string; group?: DetailGroup; messageContext?: string };
+const GLOBAL: ConversationTarget = { scope: "global", label: "天枢" };
+/** 没有引用上下文时的空列表：身份固定，输入条（memo）不因它重画。 */
+const NO_CARDS: Card[] = [];
 
 export type ConversationUiState = {
   keyboard: boolean;
@@ -38,16 +53,28 @@ export type ConversationUiState = {
   setGlobalView: (global: boolean) => void;
   railMobileOpen: boolean;
   setRailMobileOpen: (open: boolean) => void;
+  /** 深度讨论（并排）开没开：外壳持有，换页、打开对话层时收起；右列在 <1280、收起、窄屏时也收起它。 */
+  deskOpen?: boolean;
+  setDeskOpen?: (open: boolean) => void;
+  /** 对话层放大（首页全局对话等）：外壳持有，收起对话层、换页时收起；<1280 不提供，变窄自动收起。 */
+  sheetWide?: boolean;
+  setSheetWide?: (wide: boolean) => void;
   /** New selection focuses private input; independent references remain until sent/removed. */
   prefill: QuotePrefill | null;
   consumePrefill: (nonce?: number) => void;
   quotes: TextQuote[];
   removeQuotes: (ids: string[]) => void;
+  /** 发送失败放回引用（D5）：不覆盖期间新加的引用。 */
+  restoreQuotes: (quotes: TextQuote[]) => void;
+  /** 对话正文里划词「引用」（B4）：进这条对话自己的引用条，对话层 / 右列保持原样，不跳到别的对话。 */
+  quoteInConversation: (text: string, source: QuoteSource & { scope: string }) => void;
 };
 
 /**
  * 对话的外壳层（clark `workspace.tsx` 的对话编排）：
- * 首页 = 全局对话（我的 Agent）+ 历史层；二级页 = 右列（ConversationColumn）+ 右列底下的两行输入条。
+ * 首页 = 全局对话（天枢）+ 对话层；二级页 = 右列（ConversationColumn）+ 右列底下的两行输入条。
+ * 全局输入条的打字面和对话层一起开合（D6）：从语音胶囊进入打字（键盘键、「点击说话」、新引用）就升起对话层；
+ * 收起对话层（⌄、点空白、Esc）输入条回到胶囊，草稿留着。没有外置气泡，消息与出错说明都在对话层里。
  * 引用只为全局对话准备；在二级页已引用时，输入条上方出现「在全局讨论 · N」。
  */
 export function ConversationHost({
@@ -55,27 +82,34 @@ export function ConversationHost({
   detailOpen,
   rail = detailOpen,
   agentTitle,
+  pageSubject,
   ui,
 }: {
   page: ConversationTarget | null;
   detailOpen: boolean;
   /** 是否用右列（二级页里的浏览面，如雷达列表，不用）。 */
   rail?: boolean;
-  /** 右列页头上 Agent 的名字：统一「我的 Agent」。 */
+  /** 右列页头上 Agent 的名字：统一「天枢」。 */
   agentTitle: string;
+  /** 页面本身是全局对话、但有明确对象时（战场页）右列页头写的对象名，如「增长战场」；不给就不写。 */
+  pageSubject?: string | null;
   ui: ConversationUiState;
 }) {
-  const target = detailOpen && page && !ui.globalView ? page : GLOBAL;
-  return <ScopedConversation key={target.scope} target={target} detailOpen={detailOpen} rail={rail} agentTitle={agentTitle} ui={ui} />;
+  const onPage = Boolean(detailOpen && page && !ui.globalView);
+  const target = onPage && page ? page : GLOBAL;
+  // 右列页头标题下那一行：这条对话围绕谁。对象页 = 对象标题；战场页 = 战场名；二级页里改看全局对话 = 全局；其余全局页不写。
+  const subject = !onPage ? "全局" : target.scope !== "global" ? target.label : pageSubject ?? null;
+  return <ScopedConversation key={target.scope} target={target} detailOpen={detailOpen} rail={rail} agentTitle={agentTitle} subject={subject} ui={ui} />;
 }
 
-function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { target: ConversationTarget; detailOpen: boolean; rail: boolean; agentTitle: string; ui: ConversationUiState }) {
+function ScopedConversation({ target, detailOpen, rail, agentTitle, subject, ui }: { target: ConversationTarget; detailOpen: boolean; rail: boolean; agentTitle: string; subject: string | null; ui: ConversationUiState }) {
+  const router = useRouter();
   const [viewingMaterial, setViewingMaterial] = useState<{ id: string; editable: boolean; format?: string } | null>(null);
   useEffect(() => {
     const current = [...document.querySelectorAll<HTMLElement>("[data-material-scope]")]
       .find((element) => element.dataset.materialScope === target.scope);
-    if (current?.dataset.viewingMaterialId) setViewingMaterial({ id: current.dataset.viewingMaterialId,
-      editable: current.dataset.viewingMaterialEditable === "true", format: current.dataset.viewingMaterialFormat });
+    setViewingMaterial(current?.dataset.viewingMaterialId ? { id: current.dataset.viewingMaterialId,
+      editable: current.dataset.viewingMaterialEditable === "true", format: current.dataset.viewingMaterialFormat } : null);
     const changed = (event: Event) => {
       const detail = (event as CustomEvent<{ scope: string; id: string | null; editable: boolean; format?: string }>).detail;
       if (detail?.scope === target.scope) setViewingMaterial(detail.id ? { id: detail.id, editable: detail.editable, format: detail.format } : null);
@@ -83,31 +117,75 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { targ
     window.addEventListener("viewing-material-changed", changed);
     return () => window.removeEventListener("viewing-material-changed", changed);
   }, [target.scope]);
-  const data = useConversation(target.scope, viewingMaterial);
+  const data = useConversation(target.scope, viewingMaterial, target.messageContext);
+  useEffect(() => {
+    const refreshObject = (event: Event) => {
+      if ((event as CustomEvent<{ scope: string }>).detail?.scope === target.scope) router.refresh();
+    };
+    window.addEventListener("conversation-object-changed", refreshObject);
+    return () => window.removeEventListener("conversation-object-changed", refreshObject);
+  }, [target.scope, router]);
+  const { setHistoryOpen } = ui;
+  /** 全局输入条那一块：对话层的 ↓ 按它的上沿定位（D3）。 */
+  const dockRef = useRef<HTMLDivElement>(null);
   const references = useReferences();
   const global = target.scope === "global";
-  const items = references?.items ?? [];
-  const discussGlobal = () => {
+  const items = references?.items ?? NO_CARDS;
+  const discussGlobal = useStableCallback(() => {
     ui.setGlobalView(true);
     ui.setHistoryOpen(true);
-  };
+  });
+
+  /** 听写出错（没授权、没听清）：输入条交上来，在对话层里说（D6）。 */
+  const [dictationError, setDictationError] = useState<string | null>(null);
+  // 新引用 / 起草（引用提问、划词引用、起草文档）在没有右列的页面上：打字面和对话层一起出来。
+  const usesDock = !rail || ui.historyOpen;
+  useEffect(() => {
+    if (ui.prefill && usesDock) setHistoryOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只响应新的预填
+  }, [ui.prefill?.nonce]);
+
+  // 收起对话层：淡出下移播完（SHEET_EXIT_MS）再卸载，与打开对称；有右列的页面收起后换成右列，不留退场。
+  const sheet = useExitPresence(ui.historyOpen, SHEET_EXIT_MS);
+  // 对话层放大：≥1280 才有 ⤢；变窄到 <1280 自动收起，变宽回来不自己再放大。
+  const viewport = useViewportWidth();
+  const canWide = Boolean(ui.setSheetWide) && viewport >= DESK_MIN_VIEWPORT;
+  const { sheetWide = false, setSheetWide } = ui;
+  useEffect(() => {
+    if (sheetWide && !canWide) setSheetWide?.(false);
+  }, [sheetWide, canWide, setSheetWide]);
+
+  const closeHistory = useStableCallback(() => {
+    ui.setHistoryOpen(false);
+    ui.setGlobalView(false);
+    ui.setKeyboard(false);
+  });
+  const openHistory = useStableCallback(() => {
+    ui.setKeyboard(true);
+    ui.setHistoryOpen(true);
+  });
+  // 交给输入条（memo）的回调与列表身份不变：流式中这里每帧重画，输入条不跟着重画。
+  const keyboardChange = useStableCallback((keyboard: boolean) => (keyboard ? openHistory() : closeHistory()));
+  const removeReference = useStableCallback((id: string) => references?.remove(id));
+  const clearReferences = useStableCallback(() => references?.clear());
+  const restoreReferences = useStableCallback((cards: Card[]) => references?.add(cards));
+  const wideExit = useStableCallback(() => setSheetWide?.(false));
+  const scopeQuotes = useMemo(() => ui.quotes.filter((item) => item.source?.scope === target.scope), [ui.quotes, target.scope]);
 
   if (rail && !ui.historyOpen) {
-    return <RailConversation data={data} target={target} agentTitle={agentTitle} ui={ui} references={global ? [] : items}
+    return <RailConversation data={data} target={target} agentTitle={agentTitle} subject={subject} ui={ui} references={global ? [] : items}
       viewingMaterialFormat={viewingMaterial?.format} onDiscussGlobal={discussGlobal} />;
   }
 
-  const closeHistory = () => {
-    ui.setHistoryOpen(false);
-    ui.setGlobalView(false);
-  };
-
   return (
     <>
-      {ui.historyOpen ? (
+      {sheet.mounted ? (
         <>
-          <button type="button" className={w.historyBackdrop} data-testid="conversation-backdrop" aria-label="关闭对话记录" onClick={closeHistory} />
-          <ConversationHistorySheet data={data} label={target.label} global={global} onClose={closeHistory} />
+          <button type="button" className={w.historyBackdrop} data-testid="conversation-backdrop" aria-label="关闭对话记录" onClick={closeHistory}
+            data-leaving={sheet.leaving || undefined} tabIndex={sheet.leaving ? -1 : undefined} />
+          <ConversationHistorySheet data={data} label={target.label} global={global} onClose={closeHistory} composerRef={dockRef} leaving={sheet.leaving}
+            wide={canWide && sheetWide} onWide={canWide ? setSheetWide : undefined}
+            notice={dictationError} onQuote={(text) => ui.quoteInConversation(text, { scope: target.scope, intent: MESSAGE_REPLY })} />
         </>
       ) : null}
       <ConversationDock
@@ -115,20 +193,24 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { targ
         label={target.label}
         global={global}
         detail={detailOpen}
-        keyboard={ui.keyboard}
-        onKeyboardChange={ui.setKeyboard}
+        keyboard={ui.historyOpen}
+        onKeyboardChange={keyboardChange}
         historyOpen={ui.historyOpen}
-        onToggleHistory={() => (ui.historyOpen ? closeHistory() : ui.setHistoryOpen(true))}
+        onDictationError={setDictationError}
         references={items}
-        onRemoveReference={(id) => references?.remove(id)}
-        onClearReferences={() => references?.clear()}
-        onRestoreReferences={(cards) => references?.add(cards)}
+        onRemoveReference={removeReference}
+        onClearReferences={clearReferences}
+        onRestoreReferences={restoreReferences}
         pendingGlobalReferences={!global && items.length ? items.length : 0}
         onDiscussGlobal={discussGlobal}
         prefill={ui.prefill}
         onPrefillUsed={ui.consumePrefill}
-        textQuotes={ui.quotes.filter((item) => item.source?.scope === target.scope)}
+        textQuotes={scopeQuotes}
         onRemoveQuotes={ui.removeQuotes}
+        onRestoreQuotes={ui.restoreQuotes}
+        dockRef={dockRef}
+        wide={canWide && sheetWide}
+        onWideExit={wideExit}
       />
     </>
   );
@@ -143,6 +225,7 @@ function RailConversation({
   data,
   target,
   agentTitle,
+  subject,
   ui,
   references,
   viewingMaterialFormat,
@@ -151,17 +234,25 @@ function RailConversation({
   data: ConversationData;
   target: ConversationTarget;
   agentTitle: string;
+  subject: string | null;
   ui: ConversationUiState;
   references: Card[];
   viewingMaterialFormat?: string;
   onDiscussGlobal: () => void;
 }) {
   const column = useColumnMode();
+  // 深度讨论：≥1280、右列展开、不在窄屏才有 ⤢；私聊、群聊都能展开。变窄 / 收起时外壳那边一起收起，变宽回来不自己再展开。
+  const deskColumn = useDeskColumnWidth();
+  const { deskOpen: deskWanted = false, setDeskOpen } = ui;
+  const canDesk = Boolean(setDeskOpen) && !column.narrow && column.mode === "expanded" && deskColumn !== null;
+  const deskOpen = canDesk && deskWanted;
+  useEffect(() => {
+    if (deskWanted && !canDesk) setDeskOpen?.(false);
+  }, [deskWanted, canDesk, setDeskOpen]);
   const [composerHeight, setComposerHeight] = useState(90);
   const [selectedChannel, setChannel] = useState("agent");
   // 新引用在这一帧就进入私聊，不能先挂载公开输入条；下方 effect 保留消费后的频道。
   const openedGroupDeepLink = useRef<string | null>(null);
-  const end = useRef<HTMLDivElement>(null);
   const taskGroup = target.group?.kind === "task" ? target.group : undefined;
   const otherThread = target.group?.kind === "thread" ? target.group : undefined;
   const threadGroup = taskGroup || otherThread;
@@ -193,7 +284,7 @@ function RailConversation({
   const members = threadGroup ? (thread.view?.members ?? threadGroup.members) : (group.view?.members ?? missionGroup?.members ?? []);
   const groupLabel = otherThread?.objectType === "issue" ? "议题群聊" : otherThread?.objectType === "meeting" ? "会议群聊" : "事项群组";
   const channels: ConversationChannel[] = [
-    { id: "agent", kind: "agent", label: "我的 Agent", title: agentTitle, unread: 0 },
+    { id: "agent", kind: "agent", label: "天枢", title: agentTitle, ...(subject ? { subtitle: `围绕：${subject}` } : {}), unread: 0 },
     ...(hasGroup ? [{ id: "group", kind: "group" as const, label: `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
       title: otherThread ? `${target.label} · ${members.length} 人` : `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
       unread: threadGroup ? (thread.view?.unread ?? 0) : (group.view?.unread ?? 0) }] : []),
@@ -221,6 +312,24 @@ function RailConversation({
     window.addEventListener("open-thread-channel", open);
     return () => window.removeEventListener("open-thread-channel", open);
   }, [threadGroup, taskGroup?.taskId, otherThread?.objectType, otherThread?.objectId, column, ui]);
+  // 在议题页刚拉人建群：群一出现就切到群聊，让人看到新成员和开场介绍。只认这一页自己的群。
+  const openGroupFor = useRef<string | null>(null);
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const detail = (event as CustomEvent<{ objectType: string; objectId: string }>).detail;
+      if (detail && `${detail.objectType}:${detail.objectId}` === target.scope) openGroupFor.current = detail.objectId;
+    };
+    window.addEventListener("thread-members-changed", changed);
+    return () => window.removeEventListener("thread-members-changed", changed);
+  }, [target.scope]);
+  useEffect(() => {
+    if (!otherThread || openGroupFor.current !== otherThread.objectId) return;
+    openGroupFor.current = null;
+    setChannel("group");
+    if (column.narrow) ui.setRailMobileOpen(true);
+    else column.setMode("expanded");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在群出现的那一下切换
+  }, [otherThread?.objectId]);
   useEffect(() => {
     if (!missionGroup) return;
     const open = (event: Event) => {
@@ -251,9 +360,18 @@ function RailConversation({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ui.prefill?.nonce]);
 
-  useEffect(() => {
-    end.current?.scrollIntoView({ block: "nearest" });
-  }, [data.messages, data.streaming, group.view?.entries.length, thread.view?.messages.length, channel]);
+  // 滚动（与全局对话层同一套）：私聊开始回答时刚发的那条推到顶部、回答中不跟随；群聊发送时（消息等服务端回来才出现）照旧回到底部并跟随；换频道回到底部。
+  const sendingHere = channel === "agent" ? data.streaming : Boolean(threadGroup ? thread.sending : group.sending);
+  // 全局对话（战场页右栏等）：页头左上角一颗很小的「+ 新对话」；空白对话里有归档过的对话时多一行很淡的「查看历史对话」。
+  const globalAgent = channel === "agent" && target.scope === "global";
+  const archive = useArchivePanel(data.streaming);
+  const scroll = useConversationScroll({ streaming: sendingHere, resetKey: channel });
+  // 划词引用（B4）：只在私聊正文里，引用进这条右列对话。
+  const selection = useSelectionQuote(scroll.scrollRef, { within: "[data-chat-role]" });
+
+  // 页脚先写这条线归谁（全局对话 / 当前对象），再写谁看得到、能做什么：私聊与公开讨论不混。
+  const owner = conversationOwner(target.scope, target.label);
+  const privateNote = personalContext ? personalContext.agentNote ?? "仅本人可见 · 当前可讨论，修改权限以任务状态为准" : target.scope.startsWith("monthly-review-item:") ? "仅本人可见 · Agent 仅提出改写建议，点击「采用」后写入左侧" : data.viewingMaterialEditable ? `仅本人可见 · 可让 Agent 修改这份${viewingMaterialFormat === "html" ? " HTML" : viewingMaterialFormat === "markdown" ? " Markdown" : "材料"}；其他业务仍只读` : /^(issue|task):/.test(target.scope) ? "仅本人可见 · 可让 Agent 修改或新建 Markdown 材料；其他业务只读" : "仅本人可见 · 只读：不修改左侧内容，不形成决定";
 
   return (
     <>
@@ -270,18 +388,37 @@ function RailConversation({
         composerHeight={composerHeight}
         coagent={capsule}
         coagentBrief={!listening}
-        headerAction={channel === "group" && threadGroup && !thread.left ? <ThreadMembersMenu objectType={otherThread?.objectType ?? "task"} objectId={taskGroup?.taskId ?? otherThread!.objectId} viewerId={threadGroup.viewerId} members={(thread.view?.members ?? threadGroup.members.map((member) => ({ ...member, title: null })))} onChanged={() => void thread.refresh()} /> : undefined}
+        deskWidth={deskOpen ? deskColumn : null}
+        onDesk={canDesk ? setDeskOpen : undefined}
+        headerAction={channel === "group" && threadGroup && !thread.left ? <ThreadMembersMenu objectType={otherThread?.objectType ?? "task"} objectId={taskGroup?.taskId ?? otherThread!.objectId} viewerId={threadGroup.viewerId} members={(thread.view?.members ?? threadGroup.members.map((member) => ({ ...member, title: null })))} onChanged={() => void thread.refresh()} />
+          : globalAgent ? <NewConversationKey data={data} className={cs.newKey} /> : undefined}
       >
         {channel === "agent" ? <AttachmentStatus data={data} className={cs.error} /> : null}
-        <div className={cs.log} role="log" aria-label={channel === "group" ? "事项群组公开讨论" : `与${agentTitle}的对话`} aria-live="polite" aria-relevant="additions text">
-          {channel === "group" ? threadGroup ? <TaskGroupTranscript messages={thread.view?.messages ?? []} highlightId={catchUp?.id} /> : <MissionGroupTranscript entries={group.view?.entries ?? []} /> : <>
-            {data.messages.length ? <ConversationTurns messages={data.messages} /> : !data.streaming ? <p className={cs.empty}>暂无消息</p> : null}
-            {data.error && !data.streaming ? <ConversationNotice text={data.error} /> : null}
-            {data.streaming ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} /> : null}
+        <div className={cs.log} ref={scroll.scrollRef} onMouseUp={channel === "agent" ? selection.onMouseUp : undefined} role="log" aria-label={channel === "group" ? `${groupLabel}公开讨论` : `与${agentTitle}的对话`} aria-live="polite" aria-relevant="additions text">
+          <div ref={scroll.contentRef}>
+          {channel === "group" ? threadGroup ? <TaskGroupTranscript messages={thread.view?.messages ?? []} highlightId={catchUp?.id} /> : <MissionGroupTranscript entries={group.view?.entries ?? []} />
+            : globalAgent && archive.open ? <ConversationArchive data={data} onClose={archive.hide} /> : <>
+            <ConversationTimeline data={data} />
+            <ConversationHistoryState data={data} empty={<>
+              <p className={cs.empty}>暂无消息</p>
+              {globalAgent ? <ArchiveEntry data={data} onOpen={archive.show} /> : null}
+            </>} />
+            {data.switchError ? <ConversationNotice text={data.switchError} /> : null}
+            {data.error && !data.streaming ? <ConversationNotice text={data.error} action={data.recovery} /> : null}
+            {/* 回答进行中，思考与进度排在时间线里本轮正文之后、本轮卡片之前（ConversationTimeline）；这里只在没有回答进行时留出同样高度的空位。 */}
+            {data.streaming ? null : <ConversationStatusSlot />}
           </>}
-          <div ref={end} />
+          </div>
+          {/* 发送后置顶用的留白：放在内容之后，高度由 useConversationScroll 直接写。 */}
+          <div ref={scroll.reserveRef} aria-hidden />
+          {channel === "agent" ? <SelectionToolbar selected={selection.selected} label="回复" onQuote={() => {
+            if (selection.selected) ui.quoteInConversation(selection.selected.text, { scope: target.scope, intent: MESSAGE_REPLY });
+            selection.clear();
+          }} /> : null}
         </div>
-        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`}>{channel === "group" ? threadGroup && thread.left ? "你已不在这个群" : `成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : personalContext ? personalContext.agentNote ?? "仅你可见 · 当前可讨论，修改权限以任务状态为准" : target.scope.startsWith("monthly-review-item:") ? "仅你可见 · Agent 只提改写建议，你点「采用」才写进左侧" : data.viewingMaterialEditable ? `仅你可见 · 可让 Agent 修改这份${viewingMaterialFormat === "html" ? " HTML" : viewingMaterialFormat === "markdown" ? " Markdown" : "材料"}；其他业务仍只读` : /^(issue|task):/.test(target.scope) ? "仅你可见 · 可让 Agent 改或新写 Markdown 材料；其他业务只读" : "仅你可见 · 只读：不改左侧内容、不形成决定"}</p>
+        {/* ↓ 按右列 panel 定位，底边贴着输入条上沿（--conversation-composer-height，D3）；Agent 输出中是三点。 */}
+        <JumpToLatest visible={!scroll.atBottom} onJump={scroll.jumpToLatest} streaming={channel === "agent" && data.streaming} className={cs.latestJump} />
+        {channel === "group" || privateNote ? <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`} data-conversation-owner={channel === "group" ? "group" : owner.global ? "global" : "object"}>{channel === "group" ? threadGroup && thread.left ? "已退出该群组" : `公开讨论 · 成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : `${owner.short} · ${privateNote}`}</p> : null}
       </ConversationColumn>
       {channel === "group" && target.group ? <MissionGroupComposer cardId={taskGroup?.taskId ?? otherThread?.objectId ?? missionGroup!.cardId} taskId={taskGroup?.taskId ?? otherThread?.objectId} viewerId={target.group.viewerId} phase={threadGroup ? "open" : missionGroup!.phase} channels={channels} channel={channel} onChannel={setChannel} narrow={column.narrow} mobileOpen={ui.railMobileOpen} onMobileOpen={ui.setRailMobileOpen} onHeightChange={setComposerHeight} reference={missionGroup?.reference ?? null} onRemoveReference={missionGroup?.onRemoveReference ?? (() => {})} busy={threadGroup ? thread.sending : group.sending} readOnly={thread.left} error={threadGroup ? thread.error : group.error} onSend={threadGroup ? (body) => thread.send(body) : group.send} /> : <ColumnComposer
         data={data}
@@ -299,6 +436,7 @@ function RailConversation({
         onPrefillUsed={ui.consumePrefill}
         textQuotes={ui.quotes.filter((item) => item.source?.scope === target.scope)}
         onRemoveQuotes={ui.removeQuotes}
+        onRestoreQuotes={ui.restoreQuotes}
         draftOwnerId={target.group?.viewerId}
         allowAttachments={!target.group}
       />}

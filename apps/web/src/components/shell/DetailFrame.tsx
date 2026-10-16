@@ -22,15 +22,21 @@ export function DetailFrame({
   title,
   subtitle = "",
   onBack,
+  backLabel = "返回总览",
   actions,
   headingId,
+  titleTag,
   children,
 }: {
   title: string;
+  /** 标题后面的小标签（如来自雷达的议题的「雷达」）；没有就不出现。 */
+  titleTag?: ReactNode;
   /** 眉题。标题前面另有一段的页（会议页的计划时段）不写。 */
   subtitle?: string;
   /** 页头左端那颗圆的返回（读屏名称「返回总览」）。 */
   onBack: () => void;
+  /** 信号阅读页返回当前列表，其他详情返回总览。 */
+  backLabel?: string;
   /** 标题前面那一段、胶囊右端那一样、页头右边单独那一颗。 */
   actions?: ReactNode;
   /** 宿主要用标题给自己命名时传进来（aria-labelledby）；不传就自己生成一个。 */
@@ -48,13 +54,13 @@ export function DetailFrame({
           <div className="ts-row ts-between">
             <Button variant="ghost" onPress={onBack} data-close-view>
               <ArrowLeft size={18} />
-              返回总览
+              {backLabel}
             </Button>
             <div ref={setTools} data-header-tools />
             {actions}
           </div>
           <p className="ts-eyebrow">{subtitle}</p>
-          <h1 id={heading}>{title}</h1>
+          <h1 id={heading}>{title}{titleTag}</h1>
         </header>
         <HeaderSlot.Provider value={{ element: tools }}>{children}</HeaderSlot.Provider>
       </div>

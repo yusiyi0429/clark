@@ -6,8 +6,8 @@
  *   渐隐（和 Claude Code 一样，用户同日定）：正文滚上去先虚化、再淡出，阅读区看得到的内容更多。右列页头是同一种
  *   做法（conversation-column.module.css .header），两边同一条下沿。
  * - 一行排开：左端返回（只留箭头，读屏名称「返回总览」不变）；标题前面那一段（会议页是计划时段，别的页是眉题）；
- *   标题；右边是材料下拉钮（data-header-tools，ObjectMaterialArea 挂进来）和这个对象自己的那一样（会议记录入口、
- *   倒计时、编辑）。材料页签不再另起一排，都收进下拉钮（components/shell/MaterialTabs）。
+ *   标题；右边是类型切换（data-header-switch：会后的「会前预审 ｜ 会议记录」、议题的「总结与判断 / 研究与依据」）、
+ *   材料下拉钮（data-header-tools，ObjectMaterialArea 挂进来）和这个对象自己的那一样（成员、倒计时、编辑）。材料页签不再另起一排，都收进下拉钮（components/shell/MaterialTabs）。
  * - 页头本身不随滚动伸缩。
  *
  * 为什么是具名作用域覆盖：ts-design 的 WorkspaceShell 页头结构是固定的（.ts-row 里是返回键和
@@ -27,9 +27,9 @@
   z-index: 4;
   isolation: isolate;
   display: grid;
-  /* 一行：返回 · 标题前面那一段 · 眉题 · 标题 · 材料下拉钮 · 右端那一样 · 页头右边单独那一颗（下一版的开始会议／计时）。 */
-  grid-template-columns: auto auto auto minmax(0, 1fr) auto auto auto;
-  grid-template-areas: 'back lead eyebrow title tools actions end';
+  /* 一行：返回 · 标题前面那一段 · 眉题 · 标题 · 类型切换 · 材料下拉钮 · 右端那一样 · 页头右边单独那一颗（下一版的开始会议／计时）。 */
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto auto auto auto;
+  grid-template-areas: 'back lead eyebrow title switch tools actions end';
   column-gap: 0;
   align-items: center;
   box-sizing: border-box;
@@ -111,7 +111,7 @@
   color: #1f2a3d;
 }
 
-/* detail.actions：页头右端这个对象自己的东西（倒计时、编辑、会议记录入口）。:where 把特指度压到最低。 */
+/* detail.actions：页头右端这个对象自己的东西（倒计时、编辑、成员）。:where 把特指度压到最低。 */
 .scope :global(.ts-detail-header > .ts-row > :where(:not(.button:first-child))) {
   grid-area: actions;
   justify-self: end;
@@ -129,8 +129,15 @@
 
 .scope :global(.ts-detail-header > .ts-row > [data-header-tools]:empty) { display: none; }
 
-/* ts-design 给页头里的按钮设了 min-height 44：下拉钮和返回、会议记录一样高 32。 */
+/* ts-design 给页头里的按钮设了 min-height 44：下拉钮和返回一样高 32。 */
 .scope :global(.ts-detail-header > .ts-row > [data-header-tools] > .button) { min-height: 32px; }
+
+/* 类型切换（data-header-switch，SegmentedSwitch）：会议页的「会前预审 / 会议记录」、议题页的「总结与判断 / 研究与依据」，站在材料下拉钮左边。 */
+.scope :global(.ts-detail-header > .ts-row > [data-header-switch]) {
+  grid-area: switch;
+  justify-self: end;
+  margin-left: 12px;
+}
 
 /*
  * 标题前面那一段（data-header-lead）：这个对象最要紧的一个事实，站在眉题的位置、比眉题醒目。会议页是这场会的计划
@@ -167,7 +174,18 @@
 @media (max-width: 1250px) {
   .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead])) {
     grid-template-rows: auto auto;
-    grid-template-areas: 'back lead lead lead tools actions end' 'back title title title tools actions end';
+    grid-template-areas: 'back lead lead lead switch tools actions end' 'back title title title switch tools actions end';
+    align-content: center;
+  }
+  .scope :global(.ts-detail-header > .ts-row > [data-header-lead]) { margin: 0; }
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]) > h1) { display: block; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; line-height: 18px; }
+}
+
+/* 深度讨论（并排）时视口仍宽、左侧面板却窄到 582：按面板宽叠加同一档（平时态面板 ≤780 只出现在视口 ≤1250，样子不变）。 */
+@container pane (max-width: 780px) {
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead])) {
+    grid-template-rows: auto auto;
+    grid-template-areas: 'back lead lead lead switch tools actions end' 'back title title title switch tools actions end';
     align-content: center;
   }
   .scope :global(.ts-detail-header > .ts-row > [data-header-lead]) { margin: 0; }
@@ -180,6 +198,115 @@
   .scope :global(.ts-detail-header > .ts-row > .button:first-child) { margin-right: 4px; }
   .scope :global(.ts-detail-header > .ts-row > [data-header-tools]) { margin-left: 6px; }
   .scope :global(.ts-detail-header > h1) { font-size: 14.5px; }
+}
+
+/*
+ * 再窄（手机、深度讨论里很窄的左栏）：类型切换挪到页头下面单独一行、靠左，标题不被挤成几个字。
+ * 会议页那种标题前面还有计划时段的，时段、标题、切换三行。
+ */
+@media (max-width: 640px) {
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-switch])) {
+    height: auto;
+    min-height: var(--detail-header-height);
+    grid-template-rows: var(--detail-header-height) auto;
+    grid-template-areas: 'back lead eyebrow title tools tools actions end' 'switch switch switch switch switch switch switch switch';
+    padding-bottom: 6px;
+  }
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]):has(> .ts-row > [data-header-switch])) {
+    grid-template-rows: auto auto auto;
+    grid-template-areas: 'back lead lead lead tools tools actions end' 'back title title title tools tools actions end' 'switch switch switch switch switch switch switch switch';
+    padding-top: 6px;
+  }
+  .scope :global(.ts-detail-header > .ts-row > [data-header-switch]) { justify-self: start; margin: 2px 0 0 36px; }
+}
+@container pane (max-width: 560px) {
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-switch])) {
+    height: auto;
+    min-height: var(--detail-header-height);
+    grid-template-rows: var(--detail-header-height) auto;
+    grid-template-areas: 'back lead eyebrow title tools tools actions end' 'switch switch switch switch switch switch switch switch';
+    padding-bottom: 6px;
+  }
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]):has(> .ts-row > [data-header-switch])) {
+    grid-template-rows: auto auto auto;
+    grid-template-areas: 'back lead lead lead tools tools actions end' 'back title title title tools tools actions end' 'switch switch switch switch switch switch switch switch';
+    padding-top: 6px;
+  }
+  .scope :global(.ts-detail-header > .ts-row > [data-header-switch]) { justify-self: start; margin: 2px 0 0 36px; }
+}
+
+/*
+ * 手机宽的面板（单屏、双屏右页、三屏里很窄的主区；docs/superpowers/specs/2026-10-12-mobile-foldable.md §3.3）：
+ * 电脑那种一行页头在这里会把标题挤成一条细柱（390 宽时议题标题只剩 136px、两行还截断）。改成：
+ * 第一行 = 返回 · 标题（独占剩余宽度、最多三行）· 材料钮（只留图标）· 对象动作；会议页的计划时段在标题上面一行；
+ * 类型切换单独一行、两段等宽。按面板宽判断（.expanded 是 pane 容器），单屏和双屏右页同一套。
+ */
+@container pane (max-width: 599px) {
+  .scope :global(.ts-detail-header),
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead])),
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-switch])),
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]):has(> .ts-row > [data-header-switch])) {
+    height: auto;
+    min-height: var(--detail-header-height);
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    grid-template-rows: auto auto auto;
+    grid-template-areas: 'back lead tools actions end' 'back title tools actions end' 'switch switch switch switch switch';
+    align-content: center;
+    padding: 2px 6px 2px 4px;
+  }
+  .scope :global(.ts-detail-header > .ts-eyebrow) { display: none; }
+  .scope :global(.ts-detail-header > h1),
+  .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]) > h1) {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    align-self: center;
+    padding: 3px 0;
+    white-space: normal;
+    text-overflow: clip;
+    font-size: 16px;
+    line-height: 21px;
+  }
+  .scope :global(.ts-detail-header > .ts-row > [data-header-lead]) { align-self: end; margin: 4px 0 0; }
+  .scope :global(.ts-detail-header > .ts-row > [data-header-tools]) { margin-left: 4px; }
+  .scope :global(.ts-detail-header [data-material-menu]) { justify-content: center; min-width: 44px; padding: 0 10px; }
+  .scope :global(.ts-detail-header [data-material-menu] > span:not([aria-hidden])),
+  .scope :global(.ts-detail-header [data-material-menu] > svg:last-child) { display: none; }
+  .scope :global(.ts-detail-header > .ts-row > [data-header-switch]) { display: flex; justify-self: stretch; margin: 2px 2px 4px; }
+  .scope :global(.ts-detail-header > .ts-row > [data-header-switch] > *) { flex: 1 1 0; justify-content: center; }
+}
+
+/* 点触下限（globals.css --touch-hit：手持与触屏 44，鼠标不设）：返回、材料钮放到 44；电脑上取原来的 32。 */
+.scope :global(.ts-detail-header > .ts-row > .button:first-child) {
+  width: var(--touch-hit, 32px);
+  min-width: var(--touch-hit, 32px);
+  height: var(--touch-hit, 32px);
+  min-height: var(--touch-hit, 32px);
+}
+.scope :global(.ts-detail-header > .ts-row > [data-header-tools] > .button) { min-height: var(--touch-hit, 32px); }
+@media (max-width: 959px) {
+  .scope :global(.ts-detail-header > .ts-row > .button:first-child) { margin-right: 2px; border-radius: 12px; }
+}
+
+/*
+ * 材料排印（data-type-scale="doc"，议题页起用；规范见 docs/superpowers/specs/2026-10-12-issue-page-typography.md）：
+ * 页头是这份材料的书眉 —— 标题 16/600 主墨，眉题 13 次墨（原 12.5 / #7c889b 对比度只有 3.5:1）。窄屏（≤1000）两行 14 的规则不动。
+ * 没有这个属性的页（会议页、战场页……）页头保持原样。
+ */
+:global([data-type-scale='doc']) .scope :global(.ts-detail-header > .ts-eyebrow) {
+  font-size: var(--doc-type-meta);
+  line-height: var(--doc-lh-section);
+  color: var(--doc-ink-2);
+}
+:global([data-type-scale='doc']) .scope :global(.ts-detail-header > h1) {
+  font-weight: var(--doc-weight-strong);
+  color: var(--doc-ink-1);
+}
+@media (min-width: 1001px) {
+  :global([data-type-scale='doc']) .scope :global(.ts-detail-header > h1) {
+    font-size: var(--doc-type-section);
+    line-height: var(--doc-lh-section);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

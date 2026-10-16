@@ -27,7 +27,8 @@ export function materialHistory(revisions: MaterialHistoryRevision[], format: "m
         oldIndex++;
       } else {
         const history = change?.kind === "added" ? [] : histories[oldIndex++] ?? [];
-        next.push(format === "html" ? [] : change ? [{ ...metadata, kind: change.kind,
+        // origin：悬停时写「X上传」还是「X让 Co-Agent 改的」；删掉的段落（垃圾篓）不带。
+        next.push(format === "html" ? [] : change ? [{ ...metadata, ...(current.origin ? { origin: current.origin } : {}), kind: change.kind,
           before: change.kind === "modified" ? change.before : "" }, ...history].slice(0, 5) : history);
       }
     }

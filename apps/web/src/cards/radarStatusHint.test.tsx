@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
 import { WorkspaceTestProvider } from "@/components/shell/testing";
-import { RadarCard, radarStatusLine } from "./RadarCard";
+import { RadarCard, radarScanStatusLine, radarStatusLine } from "./RadarCard";
 import type { RadarPayload } from "./payloads";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
@@ -67,9 +67,9 @@ describe("雷达信号列表", () => {
     expect(html).toContain('data-context-mark="signal"');
   });
 
-  it("工具条：全部 / 未读 / 收藏，按时间 / 按重要程度，监测范围与刷新信号", () => {
+  it("工具条：全部 / 未读 / 收藏，按时间 / 按重要程度，监测范围与发现更多", () => {
     const html = render([]);
-    for (const label of ["全部", "未读", "收藏", "按时间", "按重要程度", "监测范围", "刷新信号"]) expect(html).toContain(label);
+    for (const label of ["全部", "未读", "收藏", "按时间", "按重要程度", "监测范围", "发现更多"]) expect(html).toContain(label);
   });
 
   it("状态行常显（clark role=status），写明方式、结果、时间与未读数", () => {
@@ -82,7 +82,15 @@ describe("雷达信号列表", () => {
     expect(css).toContain(".feed .status{margin:15px 0 20px}");
   });
 
-  it("信号卡：来源 · 日期、文章标题、摘要、锚点；已隐藏的不出现；默认按时间倒序", () => {
+  it("演示模式仍能刷新和设置，并如实显示扫描失败，不宣称每日自动调度", () => {
+    expect(render([])).toContain("查看监测范围");
+    expect(render([])).toContain("发现更多");
+    expect(radarStatusLine({ ...payload, lastRun: null } as unknown as RadarPayload, false, false)).toBe("尚未扫描 · 点击「发现更多」开始");
+    expect(radarScanStatusLine({ trigger: "manual", status: "failed", companyDay: "2026-09-22", createdSignals: 0, warnings: ["提供方不可用"] })).toBe("扫描未完成 · 新增 0 条信号");
+    expect(radarScanStatusLine({ trigger: "manual", status: "completed", companyDay: "2026-09-22", createdSignals: 2, warnings: [] })).toBe("刷新完成 · 新增 2 条信号");
+  });
+
+  it("信号卡：来源 · 日期、文章标题、摘要、锚点、重要度；已隐藏的不出现；默认按重要程度", () => {
     const html = render([
       signal("s1", "旧的一条", {}, "2026-09-20T02:00:00.000Z", 5),
       signal("s2", "新的一条", { read: true }, "2026-09-22T02:00:00.000Z", 1),
@@ -94,10 +102,13 @@ describe("雷达信号列表", () => {
     expect(html).toContain(">已读<");
     expect(html).toContain(">新信号<");
     expect(html).not.toContain("隐藏的一条");
-    expect(html.indexOf("新的一条")).toBeLessThan(html.indexOf("旧的一条"));
+    expect(html).toContain("企业 Agent 监管 · 重要度 6/10");
+    // 默认按重要程度（impact + urgency）：旧但更重要的一条在前。
+    expect(html.indexOf("旧的一条")).toBeLessThan(html.indexOf("新的一条"));
   });
 
-  it("没有信号时是 clark 的空态", () => {
-    expect(render([])).toContain("从公司本体出发，看看外面发生了什么");
+  it("没有信号时的空态是大白话，不出现「本体」这类内部用语", () => {
+    expect(render([])).toContain("暂无信号，点击「发现更多」开始扫描");
+    expect(render([])).not.toContain("本体");
   });
 });

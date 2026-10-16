@@ -29,7 +29,15 @@ export interface Account {
 export function avatarInitial(name: string): string {
   const chars = [...name];
   if (!/\p{Script=Han}/u.test(name)) return chars.slice(0, 1).join("").toUpperCase();
+  // 「一号位」这类称谓不是人名：写头一个字（一），不写「号」。
+  if (/^.号位$/u.test(name)) return chars[0];
   return chars.length >= 3 ? chars[1] : chars[0];
+}
+
+/** 菜单里名字下面那行小字。演示环境只给一号位用：不露登录 ID（democeo），名字本身已是身份，不再重复。 */
+export function accountSubtitle(account: Account, demo: boolean): string {
+  if (demo) return "";
+  return [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
 }
 
 type Dialog = "voiceprint" | "radar" | "connection" | "coagent" | "passcode" | null;
@@ -38,6 +46,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [leaving, setLeaving] = useState(false);
+  const [leaveArmed, setLeaveArmed] = useState(false);
   const [canSwitchView, setCanSwitchView] = useState(false);
   const [voiceConfigured, setVoiceConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -57,6 +66,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   }, []);
   const openMenu = (next: boolean) => {
     setOpen(next);
+    setLeaveArmed(false);
     if (!next) return;
     setError(null);
     void Promise.all([browserApi.GET("/api/auth/session"), browserApi.GET("/api/me/voiceprint")]).then(([session, voiceprint]) => {
@@ -112,7 +122,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                 </span>
                 <span>
                   <strong>{account.displayName}</strong>
-                  <small>{[account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ")}</small>
+                  {accountSubtitle(account, false) ? <small>{accountSubtitle(account, false)}</small> : null}
                 </span>
               </div>
               {voiceConfigured ? <Button variant="ghost" className={m.item} onPress={() => pick("voiceprint")}>
@@ -149,7 +159,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
               ) : null}
               {canSwitchView ? <Button variant="ghost" className={m.item} isDisabled={busy} onPress={() => void switchView()}>
                 <ArrowLeftRight size={16} aria-hidden="true" />
-                {account.role === "ceo" ? "切换到 DRI 工作台" : "切换到 CEO 工作台"}
+                {account.role === "ceo" ? "切换到负责人工作台" : "切换到 CEO 工作台"}
               </Button> : null}
               <Button variant="ghost" className={m.item} isDisabled={busy} onPress={() => void replayOnboarding()}>
                 <RotateCcw size={16} aria-hidden="true" />
@@ -168,7 +178,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                 }}
               >
                 <LogOut size={16} aria-hidden="true" />
-                退出登录
+                {leaveArmed ? "再按一次退出登录" : "退出登录"}
               </Button>
             </Popover.Dialog>
           </TianshuPortalTheme>

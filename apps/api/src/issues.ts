@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient, QueryResult } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import {
+  IssueAssignInput,
   IssueDecideInput,
   IssueDecideOverrideInput,
   IssueDismissInput,
@@ -18,7 +19,10 @@ import {
 import { signActionId, type ActionScope } from "./actionToken.js";
 import { battlefieldSetOf, getRegisteredBattlefieldIds, normalizeBattlefieldSet } from "./battlefields.js";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
+import { issueNatureOf } from "./dataOrigin.js";
+import { withSupplementaryEvidence } from "./radarDedupe.js";
 import { revokeEffect } from "./effects.js";
+import { insertNotification } from "./notifications.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -61,6 +65,17 @@ export type IssueUrgency = {
   decisionByEvidence?: { quote: string; window: string };
 };
 
+/** 主责人（issue.assign）：当前一条存在 assignee，全部历史存在 assignments。fingerprint 只用于幂等，不投影。 */
+export type IssueAssigneeRow = {
+  personId: string;
+  displayName: string;
+  assignedAt: string;
+  assignedBy: string;
+  assignedByName: string;
+  note: string | null;
+  fingerprint: string;
+};
+
 export type IssueRow = {
   id: string;
   version: number;
@@ -80,6 +95,8 @@ export type IssueRow = {
   dismiss_fingerprint: string | null;
   restored_at: Date | null;
   restore_fingerprint: string | null;
+  assignee: IssueAssigneeRow | null;
+  assignments: IssueAssigneeRow[];
   created_at: Date;
   updated_at: Date;
 };
@@ -87,7 +104,7 @@ export type IssueRow = {
 const ISSUE_COLUMNS = [
   "id", "version", "origin", "origin_ref", "external_id", "request_fingerprint",
   "title", "location", "urgency", "status", "research", "receipts", "promotion_fingerprint",
-  "dismissed_at", "dismiss_reason", "dismiss_fingerprint", "restored_at", "restore_fingerprint", "created_at", "updated_at",
+  "dismissed_at", "dismiss_reason", "dismiss_fingerprint", "restored_at", "restore_fingerprint", "assignee", "assignments", "created_at", "updated_at",
 ];
 const issueColumns = (prefix = "") => ISSUE_COLUMNS.map((column) => `${prefix}${column}`).join(", ");
 
@@ -226,11 +243,16 @@ export function projectIssueCard(row: IssueRow, secret: string): TCard {
       status: row.status,
       location: row.location,
       urgency: row.urgency,
-      research: projectResearch(row.research),
+      research: projectResearch(row.research, row.origin_ref),
       receipts: row.receipts.map(projectReceipt),
+      // 来源性质：AI 建议的候选议题带 nature=ai_suggested（界面不显示来源，Agent 据此不把它说成已发生的事实）；真实议题不带这一项。
+      ...(issueNatureOf(row.origin_ref) ? { nature: "ai_suggested" as const } : {}),
       dismissedAt: row.dismissed_at?.toISOString() ?? null,
       dismissReason: row.dismiss_reason,
       ...(row.restored_at ? { restoredAt: row.restored_at.toISOString() } : {}),
+      // 主责人与指派历史（docs/superpowers/specs/2026-10-12-assign-and-mission-status.md）；旧行没有这两列时按未指派。
+      assignee: row.assignee ? projectAssignment(row.assignee) : null,
+      assignments: (row.assignments ?? []).map(projectAssignment),
     },
     navigation: [{ href: `/issues/${row.id}`, label: "Issue" }],
     conversation: { scope: `issue:${row.id}` },
@@ -239,15 +261,25 @@ export function projectIssueCard(row: IssueRow, secret: string): TCard {
 }
 
 /** research 只投影 CEO 可见字段；retryFingerprint 等内部幂等状态不进 payload。 */
-function projectResearch(research: IssueResearch) {
+function projectResearch(research: IssueResearch, originRef?: unknown) {
+  // 雷达挂靠的补充信号（origin_ref.supplementarySignals）并进「判断的依据」，显示为「雷达补充：<信号标题>」
+  const doc = research.doc && typeof research.doc === "object" && Array.isArray((research.doc as { evidence?: unknown }).evidence)
+    ? { ...(research.doc as { evidence: { quote: string; sourceTitle: string; sourceUrl?: string }[] }),
+        evidence: withSupplementaryEvidence((research.doc as { evidence: { quote: string; sourceTitle: string; sourceUrl?: string }[] }).evidence, originRef) }
+    : research.doc;
   return {
     status: research.status,
     pendingSince: research.pendingSince,
     runId: research.runId,
     previousRunIds: research.previousRunIds,
     error: research.error ?? null,
-    doc: research.doc,
+    doc,
   };
+}
+
+function projectAssignment(entry: IssueAssigneeRow) {
+  return { personId: entry.personId, displayName: entry.displayName, assignedAt: entry.assignedAt,
+    assignedBy: entry.assignedBy, assignedByName: entry.assignedByName, note: entry.note };
 }
 
 /** 只投影公开 Receipt 字段，不把 actionFingerprint 等内部幂等状态带到 Web。 */
@@ -292,6 +324,10 @@ function issueActions(row: IssueRow, secret: string): TActionDescriptor[] {
       });
     }
     actions.push({ actionId: sign("issue.dismiss"), actionType: "issue.dismiss", label: "移出议题" });
+  }
+  // 指派主责：待决定与已决定都可以（决定之后也要有人落地）；移出的议题不能指派。
+  if (row.status !== "dismissed") {
+    actions.push({ actionId: sign("issue.assign"), actionType: "issue.assign", label: row.assignee ? "改派" : "指派" });
   }
   if (row.status === "dismissed") {
     actions.push({ actionId: sign("issue.restore"), actionType: "issue.restore", label: "恢复到待处理" });
@@ -426,7 +462,7 @@ export async function recoverInterruptedResearch(
               '{error}',
               jsonb_build_object(
                 'code', '${TRIGGER_NOT_STARTED}',
-                'message', '预研在进程重启前未启动，请显式重试',
+                'message', '预研还没跑完，可以重新预研。',
                 'at', now()
               )
             ),
@@ -663,7 +699,15 @@ const ISSUE_ACTION_INPUTS = {
   "issue.dismiss": IssueDismissInput,
   "issue.restore": IssueRestoreInput,
   "issue.revoke_receipt": IssueRevokeReceiptInput,
+  "issue.assign": IssueAssignInput,
 } as const;
+
+/** issue.assign 需要的人员名单与操作人：由路由从公司名单里给，issues.ts 不直接读公司记忆。 */
+export type IssueActionContext = {
+  actorId: string;
+  /** 可被指派的人（公司名单里的真人）：personId → 显示名。 */
+  people: Map<string, string>;
+};
 
 export type IssueActionOutcome =
   | { ok: true; card: TCard; startResearch?: { issueId: string; runId: string } }
@@ -682,6 +726,8 @@ function replayAlreadyProduced(row: IssueRow, actionType: string, itemId: string
       return row.research.retryFingerprint === fingerprint;
     case "issue.revoke_receipt":
       return row.receipts.some((receipt) => receipt.id === itemId && receipt.revokedFingerprint === fingerprint);
+    case "issue.assign":
+      return (row.assignments ?? []).some((entry) => entry.fingerprint === fingerprint);
     default:
       return false;
   }
@@ -697,6 +743,7 @@ export async function executeIssueAction(
   scope: ActionScope,
   fingerprint: string,
   input: unknown,
+  context?: IssueActionContext,
 ): Promise<IssueActionOutcome> {
   const schema = ISSUE_ACTION_INPUTS[scope.actionType as keyof typeof ISSUE_ACTION_INPUTS];
   if (!schema) return { ok: false, status: 404, code: "UNKNOWN_ACTION", message: "未注册的 actionType" };
@@ -777,6 +824,45 @@ export async function executeIssueAction(
         [row.id, JSON.stringify(receipts)],
       );
       const card = projectIssueCard({ ...row, status: "decided", receipts, version: row.version + 1 }, secret);
+      await client.query("COMMIT");
+      return { ok: true, card };
+    }
+
+    if (scope.actionType === "issue.assign") {
+      const { personId, note } = payload as { personId: string; note?: string };
+      if (!context) {
+        await client.query("ROLLBACK");
+        return { ok: false, status: 400, code: "PERSON_NOT_AVAILABLE", message: "指派需要公司人员名单" };
+      }
+      if (row.status === "dismissed") return conflict("ISSUE_DISMISSED", "已移出的议题不能指派，请先恢复");
+      const displayName = context.people.get(personId);
+      if (!displayName || personId === context.actorId) {
+        await client.query("ROLLBACK");
+        return { ok: false, status: 400, code: "PERSON_NOT_AVAILABLE", message: "请选择公司名单里的其他人" };
+      }
+      const text = note?.trim() || null;
+      // 指派给当前主责且说明相同：没有变化，不加版本、不再发通知。
+      if (row.assignee?.personId === personId && (row.assignee.note ?? null) === text) {
+        await client.query("COMMIT");
+        return { ok: true, card: current() };
+      }
+      const entry: IssueAssigneeRow = { personId, displayName, assignedAt: now, assignedBy: context.actorId,
+        assignedByName: context.people.get(context.actorId) ?? context.actorId, note: text, fingerprint };
+      const assignments = [...(row.assignments ?? []), entry];
+      await client.query("UPDATE issues SET assignee = $2::jsonb, assignments = $3::jsonb, version = version + 1, updated_at = now() WHERE id = $1",
+        [row.id, JSON.stringify(entry), JSON.stringify(assignments)]);
+      // 主责人进议题群（群还没有成员时先把一号位放进去，与拉人同一规则）；已读位置放到最新，免得一进来就是一堆未读。
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`thread:issue:${row.id}`]);
+      const members = await client.query("SELECT 1 FROM thread_members WHERE object_type='issue' AND object_id=$1 AND left_at IS NULL LIMIT 1", [row.id]);
+      if (!members.rowCount) await client.query("INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('issue',$1,$2,$2) ON CONFLICT DO NOTHING", [row.id, context.actorId]);
+      await client.query(`INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('issue',$1,$2,$3)
+        ON CONFLICT(object_type,object_id,person_id) DO UPDATE SET left_at=NULL,
+          joined_at=CASE WHEN thread_members.left_at IS NULL THEN thread_members.joined_at ELSE now() END`, [row.id, personId, context.actorId]);
+      await client.query(`INSERT INTO thread_reads(object_type,object_id,person_id,last_read_id)
+        SELECT 'issue',$1,$2,COALESCE(MAX(id),0) FROM thread_messages WHERE object_type='issue' AND object_id=$1
+        ON CONFLICT(object_type,object_id,person_id) DO NOTHING`, [row.id, personId]);
+      await insertNotification(client, { personId, kind: "issue_assigned", objectType: "issue", objectId: row.id, itemId: now, actorId: context.actorId });
+      const card = projectIssueCard({ ...row, assignee: entry, assignments, version: row.version + 1 }, secret);
       await client.query("COMMIT");
       return { ok: true, card };
     }

@@ -2,6 +2,7 @@ import type { TMeetingCardPayload, TResearchDoc, TWeeklyProgressResponse } from 
 import type { Query } from "./meetingStore.js";
 import type { MemoryPerson } from "./companyMemory.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "./issues.js";
+import { issueOriginFields } from "./dataOrigin.js";
 import { getMeetingRow, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "./meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice } from "./monthlyPlans.js";
 import { listMissionRoundCards } from "./missionRounds.js";
@@ -21,9 +22,9 @@ export async function listPending(ctx: Context) {
     listMissionRoundCards(ctx.q, ctx.people, ctx.secret, person, undefined, ctx.now),
   ]);
   const issueItems = issues.map((card) => {
-    const payload = card.payload as { urgency: { level: string; decisionBy?: string }; status: string };
+    const payload = card.payload as { urgency: { level: string; decisionBy?: string }; status: string; originRef?: unknown };
     return { kind: card.kind, id: card.objectRef.id, title: card.title, urgency: payload.urgency.level,
-      status: payload.status, at: payload.urgency.decisionBy ?? null, href: `/issues/${card.objectRef.id}` };
+      status: payload.status, at: payload.urgency.decisionBy ?? null, href: `/issues/${card.objectRef.id}`, ...issueOriginFields(payload.originRef) };
   });
   const meetingItems = meetingRows.filter((row) => row.status === "scheduled" || hasPendingStrategicItem(row.outcome)).map((row) => ({
     kind: "meeting", id: row.id, title: row.title, urgency: null, status: row.status === "scheduled" ? "待开会" : "会后条目待确认",
@@ -54,7 +55,7 @@ export async function getIssue(ctx: Context, issueId: string) {
   const config = locationId && location.level !== "company" ? (await ctx.q(`SELECT name FROM ${location.level === "battlefield" ? "battlefield_config" : "capability_config"} WHERE id=$1`, [locationId])).rows[0] : null;
   const related = location.level === "company" && location.relatedBattlefieldIds.length
     ? (await ctx.q("SELECT id,name FROM battlefield_config WHERE id=ANY($1::text[])", [location.relatedBattlefieldIds])).rows as { id: string; name: string }[] : [];
-  return { id: issueId, title: card.title, location: { ...location, name: config?.name ?? null,
+  return { id: issueId, title: card.title, ...issueOriginFields(row.origin_ref), location: { ...location, name: config?.name ?? null,
     relatedBattlefields: location.level === "company" ? location.relatedBattlefieldIds.map((id) =>
       ({ id, name: related.find((item) => item.id === id)?.name ?? id })) : [] }, urgency: row.urgency,
     status: row.status, currentJudgment: activeReceipt?.decisionText ?? doc?.summary ?? null,

@@ -3,8 +3,15 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Quote, X } from "lucide-react";
-import type { TextQuote } from "./quotes";
+import { isReplyQuote, type TextQuote } from "./quotes";
 import s from "@/styles/conversation-quotes.module.css";
+
+/** 待发送的引用块直接露出原文开头这么多个字，超出用省略号；全文仍在悬停 / 点开的预览里。 */
+export const QUOTE_EXCERPT_LENGTH = 16;
+export function quoteExcerpt(text: string, length = QUOTE_EXCERPT_LENGTH): string {
+  const chars = Array.from(text.replace(/\s+/gu, " ").trim());
+  return chars.length > length ? `${chars.slice(0, length).join("")}…` : chars.join("");
+}
 
 /** Hover and keyboard focus preview only this small control; clicking pins the readable selection. */
 export function QuoteChips({ quotes, onRemove, sent = false }: { quotes: TextQuote[]; onRemove?: (ids: string[]) => void; sent?: boolean }) {
@@ -60,19 +67,20 @@ export function QuoteChips({ quotes, onRemove, sent = false }: { quotes: TextQuo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview?.id, current?.id]);
   if (!quotes.length) return null;
-  return <div className={s.chips} data-sent={sent || undefined} aria-label={sent ? "本条消息的文字引用" : "待发送的文字引用"}>
-    {quotes.map((quote, index) => <span className={s.chip} key={quote.id}>
-      <button type="button" className={s.label} aria-label={`查看引用${quotes.length > 1 ? ` ${index + 1}` : ""}${quote.source?.label ? `：${quote.source.label}` : ""}`} aria-expanded={preview?.id === quote.id} aria-describedby={preview?.id === quote.id ? previewId : undefined}
+  return <div className={s.chips} data-sent={sent || undefined} aria-label={quotes.every(isReplyQuote) ? (sent ? "本条消息的回复" : "待发送的回复") : sent ? "本条消息的文字批注" : "待发送的文字批注"}>
+    {quotes.map((quote, index) => { const word = isReplyQuote(quote) ? "回复" : "批注"; return <span className={s.chip} key={quote.id} data-quote-chip="">
+      <button type="button" className={s.label} aria-label={`查看${word}${quotes.length > 1 ? ` ${index + 1}` : ""}${quote.source?.label ? `：${quote.source.label}` : ""}`} aria-expanded={preview?.id === quote.id} aria-describedby={preview?.id === quote.id ? previewId : undefined}
         onMouseEnter={(event) => open(quote, event.currentTarget, false)} onMouseLeave={leave}
         onFocus={(event) => { if (!restoringFocus.current) open(quote, event.currentTarget, false); }} onBlur={() => { if (!preview?.pinned) leave(); }}
         onClick={(event) => { if (preview?.id === quote.id && preview.pinned) close(); else open(quote, event.currentTarget, true); }}>
         <Quote size={12} aria-hidden />
-        <span>引用{quotes.length > 1 ? ` ${index + 1}` : ""}{quote.source?.label ? ` · ${quote.source.label}` : ""}</span>
+        {/* 已发送的（对话记录里）仍只写短标签；待发送的直接露出开头几个字，省得悬停才知道引了什么。 */}
+        <span>{sent ? `${word}${quotes.length > 1 ? ` ${index + 1}` : ""}${quote.source?.label ? ` · ${quote.source.label}` : ""}` : quoteExcerpt(quote.text)}</span>
       </button>
-      {onRemove ? <button type="button" className={s.remove} aria-label={`移除引用${quotes.length > 1 ? ` ${index + 1}` : ""}`} onClick={() => { onRemove([quote.id]); if (preview?.id === quote.id) close(); }}><X size={12} aria-hidden /></button> : null}
-    </span>)}
-    {preview && current ? createPortal(<div ref={popup} id={previewId} className={s.preview} role={preview.pinned ? "dialog" : "tooltip"} aria-label={preview.pinned ? "引用原文" : undefined} style={{ width: preview.width, left: preview.left, bottom: preview.bottom, top: preview.top, maxHeight: preview.maxHeight }} onMouseEnter={cancelLeave} onMouseLeave={leave}>
-      <div className={s.previewHeader}><span>{current.source?.label ?? "引用原文"}</span>{preview.pinned ? <button type="button" aria-label="关闭引用原文" onClick={() => { close(); restoreFocus(); }}><X size={14} aria-hidden /></button> : null}</div>
+      {onRemove ? <button type="button" className={s.remove} aria-label={`移除${word}${quotes.length > 1 ? ` ${index + 1}` : ""}`} onClick={() => { onRemove([quote.id]); if (preview?.id === quote.id) close(); }}><X size={12} aria-hidden /></button> : null}
+    </span>; })}
+    {preview && current ? createPortal(<div ref={popup} id={previewId} className={s.preview} role={preview.pinned ? "dialog" : "tooltip"} aria-label={preview.pinned ? `${isReplyQuote(current) ? "回复" : "批注"}原文` : undefined} style={{ width: preview.width, left: preview.left, bottom: preview.bottom, top: preview.top, maxHeight: preview.maxHeight }} onMouseEnter={cancelLeave} onMouseLeave={leave}>
+      <div className={s.previewHeader}><span>{current.source?.label ?? `${isReplyQuote(current) ? "回复" : "批注"}原文`}</span>{preview.pinned ? <button type="button" aria-label={`关闭${isReplyQuote(current) ? "回复" : "批注"}原文`} onClick={() => { close(); restoreFocus(); }}><X size={14} aria-hidden /></button> : null}</div>
       <p>{current.text}</p>
     </div>, document.body) : null}
   </div>;

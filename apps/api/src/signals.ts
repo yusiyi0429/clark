@@ -53,7 +53,7 @@ function sourceImages(value: unknown): SourceImage[] {
   return value.flatMap((image) => {
     if (!image || typeof image !== "object") return [];
     const { src, after } = image as { src?: unknown; after?: unknown };
-    return typeof src === "string" && src.startsWith("https://") && typeof after === "number" && Number.isInteger(after) && after >= 0
+    return typeof src === "string" && /^https?:\/\//.test(src) && typeof after === "number" && Number.isInteger(after) && after >= 0
       ? [{ src, after }]
       : [];
   }).slice(0, 12);
@@ -67,9 +67,13 @@ export function shortSignalTitle(summary: string): string {
 
 const FULL_TEXT_OUTLETS = new Set(RADAR_OUTLETS.filter((outlet) => outlet.fullText).map((outlet) => outlet.outletId));
 
-/** 只有目录标了 fullText 的发布方（量子位）原文是逐篇抓取的文章页；其余来源都是检索或 feed 给的摘录。 */
+/**
+ * 原文是不是全文：先看采集时逐条记下的 sourceRef.fullText（公众号 read_article、发布方文章页、检索条目抓原文页）；
+ * 没有这个字段的旧行退回目录推断——只有目录标了 fullText 的发布方（量子位）算全文，其余都是检索或 feed 给的摘录。
+ */
 export function isFullTextSource(sourceRef: unknown): boolean {
-  const ref = sourceRef as { type?: string; outletId?: string } | null;
+  const ref = sourceRef as { type?: string; outletId?: string; fullText?: unknown } | null;
+  if (typeof ref?.fullText === "boolean") return ref.fullText;
   return ref?.type === "outlet" && typeof ref.outletId === "string" && FULL_TEXT_OUTLETS.has(ref.outletId);
 }
 
@@ -79,7 +83,8 @@ function outletBadge(sourceRef: unknown): string {
   return ref?.type === "outlet" && ref.outletName ? ref.outletName : "发布方";
 }
 
-export async function projectRadarCard(q: Query, providers: RadarService["providerStatus"]): Promise<TCard> {
+/** `now` is the business clock (a demo session uses its pack date); date filters on the list count days from it. */
+export async function projectRadarCard(q: Query, providers: RadarService["providerStatus"], now = new Date()): Promise<TCard> {
   const result = await q(
     `SELECT version, timezone, lookback_hours, anchors, sources, scheduled_company_day::text,
             last_scheduled_at, last_run,
@@ -95,6 +100,8 @@ export async function projectRadarCard(q: Query, providers: RadarService["provid
   const outletCount = enabledOutlets.size;
   const wechatConfigured = providers.wechat && wechatSources > 0;
   const outletConfigured = providers.outlets && outletCount > 0;
+  const latestSignals = await latestRadarSignals(q);
+  const latestUnreadCount = await scannedUnreadCount(q);
   return {
     schemaVersion: 1,
     id: "radar:default",
@@ -104,12 +111,15 @@ export async function projectRadarCard(q: Query, providers: RadarService["provid
     title: "Radar",
     payload: {
       timezone: row.timezone,
+      businessDate: new Intl.DateTimeFormat("en-CA", { timeZone: row.timezone || "Asia/Shanghai" }).format(now),
       lookbackHours: row.lookback_hours,
       anchors: row.anchors,
       scheduledCompanyDay: row.scheduled_company_day,
       unreadCount: Number(row.unread),
       lastScheduledAt: row.last_scheduled_at?.toISOString() ?? null,
       lastRun: row.last_run,
+      latestSignals,
+      latestUnreadCount,
       sources: {
         web: {
           configured: providers.web && webSources > 0,
@@ -135,7 +145,129 @@ export async function projectRadarCard(q: Query, providers: RadarService["provid
   };
 }
 
+/** 原生 Radar 评分：relevance / impact / urgency 均为 0–5 整数（与 RadarCandidate.score 同一口径）。 */
+export type SignalScore = { relevance: number; impact: number; urgency: number };
+export type SignalScoreStatus = "assessed" | "unassessed";
+
+const scoreDimension = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 5;
+
+/** 只有三个维度都是合法原生分值时才算有分；其余（null、缺维度、越界）一律视为没有评分。 */
+export function nativeSignalScore(score: unknown): SignalScore | null {
+  if (!score || typeof score !== "object") return null;
+  const { relevance, impact, urgency } = score as Record<string, unknown>;
+  return scoreDimension(relevance) && scoreDimension(impact) && scoreDimension(urgency) ? { relevance, impact, urgency } : null;
+}
+
+/**
+ * 评分是否来自真实研判：实时扫描的分值由 Radar Assess Agent 给出；预载（imported）信号只有在导入包附带
+ * 有来源的研判（source_ref.scoreStatus = "assessed"）时才算已评估。旧版导入写入的 0/0/0 是占位，不是评估结果。
+ */
+export function signalScoreStatus(score: unknown, sourceRef: unknown): SignalScoreStatus {
+  if (!nativeSignalScore(score)) return "unassessed";
+  const ref = sourceRef as { imported?: unknown; scoreStatus?: unknown } | null;
+  if (ref && typeof ref === "object" && ref.imported === true && ref.scoreStatus !== "assessed") return "unassessed";
+  return "assessed";
+}
+
+type SignalScoreBasis = { rationale: string; assessedBy: string; assessedAt: string; sourceRef: string };
+
+/** 导入研判的出处（谁、何时、依据什么给的分）；实时扫描信号没有这一项。 */
+function signalScoreBasis(sourceRef: unknown): SignalScoreBasis | null {
+  const basis = (sourceRef as { assessment?: unknown } | null)?.assessment as Partial<SignalScoreBasis> | undefined;
+  if (!basis || typeof basis !== "object") return null;
+  const { rationale, assessedBy, assessedAt, sourceRef: ref } = basis;
+  return typeof rationale === "string" && typeof assessedBy === "string" && typeof assessedAt === "string" && typeof ref === "string"
+    ? { rationale, assessedBy, assessedAt, sourceRef: ref }
+    : null;
+}
+
+export type SignalImportance = "high" | "medium" | "low";
+
+/** 原生重要度 = impact + urgency（0–10，与雷达页「按重要程度」同一口径）；未评估返回 null。 */
+function importanceValue(score: unknown, sourceRef: unknown): number | null {
+  const native = signalScoreStatus(score, sourceRef) === "assessed" ? nativeSignalScore(score) : null;
+  return native ? native.impact + native.urgency : null;
+}
+
+/** 首页信号流的重要度三档：≥7 高、≥4 中、其余低；未评估为 null（不当作低）。 */
+export function signalImportance(score: unknown, sourceRef: unknown): SignalImportance | null {
+  const value = importanceValue(score, sourceRef);
+  return value === null ? null : value >= 7 ? "high" : value >= 4 ? "medium" : "low";
+}
+
+/** 信号流里那一行的发布方：媒体写媒体名，公众号写账号名，检索来源写站点域名。 */
+function signalPublisher(sourceType: SignalRow["source_type"], sourceRef: unknown, url: string): string {
+  if (sourceType === "outlet") return outletBadge(sourceRef);
+  if (sourceType === "wechat-account") {
+    const name = (sourceRef as { accountName?: unknown } | null)?.accountName;
+    return typeof name === "string" && name ? name : "公众号";
+  }
+  try {
+    return new URL(url).hostname.replace(/^www\./, "") || "Web";
+  } catch {
+    return "Web";
+  }
+}
+
+export type RadarLatestSignal = {
+  id: string;
+  title: string;
+  source: string;
+  publishedAt: string;
+  importance: SignalImportance | null;
+  read: boolean;
+  /** 固定为 "scan"：信号流只收雷达实时扫描到的信号（首页据此判断接口已排除资料包预载的信号）。 */
+  origin: "scan";
+};
+
+const LATEST_SIGNAL_LIMIT = 6;
+
+/**
+ * 资料包预载的信号（导入时 source_ref.imported = true）不进首页信号流：首页决策面只放真实信息，
+ * 预载信号只在雷达页列出（10/14：雷达卡回到首页决策面，只显示实时扫描到的信号）。
+ */
+const SCANNED_ONLY = `coalesce(source_ref->>'imported', '') <> 'true'`;
+
+/** 首页信号流里的未读数：实时扫描、未忽略、未读（不含资料包预载的信号）。 */
+async function scannedUnreadCount(q: Query): Promise<number> {
+  const result = await q(`SELECT count(*) AS unread FROM signals WHERE read_at IS NULL AND dismissed_at IS NULL AND ${SCANNED_ONLY}`);
+  return Number((result.rows[0] as { unread: string | number } | undefined)?.unread ?? 0);
+}
+
+/**
+ * 首页雷达卡的信号流：实时扫描到的、未忽略的信号按重要度高→低（未评估排最后）、再按发布时间新→旧，取前 6 条。
+ * 标题与雷达页列表一样用原文标题；资料包预载的信号不在这里（SCANNED_ONLY）。
+ */
+async function latestRadarSignals(q: Query): Promise<RadarLatestSignal[]> {
+  const result = await q(
+    `SELECT id, source_type, source_title, source_url, published_at, source_ref, score, read_at
+       FROM signals WHERE dismissed_at IS NULL AND ${SCANNED_ONLY}`,
+  );
+  type Row = Pick<SignalRow, "id" | "source_type" | "source_title" | "source_url" | "published_at" | "source_ref" | "score" | "read_at">;
+  return (result.rows as Row[])
+    .map((row) => ({ row, value: importanceValue(row.score, row.source_ref) }))
+    .sort((left, right) => {
+      if (left.value !== right.value) {
+        if (left.value === null) return 1;
+        if (right.value === null) return -1;
+        return right.value - left.value;
+      }
+      return right.row.published_at.getTime() - left.row.published_at.getTime() || (left.row.id < right.row.id ? -1 : 1);
+    })
+    .slice(0, LATEST_SIGNAL_LIMIT)
+    .map(({ row }) => ({
+      id: row.id,
+      title: row.source_title,
+      source: signalPublisher(row.source_type, row.source_ref, row.source_url),
+      publishedAt: row.published_at.toISOString(),
+      importance: signalImportance(row.score, row.source_ref),
+      read: row.read_at !== null,
+      origin: "scan" as const,
+    }));
+}
+
 export function projectSignalCard(row: SignalRow): TCard {
+  const scoreStatus = signalScoreStatus(row.score, row.source_ref);
   return {
     schemaVersion: 1,
     id: `signal:${row.id}`,
@@ -163,7 +295,10 @@ export function projectSignalCard(row: SignalRow): TCard {
         strategicImpact: row.strategic_impact,
         evidenceQuote: row.evidence_quote,
         unknowns: row.unknowns,
-        score: row.score,
+        // 未评估时 score 为 null：不把占位 0 分交给列表排序或对话上下文冒充研判结果。
+        score: scoreStatus === "assessed" ? nativeSignalScore(row.score) : null,
+        scoreStatus,
+        scoreBasis: scoreStatus === "assessed" ? signalScoreBasis(row.source_ref) : null,
       },
       state: {
         read: row.read_at !== null,
@@ -200,7 +335,7 @@ export async function getSignalImageSource(q: Query, id: string, index: number):
   const image = row && sourceImages(row.source_images)[index];
   if (!image || !row) return null;
   try {
-    if (new URL(row.source_url).protocol !== "https:") return null;
+    if (!["https:", "http:"].includes(new URL(row.source_url).protocol)) return null;
   } catch {
     return null;
   }

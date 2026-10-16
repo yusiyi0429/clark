@@ -4,7 +4,7 @@ import {
   type AssistantMessage,
   type Context,
 } from "@earendil-works/pi-ai";
-import { createResearchAgentRunner } from "../src/researchAgent.js";
+import { createResearchAgentRunner, scopeMemoryMatches } from "../src/researchAgent.js";
 import { loadCompanyMemory } from "../src/companyMemory.js";
 import { migrate } from "../src/migrate.js";
 import { createTestDb, testEnv } from "./helpers.js";
@@ -153,5 +153,23 @@ describe("issue pre-research publisher feed", () => {
       expect(contexts[0].tools?.map((tool) => tool.name)).toEqual(["submit_candidate"]);
       expect(outlets.calls).toEqual([]);
     });
+  });
+});
+
+describe("research evidence scope", () => {
+  const battlefields = [{ id: "aidc", name: "AIDC" }, { id: "tk", name: "词元云集" }, { id: "fdd", name: "房懂懂" }];
+  const sections = [
+    { title: "目标：LTO、PO 与候选战役" },
+    { title: "【词元云集】词元云集 2026 年 9 月公司级复盘" },
+    { title: "TK 会议纪要" },
+    { title: "AIDC 与词元云集的内部结算" },
+    { title: "TKOS 方法说明" },
+  ];
+  it("keeps only the issue's own battlefield and group-level sections", () => {
+    expect(scopeMemoryMatches(sections, { level: "battlefield", battlefieldId: "aidc" }, battlefields).map((s) => s.title))
+      .toEqual(["目标：LTO、PO 与候选战役", "AIDC 与词元云集的内部结算", "TKOS 方法说明"]);
+    expect(scopeMemoryMatches(sections, { level: "battlefield", battlefieldId: "tk" }, battlefields).map((s) => s.title))
+      .toEqual(sections.map((s) => s.title));
+    expect(scopeMemoryMatches(sections, { level: "company" }, battlefields)).toHaveLength(sections.length);
   });
 });

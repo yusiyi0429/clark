@@ -265,14 +265,14 @@ describe("item-by-item Outcome review", () => {
     }
   });
 
-  it("does not offer confirm for a decision whose linked Issue cannot be resolved", async () => {
+  it("confirms a decision with no resolvable Issue as a meeting-only decision and revokes it", async () => {
     const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: outcomeAgent() });
     try {
-      const { cookie, meetingId } = await readyOutcome(t);
+      const { cookie, issueId, meetingId } = await readyOutcome(t);
       const row = (await t.sql("SELECT outcome, issue_ids FROM meetings WHERE id = $1", [meetingId]))[0];
       const outcome = row.outcome as { items: OutcomeItem[] };
       outcome.items[0].issueId = null;
-      // 关联多个 Issue 且 decision 未指定 issueId：无法确定精确 Receipt 目标
+      // 关联多个 Issue 且 decision 未指定 issueId：没有议题可写回执，只记为会上已确认的决定
       await t.sql("UPDATE meetings SET outcome = $2::jsonb, issue_ids = $3::jsonb WHERE id = $1", [
         meetingId,
         JSON.stringify(outcome),
@@ -280,16 +280,24 @@ describe("item-by-item Outcome review", () => {
       ]);
       const card = await meetingCard(t, cookie, meetingId);
       const actions = card.actions as CardAction[];
-      expect(actions.some((a) => a.actionType === "meeting.confirm_item" && a.itemId === "item-1")).toBe(false);
+      expect(actions.some((a) => a.actionType === "meeting.confirm_item" && a.itemId === "item-1")).toBe(true);
       expect(actions.some((a) => a.actionType === "meeting.dismiss_item" && a.itemId === "item-1")).toBe(true);
 
-      const forced = signActionId(testEnv.sessionSecret, {
-        actionType: "meeting.confirm_item", objectType: "meeting", objectId: meetingId,
-        objectVersion: (card.objectRef as { version: number }).version, itemId: "item-1",
+      const confirmed = await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.confirm_item", "item-1"));
+      expect(confirmed.statusCode).toBe(200);
+      expect(outcomeOf(confirmed.json().cards[0]).outcome.items[0].review).toMatchObject({
+        status: "confirmed",
+        effectRef: `meeting:${meetingId}:decision:item-1`,
       });
-      const res = await execute(t, cookie, forced);
-      expect(res.statusCode).toBe(409);
-      expect(res.json().code).toBe("DECISION_ITEM_WITHOUT_ISSUE");
+      // 不写任何议题
+      expect(await issueReceipts(t, issueId)).toHaveLength(0);
+      const issue = (await t.sql("SELECT status FROM issues WHERE id = $1", [issueId]))[0];
+      expect(issue.status).toBe("pending");
+
+      const revoked = await execute(t, cookie, await meetingActionId(t, cookie, meetingId, "meeting.revoke_effect", "item-1"));
+      expect(revoked.statusCode).toBe(200);
+      expect(outcomeOf(revoked.json().cards[0]).outcome.items[0].review?.status).toBe("pending");
+      expect(await issueReceipts(t, issueId)).toHaveLength(0);
     } finally {
       await t.close();
     }

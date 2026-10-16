@@ -56,12 +56,134 @@ export const PreflightInputState = Type.Union([
   Type.Literal("missing"),
 ]);
 
+/**
+ * 预审实际采用的群材料。state：
+ * - used：最新有效版本的正文（或其截断部分）已进入本次预审输入；
+ * - link_only：外部链接，只给了标题与地址，不代表读过链接内容；
+ * - unreadable：这一版没有可读文字（解析失败或空文字层），没有进入输入。
+ */
+export const PreflightEvidenceMaterialState = Type.Union([
+  Type.Literal("used"),
+  Type.Literal("link_only"),
+  Type.Literal("unreadable"),
+]);
+
+export const PreflightEvidenceMaterial = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    objectType: Type.Union([Type.Literal("meeting"), Type.Literal("issue")]),
+    objectId: Type.String({ minLength: 1 }),
+    fileName: Type.String({ minLength: 1 }),
+    format: Type.String({ minLength: 1 }),
+    version: Type.Integer({ minimum: 1 }),
+    state: PreflightEvidenceMaterialState,
+    truncated: Type.Boolean(),
+    /** `material:<id>@v<version>`，与 entries.sourceRefs 同一格式。 */
+    sourceRef: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+/** 旧会前材料（meetings.materials）：与同名或同内容的群材料重复时只留群材料最新版。 */
+export const PreflightEvidenceLegacyMaterial = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    fileName: Type.String({ minLength: 1 }),
+    state: Type.Union([Type.Literal("used"), Type.Literal("duplicate")]),
+    duplicateOf: Type.Optional(Type.String({ minLength: 1 })),
+  },
+  { additionalProperties: false },
+);
+
+/** 本次预审读取的输入快照：材料版本、讨论消息与历史决定，用于追溯与判断报告是否过期。 */
+export const PreflightEvidenceRecord = Type.Object(
+  {
+    collectedAt: Type.String({ minLength: 1 }),
+    /** 按谁的权限读取（会议的 CEO 参会人）。 */
+    viewerId: Type.String({ minLength: 1 }),
+    materials: Type.Array(PreflightEvidenceMaterial),
+    legacyMaterials: Type.Array(PreflightEvidenceLegacyMaterial),
+    /** 进入输入的群讨论消息 id（thread_messages.id）。 */
+    discussionMessageIds: Type.Array(Type.Integer({ minimum: 1 })),
+    /** 读取时可见群讨论的最大消息 id；之后出现更大的 id 即有新讨论。 */
+    discussionMaxId: Type.Integer({ minimum: 0 }),
+    /** 作为约束提供给预审的仍有效历史决定（decision:<id>）。 */
+    decisionRefs: Type.Array(Type.String({ minLength: 1 })),
+    /** 已撤回/被替代、只供解释变化的历史决定（decision:<id>）。 */
+    inactiveDecisionRefs: Type.Array(Type.String({ minLength: 1 })),
+    /** 因无权限未读取的对象数（不暴露对象名）。 */
+    skippedObjects: Type.Integer({ minimum: 0 }),
+    /** 对照的近期会议：共享议题，或同一战场、单元（v4 起）。 */
+    relatedMeetings: Type.Optional(Type.Array(Type.Object(
+      {
+        id: Type.String({ minLength: 1 }),
+        title: Type.String({ minLength: 1 }),
+        scheduledAt: Type.String({ minLength: 1 }),
+        matchedBy: Type.Array(Type.Union([Type.Literal("shared_issue"), Type.Literal("battlefield"), Type.Literal("unit")]), { minItems: 1 }),
+        confirmedDecisions: Type.Integer({ minimum: 0 }),
+        pendingDecisions: Type.Integer({ minimum: 0 }),
+      },
+      { additionalProperties: false },
+    ), { maxItems: 10 })),
+  },
+  { additionalProperties: false },
+);
+
 export const PreflightInputCoverage = Type.Object(
   {
     background: PreflightInputState,
     purpose: PreflightInputState,
     sourceMaterial: PreflightInputState,
     relatedMeeting: PreflightInputState,
+    /** 以下为 H04/H05 扩展字段；Optional 保证旧 Meeting JSONB 继续可读。 */
+    groupMaterials: Type.Optional(PreflightInputState),
+    discussions: Type.Optional(PreflightInputState),
+    decisionHistory: Type.Optional(PreflightInputState),
+    evidence: Type.Optional(PreflightEvidenceRecord),
+  },
+  { additionalProperties: false },
+);
+
+/** 投影时计算：报告生成后群材料或讨论发生了变化。不落库。 */
+export const PreflightStaleMaterial = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    fileName: Type.String({ minLength: 1 }),
+    objectType: Type.Union([Type.Literal("meeting"), Type.Literal("issue")]),
+    objectId: Type.String({ minLength: 1 }),
+    usedVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+    currentVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+    change: Type.Union([Type.Literal("updated"), Type.Literal("added"), Type.Literal("removed")]),
+  },
+  { additionalProperties: false },
+);
+
+export const PreflightStaleInputs = Type.Object(
+  {
+    materials: Type.Array(PreflightStaleMaterial),
+    newDiscussionCount: Type.Integer({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * CEO 级问题（meeting_question / leader_lens）必须说明：为什么现在、为什么需要 CEO、可选路径与影响（feedback 18）。
+ * meeting_question 至少给两个选项；leader_lens 是拍板前要 Owner 回答的追问，选项可为空。
+ */
+export const PreflightCeoOption = Type.Object(
+  {
+    label: Type.String({ minLength: 1, maxLength: 300 }),
+    impact: Type.String({ minLength: 1, maxLength: 1000 }),
+  },
+  { additionalProperties: false },
+);
+
+export const PreflightCeoDecision = Type.Object(
+  {
+    whyNow: Type.String({ minLength: 1, maxLength: 1000 }),
+    whyCeo: Type.String({ minLength: 1, maxLength: 1000 }),
+    options: Type.Array(PreflightCeoOption, { maxItems: 4 }),
+    delayCost: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
   },
   { additionalProperties: false },
 );
@@ -117,12 +239,110 @@ export const MeetingPreflightEntry = Type.Object(
     title: Type.String({ minLength: 1 }),
     body: Type.String({ minLength: 1 }),
     sourceRefs: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+    /** 只在 meeting_question / leader_lens 上出现；旧 JSONB 没有。 */
+    ceoDecision: Type.Optional(PreflightCeoDecision),
   },
   { additionalProperties: false },
 );
 
 export const MeetingPreflightError = Type.Object(
   { code: Type.String(), message: Type.String(), at: Type.String() },
+  { additionalProperties: false },
+);
+
+/**
+ * 材料里自带的待决题（如原稿「管理层讨论问题」）逐条判断：
+ * - ceo：需要一号位判断（跨战场资源、战略方向、重大承诺等）；
+ * - owner：负责人职责内可以定，不必上升；
+ * - monitor：事实还不够，转监测，不阻塞本次讨论。
+ */
+export const PreflightMaterialQuestionVerdict = Type.Union([
+  Type.Literal("ceo"),
+  Type.Literal("owner"),
+  Type.Literal("monitor"),
+]);
+
+export const PreflightMaterialQuestion = Type.Object(
+  {
+    question: Type.String({ minLength: 1, maxLength: 500 }),
+    verdict: PreflightMaterialQuestionVerdict,
+    reason: Type.String({ minLength: 1, maxLength: 1000 }),
+    sourceRefs: Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems: 6 }),
+  },
+  { additionalProperties: false },
+);
+
+/** total 写在 items 之前：模型边写边判断时，界面能显示「第 2 / 5 题」。 */
+export const PreflightMaterialQuestions = Type.Object(
+  {
+    total: Type.Integer({ minimum: 0, maximum: 20 }),
+    items: Type.Array(PreflightMaterialQuestion, { maxItems: 20 }),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * 开放分歧的三类（Decision Brief 会前预审卡）：
+ * - fact_gap：事实不足，转监测、不阻塞；
+ * - judgment：判断分歧，写明已收敛到哪里、还差什么；
+ * - value_tradeoff：价值取舍，是剩下需要一号位选的。
+ */
+export const PreflightDivergenceType = Type.Union([
+  Type.Literal("fact_gap"),
+  Type.Literal("judgment"),
+  Type.Literal("value_tradeoff"),
+]);
+
+export const PreflightDivergence = Type.Object(
+  {
+    type: PreflightDivergenceType,
+    title: Type.String({ minLength: 1, maxLength: 200 }),
+    body: Type.String({ minLength: 1, maxLength: 2000 }),
+    /** 判断分歧已收敛到哪里；其他两类可省略。 */
+    converged: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+    sourceRefs: Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems: 10 }),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * 预审过程中的一步（系统按实际步骤生成，不是估算的百分比）：读取了哪份材料、对照了哪场会、查了哪一节企业知识、
+ * 判断到第几道待决题、形成了哪一条结论。key 相同的一步原地更新（如「第 2 / 5 题」→「第 3 / 5 题」）。
+ */
+export const PreflightProgressStepKind = Type.Union([
+  Type.Literal("input"),
+  Type.Literal("history"),
+  Type.Literal("knowledge"),
+  Type.Literal("thinking"),
+  Type.Literal("material_question"),
+  Type.Literal("finding"),
+  Type.Literal("check"),
+]);
+
+export const PreflightProgressStep = Type.Object(
+  {
+    key: Type.String({ minLength: 1, maxLength: 100 }),
+    kind: PreflightProgressStepKind,
+    label: Type.String({ minLength: 1, maxLength: 300 }),
+    detail: Type.Optional(Type.String({ minLength: 1, maxLength: 600 })),
+    state: Type.Union([Type.Literal("active"), Type.Literal("done")]),
+    /** 这一步第一次出现的时间。 */
+    at: Type.String({ minLength: 1 }),
+    /** 最近一次更新的时间。 */
+    updatedAt: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const PreflightProgress = Type.Object(
+  {
+    startedAt: Type.String({ minLength: 1 }),
+    updatedAt: Type.String({ minLength: 1 }),
+    finishedAt: Type.Optional(Type.String({ minLength: 1 })),
+    steps: Type.Array(PreflightProgressStep, { maxItems: 80 }),
+    /** 推理摘要里最近一条中文思考要点；没有推理摘要时不出现。 */
+    thought: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+  },
   { additionalProperties: false },
 );
 
@@ -146,6 +366,17 @@ export const MeetingPreflight = Type.Object(
     taskDefinition: Type.Optional(PreflightTaskDefinition),
     readiness: Type.Optional(PreflightReadiness),
     summary: Type.Optional(PreflightSummary),
+    /** 生成期间所用材料/讨论已变化：这份报告从写入起就不是基于最新资料。 */
+    inputsChangedDuringRun: Type.Optional(Type.Boolean()),
+    /** 投影时计算的过期提示（不落库）：报告所用材料版本或讨论之后又有变化。 */
+    staleInputs: Type.Optional(PreflightStaleInputs),
+    /** 材料自带待决题的逐条判断与开放分歧（v4 起）；旧报告没有。 */
+    materialQuestions: Type.Optional(PreflightMaterialQuestions),
+    divergences: Type.Optional(Type.Array(PreflightDivergence, { maxItems: 8 })),
+    /** 预审过程：运行中逐步写入，刷新或离开后回来可以接着看；完成或失败后保留。 */
+    progress: Type.Optional(PreflightProgress),
+    /** 本次预审所用模型与思考强度（运行记录用）。 */
+    model: Type.Optional(Type.Object({ id: Type.String({ minLength: 1 }), thinking: Type.String({ minLength: 1 }) }, { additionalProperties: false })),
   },
   { additionalProperties: false },
 );
@@ -381,6 +612,8 @@ export const PreflightCandidate = Type.Object(
   {
     taskDefinition: PreflightTaskDefinition,
     readiness: PreflightReadiness,
+    /** 材料自带待决题逐条判断；材料没有自带待决题时 total 为 0、items 为空。写在 entries 之前。 */
+    materialQuestions: Type.Optional(PreflightMaterialQuestions),
     entries: Type.Array(
       Type.Object(
         {
@@ -388,11 +621,15 @@ export const PreflightCandidate = Type.Object(
           title: Type.String({ minLength: 1, maxLength: 200 }),
           body: Type.String({ minLength: 1, maxLength: 4000 }),
           sourceRefs: Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems: 10 }),
+          /** meeting_question / leader_lens 必填（服务端校验）；其他类别忽略。 */
+          ceoDecision: Type.Optional(PreflightCeoDecision),
         },
         { additionalProperties: false },
       ),
       { minItems: 1, maxItems: 20 },
     ),
+    /** 开放分歧按三类写；没有分歧时为空数组或省略。 */
+    divergences: Type.Optional(Type.Array(PreflightDivergence, { maxItems: 8 })),
     basis: Type.String({ minLength: 1, maxLength: 4000 }),
     brief: Type.String({ minLength: 1, maxLength: 4000 }),
     summary: PreflightSummary,
@@ -405,10 +642,22 @@ export type TMeetingParticipant = Static<typeof MeetingParticipant>;
 export type TPreflightReviewEntryKind = Static<typeof PreflightReviewEntryKind>;
 export type TMeetingPreflightEntryKind = Static<typeof MeetingPreflightEntryKind>;
 export type TPreflightInputCoverage = Static<typeof PreflightInputCoverage>;
+export type TPreflightEvidenceMaterial = Static<typeof PreflightEvidenceMaterial>;
+export type TPreflightEvidenceLegacyMaterial = Static<typeof PreflightEvidenceLegacyMaterial>;
+export type TPreflightEvidenceRecord = Static<typeof PreflightEvidenceRecord>;
+export type TPreflightStaleMaterial = Static<typeof PreflightStaleMaterial>;
+export type TPreflightStaleInputs = Static<typeof PreflightStaleInputs>;
+export type TPreflightCeoOption = Static<typeof PreflightCeoOption>;
+export type TPreflightCeoDecision = Static<typeof PreflightCeoDecision>;
 export type TPreflightTaskDefinition = Static<typeof PreflightTaskDefinition>;
 export type TPreflightSummary = Static<typeof PreflightSummary>;
 export type TMeetingPreflightEntry = Static<typeof MeetingPreflightEntry>;
 export type TMeetingPreflight = Static<typeof MeetingPreflight>;
+export type TPreflightMaterialQuestion = Static<typeof PreflightMaterialQuestion>;
+export type TPreflightMaterialQuestions = Static<typeof PreflightMaterialQuestions>;
+export type TPreflightDivergence = Static<typeof PreflightDivergence>;
+export type TPreflightProgressStep = Static<typeof PreflightProgressStep>;
+export type TPreflightProgress = Static<typeof PreflightProgress>;
 export type TSupplementExportStatus = Static<typeof SupplementExportStatus>;
 export type TSupplementRequest = Static<typeof SupplementRequest>;
 export type TMeetingDraft = Static<typeof MeetingDraft>;

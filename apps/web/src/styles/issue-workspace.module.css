@@ -1,70 +1,106 @@
 /* 议题工作区（clark issue-workspace.module.css）。天枢把它渲染在外壳 .expanded 面板里，所以不用 fixed 定位，
-   圆角与裁切由面板承担；其余色值、字号、间距照 clark。 */
+   圆角与裁切由面板承担。月度计划阅读页（DemoMonthlyPlanView / MonthlyPlanCard）借用 .workspace / .columns / .reading /
+   .section / .empty，这几样的基础规则保持原样；议题页的排印写在 [data-type-scale=doc] 下（IssueCard 根上带这个属性）。
+   排印规范：docs/superpowers/specs/2026-10-12-issue-page-typography.md —— 桌面字号只有两级 16 / 13 + 标签 12（不用 --doc-type-title），
+   字重只有 400 / 600，墨色以 --doc-ink-1/2 为主，--doc-ink-3 只给编号、出处日期、空状态，--doc-ink-accent 只给可点的。本文件不写 12px 以下的字号。 */
 .workspace{display:flex;flex-direction:column;flex:1;height:100%;min-height:0;overflow:hidden;border-radius:inherit;background:#f8f8fa;color:#1d1d1f;container-type:inline-size;contain:layout paint}
 .header{display:flex;align-items:center;justify-content:space-between;gap:22px;min-height:96px;box-sizing:border-box;padding:25px 27px;background:linear-gradient(145deg,#ffffffa6,#eef1f6a3);border-bottom:1px solid #ffffffc2;-webkit-backdrop-filter:blur(30px) saturate(1.28);backdrop-filter:blur(30px) saturate(1.28);box-shadow:inset 0 1px #fff;flex:none}
 .identity{display:flex;align-items:center;gap:13px;min-width:0;flex:1}.identity>div{min-width:0}
 .header span{font-size:12px;color:#6e6e73}.header h1{font-size:22px;font-weight:600;line-height:1.5;margin:7px 0 0;letter-spacing:-.025em}
 .header>button{flex:none}
-.columns{display:flex;flex-direction:column;min-height:0;flex:1;overflow:hidden}
-.materials{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0;background:#fff}
+/* DetailFrame 的 .ts-detail 统一滚动页头下的内容；正文不再嵌套滚动框，避免滚轮被无溢出的内层截住。 */
+.columns{display:flex;flex-direction:column;min-height:0;flex:none;overflow:visible}
+.workspace [data-material-scope]{flex:none;min-height:auto}
+.materials{display:flex;flex-direction:column;height:auto;min-height:0;min-width:0;background:#fff}
+.workspace [data-material-scroll]{flex:none;overflow:visible;min-height:auto}
 .tabs{padding:0 20px;border-bottom:1px solid #1d1d1f0a;flex:none}
 .tabs{display:none}
 /* HeroUI 的页签默认铺满整行（.tabs__tab{width:100%}）；这里要靠左按内容宽。 */
 .tabs :global(.tabs__tab){width:auto}
-.reading{position:relative;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:24px 28px 48px;min-height:0;line-height:1.8;font-size:16px}
-.reading .note{font-size:11px;color:#797980;margin:0 0 23px}.reading h2{font-size:14px;font-weight:600;color:#63636a;margin:0 0 12px}
-.judgment>p{margin:0;font-size:19px;line-height:1.8;letter-spacing:-.02em}.judgment+.judgment{margin-top:28px}.judgment>button{margin-top:14px}
-.section{margin-top:30px;padding-top:24px;border-top:1px solid #1d1d1f0d}.section ol{padding:0;list-style:none;margin:0}.section li{display:flex;gap:14px;margin-top:15px}.section li>span{font-size:11px;color:#8e8e93;padding-top:4px;font-variant-numeric:tabular-nums}.section p{margin:0}.section p+p{margin-top:12px}
+
+/* —— 与月度计划共用的阅读列（基础规则不动）—— */
+.reading{position:relative;padding:24px 28px 48px;min-height:0;line-height:1.8;font-size:16px}
+.reading h2{font-size:14px;font-weight:600;color:#63636a;margin:0 0 12px}
+.section{margin-top:30px;padding-top:24px;border-top:1px solid #1d1d1f0d}.section ol{padding:0;list-style:none;margin:0}.section li{display:flex;gap:14px;margin-top:15px}.section li>span{font-size:13px;color:#8e8e93;padding-top:4px;font-variant-numeric:tabular-nums}.section p{margin:0}.section p+p{margin-top:12px}
 .section li small{display:block;margin-top:4px;font-size:12px;line-height:1.6;color:#8e8e93}.section li small a{color:inherit;text-decoration:underline;text-decoration-color:#8e8e9366;text-underline-offset:3px}.section li small a:hover{color:#2f6bb4}
 .section>p>a{color:#2f6bb4;text-decoration:none}.section>p>a:hover{text-decoration:underline}
-.sourceQuote{font-size:14px;color:#56565e}
-.unknown{margin-top:28px;border-radius:12px;background:#f5f5f7;padding:18px 20px}.unknown p{margin:0;color:#56565e;font-size:14px}.unknown p+p{margin-top:8px}
-.preflightActions{margin-top:28px;padding-top:22px;border-top:1px solid #1d1d1f0d}.preflightActions>div:first-child p{margin:-7px 0 0;font-size:12px;color:#77777c}.actionRow{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}.actionRow:empty{display:none}.preflightActions>small{display:block;margin-top:10px;color:#5d7164;font-size:11px}
-.discussion{margin-top:26px;border-top:1px solid #1d1d1f10;padding-top:20px}.discussion>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:13px}.discussion>header h2{margin-bottom:3px}.discussion>header p{margin:0;color:#77777c;font-size:12px;line-height:1.6}.discussion>header>span{flex:none;border:1px solid #dfe3e8;border-radius:999px;background:#f7f8fa;color:#737982;padding:3px 8px;font-size:10px;line-height:1.5}.discussion>small{display:block;color:#797980;font-size:11px;line-height:1.7;margin-top:11px}
-.options{display:grid;gap:7px;list-style:none;margin:0;padding:0}.options li{display:flex;align-items:center;gap:11px;border:1px solid #1d1d1f0e;background:#fafafb;color:#303036;border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5}.options li>span{flex:none;color:#92979f;font-size:10px;font-variant-numeric:tabular-nums}.options li>p{margin:0}
-.receipt{display:flex;gap:10px;align-items:flex-start;border:1px solid #dce9e2;border-radius:10px;background:#f4f9f6;padding:12px 14px}.receipt+.receipt{margin-top:7px}.receipt>svg{color:#34785c;flex:none;margin-top:3px}.receipt>div{flex:1;min-width:0}.receipt p{margin:0;font-size:14px;line-height:1.7}.receipt small{display:block;margin-top:2px;font-size:11px;color:#5d7164}.receipt>button{flex:none}
-.prose h3{font-size:16px;margin:0 0 10px}.prose p{margin:12px 0}.prose ul,.prose ol{padding-left:22px;margin:6px 0 0}
-.option+.option{margin-top:18px}.option h4{display:flex;gap:10px;margin:0;font-size:16px;font-weight:600;line-height:1.6}.option h4>span{flex:none;padding-top:3px;font-size:11px;font-weight:400;color:#8e8e93;font-variant-numeric:tabular-nums}.option li{margin-top:6px;color:#3c4350}
 .empty{margin:0;font-size:14px;color:#77777c}
+
+/* —— 议题页：阅读列、标题、共用块的排印 —— */
+/* 行长：正文 16px 每行约 37 字（--doc-measure 600 + 左右各 28 的内边距；电脑上左侧略窄于 656 时内边距先让到 12，正文仍 600）。阅读列在左侧区域里水平居中；
+   深度讨论放大、左栏变窄时 width:100% 跟着收，不出横向滚动。 */
+[data-type-scale=doc] .reading{width:100%;max-width:calc(var(--doc-measure) + 56px);margin-inline:auto;box-sizing:border-box;font-size:var(--doc-type-body);line-height:var(--doc-lh-body);color:var(--doc-ink-1);text-autospace:normal}
+@media(min-width:960px){[data-type-scale=doc] .reading{padding-inline:clamp(12px,calc((100% - var(--doc-measure)) / 2),28px)}}
+/* 节标题与正文同号（16），靠 600 字重、主墨色和上方 32 的间距 + 发丝线分层。 */
+[data-type-scale=doc] .reading :is(h2,h3){font-size:var(--doc-type-section);line-height:var(--doc-lh-section);font-weight:var(--doc-weight-strong);color:var(--doc-ink-1);letter-spacing:0}
+[data-type-scale=doc] .reading :global(.button){font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);font-weight:var(--doc-weight-regular)}
+/* HeroUI 次按钮的字色是 color-mix 出来的 #3261ae，和强调色差一点；议题页统一成 --doc-ink-accent。 */
+[data-type-scale=doc] .reading :global(.button--secondary){color:var(--doc-ink-accent)}
+/* HeroUI 的页签面板自带 8px 内边距：正文会比上面的「预研已完成」缩进 8px，对不齐左边。 */
+[data-type-scale=doc] .reading :global(.tabs__panel){padding:0}
+[data-type-scale=doc] .section{margin-top:32px;padding-top:24px;border-top:1px solid var(--doc-rule)}
+/* 编号列：13px 弱墨等宽数字，固定 36 宽，和右边正文第一行同一条基线。 */
+[data-type-scale=doc] .section li{align-items:baseline;gap:0;margin-top:16px}
+[data-type-scale=doc] .section li>span{flex:none;width:36px;padding-top:0;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-3)}
+[data-type-scale=doc] .section li>div{flex:1;min-width:0}
+[data-type-scale=doc] .section li p{color:var(--doc-ink-2);overflow-wrap:anywhere}
+[data-type-scale=doc] .section li small{margin-top:4px;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-3)}
+/* 出处以「《」开头：行首的全角开括号压成半宽，书名和上面的摘录左边对齐（clreq §6.3.2）。 */
+[data-type-scale=doc] .section li small,[data-type-scale=doc] .section>p{text-spacing-trim:trim-start}
+[data-type-scale=doc] .section li small a{text-decoration-color:color-mix(in oklab,currentColor 40%,transparent)}
+[data-type-scale=doc] .section li small a:hover,[data-type-scale=doc] .section>p>a{color:var(--doc-ink-accent)}
+[data-type-scale=doc] .empty{font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-3)}
+
+/* —— 议题页独有的块 —— */
+.reading .note{margin:0 0 24px;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-2)}
+/* 当前判断：和正文同为 16/400 主墨，不放大字号；靠节标题 600、下方多留的 8px 和下一节前 40px 的留白突出。 */
+.judgment>p{margin:0;font-size:var(--doc-type-body);line-height:var(--doc-lh-body);font-weight:var(--doc-weight-regular);letter-spacing:0;color:var(--doc-ink-1)}.judgment>ul{margin:0;padding-left:20px;font-size:var(--doc-type-body);line-height:var(--doc-lh-body);font-weight:var(--doc-weight-regular);letter-spacing:0;color:var(--doc-ink-1)}.judgment>ul>li+li{margin-top:8px}.judgment strong{font-weight:var(--doc-weight-strong)}.judgment>p+p,.judgment>p+ul,.judgment>ul+p{margin-top:8px}.judgment+.judgment{margin-top:32px}.judgment>button{margin-top:16px}
+.judgment{padding-bottom:8px}.judgment+.discussion{margin-top:40px}
+.discussion{margin-top:32px;border-top:1px solid var(--doc-rule);padding-top:24px}.discussion>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}.discussion>header h2{margin:0 0 4px}.discussion>header p{margin:0;color:var(--doc-ink-2);font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta)}
+/* 右上角的状态（与你一起想 / 已记录 / 15:00 讨论）是标签：12px、次墨、浅灰底，和「雷达」小标签同一种。 */
+.discussion>header>span{flex:none;margin-top:3px;border-radius:4px;background:var(--doc-tag-wash);color:var(--doc-ink-2);padding:0 6px;font-size:var(--doc-type-tag);line-height:var(--doc-lh-tag);font-weight:var(--doc-weight-regular)}
+.discussion>small{display:block;margin-top:12px;color:var(--doc-ink-2);font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta)}
+/* 01–03：不是按钮，不画框；一条发丝线隔开，编号列和「判断的依据」同宽同色。 */
+.options{list-style:none;margin:0;padding:0}.options li{display:flex;align-items:baseline;padding:8px 0;color:var(--doc-ink-1);font-size:var(--doc-type-body);line-height:var(--doc-lh-body)}.options li+li{border-top:1px solid var(--doc-rule)}.options li>span{flex:none;width:36px;color:var(--doc-ink-3);font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);font-variant-numeric:tabular-nums}.options li>p{flex:1;min-width:0;margin:0}
+/* 已形成的决定：不画绿框绿底，和 01–03 同一种发丝线列表；勾是次墨。 */
+.receipt{display:flex;gap:10px;align-items:flex-start;padding:8px 0}.receipt+.receipt{border-top:1px solid var(--doc-rule)}.receipt>svg{color:var(--doc-ink-2);flex:none;margin-top:6px}.receipt>div{flex:1;min-width:0}.receipt p{margin:0;font-size:var(--doc-type-body);line-height:var(--doc-lh-body);color:var(--doc-ink-1)}.receipt small{display:block;margin-top:2px;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-3)}.receipt>button{flex:none}
+.sourceQuote{font-size:var(--doc-type-body);line-height:var(--doc-lh-body);color:var(--doc-ink-2);overflow-wrap:anywhere}
+/* 还没弄清的：和备选方向同一种列表，一条一行、发丝线隔开，不再是灰底小字框。 */
+.unknown{margin-top:32px;padding-top:24px;border-top:1px solid var(--doc-rule)}.unknown>h2{margin-bottom:4px}.unknown p{margin:0;padding:8px 0;color:var(--doc-ink-1);font-size:var(--doc-type-body);line-height:var(--doc-lh-body)}.unknown p+p{border-top:1px solid var(--doc-rule)}
+/* 决定区旁边的历史（feedback 9）：跟正文一起由 .ts-detail 滚动，不另设滚动框；层内排印见 decision-workspace.module.css 的 doc 段。
+   全部为空时（data-history-collapsed）没有节标题，只剩一行 13 弱墨「暂无历史决定和后续变化。」。 */
+.history{margin-top:32px;padding-top:24px;border-top:1px solid var(--doc-rule);font-size:var(--doc-type-body);line-height:var(--doc-lh-body)}
+.history>h2{margin-bottom:16px}
+.history[data-history-collapsed]{padding-top:16px}
+/* 研究与依据：选择与后果。选项标题 16/600，编号列同上；后果用悬挂圆点，正文和选项标题左对齐。 */
+.prose h3{margin:0 0 16px}.prose p{margin:12px 0}.prose ul,.prose ol{padding-left:22px;margin:4px 0 0}
+.option+.option{margin-top:20px}.option h4{display:flex;align-items:baseline;margin:0;font-size:var(--doc-type-section);font-weight:var(--doc-weight-strong);line-height:var(--doc-lh-section);color:var(--doc-ink-1)}.option h4>span{flex:none;width:36px;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);font-weight:var(--doc-weight-regular);color:var(--doc-ink-3);font-variant-numeric:tabular-nums}
+.prose .option ul{padding-left:36px;list-style:disc}.option li{margin-top:4px;color:var(--doc-ink-1)}.option li::marker{color:var(--doc-ink-3)}
 .workspace button:focus-visible{outline:3px solid #007aff70;outline-offset:3px}
 
-/* 议题会议安排（clark topic-materials .meetingHeader，挂在页头下方）。 */
-.meetingHeader{display:grid;gap:10px;flex:none;padding:20px 28px 24px;background:#f8fafc;border-bottom:1px solid #e3e7ed}
-.meetingDate{display:flex;flex-wrap:wrap;align-items:center;gap:9px;color:#6b7280;font-size:13px}
-.meetingState{margin-left:auto;color:#3c66bf;font-size:12px}
-.meetingTime{color:#252a32;font-size:clamp(44px,5vw,64px);font-weight:400;letter-spacing:-.055em;line-height:1.18;font-variant-numeric:tabular-nums}
-.meetingMeta{display:flex;flex-wrap:wrap;align-items:center;gap:16px;color:#6b7280;font-size:12px}
-.meetingMeta>span{display:inline-flex;align-items:center;gap:5px;overflow-wrap:anywhere}
-.workspace .meetingMeta .meetingOpen{padding:0;border:0;background:none;font:inherit;font-size:12px;font-weight:600;color:#2f6bb4;cursor:pointer}
-.workspace .meetingMeta .meetingOpen:hover{text-decoration:underline}
+/*
+ * 议题的会议去处：页头下一条细引用条（整条可点），一种字号（meta 13）。
+ * 「本议题已安排上会」是小标签，会议名用正文墨色加粗，时间与主持次墨，右端「进入会议 →」用强调色——
+ * 视觉重心仍是页头的议题标题；这条只说明「这个议题要在哪场会上定」。
+ */
+.meetingLink{flex:none;padding:10px 28px 12px;border-bottom:1px solid var(--doc-rule)}
+.workspace .meetingCard{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;width:100%;box-sizing:border-box;padding:9px 14px;border:1px solid #dfe6f2;border-radius:10px;background:#f6f8fc;font:inherit;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-2);text-align:left;cursor:pointer;transition:background .15s,border-color .15s}
+.workspace .meetingCard:hover{background:#eef3fb;border-color:#cdd9ec}
+.meetingIcon{flex:none;color:var(--doc-ink-accent)}
+.meetingKicker{flex:none;padding:0 7px;border-radius:6px;background:#e3ebf8;color:#3a5689;font-size:var(--doc-type-meta);line-height:20px}
+.meetingTitle{min-width:0;color:var(--doc-ink-1);font-weight:var(--doc-weight-strong);overflow-wrap:anywhere}
+.meetingWhen{color:var(--doc-ink-3);font-variant-numeric:tabular-nums}
+.meetingGo{display:inline-flex;align-items:center;gap:3px;margin-left:auto;color:var(--doc-ink-accent);white-space:nowrap}
+.workspace .meetingCard:hover .meetingGo{text-decoration:underline;text-underline-offset:3px}
 
-/* 天枢独有：预研错误、已移出、决策路径表单（字段沿用 HeroUI 字段 token：radius 11、focus #075ccb）。 */
-.error{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 22px;padding:12px 14px;border:1px solid #f0d3cf;border-radius:12px;background:#fdf3f1;color:#a1443c;font-size:13px;line-height:1.6}.error p{margin:0;flex:1;min-width:0}
-.dismissed{display:flex;align-items:flex-start;gap:10px;margin:0 0 26px;border:1px solid #e3e5ea;border-radius:10px;background:#f7f7f9;padding:12px 14px}.dismissed>svg{flex:none;margin-top:4px;color:#8e8e93}.dismissed>div{flex:1;min-width:0}.dismissed p{margin:0;font-size:14px;line-height:1.7;color:#3c4350}.dismissed small{display:block;margin-top:2px;font-size:11px;color:#8e8e93}.dismissed>button{flex:none}
-.meetingForm{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px 14px;margin-top:16px;padding:16px 18px;border:1px solid #1d1d1f0e;border-radius:12px;background:#fafafb}
-.meetingForm>.actionRow,.meetingForm>fieldset,.meetingForm>.formNote{grid-column:1/-1}.meetingForm>.actionRow{margin-top:2px}
-.formNote{margin:0;font-size:12px;color:#a1443c}
-.joinRow{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin-top:15px}.joinRow>.field{flex:1;min-width:min(100%,220px)}
-.field{display:flex;flex-direction:column;gap:6px;min-width:0;margin:0;padding:0;border:0;font-size:12px;color:#6b6b70}
-.field>legend{padding:0;margin-bottom:6px}
-.field input:not([type=checkbox]),.field select{min-height:36px;box-sizing:border-box;padding:7px 11px;border:1px solid #e7e7ed;border-radius:11px;background:#fdfdfe;color:#17171b;font:inherit;font-size:14px;line-height:1.4;transition:border-color .15s,box-shadow .15s}
-.field input:not([type=checkbox]):hover,.field select:hover{border-color:color-mix(in oklab,#17171b 16%,transparent)}
-.field input:not([type=checkbox]):focus,.field select:focus{outline:none;border-color:#075ccb;box-shadow:0 0 0 3px #075ccb1f}
-.participants{display:flex;flex-wrap:wrap;gap:6px 14px}.participants label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#303036}
-.participants input{width:15px;height:15px;accent-color:#3a83f7}
+/* 天枢独有：预研错误、已移出、表单说明。控件里的字一律 13。 */
+.error{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 24px;padding:12px 14px;border:1px solid #f0d3cf;border-radius:12px;background:#fdf3f1;color:#a1443c;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta)}.error p{margin:0;flex:1;min-width:0}
+.dismissed{display:flex;align-items:flex-start;gap:10px;margin:0 0 24px;border:1px solid #e3e5ea;border-radius:10px;background:#f7f7f9;padding:12px 14px}.dismissed>svg{flex:none;margin-top:6px;color:var(--doc-ink-3)}.dismissed>div{flex:1;min-width:0}.dismissed p{margin:0;font-size:var(--doc-type-body);line-height:var(--doc-lh-body);color:var(--doc-ink-2)}.dismissed small{display:block;margin-top:2px;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-3)}.dismissed>button{flex:none}
+.formNote{margin:0;font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);color:var(--doc-ink-2)}.formNote[role=alert]{color:#a1443c}
+/* 议题页里的「雷达」等来源标签：次墨 + 浅灰底，不随所在文字的颜色走。 */
+.workspace[data-type-scale=doc] [data-origin-tag]{color:var(--doc-ink-2);background:var(--doc-tag-wash)}
 
 .close .backIcon{display:none}
-/*
- * 手机、三折叠（≤959 输入条浮在底部）和矮屏：页头、会议块和正文一起滚。固定的页头 + 会议块在 680 高的屏上
- * 会把阅读区挤到一两百像素，再被输入条盖掉一截；一起滚之后正文从会议块下面接着往下读。
- */
-@media(max-width:959px),(max-height:820px){
- .workspace{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
- .columns{flex:none;overflow:visible}
- .workspace [data-material-scope]{flex:none;min-height:auto}
- .materials{height:auto}
- .workspace [data-material-scroll]{flex:none;overflow:visible;min-height:auto}
-}
 @container(max-width:620px){.header{gap:12px;padding:20px}.header h1{font-size:19px}.reading{padding:22px}.discussion>header{flex-wrap:wrap}.discussion>header>span{align-self:flex-start}}
 /* 输入条浮在底部时（≤959），正文末尾让出它。 */
 @media(max-width:959px){.reading,.workspace [data-material-scroll]{padding-bottom:130px}}
@@ -77,16 +113,30 @@
  .identity{order:1;flex:1 1 100%;padding-left:4px}
  .identity>[data-context-mark]{display:none}
  .header h1{font-size:19px;line-height:1.45;margin-top:4px}
- .reading{padding:20px 19px 130px}.tabs{padding:0 19px}.judgment>p{font-size:18px}.meetingHeader{padding:16px 19px 18px}
- /* 会议安排压成一行半：日期和时间一行，主责和「打开会议空间」一行（大号 10:00 留给三屏工作台）；「已安排会议」眉题里已经写了。 */
- .meetingHeader{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:12px 16px 14px}
- .meetingState{display:none}
- .meetingTime{font-size:17px;font-weight:600;letter-spacing:0;line-height:1.4}
- .meetingMeta{flex-basis:100%;gap:4px 12px}
+ .reading{padding:20px 19px 130px}.tabs{padding:0 19px}.judgment>p,.judgment>ul{font-size:18px}.meetingLink{padding:8px 16px 10px}
 }
 @media(prefers-reduced-transparency:reduce){.workspace,.header{background:#f5f5f7}}
 @media(prefers-reduced-motion:reduce){.workspace *{transition:none!important;scroll-behavior:auto!important}}
-/* 触屏：「打开会议空间」是一行小字，点击区域上下外扩到 40。 */
-@media(pointer:coarse){.workspace .meetingMeta .meetingOpen{padding-block:11px;margin-block:-11px}}
+/* 触屏：会议引用条至少 44 高。 */
+@media(pointer:coarse){.workspace .meetingCard{min-height:44px}}
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
-@media(max-width:959px){.options.options li>span,.field.field>span,.identity.identity>div>span,.note.note,.discussion.discussion>header>span,.section.section ol>li>span{font-size:13px}.preflightActions.preflightActions>div>p,.workspace .meetingMeta.meetingMeta>span,.workspace .meetingMeta .meetingOpen.meetingOpen,.discussion.discussion>small,.discussion.discussion>header p,.section.section li>div>small,.section.section li small{font-size:14px}}
+@media(max-width:959px){.options.options li>span,.identity.identity>div>span,.note.note,.discussion.discussion>header>span,.section.section ol>li>span{font-size:13px}.workspace .meetingCard.meetingCard,.meetingKicker.meetingKicker,.discussion.discussion>header p,.discussion.discussion>small,.section.section li>div>small,.section.section li small{font-size:14px}}
+
+
+/*
+ * 点触下限（手机端规范 §2 / §3.4；docs/superpowers/specs/2026-10-12-mobile-foldable.md）：手持（≤959）和触屏（pointer: coarse）下，
+ * 阅读列里的 HeroUI 钮（「追问这条判断」「恢复到待处理」「重试」……）高 44（字号仍按排印规范取 --doc-type-meta，不在这里改）；--touch-hit 在这两种情形由 globals.css 定义。
+ * 选择器与上面 [data-type-scale=doc] .reading .button 同级、写在后面，才压得过它的 13px。鼠标的电脑不变；
+ * 只改尺寸，不给 .reading 之类设 overflow（noNestedScroll）。
+ */
+@media (max-width: 959px), (pointer: coarse) {
+  [data-type-scale=doc] .reading :global(.button) { min-height: var(--touch-hit, 44px); padding-inline: 16px; }
+  /* 「追问这条判断」：单独一行靠左，和上面的正文隔开 16（.judgment>button 的 margin-top），最小宽 72。
+     字号不在这里改：issueTypography.test.ts 规定议题页字号只能取 --doc-type-* 档，按钮保持 meta（13）；热区靠高度补足。 */
+  [data-type-scale=doc] .reading .judgment > button { min-width: 72px; }
+  /* 会议引用条在手持下也 ≥44（原来只在 pointer: coarse）。 */
+  .workspace .meetingCard { min-height: var(--touch-hit, 44px); }
+}
+
+/* 页头右端：邀请成员与「更多 ⋯」并排（页头 grid 的 actions 只有一格）。 */
+.headerActions { display: flex; flex: none; align-items: center; gap: 4px; min-width: 0; }

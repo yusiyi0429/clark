@@ -39,7 +39,7 @@ describe("本月计划", () => {
   it("只读时说明原因且没有编辑控件", () => {
     const all = render({ ...plan, editable: false, closedReason: "任务卡确定之后才能拆成执行事项" });
     expect(all.some(node => node.props.children === "任务卡确定之后才能拆成执行事项")).toBe(true);
-    expect(all.some(node => node.props.children === "保存计划" || node.props.children === "＋ 加一步" || node.props.type === "date")).toBe(false);
+    expect(all.some(node => node.props.children === "保存计划" || node.props.children === "＋ 加一步" || node.props.label === "截止")).toBe(false);
   });
   it("新步骤无日期可直接保存，只提交变动组和已有事项的变动字段", async () => {
     let all = render();
@@ -108,7 +108,7 @@ describe("本月计划", () => {
     let all = render();
     (named(all, "准备材料").props.onClick as () => void)();
     all = render();
-    (all.filter(node => node.props.type === "date")[1].props.onChange as (event: unknown) => void)({ target: { value: "2026-10-09" } });
+    (all.filter(node => node.props.label === "截止")[0].props.onChange as (value: string) => void)("2026-10-09");
     all = render();
     ui.put.mockResolvedValue({ response: { ok: false, status: 409 }, error: { code: "PLAN_STALE" } });
     (saveButton(all).props.onPress as () => void)();
@@ -116,7 +116,7 @@ describe("本月计划", () => {
     await vi.waitFor(() => expect(render().some(node => String(node.props.children).includes("当前草稿已保留"))).toBe(true));
     all = render();
     expect(all.some(node => String(node.props.children).includes("当前草稿已保留"))).toBe(true);
-    expect(all.filter(node => node.props.type === "date")[1].props.value).toBe("2026-10-09");
+    expect(all.filter(node => node.props.label === "截止")[0].props.value).toBe("2026-10-09");
     ui.ask.mockResolvedValueOnce(false);
     (named(all, "刷新计划").props.onPress as () => void)();
     await vi.waitFor(() => expect(ui.ask).toHaveBeenCalledTimes(1));
@@ -124,7 +124,7 @@ describe("本月计划", () => {
     ui.get.mockResolvedValue({ response: { ok: true }, data: plan });
     (named(render(), "刷新计划").props.onPress as () => void)();
     await vi.waitFor(() => expect(ui.get).toHaveBeenCalledWith("/api/me/plan", { params: { query: { period: "2026-10" } } }));
-    await vi.waitFor(() => expect(render().filter(node => node.props.type === "date")[1].props.value).toBe("2026-10-08"));
+    await vi.waitFor(() => expect(render().filter(node => node.props.label === "截止")[0].props.value).toBe("2026-10-08"));
   });
   it("删除已有步骤先确认，通过 DELETE 携带版本", async () => {
     let all = render();

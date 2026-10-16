@@ -120,7 +120,9 @@ describe("个人信号阅读（/me/radar/signals/[id]）", () => {
         <MemberSignalScreen signal={signal} list={list} />
       </WorkspaceTestProvider>,
     );
-    expect(html).toContain("信号详情 · 我的雷达");
+    expect(html).toContain('class="ts-detail-header"');
+    expect(html).toContain(">信号详情<");
+    expect(html).toContain(">我的雷达<");
     expect(html).toContain("返回我的雷达");
     expect(html).toContain(">和你的方向<");
     expect(html).toContain("旧的一条和定价方式直接相关");

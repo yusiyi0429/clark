@@ -16,23 +16,33 @@
  * Co-Agent 讲来龙去脉）只出现几秒，这几秒里暂时盖住右列页头，不挪版面。
  */
 
-import { useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { Button } from "ts-design/primitives";
-import { PanelRightClose, PanelRightOpen, Users, X } from "lucide-react";
+import { Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Users, X } from "lucide-react";
+import { HeroButton } from "@/components/HeroButton";
 import { TianshuMark } from "@/components/TianshuMark";
+import { prefersReducedMotion } from "@/lib/viewTransition";
+import { applyDeskWidth, DESK_SHIFT_MS } from "./desk/deskLayout";
+import { captureReadingAnchor, holdReadingAnchor, materialScroller, restoreReadingAnchor } from "./desk/readingAnchor";
+import { materialColumns, settledMaterialWidth, shiftMaterialColumns } from "./desk/materialFreeze";
+import { CitationSurfaceProvider } from "./citations";
+import { RichSurfaceProvider } from "./richBlocks/surface";
 import { formatUnread, unreadPhrase } from "./seen";
 import { useNarrowColumn, type ColumnMode } from "./useColumnMode";
 import c from "@/styles/conversation-column.module.css";
+import shell from "@/styles/app-shell.module.css";
 
 export interface ConversationChannel {
   id: string;
-  /** 输入条里频道开关上的字：「我的 Agent」「事项群组 · 4」。 */
+  /** 输入条里频道开关上的字：「天枢」「事项群组 · 4」。 */
   label: string;
   kind: "agent" | "group";
   /** 当前频道永远不画；只画在收起后的频道钮和开关的非当前段上。 */
   unread: number;
-  /** 右列页头上写的名字：CEO 和成员都是「我的 Agent」；不给就用 label。 */
+  /** 右列页头上写的名字：CEO 和成员都是「天枢」；不给就用 label。 */
   title?: string;
+  /** 页头标题下的一行弱色小字：当前对话对象（「围绕：<议题标题>」）；只有天枢频道用。 */
+  subtitle?: string;
 }
 
 /** 宿主根节点加上它：右列的宽度、外沿和收起态都在这一层算，左侧内容据此让位。 */
@@ -62,6 +72,9 @@ export function pressChannel(
 
 const FOCUSABLE = 'button:not(:disabled),a[href],input:not(:disabled),textarea:not(:disabled),summary,[tabindex="0"]';
 
+/** 左侧材料在滚的那一层：DetailFrame 的 `.ts-detail`，或老页面的 `.expandedScroll`。 */
+const MATERIAL_SCROLLERS = [".ts-detail", `.${shell.expandedScroll}`];
+
 export function ConversationColumn({
   channels,
   channel,
@@ -77,6 +90,8 @@ export function ConversationColumn({
   headerAction,
   coagent,
   coagentBrief = false,
+  deskWidth = null,
+  onDesk,
 }: {
   channels: ConversationChannel[];
   channel: string;
@@ -99,10 +114,23 @@ export function ConversationColumn({
   coagent?: ReactNode;
   /** 胶囊只出现几秒：不挪右列页头，暂时盖住它。 */
   coagentBrief?: boolean;
+  /**
+   * 深度讨论（并排）：给了就是展开态，值是对话列的宽度（宿主按断点算好：600 / 680）。右列原地加宽，左侧材料让位，
+   * 不覆盖、不 inert；正文那一棵子树不重挂。窄屏一律当没给。
+   */
+  deskWidth?: number | null;
+  /** 给了才画 ⤢ 键（宿主只在 ≥1280、右列展开时给）。 */
+  onDesk?: (open: boolean) => void;
 }) {
   const narrow = useNarrowColumn();
   const strip = !narrow && mode === "strip";
   const overlayOpen = narrow && mobileOpen;
+  const activeDeskWidth = !narrow && typeof deskWidth === "number" ? deskWidth : null;
+  const deskOn = activeDeskWidth !== null;
+  // 出处标记平时点「打开原文」：能放大就先放大（依据面板只在放大时出现）。
+  const deskOpener = useRef(onDesk);
+  deskOpener.current = onDesk;
+  const openDesk = useCallback(() => deskOpener.current?.(true), []);
   const current = channels.find((item) => item.id === channel) ?? channels[0];
   const root = useRef<HTMLDivElement>(null);
   const aside = useRef<HTMLElement>(null);
@@ -111,6 +139,12 @@ export function ConversationColumn({
   const hasCoagent = Boolean(coagent);
   // 焦点跟着这一列自己发起的变化走：从收起后的频道钮展开时落到把手上（展开不等于要打字）；关浮层回到开关。
   const pendingFocus = useRef<"handle" | "switch" | null>(null);
+  // 深度讨论：上一态（切换时才动左侧阅读位置）、宿主（卸载时清变量）、过渡标记的计时、左侧锚定的停止函数。
+  const lastDesk = useRef(false);
+  const hostRef = useRef<HTMLElement | null>(null);
+  const shiftTimer = useRef<number | undefined>(undefined);
+  const stopAnchor = useRef<(() => void) | null>(null);
+  const stopFreeze = useRef<(() => void) | null>(null);
 
   // 页头在阅读容器内，胶囊固定在视口上。扣除阅读区实际占用的滚动条，收起后两者才准确留 12px。
   useLayoutEffect(() => {
@@ -141,6 +175,60 @@ export function ConversationColumn({
             ?.querySelector<HTMLButtonElement>('[data-channel-switch] [aria-pressed="true"],[data-channel-switch] [data-selected="true"]');
     element?.focus({ preventScroll: true });
   }, [mode, channel, overlayOpen]);
+
+  // 深度讨论展开 / 收起：宿主的 --conversation-open-width 换成 desk/deskLayout 算出的宽（右列与左侧让位同一条 240ms 曲线），
+  // 左侧材料按视口顶上那一段锚定；收起后焦点掉到 body 上就回到 ⤢。右列正文的阅读位置由滚动控制器按宽度变化重校正。
+  // 左侧阅读列（desk/materialFreeze）：够宽时宽度不变、只平移；不够宽时在开始那一帧就定到结束后的宽，过渡结束后不再有任何变化。
+  useLayoutEffect(() => {
+    const element = root.current;
+    const host = element?.closest<HTMLElement>(`.${c.host}`) ?? null;
+    hostRef.current = host;
+    const toggled = lastDesk.current !== deskOn;
+    lastDesk.current = deskOn;
+    if (!toggled || !host || !element) {
+      applyDeskWidth(host?.style, activeDeskWidth);
+      return;
+    }
+    const panel = host.querySelector<HTMLElement>('[data-testid="expanded-panel"]');
+    const main = panel?.parentElement ?? null;
+    const scroller = materialScroller(panel, MATERIAL_SCROLLERS);
+    const anchor = scroller ? captureReadingAnchor(scroller) : null;
+    const reduced = prefersReducedMotion();
+    // 量在改宽之前：主区此刻的宽与右边距（过渡中途就是动画里的值）。
+    const mainWidth = main?.getBoundingClientRect().width ?? 0;
+    const mainMargin = main ? parseFloat(getComputedStyle(main).marginRight) || 0 : 0;
+    element.dataset.deskShift = "true";
+    window.clearTimeout(shiftTimer.current);
+    shiftTimer.current = window.setTimeout(() => { delete element.dataset.deskShift; }, DESK_SHIFT_MS + 80);
+    applyDeskWidth(host.style, activeDeskWidth);
+    stopFreeze.current?.();
+    stopFreeze.current = null;
+    stopAnchor.current?.();
+    if (panel && main) {
+      const nextMargin = parseFloat(getComputedStyle(main).getPropertyValue("--conversation-width"));
+      if (Number.isFinite(nextMargin)) {
+        // 阅读位置在开始那一帧（重排之后、绘制之前）就放回，不等到过渡结束。
+        stopFreeze.current = shiftMaterialColumns(panel, materialColumns(panel, scroller) as HTMLElement[], settledMaterialWidth(mainWidth, mainMargin, nextMargin), DESK_SHIFT_MS + 20, {
+          reducedMotion: reduced,
+          onReflow: () => { if (anchor) restoreReadingAnchor(anchor); },
+          scroller,
+          fadeTarget: scroller ?? panel,
+        });
+      }
+    }
+    // 过渡期间每一帧守住阅读位置（平移不改折行，守住的是滚动区高度的细小变化）；减少动效时只放一次。
+    stopAnchor.current = anchor ? holdReadingAnchor(anchor, reduced ? 0 : DESK_SHIFT_MS + 60) : null;
+    if (!deskOn) {
+      const active = document.activeElement;
+      if (!active || active === document.body) element.querySelector<HTMLElement>("[data-desk-key]")?.focus({ preventScroll: true });
+    }
+  }, [deskOn, activeDeskWidth]);
+  useLayoutEffect(() => () => {
+    applyDeskWidth(hostRef.current?.style, null);
+    window.clearTimeout(shiftTimer.current);
+    stopAnchor.current?.();
+    stopFreeze.current?.();
+  }, []);
 
   useEffect(() => {
     if (overlayOpen) closeButton.current?.focus({ preventScroll: true });
@@ -191,6 +279,7 @@ export function ConversationColumn({
       data-mode={strip ? "strip" : "expanded"}
       data-narrow={narrow || undefined}
       data-mobile-open={overlayOpen || undefined}
+      data-desk={deskOn || undefined}
       data-channel={current?.kind ?? "agent"}
       data-coagent={coagent ? (coagentBrief ? "brief" : "lasting") : undefined}
       style={{ "--conversation-composer-height": `${composerHeight}px` } as CSSProperties}
@@ -203,7 +292,8 @@ export function ConversationColumn({
       }}
     >
       {overlayOpen ? <Button className={c.veil} variant="ghost" onPress={closeOverlay} aria-label="收起对话" /> : null}
-      {narrow ? null : (
+      {/* 深度讨论开着时不画收起开关：要收先 ⤡。 */}
+      {narrow || deskOn ? null : (
         <Button
           ref={handle}
           isIconOnly
@@ -233,15 +323,46 @@ export function ConversationColumn({
         ) : null}
         <div className={c.panel} inert={strip || undefined} aria-hidden={strip || undefined}>
           {current ? (
-            <header className={c.header} data-kind={current.kind}>
-              <h2 className={c.headerTitle}>
-                {current.kind === "agent" ? <TianshuMark className={c.headerMark} /> : <Users size={16} strokeWidth={1.8} aria-hidden />}
-                <span className={current.kind === "agent" ? c.wordmark : undefined}>{current.title ?? current.label}</span>
-              </h2>
+            <header className={c.header} data-kind={current.kind} data-has-desk-key={onDesk ? true : undefined}>
+              {current.kind === "agent" && current.subtitle ? (
+                <div className={c.headerStack}>
+                  <h2 className={c.headerTitle}>
+                    <TianshuMark className={c.headerMark} />
+                    <span className={c.wordmark}>{current.title ?? current.label}</span>
+                  </h2>
+                  <p className={c.headerSub} title={current.subtitle}>{current.subtitle}</p>
+                </div>
+              ) : (
+                <h2 className={c.headerTitle}>
+                  {current.kind === "agent" ? <TianshuMark className={c.headerMark} /> : <Users size={16} strokeWidth={1.8} aria-hidden />}
+                  <span className={current.kind === "agent" ? c.wordmark : undefined}>{current.title ?? current.label}</span>
+                </h2>
+              )}
               {headerAction}
+              {onDesk ? (
+                <HeroButton
+                  isIconOnly
+                  variant="ghost"
+                  size="sm"
+                  className={c.deskKey}
+                  data-desk-key
+                  title={deskOn ? "收起" : "深度讨论"}
+                  aria-label={deskOn ? "收起" : "深度讨论"}
+                  aria-expanded={deskOn}
+                  onPress={() => onDesk(!deskOn)}
+                >
+                  {deskOn ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
+                </HeroButton>
+              ) : null}
             </header>
           ) : null}
-          <div className={c.body}>{children}</div>
+          {/* 深度讨论时回答里的来源可点：在左侧定位到那一段或打开依据面板（conversation/citations）。平时只是文字。 */}
+          {/* 富内容块（richBlocks）：深度讨论时完整铺开；收起态的大块是缩略卡，点了经 onDesk 进深度讨论（不能进时底部 sheet）。 */}
+          <CitationSurfaceProvider linked={deskOn} surface="rail" expand={!narrow && onDesk && !deskOn ? openDesk : undefined}>
+            <RichSurfaceProvider expanded={deskOn} expand={onDesk && !deskOn ? () => onDesk(true) : undefined}>
+              <div className={c.body}>{children}</div>
+            </RichSurfaceProvider>
+          </CitationSurfaceProvider>
           <div className={c.footer} aria-hidden />
         </div>
       </aside>

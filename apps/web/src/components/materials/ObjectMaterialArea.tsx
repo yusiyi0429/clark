@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { REMARK_PLUGINS } from "@/lib/markdown";
 import type { TMaterialDetailResponse, TMaterialRemovedView, TMaterialView } from "@warmap/contracts";
 import { ArrowUpRight, Link2, Upload } from "lucide-react";
 import { Button, Input, Label, TextField } from "ts-design/primitives";
@@ -10,9 +10,10 @@ import { InHeader, MaterialMenu, useRememberedScroll, type MaterialAddAction, ty
 import { MenuDialog } from "@/components/AccountMenu";
 import { TianshuMark } from "@/components/TianshuMark";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { AnnotationBar, AnnotationComposer, HistoryCard, ProposalBanner, SELECTION_SCRIPT, usePollWhileWorking, useMaterialSelection,
+import { AnnotationBar, AnnotationComposer, HistoryCard, ProposalBanner, SELECTION_SCRIPT, uploadedVersion, usePollWhileWorking, useMaterialSelection,
   type DecideAnnotation, type MaterialSelection } from "./MaterialAnnotations";
 import s from "./materials.module.css";
+import { materialTitle } from "@/lib/displayText";
 
 /** 材料区交给正文（执行事项的封面）用的东西：材料清单和放材料的几个动作。 */
 export interface MaterialAreaApi {
@@ -25,12 +26,17 @@ export interface MaterialAreaApi {
   pickFile: () => void;
   /** 打开「粘贴链接」小窗。 */
   pasteLink: () => void;
-  /** 「起草文档」：交给我的 Agent；没有时不出这一项。 */
+  /** 「起草文档」：交给天枢；没有时不出这一项。 */
   draft?: () => void;
 }
 
 type ObjectType = "issue" | "task" | "meeting";
 const date = (iso: string) => new Date(iso).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+/** 页签上的短名：带文字层抽取件内部后缀的只留原始标题，其他照旧去掉扩展名。 */
+const tabLabel = (fileName: string) => {
+  const title = materialTitle(fileName);
+  return title !== fileName ? title : fileName.replace(/\.[^.]+$/, "");
+};
 const endpoint = (type: ObjectType, id: string) => `/api/materials/${type}/${encodeURIComponent(id)}`;
 const hasMarkdownSyntax = (text: string) => /(^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|```|~~~|\|)|\*\*|__|`|\[[^\]]+\]\(|~~)/m.test(text);
 const htmlChangeText = (line: string) => line.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().slice(0, 200);
@@ -38,11 +44,13 @@ const htmlChangeText = (line: string) => line.replace(/<[^>]*>/g, "").replace(/\
 export const linkHost = (url: string) => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } };
 const LINK_PATTERN = /^https?:\/\/\S+$/i;
 
-export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, selected, selectedTab, onSelect, links = false, onDraft, deliverables, onChanged, children }:
+export function ObjectMaterialArea({ objectType, objectId, baseTabs, homeTab, groupTab, selected, selectedTab, onSelect, links = false, onDraft, deliverables, onChanged, children }:
   { objectType: ObjectType; objectId: string; baseTabs: MaterialTab[]; groupTab?: MaterialTab; selected: string; selectedTab?: string | null; onSelect: (id: string) => void;
+    /** 删掉正在看的材料后回到哪一份；不给就回 baseTabs 第一项。页头另有类型切换（SegmentedSwitch）的页，切换的那几份不进下拉单，从这里告诉材料区。 */
+    homeTab?: string;
     /** 执行事项（design-12）：能放链接；下拉单的添加项拆成上传文件 / 粘贴链接 / 起草文档；整页能拖文件、粘贴链接。 */
     links?: boolean;
-    /** 「起草文档」：交给我的 Agent（打开右列私聊并预填）。 */
+    /** 「起草文档」：交给天枢（打开右列私聊并预填）。 */
     onDraft?: () => void;
     /** 完成后验收时选的交付结果：下拉单里排在前面，其余在「参考材料」后面。 */
     deliverables?: string[] | null;
@@ -78,6 +86,7 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, s
     const onEvent = (event: Event) => {
       const object = (event as CustomEvent<{ scope?: string }>).detail;
       if (object?.scope && object.scope !== `${objectType}:${objectId}`) return;
+      setReload((value) => value + 1);
       void refresh();
       changed.current?.();
     };
@@ -124,7 +133,7 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, s
   }, [objectType, objectId, material?.id, material?.canEdit, material?.format]);
   const tab = (item: TMaterialView): MaterialTab => item.format === "link"
     ? { id: item.id, label: item.fileName, title: `${item.fileName}（链接）`, kind: "link", hint: linkHost(item.url ?? ""), working: item.working }
-    : { id: item.id, label: item.fileName.replace(/\.[^.]+$/, ""), title: item.fileName, working: item.working, count: item.pending };
+    : { id: item.id, label: tabLabel(item.fileName), title: materialTitle(item.fileName), working: item.working, count: item.pending };
   const delivered = deliverables ? materials.filter((item) => deliverables.includes(item.id)) : [];
   const reference = deliverables ? materials.filter((item) => !deliverables.includes(item.id)) : materials;
   const tabs: MaterialTab[] = [...baseTabs, ...(groupTab ? [groupTab] : []), ...delivered.map(tab),
@@ -170,10 +179,10 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, s
     } catch { return "网络断了，请重试"; }
   }, [base, refresh]);
   const remove = async () => {
-    if (!material || !await ask(`删除《${material.fileName}》？`, "删除材料")) return;
+    if (!material || !await ask(`删除《${materialTitle(material.fileName)}》？`, "删除材料")) return;
     const response = await fetch(`${base}/${material.id}`, { method: "DELETE" });
     if (!response.ok) return setUploadError("删除失败，请重试");
-    choose(baseTabs[0]?.id ?? "");
+    choose(homeTab ?? baseTabs[0]?.id ?? "");
     await refresh();
     changed.current?.();
   };
@@ -206,7 +215,7 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, s
   return <div className={s.area} data-material-scope={`${objectType}:${objectId}`} data-dragging={dragging || undefined} {...dropping}
     data-viewing-material-id={material?.id ?? ""} data-viewing-material-editable={material?.canEdit ? "true" : "false"}
     data-viewing-material-format={material?.format ?? ""}>
-    {(objectType === "issue" || objectType === "meeting" || materials.length > 0 || canUpload) ? <div className={s.toolbar}>
+    {((objectType !== "task" && baseTabs.length > 0) || groupTab || materials.length > 0 || canUpload) ? <div className={s.toolbar}>
       <InHeader><MaterialMenu tabs={tabs} selected={selectedTab === undefined ? selected : selectedTab} onSelect={choose}
         label={objectType === "meeting" ? "会议材料" : "材料"} addActions={addActions} onAdd={canUpload && !addActions ? () => file.current?.click() : undefined} /></InHeader>
       {canUpload ? <input ref={file} className={s.hidden} type="file" accept=".md,.pdf,.docx,.html,.htm" multiple={links} aria-label="上传材料"
@@ -221,8 +230,8 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, groupTab, s
       onRestore={(removed) => post(`${base}/${material.id}/restore`, { removedId: removed.id, version: detail?.version ?? material.version })}
       onDecide={(proposalId, decision) => post(`${base}/${material.id}/proposals/${encodeURIComponent(proposalId)}`, { decision })} />}{dialog}</div>
       : groupTab && selected === groupTab.id ? <div className={s.groupList}>
-        {materials.length ? <ul>{materials.map((item) => <li key={item.id}><button type="button" onClick={() => choose(item.id)}>{item.fileName}</button></li>)}</ul>
-          : <p className={s.empty}>还没有群组材料，从材料下拉单里的「添加材料」上传。</p>}
+        {materials.length ? <ul>{materials.map((item) => <li key={item.id}><button type="button" onClick={() => choose(item.id)}>{materialTitle(item.fileName)}</button></li>)}</ul>
+          : <p className={s.empty}>暂无群组材料，可通过材料下拉菜单中的「添加材料」上传。</p>}
       </div> : typeof children === "function" ? children(api) : children}
     {linkOpen ? <LinkDialog onClose={() => setLinkOpen(false)} onSubmit={addLink} /> : null}
   </div>;
@@ -250,10 +259,10 @@ function LinkDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (url
       </TextField>
       <TextField className={s.linkField} value={title} onChange={setTitle}>
         <Label>标题 · 可不填</Label>
-        <Input placeholder="不填就用域名" />
+        <Input placeholder="留空则使用域名" />
       </TextField>
       {error ? <p className={s.linkError} role="alert">{error}</p> : null}
-      <div className={s.linkActions}><Button variant="primary" type="submit" isDisabled={busy || !url.trim()}>{busy ? "放进来…" : "放进来"}</Button></div>
+      <div className={s.linkActions}><Button variant="primary" type="submit" isDisabled={busy || !url.trim()}>{busy ? "添加中…" : "添加链接"}</Button></div>
     </form>
   </MenuDialog>;
 }
@@ -261,13 +270,13 @@ function LinkDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (url
 /** 链接的阅读页：不嵌 iframe（不抓外部页面），只写它是什么、谁放的，点「打开」在新标签页里看。 */
 function LinkReader({ material, onRemove }: { material: TMaterialView; onRemove: () => void }) {
   const url = material.url ?? "";
-  return <article className={s.document} aria-label={material.fileName}>
+  return <article className={s.document} aria-label={materialTitle(material.fileName)}>
     <div className={s.linkPage}>
       <div className={s.linkFrame} aria-hidden>
         <span className={s.linkBar}><i /><i /><i /><b>{linkHost(url)}</b></span>
         <span className={s.linkBody}><i /><span><i /><i /></span></span>
       </div>
-      <h2 className={s.linkTitle}>{material.fileName}</h2>
+      <h2 className={s.linkTitle}>{materialTitle(material.fileName)}</h2>
       <p className={s.linkMeta}>{linkHost(url)} · {material.owner.displayName} 放进来 · {date(material.createdAt)}
         {material.canDelete ? <button type="button" onClick={() => void onRemove()}>删除</button> : null}</p>
       <a className={s.linkOpen} href={url} target="_blank" rel="noopener noreferrer">打开<ArrowUpRight size={15} strokeWidth={2} aria-hidden /></a>
@@ -298,20 +307,25 @@ export function MaterialReader({ material, detail, base, onRemove, onVersion, on
     return () => { active = false; };
   }, [base, material.id, material.format, material.version]);
   const by = detail?.revision.requestedBy?.displayName ?? material.owner.displayName;
+  // 有人上传（或资料包导入）的新版本：写「X上传的新版本 · 改动说明」，不写「让 Agent 改了 N 处」，也不数改动处。
+  const uploaded = uploadedVersion(detail?.revision);
   const changeCount = detail?.blocks?.filter((block) => block.change !== null).length ?? 0;
   const htmlChanges = <button type="button" onClick={() => setChanges((value) => !value)} aria-expanded={changes}>{changeCount} 处</button>;
   // 只在看最新版时能写批注；PDF 在浏览器自带阅读器里，选不到文字。
   const annotatable = Boolean(onAnnotate && detail?.latest && material.format !== "pdf");
-  return <article ref={host} className={s.document} aria-label={material.fileName}>
+  return <article ref={host} className={s.document} aria-label={materialTitle(material.fileName)}>
     <p className={s.meta}>{material.origin === "agent" ? `Agent 按${material.owner.displayName}的要求写` : `${material.owner.displayName} 上传`} · {date(material.createdAt)}
+      {/* 资料包标明“AI 生成演示素材”的材料（没有真实件）：写在来历后面，和真实材料区分开。 */}
+      {material.nature === "ai_generated" ? <span> · AI 整理</span> : null}
       <a href={`${base}/${material.id}/file`}>下载</a>{material.canDelete ? <button type="button" onClick={() => void onRemove()}>删除</button> : null}</p>
     {material.format !== "markdown" && material.format !== "html" ? <p className={s.readOnly}>只读 · 只有 Markdown 和 HTML 能让 Agent 修改{material.format === "pdf" ? "；PDF 暂不支持选中写批注" : "；选中文字可以写批注"}</p> : null}
     {detail?.revision && material.lastRevision ? <div className={s.revision}>
       {detail.latest ? detail.version === 1
         ? `第 1 版 · Agent 按${by}的要求新写 · ${date(detail.revision.at)}`
+        : uploaded ? `第 ${detail.version} 版 · ${by}上传的新版本${detail.revision.summary ? ` · ${detail.revision.summary}` : ""} · ${date(detail.revision.at)}`
         : material.format === "html" ? <>第 {detail.version} 版 · {by}让 Agent 改了 {htmlChanges} · {date(detail.revision.at)}</>
           : `第 ${detail.version} 版 · ${by}让 Agent 改了 ${changeCount} 处 · ${date(detail.revision.at)}`
-        : material.format === "html" && detail.version > 1 ? <>这是第 {detail.version} 版，不是最新 · 改了 {htmlChanges}</>
+        : material.format === "html" && detail.version > 1 && !uploaded ? <>这是第 {detail.version} 版，不是最新 · 改了 {htmlChanges}</>
           : `这是第 ${detail.version} 版，不是最新`}
       <button type="button" onClick={() => setHistory((value) => !value)} aria-expanded={history}>改动记录</button>
       {!detail.latest ? <button type="button" onClick={() => onVersion(undefined)}>回到最新</button> : null}
@@ -319,7 +333,7 @@ export function MaterialReader({ material, detail, base, onRemove, onVersion, on
     {detail?.latest && onDecide ? detail.proposals.filter((item) => item.status === "pending").map((item) => <ProposalBanner key={item.id} proposal={item} onDecide={(decision) => onDecide(item.id, decision)} />) : null}
     {detail?.latest && onRestore ? <AnnotationBar detail={detail} onRestore={onRestore} onDecide={onDecideAnnotation} /> : null}
     {history && detail ? <ol className={s.history}>{detail.revisions.map((item) => <li key={item.version}>
-      <button type="button" onClick={() => { onVersion(item.version); setHistory(false); }}>第 {item.version} 版 · {item.requestedBy?.displayName ?? material.owner.displayName} · {date(item.at)} · {item.summary ?? "上传原件"}</button>
+      <button type="button" onClick={() => { onVersion(item.version); setHistory(false); }}>第 {item.version} 版 · {item.requestedBy?.displayName ?? material.owner.displayName}{item.version > 1 && uploadedVersion(item) ? "上传" : ""} · {date(item.at)} · {item.summary ?? (item.version > 1 ? "新版本" : "上传原件")}</button>
     </li>)}</ol> : null}
     {material.format === "html" && changes && detail ? <ol className={s.changeList}>{detail.blocks?.filter((block) => block.change !== null).map((block, index) => <li key={index}>
       {block.change?.kind === "modified" ? <><strong>修改</strong><span>原来：{htmlChangeText(block.change.before)}</span><span>现在：{htmlChangeText(block.text)}</span></>
@@ -327,9 +341,9 @@ export function MaterialReader({ material, detail, base, onRemove, onVersion, on
           : <><strong>新增</strong><span>{htmlChangeText(block.text)}</span></>}
     </li>)}</ol> : null}
     {!detail ? <p role="status">正在读取材料…</p> : material.format === "pdf"
-      ? <iframe className={s.frame} src={`${base}/${material.id}/preview`} title={`${material.fileName} 预览`} />
-      : material.format === "html" ? <iframe ref={frame} className={s.frame} sandbox="allow-scripts" src={`${base}/${material.id}/preview?version=${detail.version}`} title={`${material.fileName} 预览`} />
-      : material.format === "docx" ? <iframe ref={frame} className={s.frame} sandbox="allow-scripts" title={`${material.fileName} 预览`} srcDoc={annotatable ? html + SELECTION_SCRIPT : html} />
+      ? <iframe className={s.frame} src={`${base}/${material.id}/preview`} title={`${materialTitle(material.fileName)} 预览`} />
+      : material.format === "html" ? <iframe ref={frame} className={s.frame} sandbox="allow-scripts" src={`${base}/${material.id}/preview?version=${detail.version}`} title={`${materialTitle(material.fileName)} 预览`} />
+      : material.format === "docx" ? <iframe ref={frame} className={s.frame} sandbox="allow-scripts" title={`${materialTitle(material.fileName)} 预览`} srcDoc={annotatable ? html + SELECTION_SCRIPT : html} />
       : <div ref={body} className={s.markdown} onMouseUp={annotatable ? () => onMouseUp(body.current) : undefined}>{detail.blocks?.map((block, index, blocks) => {
         // 删掉的内容正文里不显示，统一在「已删除 N 段」（垃圾篓）里看、恢复。
         if (block.change?.kind === "removed") return null;
@@ -340,7 +354,7 @@ export function MaterialReader({ material, detail, base, onRemove, onVersion, on
           if (previous && /^\s{0,3}(?:[-*+]\s|\d+[.)]\s)/.test(previous.text) && quiet(previous)) return null;
           let end = index + 1;
           while (end < blocks.length && (blocks[end].change?.kind === "removed" || (/^\s{0,3}(?:[-*+]\s|\d+[.)]\s)/.test(blocks[end].text) && quiet(blocks[end])))) end++;
-          return <div key={index} className={s.block}><Markdown remarkPlugins={[remarkGfm]}>{blocks.slice(index, end).filter((item) => item.change?.kind !== "removed").map((item) => item.text).join("\n")}</Markdown></div>;
+          return <div key={index} className={s.block}><Markdown remarkPlugins={REMARK_PLUGINS}>{blocks.slice(index, end).filter((item) => item.change?.kind !== "removed").map((item) => item.text).join("\n")}</Markdown></div>;
         }
         // 悬停：有历史（看最新版时）显示批注和历次改动，否则只显示这一版的原文。
         const popup = open === index ? block.history.length ? <HistoryCard history={block.history} />
@@ -349,20 +363,22 @@ export function MaterialReader({ material, detail, base, onRemove, onVersion, on
         if (block.change?.kind === "modified" && hasMarkdownSyntax(block.text)) return <div key={index} className={s.block} onMouseLeave={() => setOpen(null)}>
           <div className={s.formattedChange} role="button" tabIndex={0} aria-label="查看批注和修改历史" {...hover}
             onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen(open === index ? null : index); } }}>
-            <Markdown remarkPlugins={[remarkGfm]}>{block.text}</Markdown>
+            <Markdown remarkPlugins={REMARK_PLUGINS}>{block.text}</Markdown>
           </div>{popup}</div>;
         if (block.change?.kind === "modified") return <div key={index} className={`${s.block} ${s.plain}`} onMouseLeave={() => setOpen(null)}>
           {block.change.spans.map((span, part) => span.changed ? <button key={part} type="button" className={s.changed} aria-label="查看批注和修改历史" {...hover}>{span.text}</button> : <span key={part}>{span.text}</span>)}
           {popup}</div>;
         // 这一版没动、但以前改过：左边一道浅线，悬停看历史。
         if (block.history.length) return <div key={index} className={`${s.block} ${s.hadChange}`} tabIndex={0} aria-label="查看批注和修改历史" onMouseLeave={() => setOpen(null)} {...hover}>
-          <Markdown remarkPlugins={[remarkGfm]}>{block.text}</Markdown>{popup}</div>;
-        return <div key={index} className={s.block}><Markdown remarkPlugins={[remarkGfm]}>{block.text}</Markdown></div>;
+          <Markdown remarkPlugins={REMARK_PLUGINS}>{block.text}</Markdown>{popup}</div>;
+        return <div key={index} className={s.block}><Markdown remarkPlugins={REMARK_PLUGINS}>{block.text}</Markdown></div>;
       })}</div>}
     {selection && annotatable && onAnnotate ? <AnnotationComposer selection={selection} canEdit={material.canEdit} onClose={clear}
       onSubmit={(text, intent) => onAnnotate(selection, text, intent)} /> : null}
   </article>;
 }
 function ChangePopup({ before, detail }: { before: string; detail: TMaterialDetailResponse }) {
-  return <div className={s.popup} role="note"><span>原来：{before}</span><small>{detail.revision.requestedBy?.displayName ?? "Agent"}让 Agent 改的 · {date(detail.revision.at)}</small></div>;
+  const by = detail.revision.requestedBy?.displayName;
+  return <div className={s.popup} role="note"><span>原来：{before}</span><small>{uploadedVersion(detail.revision)
+    ? `${by ?? detail.material.owner.displayName}上传的新版本` : `${by ?? "Agent"}让 Agent 改的`} · {date(detail.revision.at)}</small></div>;
 }

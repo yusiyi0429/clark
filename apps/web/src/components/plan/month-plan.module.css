@@ -78,7 +78,8 @@
 .inlineEdit{grid-column:1/-1;position:sticky;left:0;z-index:4;display:flex;align-items:end;flex-wrap:wrap;gap:8px;width:min(100%,calc(100vw - 40px));box-sizing:border-box;padding:10px 14px;border-top:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line);border-radius:0 0 10px 10px;background:var(--ts-surface,#fff);box-shadow:0 5px 14px #1d1d1f12;font-size:12px}
 .inlineEdit label{display:grid;gap:4px;min-width:0;color:var(--ts-text-muted)}
 .inlineEdit label:first-child{flex:1 1 180px}
-.inlineEdit input,.addLabel input{min-width:0;max-width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}
+/* 行内小输入框：内边距比标准小一档排得下；边、圆角、底色、字号、聚焦走 globals.css 的统一输入框样式 */
+.inlineEdit input,.addLabel input{min-width:0;max-width:100%;padding:7px 12px}
 .inlineEdit label:first-child input{width:100%}
 .stepActions{display:flex;flex-wrap:wrap;gap:8px}
 .stepActions button{display:inline-flex;align-items:center;gap:3px;min-height:34px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);cursor:pointer}

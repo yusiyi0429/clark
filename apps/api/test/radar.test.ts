@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import { Card, type TRadarCandidateSubmission, type TRadarSourceItem } from "@warmap/contracts";
 import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
 import { buildApp } from "../src/app.js";
-import { createRadarService, type RadarAssessor, type RadarWebAdapter } from "../src/radar.js";
+import { createRadarService, RADAR_SCAN_TIMEOUT_MS, type RadarAssessor, type RadarWebAdapter } from "../src/radar.js";
 import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "../src/radarSources.js";
 import { createBochaWebSearchAdapter } from "../src/webSearch.js";
 import { createRadarAgentAssessor } from "../src/radarAgent.js";
@@ -209,6 +209,34 @@ describe("Radar source adapter public seam", () => {
     expect(items[0].images).toEqual([{ src: "https://mmbiz.qpic.cn/example.jpg", after: 0 }]);
     expect(items[15].excerpt).toBe("digest-16");
     expect(items[16].excerpt).toBe("digest-17");
+    // 逐条记下原文完整度：read_article 读到的标 fullText，退回 digest 的不标
+    expect(items[0].sourceRef).toMatchObject({ type: "wechat-account", fullText: true });
+    expect(items[15].sourceRef).not.toHaveProperty("fullText");
+  });
+
+  it("公众号全文标记：read_article 失败或读空时退回 digest，不标 fullText", async () => {
+    const wechat = createWechatMcpAdapter({
+      callTool: async (name, args) => {
+        if (name === "list_subscriptions") return [{ fakeid: "acc-1", nickname: "机器之心" }];
+        if (name === "get_recent_articles") {
+          return { articles: [1, 2, 3].map((id) => ({
+            id, title: `文章 ${id}`, digest: `digest-${id}`, link: `https://mp.weixin.qq.com/s/a-${id}`, publish_time: 1777626000 + id,
+          })) };
+        }
+        if (name === "read_article") {
+          if (args.article_id === 1) return "---\ntitle: x\n---\n\n全文段落";
+          if (args.article_id === 2) return "";
+          throw new Error("sidecar 抓取失败");
+        }
+        throw new Error(`unexpected tool ${name}`);
+      },
+    });
+    const items = await wechat.fetchLatest({ accountId: "acc-1", accountName: "机器之心" }, new AbortController().signal);
+    expect(items.map((item) => [item.excerpt, (item.sourceRef as { fullText?: boolean }).fullText])).toEqual([
+      ["全文段落", true],
+      ["digest-2", undefined],
+      ["digest-3", undefined],
+    ]);
   });
 
   it("rejects an unsubscribed WeChat account instead of substituting keyword search", async () => {
@@ -341,6 +369,10 @@ describe("Radar scheduled/manual public seam", () => {
           location: { type: "battlefield", id: "growth" },
         });
         expect(saved.rows[0].source_fingerprint).toMatch(/^[a-f0-9]{64}$/);
+        // 雷达自动升级的议题是 AI 生成的候选：带 nature=ai_suggested（界面标「AI 建议」，见 dataOrigin.ts）。
+        const promotedIssues = await db.query("SELECT origin, origin_ref FROM issues WHERE origin = 'radar'");
+        expect(promotedIssues.rows).toHaveLength(1);
+        expect(promotedIssues.rows[0].origin_ref).toMatchObject({ nature: "ai_suggested" });
       } finally {
         await app.close();
       }
@@ -1124,6 +1156,73 @@ describe("Signal 原文出处标注", () => {
     const fullTextOf = (outletId: string) => (projectSignalCard(row(outletId)).payload as { source: { fullText: boolean } }).source.fullText;
     expect(fullTextOf("qbitai")).toBe(true);
     expect(fullTextOf("bloomberg")).toBe(false);
+    // 采集时逐条记下的标记优先：公众号读到全文标发布方原文；量子位这条没抓到全文就不再按目录宣称
+    const cardFullText = (sourceType: "wechat-account" | "outlet", sourceRef: Record<string, unknown>) =>
+      (projectSignalCard({ ...row("qbitai"), source_type: sourceType, source_ref: sourceRef } as never).payload as { source: { fullText: boolean } }).source.fullText;
+    expect(cardFullText("wechat-account", { type: "wechat-account", provider: "wechat-mcp", accountId: "a", accountName: "号", fullText: true })).toBe(true);
+    expect(cardFullText("wechat-account", { type: "wechat-account", provider: "wechat-mcp", accountId: "a", accountName: "号" })).toBe(false);
+    expect(cardFullText("outlet", { type: "outlet", provider: "publisher-feed", outletId: "qbitai", outletName: "量子位", fullText: false })).toBe(false);
+  });
+});
+
+describe("检索条目入库前换成原文页全文", () => {
+  it("只给通过引文校验、要落库的检索条目抓原文页；全文含引文才替换并标 fullText，否则保留检索摘要", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      await db.query("UPDATE radar_config SET anchors = $1::jsonb, sources = $2::jsonb WHERE id = 'default'", [
+        JSON.stringify(ANCHORS), JSON.stringify(SOURCES),
+      ]);
+      const summaryOf = (url: string) => `检索摘要：竞品下调企业版价格 ${url}`;
+      const item = (url: string): TRadarSourceItem => ({
+        sourceType: "web", title: `标题 ${url}`, url, publishedAt: "2026-05-01T08:00:00.000Z", excerpt: summaryOf(url),
+        sourceRef: { type: "web-search", provider: "bocha", query: "竞争对手 最新定价" },
+        images: [{ src: "https://img.example.com/bocha-cover.jpg", after: 0 }],
+      });
+      const urls = ["https://example.com/full", "https://example.com/rewritten", "https://example.com/failed", "https://example.com/rejected"];
+      const body = (url: string) => `${"背景段落。".repeat(50)}\n\n${summaryOf(url)}\n\n${"后续段落。".repeat(50)}`;
+      const asked: string[] = [];
+      const radar = createRadarService({
+        pool,
+        web: { configured: true, async search() { return urls.map(item); } },
+        assessor: {
+          async assess({ sources }) {
+            return { candidates: sources.map((source) => ({
+              sourceFingerprint: source.sourceFingerprint, anchorId: "anchor-market", summary: "竞品降价", strategicImpact: "影响",
+              // rejected：引文不在检索摘要里，研判就不通过，不应为它抓原文页
+              evidenceQuote: source.url.endsWith("rejected") ? "摘要里没有的句子" : "竞品下调企业版价格",
+              unknowns: [], score: { relevance: 3, impact: 3, urgency: 3 },
+            })) } as never;
+          },
+        },
+        articleText: async (url) => {
+          asked.push(url);
+          if (url.endsWith("/full")) return { text: body(url), images: [{ src: "https://example.com/inline.jpg", after: 1 }] };
+          // 原文页把那句话改写了：全文里找不到引文，保留检索摘要
+          if (url.endsWith("/rewritten")) return { text: body(url).replace("竞品下调企业版价格", "竞品调低了企业版的价格"), images: [] };
+          return null;
+        },
+        now: () => NOW,
+      });
+      expect(await radar.runManual()).toMatchObject({ status: "completed", createdSignals: 3 });
+      expect(asked.sort()).toEqual(["https://example.com/failed", "https://example.com/full", "https://example.com/rewritten"]);
+      const stored = Object.fromEntries((await db.query<{ source_url: string; excerpt: string; evidence_quote: string; source_ref: Record<string, unknown>; source_images: unknown }>(
+        "SELECT source_url, excerpt, evidence_quote, source_ref, source_images FROM signals",
+      )).rows.map((row) => [row.source_url, row]));
+      expect(stored["https://example.com/full"]).toMatchObject({
+        excerpt: body("https://example.com/full"),
+        source_ref: { type: "web-search", provider: "bocha", fullText: true },
+        source_images: [{ src: "https://example.com/inline.jpg", after: 1 }],
+      });
+      for (const url of ["https://example.com/rewritten", "https://example.com/failed"]) {
+        expect(stored[url].excerpt).toBe(summaryOf(url));
+        expect(stored[url].source_ref).not.toHaveProperty("fullText");
+        expect(stored[url].source_images).toEqual([{ src: "https://img.example.com/bocha-cover.jpg", after: 0 }]);
+      }
+      // 不变量：引文永远逐字出现在落库的原文里
+      for (const row of Object.values(stored)) expect(row.excerpt).toContain(row.evidence_quote);
+      const card = projectSignalCard((await db.query(`SELECT * FROM signals WHERE source_url = 'https://example.com/full'`)).rows[0]);
+      expect((card.payload as { source: { fullText: boolean } }).source.fullText).toBe(true);
+    });
   });
 });
 
@@ -1186,5 +1285,11 @@ describe("publisher outlet Signal persistence", () => {
         .toEqual([{ source_type: "outlet", source_title: "Treasury basis trade", source_images: [{ src: "https://assets.bloomberg.com/chart.jpg", after: 0 }] }]);
       expect(webCalls).toBe(0);
     });
+  });
+});
+
+describe("radar scan time limit", () => {
+  it("defaults to 6 minutes so a Haiku scan of a full round is not cut short", () => {
+    expect(RADAR_SCAN_TIMEOUT_MS).toBe(6 * 60_000);
   });
 });

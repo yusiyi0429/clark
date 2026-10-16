@@ -19,9 +19,9 @@
 .popoverTitle{margin:0;font-size:13.5px;font-weight:600;color:#1d1d1f}
 .field{display:flex;flex-direction:column;gap:4px}
 .field>span{font-size:11.5px;color:#3c4350}
-.field input,.field select{box-sizing:border-box;width:100%;height:36px;border:0;outline:1px solid #d9dde5;border-radius:9px;background:#f7f8fa;padding:0 12px;font:inherit;font-size:12.5px;color:#1d1d1f}
-.field textarea{box-sizing:border-box;width:100%;min-height:72px;border:0;outline:1px solid #d9dde5;border-radius:9px;background:#f7f8fa;padding:8px 12px;font:inherit;font-size:12.5px;line-height:1.5;color:#1d1d1f;resize:vertical}
-.field input:focus,.field textarea:focus{outline:2px solid #4989d6;background:#fff}
+/* 文字框 / 下拉的边、圆角、底色、字号、悬停与聚焦都走 globals.css 的统一输入框样式，这里只管宽高 */
+.field input,.field select{width:100%;height:36px;padding:0 14px}
+.field textarea{width:100%;min-height:72px}
 .pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .support{display:flex;flex-direction:column;gap:4px;max-height:132px;overflow-y:auto;scrollbar-width:thin}
 .supportRow{display:flex;align-items:flex-start;gap:6px;font-size:12px;line-height:18px;color:#3c4350}

@@ -67,11 +67,11 @@ export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
     };
     app.get("/api/auth/demo", { schema: { response: { 200: DemoEntryResponse } } }, async (_req, reply) => {
       const access = await demoAccess();
-      return access ? { displayName: access.person.displayName } : fail(reply, 404, "DEMO_NOT_FOUND", "演示账号不存在");
+      return access ? { displayName: access.person.displayName } : fail(reply, 404, "DEMO_NOT_FOUND", "账号不存在");
     });
     app.post("/api/auth/demo", { preHandler: sameOrigin, config: perIp, schema: { response: { 200: LoginResponse } } }, async (_req, reply) => {
       const access = await demoAccess();
-      if (!access) return fail(reply, 404, "DEMO_NOT_FOUND", "演示账号不存在");
+      if (!access) return fail(reply, 404, "DEMO_NOT_FOUND", "账号不存在");
       return signIn(reply, access.person.personId, access.row.session_version, roleOf(access.person));
     });
   }

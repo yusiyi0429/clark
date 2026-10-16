@@ -33,6 +33,8 @@ type NotificationRow = {
   meeting_title: string | null;
   issue_title: string | null;
   item_title: string | null;
+  item_id: string | null;
+  issue_assignments: { assignedAt: string; note: string | null }[] | null;
 };
 
 function composeText(row: NotificationRow, names: Map<string, string>): string {
@@ -51,14 +53,19 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"} 拉你进${row.object_type === "issue" ? "议题" : "会议"}「${row.object_type === "issue" ? row.issue_title ?? "" : row.meeting_title ?? ""}」`;
     case "task_submitted":
       return `「${row.task_title ?? ""}」等你验收`;
+    case "issue_assigned": {
+      // item_id 是这次指派的时间：改派过也能找回当时那句说明。
+      const note = row.issue_assignments?.find((entry) => entry.assignedAt === row.item_id)?.note;
+      return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"} 请你主责议题「${row.issue_title ?? ""}」${note ? `：${note}` : ""}`;
+    }
   }
 }
 
 /** 我的通知：未读在前，最近 50 条。 */
 export async function listMyNotifications(q: Query, companyMemory: CompanyMemoryRepository, personId: string): Promise<TNotificationView[]> {
   const result = await q(
-    `SELECT n.id::text, n.kind, n.object_type, n.object_id, n.actor_id, n.created_at, n.read_at,
-            t.title AS task_title, t.return_reason, m.title AS meeting_title, i.title AS issue_title,
+    `SELECT n.id::text, n.kind, n.object_type, n.object_id, n.item_id, n.actor_id, n.created_at, n.read_at,
+            t.title AS task_title, t.return_reason, m.title AS meeting_title, i.title AS issue_title, i.assignments AS issue_assignments,
             (SELECT item->>'title' FROM jsonb_array_elements(m.outcome->'items') AS item WHERE item->>'id' = n.item_id) AS item_title
        FROM notifications n
        LEFT JOIN tasks t ON n.object_type = 'task' AND t.id::text = n.object_id

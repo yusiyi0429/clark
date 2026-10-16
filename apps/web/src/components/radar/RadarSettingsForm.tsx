@@ -386,7 +386,7 @@ function sourcesSection({ mode, idPrefix, view, draft, onDraft, errors }: Sectio
       : "全网检索暂未开通：现在只读订阅源和公众号，方向用来从中筛选。"
     : mode === "person"
       ? "不填时，按你的方向在全网检索。"
-      : "只收有订阅源的媒体；全网检索和公众号在运营侧维护。";
+      : "这里只收有订阅源的媒体；全网检索和公众号另行配置。";
   return (
     <section className={s.section} aria-labelledby={`${idPrefix}-sources`}>
       <div className={s.sectionHead}>

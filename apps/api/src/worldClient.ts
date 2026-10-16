@@ -3,12 +3,101 @@ import { readFileSync } from "node:fs";
 import type { Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
 
-export type WorldInstance = { scope_id: string; domains: { company: string; eo: string }; people: Record<string, string> };
-export function loadWorldInstance(): WorldInstance {
-  return JSON.parse(readFileSync(new URL("../config/world-instance.json", import.meta.url), "utf8"));
+/**
+ * world 实例配置：按 TKOS_WORLD_INSTANCE 选（缺省 mvp = config/world-instance.json，原配置不变；demo / formal / tk = config/world-instance.<名>.json）。
+ * formal 是集团正式 scope；tk 是词元云集（TK）scope 的天枢专用读身份，写死只读（无论配置文件怎么写，writes 一律为 false，WorldClient.write 直接拒绝）。
+ * people 是 Inception 人员 id → 本体主体 id；真实人名的对应不进仓库，放在 TKOS_WORLD_INSTANCE_LOCAL_FILE 指的本地文件（.data/ 下，git 忽略），启动时合并。
+ * reads：读侧集成（战场目标、Agent 上下文）是否启用；writes：写回（会议事件等）是否启用。缺省都按 MVP 原行为（不读、写）。
+ */
+export type WorldInstance = {
+  scope_id: string;
+  /** 核对用：GET /v1/identity 返回的 tenant_id 应与它一致（只用于冒烟与范围核对）。 */
+  tenant_id?: string;
+  domains: { company: string; eo: string } & Record<string, string>;
+  people: Record<string, string>;
+  label?: string;
+  principals?: Record<string, string>;
+  anchors?: { company?: string; strategy?: string };
+  reads?: boolean;
+  writes?: boolean;
+};
+export const WORLD_INSTANCES = ["mvp", "demo", "formal", "tk"] as const;
+/** 写死只读的实例：0.2 没有技术上的只读（读身份按规则仍能记外部事件），只读由我们这一侧保证。 */
+export const WORLD_READ_ONLY_INSTANCES: readonly WorldInstanceName[] = ["tk"];
+export type WorldInstanceName = (typeof WORLD_INSTANCES)[number];
+export function worldInstanceName(value: string | undefined, fallback: WorldInstanceName = "mvp"): WorldInstanceName {
+  const name = value?.trim() || fallback;
+  if (!(WORLD_INSTANCES as readonly string[]).includes(name)) throw new Error(`TKOS_WORLD_INSTANCE 只能是 ${WORLD_INSTANCES.join(" / ")}`);
+  return name as WorldInstanceName;
 }
-export type WorldEnv = { worldApiUrl?: string; worldAgentToken?: string };
+export function loadWorldInstance(name: WorldInstanceName = "mvp", localFile?: string): WorldInstance {
+  const file = name === "mvp" ? "../config/world-instance.json" : `../config/world-instance.${name}.json`;
+  const loaded = JSON.parse(readFileSync(new URL(file, import.meta.url), "utf8")) as WorldInstance;
+  const base = WORLD_READ_ONLY_INSTANCES.includes(name) ? { ...loaded, writes: false } : loaded;
+  if (!localFile) return base;
+  // 本地补充只合并 people（人员对应）；scope、域、读写开关一律以仓库里的实例配置为准。
+  const local = JSON.parse(readFileSync(localFile, "utf8")) as { people?: Record<string, string> };
+  return { ...base, people: { ...base.people, ...(local.people ?? {}) } };
+}
+export type WorldEnv = {
+  worldApiUrl?: string;
+  /** 只在内存里；由 TKOS_WORLD_AGENT_TOKEN 或 TKOS_WORLD_AGENT_TOKEN_FILE（读文件、trim）给出，不写日志、不进响应。 */
+  worldAgentToken?: string;
+  worldInstance?: WorldInstanceName;
+  worldInstanceLocalFile?: string;
+  /** 凭证文件读取失败的错误码（不含文件内容）；健康接口如实报告。 */
+  worldTokenError?: string;
+};
 export const worldConfigured = (env: WorldEnv): boolean => Boolean(env.worldApiUrl && env.worldAgentToken);
+export const worldWritesEnabled = (config: WorldInstance): boolean => config.writes !== false;
+export const worldReadsEnabled = (config: WorldInstance): boolean => config.reads === true;
+
+/**
+ * 从环境变量装配 world 配置：TKOS_WORLD_API_URL；凭证优先 TKOS_WORLD_AGENT_TOKEN，否则读 TKOS_WORLD_AGENT_TOKEN_FILE。
+ * 读文件失败或文件为空时不抛错（不影响启动），worldAgentToken 留空、worldTokenError 给出错误码；错误里不带文件内容。
+ */
+export function resolveWorldEnv(source: NodeJS.ProcessEnv = process.env, defaults: { instance?: WorldInstanceName } = {}): WorldEnv {
+  const env: WorldEnv = {
+    worldApiUrl: source.TKOS_WORLD_API_URL?.trim() || undefined,
+    worldInstance: worldInstanceName(source.TKOS_WORLD_INSTANCE, defaults.instance ?? "mvp"),
+    worldInstanceLocalFile: source.TKOS_WORLD_INSTANCE_LOCAL_FILE?.trim() || undefined,
+  };
+  readWorldToken(env, source.TKOS_WORLD_AGENT_TOKEN?.trim(), source.TKOS_WORLD_AGENT_TOKEN_FILE?.trim());
+  return env;
+}
+function readWorldToken(env: WorldEnv, direct: string | undefined, file: string | undefined): void {
+  if (direct) env.worldAgentToken = direct;
+  else if (file) {
+    try {
+      const token = readFileSync(file, "utf8").trim();
+      if (token) env.worldAgentToken = token;
+      else env.worldTokenError = "WORLD_TOKEN_FILE_EMPTY";
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      env.worldTokenError = `WORLD_TOKEN_FILE_UNREADABLE${code ? `:${code}` : ""}`;
+    }
+  }
+}
+
+/**
+ * 第二个只读实例（词元云集 TK scope）：TKOS_WORLD_TK_INSTANCE 不设就关闭（返回 undefined）。
+ * 只接受写死只读的实例名（目前只有 tk）；地址缺省沿用 TKOS_WORLD_API_URL，可用 TKOS_WORLD_TK_API_URL 单独给；
+ * 凭证只从 TKOS_WORLD_TK_TOKEN_FILE 读（不接受直给的变量，也不回退主实例的凭证）。
+ */
+export function resolveWorldTkEnv(source: NodeJS.ProcessEnv = process.env): WorldEnv | undefined {
+  const name = source.TKOS_WORLD_TK_INSTANCE?.trim();
+  if (!name) return undefined;
+  const instance = worldInstanceName(name);
+  if (!WORLD_READ_ONLY_INSTANCES.includes(instance)) throw new Error(`TKOS_WORLD_TK_INSTANCE 只能是 ${WORLD_READ_ONLY_INSTANCES.join(" / ")}`);
+  const env: WorldEnv = { worldApiUrl: (source.TKOS_WORLD_TK_API_URL ?? source.TKOS_WORLD_API_URL)?.trim() || undefined, worldInstance: instance };
+  readWorldToken(env, undefined, source.TKOS_WORLD_TK_TOKEN_FILE?.trim());
+  return env;
+}
+/** GET /v1/identity：凭证对应的主体、所在 scope 与角色指派（只读，不落读取记录）。 */
+export type WorldIdentity = {
+  scope_id: string; tenant_id: string; company_id: string; principal_id: string; principal_type: "human" | "agent";
+  display_name: string; auth_epoch: number; assignments: Record<string, unknown>[];
+};
 export type WorldExternalRef = { system: string; id: string; url?: string | null };
 export type WorldHead = {
   object_id: string; object_type: string; title: string; revision_id: string;
@@ -47,15 +136,20 @@ export const requestDigest = (value: unknown): string => createHash("sha256").up
 export class WorldClient {
   readonly instance: string;
   readonly config: WorldInstance;
+  /** 写死只读（tk 实例，或配置 writes:false 且实例在只读名单里）：write 一律拒绝，不发请求。 */
+  readonly readOnly: boolean;
   private readonly apiUrl: string;
   private readonly token: string;
-  constructor(private readonly q: Query, env: WorldEnv, config = loadWorldInstance()) {
+  private readonly timeoutMs: number;
+  constructor(private readonly q: Query, env: WorldEnv, config = loadWorldInstance(env.worldInstance, env.worldInstanceLocalFile), options: { timeoutMs?: number } = {}) {
     if (!worldConfigured(env)) throw new WorldError(503, "WORLD_NOT_CONFIGURED", "world 未配置");
     this.apiUrl = env.worldApiUrl!.replace(/\/+$/, "");
     const url = new URL(this.apiUrl);
     if (url.username || url.password || url.search || url.hash) throw new Error("world API URL must not contain credentials, query or fragment");
     this.token = env.worldAgentToken!;
     this.config = config;
+    this.readOnly = WORLD_READ_ONLY_INSTANCES.includes(env.worldInstance ?? "mvp");
+    this.timeoutMs = options.timeoutMs ?? 15_000;
     this.instance = `${this.apiUrl}#${config.scope_id}`;
   }
   private async request<T>(path: string, body?: WorldAction): Promise<T> {
@@ -66,7 +160,7 @@ export class WorldClient {
         method: body ? "POST" : "GET",
         headers: { authorization: `Bearer ${this.token}`, ...(body ? { "content-type": "application/json" } : {}) },
         body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(this.timeoutMs),
         redirect: "error",
       });
       status = response.status;
@@ -93,6 +187,37 @@ export class WorldClient {
     } while (cursor);
     return items;
   }
+  /**
+   * 健康检查：GET /v1/health（不带凭证）。旧的 /healthz 是兼容接口，现在返回 503，不再使用。
+   * 200 且正文 ok 不为 false 才算健康；非 200 抛 WORLD_UNHEALTHY（带 HTTP 状态），网络错误抛 NETWORK_ERROR。正文里不含版本号。
+   */
+  async health(): Promise<void> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.apiUrl}/v1/health`, { signal: AbortSignal.timeout(this.timeoutMs), redirect: "error" });
+    } catch {
+      throw new WorldError(0, "NETWORK_ERROR", "world 健康检查失败");
+    }
+    const body = await response.json().catch(() => null) as { ok?: unknown } | null;
+    if (!response.ok || body?.ok === false) throw new WorldError(response.status, "WORLD_UNHEALTHY", "world 健康检查未通过");
+  }
+  /** 服务端版本：GET /openapi.json（不带凭证）里的 info.version；取不到时为 null，不影响读取。 */
+  async serverVersion(): Promise<string | null> {
+    try {
+      const response = await fetch(`${this.apiUrl}/openapi.json`, { signal: AbortSignal.timeout(this.timeoutMs), redirect: "error" });
+      if (!response.ok) return null;
+      const body = await response.json().catch(() => null) as { info?: { version?: unknown } } | null;
+      const value = body?.info?.version;
+      return typeof value === "string" && value.trim() ? value.trim() : null;
+    } catch {
+      return null;
+    }
+  }
+  /** 取事件（只读）：subject_refs 含该对象、occurred_at 不早于 since 的事件。 */
+  async getEvents(id: string, since?: string): Promise<{ items?: Record<string, unknown>[]; events?: Record<string, unknown>[] } & Record<string, unknown>> {
+    return this.request(`/v1/world/objects/${encodeURIComponent(id)}/events${since ? `?since=${encodeURIComponent(since)}` : ""}`);
+  }
+  async identity(): Promise<WorldIdentity> { return this.request("/v1/identity"); }
   async getObject(id: string): Promise<WorldObject> { return this.request(`/v1/world/objects/${encodeURIComponent(id)}`); }
   async getHead(id: string): Promise<WorldHead> {
     const object = await this.getObject(id);
@@ -109,6 +234,7 @@ export class WorldClient {
   }
   /** build 每次重新读取当前头；网络重放优先使用台账中的完整请求。 */
   async write(key: string, build: () => Promise<WorldAction>): Promise<WorldReceipt> {
+    if (this.readOnly) throw new WorldError(403, "WORLD_READ_ONLY", "该实例写死只读，不写本体");
     if (key.length < 16 || key.length > 128) throw new WorldError(422, "INVALID_REQUEST", "幂等键必须为 16–128 字符");
     const saved = await this.q("SELECT request_body, prepared, error_code FROM world_sync_ledger WHERE instance = $1 AND idempotency_key = $2 ORDER BY id DESC LIMIT 1", [this.instance, key]);
     const previous = saved.rows[0];

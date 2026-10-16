@@ -14,6 +14,7 @@ import type {
   TMeetingRecordingSummary,
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
+import { computeStaleInputs, type GroupInputVersions } from "./preflightStaleness.js";
 
 export type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -47,6 +48,8 @@ export type MeetingRow = {
   updated_at: Date;
   /** 最近一次会议录音（meeting_recordings 另表，随 meetingColumns 带出）；`SELECT *` 读出的行没有这一格。 */
   latest_recording?: TMeetingRecordingSummary | null;
+  /** 预审 ready 时现查的群材料版本与讨论游标（随 meetingColumns 带出，用于过期提示）；其他时候为 null。 */
+  group_inputs?: GroupInputVersions | null;
 };
 
 const MEETING_COLUMNS = [
@@ -57,7 +60,29 @@ const MEETING_COLUMNS = [
 /** 录音状态变化不 bump Meeting version（否则会让进行中的会议 Action 全部失效），所以每次读取现查最近一条。 */
 const latestRecordingColumn = (prefix: string) =>
   `(SELECT jsonb_build_object('id', r.id, 'status', r.status, 'error', r.error) FROM meeting_recordings r WHERE r.meeting_id = ${prefix || "meetings."}id ORDER BY r.created_at DESC LIMIT 1) AS latest_recording`;
-export const meetingColumns = (prefix = "") => [...MEETING_COLUMNS.map((column) => `${prefix}${column}`), latestRecordingColumn(prefix)].join(", ");
+/**
+ * 预审过期提示（H04）：只在预审 ready 时现查本会议与关联议题当前可见的群材料版本和群讨论游标，不 bump version。
+ * 权限与 meetingEvidence.collectMeetingEvidence 一致（viewer = 会议 CEO 参会人）：会议材料可见；议题材料要求 CEO
+ * 在群里或议题没有群；讨论只算 CEO 在群的成员消息。
+ */
+const groupInputsColumn = (prefix: string) => {
+  const m = prefix || "meetings.";
+  const objectMatch = (alias: string) =>
+    `((${alias}.object_type = 'meeting' AND ${alias}.object_id = ${m}id::text) OR (${alias}.object_type = 'issue' AND ${m}issue_ids ? ${alias}.object_id))`;
+  const ceoMember = (alias: string) =>
+    `EXISTS (SELECT 1 FROM thread_members tm WHERE tm.object_type = ${alias}.object_type AND tm.object_id = ${alias}.object_id AND tm.person_id = ${m}ceo_participant_id AND tm.left_at IS NULL)`;
+  const discussions = `FROM thread_messages gm WHERE gm.kind = 'member' AND ${objectMatch("gm")} AND ${ceoMember("gm")}`;
+  return `(CASE WHEN ${m}preflight->>'status' = 'ready' THEN jsonb_build_object(
+    'materials', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', om.id::text, 'objectType', om.object_type, 'objectId', om.object_id,
+        'fileName', om.file_name, 'version', om.current_version) ORDER BY om.created_at, om.id)
+      FROM object_materials om WHERE om.deleted_at IS NULL AND ${objectMatch("om")}
+        AND (om.object_type = 'meeting' OR ${ceoMember("om")}
+          OR NOT EXISTS (SELECT 1 FROM thread_members tx WHERE tx.object_type = 'issue' AND tx.object_id = om.object_id))), '[]'::jsonb),
+    'discussionMaxId', (SELECT COALESCE(max(gm.id), 0) ${discussions}),
+    'newDiscussionCount', (SELECT count(*) ${discussions} AND gm.id > COALESCE((${m}preflight #>> '{inputCoverage,evidence,discussionMaxId}')::bigint, 0))
+  ) END) AS group_inputs`;
+};
+export const meetingColumns = (prefix = "") => [...MEETING_COLUMNS.map((column) => `${prefix}${column}`), latestRecordingColumn(prefix), groupInputsColumn(prefix)].join(", ");
 
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type MeetingActionError = { status: number; code: string; message: string; fieldErrors?: Record<string, string> };
@@ -84,6 +109,14 @@ export function emptyDraft(): TMeetingDraft {
   return { readIssueIds: [], carriedIssueIds: [], checkedEntryIds: [], editsByEntryId: {}, supplementRequests: [], note: "" };
 }
 
+/** 预审投影：去掉误存的 staleInputs，ready 时按当前群输入重新计算过期提示。 */
+function projectPreflight(row: MeetingRow): TMeetingPreflight {
+  const { staleInputs: _stored, ...preflight } = row.preflight;
+  if (preflight.status !== "ready" || !row.group_inputs) return preflight;
+  const stale = computeStaleInputs(preflight.inputCoverage?.evidence, row.group_inputs);
+  return stale ? { ...preflight, staleInputs: stale } : preflight;
+}
+
 function projectMaterial(material: StoredMeetingMaterial): TMeetingMaterial {
   const { storageKey: _storageKey, sha256: _sha256, extractedText: _extractedText, ...projected } = material;
   return projected;
@@ -105,6 +138,17 @@ export async function getMeetingRow(q: Query, id: string): Promise<MeetingRow | 
 export async function listMeetingRows(q: Query): Promise<MeetingRow[]> {
   const result = await q(`SELECT ${meetingColumns()} FROM meetings ORDER BY scheduled_at DESC, created_at DESC`);
   return result.rows as MeetingRow[];
+}
+/**
+ * 子决定：parentItemId 指向同场会里的一条主决定。子决定不单独确认／忽略／撤回，
+ * 随主决定一起处理（主决定确认 → 子项确认；忽略 → 一并忽略；撤回 → 一起恢复待处理）。
+ */
+export function isChildDecision(items: TMeetingOutcomeItem[], item: TMeetingOutcomeItem): boolean {
+  if (item.kind !== "decision" || !item.parentItemId) return false;
+  return items.some((candidate) => candidate.id === item.parentItemId && candidate.kind === "decision");
+}
+export function childDecisionsOf(items: TMeetingOutcomeItem[], parentId: string): TMeetingOutcomeItem[] {
+  return items.filter((candidate) => candidate.kind === "decision" && candidate.parentItemId === parentId);
 }
 function parentConfirmed(outcome: TMeetingOutcomeState, item: TMeetingOutcomeItem): boolean {
   const parent = item.parentItemId ? outcome.items.find((candidate) => candidate.id === item.parentItemId) : undefined;
@@ -155,7 +199,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
     );
     if (!row.transcript_candidate) actions.push(action("meeting.reschedule", "重新安排会议"));
     // 「这场会开完了」只记一次结束时刻，不改 status
-    if (!row.ended_at) actions.push(action("meeting.end", "这场会开完了"));
+    if (!row.ended_at) actions.push(action("meeting.end", "结束会议"));
     if (row.preflight.status === "failed") actions.push(action("meeting.retry_preflight", "重试预审"));
     if (row.preflight.status === "ready") actions.push(action("meeting.regenerate_preflight", "重新预审"));
   }
@@ -174,11 +218,12 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
   if ((row.status === "held" || row.status === "reviewed") && row.outcome?.status === "ready") {
     for (const item of row.outcome.items) {
       if (!item.review) continue;
+      // 子决定没有自己的动作，跟着主决定走
+      if (isChildDecision(row.outcome.items, item)) continue;
       if (item.review.status === "pending") {
-        // 无法产生精确效果时不暴露确认：父 decision 未确认的 reopenWhen、无可解析 Issue 的 decision
-        const confirmable =
-          (item.kind !== "reopenWhen" || parentConfirmed(row.outcome, item)) &&
-          (item.kind !== "decision" || decisionIssueId(row, item) !== null);
+        // 无法产生精确效果时不暴露确认：父 decision 未确认的 reopenWhen。
+        // 无可解析 Issue 的 decision 也能确认：只记为会上已确认的决定，不写任何议题。
+        const confirmable = item.kind !== "reopenWhen" || parentConfirmed(row.outcome, item);
         if (confirmable) actions.push(action("meeting.confirm_item", "确认", item.id));
         actions.push(action("meeting.dismiss_item", item.kind === "strategic" ? "不同意" : "忽略", item.id));
       } else if (item.review.status === "confirmed" && item.kind !== "strategic") {
@@ -207,7 +252,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       participants: row.participants,
       issueIds: row.issue_ids,
       originRef: row.origin_ref,
-      preflight: row.preflight,
+      preflight: projectPreflight(row),
       draft: row.draft,
       materials: row.materials.map(projectMaterial),
       transcript: row.transcript,

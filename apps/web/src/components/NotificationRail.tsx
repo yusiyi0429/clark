@@ -20,12 +20,14 @@ import { roundStatusText } from "./missionCards/roundStatusText";
 import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
 import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
 import { CycleCountdown } from "./CycleCountdown";
+import { RADAR_ORIGIN_LABEL, RadarOriginIcon } from "./OriginTag";
+import { preflightInFlight } from "@/cards/meetingIssueModel";
 import n from "@/styles/notifications.module.css";
 
 type RailKind = "decisions" | "meetings" | "research";
 type Tone = "red" | "amber" | "neutral";
 type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card; followUp?: boolean; canReschedule?: boolean };
-type RailGroup = { kind: RailKind; title: string; subtitle: string; mark: ContextMarkKind; items: RailItem[] };
+type RailGroup = { kind: RailKind; title: string; subtitle: ReactNode; mark: ContextMarkKind; items: RailItem[] };
 
 const RAIL: Record<RailKind, { title: string; mark: ContextMarkKind }> = {
   decisions: { title: "战略决策更新", mark: "issue" },
@@ -49,6 +51,18 @@ export function clock(date: Date): { time: string; weekday: string; day: string 
 }
 
 const sameCompanyDay = (a: Date, b: Date) => clock(a).day === clock(b).day;
+
+/** 左栏多久重读一次首页卡片：有会前预审在跑 5 秒，有待开的会或没定完的任务卡轮次 20 秒，否则不轮询。 */
+export function railRefreshInterval(cards: Card[]): number | null {
+  if (cards.some((card) => card.kind === "meeting" && preflightInFlight(payloadOf<MeetingPayload>(card)))) return 5_000;
+  const waiting = cards.some((card) => {
+    if (card.kind === "meeting") return payloadOf<MeetingPayload>(card).status === "scheduled";
+    if (card.kind !== "mission-round") return false;
+    const payload = payloadOf<TMissionRoundSummary>(card);
+    return payload.phase !== "confirmed" || Boolean(payload.todo);
+  });
+  return waiting ? 20_000 : null;
+}
 
 function missionRoundMeta(payload: TMissionRoundSummary): string {
   if (payload.phase === "drafting") return "Co-Agent 正在起草";
@@ -110,7 +124,7 @@ export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: str
     return {
       id: card.id,
       title: card.title,
-      meta: followUp ? "会议已结束，待你提交记录或重新安排" : sameCompanyDay(new Date(at), now) ? clock(new Date(at)).time : monthDayTime(at),
+      meta: followUp ? "会议已结束，待提交记录或重新安排" : sameCompanyDay(new Date(at), now) ? clock(new Date(at)).time : monthDayTime(at),
       followUp,
       canReschedule: card.actions.some((action) => action.actionType === "meeting.reschedule"),
       tone: "neutral",
@@ -125,13 +139,17 @@ export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: str
     }),
   );
   const lead = leads.size === 1 ? [...leads][0] : "";
-  const meetingSubtitle = meetingItems.some((item) => item.followUp) ? "含待你处理的会后记录" : allToday ? `今天${lead ? ` · ${lead}主持` : ""}` : `${meetings.length} 场待开`;
+  const meetingSubtitle = meetingItems.some((item) => item.followUp) ? "含待处理的会后记录" : allToday ? `今天${lead ? ` · ${lead}主持` : ""}` : `${meetings.length} 场待开`;
 
   const urgent = cards.filter((card) => card.kind === "issue" && card.urgency === "red");
-  const origins = new Set(urgent.map((card) => payloadOf<IssuePayload>(card).origin));
-  const researchSubtitle = [origins.has("radar") ? "Co-Agent 提请" : "", origins.has("dri") ? "负责人提请" : "", origins.has("ceo") ? "待你判断" : ""]
-    .filter(Boolean)
-    .join(" · ");
+  // 议题来源：雷达自动升级的（AI 候选议题）写「雷达」并带雷达小图标。
+  const origins = new Set(urgent.map((card) => { const payload = payloadOf<IssuePayload>(card); return payload.nature === "ai_suggested" && payload.origin === "radar" ? "radar-ai" : payload.origin; }));
+  const researchSubtitle: ReactNode[] = [
+    origins.has("radar") ? "Co-Agent 提请" : "",
+    origins.has("radar-ai") ? <span key="radar-ai" aria-label={RADAR_ORIGIN_LABEL} title={RADAR_ORIGIN_LABEL}><RadarOriginIcon />雷达</span> : "",
+    origins.has("dri") ? "负责人提请" : "",
+    origins.has("ceo") ? "一号位发起" : "",
+  ].filter(Boolean).flatMap((part, index) => (index ? [" · ", part] : [part]));
   const researchItems = urgent.map<RailItem>((card) => {
     const payload = payloadOf<IssuePayload>(card);
     return {
@@ -146,7 +164,7 @@ export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: str
   const groups: RailGroup[] = [
     { kind: "decisions", ...RAIL.decisions, subtitle: missionRounds.length ? "月度目标与任务卡" : "月度协商", items: [...monthly, ...missionRounds] },
     { kind: "meetings", ...RAIL.meetings, subtitle: meetingSubtitle, items: meetingItems },
-    { kind: "research", ...RAIL.research, subtitle: researchSubtitle, items: researchItems },
+    { kind: "research", ...RAIL.research, subtitle: researchSubtitle.length ? <>{researchSubtitle}</> : "", items: researchItems },
   ];
   return groups.filter((group) => group.items.length > 0);
 }
@@ -229,22 +247,17 @@ export function NotificationRail({
   const strategic = pendingStrategicItems(cards).length;
   const layoutKey = [`strategic:${strategic}`, ...groups.map((group) => `${group.kind}:${group.items.length}`)].join("|");
 
-  // 同成员工作台同步其他拍板人的变更；倒计时本身由分组与卡页共享分钟时钟。
-  const needsRoundRefresh = cards.some((card) => {
-    if (card.kind === "meeting") return payloadOf<MeetingPayload>(card).status === "scheduled";
-    if (card.kind !== "mission-round") return false;
-    const payload = payloadOf<TMissionRoundSummary>(card);
-    return payload.phase !== "confirmed" || Boolean(payload.todo);
-  });
+  // 同成员工作台同步其他拍板人的变更；倒计时本身由分组与卡页共享分钟时钟。会前预审在跑时 5 秒一次，预审一出结果左栏就换上结论。
+  const refreshEvery = railRefreshInterval(cards);
   useEffect(() => {
-    if (!needsRoundRefresh) return;
+    if (!refreshEvery) return;
     const refresh = () => { if (document.visibilityState === "visible") router.refresh(); };
-    const timer = window.setInterval(refresh, 20_000);
+    const timer = window.setInterval(refresh, refreshEvery);
     window.addEventListener("focus", refresh);
     window.addEventListener("meeting-changed", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); window.removeEventListener("meeting-changed", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, [needsRoundRefresh, router]);
+  }, [refreshEvery, router]);
   const refreshRound = useCallback(() => router.refresh(), [router]);
   // 分组出现 / 消失时，其余卡片从旧位置滑到新位置（FLIP，clark 同）。
   useLayoutEffect(() => {

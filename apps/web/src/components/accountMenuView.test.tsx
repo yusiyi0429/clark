@@ -53,7 +53,7 @@ async function open(role: "ceo" | "member" = "ceo") {
 afterEach(() => { hooks.reset(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe("个人菜单视角和首次引导", () => {
-  it("只给双身份者显示切换，未配置声纹时隐藏入口；成功后整页去 DRI 工作台", async () => {
+  it("只给双身份者显示切换，未配置声纹时隐藏入口；成功后整页去负责人工作台", async () => {
     const assign = vi.fn();
     vi.stubGlobal("window", { location: { assign } });
     api.GET.mockImplementation(async (path: string) => ({ response: { ok: true }, data: path === "/api/auth/session"
@@ -61,8 +61,8 @@ describe("个人菜单视角和首次引导", () => {
     api.POST.mockResolvedValue({ response: { ok: true } });
     const tree = await open();
     expect(item(tree, "我的声纹")).toBeUndefined();
-    expect(item(tree, "切换到 DRI 工作台")).toBeDefined();
-    (item(tree, "切换到 DRI 工作台")!.props.onPress as () => void)();
+    expect(item(tree, "切换到负责人工作台")).toBeDefined();
+    (item(tree, "切换到负责人工作台")!.props.onPress as () => void)();
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/me"));
     expect(api.POST).toHaveBeenCalledWith("/api/auth/view", { body: { view: "member" } });
   });

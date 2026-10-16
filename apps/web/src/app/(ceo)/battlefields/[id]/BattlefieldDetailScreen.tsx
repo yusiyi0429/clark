@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { ChevronRight, Crown } from "lucide-react";
 import type { Card } from "@/lib/api/client";
 import { payloadOf, type BattlefieldPayload, type MissionPayload } from "@/cards/payloads";
 import { IssueRow, meetingTimesByIssue } from "@/components/IssueRow";
+import { SegmentedSwitch } from "@/components/SegmentedSwitch";
+import { SourceName } from "@/components/SourceName";
+import { cleanDisplayText } from "@/lib/displayText";
 import { DetailHeader } from "@/components/shell/DetailHeader";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { calendarDate, monthDayTime } from "@/lib/companyTime";
@@ -30,14 +32,15 @@ export function missionsByOwner(cards: Card[], battlefieldId: string): { owner: 
 const EXPORT_LABEL: Record<string, string> = { delivered: "已送达", failed: "外发失败" };
 
 /**
- * 战场二级页（clark 战场视角「待决策 / 进展」）：只摆有真实来源的内容，缺的照实写。
- * 进展不计算完成率、达成度或按期判断（CONTEXT.md Mission：不承载执行状态与完成率），
+ * 战场二级页（clark 战场视角「决策 / 战况」）：只摆有真实来源的内容，缺的照实写。
+ * 战况不计算完成率、达成度或按期判断（CONTEXT.md Mission：不承载执行状态与完成率），
  * 只列本月 Mission 的成功证据与里程碑原文、普通待办的外发状态和负责人反馈。
  */
 export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { battlefield: Card; cards: Card[]; initialTab: BattlefieldTab }) {
   const { navigate, close, viewerId } = useWorkspace();
   const payload = payloadOf<BattlefieldPayload>(battlefield);
   const ceoOwns = !!viewerId && payload.ownerId === viewerId;
+  // 从卡片哪一面点进来就停在哪个页签（?tab=progress 是战况页签）。
   const [tab, setTab] = useState<BattlefieldTab>(initialTab);
   const meetingTimes = useMemo(() => meetingTimesByIssue(cards), [cards]);
   const issueCards = useMemo(() => {
@@ -55,7 +58,8 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
     const url = new URL(window.location.href);
     if (next === "progress") url.searchParams.set("tab", "progress");
     else url.searchParams.delete("tab");
-    window.history.replaceState(window.history.state, "", url);
+    // 传 null：Next 才会把新地址同步进路由（传它自己的 state 会被当成内部调用，之后重绘又把 ?tab 去掉，巡检 P2-29）。
+    window.history.replaceState(null, "", url);
   }
 
   const openMission = (mission: MissionPayload, origin: Element) => navigate(`/missions/${encodeURIComponent(mission.missionId)}`, origin);
@@ -66,29 +70,23 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
         eyebrow="战场"
         title={payload.name}
         extra={
-          <ToggleButtonGroup
-            className={w.facetSwitch}
-            aria-label="战场视角"
-            selectionMode="single"
-            disallowEmptySelection
-            selectedKeys={[tab]}
-            onSelectionChange={(keys) => {
-              const next = [...keys][0] as BattlefieldTab | undefined;
-              if (next) pick(next);
-            }}
-          >
-            <ToggleButton id="decisions">待决策</ToggleButton>
-            <ToggleButton id="progress" aria-label={ceoOwns ? "进展（你是这个战场的负责人）" : undefined}>
-              {ceoOwns ? <Crown size={15} strokeWidth={1.8} aria-hidden="true" /> : null}
-              进展
-            </ToggleButton>
-          </ToggleButtonGroup>
+          <SegmentedSwitch
+            className={`${w.facetSwitch} ${d.viewSwitch}`}
+            label="战场视角"
+            selected={tab}
+            onSelect={pick}
+            segments={[
+              { id: "decisions", label: "决策" },
+              { id: "progress", label: <>{ceoOwns ? <Crown size={15} strokeWidth={1.8} aria-hidden="true" /> : null}战况</>,
+                ariaLabel: ceoOwns ? "战况（一号位为本战场负责人）" : undefined },
+            ]}
+          />
         }
         closeLabel="返回全局"
         onClose={close}
       />
       <div className={w.expandedScroll}>
-        <div className={d.detail} data-tab={tab}>
+        <div className={d.detail} data-tab={tab} data-material-column>
           {ceoOwns ? null : <p className={d.owner}>负责人 · {payload.ownerDisplayName || "待指派"}</p>}
 
           {tab === "decisions" ? (
@@ -106,12 +104,12 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
                   {payload.pendingIssues.map((issue) => (
                     <IssueRow
                       key={issue.id}
-                      issue={{ id: issue.id, title: issue.title, urgency: issue.urgency, meetingTime: meetingTimes.get(issue.id) || undefined }}
+                      issue={{ id: issue.id, title: issue.title, urgency: issue.urgency, meetingTime: meetingTimes.get(issue.id) || undefined, fromRadar: issue.fromRadar }}
                       card={issueCards.find((item) => item.objectRef.id === issue.id)}
                       onNavigate={navigate}
                     />
                   ))}
-                  {payload.pendingIssues.length ? null : <p className={d.empty}>暂无待决策议题</p>}
+                  {payload.pendingIssues.length ? null : <p className={d.empty}>无待决策议题</p>}
                 </div>
               </section>
 
@@ -134,7 +132,7 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
                   </>
                 ) : (
                   <div className={d.box}>
-                    <p className={d.empty}>还没有登记战役</p>
+                    <p className={d.empty}>尚未登记战役</p>
                   </div>
                 )}
               </section>
@@ -185,7 +183,7 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
                   </div>
                 ) : (
                   <div className={d.box}>
-                    <p className={d.empty}>本月还没有归属这个战场的 Mission</p>
+                    <p className={d.empty}>本月尚无归属本战场的 Mission</p>
                   </div>
                 )}
               </section>
@@ -208,7 +206,7 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
                       ))}
                     </ul>
                   ) : (
-                    <p className={d.empty}>当月没有归属这个战场的普通待办</p>
+                    <p className={d.empty}>当月无归属本战场的普通待办</p>
                   )}
                 </div>
               </section>
@@ -223,8 +221,8 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
                       {payload.feedback.map((item) => (
                         <li key={`${item.observedAt}:${item.sourceRef}`}>
                           <span>{monthDayTime(item.observedAt)}</span>
-                          <p>{item.text}</p>
-                          <small>来源 · {item.sourceRef}</small>
+                          <p>{cleanDisplayText(item.text)}</p>
+                          <small>来源 · <SourceName value={item.sourceRef} /></small>
                         </li>
                       ))}
                     </ol>
@@ -241,6 +239,7 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
   );
 }
 
+/** 非演示环境的目标：六个月目标与本月目标。 */
 function Goals({ payload }: { payload: BattlefieldPayload }) {
   return (
     <section className={d.section} aria-label="目标">

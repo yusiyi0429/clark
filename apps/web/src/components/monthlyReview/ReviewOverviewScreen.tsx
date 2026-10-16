@@ -102,7 +102,7 @@ export function ReviewOverviewScreen({ initial }: { initial: TMonthlyReviewRespo
   const confirmSummary = reviewAction("monthly-review.confirm_summary");
   const retrySummary = reviewAction("monthly-review.retry_summary");
   const statusText = review.status === "collecting" ? `${review.counts.confirmed}/${review.counts.total} 项已确认`
-    : review.status === "summarizing" ? "各项已确认 · 待确认公司复盘" : review.status === "ltco_pending" ? "公司复盘已确认 · 待审视 LTO" : "已完成";
+    : review.status === "summarizing" ? "各项已确认 · 待确认公司复盘" : review.status === "ltco_pending" ? "公司复盘已确认 · 待审视长期目标" : "已完成";
 
   const confirmCompany = async () => {
     if (summaryDirty && !(await perform(updateSummary, summaryInput))) return;
@@ -189,7 +189,7 @@ export function ReviewOverviewScreen({ initial }: { initial: TMonthlyReviewRespo
                   <h3>长期目标修订建议</h3>
                   {review.ltco.suggestion
                     ? <p>{review.ltco.suggestion.change || review.ltco.suggestion.units.length
-                        ? `建议修订${review.ltco.suggestion.change ? "公司 LTO" : ""}${review.ltco.suggestion.change && review.ltco.suggestion.units.length ? "和" : ""}${review.ltco.suggestion.units.length ? ` ${review.ltco.suggestion.units.length} 个战场 LTO` : ""}。`
+                        ? `建议修订${review.ltco.suggestion.change ? "公司长期目标" : ""}${review.ltco.suggestion.change && review.ltco.suggestion.units.length ? "和" : ""}${review.ltco.suggestion.units.length ? ` ${review.ltco.suggestion.units.length} 个战场长期目标` : ""}。`
                         : "建议保持。"}{review.ltco.suggestion.rationale}<span className={s.hint}>（确认公司复盘后，在长期目标审视里逐条决定）</span></p>
                     : <p className={s.hint}>汇总完成后给出。</p>}
                   <div className={r.bar}>
@@ -204,9 +204,9 @@ export function ReviewOverviewScreen({ initial }: { initial: TMonthlyReviewRespo
         {review.status === "ltco_pending" ? <div className={r.bar}>
           <Button variant="primary" className={s.primary} onPress={() => workspace.navigate(`/reviews/${review.period}/ltco`)}>审视公司长期目标</Button>
         </div> : null}
-        {review.status === "closed" && review.ltco.decision ? <section className={r.section} aria-label="LTO 审视">
-          <h2>LTO</h2>
-          <p className={s.hint}>{monthDayTime(review.ltco.decision.decidedAt)} {review.ltco.decision.decision === "keep" ? "决定保持不变" : `已修订${review.ltco.decision.ltcoAfter !== review.ltco.decision.ltcoBefore ? "公司 LTO" : ""}${review.ltco.decision.units.length ? `${review.ltco.decision.ltcoAfter !== review.ltco.decision.ltcoBefore ? "和" : ""} ${review.ltco.decision.units.length} 个战场 LTO` : ""}`}。{monthOf(review.nextPeriod)} 月计划草案{review.ltco.decision.planExisted ? "之前已经有了，可以在计划页重新生成" : "已开始生成"}。</p>
+        {review.status === "closed" && review.ltco.decision ? <section className={r.section} aria-label="长期目标审视">
+          <h2>长期目标审视</h2>
+          <p className={s.hint}>{monthDayTime(review.ltco.decision.decidedAt)} {review.ltco.decision.decision === "keep" ? "决定保持不变" : `已修订${review.ltco.decision.ltcoAfter !== review.ltco.decision.ltcoBefore ? "公司长期目标" : ""}${review.ltco.decision.units.length ? `${review.ltco.decision.ltcoAfter !== review.ltco.decision.ltcoBefore ? "和" : ""} ${review.ltco.decision.units.length} 个战场长期目标` : ""}`}。{monthOf(review.nextPeriod)} 月计划草案{review.ltco.decision.planExisted ? "之前已经有了，可以在计划页重新生成" : "已开始生成"}。</p>
           <div className={r.bar}><Button variant="primary" className={s.primary} onPress={() => workspace.navigate(`/plans/${review.nextPeriod}`)}>查看 {monthOf(review.nextPeriod)} 月计划</Button></div>
         </section> : null}
         <FeedbackLink />

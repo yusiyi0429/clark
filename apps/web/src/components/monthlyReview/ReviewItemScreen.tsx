@@ -144,9 +144,9 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
           </div> : null}
 
           <section className={r.goal} aria-label="本月目标">
-            <h2>{item.subjectType === "battlefield" ? "PO · " : ""}{month} 月目标</h2>
+            <h2>{item.subjectType === "battlefield" ? "战场 · " : ""}{month} 月目标</h2>
             {item.target ? <p>{item.target}</p> : <p className={r.muted}>{month} 月没有签发的目标，按实际推进情况复盘。</p>}
-            <h2>{item.subjectType === "battlefield" ? "LTO · " : ""}六个月目标</h2>
+            <h2>{item.subjectType === "battlefield" ? "战场 · " : ""}六个月目标</h2>
             <p className={r.muted}>{item.sixMonthOutcome || "未填写"}</p>
           </section>
 
@@ -188,7 +188,7 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
           </dl> : null}
 
           {editable ? <div className={r.bar}>
-            <p className={`${s.hint} ${r.hint}`}>可以直接改，也可以在右边和你的 Agent 聊：上传你手写的复盘（PDF / Word / Markdown），它会按材料给每一栏改写建议，你点「采用」才会写进来。</p>
+            <p className={`${s.hint} ${r.hint}`}>可以直接改，也可以在右边和天枢聊：上传你手写的复盘（PDF / Word / Markdown），它会按材料给每一栏改写建议，你点「采用」才会写进来。</p>
             {dirtyFields.length ? <Button variant="ghost" className={s.secondary} isDisabled={pending} onPress={() => void save("已保存。")}>保存</Button> : null}
             {submitAction ? <Button variant="primary" className={s.primary} isDisabled={pending} onPress={() => void submit()}>{pending ? "正在提交…" : item.status === "returned" ? "重新提交" : "提交复盘"}</Button> : null}
           </div> : null}

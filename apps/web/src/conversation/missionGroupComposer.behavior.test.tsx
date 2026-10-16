@@ -100,7 +100,7 @@ describe("任务卡群组输入行为", () => {
     remount(); group(groupProps({ viewerId: "ceo" })); expect(harness.field.value).toBe("CEO 的草稿");
   });
 
-  it("同一人同一卡在事项群组与我的 Agent 间切换，分别保留公开与私聊草稿", () => {
+  it("同一人同一卡在事项群组与天枢间切换，分别保留公开与私聊草稿", () => {
     const props = groupProps(); group(props); type("准备公开讨论");
     remount(); agent(); expect(harness.field.value).toBe(""); type("仅自己梳理风险");
     remount(); group(props); expect(harness.field.value).toBe("准备公开讨论");

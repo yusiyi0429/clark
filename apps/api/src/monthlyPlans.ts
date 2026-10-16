@@ -112,6 +112,30 @@ function checkableItemIds(row: Pick<MonthlyPlanRow, "battlefields" | "capabiliti
   ];
 }
 
+/**
+ * 一次保存里内容真正变了的核对项：公司结果变了 → company；某个战场 / 能力的结果变了 → 只有它；
+ * 待办按条比较（标题、负责人、截止、战场、来源等任何字段变了）。没出现在请求里的类别不算变。
+ */
+export function changedCheckableItemIds(
+  row: Pick<MonthlyPlanRow, "company_outcome" | "battlefields" | "capabilities" | "todos">,
+  next: { companyOutcome?: string; battlefields?: { battlefieldId: string; outcome: string }[]; capabilities?: { capabilityId: string; outcome: string }[]; todos?: TMonthlyPlanTodo[] },
+): Set<string> {
+  const changed = new Set<string>();
+  if (next.companyOutcome !== undefined && next.companyOutcome !== row.company_outcome) changed.add("company");
+  for (const item of next.battlefields ?? []) {
+    if (row.battlefields.find((old) => old.battlefieldId === item.battlefieldId)?.outcome !== item.outcome) changed.add(`battlefield:${item.battlefieldId}`);
+  }
+  for (const item of next.capabilities ?? []) {
+    if (row.capabilities.find((old) => old.capabilityId === item.capabilityId)?.outcome !== item.outcome) changed.add(`capability:${item.capabilityId}`);
+  }
+  const fingerprint = (todo: TMonthlyPlanTodo) => JSON.stringify(Object.entries(todo).filter(([, value]) => value !== undefined).sort(([a], [b]) => a.localeCompare(b)));
+  for (const todo of next.todos ?? []) {
+    const old = row.todos.find((item) => item.id === todo.id);
+    if (!old || fingerprint(old) !== fingerprint(todo)) changed.add(`todo:${todo.id}`);
+  }
+  return changed;
+}
+
 export function projectMonthlyFeedback(feedback: StoredMonthlyFeedback): TMonthlyPlanFeedback {
   const { requestFingerprint: _requestFingerprint, ...visible } = feedback;
   return visible;
@@ -301,15 +325,10 @@ export async function executeUpdateMonthlyPlanDraft(
         return planError(400, "INVALID_CHECKED_ITEM", `核对项不存在: ${bad}`, { checkedItemIds: "unknown item" });
       }
     }
-    // 被编辑的字段重新回到未核对；被删除条目的旧核对一并失效
-    const clearedPrefixes = [
-      ...(input.companyOutcome !== undefined ? ["company"] : []),
-      ...(input.battlefields !== undefined ? ["battlefield:"] : []),
-      ...(input.capabilities !== undefined ? ["capability:"] : []),
-      ...(input.todos !== undefined ? ["todo:"] : []),
-    ];
+    // 内容真正变了的条目重新回到未核对（按条目，不按整类：改一个战场不连累其他战场的确认）；被删除条目的旧核对一并失效
+    const cleared = changedCheckableItemIds(row, { companyOutcome: input.companyOutcome, battlefields: input.battlefields, capabilities: input.capabilities, todos: nextTodos });
     const checkedItemIds = (input.checkedItemIds ?? row.negotiation.checkedItemIds)
-      .filter((itemId) => !clearedPrefixes.some((prefix) => itemId === prefix || itemId.startsWith(prefix)))
+      .filter((itemId) => !cleared.has(itemId))
       .filter((itemId) => allowed.has(itemId));
 
     const now = new Date().toISOString();

@@ -1,7 +1,9 @@
 /*
- * 听写控件（conversation/DictationControls.tsx），照 ChatGPT 的听写：✕ · 撑满中间的一排点 · ■ · ↑，钮都是圆的。
+ * 听写控件（conversation/DictationControls.tsx）：文字为主、指示为辅。
+ *   录音指示：8px 红点（#e5484d）1.2 秒呼吸一次（减少动效时常亮）+ 计时 0:12（12px 等宽灰字）
+ *   声波：18 根、2px 宽、间距 2（共约 70px），高 2–10px，灰色、透明度 0.45；不说话时是一条细线
+ *   钮：✕ ■ ↑ 都是圆的，大小跟所在输入条的钮一样：--dictation-size（二级页 36，首页 44）
  * 放在二级页输入条里时读 --tone-*（跟着频道换色）；放在首页输入条里时读那边给的 --dictation-*。
- * 钮的大小跟所在输入条的钮一样：--dictation-size（二级页 36，首页 44）。
  */
 
 .controls {
@@ -16,34 +18,59 @@
   min-width: 0;
 }
 
-/*
- * 一排点撑满中间：安静时是一条平的虚线，说话时按音量拉高成小竖条。最新的在最右边，
- * 地方不够时从左边截掉旧的（靠右排、左边溢出隐藏）。
- */
-.dots {
-  display: flex;
-  flex: 1 1 auto;
-  justify-content: flex-end;
+/* 指示 + 声波：在左边（二级页底行）或者 ■ 的左边（首页输入条），把钮推到右边。 */
+.meter {
+  display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: 3px;
-  min-width: 0;
-  height: 24px;
-  padding: 0 6px;
-  overflow: hidden;
+  gap: 7px;
+  margin-right: auto;
+  padding: 0 6px 0 8px;
   color: var(--ink);
 }
 
-.dots i {
+.dot {
   flex: none;
-  width: 3px;
-  min-height: 3px;
-  border-radius: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e5484d;
+  animation: breathe 1200ms ease-in-out infinite;
+}
+
+.clock {
+  min-width: 28px;
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+
+.wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: 70px;
+  height: 12px;
+  overflow: hidden;
+  color: #8a909a;
+  opacity: 0.45;
+}
+
+.wave i {
+  flex: none;
+  width: 2px;
+  min-height: 2px;
+  border-radius: 1px;
   background: currentColor;
-  opacity: 0.75;
   transition: height 90ms linear;
 }
 
-.controls[data-phase='transcribing'] .dots i { opacity: 0.35; }
+/* 还没打开麦克风 / 收尾中：指示淡一点、红点不动。 */
+.controls[data-phase='starting'] .dot,
+.controls[data-phase='finishing'] .dot { animation: none; opacity: 0.45; }
+.controls[data-phase='finishing'] .wave { opacity: 0.25; }
 
 .status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
@@ -71,7 +98,7 @@
 .button.button[data-disabled='true'] { cursor: default; opacity: 0.55; }
 .button.button:focus-visible { outline: 2px solid var(--strong); outline-offset: 2px; }
 
-/* 没听清、没授权这类一句话：挂在输入条最上面那一行（附件条那里），下次开口或打字就消失。 */
+/* 没听清、没授权、改成说完再转这类一句话：挂在输入条最上面那一行（附件条那里），下次开口或打字就消失。 */
 .error {
   flex: 1 1 auto;
   min-width: 0;
@@ -82,11 +109,54 @@
   line-height: 18px;
 }
 
+/*
+ * 下划线镜像层（conversation/DictationMirror.tsx）：叠在 textarea 上，排版属性由脚本照抄 textarea，
+ * 字透明、只画下划线；不接鼠标。整理中下划线轻轻明暗（「正在整理」），减少动效时不动。
+ */
+.mirror {
+  position: absolute;
+  z-index: 1;
+  margin: 0;
+  overflow: hidden;
+  border-style: solid;
+  border-color: transparent;
+  background: transparent;
+  color: transparent;
+  white-space: pre-wrap;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.marked {
+  text-decoration-line: underline;
+  text-decoration-color: var(--dictation-underline, #9aa1ad);
+  text-decoration-thickness: 1.5px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 4px;
+}
+
+.mirror[data-polishing] .marked { animation: polishing 1100ms ease-in-out infinite; }
+
+/* 整理替换进来的那段：盖一层输入框底色（--dictation-veil，脚本照抄），160ms 褪成透明 = 新字轻淡入；不动排版、不动光标。 */
+.fresh {
+  background-color: transparent;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  animation: veil 160ms ease-out both;
+}
+
 .spin { animation: spin 900ms linear infinite; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes veil { from { background-color: color-mix(in srgb, var(--dictation-veil, transparent) 82%, transparent); } to { background-color: transparent; } }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes polishing { 0%, 100% { text-decoration-color: var(--dictation-underline, #9aa1ad); } 50% { text-decoration-color: color-mix(in srgb, var(--dictation-underline, #9aa1ad) 35%, transparent); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .dots i { transition: none; }
+  .wave i { transition: none; }
+  .dot { animation: none; }
   .spin { animation: none; }
+  .mirror[data-polishing] .marked { animation: none; }
+  .fresh { animation: none; }
 }

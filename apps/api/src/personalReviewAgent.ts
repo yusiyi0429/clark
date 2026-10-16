@@ -10,7 +10,7 @@ export const PERSONAL_REVIEW_WRITING_REQUIREMENTS = `对照本人 Mission 的承
 四部分每栏含 text 与 sources：
 overall（本周期总体结果）：对照承诺，写实际达成与未达成。
 judgments（关键经营判断）：串起结果、证据、差距、原因和判断变化。
-nextFocus（下周期经营重点）：只写 Formation Input，作为下轮定目标的输入，不替本人写下月 Mission、PO、任务指派或排期。
+nextFocus（下周期经营重点）：只写 Formation Input，作为下轮定目标的输入，不替本人写下月 Mission、本月目标、任务指派或排期。
 escalations（待上层决策事项）：写需上层拍板的具体问题；没有可以留空。
 材料里没有的写「缺少材料」，不编造结果、数字或来源。sources 只能引用输入中真实的 Mission、进展日期、附件或消息。`;
 

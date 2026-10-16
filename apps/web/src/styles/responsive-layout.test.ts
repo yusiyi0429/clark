@@ -56,7 +56,8 @@ describe("responsive workspace CSS", () => {
     const source = css("./config.module.css");
     expect(source).toContain("max-width:2448px");
     expect(source).toContain(".grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;max-width:2448px;align-items:start}");
-    expect(source).toContain("height:44px;border:0;outline:1px solid #d9dde5;border-radius:10px");
+    // 输入框的边、圆角、底色、聚焦走 globals.css 的统一输入框样式（--field-*），页面里只留 44 高与左右内边距。
+    expect(source).toContain(".field input,.field select{width:100%;height:44px;padding:0 16px}");
     expect(source).toContain(".grid{grid-template-columns:minmax(0,1fr)}.tall,.ltco{height:auto}");
     // 卡片随内容长高时，页脚和上传区回到文档流，不再压到输入框上。
     expect(source).toContain(".cardFooter,.upload{position:static}");
@@ -77,6 +78,12 @@ describe("responsive workspace CSS", () => {
     expect(source).toContain("align-items:stretch");
   });
 
+  it("lets a lone meeting-level judgment group span the two-column pair row", () => {
+    const source = css("./meeting-workspace.module.css");
+    expect(source).toContain(".pairRow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))");
+    expect(source).toContain(".pairRow>:only-child{grid-column:1/-1}");
+  });
+
   it("keeps both scheduled-meeting side panels reachable below 1000px", () => {
     const source = css("./meeting-workspace.module.css");
     expect(source).not.toContain('.advisorShell>:global([data-testid="meeting-chat-sidebar"]){display:none}');
@@ -85,11 +92,45 @@ describe("responsive workspace CSS", () => {
     expect(source.match(/width:var\(--rail-stub\);min-width:var\(--rail-stub\)/g)).toBeNull();
   });
 
+  it("keeps the meeting outline sticky inside the single .ts-detail scroller and never turns a reading container into a nested scroll box", () => {
+    const source = css("./meeting-workspace.module.css");
+    // 宽屏（面板够宽、屏幕不矮）：目录在左列吸顶，跟着阅读页 .ts-detail 滚动，让出页头。
+    expect(source).toContain("@container pane (min-width: 940px)");
+    expect(source).toContain("@media (min-height: 600px)");
+    expect(source).toMatch(/\.readingGrid\[data-toc=true\]>\.tocAside\{position:sticky;top:calc\(var\(--detail-header-height,48px\) \+ 14px\)/);
+    expect(source).toContain(".reading>.pane[data-toc=true]{max-width:calc(var(--material-column,656px) + 236px)}");
+    // 窄屏 / 矮屏 / 放大：零高度的吸顶条里一颗「目录」钮，不占正文高度；点开的目录浮在正文上面。
+    expect(source).toMatch(/\.tocBar\{position:sticky;[^}]*height:0\}/);
+    expect(source).toMatch(/\.tocPanel\{position:absolute;/);
+    // 阅读容器一律不设 overflow / overscroll（0b063c5：无溢出的内层滚动框会截住滚轮）。
+    const rulesOf = (text: string, name: string) => [...text.matchAll(new RegExp(`\\.${name}(?![\\w-])[^{]*\\{([^}]*)\\}`, "g"))].map((match) => match[1]);
+    const noNestedScroll = (text: string, names: string[]) => {
+      for (const name of names) {
+        const rules = rulesOf(text, name);
+        expect(rules.length, name).toBeGreaterThan(0);
+        for (const rule of rules) {
+          expect(rule, name).not.toMatch(/overflow(-y)?\s*:\s*(auto|scroll|hidden)/);
+          expect(rule, name).not.toMatch(/overscroll-behavior/);
+        }
+      }
+    };
+    noNestedScroll(source, ["reading", "pane", "readingGrid", "readingMain", "material", "decisionWorkspace", "overview", "issueList", "issueBlock", "issueSection", "meetingLevel", "tocAside", "tocBar"]);
+    const shared = css("./decision-workspace.module.css");
+    noNestedScroll(shared, ["layers", "layer", "entry", "inactive", "sourceRow"]);
+    // 只有浮在上面的「依据」抽屉自己滚动。
+    expect(shared).toMatch(/\.drawer\{position:absolute;/);
+    expect(shared).toMatch(/\.drawerBody\{[^}]*overflow-y:auto;overscroll-behavior:contain/);
+    noNestedScroll(css("./issue-workspace.module.css"), ["history"]);
+  });
+
   it("renders the issue workspace inside the shell panel with clark's header and reading column", () => {
     const source = css("./issue-workspace.module.css");
     expect(source).toContain(".workspace{display:flex;flex-direction:column;flex:1;height:100%;min-height:0;overflow:hidden;border-radius:inherit;background:#f8f8fa");
     expect(source).toContain("min-height:96px;box-sizing:border-box;padding:25px 27px;background:linear-gradient(145deg,#ffffffa6,#eef1f6a3)");
-    expect(source).toContain(".reading{position:relative;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:24px 28px 48px;min-height:0;line-height:1.8;font-size:16px}");
+    // 正文随 DetailFrame 的 .ts-detail 一起滚动：阅读列不能再是没有溢出的内层滚动框，否则会截住滚轮（0b063c5 修复）。
+    expect(source).toContain(".reading{position:relative;padding:24px 28px 48px;min-height:0;line-height:1.8;font-size:16px}");
+    expect(source).not.toMatch(/\.reading\{[^}]*overflow:auto/);
+    expect(source).not.toMatch(/\.reading\{[^}]*overscroll-behavior/);
     expect(source).not.toContain("position:fixed");
   });
 
@@ -103,6 +144,11 @@ describe("responsive workspace CSS", () => {
     const source = css("./app-shell.module.css");
     expect(source).toContain(".expandedScroll[data-radar-reader-layout=true]{margin:0;padding:0;overflow:hidden;display:flex;min-width:0}");
     expect(source).toContain(".shell[data-topic-rail=true] .expandedScroll[data-radar-reader-layout=true]{padding:0}");
+  });
+
+  it("lets the DetailFrame reader own the signal page's scroll so wheel and trackpad are not swallowed", () => {
+    const source = css("./app-shell.module.css");
+    expect(source).toContain(":global(.ts-detail)>.expandedScroll[data-radar-reader-layout=true],:global(.ts-detail)>.expandedScroll[data-radar-reader-layout=true]>[data-radar-reader]{overflow:visible;overscroll-behavior:auto;flex:none;height:auto}");
   });
 
   it("keeps the radar list and reader on clark's single 772px reading column", () => {

@@ -116,11 +116,11 @@ export function MissionOverviewScreen({
       />
       <div className={w.expandedScroll}>
         <div className={m.content}>
-          <p className={m.intro}>查看本月 DRI 的结果承诺与讨论草稿，以及每条 Mission 与战场、能力域和月度 PO 的关系。</p>
+          <p className={m.intro}>查看本月负责人的结果承诺与讨论草稿，以及每条 Mission 与战场、能力域和本月目标的关系。</p>
 
           <div className={m.summary} data-testid="mission-summary">
             <Stat value={stats.missions} label={statLabel} />
-            <Stat value={stats.owners} label="DRI" tone="owner" />
+            <Stat value={stats.owners} label="负责人" tone="owner" />
             <Stat value={stats.battlefields} label="关联战场" tone="battlefield" />
             <Stat value={stats.capabilities} label="主要能力域" tone="capability" />
           </div>
@@ -137,7 +137,7 @@ export function MissionOverviewScreen({
                 onPick={(battlefieldId) => pick({ battlefieldId })}
               />
               <FilterGroup label="能力域" all="全部能力域" options={capabilityOptions} value={filters.capabilityId} onPick={(capabilityId) => pick({ capabilityId })} />
-              <FilterGroup label="DRI" all="全部 DRI" options={ownerOptions} value={filters.ownerId} onPick={(ownerId) => pick({ ownerId })} />
+              <FilterGroup label="负责人" all="全部负责人" options={ownerOptions} value={filters.ownerId} onPick={(ownerId) => pick({ ownerId })} />
             </section>
 
             <section className={m.listCard} aria-label="Mission 列表">
@@ -166,7 +166,7 @@ export function MissionOverviewScreen({
                 {filtered.length ? null : <p className={m.empty}>当前筛选没有 Mission。</p>}
               </div>
               <div className={m.footer}>
-                <span className={m.footerHint}>共 {filtered.length} 条 Mission · 执行进度留在 DRI 流程</span>
+                <span className={m.footerHint}>共 {filtered.length} 条 Mission · 执行进度留在负责人流程</span>
                 <button type="button" className={m.primary} onClick={() => navigate("/config/missions")}>
                   编辑 Mission 配置
                   <ArrowRight aria-hidden="true" />

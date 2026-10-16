@@ -17,7 +17,7 @@
   white-space: nowrap;
 }
 
-.slotDay { font-size: 12.5px; font-weight: 500; line-height: 20px; color: #7c889b; }
+.slotDay { font-size: 13px; font-weight: 500; line-height: 20px; color: #7c889b; }
 
 .slotTime {
   font-size: 16px;
@@ -27,6 +27,61 @@
   color: #1f2a3d;
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * 阶段（data-timeline）：日子那一段换成阶段那几个字。一个颜色走全站 —— 通知栏黑卡的左条是同一组颜色。
+ *   即将开  橙点 + 橙色小字相对时间（「还有 3 小时」「明天」）
+ *   进行中  红点呼吸 +「会议中 mm:ss」
+ *   已结束  灰色对勾 + 灰字「已结束 · 10/8」，时段本身也变灰
+ */
+.slot {
+  --meeting-upcoming: #f2aa59;
+  --meeting-upcoming-ink: #b25d0c;
+  --meeting-live: #e5484d;
+  --meeting-live-ink: #c5292f;
+  --meeting-ended: #98a2b0;
+  --meeting-ended-ink: #8a94a3;
+}
+
+.slotState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.slotDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--meeting-upcoming);
+}
+
+.slotMark { flex: none; color: var(--meeting-ended); }
+.slotWord { font-variant-numeric: tabular-nums; }
+.slotElapsed { font-weight: 600; }
+
+.slot[data-timeline='upcoming'] .slotWord { color: var(--meeting-upcoming-ink); }
+.slot[data-timeline='live'] .slotDot { background: var(--meeting-live); animation: livePulse 1.6s ease-in-out infinite; }
+.slot[data-timeline='live'] .slotWord { color: var(--meeting-live-ink); }
+.slot[data-timeline='ended'] .slotWord { color: var(--meeting-ended-ink); }
+.slot[data-timeline='ended'] .slotTime { font-weight: 500; color: var(--meeting-ended-ink); }
+
+@keyframes livePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(229 72 77 / 45%); }
+  50% { box-shadow: 0 0 0 5px rgb(229 72 77 / 0%); opacity: 0.75; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slot[data-timeline='live'] .slotDot { animation: none; }
+}
+
+:global([data-reduce-motion='true']) .slot[data-timeline='live'] .slotDot { animation: none; }
 
 .sr {
   position: absolute;
@@ -41,13 +96,13 @@
 
 @media (max-width: 1250px) {
   .slot { gap: 6px; }
-  .slotDay { font-size: 11.5px; line-height: 18px; }
+  .slotDay, .slotState { font-size: 11.5px; line-height: 18px; }
   .slotTime { font-size: 14.5px; line-height: 18px; }
 }
 
 /* 手机上那一行只放得下时段：日子退场（和眉题一样），几点到几点一个字不省。 */
 @media (max-width: 959px) {
-  .slotDay { display: none; }
+  .slotDay, .slotWord { display: none; }
 }
 
 /*
@@ -111,7 +166,8 @@
 .press.press:hover { background: rgb(255 255 255 / 45%); }
 .press.press:focus-visible { outline: 2px solid #3a83f7; outline-offset: 2px; }
 
-.capsule[data-phase='idle'] .press.press { gap: 8px; color: #2f6fd6; }
+.capsule[data-phase='idle'] .press.press { gap: 8px; background: #f2aa59; color: #3b2208; }
+.capsule[data-phase='idle'] .press.press:hover { background: #eb9d45; }
 .capsule[data-phase='live'] .press.press { justify-content: flex-start; gap: 10px; padding: 0 14px 0 20px; }
 .capsule[data-phase='ended'] .still { justify-content: flex-start; gap: 10px; padding: 0 20px; color: #56657a; }
 
@@ -119,14 +175,14 @@
 .capsule[data-phase='live'] .press.press > *,
 .capsule[data-phase='ended'] .still > * { animation: contentIn 260ms 120ms ease-out both; }
 
-/* 会中那颗点：和 Co-Agent 胶囊同一个蓝，不闪 —— 走着的秒数已经在说「在开」。 */
+/* 会中那颗点：和页头时间段、通知栏黑卡同一个红，呼吸（减少动效时常亮）。 */
 .dot {
   flex: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #0011fd;
-  box-shadow: 0 0 0 4px rgb(0 17 253 / 10%);
+  background: #e5484d;
+  animation: livePulse 1.6s ease-in-out infinite;
 }
 
 /* 一行：小字在前、数字在后，和页头胶囊里眉题在标题前面同一个读法。 */
@@ -139,7 +195,7 @@
   line-height: 20px;
 }
 
-.caption { font-size: 12.5px; font-weight: 500; line-height: 20px; color: #7c889b; }
+.caption { font-size: 13px; font-weight: 500; line-height: 20px; color: #7c889b; }
 .time { font-size: 16px; font-weight: 600; line-height: 20px; font-variant-numeric: tabular-nums; }
 .capsule[data-phase='ended'] .time { font-weight: 500; color: #56657a; }
 
@@ -184,10 +240,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .dot { animation: none; }
   .capsule::before, .press.press { transition: none; }
   .capsule[data-phase='live'] .press.press > *, .capsule[data-phase='ended'] .still > * { animation: none; }
 }
 
+:global([data-reduce-motion='true']) .dot { animation: none; }
 :global([data-reduce-motion='true']) .capsule::before,
 :global([data-reduce-motion='true']) .press.press { transition: none; }
 :global([data-reduce-motion='true']) .capsule[data-phase='live'] .press.press > *,
@@ -199,4 +257,9 @@
 
 @media (prefers-contrast: more) {
   .capsule { box-shadow: inset 0 0 0 1px #5b6b85; }
+}
+
+/* 点触下限（手机端规范 §2 / §3.5）：计时弹层里的「结束会议」高 44、最小宽 72；胶囊本身手持下已是 44 高。鼠标的电脑不变。 */
+@media (max-width: 959px), (pointer: coarse) {
+  .end.end { min-height: var(--touch-hit, 44px); min-width: 72px; font-size: 14px; }
 }

@@ -77,7 +77,21 @@ export const ConversationMessageRequest = Type.Object(
     attachments: Type.Optional(Type.Array(ConversationAttachmentRef, { maxItems: 10 })),
     /** 工单 09：页面左侧正在看的那份材料；必须属于这个 scope 的对象。 */
     viewingMaterialId: Type.Optional(Type.String({ format: "uuid" })),
+    /**
+     * 「继续」：接着上一轮没完成的回答（那一轮的 runId）。有已写出的部分时从断点续写，没有时用已查到的材料重答；
+     * 只能接这个人在这个页面自己的那一轮。
+     */
+    resumeRunId: Type.Optional(Type.String({ format: "uuid" })),
   },
+  { additionalProperties: false },
+);
+
+/**
+ * 这一轮实际用了备用模型，或走了恢复路径（重试、从断点续写、精简历史）：回答末尾一行很淡的说明。
+ * text 是那一行（不写模型名、不写技术细节）；detail 是悬停时更具体一点的说明（同样不写英文原文）。
+ */
+export const ConversationRecoveryNote = Type.Object(
+  { text: Type.String({ minLength: 1, maxLength: 120 }), detail: Type.String({ maxLength: 400 }) },
   { additionalProperties: false },
 );
 
@@ -90,12 +104,43 @@ export const ConversationMessage = Type.Object(
     attachments: Type.Array(ConversationAttachmentInfo),
     runId: Type.String(),
     createdAt: Type.String({ format: "date-time" }),
+    /** 只在助手回答上、且这一轮走过恢复时才有。 */
+    recoveryNote: Type.Optional(ConversationRecoveryNote),
   },
   { additionalProperties: false },
 );
 
 export const ConversationHistory = Type.Object(
-  { scope: ConversationScope, messages: Type.Array(ConversationMessage) },
+  {
+    scope: ConversationScope,
+    messages: Type.Array(ConversationMessage),
+    /** 这个人在这个页面已归档、有内容的历史对话条数（当前对话为空时界面据此给一行「查看历史对话」）。 */
+    archivedCount: Type.Optional(Type.Integer({ minimum: 0 })),
+  },
+  { additionalProperties: false },
+);
+
+/** 已归档的一段对话：首问原文（前 4000 字，含引用与页面前缀的原样格式；界面解析后取前 20 字作标题）、起止时间与条数。 */
+export const ArchivedConversation = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    firstQuestion: Type.String(),
+    startedAt: Type.String({ format: "date-time" }),
+    lastAt: Type.String({ format: "date-time" }),
+    archivedAt: Type.String({ format: "date-time" }),
+    messageCount: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const ArchivedConversationList = Type.Object(
+  { conversations: Type.Array(ArchivedConversation, { maxItems: 200 }) },
+  { additionalProperties: false },
+);
+
+/** 新建对话 / 切回一段历史对话之后，当前对话是哪一条；archived：原来那条有内容、已归档。 */
+export const ConversationSwitchResponse = Type.Object(
+  { conversationId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]), archived: Type.Boolean() },
   { additionalProperties: false },
 );
 
@@ -115,6 +160,40 @@ export const ConversationSseEvent = Type.Union([
       toolCallId: Type.String(),
       name: Type.String(),
       isError: Type.Optional(Type.Boolean()),
+      /** 工具开始时给界面的一行进度（查什么，不含工具名）。 */
+      label: Type.Optional(Type.String()),
+      /** 工具结束时这一步实际读到了什么（条数、来源标题、企业知识节名），由系统按工具结果生成。 */
+      detail: Type.Optional(Type.String()),
+    },
+    { additionalProperties: false },
+  ),
+  /** 本轮档位：快答 / 检索问答 / 深度；检索问答与深度档带一句开场说明（notice），界面先显示它和预计用时。 */
+  Type.Object(
+    {
+      ...StreamBase,
+      type: Type.Literal("route"),
+      tier: Type.Union([Type.Literal("quick"), Type.Literal("grounded"), Type.Literal("deep")]),
+      source: Type.Union([Type.Literal("rule"), Type.Literal("model"), Type.Literal("fallback")]),
+      expectSeconds: Type.Integer({ minimum: 0 }),
+      timeoutMs: Type.Integer({ minimum: 0 }),
+      notice: Type.Optional(Type.String()),
+      /** 本档的主答模型 id（只用于日志）。 */
+      model: Type.Optional(Type.String()),
+    },
+    { additionalProperties: false },
+  ),
+  /**
+   * 模型在思考。summary：推理摘要里的一句中文要点（英文摘要不下发）；delta：思考摘要的中文正文，逐段追加（英文段落已译成中文）。
+   */
+  Type.Object({ ...StreamBase, type: Type.Literal("thinking"), summary: Type.Optional(Type.String()), delta: Type.Optional(Type.String()) }, { additionalProperties: false }),
+  /** 非深度档中途升级：回答超过约 20 秒还没出正文，或模型连续多轮检索；notice 是给界面的整句。 */
+  Type.Object(
+    {
+      ...StreamBase,
+      type: Type.Literal("escalation"),
+      reason: Type.Union([Type.Literal("slow"), Type.Literal("retrieval")]),
+      expectSeconds: Type.Integer({ minimum: 0 }),
+      notice: Type.String(),
     },
     { additionalProperties: false },
   ),
@@ -147,8 +226,35 @@ export const ConversationSseEvent = Type.Union([
     },
     { additionalProperties: false },
   ),
+  /**
+   * 上游出错后正在自动恢复（同档重试、换备用模型、精简历史重试、从断点续写）：notice 是给进度行的一句中文，
+   * attempt 是这一步的第几次尝试。恢复成功时正文接着流入，不另发事件。
+   */
   Type.Object(
-    { ...StreamBase, type: Type.Literal("error"), code: Type.String(), message: Type.String() },
+    {
+      ...StreamBase,
+      type: Type.Literal("recovery"),
+      reason: Type.String(),
+      action: Type.Union([Type.Literal("retry"), Type.Literal("fallback"), Type.Literal("trim"), Type.Literal("continue"), Type.Literal("skip")]),
+      attempt: Type.Integer({ minimum: 1 }),
+      notice: Type.String(),
+    },
+    { additionalProperties: false },
+  ),
+  /**
+   * 这一轮没能完成。message 是给一号位的中文说明（原因 + 已保留什么 + 下一步）；
+   * resume：continue = 有已写出的部分，可以从断点续写；retry = 没写出正文，可以用已查到的材料重答；没有 = 不建议直接再试（如凭证失效）。
+   * partial：已写出的部分已存进这条对话（读回历史就能看到）。
+   */
+  Type.Object(
+    {
+      ...StreamBase,
+      type: Type.Literal("error"),
+      code: Type.String(),
+      message: Type.String(),
+      resume: Type.Optional(Type.Union([Type.Literal("continue"), Type.Literal("retry")])),
+      partial: Type.Optional(Type.Boolean()),
+    },
     { additionalProperties: false },
   ),
   Type.Object(
@@ -156,6 +262,8 @@ export const ConversationSseEvent = Type.Union([
       ...StreamBase,
       type: Type.Literal("done"),
       status: Type.Union([Type.Literal("completed"), Type.Literal("aborted")]),
+      /** 这一轮走过恢复：与存进回答的那行说明相同。 */
+      recoveryNote: Type.Optional(ConversationRecoveryNote),
     },
     { additionalProperties: false },
   ),
@@ -171,4 +279,8 @@ export type TConversationAttachmentUploadResponse = Static<typeof ConversationAt
 export type TConversationMessageRequest = Static<typeof ConversationMessageRequest>;
 export type TConversationMessage = Static<typeof ConversationMessage>;
 export type TConversationHistory = Static<typeof ConversationHistory>;
+export type TConversationRecoveryNote = Static<typeof ConversationRecoveryNote>;
+export type TArchivedConversation = Static<typeof ArchivedConversation>;
+export type TArchivedConversationList = Static<typeof ArchivedConversationList>;
+export type TConversationSwitchResponse = Static<typeof ConversationSwitchResponse>;
 export type TConversationSseEvent = Static<typeof ConversationSseEvent>;

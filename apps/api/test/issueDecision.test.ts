@@ -209,6 +209,28 @@ describe("Issue research lifecycle", () => {
     });
   });
 
+  it("times out a hung run so the card offers retry instead of staying running", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      let aborted = false;
+      const hung: ResearchRunner = (_input, signal) => new Promise(() => { signal.addEventListener("abort", () => { aborted = true; }); });
+      const research = createResearchService({ pool, runner: hung, researchTimeoutMs: 50 });
+      const { app } = await setupWithResearch(pool, hung, research);
+      try {
+        const created = await postDri(app, { ...DRI_ISSUE, externalId: "ticket08-timeout" });
+        const id = created.json().cards[0].objectRef.id as string;
+        await research.idle();
+        const cookie = await login(app, db);
+        const card = await issueCard(app, cookie, id);
+        expect(card.payload.research).toMatchObject({ status: "failed", error: { code: "research_failed", message: "预研超时，请重试" } });
+        expect(card.actions.map((a) => a.actionType)).toContain("issue.retry_research");
+        expect(aborted).toBe(true);
+      } finally {
+        await app.close();
+      }
+    });
+  });
+
   it("rejects a candidate that violates the strict ResearchDoc schema", async () => {
     await createTestDb(async ({ db, pool }) => {
       await migrate(db);
@@ -426,7 +448,7 @@ describe("CEO direct decision", () => {
           }],
         });
         expect(card.payload.receipts[0].revokedAt).toBeUndefined();
-        expect(card.actions.map((a: { actionType: string }) => a.actionType)).toEqual(["issue.revoke_receipt"]);
+        expect(card.actions.map((a: { actionType: string }) => a.actionType)).toEqual(["issue.assign", "issue.revoke_receipt"]);
 
         const replay = await execute(app, cookie, decide.actionId, input);
         expect(replay.statusCode).toBe(200);

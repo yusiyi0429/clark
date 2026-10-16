@@ -98,7 +98,9 @@ describe("战场管理页 CSS 基线", () => {
   it("行内编辑/删除图标与编辑弹层取设计色值", () => {
     expect(source).toContain(".rowIcon{display:grid;place-items:center;flex:none;width:24px;height:24px");
     expect(source).toContain(".save{background:#007aff");
-    expect(source).toContain("height:36px;border:0;outline:1px solid #d9dde5;border-radius:9px;background:#f7f8fa");
+    // 边、圆角、底色、聚焦走 globals.css 的统一输入框样式，这里只管宽高。
+    expect(source).toContain(".field input,.field select{width:100%;height:36px;padding:0 14px}");
+    expect(source).not.toMatch(/.field[^{]*:focus{outline:2px/);
   });
 
   it("选中态、紧急度圆点与删除确认弹层取设计色值", () => {
@@ -113,7 +115,7 @@ describe("战场管理页 CSS 基线", () => {
   it("编辑弹层 420 宽，含战略锚点文本域与编号/顺序双列", () => {
     expect(source).toContain(".wide{left:186px;width:420px}");
     expect(source).toContain(".pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}");
-    expect(source).toContain(".field textarea{box-sizing:border-box;width:100%;min-height:72px");
+    expect(source).toContain(".field textarea{width:100%;min-height:72px}");
   });
 });
 

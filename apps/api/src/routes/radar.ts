@@ -2,6 +2,7 @@ import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
 import { RadarScanResponse, SignalStateRequest, type TCardCollection } from "@warmap/contracts";
 import { getSignalCard, getSignalImageSource, listSignalCards, projectRadarCard, setSignalState } from "../signals.js";
+import { fetchProxiedImage } from "../signalCover.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
 export function registerRadarRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -12,7 +13,7 @@ export function registerRadarRoutes(app: AppInstance, ctx: RouteContext): void {
     index: Type.String({ pattern: "^[0-9]+$" }),
   }, { additionalProperties: false });
   app.get("/api/cards/radar", { preHandler: requireCEO }, async (): Promise<TCardCollection> => ({
-    cards: [await projectRadarCard(q, radar.providerStatus)],
+    cards: [await projectRadarCard(q, radar.providerStatus, ctx.now())],
   }));
 
   app.get("/api/cards/signals", { preHandler: requireCEO }, async (): Promise<TCardCollection> => ({
@@ -34,36 +35,18 @@ export function registerRadarRoutes(app: AppInstance, ctx: RouteContext): void {
     async (req, reply): Promise<FastifyReply> => {
       const image = await getSignalImageSource(q, req.params.id, Number(req.params.index));
       if (!image) return fail(reply, 404, "SIGNAL_IMAGE_NOT_FOUND", "原文图片不存在");
-      let source: Response;
-      try {
-        source = await fetch(image.url, {
-          headers: { "user-agent": "Mozilla/5.0 (compatible; WarMapRadar/1.0)", referer: image.referer },
-        });
-      } catch {
-        return fail(reply, 502, "SIGNAL_IMAGE_FETCH_FAILED", "原文图片抓取失败");
+      // 国内站多有 Referer 防盗链：由服务端带原文页做 Referer 去取（被拒再不带 Referer 重试），浏览器只访问同源地址。
+      const proxied = await fetchProxiedImage(image.url, image.referer);
+      if (!proxied.ok) {
+        const code = proxied.status === 413 ? "SIGNAL_IMAGE_TOO_LARGE" : proxied.status === 404 ? "SIGNAL_IMAGE_NOT_FOUND" : "SIGNAL_IMAGE_FETCH_FAILED";
+        return fail(reply.header("cache-control", "private, max-age=300"), proxied.status, code, proxied.message);
       }
-      const type = source.headers.get("content-type")?.split(";", 1)[0]?.toLowerCase();
-      if (!source.ok || !type || !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(type)) {
-        return fail(reply, 502, "SIGNAL_IMAGE_FETCH_FAILED", "原文图片不可用");
-      }
-      const limit = 10 * 1024 * 1024;
-      const declared = Number(source.headers.get("content-length"));
-      if (Number.isFinite(declared) && declared > limit) return fail(reply, 413, "SIGNAL_IMAGE_TOO_LARGE", "原文图片超过 10MiB");
-      const reader = source.body?.getReader();
-      if (!reader) return fail(reply, 502, "SIGNAL_IMAGE_FETCH_FAILED", "原文图片读取失败");
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      while (true) {
-        const next = await reader.read();
-        if (next.done) break;
-        size += next.value.byteLength;
-        if (size > limit) {
-          await reader.cancel();
-          return fail(reply, 413, "SIGNAL_IMAGE_TOO_LARGE", "原文图片超过 10MiB");
-        }
-        chunks.push(next.value);
-      }
-      return reply.header("content-type", type).header("cache-control", "private, max-age=3600").send(Buffer.concat(chunks));
+      // 登记过的原文图地址不会变：浏览器缓存一天，演示时来回切换不重复抓
+      return reply
+        .header("content-type", proxied.type)
+        .header("cache-control", "private, max-age=86400, immutable")
+        .header("x-content-type-options", "nosniff")
+        .send(proxied.body);
     },
   );
 

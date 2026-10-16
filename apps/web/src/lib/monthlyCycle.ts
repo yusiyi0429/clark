@@ -59,8 +59,8 @@ const STAGE: Record<TMonthlyCycle["stage"], string> = {
   personal_reviews: "收集个人复盘",
   unit_reviews: "战场复盘",
   company_summary: "公司复盘",
-  lto_decision: "LTO 审视",
-  period_plan: "制定 PO",
+  lto_decision: "长期目标审视",
+  period_plan: "制定本月目标",
   mission_cards: "任务卡讨论",
   done: "已签发",
 };

@@ -6,7 +6,8 @@
 .shell button{cursor:pointer;touch-action:manipulation}
 :where(.shell button:not([data-slot])){color:inherit;text-align:left}
 .shell button:not([data-slot]):disabled{cursor:default;opacity:.55}
-.shell button:not([data-slot]):focus-visible,.shell input:focus-visible{outline:3px solid #007aff88;outline-offset:4px}
+/* 文字输入的聚焦只换边色（globals.css 的统一输入框样式），这里的外框只给勾选 / 单选 / 滑块 / 文件 */
+.shell button:not([data-slot]):focus-visible,.shell input:is([type=checkbox],[type=radio],[type=range],[type=file]):focus-visible{outline:3px solid #007aff88;outline-offset:4px}
 :where(.shell h1,.shell h2,.shell h3,.shell p){margin:0}
 .mainArea{position:relative;min-width:0;min-height:0;overflow:hidden;border-radius:24px}
 .notificationArea{min-width:0;min-height:0;position:relative;z-index:5}
@@ -30,7 +31,10 @@
 .expandedScroll{overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;margin:0 22px 0;padding:8px 18px 128px;border-left:0;min-height:0;flex:1;scroll-behavior:smooth;scroll-padding-bottom:128px}
 .sectionIntro{font-size:18px;line-height:1.8;margin:10px 0 30px!important;max-width:660px}
 .contextNote,.empty{color:#888;font-size:13px;line-height:1.8;margin-top:22px!important}
-.noticeToast{position:fixed;bottom:26px;z-index:80;display:flex;align-items:center;gap:8px;background:#172b45ed;color:#fff;border:1px solid #ffffff26;border-radius:12px;padding:12px 16px;font-size:12px;backdrop-filter:blur(14px);animation:lineIn .2s;left:calc(var(--shell-edge) + 10px);right:auto;max-width:calc(var(--notice-width) - 20px)}
+.noticeToast{position:fixed;bottom:26px;z-index:80;display:flex;align-items:center;gap:8px;background:#172b45ed;color:#fff;border:1px solid #ffffff26;border-radius:12px;padding:12px 16px;font-size:13px;backdrop-filter:blur(14px);animation:lineIn .2s;left:calc(var(--shell-edge) + 10px);right:auto;max-width:calc(var(--notice-width) - 20px)}
+/* 提示里的「撤销」：低存在感的文字键。 */
+.toastAction{margin-left:4px;border:0;background:none;color:#9cc7ff;font-size:13px;padding:2px 6px;border-radius:6px;cursor:pointer;flex:none}
+.toastAction:hover{background:#ffffff14}
 @keyframes lineIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 
 /* 对话记录层（对话阶段重做内容；外框与 clark 同值） */
@@ -49,34 +53,71 @@
 .chatWelcome button{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:15px 0;width:100%;border:0;border-bottom:1px solid #ffffff1a;background:none;font-size:14px}
 .sheetHeader .chatBrand{display:flex;align-items:center;gap:11px}
 .chatBrandMark{width:30px;height:30px;flex:none;--brand-deep:#72a7ed;--brand-bright:#c1e3ff}
-.sheetHeader .chatBrand h2{margin:0;line-height:1.25;letter-spacing:.04em}
-.historySheet{left:calc(var(--main-start) + var(--chat-inset));right:calc(var(--shell-edge) + var(--chat-inset));height:calc(100dvh - clamp(72px,10vh,136px) - 16px);max-height:none;background:#252527;border-color:#ffffff24;border-radius:28px;box-shadow:0 24px 80px #10101826,inset 0 1px 0 #ffffff0b;animation:historyRise 240ms cubic-bezier(.2,0,0,1) both}
-.historySheet .sheetHeader{padding:16px 26px 19px;align-items:center;border-bottom-color:#ffffff0b}
-.historySheet .sheetScroll{padding:28px 36px 130px;flex:1;scroll-padding-bottom:130px}
-.historyContent{width:100%;max-width:720px;margin:0 auto}
-.historySheet .historyContent{padding-bottom:60px}
-.historySheet .chatBrandMark{width:27px;height:27px}
-.shell .historySheet .chatBrand h2{font-size:19px;font-weight:600;letter-spacing:.02em}
-.historyHeaderActions{display:flex;align-items:center;gap:8px}
-.historyHeaderActions>button{display:grid;place-items:center;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border:0;border-radius:50%;background:#ffffff12;color:#cdd4df}
-.historySheet[data-tone=light]{color:#25282e;border-color:#ffffffd9;box-shadow:0 24px 80px #1d293522,0 1px 3px #1d293510,inset 0 1px #fff}
-.historySheet[data-material=monthly]{background:linear-gradient(145deg,#fffcf5 0%,#ffffff 55%,#f7f1e4 100%)}
-.historySheet[data-material=meeting]{background:linear-gradient(145deg,#eef3f5 0%,#f7f9f8 55%,#eaf0ed 100%)}
-.historySheet[data-tone=light] .sheetHeader{border-bottom-color:#1d1d1f0f}
-.historySheet[data-tone=light] .sheetHeader>button,.historySheet[data-tone=light] .historyHeaderActions>button{background:#1d1d1f0a;color:#5c626d}
-.historySheet[data-tone=light] .sheetHandle{background:#1d1d1f2a}
-.historySheet[data-tone=light] .chatBrand small{color:#7b756c}
+.historySheet{left:calc(var(--main-start) + var(--chat-inset));right:calc(var(--shell-edge) + var(--chat-inset));height:calc(100dvh - clamp(72px,10vh,136px) - 16px);max-height:none;background:#252527;border-color:#ffffff24;border-radius:28px;box-shadow:0 24px 80px #10101826,inset 0 1px 0 #ffffff0b;animation:historyRise 340ms cubic-bezier(.22,1,.36,1) both}
+/* 没有页头横条（D1）：正文从顶部开始，上留白只让开两角那两颗圆键。 */
+.historySheet .sheetScroll{position:relative;padding:44px 36px 130px;flex:1;scroll-padding-bottom:130px}
+/* 两角的圆形液态玻璃键（D1）：半透明白底 + 模糊 + 细高光边；左上星标只是标识，右上收起。正文从它们下面滑过。 */
+/* 顶部磨砂渐隐：实的部分到圆键约 1/3 处（top 10 + 38/3 ≈ 23px），往下 20px 渐隐到透明，没有硬边。 */
+.historySheet .sheetFade{position:absolute;z-index:3;top:0;left:0;right:0;height:44px;border-radius:28px 28px 0 0;pointer-events:none;background:linear-gradient(to bottom,var(--sheet-fade,#252527f0) 0%,var(--sheet-fade,#252527f0) 30%,transparent 100%);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 52%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0,#000 52%,transparent 100%)}
+.historySheet[data-tone=light]{--sheet-fade:#f0f3f7e6}
+.historySheet[data-material=monthly]{--sheet-fade:#fffcf5e6}
+.historySheet[data-material=meeting]{--sheet-fade:#eef3f5e6}
+@media(prefers-reduced-transparency:reduce){.historySheet .sheetFade{-webkit-backdrop-filter:none;backdrop-filter:none}}
+.historySheet .glassButton{position:absolute;z-index:4;top:10px;display:grid;place-items:center;width:38px;height:38px;min-width:38px;min-height:38px;padding:0;border:1px solid #ffffffb3;border-radius:50%;background:#ffffff8c;-webkit-backdrop-filter:blur(14px) saturate(170%);backdrop-filter:blur(14px) saturate(170%);box-shadow:0 2px 10px #1d29351a,inset 0 1px #fff;color:#5c626d}
+.historySheet .sheetMark{left:12px;pointer-events:none}
+.historySheet .sheetMark .chatBrandMark{width:18px;height:18px}
+.historySheet .sheetCollapse{right:12px;cursor:pointer;transition:background 150ms ease,color 150ms ease,transform 150ms ease}
+.historySheet .sheetCollapse::after{content:'';position:absolute;inset:-3px;border-radius:50%}
+.historySheet .sheetCollapse:hover{background:#ffffffc7;color:#3f4754}
+.historySheet .sheetCollapse:active{transform:scale(.94)}
+.historySheet .sheetCollapse:focus-visible{outline:2px solid #3A83F788;outline-offset:2px}
 .historySheet[data-tone=light] .chatBrandMark{--brand-deep:#566e8a;--brand-bright:#8ea6c4}
-.historySheet[data-tone=light] .chatWelcome p{color:#25282e}
-.historySheet[data-tone=light] .chatWelcome button{border-bottom-color:#1d1d1f12;color:#3f4754}
 .historySheet[data-material=monthly] .chatBrandMark{--brand-deep:#927642;--brand-bright:#c9a45a}
 .historySheet[data-material=meeting] .chatBrandMark{--brand-deep:#536b91;--brand-bright:#8fa7a0}
+@media(prefers-reduced-transparency:reduce){.historySheet .glassButton{background:#f8f9fb;-webkit-backdrop-filter:none;backdrop-filter:none}}
+/* ↓ 回到最新（D3）：按对话层定位、水平居中，底边贴在输入条上沿之上 12px；--jump-bottom 由 useComposerClearance 按实际位置写入。 */
+.historySheet .historyJump{position:absolute;left:0;right:0;bottom:var(--jump-bottom,84px)}
+.historyContent{width:100%;max-width:720px;margin:0 auto}
+.historySheet .historyContent{padding-bottom:60px}
+/* 对话层与底下页面的层级只靠它自己的阴影表达（外面不再盖遮罩），阴影比原来略深一档。 */
+.historySheet[data-tone=light]{background:linear-gradient(170deg,#f0f3f7 0%,#f8f9fb 60%,#f3f5f8 100%);color:#25282e;border-color:#ffffffd9;box-shadow:0 24px 80px #1d29352e,0 4px 16px #1d293512,0 1px 3px #1d293510,inset 0 1px #fff}
+.historySheet[data-material=monthly]{background:linear-gradient(145deg,#fffcf5 0%,#ffffff 55%,#f7f1e4 100%)}
+.historySheet[data-material=meeting]{background:linear-gradient(145deg,#eef3f5 0%,#f7f9f8 55%,#eaf0ed 100%)}
+.historySheet[data-tone=light] .sheetHandle{background:#1d1d1f2a}
+.historySheet[data-tone=light] .chatWelcome p{color:#25282e}
+.historySheet[data-tone=light] .chatWelcome button{border-bottom-color:#1d1d1f12;color:#3f4754}
 @keyframes historyRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 /* 宽屏：对话记录贴右边一栏，宽 = 首页输入条宽 + 左右各 16（输入条在它底部居中，右边缘不动），左边的卡片照常看得到。 */
 @media(min-width:960px){.historySheet{left:auto;right:var(--shell-edge);bottom:14px;width:min(592px,calc(100vw - var(--main-start) - var(--shell-edge)));transform-origin:right bottom}}
 @media(min-width:1800px){.historySheet{width:min(652px,calc(100vw - var(--main-start) - var(--shell-edge)))}}
-.historyBackdrop{position:fixed;z-index:90;left:var(--main-start);right:var(--shell-edge);top:var(--shell-edge);bottom:var(--shell-edge);border:0;border-radius:24px;background:#25252712;cursor:default!important;animation:historyVeil 180ms ease-out both}
+/* 对话层放大（深度讨论 v2，ConversationHistorySheet data-wide，≥1280 才有 ⤢）：靠右、占视口约 58%、上下顶满；
+   左边露出首页（外面是透明的点击区，不盖遮罩），回答里的来源点了在那里打开依据面板。宽度、高度 240ms 过渡，减少动效时瞬时（.shell * 统一关掉）。
+   过渡中（data-resizing，ConversationHistorySheet resizeWindow，约 240ms）：
+   - 外框（底色、细边、阴影、圆角、两角圆键、↓）照常跟着宽高走，看上去和原来一样；
+   - 滚动区不跟着逐帧变：一开始就定成终态尺寸（外框终态宽高减去左右上下各 1px 的边，公式与上面外框的一致，改一处要两处一起改），
+     贴在外框左上角，多出来的部分由外框的 overflow:hidden 裁掉。正文只在第一帧按终值折行一次，之后每帧没有重排，过渡结束放开时尺寸不变、不跳。
+     不用继承的自定义属性传终值：切换时改外框上的自定义属性，整棵子树都要重算样式（实测第一帧多出一大截）；
+   - 顶部磨砂渐隐、两颗液态玻璃键的 backdrop-filter 与遮罩临时换成实底：外框每帧在变，毛玻璃每帧都要重新取样。 */
+@media(min-width:960px){.historySheet{transition:width 240ms cubic-bezier(.22,1,.36,1),height 240ms cubic-bezier(.22,1,.36,1)}
+.historySheet[data-wide]{width:min(58vw,calc(100vw - var(--shell-edge) * 2 - 360px));height:calc(100dvh - var(--shell-edge) - 14px)}
+.historySheet[data-wide] .historyContent{max-width:860px}
+.historySheet[data-resizing] .sheetScroll{flex:none;width:calc(min(592px,calc(100vw - var(--main-start) - var(--shell-edge))) - 2px);height:calc(100dvh - clamp(72px,10vh,136px) - 18px)}
+.historySheet[data-resizing][data-wide] .sheetScroll{width:calc(min(58vw,calc(100vw - var(--shell-edge) * 2 - 360px)) - 2px);height:calc(100dvh - var(--shell-edge) - 16px)}
+.historySheet[data-resizing] .sheetFade{-webkit-backdrop-filter:none;backdrop-filter:none;-webkit-mask-image:none;mask-image:none}
+.historySheet[data-resizing] .glassButton{background:#f8f9fb;-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media(min-width:1800px){.historySheet[data-resizing]:not([data-wide]) .sheetScroll{width:calc(min(652px,calc(100vw - var(--main-start) - var(--shell-edge))) - 2px)}}
+.historySheet .sheetWideKey{right:58px;cursor:pointer;transition:background 150ms ease,color 150ms ease,transform 150ms ease}
+.historySheet .sheetWideKey:hover{background:#ffffffc7;color:#3f4754}
+.historySheet .sheetWideKey:active{transform:scale(.94)}
+.historySheet .sheetWideKey:focus-visible{outline:2px solid #3A83F788;outline-offset:2px}
+/* 对话层外的点击区：透明，只用来「点外面收起」，不再给右侧页面盖浅灰蒙板（看上去像出错）。 */
+.historyBackdrop{position:fixed;z-index:90;left:var(--main-start);right:var(--shell-edge);top:var(--shell-edge);bottom:var(--shell-edge);border:0;border-radius:24px;background:transparent;cursor:default!important;animation:historyVeil 180ms ease-out both}
 @keyframes historyVeil{from{opacity:0}to{opacity:1}}
+/* 收起（与打开对称）：对话层淡出下移、外面的点击区一起撤掉，播完由宿主卸载（ConversationHost SHEET_EXIT_MS = 220）。 */
+.historySheet[data-leaving]{animation:historySink 220ms cubic-bezier(.4,0,1,1) both;pointer-events:none}
+.historyBackdrop[data-leaving]{animation:historyVeilOut 200ms ease-in both;pointer-events:none}
+@keyframes historySink{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(14px)}}
+@keyframes historyVeilOut{from{opacity:1}to{opacity:0}}
 
 :global(html):has(.shell){scrollbar-gutter:auto;scrollbar-width:none}
 :global(html):has(.shell)::-webkit-scrollbar{display:none;width:0}
@@ -104,9 +145,11 @@
 .mainArea{grid-column:2;grid-row:1}
 .notificationArea{grid-column:1;grid-row:1}
 .homeSurface{height:100%;min-height:0}
+/* 展开页完全盖住首页、且不在转场 / 动画 / 侧看（peek）中时，把底下的首页藏掉（窄屏本来就 display:none）。否则首页翻转卡的 3D 合成层会让 Chrome 把滚轮命中到底下 inert 的看板，展开页（雷达等）滚轮 / 触控板失效、只能拖滚动条。 */
+.homeSurface[data-covered]{visibility:hidden}
 @media(min-width:1800px){.shell{inset:0;padding:16px;gap:16px;--shell-edge:16px;--layout-gap:16px}}
 @media(max-width:1250px){.shell{inset:0;padding:10px;gap:10px;--shell-edge:10px;--layout-gap:10px;--notice-width:280px;--peek-width:280px}.expandedHeader{padding:18px}.expandedScroll{margin:0 14px;padding-right:5px}}
-@media(max-width:1000px){.shell{--notice-width:270px;--peek-width:270px;--chat-inset:12px}.noticeToast{max-width:260px}.historySheet .sheetScroll{padding:25px 28px 120px}.historySheet .sheetHeader{padding:12px 22px 16px}}
+@media(max-width:1000px){.shell{--notice-width:270px;--peek-width:270px;--chat-inset:12px}.noticeToast{max-width:260px}.historySheet .sheetScroll{padding:44px 28px 120px}}
 @media(min-width:1800px){.historyContent{max-width:800px}}
 
 @media(prefers-reduced-transparency:reduce){.shell{background:#f5f5f7}.expandedHeader{background:#f5f5f7;backdrop-filter:none}.sheet{background:#28282a;-webkit-backdrop-filter:none;backdrop-filter:none}}
@@ -141,7 +184,7 @@
  .expanded{position:absolute;inset:0;border-radius:23px}
  .expandedHeader{min-height:64px;padding:12px 14px 12px 10px;gap:10px}
  /* 页头左上角是返回（DetailHeader 把关闭键换成返回箭头排到最前），对象标记让出宽度给标题。 */
- .expandedHeader>.closeRound{order:-1;width:40px;height:40px;background:none}
+ .expandedHeader>.closeRound{order:-1;width:44px;height:44px;min-width:44px;background:none}
  .closeRound .closeIcon{display:none}
  .closeRound .backIcon{display:block}
  .expandedIdentity>[data-context-mark]{display:none}
@@ -151,8 +194,7 @@
  .expandedHeader>:not(.expandedIdentity):not(.closeRound){margin-left:auto}
  .expandedIdentity h1{font-size:18px}
  .historySheet{left:8px;right:8px;bottom:8px;height:calc(100dvh - 42px);border-radius:24px}
- .historySheet .sheetScroll{padding:24px 20px 115px}
- .historySheet .sheetHeader{padding:12px 19px 15px}
+ .historySheet .sheetScroll{padding:42px 20px 115px}
  .shell:not([data-detail-open=true]) .historySheet{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));height:calc(100dvh - 44px - env(safe-area-inset-bottom))}
  .shell :global([data-testid="global-controls"]),.shell[data-detail-open=true] :global([data-testid="global-controls"]){bottom:calc(12px + env(safe-area-inset-bottom))}
 }
@@ -201,6 +243,9 @@
  .shell[data-topic-rail=true] .expandedScroll{margin:0;padding:18px calc(24px + var(--conversation-lane,0px)) 44px 24px}
  .shell[data-topic-rail=true] .expandedScroll[data-radar-reader-layout=true]{padding:0}
 }
+/* 深度讨论（并排）展开 / 收起那一下（右列根节点带 data-desk-shift）：左侧让位 240ms，减少动效时瞬时。 */
+@media (min-width: 960px){.shell[data-topic-rail=true]:has([data-desk-shift]) .mainArea{transition:margin-right 240ms cubic-bezier(.22,1,.36,1)}}
+@media (prefers-reduced-motion: reduce){.shell[data-topic-rail=true]:has([data-desk-shift]) .mainArea{transition:none}}
 /* 转场截的是最终布局：截图那一刻阅读区不能还在滑。 */
 :global(html[data-notice-transition]) .shell .mainArea{transition:none}
 @media (min-width: 960px) and (max-width: 1000px){.shell[data-topic-rail=true] .expandedHeader{padding:22px 20px;gap:10px}.shell[data-topic-rail=true] .expandedScroll{padding-left:18px;padding-right:18px}}
@@ -214,6 +259,8 @@
 .expandedScroll[data-radar-reader-layout=true]{margin:0;padding:0;overflow:hidden;display:flex;min-width:0}
 @media(max-width:1100px){.expandedScroll[data-radar-reader-layout=true]{overflow-y:auto;overflow-x:hidden}.expandedScroll[data-radar-reader-layout=true]>div{height:auto;flex:none;grid-template-rows:auto}}
 .expandedScroll[data-radar-reader-layout=true]{flex-direction:column;overflow-y:auto}.expandedScroll[data-radar-reader-layout=true]>section{margin:0 24px}.expandedScroll[data-radar-reader-layout=true]>div{flex:none;min-height:100%}
+/* 放在 DetailFrame 的 .ts-detail 里时由外层滚：内层不能再是滚动容器，否则 overscroll-behavior:contain 把滚轮/触控板吞掉。 */
+:global(.ts-detail)>.expandedScroll[data-radar-reader-layout=true],:global(.ts-detail)>.expandedScroll[data-radar-reader-layout=true]>[data-radar-reader]{overflow:visible;overscroll-behavior:auto;flex:none;height:auto}
 
 /* 手持（≤959）的画布：深藏青、两块极淡的柔光，沉稳不抢眼，浅色通知卡在上面才显得出来（详情仍是浅色面板，四周留 8px 深色边）。 */
 @media(max-width:959px){.shell{background-color:#141c30;background-image:radial-gradient(60% 42% at 90% 4%,rgb(58 80 136/.5) 0%,transparent 72%),radial-gradient(58% 40% at 4% 96%,rgb(48 66 118/.42) 0%,transparent 72%),linear-gradient(180deg,#1b2543 0%,#121a2d 100%);background-position:center;background-size:auto}}
@@ -235,6 +282,10 @@
 }
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
 @media(max-width:959px){.expandedIdentity.expandedIdentity>div>span{font-size:13px}}
+/* 触屏的工作台（pointer:coarse，规范 §1）：战场 / 雷达 / 已处理页头右上角的关闭键 42 → 44（手持时它在左上角、已是 44）。 */
+@media(pointer:coarse){.closeRound{width:44px;height:44px}}
+/* 对话层左上角星标右边那颗很小的「+ 新对话」（ConversationArchive）：低对比度灰色，不是玻璃圆键。 */
+.historySheet .sheetNewKey{position:absolute;z-index:4;top:15px;left:56px}
 
 .m2Entry{display:flex;justify-content:flex-end;padding:8px 16px 0}
 .m2Entry a{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border,rgba(0,0,0,.12));border-radius:12px;color:inherit;font-size:14px;text-decoration:none;background:var(--surface,#fff)}

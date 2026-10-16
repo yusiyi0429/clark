@@ -9,6 +9,7 @@ import { SESSION_COOKIE, parseCookies, readSessionToken } from "../session.js";
 import { canSwitchView, canUseMemberView, currentSessionVersion, roleOf, type SessionRole } from "../memberAccess.js";
 import type { CompanyMemoryRepository } from "../companyMemory.js";
 import type { ConversationRuntime } from "../conversations.js";
+import type { ConversationCompaction } from "../conversationCompaction.js";
 import type { DriExporter, MeetingActionOutcome, Query } from "../meetingStore.js";
 import type { PreflightAgent } from "../meetingPreflight.js";
 import type { OntologyUpdater, PostMeetingAgent, TranscriptImportResult } from "../outcome.js";
@@ -20,10 +21,13 @@ import type { MonthlyReviewService } from "../monthlyReviewService.js";
 import type { MeetingRecordingService } from "../meetingRecordings.js";
 import type { VoiceprintDeps } from "../voiceprints.js";
 import type { DictationDeps } from "../dictation.js";
+import type { RealtimeSessionDeps } from "../tencentAsrRealtime.js";
+import type { DictationPolishDeps } from "../dictationPolish.js";
 import type { ThreadIntroAgent } from "../threadIntro.js";
 import type { MissionCardDraftAgent } from "../missionCardDraftAgent.js";
 import type { TaskAcceptanceAgent } from "../taskAcceptanceDraft.js";
 import type { AppEnv } from "../app.js";
+import type { WorldReader } from "../worldReader.js";
 
 export type AppInstance = FastifyInstance<
   RawServerDefault,
@@ -51,6 +55,10 @@ export type MaterialLimit = { status: 413 | 400; code: string; message: string }
 
 /** buildApp 装配出的依赖与请求边界助手；路由插件只依赖这里，不反向依赖 app.ts 的运行实例。 */
 export type RouteContext = {
+  /** 本体（tkos.world）只读集成；未配置时 enabled=false、snapshot 恒为 null。 */
+  world?: WorldReader;
+  /** 第二个只读实例（词元云集 TK scope）；没配时为空。 */
+  worldTk?: WorldReader;
   pool: Pool;
   q: Query;
   env: AppEnv;
@@ -68,6 +76,10 @@ export type RouteContext = {
   recordings: MeetingRecordingService;
   voiceprints: VoiceprintDeps;
   dictation: DictationDeps;
+  /** 实时听写签发（腾讯实时识别 URL 签名）的配置与真实时钟。 */
+  dictationRealtime: RealtimeSessionDeps;
+  /** 听写后的快速整理（火山方舟）。 */
+  dictationPolish: DictationPolishDeps;
   threadIntroAgent: ThreadIntroAgent;
   missionCardDraftAgent: MissionCardDraftAgent;
   /** 验收弹窗里我的 Agent 起草（只读）；测试注入假实现。 */
@@ -75,6 +87,10 @@ export type RouteContext = {
   materialStorageDir: string;
   conversationAttachmentStorageDir: string;
   conversationTurnTimeoutMs: number;
+  conversationStallTimeoutMs: number;
+  conversationHeartbeatMs: number;
+  /** 对话历史的后台压缩（conversationCompaction.ts）：轮前换入就绪的快照，轮后需要时在后台压缩。 */
+  conversationCompaction?: ConversationCompaction;
   maxTranscriptBytes: number;
   now: () => Date;
   requestContext: WeakMap<FastifyRequest, RequestContext>;

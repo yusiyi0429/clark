@@ -27,7 +27,8 @@ describe("议题与会议群", () => {
       expect((await call(f, f.third, "GET", "/api/me/notifications")).json().notifications[0]).toMatchObject({
         kind: "task_collaborator_added", objectType: "task", objectId: id,
       });
-      await waitFor(async () => (await f.t.sql("SELECT 1 FROM thread_messages WHERE object_type='task' AND object_id=$1", [id])).length === 1);
+      // 群里先有一条建事项时的说明，等后台介绍到达（共 2 条）；原来按 1 条判断，介绍来得早时永远等不到。
+      await waitFor(async () => (await f.t.sql("SELECT 1 FROM thread_messages WHERE object_type='task' AND object_id=$1", [id])).length === 2);
       expect((await call(f, f.member, "GET", `/api/me/tasks/${id}`)).json().task.version).toBe(task.version + 1);
       expect((await call(f, f.third, "POST", `/api/threads/task/${id}/leave`)).statusCode).toBe(204);
       expect((await call(f, f.member, "GET", `/api/me/tasks/${id}`)).json().task.version).toBe(task.version + 2);
@@ -224,11 +225,26 @@ describe("议题与会议群", () => {
       await postThreadIntro(t.pool, { generate() { return new Promise(() => undefined); } }, input, [TEST_CEO.personId], 30);
       const messages = await t.sql("SELECT content FROM thread_messages WHERE object_type='issue' AND object_id=$1 ORDER BY id", [id]);
       expect(messages).toHaveLength(2);
-      expect(messages[0].content).toBe("测试甲 把 测试乙 拉进了这个群：「渠道议题」。窗口即将关闭。测试甲 说：「一起看」");
+      expect(messages[0].content).toBe("测试甲把测试乙拉进了这个群：「渠道议题」。窗口即将关闭。测试甲说：「一起看」");
       expect(messages[1].content).toContain("窗口即将关闭");
       const member = await t.memberCookie(), ceo = await t.loginCookie();
       expect((await t.app.inject({ method: "GET", url: `/api/threads/issue/${id}`, headers: { cookie: member } })).json().unread).toBe(2);
       expect((await t.app.inject({ method: "GET", url: `/api/threads/issue/${id}`, headers: { cookie: ceo } })).json().unread).toBe(0);
+    } finally { await t.close(); }
+  });
+
+  it("兜底说明不带资料里的章节编号和「（依据：…）」括注（复验）", async () => {
+    const t = await createTestApp();
+    try {
+      const issue = await t.createIssue();
+      const id = issue.objectRef.id;
+      const failing: ThreadIntroAgent = { async generate() { throw new Error("model failed"); } };
+      const base = { objectType: "issue" as const, objectId: id, title: "资管评价", inviter: "一号位", newcomers: ["王丽"], note: "一起看", history: [] };
+      await postThreadIntro(t.pool, failing, { ...base, description: "A3 写明 AIDC 有两大业务能力；B1 中指标分开。（依据：A3 AIDC 责任边界；B1 指标字典 A17）" }, [TEST_CEO.personId], 30);
+      await postThreadIntro(t.pool, failing, { ...base, description: "两项能力要分开评价。（依据：集团战略）" }, [TEST_CEO.personId], 30);
+      const messages = (await t.sql("SELECT content FROM thread_messages WHERE object_type='issue' AND object_id=$1 ORDER BY id", [id])).map((row) => row.content as string);
+      expect(messages[0]).toBe("一号位把王丽拉进了这个群：「资管评价」。一号位说：「一起看」");
+      expect(messages[1]).toBe("一号位把王丽拉进了这个群：「资管评价」。两项能力要分开评价。一号位说：「一起看」");
     } finally { await t.close(); }
   });
 });

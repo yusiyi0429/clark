@@ -55,6 +55,7 @@ export function SignalStoryView({
               alt=""
               loading="lazy"
               decoding="async"
+              referrerPolicy="no-referrer"
               draggable={false}
               onLoad={() => setImage("ready")}
               onError={() => setImage("failed")}

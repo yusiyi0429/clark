@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
+// 历史层的时间线会读提案（演示外不发请求），只需要一个路由桩。
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined }) }));
 import { ConversationDock } from "./ConversationDock";
 import { ConversationHistorySheet } from "./ConversationHistorySheet";
 import { ConversationThinking, ConversationTurn } from "./Transcript";
@@ -32,6 +34,9 @@ function data(patch: Partial<ConversationData> = {}): ConversationData {
     startedAt: 0,
     error: null,
     lastReply: null,
+    historyStatus: "ready",
+    historyError: null,
+    retryHistory: noop,
     attachments: [],
     uploading: false,
     attachmentError: null,
@@ -53,7 +58,6 @@ function dock(patch: Partial<Parameters<typeof ConversationDock>[0]> = {}) {
       keyboard={false}
       onKeyboardChange={noop}
       historyOpen={false}
-      onToggleHistory={noop}
       references={[]}
       onRemoveReference={noop}
       onClearReferences={noop}
@@ -78,9 +82,23 @@ describe("对话端点与附件", () => {
   });
 
 
-  it("失败文案按错误码说明后果，未知错误说明页面操作仍可用（C-04）", () => {
-    expect(failureCopy("TURN_TIMEOUT")).toContain("已停止");
-    expect(failureCopy(undefined)).toBe("对话服务暂时没有接通。页面操作仍可用。");
+  it("失败文案按出错的环节说清楚，没有笼统的「暂不可用」，也不显示英文原文（C-04）", () => {
+    expect(failureCopy("UNREACHABLE", "Failed to fetch")).toBe("没有连上天枢服务（可能正在重启，或本机网络刚切换）。消息没有发出去，原文已放回输入框，稍后重发即可。");
+    expect(failureCopy("STREAM_BROKEN", "network error")).toBe("和天枢服务的连接在回答途中断开了（可能是服务重启或本机网络切换）。");
+    expect(failureCopy("HTTP_502", "")).toContain("天枢服务这次没有接下这条消息");
+    expect(failureCopy("RUNTIME_FAILED", "terminated")).toBe("这次回答没有完成（原因已记录）。");
+    expect(failureCopy("NETWORK_INTERRUPTED", "和模型服务的网络连接中断了。已写出的部分保留在上方，点「继续」从断点接着写。"))
+      .toBe("和模型服务的网络连接中断了。已写出的部分保留在上方，点「继续」从断点接着写。");
+    for (const code of [undefined, "RUNTIME_FAILED", "TURN_TIMEOUT", "HTTP_500", "STREAM_ENDED", "STREAM_SILENT", "X"]) {
+      const text = failureCopy(code, "OpenAI API error (503): Unknown service error");
+      expect(text).not.toMatch(/暂不可用|OpenAI|Unknown/);
+    }
+  });
+
+  it("模型拒绝回答时显示中文说明，不推断修改是否完成", () => {
+    const text = failureCopy("CONTENT_FILTER", "Provider rejected request: content_filter");
+    expect(text).toBe("模型服务没有受理这次请求（内容审核未通过）。问题已保留，可以换个说法后重试。");
+    expect(text).not.toMatch(/Provider|content_filter|没有接通|未完成修改|已修改/);
   });
 });
 
@@ -91,32 +109,47 @@ describe("全局输入条（clark workspace 614–640）", () => {
     expect(html).toContain('aria-label="语音输入"');
     expect(html).not.toContain("语音未接入");
     expect(html).toContain('aria-label="切换键盘输入"');
-    expect(html).toContain("查看“公司全局”的对话记录");
+    // D2：没有历史键。
+    expect(html).not.toContain("对话记录");
   });
 
-  it("键盘面：首页占位「输入你的想法…」，二级页「继续聊聊…」，引用后改为围绕引用", () => {
-    expect(dock({ keyboard: true })).toContain('placeholder="输入你的想法…"');
+  it("键盘面：首页占位「输入问题或指令…」，二级页「继续讨论…」，批注后改为围绕批注", () => {
+    expect(dock({ keyboard: true })).toContain('placeholder="输入问题或指令…"');
     expect(dock({ keyboard: true })).toContain('aria-label="全局对话输入"');
     // 展开后左边那颗是麦克风：原地开始听写，不缩回胶囊。
     expect(dock({ keyboard: true })).toContain('aria-label="语音输入"');
     expect(dock({ keyboard: true })).not.toContain("切换到语音输入");
     const detail = dock({ keyboard: true, detail: true, global: false, label: "交付力量先支持灯塔" });
-    expect(detail).toContain('placeholder="继续聊聊…"');
+    expect(detail).toContain('placeholder="继续讨论…"');
     expect(detail).toContain('aria-label="交付力量先支持灯塔对话输入"');
-    expect(dock({ keyboard: true, references: [card("c1", "议题")] })).toContain('placeholder="围绕引用的卡片，聊聊你的判断…"');
+    expect(dock({ keyboard: true, references: [card("c1", "议题")] })).toContain('placeholder="围绕批注的内容输入问题或判断…"');
   });
 
   it("回答进行中主按钮变成「停止回答」", () => {
-    const html = dock({ data: data({ streaming: true, status: "streaming" }) });
+    const html = dock({ data: data({ streaming: true, thinking: true, status: "streaming" }) });
     expect(html).toContain("停止回答");
     expect(html).toContain('aria-label="停止本次回答"');
+  });
+
+  it("输入条上方没有气泡（D6）：回答、刚问的话、失败说明都只在对话层里", () => {
+    const streaming = dock({ data: data({ streaming: true, thinking: true, status: "streaming", stage: "answering", partial: "先核对本月签约目标。" }) });
+    expect(streaming).not.toContain("先核对本月签约目标。");
+    expect(streaming).not.toContain("关闭本次对话气泡");
+    expect(streaming).not.toContain("完整对话记录");
+    expect(dock({ data: data({ lastReply: { text: "## 结论" + String.fromCharCode(10) + "**增长**放缓", ms: 1200 } }) })).not.toContain("增长");
+    expect(dock({ data: data({ error: "服务暂时没接通（*重试*）" }) })).not.toContain("服务暂时没接通");
+  });
+
+  it("输入条标出历史读取状态，供页面与验收脚本识别", () => {
+    expect(dock({ data: data({ historyStatus: "error", historyError: "没有连上天枢服务，对话记录没读出来，可以点重试。" }) })).toContain('data-history-status="error"');
+    expect(dock()).toContain('data-history-status="ready"');
   });
 
   it("引用只属于全局对话：二级页不显示引用托盘，改为「在全局讨论」", () => {
     const refs = [card("c1", "交付力量先支持灯塔，还是 TokenOps？")];
     expect(dock({ references: refs })).toContain("交付力量先支持灯塔，还是 TokenOps？");
     const detail = dock({ references: refs, global: false, detail: true, pendingGlobalReferences: 1, onDiscussGlobal: noop });
-    expect(detail).toContain("在全局讨论已引用的 1 张卡片");
+    expect(detail).toContain("在全局讨论已批注的 1 项");
   });
 });
 
@@ -146,8 +179,72 @@ describe("对话记录", () => {
 
   it("历史层：全局欢迎语与对象欢迎语不同", () => {
     const global = renderToStaticMarkup(<ConversationHistorySheet data={data()} label="公司全局" global onClose={noop} />);
-    expect(global).toContain("从你正在想的事情开始。");
+    expect(global).toContain("可从当前关注的问题开始讨论。");
     const topic = renderToStaticMarkup(<ConversationHistorySheet data={data({ scope: "issue:1" })} label="灯塔" global={false} onClose={noop} />);
-    expect(topic).toContain("从“灯塔”里你最想弄清的地方开始。");
+    expect(topic).toContain("可从「灯塔」中待澄清的问题开始讨论。");
+  });
+
+  it("历史层记录归属写在 data-conversation-owner 上；不再写「… · 仅你可见」", () => {
+    const global = renderToStaticMarkup(<ConversationHistorySheet data={data()} label="天枢" global onClose={noop} />);
+    expect(global).not.toContain("全局对话 · 仅你可见");
+    expect(global).toContain('data-conversation-owner="global"');
+    const topic = renderToStaticMarkup(<ConversationHistorySheet data={data({ scope: "issue:1" })} label="灯塔" global={false} onClose={noop} />);
+    expect(topic).not.toContain("仅你可见");
+    expect(topic).toContain('data-conversation-owner="object"');
+    expect(topic).not.toContain("全局对话");
+  });
+
+  it("历史层：载入中、真的没有、没读到三种画法不同，没读到不显示欢迎语", () => {
+    const sheet = (patch: Partial<ConversationData>) =>
+      renderToStaticMarkup(<ConversationHistorySheet data={data({ scope: "issue:1", ...patch })} label="灯塔" global={false} onClose={noop} />);
+    const loading = sheet({ historyStatus: "loading" });
+    expect(loading).toContain("正在载入对话记录…");
+    expect(loading).toContain('data-history="loading"');
+    expect(loading).toContain('data-empty="false"');
+    expect(loading).not.toContain("你最想弄清的地方开始");
+    const failed = sheet({ historyStatus: "error", historyError: "没有连上天枢服务，对话记录没读出来，可以点重试。" });
+    expect(failed).toContain("对话记录没有载入，这不代表没有记录。 没有连上天枢服务，对话记录没读出来，可以点重试。");
+    expect(failed).toContain('role="alert"');
+    expect(failed).toContain("重试");
+    expect(failed).toContain('data-empty="false"');
+    expect(failed).not.toContain("你最想弄清的地方开始");
+    const empty = sheet({});
+    expect(empty).toContain('data-empty="true"');
+    expect(empty).toContain("可从「灯塔」中待澄清的问题开始讨论。");
+    expect(empty).not.toContain("正在载入对话记录");
+    expect(empty).not.toContain("重试");
+  });
+
+  it("历史层：已显示的消息在刷新失败、重新载入时都留着，提示接在下面", () => {
+    const messages = [{ sequence: 1, role: "user" as const, content: "灯塔的付费意愿怎么判断？" }];
+    const failed = renderToStaticMarkup(<ConversationHistorySheet data={data({ messages, historyStatus: "error", historyError: "没有连上天枢服务，对话记录没读出来，可以点重试。" })} label="天枢" global onClose={noop} />);
+    expect(failed).toContain("灯塔的付费意愿怎么判断？");
+    expect(failed).toContain("对话记录没有刷新成功，已显示的内容仍保留。");
+    expect(failed.indexOf("灯塔的付费意愿怎么判断？")).toBeLessThan(failed.indexOf("对话记录没有刷新成功"));
+    const reloading = renderToStaticMarkup(<ConversationHistorySheet data={data({ messages, historyStatus: "loading" })} label="天枢" global onClose={noop} />);
+    expect(reloading).toContain("灯塔的付费意愿怎么判断？");
+    expect(reloading).toContain("正在刷新对话记录…");
+  });
+
+  it("历史层在完成前显示流式正文，完成后只显示保存的回复，并保持浅色", () => {
+    const first = renderToStaticMarkup(<ConversationHistorySheet data={data({ streaming: true, thinking: true, status: "streaming", partial: "先核对本月签约目标。" })} label="公司全局" global onClose={noop} />);
+    expect(first).toContain('data-tone="light"');
+    expect(first).toContain('data-testid="conversation-streaming-turn"');
+    expect(first).toContain("先核对本月签约目标。");
+    const saved = renderToStaticMarkup(<ConversationHistorySheet data={data({ status: "complete", messages: [{ sequence: 2, role: "assistant", content: "先核对本月签约目标。再看管线。" }] })} label="公司全局" global onClose={noop} />);
+    expect(saved).not.toContain('data-testid="conversation-streaming-turn"');
+    expect(saved.match(/先核对本月签约目标。再看管线。/g)).toHaveLength(1);
+  });
+
+  it("历史层：「思考中」那一行的位置一直留着（结束时不缩回）；底部有 ↓ 回到最新，在底部时藏起", () => {
+    const streaming = renderToStaticMarkup(<ConversationHistorySheet data={data({ streaming: true, thinking: true, status: "streaming", partial: "先核对" })} label="公司全局" global onClose={noop} />);
+    const idle = renderToStaticMarkup(<ConversationHistorySheet data={data({ status: "complete", messages: [{ sequence: 2, role: "assistant", content: "先核对。" }] })} label="公司全局" global onClose={noop} />);
+    for (const html of [streaming, idle]) {
+      expect(html).toContain('data-testid="conversation-status-slot"');
+      expect(html).toMatch(/data-testid="conversation-jump-latest"/);
+      expect(html).not.toContain("data-visible");
+    }
+    expect(streaming).toContain('data-testid="conversation-thinking"');
+    expect(idle).not.toContain('data-testid="conversation-thinking"');
   });
 });

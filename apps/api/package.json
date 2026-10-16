@@ -13,7 +13,8 @@
     "world:link-missions": "tsx scripts/world-link-missions.ts",
     "mission-cards:import": "tsx scripts/import-mission-card-drafts.ts",
     "missions:import": "tsx scripts/import-missions.ts",
-    "reviews:import": "tsx scripts/import-reviews.ts"
+    "reviews:import": "tsx scripts/import-reviews.ts",
+    "signals:backfill-covers": "tsx scripts/backfill-signal-covers.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",
@@ -22,11 +23,14 @@
     "@fastify/rate-limit": "^10.2.2",
     "@fastify/type-provider-typebox": "^5.1.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@mozilla/readability": "0.6.0",
     "@sinclair/typebox": "^0.34.52",
     "@volcengine/tos-sdk": "^2.9.1",
     "@warmap/contracts": "workspace:*",
     "fastify": "^5.2.1",
     "jszip": "3.10.1",
+    "langsmith": "0.10.5",
+    "linkedom": "0.18.13",
     "mammoth": "1.12.3",
     "pdfjs-dist": "5.4.296",
     "pg": "^8.14.1",

@@ -7,6 +7,7 @@ import {
   type Context,
   type Model,
 } from "@earendil-works/pi-ai";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { loadCompanyMemory } from "../src/companyMemory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import type { ConversationRuntime } from "../src/conversations.js";
@@ -66,6 +67,24 @@ function stream(final: AssistantMessage) {
 }
 
 describe("controlled Pi conversation adapter public behavior", () => {
+  it("classifies provider content_filter without retrying or reporting a saved answer", async () => {
+    let calls = 0;
+    const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(testEnv),
+      baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+      streamSimple: () => {
+        calls++;
+        const filtered = { ...message([{ type: "text", text: "I'm sorry, but I cannot assist with that request." }], "error"), errorMessage: "Response incomplete: content_filter" };
+        const events = createAssistantMessageEventStream();
+        queueMicrotask(() => { events.push({ type: "error", reason: "error", error: filtered }); });
+        return events;
+      } });
+    try {
+      await expect(runtime.run({ scope: "signal:11111111-1111-4111-8111-111111111111", viewer: CEO_VIEWER, message: "概括核心观点",
+        currentObject: null, referencesSnapshot: [], runtimeEntries: [], piSessionId: randomUUID(), signal: new AbortController().signal,
+        emit: () => undefined })).rejects.toMatchObject({ code: "CONTENT_FILTER", message: "Response incomplete: content_filter" });
+      expect(calls).toBe(1);
+    } finally { await runtime.close?.(); }
+  });
   it("材料提议工具拒绝非唯一 find，唯一修改只生成本人的 pending 提议", async () => {
     const t = await createTestApp();
     const issue = await t.createIssue();
@@ -134,7 +153,8 @@ describe("controlled Pi conversation adapter public behavior", () => {
     });
     try {
       for (const scope of ["global", "issue:fixture-001", "task:fixture-001", "meeting:fixture-001", "monthly-review-item:fixture-001"] as const)
-        await runtime.run({ scope, viewer: CEO_VIEWER, message: "看看材料", currentObject: null, referencesSnapshot: [],
+        // 带「写进」：有写入意图的轮次才带 create_material（没有修改意图时不带直接写入的工具，见 conversationPrompt.ts）。
+        await runtime.run({ scope, viewer: CEO_VIEWER, message: "看看材料，需要的话写进一份新材料", currentObject: null, referencesSnapshot: [],
           runtimeEntries: [], piSessionId: "11111111-1111-4111-8111-111111111111", signal: new AbortController().signal,
           emit: () => undefined });
       expect(toolsByScope[0]).not.toContain("edit_material");
@@ -306,7 +326,61 @@ describe("controlled Pi conversation adapter public behavior", () => {
     }
   });
 
-  it("terminates an abnormal loop on the eighth Search without retrying or switching models", async () => {
+  // 检索到上限时不让整轮作废：第 8 次照常返回结果并说明额度已用完，之后的检索不执行、退回提示，模型据已有材料作答。
+  it("returns the eighth Search with a limit notice, refuses further Searches without running them, and still answers", async () => {
+    const search = createFakeWebSearchAdapter({
+      loop: [{ title: "外部条目", url: "https://example.com/a", publishedAt: "2025-09-15T00:00:00.000Z", excerpt: "摘要", provider: "fake-search" }],
+    });
+    const contexts: Context[] = [];
+    let modelCalls = 0;
+    const runtime = await createPiConversationRuntime({
+      companyMemory: loadCompanyMemory(testEnv),
+      baseUrl: "https://provider.invalid/v1/responses",
+      apiKey: "test-key",
+      modelId: "fake-light",
+      search,
+      streamSimple: (_model, context) => {
+        contexts.push({ ...context, messages: [...context.messages] });
+        modelCalls += 1;
+        // 前 9 次都检索（第 9 次无视提示），之后作答。
+        if (modelCalls <= 9) return stream(message([{
+          type: "toolCall", id: `search-${modelCalls}`, name: "web_search", arguments: { query: "loop" },
+        }], "toolUse"));
+        const toolTexts = context.messages.filter((item) => item.role === "toolResult").map((item) => JSON.stringify(item));
+        return stream(message([{ type: "text", text: toolTexts.some((item) => item.includes("检索已到上限"))
+          ? "本轮检索已到上限，以下基于已检索到的材料作答。" : "没有看到上限提示" }], "stop"));
+      },
+    });
+    try {
+      const events: unknown[] = [];
+      const result = await runtime.run({
+        scope: "global",
+        viewer: CEO_VIEWER,
+        message: "loop",
+        currentObject: null,
+        referencesSnapshot: [],
+        runtimeEntries: [],
+        piSessionId: "11111111-1111-4111-8111-111111111111",
+        signal: new AbortController().signal,
+        emit: (event) => events.push(event),
+      });
+      expect(result.assistantMessage).toBe("本轮检索已到上限，以下基于已检索到的材料作答。");
+      expect(search.calls).toHaveLength(8);
+      const toolResults = contexts.at(-1)!.messages.filter((item) => item.role === "toolResult") as { isError: boolean; content: { type: string; text?: string }[] }[];
+      expect(toolResults).toHaveLength(9);
+      const eighth = JSON.parse(toolResults[7].content[0].text!);
+      expect(eighth.results).toHaveLength(1);
+      expect(eighth.notice).toContain("检索已到上限");
+      expect(toolResults[8].isError).toBe(true);
+      expect(toolResults[8].content[0].text).toContain("检索已到上限");
+      expect(toolResults[8].content[0].text).toContain("说明");
+      expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ type: "tool", phase: "completed", name: "web_search", isError: true })]));
+    } finally {
+      await runtime.close?.();
+    }
+  });
+
+  it("still terminates an abnormal loop that keeps calling Search after the limit, without switching models", async () => {
     const search = createFakeWebSearchAdapter({ loop: [] });
     let modelCalls = 0;
     const seenModels: string[] = [];
@@ -319,7 +393,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       streamSimple: (model) => {
         seenModels.push(model.id);
         modelCalls += 1;
-        if (modelCalls > 9) throw new Error("unbounded search loop");
+        if (modelCalls > 30) throw new Error("unbounded search loop");
         return stream(message([{
           type: "toolCall", id: `search-${modelCalls}`, name: "web_search", arguments: { query: "loop" },
         }], "toolUse"));
@@ -336,23 +410,23 @@ describe("controlled Pi conversation adapter public behavior", () => {
         piSessionId: "11111111-1111-4111-8111-111111111111",
         signal: new AbortController().signal,
         emit: () => undefined,
-      })).rejects.toMatchObject({
-        message: "Search limit reached (8)",
-        code: "SEARCH_BUDGET_EXHAUSTED",
-      });
+      })).rejects.toMatchObject({ code: "SEARCH_BUDGET_EXHAUSTED" });
       expect(search.calls).toHaveLength(8);
+      expect(modelCalls).toBeLessThanOrEqual(17);
       expect(seenModels).toEqual(Array(seenModels.length).fill("fake-light"));
     } finally {
       await runtime.close?.();
     }
   });
 
-  it("keeps Pi automatic compaction enabled and checkpoints an in-turn compaction", async () => {
+  // 压缩只在后台做（conversationCompaction.ts）：pi 的自动压缩（轮前、两次工具之间、轮末）全部关掉，一号位不再干等。
+  it("never compacts inside a turn, even when a tool round pushes the context past the model window", async () => {
     const search = createFakeWebSearchAdapter({ latest: [] });
     const highUsage = { ...usage, input: 120_000, totalTokens: 120_002 };
     const events: unknown[] = [];
     const checkpoints: unknown[][] = [];
     let regularCalls = 0;
+    let summaryCalls = 0;
     const runtime = await createPiConversationRuntime({
       companyMemory: loadCompanyMemory(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
@@ -361,6 +435,7 @@ describe("controlled Pi conversation adapter public behavior", () => {
       search,
       streamSimple: (_model, context) => {
         if (context.systemPrompt.includes("context summarization assistant")) {
+          summaryCalls += 1;
           return stream(message([{ type: "text", text: "自动压缩摘要" }], "stop"));
         }
         regularCalls += 1;
@@ -374,55 +449,39 @@ describe("controlled Pi conversation adapter public behavior", () => {
         ));
       },
     });
+    const turn = (text: string, entries: unknown[], piSessionId?: string | null, emit: (event: unknown) => void = () => undefined) => runtime.run({
+      scope: "global",
+      viewer: CEO_VIEWER,
+      message: text,
+      currentObject: null,
+      referencesSnapshot: [],
+      runtimeEntries: JSON.parse(JSON.stringify(entries)),
+      piSessionId: piSessionId ?? "11111111-1111-4111-8111-111111111111",
+      signal: new AbortController().signal,
+      emit,
+      checkpoint: async (saved) => { checkpoints.push(saved); },
+    });
     try {
-      const history = await runtime.run({
-        scope: "global",
-        viewer: CEO_VIEWER,
-        message: "历史上下文".repeat(30_000),
-        currentObject: null,
-        referencesSnapshot: [],
-        runtimeEntries: [],
-        piSessionId: "11111111-1111-4111-8111-111111111111",
-        signal: new AbortController().signal,
-        emit: () => undefined,
-      });
-      const middle = await runtime.run({
-        scope: "global",
-        viewer: CEO_VIEWER,
-        message: "近期上下文".repeat(30_000),
-        currentObject: null,
-        referencesSnapshot: [],
-        runtimeEntries: JSON.parse(JSON.stringify(history.runtimeEntries)),
-        piSessionId: history.piSessionId ?? "11111111-1111-4111-8111-111111111111",
-        signal: new AbortController().signal,
-        emit: () => undefined,
-      });
-      await runtime.run({
-        scope: "global",
-        viewer: CEO_VIEWER,
-        message: "查询当前事实",
-        currentObject: null,
-        referencesSnapshot: [],
-        runtimeEntries: JSON.parse(JSON.stringify(middle.runtimeEntries)),
-        piSessionId: middle.piSessionId ?? "11111111-1111-4111-8111-111111111111",
-        signal: new AbortController().signal,
-        emit: (event) => events.push(event),
-        checkpoint: async (entries) => { checkpoints.push(entries); },
-      });
-      expect(events).toEqual(expect.arrayContaining([
-        expect.objectContaining({ type: "compaction", phase: "started" }),
-        expect.objectContaining({ type: "compaction", phase: "completed" }),
-      ]));
-      expect(JSON.stringify(checkpoints)).toContain("自动压缩摘要");
+      const history = await turn("历史上下文".repeat(30_000), []);
+      const middle = await turn("近期上下文".repeat(30_000), history.runtimeEntries, history.piSessionId);
+      const last = await turn("查询当前事实", middle.runtimeEntries, middle.piSessionId, (event) => events.push(event));
+      const after = await turn("再问一句", last.runtimeEntries, last.piSessionId, (event) => events.push(event));
+      expect(after.assistantMessage).toMatch(/^regular-/);
+      expect(summaryCalls).toBe(0);
+      expect(checkpoints).toEqual([]);
+      expect(events).not.toEqual(expect.arrayContaining([expect.objectContaining({ type: "compaction" })]));
+      expect(JSON.stringify(after.runtimeEntries)).not.toContain('"type":"compaction"');
+      // 原始历史都还在（后台压缩之前不丢任何东西）。
+      expect(JSON.stringify(after.runtimeEntries)).toContain("历史上下文历史上下文");
     } finally {
       await runtime.close?.();
     }
   });
 
-  it("JSON round-trips entries, compacts long context with the compaction slot, and checkpoints only runtime state", async () => {
-    const emitted: unknown[] = [];
-    const checkpoints: unknown[][] = [];
+  it("JSON round-trips entries; a turn over the hard threshold answers from a window without the compaction slot and keeps the full history", async () => {
+    const contexts: Context[] = [];
     let lightTurns = 0;
+    let compactionCalls = 0;
     const highUsage = { ...usage, input: 120_000, totalTokens: 120_002 };
     const runtime = await createPiConversationRuntime({
       companyMemory: loadCompanyMemory(testEnv),
@@ -430,60 +489,131 @@ describe("controlled Pi conversation adapter public behavior", () => {
       apiKey: "test-key",
       modelId: "fake-light",
       compactionModelId: "fake-compaction",
-      streamSimple: (model) => {
+      streamSimple: (model, context) => {
         if (model.id === "fake-compaction") {
+          compactionCalls += 1;
           return stream(message([{ type: "text", text: "旧讨论的压缩摘要" }], "stop"));
         }
         lightTurns += 1;
+        contexts.push(context);
         return stream(message([{ type: "text", text: `light-${lightTurns}` }], "stop"));
       },
     });
+    const turn = (text: string, entries: unknown[], piSessionId?: string | null) => runtime.run({
+      scope: "global", viewer: CEO_VIEWER, message: text, currentObject: null, referencesSnapshot: [],
+      runtimeEntries: entries, piSessionId: piSessionId ?? "11111111-1111-4111-8111-111111111111", signal: new AbortController().signal, emit: () => undefined,
+    });
     try {
-      const first = await runtime.run({
-        scope: "global",
-        viewer: CEO_VIEWER,
-        message: "旧上下文".repeat(30_000),
-        currentObject: null,
-        referencesSnapshot: [],
-        runtimeEntries: [],
-        piSessionId: "11111111-1111-4111-8111-111111111111",
-        signal: new AbortController().signal,
-        emit: () => undefined,
-      });
-      const middle = await runtime.run({
-        scope: "global",
-        viewer: CEO_VIEWER,
-        message: "仍需保留的近期上下文".repeat(10_000),
-        currentObject: null,
-        referencesSnapshot: [],
-        runtimeEntries: JSON.parse(JSON.stringify(first.runtimeEntries)),
-        piSessionId: first.piSessionId ?? "11111111-1111-4111-8111-111111111111",
-        signal: new AbortController().signal,
-        emit: () => undefined,
-      });
+      const first = await turn("旧上下文".repeat(30_000), []);
+      const middle = await turn("仍需保留的近期上下文".repeat(10_000), JSON.parse(JSON.stringify(first.runtimeEntries)), first.piSessionId);
       const roundTripped = JSON.parse(JSON.stringify(middle.runtimeEntries));
       const latestAssistant = roundTripped.findLast((entry: { type?: string; message?: { role?: string; usage?: unknown } }) =>
         entry.type === "message" && entry.message?.role === "assistant");
       latestAssistant.message.usage = highUsage;
-      const second = await runtime.run({
-        scope: "global",
-        viewer: CEO_VIEWER,
-        message: "继续",
-        currentObject: null,
-        referencesSnapshot: [],
-        runtimeEntries: roundTripped,
-        piSessionId: middle.piSessionId ?? "11111111-1111-4111-8111-111111111111",
-        signal: new AbortController().signal,
-        emit: (event) => emitted.push(event),
-        checkpoint: async (entries) => { checkpoints.push(entries); },
-      });
-      expect(emitted).toEqual(expect.arrayContaining([
-        expect.objectContaining({ type: "compaction", phase: "started" }),
-        expect.objectContaining({ type: "compaction", phase: "completed" }),
-      ]));
-      expect(JSON.stringify(second.runtimeEntries)).toContain("旧讨论的压缩摘要");
-      expect(JSON.stringify(checkpoints.at(-1))).toContain("旧讨论的压缩摘要");
-      expect(checkpoints.at(-1)!.length).toBeLessThan(second.runtimeEntries.length);
+      const second = await turn("继续", roundTripped, middle.piSessionId);
+      expect(second.assistantMessage).toBe("light-3");
+      expect(compactionCalls).toBe(0);
+      // 这一轮交给模型的是窗口：此前各轮只有截短的原话，不带完整的旧上下文。
+      const sent = JSON.stringify(contexts.at(-1)!.messages);
+      expect(sent).not.toContain("旧上下文".repeat(2_000));
+      expect(sent).toContain("继续");
+      // 存下来的历史完整（后台压缩之前不丢），并记下这一轮走过窗口。
+      expect(JSON.stringify(second.runtimeEntries)).toContain("旧上下文".repeat(2_000));
+      expect(JSON.stringify(second.runtimeEntries)).toContain("warmap.history-window");
+    } finally {
+      await runtime.close?.();
+    }
+  });
+
+  // 10/13 压缩死锁：会话最后一条是压缩记录、之前那条助手用量仍是压缩前的大数；拿它判断会每轮再压一次。
+  // 现在一轮里不压缩，压缩记录之后按字数估算历史长度，下一轮照常回答。
+  it("does not use a usage recorded before the latest compaction; the next turns answer normally without compaction calls", async () => {
+    const highUsage = { ...usage, input: 120_000, totalTokens: 120_002 };
+    let compactionCalls = 0;
+    let regularCalls = 0;
+    const runtime = await createPiConversationRuntime({
+      companyMemory: loadCompanyMemory(testEnv),
+      baseUrl: "https://provider.invalid/v1/responses",
+      apiKey: "test-key",
+      modelId: "fake-light",
+      compactionModelId: "fake-compaction",
+      streamSimple: (model, context) => {
+        if (model.id === "fake-compaction" || context.systemPrompt.includes("context summarization assistant")) {
+          compactionCalls += 1;
+          return stream(message([{ type: "text", text: "压缩摘要" }], "stop"));
+        }
+        regularCalls += 1;
+        return stream(message([{ type: "text", text: `regular-${regularCalls}` }], "stop", highUsage));
+      },
+    });
+    const turn = (text: string, entries: unknown[], piSessionId?: string | null, emit: (event: unknown) => void = () => undefined) => runtime.run({
+      scope: "global",
+      viewer: CEO_VIEWER,
+      message: text,
+      currentObject: null,
+      referencesSnapshot: [],
+      runtimeEntries: JSON.parse(JSON.stringify(entries)),
+      piSessionId: piSessionId ?? "11111111-1111-4111-8111-111111111111",
+      signal: new AbortController().signal,
+      emit,
+    });
+    try {
+      const first = await turn("历史上下文", []);
+      // 与 10/13 卡死的那段对话形状相同：以压缩记录结尾，之前的用量是大数。
+      const sessionId = first.piSessionId ?? "11111111-1111-4111-8111-111111111111";
+      const manager = SessionManager.inMemory(process.cwd(), { id: sessionId }, structuredClone(first.runtimeEntries) as Parameters<typeof SessionManager.inMemory>[2]);
+      const kept = manager.getBranch().findLast((entry) => entry.type === "message" && entry.message.role === "user")!;
+      manager.appendCompaction("压缩摘要", kept.id, 120_002);
+      const events: unknown[] = [];
+      const third = await turn("继续", [manager.getHeader(), ...manager.getEntries()], sessionId, (event) => events.push(event));
+      expect(third.assistantMessage).toBe(`regular-${regularCalls}`);
+      expect(compactionCalls).toBe(0);
+      expect(events).not.toEqual(expect.arrayContaining([expect.objectContaining({ type: "compaction" })]));
+      // 压缩记录之后没有窗口标记：按字数估算，历史很短。
+      expect(JSON.stringify(third.runtimeEntries)).not.toContain("warmap.history-window");
+      const fourth = await turn("再继续", third.runtimeEntries, third.piSessionId);
+      expect(fourth.assistantMessage).toBe(`regular-${regularCalls}`);
+    } finally {
+      await runtime.close?.();
+    }
+  });
+
+
+  it("continues the turn when a pre-turn compaction has nothing to compact, and the conversation recovers", async () => {
+    const highUsage = { ...usage, input: 120_000, totalTokens: 120_002 };
+    let regularCalls = 0;
+    const runtime = await createPiConversationRuntime({
+      companyMemory: loadCompanyMemory(testEnv),
+      baseUrl: "https://provider.invalid/v1/responses",
+      apiKey: "test-key",
+      modelId: "fake-light",
+      compactionModelId: "fake-compaction",
+      streamSimple: (model) => {
+        if (model.id === "fake-compaction") return stream(message([{ type: "text", text: "不应调用" }], "stop"));
+        regularCalls += 1;
+        return stream(message([{ type: "text", text: `regular-${regularCalls}` }], "stop"));
+      },
+    });
+    const turn = (text: string, entries: unknown[], piSessionId?: string | null) => runtime.run({
+      scope: "global",
+      viewer: CEO_VIEWER,
+      message: text,
+      currentObject: null,
+      referencesSnapshot: [],
+      runtimeEntries: JSON.parse(JSON.stringify(entries)),
+      piSessionId: piSessionId ?? "11111111-1111-4111-8111-111111111111",
+      signal: new AbortController().signal,
+      emit: () => undefined,
+    });
+    try {
+      const first = await turn("短问题", []);
+      // 用量记录很大、实际历史很短：压缩找不到可压的内容。修复前整轮在这里失败。
+      const entries = JSON.parse(JSON.stringify(first.runtimeEntries));
+      entries.findLast((entry: { type?: string; message?: { role?: string } }) => entry.type === "message" && entry.message?.role === "assistant").message.usage = highUsage;
+      const second = await turn("继续", entries, first.piSessionId);
+      expect(second.assistantMessage).toBe("regular-2");
+      const third = await turn("再继续", second.runtimeEntries, second.piSessionId);
+      expect(third.assistantMessage).toBe("regular-3");
     } finally {
       await runtime.close?.();
     }
@@ -575,8 +705,9 @@ describe("controlled Pi conversation adapter public behavior", () => {
 
       expect(first.assistantMessage).toBe("MCP OK");
       expect(first.runtimeEntries.length).toBeGreaterThan(0);
+      // 「负责人是谁」是快答：快答档不带外部检索（conversationPrompt.ts）。
       expect(contexts[0].tools?.map((tool) => tool.name).sort()).toEqual([
-        "get_passages", "list_sections", "search_people", "search_sections", "web_search",
+        "get_passages", "list_sections", "search_people", "search_sections",
       ]);
       expect(contexts[0].tools?.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));
       expect(contexts[0].systemPrompt).toContain("不能执行任何业务写入");

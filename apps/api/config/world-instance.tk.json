@@ -1,0 +1,20 @@
+{
+  "label": "词元云集范围（TK，只读）",
+  "scope_id": "a92430fd-e1fc-4a42-8a04-bc2faa0a34cc",
+  "tenant_id": "tokenking-world-02",
+  "domains": {
+    "company": "fc9e6f1e-0bec-4076-8d0d-2686c8ea26fa",
+    "eo": "88674067-189b-4457-ba20-7de2df9f3768",
+    "reader": "392a2f73-f1d1-4ec0-a6d7-9963976f56c8"
+  },
+  "principals": {
+    "tianshu-reader": "6d11f6fc-ee9d-43b1-872b-284cb0a318ab"
+  },
+  "anchors": {
+    "company": "0ee4d398-0283-4e08-9f9f-c0244802c806",
+    "strategy": "0057ae2d-1439-4326-9587-258ee8988577"
+  },
+  "people": {},
+  "reads": true,
+  "writes": false
+}

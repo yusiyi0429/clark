@@ -1,3 +1,5 @@
+import { ADDRESS_STYLE } from "./promptStyle.js";
+
 /** TKOS_Mission_Card_Mission_Plan_v0.1_2026-09-30，用于起草及改写同一任务卡。 */
 export const MISSION_CARD_WRITING_BASIS_SOURCE = "TKOS_Mission_Card_Mission_Plan_v0.1_2026-09-30";
 
@@ -34,4 +36,6 @@ ${MISSION_CARD_WRITING_RULES}
 每项 Mission 必须审阅全部规则：name（名称识别）、result（最终独立结果）、necessity（上级目标贡献及删除后的缺口）、evidence（真实结果验收）、boundary（责任分界）、timeBoundary（影响责任的真实时间边界或具体待确认缺口）、tradeoffs（影响范围/优先级/资源/速度/质量的主动选择及代价或具体待确认问题）、plan（Mission 层主路径与实质约束）、milestone（少量状态里程碑）、grounding（事实/数字/日期/资源/人员有真实来源或明确待确认）、scope（没有强凑 Mission 或下钻 Task 清单）。
 每条 assessment 的 excerpt 必须逐字摘取这项 Mission 对应字段中的连续正文片段；successEvidence 与 milestones 是数组，摘取其中一条的原文，不要把数组序列化成带括号、引号的 JSON，也不要拼接省略号或改写摘录。reason 解释具体判断；不允许空泛「符合规范」。passed=false 时 correction 必须给出针对字段的可执行改法（缺依据时改为待确认，不能建议补造事实）。passed=true 时 correction 为 null。
 审阅必须检查所有 Mission，missionIndex 从 0 开始与 draft.missions 一一对应，不遗漏或重复。grounding 不能只看 basis 声称有依据，要核对 input 的真实来源；period/signedAt 不能支持具体交付日期。只有所有规则合格才能作为讨论草稿返回。
-Demo/会议/手册等词不是禁词；如果描述的是有真实判断、行为或结果 Evidence 的可复用机制，应依据语义评估，不作关键词封杀。`;
+Demo/会议/手册等词不是禁词；如果描述的是有真实判断、行为或结果 Evidence 的可复用机制，应依据语义评估，不作关键词封杀。
+
+${ADDRESS_STYLE}`;

@@ -87,7 +87,7 @@ describe("Mission 总览渲染", () => {
     expect(html).toContain("管理 Mission");
     expect(html).toContain('aria-label="返回全局"');
     expect(html).toContain("本月 Mission");
-    expect(html).toContain("DRI");
+    expect(html).toContain("负责人");
     expect(html).toContain("关联战场");
     expect(html).toContain("主要能力域");
   });
@@ -104,7 +104,7 @@ describe("Mission 总览渲染", () => {
   it("筛选面板覆盖周期/战场/能力域/DRI，并保留全战场选项", () => {
     expect(html).toContain("全部战场");
     expect(html).toContain("全部能力域");
-    expect(html).toContain("全部 DRI");
+    expect(html).toContain("全部负责人");
     expect(html).toContain("2026-09");
     expect(html).toContain("002 客户");
   });

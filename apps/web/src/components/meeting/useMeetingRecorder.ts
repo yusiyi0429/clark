@@ -50,7 +50,7 @@ export function useMeetingRecorder(meetingId: string) {
           fetch(`${base}/${encodeURIComponent(id)}/chunks/${n}`, { method: "PUT", headers: { "content-type": blob.type || "audio/webm" }, body: blob });
         let response = await send().catch(() => null);
         if (!response?.ok) response = await send().catch(() => null);
-        if (!response?.ok) failed.current = "有一段录音没有传上去，转写可能缺一小段。";
+        if (!response?.ok) failed.current = "部分录音片段上传失败，转写内容可能不完整。";
       });
     },
     [base],
@@ -92,7 +92,7 @@ export function useMeetingRecorder(meetingId: string) {
   const start = useCallback(async () => {
     if (recorder.current) return;
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setState({ status: "unsupported", error: "这个浏览器不能录音，这场会不会有录音。" });
+      setState({ status: "unsupported", error: "当前浏览器不支持录音，该会议将没有录音。" });
       return;
     }
     const type = pickRecordingType((candidate) => MediaRecorder.isTypeSupported(candidate));
@@ -100,14 +100,14 @@ export function useMeetingRecorder(meetingId: string) {
     try {
       stream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      setState({ status: "denied", error: "麦克风没有授权，这场会不会有录音。" });
+      setState({ status: "denied", error: "麦克风未授权，该会议将没有录音。" });
       return;
     }
     const response = await fetch(base, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).catch(() => null);
     const body = (await response?.json().catch(() => ({}))) as { recordingId?: string; message?: string } | undefined;
     if (!response?.ok || !body?.recordingId) {
       releaseMic();
-      setState({ status: "failed", error: body?.message ?? "录音没有开始，这场会不会有录音。" });
+      setState({ status: "failed", error: body?.message ?? "录音未能启动，该会议将没有录音。" });
       return;
     }
     recordingId.current = body.recordingId;
@@ -140,7 +140,7 @@ export function useMeetingRecorder(meetingId: string) {
     recordingId.current = null;
     if (!response?.ok) {
       const body = (await response?.json().catch(() => ({}))) as { message?: string } | undefined;
-      setState({ status: "failed", error: body?.message ?? "录音没能交给服务端转写，请稍后在会议记录里导入妙记。" });
+      setState({ status: "failed", error: body?.message ?? "录音未能提交转写，请稍后在「会议记录」中导入妙记。" });
       return false;
     }
     setState(failed.current ? { status: "finished", error: failed.current } : { status: "finished" });

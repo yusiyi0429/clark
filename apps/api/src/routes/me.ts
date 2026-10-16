@@ -1,6 +1,6 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
 import { acceptMyTask, addTaskCollaborators, clearMyTaskSubmission, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
 import { draftTaskAcceptance } from "../taskAcceptanceDraft.js";
@@ -10,6 +10,8 @@ import { personDisplayNames } from "../people.js";
 import { canUseMemberView } from "../memberAccess.js";
 import { deleteVoiceprint, enrollVoiceprint, MAX_VOICEPRINT_UPLOAD_BYTES, voiceprintStatus } from "../voiceprints.js";
 import { dictate, MAX_DICTATION_UPLOAD_BYTES } from "../dictation.js";
+import { createSessionRateLimiter, issueRealtimeSession } from "../tencentAsrRealtime.js";
+import { MAX_POLISH_TEXT_CHARS, polishDictation } from "../dictationPolish.js";
 import { idParams, type AppInstance, type Guard, type RouteContext } from "./shared.js";
 import { readMemberWork } from "../memberWork.js";
 import { readMemberBattlefield } from "../memberBattlefields.js";
@@ -21,10 +23,13 @@ import { getIssueRow } from "../issues.js";
 import { getMeetingRow } from "../meetingStore.js";
 import { projectMemberIssueCard, projectMemberMeetingCard } from "../memberCards.js";
 import { isActiveMember, unreadThreads } from "../threads.js";
+import { AGENT_ROLES, anonUserId, randomTurnSuffix, stableThreadId, tracedTurn, withAgent } from "../tracing.js";
 
 // 成员工作台：普通视图对象，不走 Card/Action 签名（spec §3.5）。
 export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, fail, requirePerson, companyMemory, voiceprints, dictation, materialMultipartLimitError } = ctx;
+  const { pool, q, fail, requirePerson, companyMemory, voiceprints, dictation, dictationRealtime, dictationPolish, materialMultipartLimitError } = ctx;
+  // 实时听写签发的每人每分钟上限：每个 app 实例一份计数
+  const realtimeSessionLimiter = createSessionRateLimiter();
 
   const names = () => personDisplayNames(companyMemory);
   const invitable = () => new Set(companyMemory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId));
@@ -236,6 +241,46 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
       }
       const result = await dictate(dictation, audio);
       return result.ok ? { text: result.text } : fail(reply, result.status, result.code, result.message);
+    },
+  );
+
+  // 实时听写：签一个 30 秒内有效的腾讯实时识别地址，浏览器直连腾讯。地址与签名不进日志（请求日志只记路径）。
+  app.post(
+    "/api/me/dictation/session",
+    { preHandler: requirePerson, schema: { response: { 200: DictationSessionResponse } } },
+    async (req, reply) => {
+      reply.header("Cache-Control", "no-store");
+      const result = issueRealtimeSession(dictationRealtime, realtimeSessionLimiter, req.person!.personId);
+      if (result.ok) return result.value;
+      if (result.retryAfterSeconds) reply.header("retry-after", String(result.retryAfterSeconds));
+      return fail(reply, result.status, result.code, result.message);
+    },
+  );
+
+  // 听写后的轻度整理（mode：sentence 逐句 / full 整段含分点）：失败 / 超时 / 未配置都回原文（polished:false），不报错。
+  app.post(
+    "/api/me/dictation/polish",
+    { preHandler: requirePerson, schema: { body: DictationPolishRequest, response: { 200: DictationPolishResponse } } },
+    async (req, reply) => {
+      reply.header("Cache-Control", "no-store");
+      if (Array.from(req.body.text).length > MAX_POLISH_TEXT_CHARS) {
+        return fail(reply, 413, "DICTATION_TEXT_TOO_LONG", `一次最多整理 ${MAX_POLISH_TEXT_CHARS} 字`);
+      }
+      const mode = req.body.mode ?? "sentence";
+      const personId = req.person!.personId;
+      // LangSmith：一次整理 = 一个 Turn（dict-<随机>），Thread = 这个人的听写整理会话；不需要整理的句子不调用模型，也不留轨迹。
+      return tracedTurn({
+        resolve: async () => ({
+          agentRole: AGENT_ROLES.dictationPolish,
+          logicalTurnId: `dict-${randomTurnSuffix()}`,
+          attempt: 1,
+          threadId: await stableThreadId(q, `dictation|${anonUserId(personId)}`),
+          scope: "global",
+          anonUserId: anonUserId(personId),
+        }),
+        outputs: (result) => ({ polished: result.polished }),
+      }, () => withAgent(AGENT_ROLES.dictationPolish, () => polishDictation(dictationPolish, req.body.text, mode),
+        { inputs: { mode, chars: Array.from(req.body.text).length }, outputs: (result) => ({ polished: result.polished }) }));
     },
   );
 

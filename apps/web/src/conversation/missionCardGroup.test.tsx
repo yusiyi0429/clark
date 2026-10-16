@@ -43,10 +43,10 @@ describe("任务卡群组的阶段和公开记录", () => {
     expect(html).toContain("v1");
     expect(html).not.toContain("暂无消息");
   });
-  it("引用条显示源版本并允许取消", () => {
+  it("批注条显示源版本并允许取消", () => {
     const html = renderToStaticMarkup(<MissionGroupComposer cardId="card" phase="open" channels={[]} channel="group" onChannel={() => {}} narrow={false} mobileOpen={false} onMobileOpen={() => {}} onHeightChange={() => {}} reference={{ missionId: "m", field: "why", quote: "讨论依据", sourceVersion: 2, nonce: 1 }} onRemoveReference={() => {}} busy={false} onSend={async () => true} />);
     expect(html).toContain("讨论依据");
     expect(html).toContain("v2");
-    expect(html).toContain('aria-label="取消引用"');
+    expect(html).toContain('aria-label="取消批注"');
   });
 });

@@ -27,3 +27,16 @@ describe("个人菜单（左下角自己的名字）", () => {
     expect(submit).toContain("disabled");
   });
 });
+
+describe("一号位视角（巡检 P1-12）", () => {
+  it("「一号位」头像写「一」，不写「号」", async () => {
+    expect(avatarInitial("一号位")).toBe("一");
+  });
+
+  it("演示环境菜单不露登录 ID（democeo）；正式环境照旧", async () => {
+    const { accountSubtitle } = await import("./AccountMenu");
+    const account = { displayName: "一号位", loginId: "democeo", role: "ceo" as const };
+    expect(accountSubtitle(account, true)).toBe("");
+    expect(accountSubtitle(account, false)).toBe("democeo · CEO");
+  });
+});

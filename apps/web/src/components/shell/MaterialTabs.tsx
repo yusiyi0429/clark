@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * 左侧阅读区此刻看哪一份（clark `detail-header/material-tabs.tsx`）。两样控件一起回答这一个问题，任何时刻恰好一个是当前：
+ * 左侧阅读区此刻看哪一份（clark `detail-header/material-tabs.tsx`）。
  *
- * - `MaterialMenu`：页头右边一颗按钮，写着此刻看的那一份；按下去是一张下拉单，列出这一页的材料，最后一项是「添加材料」。
- *   材料区要尽可能给材料留空间（用户 2026-09-29 定），所以不再在页头下面另起一排页签。二级页（DetailFrame）里它经
- *   `HeaderSlot` 挂进页头；没有 DetailFrame 的页（议题页）就放在材料区自己那一行。
- * - `HeaderMaterialToggle`：页头右端一个「整场」的入口（会议页的会议记录）。它不属于任何一份材料，所以单独一颗。
- *   按下去阅读区换成它，下拉单里一项都不勾；再按一次回到刚才那份材料。
+ * `MaterialMenu`：页头右边一颗按钮，写着此刻看的那一份；按下去是一张下拉单，列出这一页的材料，最后一项是「添加材料」。
+ * 材料区要尽可能给材料留空间（用户 2026-09-29 定），所以不再在页头下面另起一排页签。二级页（DetailFrame）里它经
+ * `HeaderSlot` 挂进页头；不在 DetailFrame 里的页就放在材料区自己那一行。
+ * 页头另有类型切换（components/SegmentedSwitch：会议页的「会前预审 ｜ 会议记录」、议题页的「总结与判断 / 研究与依据」）时，
+ * 切换的那几份不进下拉单；选了某份材料，切换里一段都不亮。
  *
  * 只换左侧看哪一份：不跳页、不改地址。
  */
@@ -15,8 +15,8 @@
 import { createContext, Fragment, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { TianshuPortalTheme } from "ts-design";
-import { Button, Popover, ToggleButton } from "ts-design/primitives";
-import { Check, ChevronDown, FileText, Link2, NotebookPen, Plus } from "lucide-react";
+import { Button, Popover } from "ts-design/primitives";
+import { Check, ChevronDown, FileText, Link2, Plus } from "lucide-react";
 import t from "@/styles/material-tabs.module.css";
 
 /**
@@ -51,22 +51,6 @@ export interface MaterialAddAction {
   icon: ReactNode;
   onPress: () => void;
 }
-
-/** 阅读区的选择：`current` 是此刻看的那一份；`material` 是最近看的那份材料，整场入口再按一次就回到它。 */
-export interface MaterialView {
-  current: string;
-  material: string;
-}
-
-export const materialView = (material: string): MaterialView => ({ current: material, material });
-
-/** 按下一份材料的页签：看它，也记住它。 */
-export const pressMaterial = (view: MaterialView, id: string): MaterialView =>
-  view.current === id && view.material === id ? view : { current: id, material: id };
-
-/** 按页头那个整场入口：没在看就换成它；正在看就回到刚才那份材料。 */
-export const toggleWhole = (view: MaterialView, wholeId: string): MaterialView =>
-  view.current === wholeId ? { ...view, current: view.material } : { ...view, current: wholeId };
 
 /**
  * 像浏览器页签那样，每一份各自记住滚到了哪儿：换过去从它上次的位置接着看，没看过的从头看。`key` 是
@@ -128,12 +112,12 @@ export function MaterialMenu({
               <Fragment key={tab.id}>
                 {tab.ruleBefore ? <p className={t.section}>{tab.ruleBefore}</p> : null}
                 <Button variant="ghost" className={t.item}
-                  aria-label={`${tab.title}${tab.working ? "（Co-Agent 正在改）" : ""}${tab.count ? `，${tab.count} 条待处理` : ""}`}
+                  aria-label={`${tab.title}${tab.working ? "（Co-Agent 修改中）" : ""}${tab.count ? `，${tab.count} 条待处理` : ""}`}
                   aria-current={tab.id === selected || undefined} isDisabled={tab.isDisabled}
                   onPress={() => { if (!tab.isDisabled) pick(() => onSelect(tab.id)); }}>
                   {tab.kind === "link" ? <Link2 size={15} strokeWidth={1.8} aria-hidden /> : <FileText size={15} strokeWidth={1.8} aria-hidden />}
                   <span className={t.label}>{tab.label}</span>
-                  {tab.working ? <span className={`${t.hint} ${t.working}`}><span className={t.pulse} aria-hidden />在改</span>
+                  {tab.working ? <span className={`${t.hint} ${t.working}`}><span className={t.pulse} aria-hidden />修改中</span>
                     : tab.hint ? <span className={t.hint}>{tab.hint}</span> : null}
                   {tab.count ? <span className={t.count} aria-hidden>{tab.count}</span> : null}
                   {tab.id === selected ? <Check size={15} strokeWidth={2} aria-hidden className={t.check} /> : null}
@@ -163,13 +147,4 @@ export function InHeader({ children }: { children: ReactNode }) {
   const slot = useContext(HeaderSlot);
   if (!slot) return <>{children}</>;
   return slot.element ? createPortal(children, slot.element) : null;
-}
-
-export function HeaderMaterialToggle({ tab, selected, onToggle }: { tab: MaterialTab; selected: boolean; onToggle: () => void }) {
-  return (
-    <ToggleButton className={t.whole} isSelected={selected} onChange={onToggle} data-header-whole aria-label={tab.title}>
-      <NotebookPen size={16} strokeWidth={1.8} aria-hidden />
-      <span className={t.label}>{tab.label}</span>
-    </ToggleButton>
-  );
 }

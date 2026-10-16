@@ -1,13 +1,35 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { browserApi, type Card } from "@/lib/api/client";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type RadarPayload, type SignalPayload } from "./payloads";
 import { SignalStory } from "./SignalStory";
 import { SignalArticle, type SignalState } from "./SignalArticle";
-import { DetailHeader } from "@/components/shell/DetailHeader";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
+import { refreshWorkspace, showWorkspaceToast, type ToastDetail } from "@/lib/toast";
+
+/**
+ * 「不再出现在阅读列表」之后回到列表，底部提示一句并给「撤销」（巡检 P1-15）。
+ * 撤销时已不在信号页：直接改回状态，再让外壳刷新列表。
+ */
+export function hiddenSignalToast(signalId: string): ToastDetail {
+  return {
+    text: "这条信号已从阅读列表移除",
+    action: {
+      label: "撤销",
+      run: async () => {
+        const { response } = await browserApi.PATCH("/api/signals/{id}/state", { params: { path: { id: signalId } }, body: { dismissed: false } })
+          .catch(() => ({ response: null }));
+        if (response?.ok) {
+          refreshWorkspace();
+          showWorkspaceToast({ text: "已恢复到阅读列表" });
+        } else showWorkspaceToast({ text: "恢复失败，请稍后重试" });
+      },
+    },
+  };
+}
 
 export { joinSentences } from "./SignalArticle";
 
@@ -60,6 +82,23 @@ export function SignalCard({ card, collection, onCard, onNavigate }: CardRenderP
   const [last, setLast] = useState<SignalState | null>(null);
   const upNext = useMemo(() => upNextSignals(card, collection), [card, collection]);
 
+  useEffect(() => {
+    let active = true;
+    const scope = `signal:${card.objectRef.id}`;
+    const changed = (event: Event) => {
+      if ((event as CustomEvent<{ scope?: string }>).detail?.scope !== scope) return;
+      void browserApi.GET("/api/cards/signals/{id}", { params: { path: { id: card.objectRef.id } }, cache: "no-store" })
+        .then(({ data, response }) => {
+          const updated = data?.cards[0];
+          if (!active || !response.ok || !updated) return;
+          setState(payloadOf<SignalPayload>(updated).state);
+          onCard(updated);
+        }).catch(() => undefined);
+    };
+    window.addEventListener("conversation-object-changed", changed);
+    return () => { active = false; window.removeEventListener("conversation-object-changed", changed); };
+  }, [card.objectRef.id, onCard]);
+
   const radar = homeCards.find((item) => item.kind === "radar");
   const anchors = radar ? payloadOf<RadarPayload>(radar).anchors : [];
   const anchorTitleOf = (id: string) => anchors.find((item) => item.id === id)?.title;
@@ -89,14 +128,7 @@ export function SignalCard({ card, collection, onCard, onNavigate }: CardRenderP
   }
 
   return (
-    <>
-      <DetailHeader
-        mark="signal"
-        eyebrow="信号详情 · 雷达"
-        back={{ label: "返回信号列表", onPress: () => onNavigate("/radar") }}
-        closeLabel="关闭雷达"
-        onClose={() => onNavigate("/")}
-      />
+    <DetailFrame title="信号详情" subtitle="雷达" onBack={() => onNavigate("/radar")} backLabel="返回信号列表">
       <SignalArticle
         reading={{
           title: payload.source.title,
@@ -105,7 +137,7 @@ export function SignalCard({ card, collection, onCard, onNavigate }: CardRenderP
           summary: payload.assessment.summary,
           unknowns: payload.assessment.unknowns,
           relation: {
-            heading: "对我们的影响",
+            heading: "对公司的影响",
             text: payload.assessment.strategicImpact,
             tag: anchor ? { label: `战略锚点 · ${anchor.title}`, detail: anchor.query } : undefined,
           },
@@ -123,11 +155,14 @@ export function SignalCard({ card, collection, onCard, onNavigate }: CardRenderP
         onRetry={() => {
           if (last) void update(last);
         }}
-        onHidden={() => onNavigate("/radar")}
+        onHidden={() => {
+          onNavigate("/radar");
+          showWorkspaceToast(hiddenSignalToast(card.objectRef.id));
+        }}
         upNext={upNext.map((item) => (
           <SignalStory key={item.id} card={item} anchorTitle={anchorTitleOf(payloadOf<SignalPayload>(item).assessment.anchorId)} onOpen={onNavigate} />
         ))}
       />
-    </>
+    </DetailFrame>
   );
 }

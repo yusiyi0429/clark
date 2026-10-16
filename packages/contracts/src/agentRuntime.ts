@@ -14,6 +14,8 @@ export const WebSearchResult = Type.Object({
   publishedAt: Type.Optional(Type.String({ format: "date-time" })),
   excerpt: Type.String(),
   provider: Type.String({ minLength: 1 }),
+  /** 检索服务给这条网页配的图（博查 images 里 hostPageUrl 对得上的那张）；雷达拿来做信号封面。 */
+  imageUrl: Type.Optional(Type.String({ minLength: 8, maxLength: 1000 })),
 }, { additionalProperties: false });
 
 export const WebSearchResponse = Type.Object({

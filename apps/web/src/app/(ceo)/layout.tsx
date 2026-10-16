@@ -7,7 +7,8 @@ import { loadHomeCards, readSession } from "@/lib/api/server";
  * （clark 同：总览 DOM 保留，关闭回到来源）。未登录或成员身份时交给各页面自己的 requireCeo 跳转（带上正确的 next）。
  */
 export default async function CeoLayout({ children }: { children: React.ReactNode }) {
-  const cookie = (await cookies()).toString();
+  const jar = await cookies();
+  const cookie = jar.toString();
   const session = await readSession(cookie);
   if (session?.role !== "ceo" || !session.onboarded) return children;
   const { cards } = await loadHomeCards(cookie);

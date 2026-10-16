@@ -120,6 +120,77 @@
   --space-4: 16px;
   --space-6: 24px;
   --space-8: 32px;
+
+  /*
+   * 材料排印（docs/superpowers/specs/2026-10-12-issue-page-typography.md）：二级页读材料用的一套字号、字重、墨色。
+   * 议题页只用两级 16 / 13 + 标签专用 12（--doc-type-title 20 议题页已不用，目前只剩月度计划页的一处在用）；字重只有 400 / 600；
+   * 墨色以主 / 次两级为主，弱墨只给编号、出处日期、空状态；强调色只给可点的。
+   * 层级靠字重、墨色、间距和发丝线分，不靠再多一个字号。12px 只给标签（雷达来源、状态），其余辅助字 ≥13px。
+   * 名字带 doc-：外壳 .shell 已有一套随视口变化的 --type-*（首页看板用），这里不能和它重名。
+   * 页面用 data-type-scale="doc" 选用；议题页（IssueCard）先用，会议页、战场页等以后加上同一个属性即可。
+   */
+  --doc-type-title: 20px;
+  --doc-lh-title: 32px;
+  --doc-type-section: 16px;
+  --doc-lh-section: 24px;
+  --doc-type-body: 16px;
+  --doc-lh-body: 28px;
+  --doc-type-meta: 13px;
+  --doc-lh-meta: 20px;
+  --doc-type-tag: 12px;
+  --doc-lh-tag: 18px;
+  --doc-weight-regular: 400;
+  --doc-weight-strong: 600;
+  /* 墨色：主（正文、标题）17:1 · 次（说明、摘录）7.6:1 · 弱（日期、出处、编号、标签）5.3:1；强调色只给可点的字。 */
+  --doc-ink-1: #17171b;
+  --doc-ink-2: #535358;
+  --doc-ink-3: #6b6b70;
+  --doc-ink-accent: #3c66bf;
+  --doc-tag-wash: color-mix(in oklab, #17171b 6%, transparent);
+  --doc-rule: color-mix(in oklab, #17171b 9%, transparent);
+  /* 行长：正文 16px 每行约 37 字（二级页左侧阅读列统一 600，见深度讨论 spec 末节）。 */
+  --doc-measure: 600px;
+}
+
+/*
+ * 点触下限（docs/superpowers/specs/2026-10-12-mobile-foldable.md §2）：手持（≤959：单屏、双屏）与触屏（pointer: coarse：
+ * 三折叠三屏、平板横放）热区至少 44。鼠标的电脑不设这个变量，组件写 var(--touch-hit, 原尺寸)，电脑上一像素不变。
+ */
+@media (max-width: 959px), (pointer: coarse) {
+  :root { --touch-hit: 44px; }
+}
+
+/*
+ * 输入框 / 文本框 / 下拉的统一样式（用户 2026-10-12：以右侧对话输入条为准；不用虚线框，聚焦不用粗蓝色双层框）。
+ * 颜色、圆角、内边距、字号、行高都取对话输入条（composer-pill.module.css 的 --pill-line-agent #dfe5ee、圆角 20、字 14 / 行 20、左右 16）：
+ * 默认 1px 浅灰细边；悬停稍深；聚焦 1px 黑灰（主墨弱化）—— 键盘焦点照样看得见，不叠 outline、不用蓝。
+ * 画不了边的场合（框外还有一层容器）才用 --field-focus-ring：一圈极淡的同色阴影，不是粗框。
+ * 手持与触屏字号 16（iOS 小于 16 的输入框聚焦时会放大整页）。单行框圆角取 --field-radius-line（同对话胶囊的高度比例），多行取 --field-radius。
+ * 基础元素样式在下面 @layer base 里（零特指度）：组件只写尺寸与排版，边框、底色、焦点一律用这套变量，不再各写一份。
+ * 注意：--field-border / -hover / -focus / -placeholder / -radius 与 HeroUI 自己的字段变量同名（HeroUI 的 Input、Select 等就读它们），
+ * 所以 HeroUI / ts-design 的文本框也跟着这套取值走。但 ts-design 的 [data-ts-theme]（TianshuTheme 外层）会把同名变量重新赋值
+ * （边是 transparent、圆角 0.75rem），把 :root 的取值盖掉；这个声明块因此同时挂在 :root [data-ts-theme] 下（特指度 0,2,0 压过 ts-design 的 0,1,0）。
+ * heroui-tianshu.css 里同名的几行已删，免得 :root[data-theme] 再盖一遍。
+ */
+:root,
+:root [data-ts-theme] {
+  --field-bg: #ffffff;
+  --field-ink: #282c32;
+  --field-placeholder: #9197a0;
+  --field-border: #dfe5ee;
+  --field-border-hover: #cbd2dc;
+  --field-border-focus: #3a3a40;
+  --field-focus-ring: 0 0 0 3px rgb(58 58 64 / 7%);
+  --field-radius: 20px;
+  --field-radius-line: 14px;
+  --field-pad-y: 12px;
+  --field-pad-x: 16px;
+  --field-font: 14px;
+  --field-line: 20px;
+  --field-caret: #2f6fd6;
+}
+@media (max-width: 959px), (pointer: coarse) {
+  :root, :root [data-ts-theme] { --field-font: 16px; --field-line: 24px; --field-pad-y: 10px; }
 }
 
 @theme inline {
@@ -211,6 +282,62 @@
   [role="button"]:not([aria-disabled="true"]) {
     cursor: pointer;
   }
+
+}
+
+/*
+ * 文字输入的基础样式（变量见上方 --field-*）。不放进 @layer base：Tailwind 与 HeroUI 各自带一份预检（textarea { resize: vertical }、
+ * input { font: inherit; border-radius: 0 }），HeroUI 的那份在本文件之后加载，同在 base 层时会把这里盖掉。所以写成不分层、零特指度（:where）：
+ * 压过任何分层的预检与组件库默认样式；组件只要写了自己的类（如对话输入条里的无边框文字框）就以组件为准。
+ * 聚焦只换边色（#dfe5ee → #3a3a40，键盘焦点看得清），不加 outline、不加蓝色双层框；全局 :focus-visible 的 2px 外框在文字输入上关掉。
+ */
+:where(input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="password"], input[type="url"], input[type="tel"], input[type="number"], input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"], textarea, select) {
+  box-sizing: border-box;
+  border: 1px solid var(--field-border);
+  border-radius: var(--field-radius-line);
+  background-color: var(--field-bg);
+  color: var(--field-ink);
+  caret-color: var(--field-caret);
+  font: inherit;
+  font-size: var(--field-font);
+  line-height: var(--field-line);
+  padding: var(--field-pad-y) var(--field-pad-x);
+  outline: none;
+  transition: border-color 140ms ease;
+}
+:where(textarea) { border-radius: var(--field-radius); resize: none; }
+:where(input, textarea)::placeholder { color: var(--field-placeholder); }
+:where(input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="password"], input[type="url"], input[type="tel"], input[type="number"], input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"], textarea, select):where(:hover) {
+  border-color: var(--field-border-hover);
+}
+:where(input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="password"], input[type="url"], input[type="tel"], input[type="number"], input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"], textarea, select):where(:focus) {
+  border-color: var(--field-border-focus);
+}
+:where(input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="password"], input[type="url"], input[type="tel"], input[type="number"], input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"], textarea, select):where(:focus-visible) {
+  outline: none;
+}
+/*
+ * HeroUI / ts-design 的文本框（Input、TextArea、Select 触发器）。它们的样式在 @layer components（分层），
+ * 所以这里用不分层的规则对齐：边、悬停边、聚焦边、占位字已经通过 --field-* 同名变量带过来了（见上方注释），
+ * 这里补圆角（单行取 --field-radius-line，不然会跟着多行的 20 变成胶囊）、内边距、字号行高，并去掉 HeroUI 默认的 2px 聚焦圈。
+ * :where() 把特指度归零：组件自己的 CSS Module 写了就以它为准（对话输入条的 HeroUI TextArea 无边框，整套自己覆盖）。
+ */
+:where(input[data-slot="input"], [data-slot="select-trigger"]) {
+  border-radius: var(--field-radius-line);
+}
+:where(input[data-slot="input"], textarea[data-slot="textarea"], [data-slot="select-trigger"]) {
+  padding: var(--field-pad-y) var(--field-pad-x);
+  font-size: var(--field-font);
+  line-height: var(--field-line);
+  box-shadow: none;
+}
+:where(input[data-slot="input"], textarea[data-slot="textarea"], [data-slot="select-trigger"]):where(:focus, :focus-visible, [data-focused="true"], [data-focus-visible="true"]) {
+  border-color: var(--field-border-focus);
+  outline: none;
+  box-shadow: none;
+}
+:where(textarea[data-slot="textarea"]) {
+  resize: none;
 }
 
 /* 禁用状态优先于入场动画终帧，也覆盖原生按钮与 HeroUI 的同一语义。 */
@@ -252,6 +379,12 @@ button:disabled { pointer-events: auto; }
 .action-error {
   background: #fdecea;
   color: #9c4a40;
+}
+/* 材料排印的页（data-type-scale=doc）里，动作反馈和它的按钮用辅助字号 13px（不再 12px）。 */
+[data-type-scale="doc"] :is(.action-conflict, .action-error),
+[data-type-scale="doc"] :is(.action-conflict, .action-error) button {
+  font-size: var(--doc-type-meta);
+  line-height: var(--doc-lh-meta);
 }
 .action-conflict button,
 .action-error button,
@@ -355,3 +488,9 @@ html[data-notice-transition="close"]::view-transition-new(*) { animation-duratio
 
 /* 天枢标志默认用深色渐变（与 favicon 一致，#275AC4 → #3E82F7）。:where 零优先级：各处给标志单独设的 --brand-* 仍然生效；不改全站的品牌色。 */
 :where(svg[data-tianshu-mark]) { --brand-deep: #275ac4; --brand-bright: #3e82f7; }
+
+/* 深度讨论里点回答的来源：左侧定位到的那一段短暂高亮，约 1.2s 淡出（conversation/citationBridge → readingScroll.briefFlash）。
+   减少动效时不做动画，静态浅底停同样时长后撤掉。 */
+[data-cite-flash="true"] { animation: tianshu-cite-flash 1.2s ease-out; }
+@keyframes tianshu-cite-flash { 0%, 30% { background-color: #3a83f71f; box-shadow: 0 0 0 4px #3a83f71f; } 100% { background-color: transparent; box-shadow: 0 0 0 4px transparent; } }
+@media (prefers-reduced-motion: reduce) { [data-cite-flash="true"] { animation: none; background-color: #3a83f714; } }

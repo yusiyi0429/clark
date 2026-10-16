@@ -108,7 +108,7 @@ export function CapabilityDetailScreen({ cards, plan }: { cards: Card[]; plan: C
                       {domain.code ? <span aria-label={`编号 ${domain.code}`}>{domain.code}</span> : null}
                     </h4>
                     <p className={c.owner}>
-                      DRI 未登记{domain.group ? ` · ${domain.group}` : ""}
+                      负责人未登记{domain.group ? ` · ${domain.group}` : ""}
                     </p>
                     {domain.supports.length ? (
                       <div className={c.supports}>

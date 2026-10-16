@@ -254,26 +254,35 @@ async function revokeMeetingEffect(
   }
 
   if (kind === "decision") {
-    const issueId = item.issueId ?? (meeting.issue_ids.length === 1 ? meeting.issue_ids[0] : null);
-    if (!issueId) return { ok: false, code: "DECISION_ITEM_WITHOUT_ISSUE", message: "该 decision 没有关联 Issue，无法撤回 Receipt" };
-    issue = await lockIssue(client, issueId);
-    if (!issue) return { ok: false, code: "ISSUE_NOT_FOUND", message: "关联 Issue 不存在" };
-    if (options.expectedIssueVersion !== undefined && issue.version !== options.expectedIssueVersion) {
-      return { ok: false, conflict: true, latestMeeting: meeting, latestIssue: issue };
+    // 主决定撤回时，随它确认的子决定一起恢复待处理（各自的回执一起撤回）
+    const children = items.filter((candidate) => candidate.kind === "decision" && candidate.parentItemId === item.id && candidate.review?.status === "confirmed");
+    for (const decision of [target, ...children]) {
+      const ref = decision.review?.effectRef;
+      const issueId = decision.issueId ?? (meeting.issue_ids.length === 1 ? meeting.issue_ids[0] : null);
+      // 没有关联议题的会上决定确认时没写回执，撤回只改会后条目本身
+      let locked: IssueRow | null = null;
+      if (issueId) locked = await lockIssue(client, issueId);
+      if (issueId && !locked) return { ok: false, code: "ISSUE_NOT_FOUND", message: "关联 Issue 不存在" };
+      if (locked && ref) {
+        if (decision === target && options.expectedIssueVersion !== undefined && locked.version !== options.expectedIssueVersion) {
+          return { ok: false, conflict: true, latestMeeting: meeting, latestIssue: locked };
+        }
+        const receipt = locked.receipts.find((candidate) => candidate.effectRef === ref);
+        if (!receipt) return { ok: false, code: "RECEIPT_NOT_FOUND", message: "关联 Receipt 不存在" };
+        const receipts = locked.receipts.map((candidate) =>
+          candidate.effectRef === ref
+            ? { ...candidate, revokedAt: at, revokedFingerprint: fingerprint, revokeReason: options.reason }
+            : candidate,
+        );
+        const status: IssueRow["status"] = receipts.some((candidate) => !candidate.revokedAt) ? "decided" : "pending";
+        const updated = await client.query<IssueRow>(
+          "UPDATE issues SET receipts = $2::jsonb, status = $3, version = version + 1, updated_at = now() WHERE id = $1 RETURNING *",
+          [locked.id, JSON.stringify(receipts), status],
+        );
+        if (decision === target || issue?.id === locked.id) issue = updated.rows[0];
+      }
+      if (decision !== target) decision.review = { status: "pending", effectRef: null };
     }
-    const receipt = issue.receipts.find((candidate) => candidate.effectRef === effectRef);
-    if (!receipt) return { ok: false, code: "RECEIPT_NOT_FOUND", message: "关联 Receipt 不存在" };
-    const receipts = issue.receipts.map((candidate) =>
-      candidate.effectRef === effectRef
-        ? { ...candidate, revokedAt: at, revokedFingerprint: fingerprint, revokeReason: options.reason }
-        : candidate,
-    );
-    const status: IssueRow["status"] = receipts.some((candidate) => !candidate.revokedAt) ? "decided" : "pending";
-    const updated = await client.query<IssueRow>(
-      "UPDATE issues SET receipts = $2::jsonb, status = $3, version = version + 1, updated_at = now() WHERE id = $1 RETURNING *",
-      [issue.id, JSON.stringify(receipts), status],
-    );
-    issue = updated.rows[0];
     // 父 decision 撤回时同步清理子复议条件与其 Radar anchors
     for (const child of items) {
       if (child.kind !== "reopenWhen" || child.parentItemId !== item.id) continue;

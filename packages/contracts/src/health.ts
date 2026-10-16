@@ -19,6 +19,31 @@ export const HealthDependencies = Type.Object(
   { additionalProperties: false },
 );
 
+/** 本体（tkos.world）连通状态：启动时只读探测的结果；不含凭证，也不含地址。world 状态不影响 status。 */
+export const WorldHealth = Type.Object(
+  {
+    configured: Type.Boolean(),
+    /** 实例配置：mvp（原配置）、demo（演示范围）、formal（集团正式范围）或 tk（词元云集范围，只读）。 */
+    instance: Type.String(),
+    scopeId: Type.Union([Type.String(), Type.Null()]),
+    /** 读侧集成（战场目标、Agent 上下文）是否启用。 */
+    reads: Type.Boolean(),
+    /** 写回是否启用（演示范围第 1 期关闭）。 */
+    writes: Type.Boolean(),
+    state: Type.Union([Type.Literal("not_configured"), Type.Literal("checking"), Type.Literal("connected"), Type.Literal("error")]),
+    checkedAt: Type.Union([Type.String(), Type.Null()]),
+    contractVersion: Type.Union([Type.String(), Type.Null()]),
+    serverVersion: Type.Union([Type.String(), Type.Null()]),
+    objects: Type.Union([Type.Object({
+      company: Type.Integer({ minimum: 0 }), strategy: Type.Integer({ minimum: 0 }), units: Type.Integer({ minimum: 0 }),
+      longTermGoals: Type.Integer({ minimum: 0 }), periodGoals: Type.Integer({ minimum: 0 }),
+    }, { additionalProperties: false }), Type.Null()]),
+    errorCode: Type.Union([Type.String(), Type.Null()]),
+    httpStatus: Type.Union([Type.Integer(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 export const HealthResponse = Type.Object(
   {
     status: Type.Union([Type.Literal("ok"), Type.Literal("degraded")]),
@@ -26,6 +51,9 @@ export const HealthResponse = Type.Object(
     database: Type.Boolean(),
     buildSha: Type.String(),
     dependencies: HealthDependencies,
+    world: Type.Optional(WorldHealth),
+    /** 第二个只读实例（词元云集 TK scope，TKOS_WORLD_TK_INSTANCE）；没配时不带这一项。 */
+    worldTk: Type.Optional(WorldHealth),
   },
   { additionalProperties: false },
 );

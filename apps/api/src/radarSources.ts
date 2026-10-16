@@ -3,6 +3,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { TRadarSourceItem } from "@warmap/contracts";
 import type { RadarWebAdapter, RadarWechatAdapter } from "./radar.js";
 import type { WebSearchAdapter } from "./webSearch.js";
+import { isLikelyCoverImage } from "./signalCover.js";
+import { RETRIEVE_SOURCES, withRetrieve } from "./tracing.js";
 
 function obj(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -42,6 +44,8 @@ export function createBochaRadarWebAdapter(search: WebSearchAdapter & { configur
         publishedAt: result.publishedAt,
         excerpt: result.excerpt,
         sourceRef: { type: "web-search" as const, provider: "bocha", query: input.query },
+        // 检索服务自带的配图优先；没有的话入库前再去原文页取 og:image（radar.ts coverImage）
+        ...(result.imageUrl && isLikelyCoverImage(result.imageUrl) ? { images: [{ src: result.imageUrl, after: 0 }] } : {}),
       }] : []);
     },
   };
@@ -108,7 +112,7 @@ export function createWechatMcpAdapter({
 }: WechatMcpAdapterOptions): RadarWechatAdapter {
   const configured = Boolean(url && token);
   const call = callTool ?? (configured ? createStreamableHttpCallTool(url!, token!) : undefined);
-  return {
+  const adapter: RadarWechatAdapter = {
     configured,
     async fetchLatest({ accountId, accountName }, signal): Promise<TRadarSourceItem[]> {
       if (!call) throw new Error("微信公众号 sidecar 未配置 WECHAT_MCP_URL/WECHAT_MCP_TOKEN");
@@ -143,6 +147,8 @@ export function createWechatMcpAdapter({
           excerpt = full.text;
           if (full.images.length) images = full.images;
         }
+        // 只有 read_article 真读到正文才算全文；退回 digest 或标题的如实记为摘录
+        const fullText = Boolean(excerpt);
         excerpt = excerpt || str(article.digest);
         items.push({
           sourceType: "wechat-account",
@@ -150,12 +156,18 @@ export function createWechatMcpAdapter({
           url: link,
           publishedAt: new Date(publishTime * 1000).toISOString(),
           excerpt: excerpt.slice(0, 10_000) || title,
-          sourceRef: { type: "wechat-account", provider: "wechat-mcp", accountId, accountName },
+          sourceRef: { type: "wechat-account", provider: "wechat-mcp", accountId, accountName, ...(fullText ? { fullText: true } : {}) },
           ...(images ? { images } : {}),
         });
       }
       return items;
     },
+  };
+  return {
+    configured,
+    // 每次真实读取公众号 sidecar 一个 retrieve:wechat-feed 节点（只记账号 id，不记账号名）。
+    fetchLatest: (input, signal) => withRetrieve(RETRIEVE_SOURCES.wechatFeed, () => ({ accountId: input.accountId }),
+      () => adapter.fetchLatest(input, signal), (items) => ({ items: items.length })),
   };
 }
 

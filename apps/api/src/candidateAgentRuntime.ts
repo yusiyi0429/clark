@@ -20,21 +20,52 @@ import {
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { logEvent } from "./observability.js";
-import { recordAgentTrace } from "./langsmith.js";
+import { preview, traceTools, tracedCandidateAgent, tracedStreamSimple, tracingEnabled } from "./tracing.js";
+import { conversationModelDefinition, type ConversationModelDefinition } from "./conversationModel.js";
 
 function normalizedBaseUrl(value: string): string {
   return value.replace(/\/+$/, "").replace(/\/responses$/, "");
 }
 
+/** Claude（Anthropic 协议）单独注册一个 provider：pi 只在模型协议与 provider 协议一致时才走 provider 的 streamSimple（追踪包装在那里）。 */
+const ANTHROPIC_PROVIDER = "warmap-anthropic";
+
+/**
+ * 候选 Agent 的模型注册信息，协议与地址推断与对话主答同一套（conversationModel.ts）：
+ * - claude-*：Anthropic 协议，根地址 + /anthropic，自适应思考 + effort；Sonnet / Opus 5.5 不能关思考，「off」按 effort low 发；
+ * - gpt-6.1-*：Responses，根地址 + /openai；
+ * - 其余（gpt-5.6、deepseek 等）：Responses，PI_BASE_URL，与 10/13 之前完全一样——不开思考时 reasoning:false（不发 reasoning 参数）。
+ */
+export function candidateModelDefinition(input: { modelId: string; baseUrl: string; thinkingLevel?: CandidateThinkingLevel; maxTokens?: number }): ConversationModelDefinition {
+  const definition = conversationModelDefinition({ modelId: input.modelId, baseUrl: normalizedBaseUrl(input.baseUrl) });
+  // Claude 一律不发关思考：Sonnet / Opus 5.5 关思考是 400；Haiku 5.5 虽然接受，10/13 雷达实测关掉后 4 批里有 3 批没交候选，保持 off → effort low。
+  if (definition.api === "anthropic-messages") return { ...definition, maxTokens: input.maxTokens ?? definition.maxTokens };
+  return { ...definition, reasoning: (input.thinkingLevel ?? "off") !== "off", contextWindow: 128_000, maxTokens: input.maxTokens ?? 16_384 };
+}
+
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
-export async function runCandidateAgent<T extends TSchema>(options: {
+/** 候选 Agent 运行中的事件（给需要显示过程的场景用，如会前预审）：思考、工具调用、submit_candidate 的流式参数。 */
+export type CandidateAgentEvent =
+  | { type: "thinking_start" }
+  | { type: "thinking_delta"; delta: string }
+  | { type: "tool_start"; toolCallId: string; name: string; args: unknown }
+  | { type: "tool_end"; toolCallId: string; name: string; isError: boolean; result: unknown }
+  /** 工具参数边写边解析出的部分对象；final=true 是整份参数写完。 */
+  | { type: "tool_args"; name: string; args: unknown; final?: boolean };
+
+export type CandidateThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
+export type CandidateAgentOptions<T extends TSchema> = {
   query: Query;
   kind: string;
   objectRef?: { type: string; id: string; version?: number };
-  /** 这次 run 属于谁：只进 LangSmith metadata，系统/公司级 run 不传。 */
+  /** 这次 run 属于谁：只以 anon_user_id 进入 LangSmith，系统/公司级 run 不传。 */
   personId?: string;
+  /** 历史参数，不再发送到轨迹。 */
   personName?: string;
+  /** 覆盖按 objectRef 推出的轨迹 scope（如 plan:2026-10）。 */
+  traceScope?: string;
   input: unknown;
   prompt: string;
   schema: T;
@@ -45,8 +76,29 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   /** 只读辅助工具（如 CompanyMemory MCP）：与 submit_candidate 一同进入工具白名单。 */
   extraTools?: ReturnType<typeof defineTool<any>>[];
   signal?: AbortSignal;
+  /**
+   * 打开思考（模型注册为 reasoning，thinkingLevel 映射到 reasoning.effort）。不给时关闭，与原来一致。
+   * Claude 走 Anthropic 协议的 adaptive + output_config.effort；Sonnet / Opus 5.5 不能关思考，off 按 effort low 发。
+   */
+  thinkingLevel?: CandidateThinkingLevel;
+  /** 单次输出 token 上限；不给时 16384。 */
+  maxTokens?: number;
+  /** 运行事件；回调里抛错不影响运行。 */
+  onEvent?: (event: CandidateAgentEvent) => void;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
-}): Promise<{ runId: string; candidate: Static<T> }> {
+};
+
+export async function runCandidateAgent<T extends TSchema>(options: CandidateAgentOptions<T>): Promise<{ runId: string; candidate: Static<T> }> {
+  if (!tracingEnabled()) return runCandidateAgentUntraced(options);
+  return tracedCandidateAgent(
+    { query: options.query, kind: options.kind, objectRef: options.objectRef, scope: options.traceScope, personId: options.personId,
+      inputs: { kind: options.kind, input: preview(options.input) } },
+    () => runCandidateAgentUntraced(options),
+    (result) => ({ candidate: result.candidate }),
+  );
+}
+
+async function runCandidateAgentUntraced<T extends TSchema>(options: CandidateAgentOptions<T>): Promise<{ runId: string; candidate: Static<T> }> {
   const runId = randomUUID();
   const startedAt = Date.now();
   const promptHash = createHash("sha256").update(options.prompt).digest("hex");
@@ -75,6 +127,8 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   let usage: unknown;
   let usageTokens = -1;
   let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
+  const thinking = options.thinkingLevel ?? "off";
+  const emit = (event: CandidateAgentEvent) => { try { options.onEvent?.(event); } catch { /* 过程显示失败不影响候选 */ } };
   try {
     const modelRuntime = await ModelRuntime.create({
       credentials: new InMemoryCredentialStore(),
@@ -82,25 +136,20 @@ export async function runCandidateAgent<T extends TSchema>(options: {
       modelsPath: null,
       refreshOnCreate: false,
     });
-    modelRuntime.registerProvider("warmap", {
-      name: "WarMap OpenAI-compatible Responses",
-      baseUrl: normalizedBaseUrl(options.baseUrl),
-      api: "openai-responses",
-      streamSimple: options.streamSimple,
-      models: [{
-        id: options.modelId,
-        name: options.modelId,
-        api: "openai-responses",
-        reasoning: false,
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 128_000,
-        maxTokens: 16_384,
-      }],
+    const definition = candidateModelDefinition({ modelId: options.modelId, baseUrl: options.baseUrl, thinkingLevel: thinking, maxTokens: options.maxTokens });
+    const anthropic = definition.api === "anthropic-messages";
+    const provider = anthropic ? ANTHROPIC_PROVIDER : "warmap";
+    // 两种协议都经过追踪包装：追踪启用时每次真实模型请求一个 llm 节点（Claude 不能落到 pi 内建实现上绕过它）。
+    modelRuntime.registerProvider(provider, {
+      name: anthropic ? "WarMap Anthropic Messages" : "WarMap OpenAI-compatible Responses",
+      baseUrl: definition.baseUrl,
+      api: definition.api,
+      streamSimple: tracedStreamSimple(options.streamSimple),
+      models: [definition],
     });
-    await modelRuntime.setRuntimeApiKey("warmap", options.apiKey);
-    const model = modelRuntime.getModel("warmap", options.modelId);
-    if (!model) throw new Error(`Pi model not found: warmap/${options.modelId}`);
+    await modelRuntime.setRuntimeApiKey(provider, options.apiKey);
+    const model = modelRuntime.getModel(provider, options.modelId);
+    if (!model) throw new Error(`Pi model not found: ${provider}/${options.modelId}`);
 
     const submitCandidate = defineTool({
       name: "submit_candidate",
@@ -118,17 +167,31 @@ export async function runCandidateAgent<T extends TSchema>(options: {
       model,
       modelRuntime,
       resourceLoader,
-      customTools: [submitCandidate, ...(options.extraTools ?? [])],
+      customTools: traceTools([submitCandidate, ...(options.extraTools ?? [])]),
       tools: ["submit_candidate", ...(options.extraTools ?? []).map((tool) => tool.name)],
       sessionManager: SessionManager.inMemory(),
       settingsManager: SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } }),
-      thinkingLevel: "off",
+      thinkingLevel: thinking,
     }));
     abortAfterSubmit = () => session!.abort();
     const unsubscribe = session.subscribe((event) => {
       if (event.type === "message_end" && event.message.role === "assistant" && event.message.usage.totalTokens > usageTokens) {
         usage = event.message.usage;
         usageTokens = event.message.usage.totalTokens;
+      }
+      if (!options.onEvent) return;
+      if (event.type === "message_update") {
+        const update = event.assistantMessageEvent;
+        if (update.type === "thinking_start") emit({ type: "thinking_start" });
+        else if (update.type === "thinking_delta") emit({ type: "thinking_delta", delta: update.delta });
+        else if (update.type === "toolcall_delta" || update.type === "toolcall_end") {
+          const block = update.type === "toolcall_end" ? update.toolCall : update.partial.content[update.contentIndex];
+          if (block?.type === "toolCall") emit({ type: "tool_args", name: block.name, args: block.arguments, final: update.type === "toolcall_end" });
+        }
+      } else if (event.type === "tool_execution_start") {
+        emit({ type: "tool_start", toolCallId: event.toolCallId, name: event.toolName, args: event.args });
+      } else if (event.type === "tool_execution_end") {
+        emit({ type: "tool_end", toolCallId: event.toolCallId, name: event.toolName, isError: event.isError, result: event.result });
       }
     });
     const onAbort = () => void session!.abort();
@@ -147,22 +210,6 @@ export async function runCandidateAgent<T extends TSchema>(options: {
       [runId, JSON.stringify(candidate), JSON.stringify(usage ?? null)],
     );
     logBatchRun({ runId, kind: options.kind, modelId: options.modelId, objectRef: options.objectRef, startedAt, status: "succeeded" });
-    void recordAgentTrace({
-      runId,
-      name: options.kind,
-      agentKind: options.kind,
-      promptHash,
-      objectRef: options.objectRef,
-      personId: options.personId,
-      personName: options.personName,
-      inputs: options.input,
-      outputs: candidate,
-      toolEvents: [{ name: "submit_candidate", isError: false }],
-      usage: usage ?? null,
-      status: "succeeded",
-      startedAt,
-      durationMs: Date.now() - startedAt,
-    });
     return { runId, candidate };
   } catch (cause) {
     const error = (cause as Error).message || String(cause);
@@ -174,23 +221,6 @@ export async function runCandidateAgent<T extends TSchema>(options: {
     );
     const status = options.signal?.aborted ? "aborted" : "failed";
     logBatchRun({ runId, kind: options.kind, modelId: options.modelId, objectRef: options.objectRef, startedAt, status, error });
-    void recordAgentTrace({
-      runId,
-      name: options.kind,
-      agentKind: options.kind,
-      promptHash,
-      objectRef: options.objectRef,
-      personId: options.personId,
-      personName: options.personName,
-      inputs: options.input,
-      outputs: candidate,
-      toolEvents: [{ name: "submit_candidate", isError: !candidate }],
-      usage: usage ?? null,
-      error,
-      status,
-      startedAt,
-      durationMs: Date.now() - startedAt,
-    });
     throw cause;
   } finally {
     session?.dispose();

@@ -2,10 +2,12 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Calendar, ChevronDown, ChevronLeft, FileUp, Flag, Layers, LogOut, Target } from "lucide-react";
+import { ArrowRight, Calendar, ChevronLeft, FileUp, Flag, Layers, LogOut, Target } from "lucide-react";
 import type { TStrategyConfigResponse } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import { logout } from "@/lib/logout";
+import { DatePicker, DateTimePicker } from "@/components/ui/DatePicker";
+import { Select } from "@/components/ui/Select";
 import c from "@/styles/config.module.css";
 
 
@@ -191,7 +193,7 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
 
       <div className={c.grid}>
         <form className={`${c.card} ${c.ltco}`} onSubmit={saveStrategy}>
-          <CardHead title="公司长期目标（LTO）" desc="未来 6 个月的公司结果方向，每月审视时窗口往后滑一个月；月度计划据此拆出当月 PO。" />
+          <CardHead title="公司长期目标" desc="未来 6 个月的公司结果方向，每月审视时窗口往后滑一个月；月度计划据此拆出当月目标。" />
           <textarea
             className={c.ltcoInput}
             aria-label="公司长期目标"
@@ -211,16 +213,11 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
               <input value={meeting.title} placeholder="例如：Q4 定价策略评审会" onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} required />
             </Field>
             <Field label="时间">
-              <input type="datetime-local" value={meeting.scheduledAt} onChange={(e) => setMeeting({ ...meeting, scheduledAt: e.target.value })} required />
+              <DateTimePicker label="会议时间" value={meeting.scheduledAt} onChange={(scheduledAt) => setMeeting((current) => ({ ...current, scheduledAt }))} required />
             </Field>
-            <Field label="主持 DRI">
-              <Select value={meeting.leadDriId} onChange={(value) => setMeeting({ ...meeting, leadDriId: value })} placeholder="选择 lead DRI">
-                {dri.map((person) => (
-                  <option key={person.personId} value={person.personId}>
-                    {person.displayName}
-                  </option>
-                ))}
-              </Select>
+            <Field label="主持人">
+              <Select aria-label="主持人" value={meeting.leadDriId} onChange={(value) => setMeeting({ ...meeting, leadDriId: value })} placeholder="选择主持人" required
+                options={dri.map((person) => ({ value: person.personId, label: person.displayName }))} />
             </Field>
           </Fields>
           <div
@@ -266,16 +263,11 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
               <input maxLength={25} value={issue.title} placeholder="例如：是否追加东南亚渠道预算 40%" onChange={(e) => setIssue({ ...issue, title: e.target.value })} required />
             </Field>
             <Field label="所属战场">
-              <Select value={issue.battlefieldId} onChange={(value) => setIssue({ ...issue, battlefieldId: value })} placeholder="选择已注册战场">
-                {battlefields.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </Select>
+              <Select aria-label="所属战场" value={issue.battlefieldId} onChange={(value) => setIssue({ ...issue, battlefieldId: value })} placeholder="选择已注册战场" required
+                options={battlefields.map((item) => ({ value: item.id, label: item.name }))} />
             </Field>
             <Field label="决定期限">
-              <input type="date" value={issue.decisionBy} onChange={(e) => setIssue({ ...issue, decisionBy: e.target.value })} />
+              <DatePicker label="决定期限" value={issue.decisionBy} clearable onChange={(decisionBy) => setIssue((current) => ({ ...current, decisionBy }))} />
             </Field>
           </Fields>
           <CardFooter hint="议题进入待决策队列" status={status.issue}>
@@ -304,16 +296,10 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
               <input value={battlefield.name} placeholder="例如：东南亚交付战场" onChange={(e) => setBattlefield({ ...battlefield, name: e.target.value })} required />
             </Field>
             <Field label="负责人">
-              <Select value={battlefield.ownerId} onChange={(value) => setBattlefield({ ...battlefield, ownerId: value })} placeholder="待指派" required={false}>
-                <option value="">待指派</option>
-                {people.map((person) => (
-                  <option key={person.personId} value={person.personId}>
-                    {person.displayName}
-                  </option>
-                ))}
-              </Select>
+              <Select aria-label="负责人" value={battlefield.ownerId} onChange={(value) => setBattlefield({ ...battlefield, ownerId: value })} placeholder="待指派"
+                options={[{ value: "", label: "待指派" }, ...people.map((person) => ({ value: person.personId, label: person.displayName }))]} />
             </Field>
-            <Field label="LTO · 六个月目标">
+            <Field label="长期目标 · 六个月">
               <textarea
                 className={c.textarea}
                 placeholder="描述春节前需要形成的真实经营结果"
@@ -405,19 +391,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Select({ value, onChange, placeholder, required = true, children }: { value: string; onChange: (value: string) => void; placeholder: string; required?: boolean; children: ReactNode }) {
-  return (
-    <span className={c.selectWrap}>
-      <select value={value} onChange={(event) => onChange(event.target.value)} required={required}>
-        <option value="" disabled={required}>
-          {placeholder}
-        </option>
-        {children}
-      </select>
-      <ChevronDown aria-hidden="true" className={c.chevron} />
-    </span>
-  );
-}
 
 function CardFooter({ hint, status, children }: { hint: string; status: Status; children: ReactNode }) {
   return (

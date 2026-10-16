@@ -66,7 +66,7 @@ describe("公司能力详情", () => {
     expect(html).toContain("01-3 的标题");
     expect(html).toContain("孙铭泽");
     // 能力域没有登记 DRI：照实写，不编造。
-    expect(html).toContain("DRI 未登记");
+    expect(html).toContain("负责人未登记");
     // 没写进本月计划的能力域照实说明。
     expect(html).toContain("本月计划没有写这个能力域");
   });

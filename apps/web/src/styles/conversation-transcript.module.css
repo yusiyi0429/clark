@@ -4,12 +4,47 @@
 .meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 12px;font-size:12px;line-height:1.5;color:#a5a5af}
 .prose>:first-child{margin-top:0!important}.prose>:last-child{margin-bottom:0!important}
 .prose p{margin:0 0 16px}.prose ul,.prose ol{padding-left:24px;margin:12px 0 18px}.prose ul{list-style:disc}.prose ol{list-style:decimal}.prose li{padding-left:3px;margin:6px 0}
+/* 用户自己的消息（多半是语音输入整理过的）：换行按原样分行；分点紧凑些，像输入框里那样。 */
+.user .prose p{white-space:pre-line;margin-bottom:8px}.user .prose ul,.user .prose ol{margin:6px 0 8px}.user .prose li{margin:2px 0}
 .prose h1,.prose h2,.prose h3{font-size:17px!important;line-height:1.5;margin:24px 0 12px!important;letter-spacing:0!important}
 .prose strong{font-weight:600;color:#f7f7f9}.prose a{color:#a9caff;text-decoration:underline;text-underline-offset:3px}
 .prose pre{overflow:auto;padding:16px;background:#18181b;border-radius:12px}.prose code{font-size:.9em}.prose table{display:block;overflow-x:auto;border-collapse:collapse;max-width:100%}.prose td,.prose th{padding:8px 12px;border-bottom:1px solid #ffffff20;text-align:left}
 .sources{margin-top:18px;color:#aaaab5;font-size:12px}.sources summary{cursor:pointer;width:fit-content}.sources a{display:block;color:#d3d8e2;text-decoration:none;padding:10px 0;border-bottom:1px solid #ffffff0d}.sources a:hover{color:#a9caff}.sources a span{display:block;color:#8f929d;font-size:11px}.sources p{font-size:11px}
-.thinking{display:flex;align-items:center;gap:9px;margin:4px 0 30px;color:#aaaab5;font-size:13px;min-height:30px}.elapsed{font-variant-numeric:tabular-nums;color:#85858f}.thinking button{margin-left:auto;border:0;background:none;color:#aaaab5;font-size:12px;cursor:pointer;padding:6px 10px;border-radius:9px}.thinking button:hover{background:#ffffff0c;color:white}
-.pulse{width:7px;height:7px;background:#c5cedc;border-radius:50%;animation:breathe 1.8s ease-in-out infinite}@keyframes breathe{50%{opacity:.3;transform:scale(.8)}}
+.thinking{display:flex;align-items:center;gap:9px;min-width:0;margin:4px 0 30px;color:#aaaab5;font-size:13px;min-height:30px}.elapsed{font-variant-numeric:tabular-nums;color:#85858f}.thinking button{flex:none;margin-left:auto;border:0;background:none;color:#aaaab5;font-size:12px;cursor:pointer;padding:6px 10px;border-radius:9px}.thinking button:hover{background:#ffffff0c;color:white}
+.pulse{flex:none;width:7px;height:7px;background:#c5cedc;border-radius:50%;animation:breathe 1.8s ease-in-out infinite}@keyframes breathe{50%{opacity:.3;transform:scale(.8)}}
+/*
+ * 进度行在窄宽度下（收起的对话框、右列）按优先级让位：圆点、阶段、停止不压缩、不换行；先截断细节（最少留 6 个字宽），再截断用时。
+ * 行宽 <300 不显示细节，<220 连用时也不显示。阶段文字不会再被挤成竖排，圆点也不会被压扁裁掉。
+ */
+.thinkingGroup{container-type:inline-size}
+.thinking>[role=status]{flex:none;white-space:nowrap}
+/* 进度行细节（在查什么、读到了什么、已查几项）：12px 标签，与阶段同色（比正文浅一级）；长了截断，不挤掉阶段、用时和停止。 */
+.progressDetail{flex:0 1000 auto;min-width:6em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#aaaab5}
+.elapsed{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@container (max-width:299px){.progressDetail{display:none}}
+@container (max-width:219px){.elapsed{display:none}}
+:global([data-tone=light]) .progressDetail{color:#7a7f89}
+/* 中途升级提示（非深度档回答久了或连续检索）：13px，与进度行同色，放在进度行上方。正文开始后进度行淡化，不再抢正文。 */
+.thinkingNote{margin:4px 0 0;font-size:13px;line-height:1.6;color:#aaaab5}
+:global([data-tone=light]) .thinkingNote{color:#7a7f89}
+.thinking{transition:opacity .3s ease}
+.thinkingGroup[data-stage=answering] .thinking{opacity:.6}
+/*
+ * 思考过程（模型返回的思考摘要）：正文开始前在进度行上方滚动，只露最近四行。有人会读：13px、比正文浅一级的灰（与正文分层），不整片蒙淡；
+ * 超过四行、最上面一行被切开时（data-clipped）只把那一行淡出。
+ */
+.thinkingStream{display:flex;flex-direction:column;justify-content:flex-end;max-height:calc(13px * 1.6 * 4);overflow:hidden;margin:6px 0 0;font-size:13px;line-height:1.6;color:#aaaab5}
+.thinkingStream[data-clipped]{-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 calc(13px * 1.6));mask-image:linear-gradient(to bottom,transparent 0,#000 calc(13px * 1.6))}
+.thinkingStream p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+/* 对话层放大 / 收起的 240ms 里（app-shell .historySheet[data-resizing]）遮罩先摘掉，过渡结束复原。 */
+:global([data-resizing]) .thinkingStream[data-clipped]{-webkit-mask-image:none;mask-image:none}
+:global([data-tone=light]) .thinkingStream{color:#666d76}
+/* 正文开始后收成「已思考 N 秒」（12px 标签，和「用时」同一行）；点开是全文，13px，左侧一条细线。 */
+.thoughtToggle{padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px}
+.thoughtToggle:hover{text-decoration-color:currentColor}
+.meta .thoughtToggle:not(:first-child)::before{content:'·';margin-right:6px;display:inline-block;text-decoration:none}
+.thoughtFull{max-height:50vh;overflow:auto;margin:-4px 0 16px;padding:0 0 0 12px;border-left:1px solid #ffffff20;font-size:13px;line-height:1.7;color:#aaaab5;white-space:pre-wrap;overflow-wrap:anywhere}
+:global([data-tone=light]) .thoughtFull{border-left-color:#1d1d1f18;color:#666d76}
 @media(min-width:1800px){.assistant,.user{font-size:16px}}
 @media(max-width:599px){.assistant,.user{font-size:14px}.user{max-width:90%;padding:10px 15px}.meta{font-size:11px}.assistant{margin-bottom:28px}}
 @media(prefers-reduced-motion:reduce){.pulse{animation:none}}
@@ -26,4 +61,95 @@
 :global([data-tone=light]) .sources a{color:#3f4754;border-bottom-color:#1d1d1f0f}
 :global([data-tone=light]) .sources a span{color:#8b8f97}
 :global([data-tone=light]) .prose pre{background:#1d1d1f0a;color:#25282e}
+:global([data-tone=light]) .prose td,:global([data-tone=light]) .prose th{border-bottom-color:#1d1d1f18}
+:global([data-tone=light]) .thinking button:hover{background:#1d1d1f0a;color:#3f4754}
 :global([data-tone=light]) .pulse{background:#8a94a6}
+
+/* 对话记录读到哪一步：载入中一行浅灰小字；没读到一块浅色提示 + 重试（没载入不等于没有记录）。 */
+.historyLoading{display:flex;align-items:center;gap:8px;margin:4px 0 24px;color:#a5a5af;font-size:13px;line-height:1.6}
+.historyLoading::before{content:'';flex:none;width:6px;height:6px;border-radius:50%;background:currentColor;animation:breathe 1.8s ease-in-out infinite}
+.historyError{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:4px 0 28px;padding:10px 14px;border-radius:12px;background:#ffffff0d;color:#e9c3b9;font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+.historyError p{flex:1 1 220px;min-width:0;margin:0}
+.historyError button{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:0 12px;border-radius:999px;color:inherit;font-weight:600}
+:global([data-tone=light]) .historyLoading{color:#8b9099}
+:global([data-tone=light]) .historyError{background:#fff5f2;color:#a44d3e}
+:global([data-tone=light]) .historyError button:hover{background:#a44d3e12}
+@media(prefers-reduced-motion:reduce){.historyLoading::before{animation:none}}
+
+/* 柔和输出（B2）：流式回答按字匀速放出，每次放出的几个字切成一个 span，第一次出现时很轻地淡入（150ms）；旧段不重播。 */
+.prose [data-arrival]{animation:arrivalFade 150ms ease-out both}
+@keyframes arrivalFade{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.prose [data-arrival]{animation:none}}
+
+/* 「思考中」那一行的固定位置：结束后留下同样高度的空位，结束那一刻不缩回。 */
+.statusSlot{display:flow-root;min-height:68px}
+.statusSlot>.thinkingGroup>.thinking{margin-top:4px}
+
+/* 回到最新（B1 / D3）：水平居中；纵向位置由所在面板给（贴着输入框上沿），不在底部时浮出。 */
+.jumpDock{position:sticky;bottom:var(--jump-bottom,14px);z-index:3;display:flex;justify-content:center;height:0;pointer-events:none}
+.jumpDock .jump{position:absolute;bottom:0;display:grid;place-items:center;width:38px;height:38px;min-width:38px;min-height:38px;padding:0;border:1px solid #ffffff1f;border-radius:50%;background:#2f2f33eb;color:#e5e7ec;box-shadow:0 6px 20px #0000003d;opacity:0;transform:translateY(6px) scale(.96);transition:opacity 160ms ease,transform 160ms ease;pointer-events:none;cursor:pointer}
+.jumpDock[data-visible] .jump{opacity:1;transform:none;pointer-events:auto}
+.jumpDock .jump:hover{background:#38383de0}
+:global([data-tone=light]) .jumpDock .jump{border-color:#1d1d1f14;background:#ffffffeb;color:#4a5160;box-shadow:0 6px 18px #1d293524}
+:global([data-tone=light]) .jumpDock .jump:hover{background:#fff;color:#25282e}
+/* 「正在输出」（D3）：Agent 输出中球里是三个依次明暗的小圆点，颜色跟 ↓ 一样（中性灰）。 */
+.jumpDots{display:flex;align-items:center;gap:3px}
+.jumpDots i{width:4.5px;height:4.5px;border-radius:50%;background:currentColor;opacity:.25;animation:jumpDot 1.2s ease-in-out infinite}
+.jumpDots i:nth-child(2){animation-delay:.16s}
+.jumpDots i:nth-child(3){animation-delay:.32s}
+@keyframes jumpDot{0%,70%,100%{opacity:.25}35%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.jumpDots i{animation:none;opacity:.6}.jumpDock .jump{transition:none}}
+
+/* 回答末尾的选项（10/11 首演版定稿）：最新一条回答下一行文字按钮，字号同辅助文字，无底色，不抢正文。 */
+.options{display:flex;flex-wrap:wrap;gap:2px 16px;margin:-22px 0 30px;font-size:13px;line-height:1.6}
+.options button{padding:3px 0;border:0;background:none;color:#aaaab5;font:inherit;cursor:pointer;border-radius:4px}
+.options button:hover{color:#ececef}
+.options button:focus-visible{outline:1px solid #ffffff40;outline-offset:2px}
+:global([data-tone=light]) .options button{color:#7a7f89}
+:global([data-tone=light]) .options button:hover{color:#25282e}
+:global([data-tone=light]) .options button:focus-visible{outline-color:#1d1d1f30}
+@media(max-width:599px){.options{margin-top:-18px}}
+/* 共用对话里这句是在哪个战场页问的（巡检 P1-18）：低存在感的一行小字。 */
+.pageTag{margin:-2px 0 4px;font-size:12px;line-height:1.5;color:#a1a6b0}
+:global([data-tone=light]) .pageTag{color:#6e7480}
+/*
+ * 手持字号（docs/superpowers/specs/2026-10-12-mobile-foldable.md §2、§3.2）：手机上对话正文原来反而缩到 14、消息眉题 11、用时与来源 11–12，
+ * 是照电脑缩的。手持（≤959）正文 16、行高 1.75；消息眉题、页面标签、用时 13；思考那一行 14、「展开」类小钮 13 + 热区 44；来源 13。
+ */
+@media(max-width:959px){.assistant,.user{font-size:16px;line-height:1.75}.meta,.pageTag{font-size:13px}.thinking{font-size:14px}.thinking button{min-height:44px;font-size:13px}.sources,.sources a span,.sources p{font-size:13px}}
+/* 「回到最新」圆钮：手持与触屏热区 44（视觉 38 不变，透明外扩）。 */
+@media(max-width:959px),(pointer:coarse){.jumpDock .jump::after{content:"";position:absolute;inset:-4px;border-radius:50%}}
+
+/* 公式（KaTeX，conversation/richBlocks/markdown.ts）：块级公式一块浅底、宽了横向滚（不裁切），与富内容块一样和正文栏同宽；
+   公式写错时 KaTeX 不抛错，错误样式改回正文色，看上去就是原文。 */
+.prose :global(.katex){font-size:1.06em}
+.prose :global(.katex-display){margin:14px 0 18px;padding:12px 16px;overflow-x:auto;overflow-y:hidden;border-radius:12px;background:#1d1d1f06;scrollbar-width:thin}
+.prose :global(.katex-display>.katex){text-align:left}
+.prose :global(.katex-error){color:inherit!important}
+
+/*
+ * 新建对话与历史对话（ConversationArchive）：存在感越低越好。「+」是一颗 13px 的低对比度灰色小图标；
+ * 历史入口只在空白对话里出现一行 12px 的淡字；列表是首问 13px + 日期 12px。不加新颜色。
+ */
+.newConversation{display:grid;place-items:center;width:28px;height:28px;min-width:28px;padding:0;border:0;border-radius:50%;background:none;color:#a5a5af;cursor:pointer;transition:color 150ms ease,background 150ms ease}
+.newConversation:hover{color:#5c626d;background:#1d1d1f0a}
+.newConversation:focus-visible{outline:2px solid #3A83F788;outline-offset:2px}
+.newConversation:disabled{cursor:default;opacity:.5}
+.archiveEntry{display:block;width:fit-content;margin:4px 0 0;padding:0;border:0;background:none;color:#a5a5af;font-size:12px;line-height:1.5;cursor:pointer}
+.archiveEntry:hover,.archiveEntry:focus-visible{color:#7a7f89;text-decoration:underline;text-underline-offset:3px}
+.archive{margin:0 0 24px}
+.archiveHead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;margin:0 0 16px;font-size:12px;line-height:1.5;color:#7a7f89}
+.archiveActions{display:flex;flex-wrap:wrap;gap:12px}
+.archiveActions button,.archiveInline{padding:0;border:0;background:none;color:#7a7f89;font-size:12px;line-height:1.5;cursor:pointer;text-decoration:underline;text-underline-offset:3px;text-decoration-color:#1d1d1f12}
+.archiveActions button:hover,.archiveInline:hover{color:#3f4754}
+.archiveActions button:disabled{cursor:default;opacity:.5}
+.archiveInline{margin-left:6px}
+.archiveList{margin:0;padding:0;list-style:none}
+.archiveList button{display:flex;align-items:baseline;justify-content:space-between;gap:12px;width:100%;padding:12px 0;border:0;border-bottom:1px solid #1d1d1f12;background:none;text-align:left;cursor:pointer}
+.archiveList button:focus-visible{outline:2px solid #3A83F788;outline-offset:2px}
+.archiveTitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:1.6;color:#3f4754}
+.archiveList button:hover .archiveTitle{color:#25282e}
+.archiveDate{flex:none;font-size:12px;line-height:1.5;color:#a5a5af}
+.archiveNote{margin:0 0 16px;font-size:13px;line-height:1.6;color:#7a7f89}
+/* 这一轮用了备用模型或走过恢复：回答末尾一行很淡的 12px 小字，悬停看说明。 */
+.recoveryNote{width:fit-content;margin:12px 0 0;font-size:12px;line-height:1.5;color:#a5a5af;cursor:default}
