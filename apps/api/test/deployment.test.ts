@@ -445,10 +445,12 @@ describe("backup.sh source modes", () => {
 
   it("dry-run reports compose mode, the exact command shape and writes nothing", () => {
     const dir = tempDir();
-    const result = run(BACKUP_SH, ["--dry-run"], backupEnv(dir, { BACKUP_LOCAL_DIR: join(dir, "local"), DATABASE_URL: "" }));
+    const result = run(BACKUP_SH, ["--dry-run"], backupEnv(dir, { BACKUP_LOCAL_DIR: join(dir, "local"), DATABASE_URL: "", WARMAP_ENV_FILE: "" }));
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("source_mode=compose");
     expect(result.stdout).toContain("docker compose -f");
+    expect(result.stdout).toMatch(/--env-file .+\/\.env exec/);
+    expect(result.stdout).not.toContain("/infra/.env");
     expect(result.stdout).toContain("exec -T postgres pg_dump -U warmap -d warmap --format=custom --no-owner --no-privileges");
     expect(result.stdout).toContain("未执行任何写入、未连接数据库、未触达远端");
     expect(existsSync(join(dir, "local"))).toBe(false);

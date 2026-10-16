@@ -35,7 +35,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SOURCE_MODE="${BACKUP_SOURCE_MODE:-compose}"
 COMPOSE_FILE="${WARMAP_COMPOSE_FILE:-$REPO_ROOT/infra/docker-compose.yml}"
 COMPOSE_OVERRIDE="${WARMAP_COMPOSE_OVERRIDE:-}"
-COMPOSE_ENV_FILE="${WARMAP_ENV_FILE:-$REPO_ROOT/infra/.env}"
+COMPOSE_ENV_FILE="${WARMAP_ENV_FILE:-$REPO_ROOT/.env}"
 COMPOSE_SERVICE="${WARMAP_PG_SERVICE:-postgres}"
 API_SERVICE="${WARMAP_API_SERVICE:-api}"
 DB_NAME="${WARMAP_DB_NAME:-warmap}"
@@ -138,7 +138,7 @@ fi
 
 if [ "$SOURCE_MODE" = compose ]; then
   [ -f "$COMPOSE_FILE" ] || die "compose 文件不存在: $COMPOSE_FILE"
-  [ -f "$COMPOSE_ENV_FILE" ] || die "compose env 文件不存在: ${COMPOSE_ENV_FILE}（默认 infra/.env）"
+  [ -f "$COMPOSE_ENV_FILE" ] || die "compose env 文件不存在: ${COMPOSE_ENV_FILE}（默认根目录 .env）"
 fi
 
 make_checksum() { ( cd "$(dirname "$1")" && sha256 "$(basename "$1")" > "$(basename "$1").sha256" ); }

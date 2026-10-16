@@ -1,5 +1,5 @@
 /* 战场翻转卡：取值逐项来自 clark-main `progress-card.module.css`。三环、状态药丸与进展看板
-   在天枢没有后端数据（不计算完成率，见 docs/CEOwarmap_目标设计_v0.3.md §2.4），不移植。 */
+   在天枢没有后端数据（不计算完成率，见 docs/context.md 的个人任务定义），不移植。 */
 .frame{min-width:0;min-height:0;position:relative;border-radius:22px;perspective:1800px;isolation:isolate}
 .rotor{display:grid;height:100%;min-height:0;border:1px solid #dfe4e9;border-radius:inherit;background:#fff;box-shadow:0 2px 6px #1d1d1f08,inset 0 1px 0 #fff;transform:translateZ(0);transform-style:preserve-3d;will-change:transform;transition:transform 380ms cubic-bezier(.22,.72,.18,1),border-color 180ms,box-shadow 180ms}
 .rotor[data-flipped=true]{transform:translateZ(0) rotateY(180deg)}

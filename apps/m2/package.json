@@ -1,6 +1,6 @@
 {
   "name": "@warmap/m2", "private": true, "type": "module",
-  "scripts": {"build": "node build.mjs", "start": "node server.mjs", "test": "node --test test*.mjs", "typecheck": "node --check server.mjs && node --check legacy-auth.mjs"},
+  "scripts": {"build": "node build.mjs", "start": "node --env-file-if-exists=../../.env server.mjs", "test": "node --test test*.mjs", "typecheck": "node --check server.mjs && node --check legacy-auth.mjs"},
   "dependencies": {"react": "19.2.0", "react-dom": "19.2.0", "@heroui/react": "3.2.5", "@heroui/styles": "3.2.5", "lucide-react": "^1.46.0", "react-markdown": "^10.1.0", "remark-gfm": "^4.0.1"},
   "devDependencies": {"vite": "^7.3.0"}
 }

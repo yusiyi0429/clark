@@ -10,9 +10,8 @@ tools
 # 运行期靠只读 volume 提供；不让真实 CompanyMemory 与人员名单进入构建上下文
 seed
 backend
-infra/.env
 infra/backup/.state
-# 任意层级的本地 env（如 apps/api/.env）都不进构建上下文，否则会被 COPY apps/api 打进镜像
+# 根目录与任意子目录的真实 env 都不进入构建上下文
 **/.env
 **/.env.*
 !**/.env.example

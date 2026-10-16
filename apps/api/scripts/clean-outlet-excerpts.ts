@@ -4,7 +4,7 @@ import { decodeHtml, extractArticleContent } from "../src/outletSources.js";
 
 /**
  * 一次性清理：修复正文提取前落库的 fullText 发布方（量子位）Signal 原文。
- * 在 apps/api 下执行：`pnpm exec tsx --env-file=.env scripts/clean-outlet-excerpts.ts [--dry-run] [--rebuild-images]`
+ * 在 apps/api 下执行：`node --env-file=../../.env --import tsx scripts/clean-outlet-excerpts.ts [--dry-run] [--rebuild-images]`
  * - 在正文尾部标记处截断（容器内版权声明 / 分享框 / 注释残留 `-->`），删去 `-->` 行，补全实体解码；
  * - 丢弃位置落在保留段落之外的配图；历史配图位置的 +N 漂移无法还原，保持原样；
  * - evidence_quote 不再逐字出现在新原文里的行跳过并报告；

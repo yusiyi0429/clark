@@ -18,4 +18,4 @@ CEO WarMap 的战场图把长期战略映射（公司 LTCO、战场/能力六个
 - 长期配置由 CEO 通过确定性配置路由（`/api/config/strategy`、`/api/config/battlefields`、`/api/config/capabilities`）写入，不走 opaque-action；MonthlyPlan 的能力 PCO 仍走既有 versioned Action。
 - 删除战场仍必须经过 `deleteBattlefield()` 的级联归一化，禁止裸 SQL 绕过议题关系。
 - 迁移只改结构，不硬编码图片业务数据；staging 数据通过 API 与受控 SQL 事务导入，更新已签发 MonthlyPlan 必须 version+1 留证据。
-- 关系图（`docs/diagrams/CEOwarmap_业务对象关系.*`）与 CONTEXT.md 的表述随之更新：禁止的是 Mission 执行实体，Mission 自身是独立核心实体，战场图只保留只读战略锚点。
+- 关系图（`docs/diagrams/CEOwarmap_业务对象关系.*`）与 `docs/context.md` 的表述随之更新：禁止的是 Mission 执行实体，Mission 自身是独立核心实体，战场图只保留只读战略锚点。

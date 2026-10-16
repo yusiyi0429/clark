@@ -14,6 +14,6 @@ metadata 只使用：`thread_id`、`logical_turn_id`、`attempt`、`scope`、`an
 
 模型 outputs 使用 OpenAI 消息格式与 LangSmith `usage_metadata` 契约。只保存 Provider 返回的 input/output/cache/total token，不写 SDK 模型价格表中的占位 cost，也不手工拼父节点聚合指标。全零占位 usage 无法证明 Provider 报送了用量，保留缺口。首个非空 text/thinking/toolcall delta 才产生带实际时间的 `new_token` event；最终消息、start/end 或本地文本回放不算首 token。没有事件就不补写时延；Run 起止时间由实际执行边界产生。
 
-继续遵守 ADR-0027：Company/Personal Reference 正文和对应工具返回不复制进普通 Trace；个人蒸馏的 Agent、模型、工具输入输出和错误全程脱敏，仍可保留真实用量。凭据不进入 payload 或传输错误日志。没有 key 或关闭 LANGSMITH_TRACING 时不上传；SDK 上传失败与业务结果隔离，关闭时等待已排队上报。当前为有界超时、无重试的尽力上报，不承诺进程崩溃后的离线补传。
+按完整业务观测授权，Company/Personal Reference 正文、对应工具返回和个人蒸馏的输入输出进入 Trace。不得把候选提交成功当作业务写入成功。凭据仍不进入 payload 或传输错误日志。没有 key 或关闭 LANGSMITH_TRACING 时不上传；SDK 上传失败与业务结果隔离，关闭时等待已排队上报。当前为有界超时、无重试的尽力上报，不承诺进程崩溃后的离线补传。
 
 LangSmith 原生 Threads 视图按 `thread_id` 聚合；切到 Traces 查看每个 Turn attempt，再展开 Agent/model/tool/retrieve Span。用 `logical_turn_id` 比较同轮 attempt，用 `scope`、`agent_role`、`anon_user_id` 和 caller tags 筛选。Thread 不是跨轮次的伪 root，不预聚合 Coze metrics_info。

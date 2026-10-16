@@ -1,5 +1,5 @@
 # 火山主机拉不到 Docker Hub：公众号 sidecar 用离线加载的本地标签（与 docker-compose.yml 固定的 digest 4723fcbb 是同一镜像）。
-# 用法：docker compose -f infra/docker-compose.yml -f infra/volcano.override.yml --env-file infra/.env up -d --no-build
+# 用法：docker compose -f infra/docker-compose.yml -f infra/volcano.override.yml --env-file .env up -d --no-build
 services:
   wechat:
     image: tianshu-local/wechat-download-api:1.7.0-4723fcbb

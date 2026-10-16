@@ -1,0 +1,212 @@
+# 原始基础设施与契约方案
+
+本文保留早期方案。人员登录、成员权限和记忆边界已有后续决策。当前说明见[架构](../README.md)与[领域上下文](../../context.md)。
+
+## 1. 职责
+
+本分片建立后续所有业务链共用的 Monorepo、TypeBox/OpenAPI、PostgreSQL、鉴权、Card projector 和 Action executor。
+
+不包含 Radar、Agent 业务 Prompt、Meeting、MonthlyPlan 或完整 Web 页面。
+
+## 2. Monorepo
+
+```text
+apps/web
+apps/api
+packages/contracts
+prompts/warmap
+infra
+```
+
+依赖规则：
+
+- Web 只依赖生成客户端和展示类型；
+- API 依赖 contracts；
+- contracts 不依赖 React、Fastify、Pi 或数据库；
+- domain 不依赖 HTTP、Card 或 Agent；
+- Card projector 只读 domain repository。
+
+## 3. TypeBox 契约
+
+分组：
+
+```text
+domain       六实体与两配置 DTO
+cards        Card、ActionDescriptor、页面 Card 集合
+commands     每个 Action input
+integrations DRI、Transcript、MCP
+stream       Conversation SSE event
+errors       ApiError
+```
+
+API 注册同一 schema 生成 OpenAPI。Web client 在构建前生成，CI 检查生成结果无漂移。
+
+错误统一为：
+
+```text
+{ code, message, retryable, requestId, fieldErrors?, latestCard? }
+```
+
+## 4. 数据库
+
+使用 `pg` 和显式 SQL migration，不引入 ORM。
+
+业务表：
+
+```text
+issues
+signals
+meetings
+meeting_outcomes
+monthly_plans
+conversations
+conversation_messages
+radar_config
+battlefield_configs
+```
+
+技术表：
+
+```text
+agent_runs
+schema_migrations
+```
+
+每个业务对象包含：
+
+- 稳定 UUID／period key；
+- `version`；
+- 查询需要的状态列；
+- 复杂内嵌结构 JSONB；
+- `created_at/updated_at`；
+- 写入前后 TypeBox 校验。
+
+Conversation messages 独立成表，只追加；Pi entries 保存在 Conversation 行的 JSONB。
+
+## 5. Repository
+
+每个实体一个小型 repository：
+
+- `get(id)`；
+- 当前页面需要的明确 query；
+- `insert`；
+- `updateIfVersion`；
+- 需要时 `getForUpdate`。
+
+禁止通用 Repository/BaseRepository。事务由 use case 显式持有连接，避免跨 repository 隐式提交。
+
+## 6. Migration
+
+- SQL 文件顺序编号；
+- API 启动前持有 advisory lock 执行；
+- 已执行 migration 不允许修改；
+- migration 失败时 API 不进入 ready；
+- MVP 只支持向前 migration，回滚使用部署前备份。
+
+## 7. 鉴权
+
+### CEO
+
+环境：
+
+```text
+CEO_ACCESS_PASSWORD_HASH
+SESSION_SECRET
+SESSION_MAX_AGE_SECONDS
+PUBLIC_ORIGIN
+```
+
+登录成功后签发 HMAC Session Cookie：HttpOnly、Secure、SameSite=Strict。写请求验证 Origin。登录按 IP 限速并使用 constant-time 比较。
+
+### 服务身份
+
+```text
+DRI_SERVICE_TOKEN
+ONTOLOGY_SERVICE_TOKEN
+```
+
+服务 token 与用户 Session 独立，不可互换；只在 API 进程环境中解析。
+
+## 8. Card projector
+
+输入为领域对象和 viewer identity，输出为 Card：
+
+```text
+schemaVersion
+id
+version
+kind
+objectRef
+title / badge / urgency
+payload
+navigation
+conversation
+actions
+```
+
+Projector 必须纯函数式：不写数据库、不调用模型、不请求外部 Provider。
+
+API 维护 kind → schema/projector/action types 的显式 registry。Web 维护 kind → React renderer 的独立显式 registry。
+
+## 9. ActionDescriptor
+
+`actionId` 是 HMAC 签名 token，确定性包含 actionType、objectType、objectId、objectVersion 和 itemId。相同对象 version 的相同动作必须得到相同 actionId，不使用随机 nonce。Web 不解析。
+
+API 根据 `actionId + canonical input` 计算 action fingerprint；multipart 使用文件 SHA-256 参与计算。统一执行入口：
+
+1. CEO 鉴权；
+2. 验签和 input schema；
+3. 对象行锁；
+4. 若 action fingerprint 对应 effect 已存在，直接返回当前 Card；
+5. 否则检查 version/状态；
+6. 执行显式 command handler；
+7. 把 fingerprint 写入 Receipt/Review 等所属业务效果；
+8. 事务提交并返回新 Card。
+
+幂等依赖 action fingerprint、状态单向迁移、deterministic effect ID、唯一约束和 version，不建立 Action 表。
+
+## 10. 基础 API
+
+```text
+POST /api/auth/login
+POST /api/auth/logout
+GET  /api/auth/session
+GET  /api/cards/home
+POST /api/actions/execute
+GET  /healthz
+```
+
+本阶段首页可由 API fixture 返回一张只读 Card。fixture 不编译进 Web，production 禁止启用。
+
+## 11. 并发
+
+- 所有业务写使用对象 version；
+- 相同 action fingerprint 已产生效果时优先返回当前 Card；
+- 未命中既有效果且 version 冲突时返回 409 + latestCard；
+- GET 无锁且无副作用；
+- 时间统一存 UTC。
+
+## 12. 测试 seam
+
+最高 seam 为 HTTP：
+
+- 登录 → Cookie → 首页 Card；
+- 未登录／错误密码／Origin 不符；
+- Card schema；
+- Action token 防伪；
+- version conflict；
+- Action 重放；
+- migration 空库升级；
+- GET 无写入。
+
+Repository 只补唯一约束和事务难以从 HTTP 定位的少量测试。
+
+## 13. 完成条件
+
+- 三个 workspace 包可独立构建；
+- PostgreSQL 空库可 migration；
+- 登录和首页 Card 纵向链可运行；
+- OpenAPI 可生成 Web client；
+- Web 无业务 API route；
+- 409 返回 latestCard；
+- 没有 ORM、Action 表、队列或通用工作流。

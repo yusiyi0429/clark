@@ -7,13 +7,13 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts",
-    "access:issue": "tsx scripts/issue-access.ts",
-    "world:link-missions": "tsx scripts/world-link-missions.ts",
-    "mission-cards:import": "tsx scripts/import-mission-card-drafts.ts",
-    "missions:import": "tsx scripts/import-missions.ts",
-    "reviews:import": "tsx scripts/import-reviews.ts"
+    "dev": "node --env-file-if-exists=../../.env --import tsx --watch src/server.ts",
+    "start": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
+    "access:issue": "node --env-file-if-exists=../../.env --import tsx scripts/issue-access.ts",
+    "world:link-missions": "node --env-file-if-exists=../../.env --import tsx scripts/world-link-missions.ts",
+    "mission-cards:import": "node --env-file-if-exists=../../.env --import tsx scripts/import-mission-card-drafts.ts",
+    "missions:import": "node --env-file-if-exists=../../.env --import tsx scripts/import-missions.ts",
+    "reviews:import": "node --env-file-if-exists=../../.env --import tsx scripts/import-reviews.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",

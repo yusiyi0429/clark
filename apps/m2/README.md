@@ -17,6 +17,6 @@ M2 每次请求向旧版 `/api/auth/session` 核对 Cookie。签名、到期、�
 - `pnpm --filter @warmap/m2 test`：可移植的领域回归以及真实 HTTP 登录、越权、数据范围、私聊和双签检查；不调用真实模型。
 - `pnpm --filter @warmap/m2 build`：独立 Vite 构建。
 - 原 demo 的历史轮次和浏览器测试仍在原工作区运行；其真实发布样本、个人机器路径未放入 CI。
-- 上线流程与限制见 `infra/staging/m2-trial.md`。
+- 本地启动、上线流程与限制见[试用指南](../../docs/guides/m2-trial.md)。配置统一保存在根目录 `.env`，规则见[环境指南](../../docs/guides/environment.md)。
 
 已知边界：九成员和十个 RU 为当前配置；单进程文件存储；跨 RU 联合修改、旧版会议／洞察联动及正式本体写回不在此次范围。技术通过不表示分解业务质量已经验收。

@@ -186,4 +186,4 @@ if [ "$VOLUME_MODE" = 1 ]; then
   echo "restore: 存储校验通过（${verified} 行 storageKey/SHA 与卷内文件一致）"
 fi
 
-echo "restore: 完成。下一步用恢复库启动 API 并继续一次对象 Conversation（见 infra/staging/runbook.md）"
+echo "restore: 完成。下一步用恢复库启动 API 并继续一次对象 Conversation（见 docs/guides/deployment.md）"

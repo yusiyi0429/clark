@@ -1,0 +1,52 @@
+# M2 内部试用发布
+
+## 部署边界
+
+M2 是同站点 `/m2/` 的独立应用。主站入口、数据备份与回滚见[部署指南](deployment.md)。执行前核对现网域名、主机、目录和当前部署人。仓库记录不能替代现网验证。
+
+## 发布输入
+
+1. 明确合入提交 SHA，保留旧 API/Web 镜像和已核对的旧版启动参数。
+2. 在原 demo 工作区只读导出当前第 13 轮：
+   `node apps/m2/export-trial.mjs <demo-workspace> <private-directory>`。
+   导出包含旧轮归档及人工记录，禁止打印内容或上传到 Git；snapshot-receipt.json 记录原文件哈希。
+3. 核对旧版实际人员 seed 的稳定 personId，再建立 accounts.json。使用 accounts.example.json 的结构；每个账号与成员编号唯一。不要根据重名、职责名称或工作台视角猜测。配置文件由发布人回读核对九位成员，包括兼任职责者。
+4. 将私有数据目录通过受控渠道交接到服务器，归 uid/gid 1000，目录 0700，文件 0600。
+5. 在服务器根目录 `.env` 中配置：M2_SEED_DIR（私有目录）、M2_INTERNAL_TOKEN（随机至少32字符）、M2_MODEL_KEY（服务端模型凭据），以及可选 M2_WORLD_READ_TOKEN（产品专用只读凭证）。模型沿用本次 demo 的明确模型；修改模型或技能属于另一轮验证，不混入本次接入。
+
+模型默认还是团队记录中的 TokenHub HTTP 地址。正式发布人需核对同机地址可用性、真实模型配置与安全网络条件；可通过 M2_MODEL_BASE 显式配置团队核对过的 HTTPS 地址。不能把个人钥匙串或 Codex agent.token 复制到服务器。
+
+## 部署
+
+使用原 Compose 参数和现行火山 override，额外加入 `-f infra/m2.override.yml`。该文件增加独立 m2 服务和卷，并让 edge 使用 Caddyfile.m2；默认旧栈不启用 M2。
+
+在仓库根目录运行 `docker compose --env-file .env -f infra/docker-compose.yml -f infra/m2.override.yml config --quiet`；实际部署有其他 override 时使用相同文件组。不得打印展开后的密钥。备份旧栈以及已有 m2_state，再构建 M2 和 Web，启动 M2，确认健康，再更新 Web 和 edge。API 无代码改动，无新数据库迁移。上线地址为 `https://tk.tokenkingos.com/m2/`。
+
+原本体选择清单针对截至 10/9 的事实。这次导出的第13轮也沿用该时点输入。“实时读取”表示重新核对这些来源，不表示自动纳入10/10后的进展。资料或组织责任变化时按来源校验停止，由负责人重新审查清单。
+
+## 本地运行
+
+按[环境指南](environment.md)填写根目录 `.env`。准备私有 seed 与账号映射。设置 `M2_PORT=4333`，避免与 API 的 `PORT` 冲突。模型使用本地 `DECODING_*` 变量，World 读取使用 `TKOS_WORLD_PRODUCT_TOKEN`。
+
+```bash
+pnpm --filter @warmap/m2 build
+pnpm --filter @warmap/m2 start
+```
+
+先登录主应用，再访问 `http://localhost:3100/m2/`。Web 开发代理转发至 M2。M2 每次请求仍向 API 校验会话。
+
+## 验收
+
+- CEO、RU DRI 和 Mission DRI 登录旧版后都能看到入口，打开后自动进入本人。
+- 任意改 URL 或请求中的 memberId 不能换人；未登录与重置后的旧会话不能访问 M2。
+- 用两账号完成公开意见、建议、接受／不采用、修订与同版确认；另一账号的私聊不可读。
+- 当前计划、历史和人工记录与导出回执一致。旧版计划没有被写入。
+- 正常停止再启动，M2 记录恢复。真实部署模型群回应和本体读取单独核对；本次本地自动测试使用隔离数据及可控响应。
+
+## 停止和回退
+
+先停 M2 入口流量，再正常停止 m2，保留 m2_state 和私有 seed；回退 Web 镜像和 edge 原 Caddyfile。不删除卷、不恢复旧版数据库。
+
+M2 使用单进程写锁。异常强杀可能留下锁文件；只能在确认 m2 已停止、没有其他进程使用同一卷并备份后清理残留锁。禁止并行启动两个进程写同一文件。长模型调用期间不要直接重启；生成中重启会保存明确失败状态，再人工续跑。
+
+服务器权限和现网配置未交接前，PR 与本地验证可以完成，上线验收仍为待执行。

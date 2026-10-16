@@ -251,4 +251,4 @@ const result=await gateway.complete([{role:'system',content:nexusSystemPrompt+'\
 server.on('close',()=>{nexusClosing=true;for(const timer of nexusTimers.values())clearTimeout(timer);store.close();});
 server.on('listening',()=>{for(const [scope,n] of Object.entries(store.snapshot().nexus||{}))if(n.pendingSourceIds?.length&&n.pendingMemberId)scheduleNexus(scope,n.pendingMemberId);});
 for(const signal of ['SIGINT','SIGTERM'])if(process.env.NODE_ENV!=='test')process.once(signal,async()=>{nexusClosing=true;for(const timer of nexusTimers.values())clearTimeout(timer);await new Promise(r=>server.close(r));await store.close();process.exit(0);});
-if(process.env.NODE_ENV!=='test')server.listen(Number(process.env.PORT||4333),process.env.M2_BIND_HOST||'127.0.0.1',()=>console.log(`Decoding MVP http://${lanHost||'127.0.0.1'}:4333`));
+if(process.env.NODE_ENV!=='test')server.listen(Number(process.env.M2_PORT||process.env.PORT||4333),process.env.M2_BIND_HOST||'127.0.0.1',()=>console.log(`Decoding MVP http://${lanHost||'127.0.0.1'}:4333`));

@@ -1,24 +1,17 @@
-# Domain Docs
+# 领域文档维护
 
-本项目使用 single-context 领域文档。
+本项目使用一份领域上下文，不按 Web、API、M2 或 contracts 重复维护词表。
 
-## Before exploring
+## 阅读入口
 
-- 读取根目录 `CONTEXT.md`
-- 读取与当前任务相关的 `docs/adr/`
-- 文件不存在时静默继续
+1. 讨论产品需求或领域术语时，读取 [context.md](../context.md)。
+2. 改变架构边界时，读取相关 [ADR](../adr/README.md)。
+3. 实现任务卡流程时，核对对应[契约](../contracts/mission-card-preparation-review.v0.1.md)。
 
-## Vocabulary
+## 维护规则
 
-输出中的领域术语必须采用 `CONTEXT.md` 的定义，避免使用其中明确列入 `_Avoid_` 的同义词。
-
-## ADR conflicts
-
-若方案与现有 ADR 冲突，必须明确指出，不得静默覆盖。
-
-## Layout
-
-- 领域词表：`CONTEXT.md`
-- 架构决策：`docs/adr/`
-- 不创建 `CONTEXT-MAP.md`
-- 不按 Web、API 或 contracts 包重复维护领域词表
+- 使用 `context.md` 定义的术语。执行事项与个人任务不得混称。
+- 方案与有效 ADR 冲突时，明确说明冲突。不得静默覆盖。
+- 历史方案和旧图只提供决策依据，不证明当前实现。
+- 未实现需求保留状态与依据。不得因代码中不存在而删除需求。
+- 不新建重复词表或上下文映射文件。

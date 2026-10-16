@@ -1,29 +1,25 @@
-# Issue tracker: Local Markdown
+# 本地事项
 
-本项目的 Issues 和 Specs 保存在 `.scratch/`。
+项目的 Issue 与 Spec 使用 Markdown，保存在 `.scratch/`。这里的 Issue 指开发工单，不是产品中的决策议题。
 
-## Conventions
+## 文件位置
 
-- 每个 feature 一个目录：`.scratch/<feature-slug>/`
-- Spec 为 `.scratch/<feature-slug>/spec.md`
-- Implementation issue 放在 `.scratch/<feature-slug>/issues/`
-- 每个 issue 单独一个文件，按 `01-<slug>.md` 顺序编号
-- Triage 状态写在 issue 顶部的 `Status:` 行
-- 评论追加在文件底部的 `## Comments`
+| 内容 | 路径 |
+| --- | --- |
+| 功能目录 | `.scratch/<feature-slug>/` |
+| 规格 | `.scratch/<feature-slug>/spec.md` |
+| 工单 | `.scratch/<feature-slug>/issues/01-<slug>.md` |
+| 工作索引 | `.scratch/<feature-slug>/map.md` |
 
-## Publishing
+每个工单使用独立文件，并按编号排序。Skill 要求发布到事项系统时，在对应本地目录创建文件。用户提供路径或编号时，读取对应工单。
 
-当 skill 要求“publish to the issue tracker”时，在对应 `.scratch/<feature-slug>/` 下创建文件。
+## 状态与评论
 
-## Fetching
+- 工单顶部使用 `Type:` 与 `Status:`。
+- `Blocked by:` 记录依赖。
+- 领取前写入 `Status: claimed`。
+- 完成后写入 `Status: resolved`，并将结果摘要追加到工作索引。
+- 评论追加在文件底部的 `## Comments`。
+- 分类使用[分类标签](triage-labels.md)。
 
-读取用户提供的 issue 路径或编号。
-
-## Wayfinding
-
-- Map：`.scratch/<effort>/map.md`
-- Child ticket：`.scratch/<effort>/issues/NN-<slug>.md`
-- Ticket 使用 `Type:` 和 `Status:`
-- `Blocked by:` 记录依赖
-- claim 前写入 `Status: claimed`
-- resolve 后写入 `Status: resolved`，并把结果摘要追加到 map
+历史证据保留在原功能目录。不得因重新整理正式文档而改写历史验收结果。

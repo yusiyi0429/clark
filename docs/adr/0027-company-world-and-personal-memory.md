@@ -12,4 +12,4 @@ Personal 只保存本人长期偏好与协作约束，通过主私聊后台自�
 
 运行文档保存在 MEMORY_STORAGE_DIR 的 Company/Personal 子目录中；目录仅 API uid 可读写，部署使用持久卷。旧 /mcp/company-memory、专用 token 和 Markdown seed 启动依赖删除；/mcp/me 保留个人授权。
 
-记忆 Reference 的观测默认只保留必要模块、命中和可用状态，Company/Personal 正文不复制进普通日志或 LangSmith。此项窄范围替代 ADR-0008 对记忆正文的旧策略，不改变其他业务上下文的既有完整调试授权。
+获准的业务观测完整记录 Company/Personal 正文与个人蒸馏内容，不再按记忆类型隐藏输入输出。凭据始终排除。托管处理授权与访问控制见 [ADR-0008](0008-allow-full-model-traces-in-hosted-services.md)，真实节点协议见 [ADR-0028](0028-langsmith-thread-turn-spans.md)。

@@ -1,12 +1,12 @@
 /**
  * Ticket 16 真实外部验收（成本上限、无自动重试、不换档、不重跑）。
  *
- * 只读真实凭据（来自 infra/.env，经 `set -a; . infra/.env` 注入），不打印/不写入任何 secret。
+ * 只读真实凭据（来自根目录 .env，经 Node --env-file 注入），不打印/不写入任何 secret。
  * 每一步失败即停止，不重试；输出只保留 provider/model 名称、状态、耗时、usage 与公开 URL。
  *
  * 用法（仓库内）：
- *   set -a; . infra/.env; set +a
- *   cd apps/api && npx tsx scripts/real-acceptance.ts [--dry-run]
+ *   cd apps/api
+ *   node --env-file=../../.env --import tsx scripts/real-acceptance.ts [--dry-run]
  */
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";

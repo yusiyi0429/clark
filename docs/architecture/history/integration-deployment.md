@@ -1,0 +1,408 @@
+# 原始联调与部署方案
+
+本文记录历史发布门槛与风险豁免，不作为当前命令入口。当前配置见[环境指南](../../guides/environment.md)，部署与备份见[部署指南](../../guides/deployment.md)。
+
+## 1. 目标
+
+把各技术分片整合为一个可重复部署、可观察、可备份、可回滚的单机 MVP，并在不破坏当前 CEO WarMap 参考界面的前提下切换到新 Web。
+
+## 2. 环境分层
+
+| 环境 | 数据 | 外部 Provider | 用途 |
+|---|---|---|---|
+| local | 可删除 fixture | 默认 stub，可单独开真实模型 | 模块开发 |
+| integration | 固定集成数据 | stub + 可控 Pi 模型 | API／Web 联调 |
+| staging | 脱敏真实样本 | 真实 Search、公众号、模型、MCP | 上线验收 |
+| production | 真实数据 | 真实 Provider | 单 CEO 使用 |
+
+禁止 staging 和 production 共用 PostgreSQL、Session secret 或 service token。
+
+## 3. Docker Compose
+
+长期服务：
+
+```text
+edge         Caddy · 站内唯一入口（只绑宿主机 127.0.0.1:3130，TLS 由宿主机 Nginx 终止）
+web          Next.js
+api          Fastify + Pi + Scheduler + MCP
+postgres     PostgreSQL
+wechat       tmwgsicp/wechat-download-api（AGPL sidecar）· 仅内网
+storage-init 一次性卷属主初始化（复用 postgres 镜像，root 执行后退出）
+```
+
+`storage-init` 把 `meeting_materials` / `conversation_attachments` 两个命名卷 chown 给 uid 1000 后退出；
+`api` 以 `service_completed_successfully` 等它结束，自身仍以非 root 运行。Docker 新建命名卷默认为 `root:root`，
+没有这一步时 API 首次写入会 EACCES。
+
+网络：
+
+- 火山方案 B：宿主机 Nginx 占用 80/443、终止 TLS、HTTP 跳转 HTTPS，并把整个域名转发到 edge；edge 只绑 `127.0.0.1:3130`（配置见 `infra/host-nginx/`）；
+- Caddy 将 `/` 路由到 Web，将 `/api/*` 与 `/mcp/me` 路由到 API；
+- Web、API、PostgreSQL 只在 Compose 内网；
+- DRI service API、Conversation SSE、multipart Transcript、Meeting Material multipart/受控预览下载和 MCP 都经 Caddy，不经过 Next rewrite；
+- MCP 与 DRI API 继续要求各自 service token；
+- 证书由宿主机签发/续期；Caddy 信任宿主机 Nginx 的 `X-Forwarded-*` 并透传流式请求；
+- 长期服务 `restart: unless-stopped`，崩溃或宿主机重启后自动拉起。
+
+持久卷：
+
+- PostgreSQL data；
+- API-only `meeting_materials`：仅 API 的非 root 用户可读写，存 Meeting Material 原件；Web、DRI service 与 Agent 无挂载、无直接路径；
+- CompanyMemory Markdown 若仍为种子，通过只读挂载提供；
+- 备份输出先写临时目录，再加密上传到异机位置。
+
+## 4. 配置
+
+### Edge / Web
+
+```text
+PUBLIC_DOMAIN
+PUBLIC_ORIGIN
+API_INTERNAL_URL
+BUILD_SHA
+```
+
+### API
+
+```text
+DATABASE_URL
+PUBLIC_ORIGIN
+CEO_ACCESS_PASSWORD_HASH
+SESSION_SECRET
+DRI_SERVICE_TOKEN
+TKOS_WORLD_API_URL
+TKOS_WORLD_AGENT_TOKEN
+COMPANY_WORLD_ACCESS_FILE
+COMPANY_SYSTEM_PERSON_ID
+MEMORY_STORAGE_DIR
+COMPANY_TIMEZONE=Asia/Shanghai
+PI_BASE_URL
+PI_API_KEY
+LIGHT_MODEL
+HEAVY_MODEL
+COMPACTION_MODEL
+BOCHA_API_KEY
+WECHAT_MCP_URL
+WECHAT_MCP_TOKEN
+WECHAT_SITE_URL
+LANGSMITH_API_KEY
+LANGSMITH_PROJECT=clark_oct
+LANGSMITH_TRACING=true
+LANGSMITH_IDENTITY_SALT # 可选，缺省使用 SESSION_SECRET
+RADAR_DAILY_CRON
+BUILD_SHA
+# 宿主机备份 cron（不进入 API 容器）
+DATABASE_URL
+BACKUP_SSH_HOST
+BACKUP_SSH_USER
+BACKUP_SSH_PATH
+BACKUP_SSH_KEY_PATH
+BACKUP_AGE_RECIPIENT
+BACKUP_AGE_IDENTITY
+BACKUP_RETENTION_DAYS
+```
+
+`.env.example` 只列变量和说明，不包含真实值。生产 secret 由服务器受限文件或 secret manager 注入，不进入镜像。
+
+## 5. 构建
+
+### Web 镜像
+
+- 使用 pnpm frozen lockfile；
+- 只复制 workspace 所需包；
+- 构建后检查 bundle 不包含服务端 key 名值、旧 seed 和旧业务模块；
+- 使用非 root 用户运行。
+
+### API 镜像
+
+- 固定 Pi SDK、Fastify、TypeBox 和 PostgreSQL driver 版本；
+- 不复制用户 `~/.pi`；
+- 不安装 Shell、浏览器、ffmpeg、ASR 或录音依赖；
+- Prompt 作为只读构建产物；
+- 使用非 root 用户运行，并在启动前确保 `meeting_materials` volume 由该用户拥有；解析临时目录不挂载、每批结束删除。
+
+
+### 数据库
+
+- 固定 PostgreSQL major；
+- 启用必要 extension 前写 migration；
+- 不依赖手工进入容器改 schema。
+
+## 6. Migration
+
+部署顺序：
+
+1. 备份当前数据库；
+2. 启动 PostgreSQL；
+3. 以 advisory lock 执行 migration；
+4. migration 失败则停止 API 上线；
+5. API 启动后验证 schema version；
+6. Web 最后切换。
+
+Migration 只向前执行。MVP 不建设自动 down migration；回滚使用旧镜像加部署前数据库备份。
+
+## 7. 联调数据
+
+集成环境提供一套固定 fixture：
+
+- 一条普通 Signal；
+- 一条可自动升级的 Signal；
+- 一条 dismissed Issue；
+- 一条 DRI Issue；
+- 一场 scheduled Meeting，含可替换的 PDF、DOCX、Markdown 会前材料集；
+- 一份合法与一份非法 Transcript；
+- 一个含多个 review item 的 MeetingOutcome；
+- 一个 draft MonthlyPlan；
+- global、Issue、Meeting 三个 Conversation。
+
+fixture 只通过 API seed command 写入 integration 数据库，不编译进 Web。production 禁止执行 seed command。
+
+## 8. 分片联调顺序
+
+### 8.1 Contracts
+
+- API OpenAPI snapshot 生成；
+- Web client 重新生成；
+- CI 确认生成文件无 diff；
+- Card kind 全部有 renderer。
+
+### 8.2 Auth 与 Card
+
+- 登录、Cookie、logout；
+- 首页 Card query；
+- Action HMAC、version conflict、幂等；
+- 未登录页面跳 access。
+
+### 8.3 Pi／Conversation／MCP
+
+- API 启动不读取用户 Pi 配置；
+- Chat 无搜索问题不调用 Tool；
+- 外部事实问题调用 Search；
+- MCP 返回 section、passage 和 person；
+- global 与对象 scope 不串话；
+- runtime entries 重启恢复；
+- compaction 不删除原始消息。
+
+### 8.4 Radar／Issue
+
+- scheduled/manual 使用同一管线；
+- Signal 去重；
+- 自动升级；
+- red 时间门；
+- Research ready/failed/retry；
+- CEO 决定、Override、Receipt、dismissed。
+
+### 8.5 Meeting／Outcome
+
+- Meeting create/import；
+- Meeting Material 全批上传、抽取失败原子拒绝、ready 回退、空集替换、受控查看与 held/reviewed 只读；
+- Preflight 保存；
+- Supplement Request 状态；
+- Transcript 整份校验；
+- Outcome 引文和 speaker；
+- 每项 confirm/dismiss；
+- effectRef 精确撤回；
+- pending_export。
+
+### 8.6 MonthlyPlan
+
+- 月初唯一创建；
+- DRI feedback；
+- sign；
+- 战场背面；
+- Radar 基础 anchors。
+
+### 8.7 Web 视觉
+
+- scope 内页面视觉 diff；
+- scope 外新增状态人工走查；
+- 稳定 URL 直达／刷新／回退；
+- keyboard、Escape、focus、reduced-motion；
+- 无语音、录音、深研和旧入口。
+
+## 9. 真实 Provider 验收
+
+### Web Search
+
+- 唯一 Provider 是博查（`BOCHA_API_KEY`；已删除 Brave/`SEARCH_API_KEY`）；
+- 使用一个真实 query；
+- 结果包含 title、URL、excerpt；
+- Pi 可完成一次自主 Tool loop；
+- 记录调用数和 usage；
+- 8 次保护可通过 stub 单独测试，不用真实烧满。
+
+### 公众号
+
+- 账号级来源经独立 AGPL sidecar `tmwgsicp/wechat-download-api` 的 MCP（`WECHAT_MCP_URL`/`WECHAT_MCP_TOKEN`，仅内网、不经 Caddy）读取；不 vendor 其源码，不让 WarMap 接触微信 Cookie；
+- 来源 `accountId` 必须是 sidecar 已订阅公众号的 `fakeid`，用 `list_subscriptions`/`get_recent_articles`/`read_article`；
+- 按账号拉取最新文章；
+- 保存规范化 URL 与发布时间；
+- 与 Web Search 结果进入同一 Signal 管线；
+- 不把关键词或 `site:mp.weixin.qq.com` 验收为账号订阅。
+
+### 模型
+
+- light、heavy、compaction 各执行一次；
+- Tool schema、submit_candidate、compaction 均成功；
+- 模型失败不自动换档。
+
+### Company / Personal 与人员目录
+
+- PeopleDirectory 校验稳定人员 seed，登录角色不依赖 World。
+- Company 仅消费授权 World 事实；未配置或不可用时明确缺口，不回退旧 Markdown。
+- Company 正文有界并支持按需展开，模型视图没有内部来源哈希。
+- 记忆卷私有持久化；运行配置见本目录 README 与 ADR-0027。
+- 旧 `/mcp/company-memory` 返回 404，`/mcp/me` 保留个人授权，不暴露 Company 写工具。
+
+## 10. Health 与 Smoke
+
+### Web health
+
+验证：
+
+- 进程存活；
+- BUILD_SHA；
+- 不访问 API 上游。
+
+### API health
+
+报告布尔状态或安全摘要：
+
+- database；
+- Pi Runtime；
+- model slots；
+- Search；
+- WeChat；
+- MCP；
+- scheduler last tick；
+- BUILD_SHA。
+
+不返回 key、端点完整凭据或 CompanyMemory 内容。
+
+### 上线 smoke
+
+1. 登录；
+2. 首页 Card；
+3. global Chat；
+4. Issue Card；
+5. Radar 状态；
+6. Meeting 页面；
+7. MonthlyPlan 页面；
+8. API health；
+9. MCP 鉴权；
+10. 写操作使用专门 staging 对象，不修改 production 真实对象。
+
+## 11. 备份与恢复
+
+### 备份
+
+由宿主机 cron 执行 `infra/backup/backup.sh`；API 镜像不安装备份 Shell 工具。备份目标为独立 SSH/SFTP 主机目录，使用 age 公钥加密。compose 模式下脚本在同一 UTC 批次内：
+
+1. 冻结写入口：仅停止备份前在运行的 `api` 服务（EXIT trap 保证结束后重启；postgres/edge/wechat 不动）；
+2. `pg_dump` 自定义格式 + schema 版本；
+3. 从 DB 导出存储行清单（`meetings.materials` 与 `conversation_messages.attachments` 的 storageKey/SHA-256，manifest 基准）；
+4. `meeting_materials`、`conversation_attachments`、`meeting_recordings` 三个 API volume 与公众号 sidecar 的 `wechat_data` 分别 tar；
+5. 校验 dump/卷归档非空；dump 与四个卷归档分别 age 加密；manifest（无敏感内容，明文）+ 每个产物 SHA-256 sidecar；
+6. 同批次 dump/卷归档/manifest/checksum 全部上传异机；保留至少 7 天；删除本机明文。
+
+`BACKUP_SOURCE_MODE=url` 仅备份数据库，不覆盖任何卷，脚本会显式声明该备份不能用于卷恢复；卷数据恢复必须用 compose 模式备份。
+
+### 恢复验收
+
+`infra/backup/restore.sh` 默认 dry-run，只写显式 `--execute`。数据库-only 恢复（仅 dump + 空目标库）被显式声明为对卷数据不完整；完整恢复必须同批提供加密 dump、四个卷归档与**显式命名的空目标卷**：
+
+- 新建空 PostgreSQL 与空的 `meeting_materials` / `conversation_attachments` / `meeting_recordings` / `wechat_data` volume（脚本要求卷已存在且为空，非空即拒绝）；
+- checksum 先于解密；解密后恢复四个卷（API 卷以 `--user 1000:1000` 提取，非 root 属主兼容；`wechat_data` 以 root 提取保留属主），再恢复数据库；
+- 以恢复后的 DB 为准逐行核对每个 storageKey 的 SHA-256 与卷内文件一致，不一致立即失败（fail closed）；
+- 执行 schema 检查与对象抽查（Issue、Transcript、MeetingOutcome、Meeting Material、MonthlyPlan、Conversation messages、Pi entries）；
+- 恢复后创建 Pi Session 并继续一次对象 Conversation；记录恢复耗时和结果。
+
+单独的 Docker volume、单独的数据库 dump，或数据库-only 恢复都不计为完整备份。
+
+## 12. Cutover
+
+### 12.1 前置门槛
+
+- 新 Web 全部目标 URL 可用；
+- 四条业务链通过；
+- 真实 Provider 验收完成；
+- 视觉回归通过；
+- 用户确认像素级结果；
+- 备份恢复通过；
+- production env 和 health 通过；
+- Web bundle 无旧业务与密钥；
+- 宿主机 Nginx TLS 与 Caddy 分流、SSE、multipart、DRI service API 和 MCP 路由验收通过。
+
+### 12.2 切换
+
+1. 保持旧 frontend 只读运行；
+2. 部署新 PostgreSQL、API、Web 和 Caddy edge；
+3. production 只导入正式数据，不导入旧 demo；
+4. 切换入口到新 Web；
+5. 观察 health、错误、Agent usage；
+6. 完成 CEO smoke；
+7. 冻结观察窗口后删除旧 frontend 源目录。
+
+### 12.3 回滚
+
+观察窗口内：
+
+- 路由切回旧只读前端；
+- 停止新 API 写入口；
+- 保留新数据库用于排查；
+- 若 schema／数据损坏，恢复部署前备份；
+- 不尝试把新数据写回旧 demo store。
+
+旧 frontend 删除后，源码恢复依赖根仓库 Git 历史，不保留运行时兼容目录。
+
+## 13. 发布后观察
+
+最少观察：
+
+- API 5xx；
+- 401/403 异常；
+- PostgreSQL 连接；
+- Agent failed/aborted；
+- Search calls 和超时；
+- Radar last success；
+- scheduler tick；
+- MCP latency；
+- Conversation 恢复次数；
+- backup success；
+- material backup batch completeness 与 restore verification。
+
+不因为单个失败立即自动重跑模型。先在对象页面展示并由 CEO 决定是否重试。
+
+## 14. 删除旧前端
+
+最终删除包括旧页面、业务 API、Agent、data store、research、recording、ASR、TTS、ontology、graphknowledge、scan、models、memory adapter、旧 prompts、旧 scripts、seed 和 localStorage 兼容代码。
+
+删除后验证：
+
+- 根 workspace 和 Caddy 配置无 `frontend` 引用；
+- Docker/CI 不构建旧目录；
+- 新 Web bundle 不包含旧对象字符串和 demo 数据；
+- 所有目标 URL 正常；
+- 文档只指向 apps/web 与 apps/api；
+- 无兼容重定向或双写。
+
+## 15. 完成条件
+
+- integration 与 staging 联调清单全部通过；
+- production smoke 通过；
+- 所有外部来源真实可用；
+- 备份恢复有证据；
+- 用户通过像素级 UI 验收；
+- 旧 frontend 已删除；
+- 没有 Redis、队列、对象存储、多 Runtime 或其他未请求基础设施。
+
+### 15.1 用户风险豁免（2026-09-16）
+
+用户明确选择方案 C，允许公众号真实文章拉取和异机 SSH/SFTP 备份延期，不再阻塞人工 UI 验收与 cutover 流程：
+
+- 公众号 sidecar、MCP 鉴权、精确账号订阅已完成；微信 `ret=200013 freq control` 导致真实文章尚未进入 Signal，不得改用关键词冒充通过。
+- 本机 age 加密、checksum、独立空库恢复及恢复后 Conversation 已通过；异机复制与至少 7 天保留尚未完成，用户接受对应单机故障数据丢失风险。
+
+该例外不构成两项技术验收通过，也不替代 Ticket 17 对切换生产入口和删除旧 `frontend/` 的明确授权。
+
+LangSmith SDK 的 Thread/Turn/Span 命名、重试与脱敏契约见 [ADR-0028](../../adr/0028-langsmith-thread-turn-spans.md)。API 启动会应用 migration 063；key 通过部署环境注入。出网需允许 `https://api.smith.langchain.com`。在项目 `clark_oct` 的 Threads 与 Traces 视图切换，按 `logical_turn_id` 比较同轮执行；接入方通过 `caller:web` / `caller:worker` tags 筛选。关闭追踪用 `LANGSMITH_TRACING=false`。

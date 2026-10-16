@@ -26,7 +26,7 @@ smoke: dry-run（未发请求）。步骤：
   6. GET  ${ORIGIN}/api/cards/radar         Radar Card（provider 配置如实显示）
   7. 登录后 GET 对象的 /api/cards/*         写操作只针对专门 staging 对象
 真实 Provider 验收（博查 query + Pi Tool loop、公众号账号拉取、三模型槽位、合法 Transcript、备份恢复）
-不在此脚本内自动执行，按 infra/staging/runbook.md 的成本上限逐项确认。
+不在此脚本内自动执行，按 docs/guides/deployment.md 逐项确认授权与成本。
 EOF
   exit 0
 fi
@@ -74,4 +74,4 @@ if [ "$failures" -gt 0 ]; then
   echo "smoke: $failures 项失败"
   exit 1
 fi
-echo "smoke: 全部通过（真实 Provider 与备份恢复见 infra/staging/runbook.md）"
+echo "smoke: 全部通过（真实 Provider 与备份恢复见 docs/guides/deployment.md）"

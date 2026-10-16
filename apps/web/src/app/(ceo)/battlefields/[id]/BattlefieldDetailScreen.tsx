@@ -31,7 +31,7 @@ const EXPORT_LABEL: Record<string, string> = { delivered: "已送达", failed: "
 
 /**
  * 战场二级页（clark 战场视角「待决策 / 进展」）：只摆有真实来源的内容，缺的照实写。
- * 进展不计算完成率、达成度或按期判断（CONTEXT.md Mission：不承载执行状态与完成率），
+ * 进展不计算完成率、达成度或按期判断（docs/context.md Mission：不承载执行状态与完成率），
  * 只列本月 Mission 的成功证据与里程碑原文、普通待办的外发状态和负责人反馈。
  */
 export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { battlefield: Card; cards: Card[]; initialTab: BattlefieldTab }) {
