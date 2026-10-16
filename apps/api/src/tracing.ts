@@ -32,7 +32,7 @@ import {
   type Usage,
 } from "@earendil-works/pi-ai";
 import { getApiProvider } from "@earendil-works/pi-ai/compat";
-import { redactSecrets } from "./observability.js";
+import { redactSecretText, redactSecrets } from "./observability.js";
 
 // ───────────────────────────── 命名常量 ─────────────────────────────
 
@@ -764,8 +764,10 @@ const MESSAGE_CHARS = 32000;
 /** 系统提示可达数万字，单独放宽上限，保证轨迹里能看全。 */
 const SYSTEM_PROMPT_CHARS = 120000;
 
+/** 上报的正文（含个人记忆正文）照原文，只截断长度、去掉夹带的凭证。 */
 function clip(text: string, limit: number): string {
-  return text.length > limit ? `${text.slice(0, limit)}…[+${text.length - limit} chars]` : text;
+  const clean = redactSecretText(text);
+  return clean.length > limit ? `${clean.slice(0, limit)}…[+${clean.length - limit} chars]` : clean;
 }
 
 /** 系统提示按明文上报，便于在轨迹里复盘 Agent 实际看到了什么。 */
