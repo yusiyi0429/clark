@@ -35,6 +35,8 @@ export function createWorldReader(env: WorldEnv) {
         if (!Array.isArray(page.items) || (page.next_cursor !== null && typeof page.next_cursor !== 'string')) throw new Error('Invalid World list');
         for (const head of page.items) {
           if (typeof head.object_id !== 'string' || typeof head.revision_id !== 'string' || !Number.isInteger(head.object_version) || head.domain_id !== domain) throw new Error('Invalid World head or scope');
+          // tkos.world/0.3 的列表里混入 StateSnapshot（时间记录，无 business 层）；其内容由业务对象投影的 records.latest_state 携带，这里只投影业务对象。
+          if (head.object_type === 'StateSnapshot') continue;
           heads.push(head);
         }
         if (heads.length > 200 || seen.has(page.next_cursor)) throw new Error('World coverage exceeds supported size');
