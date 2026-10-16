@@ -301,7 +301,6 @@ export async function buildApp({
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     companyMemory,
     company: companyReader,
-    personalMemory: { select: (personId, query) => personalMemory.select(personId, query) },
     materialPool: pool,
     missionCardSecret: env.sessionSecret,
     now,

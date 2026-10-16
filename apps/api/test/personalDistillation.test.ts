@@ -45,7 +45,7 @@ test('durable worker distills only own user messages and duplicate delivery is h
  });
 });
 
-test('main reply success queues natural learning, restart consumes it, and failed replies still honor explicit forget',async()=>{
+test('main reply success queues natural learning and a later worker consumes it',async()=>{
  const { buildApp }=await import('../src/app.js');const { testEnv,seedTestAccess,TEST_CEO }=await import('./helpers.js');
  await createTestDb(async({db,pool})=>{await migrate(db);await seedTestAccess(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-http-'));let failReply=false;let mode='learn';
  const memory=createPersonalMemory({pool,storageDir});
@@ -57,8 +57,6 @@ test('main reply success queues natural learning, restart consumes it, and faile
  await app.inject({method:'POST',url:'/api/conversations/global/messages',headers,payload:{message:'我一直先看结论。'}});
  const worker=createPersonalDistillation({pool,memory,baseUrl:testEnv.piBaseUrl,apiKey:'test',modelId:'test',streamSimple:provider});await worker.processNext(TEST_CEO.personId);
  expect((await app.inject({url:'/api/me/memory/personal',headers})).json().markdown).toContain('先看结论');
- failReply=true;mode='forget';const reply=await app.inject({method:'POST',url:'/api/conversations/global/messages',headers,payload:{message:'删除先看结论这个偏好。'}});
- expect(reply.body).toContain('RUNTIME_FAILED');expect((await memory.readOwn(TEST_CEO.personId)).markdown).not.toContain('先看结论');
  }finally{await app.close();await rm(storageDir,{recursive:true,force:true});}
  });
 });
@@ -91,18 +89,6 @@ test('a later unrelated turn cannot rewrite a preference using only an older quo
  }finally{await rm(storageDir,{recursive:true,force:true});}});
 });
 
-test('an ambiguous explicit request asks for clarification without editing unrelated attributes',async()=>{
- const {buildApp}=await import('../src/app.js');const {testEnv,seedTestAccess,TEST_CEO}=await import('./helpers.js');
- await createTestDb(async({db,pool})=>{await migrate(db);await seedTestAccess(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-ambiguous-'));const memory=createPersonalMemory({pool,storageDir});
- await memory.apply(TEST_CEO.personId,{expectedRevision:0,epoch:0,changes:[{operation:'add',attributeKey:'hobby',text:'喜欢徒步。'},{operation:'add',attributeKey:'communication',text:'先看结论。'}]});let calls=0;
- const app=await buildApp({pool,env:{...testEnv,personalMemoryStorageDir:storageDir},personalDistillationStream:()=>candidate({changes:[],clarification:'你想忘掉徒步偏好，还是表达偏好？'}),conversationRuntime:{async run(){calls++;throw new Error('should clarify first');}}});
- try{const login=await app.inject({method:'POST',url:'/api/auth/login',headers:{origin:testEnv.publicOrigin},payload:{loginId:TEST_CEO.loginId,passcode:TEST_CEO.passcode}});const headers={cookie:(login.headers['set-cookie'] as string).split(';')[0],origin:testEnv.publicOrigin};
- const reply=await app.inject({method:'POST',url:'/api/conversations/global/messages',headers,payload:{message:'忘掉那个偏好。'}});expect(reply.body).toContain('completed');const history=await app.inject({url:'/api/conversations/global/messages',headers});expect(history.body).toContain('你想忘掉');expect(calls).toBe(0);expect((await memory.readOwn(TEST_CEO.personId)).sections).toHaveLength(2);
- const worker=createPersonalDistillation({pool,memory,baseUrl:testEnv.piBaseUrl,apiKey:'test',modelId:'test',streamSimple:()=>{throw new Error('No second classification before clarification');}});
- expect(await worker.processNext(TEST_CEO.personId)).toBe(false);
- }finally{await app.close();await rm(storageDir,{recursive:true,force:true});}
- });
-});
 
 test('forgotten semantics cannot return under a new key, but explicit new permission can restore the exact attribute',async()=>{
  await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-tombstone-'));
@@ -150,14 +136,6 @@ test('an incomplete exclusion view pauses automatic additions instead of silentl
  }finally{await rm(storageDir,{recursive:true,force:true});}});
 });
 
-test('an explicit forget with arbitrary wording survives main failure and a worker restart',async()=>{
- const {buildApp}=await import('../src/app.js');const {testEnv,seedTestAccess,TEST_CEO}=await import('./helpers.js');
- await createTestDb(async({db,pool})=>{await migrate(db);await seedTestAccess(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-arbitrary-'));const memory=createPersonalMemory({pool,storageDir});await memory.apply(TEST_CEO.personId,{expectedRevision:0,epoch:0,changes:[{operation:'add',attributeKey:'drink',text:'喜欢咖啡。'}]});
- const provider=()=>candidate({changes:[{operation:'remove',attributeKey:'drink',title:'饮食偏好',text:'',inferred:false,evidence:[{sequence:1,quote:'把咖啡偏好从档案拿掉。'}]}],clarification:''});const app=await buildApp({pool,env:{...testEnv,personalMemoryStorageDir:storageDir},personalDistillationStream:provider,conversationRuntime:{async run(){throw new Error('main unavailable');}}});
- try{const login=await app.inject({method:'POST',url:'/api/auth/login',headers:{origin:testEnv.publicOrigin},payload:{loginId:TEST_CEO.loginId,passcode:TEST_CEO.passcode}});const headers={cookie:(login.headers['set-cookie'] as string).split(';')[0],origin:testEnv.publicOrigin};const response=await app.inject({method:'POST',url:'/api/conversations/global/messages',headers,payload:{message:'把咖啡偏好从档案拿掉。'}});expect(response.body).toContain('RUNTIME_FAILED');await app.close();
- const worker=createPersonalDistillation({pool,memory,baseUrl:testEnv.piBaseUrl,apiKey:'test',modelId:'test',streamSimple:provider});await worker.processNext(TEST_CEO.personId);expect((await memory.readOwn(TEST_CEO.personId)).markdown).not.toContain('咖啡');
- }finally{await app.close();await rm(storageDir,{recursive:true,force:true});}});
-});
 
 test('a removal found during natural distillation creates a forget barrier against older delayed jobs',async()=>{
  await createTestDb(async({db,pool})=>{await migrate(db);const storageDir=await mkdtemp(join(tmpdir(),'distill-natural-remove-'));

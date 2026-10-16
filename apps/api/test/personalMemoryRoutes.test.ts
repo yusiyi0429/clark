@@ -32,7 +32,7 @@ test('main chat receives the owner\'s relevant personal memory and no longer aft
         const cookie = await t.loginCookie(), headers = { cookie, origin: t.publicOrigin };
         await t.app.inject({ method: 'PUT', url: '/api/me/memory/personal', headers, payload: { expectedRevision: 0, markdown: '# Personal\n\n## 协作偏好\n\n先给结论。' } });
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '帮我分析一下' } });
-        expect(inputs[0].personalMemory).toEqual([{ title: '协作偏好', text: '先给结论。' }]);
+        expect(inputs[0].personalMemory).toMatchObject([{ title: '协作偏好', text: '先给结论。' }]);
         // 别人的对话里看不到。
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers: { cookie: await t.memberCookie(), origin: t.publicOrigin }, payload: { message: '帮我分析一下' } });
         expect(inputs[1].personalMemory).toBeUndefined();
@@ -61,6 +61,54 @@ test('forgetting a memory keeps the model context of every conversation of that 
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '第二轮' } });
         expect(inputs[1].runtimeEntries).toEqual([{ turn: 1 }]);
         expect(inputs[1].personalMemory).toBeUndefined();
+    }
+    finally {
+        await t.close();
+    }
+});
+
+test('an explicit memory request whose memory update fails keeps the main answer and the model context (3c)', async () => {
+    const inputs: Parameters<ConversationRuntime['run']>[0][] = [];
+    const t = await createTestApp({}, { async run(input) { inputs.push(input); input.emit({ type: 'message', delta: '主回答' }); return { assistantMessage: '主回答', runtimeEntries: [{ turn: inputs.length }] }; } },
+        { personalDistillationStream: () => { throw new Error('memory model down'); } });
+    try {
+        const cookie = await t.loginCookie(), headers = { cookie, origin: t.publicOrigin };
+        await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '第一轮' } });
+        const reply = await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '忘掉我先看结论的偏好。' } });
+        expect(reply.body).toContain('主回答');
+        expect(inputs).toHaveLength(2);
+        expect(inputs[1].runtimeEntries).toEqual([{ turn: 1 }]);
+        expect(await t.sql("SELECT runtime_entries FROM conversations WHERE owner_id = 'person-fixture-001'")).toEqual([{ runtime_entries: [{ turn: 2 }] }]);
+        const history = (await t.app.inject({ method: 'GET', url: '/api/conversations/global/messages', headers })).json();
+        expect(history.messages.map((message: { content: string }) => message.content)).toEqual(['第一轮', '主回答', '忘掉我先看结论的偏好。', '主回答']);
+    }
+    finally {
+        await t.close();
+    }
+});
+
+test('the main agent remembers, corrects and forgets through its own tools; a failed tool call does not touch the answer (3c)', async () => {
+    const outcomes: unknown[] = [];
+    const t = await createTestApp({}, { async run(input) {
+        const tools = input.personalMemoryTools!;
+        if (input.message === '记住我习惯先看结论。') outcomes.push(await tools.remember({ title: '沟通偏好', text: '习惯先看结论。' }));
+        if (input.message === '忘掉那条偏好。') {
+            const [entry] = await tools.search('先看结论');
+            outcomes.push(await tools.forget({ id: entry.id }));
+            outcomes.push(await tools.forget({ id: entry.id }).catch((error: Error) => error.message));
+        }
+        return { assistantMessage: '好的', runtimeEntries: input.runtimeEntries };
+    } });
+    try {
+        const cookie = await t.loginCookie(), headers = { cookie, origin: t.publicOrigin };
+        await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '记住我习惯先看结论。' } });
+        expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers })).json().markdown).toContain('习惯先看结论');
+        const reply = await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '忘掉那条偏好。' } });
+        expect(reply.body).toContain('completed');
+        expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers })).json().markdown).not.toContain('习惯先看结论');
+        expect(outcomes[2]).toContain('PERSONAL_SECTION_NOT_FOUND');
+        // 别人看不到，也改不了。
+        expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers: { cookie: await t.memberCookie(), origin: t.publicOrigin } })).json().sections).toEqual([]);
     }
     finally {
         await t.close();

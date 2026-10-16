@@ -46,6 +46,14 @@ export type ConversationRuntimeEvent =
   | { type: "recovery"; reason: string; action: "retry" | "fallback" | "trim" | "continue" | "skip"; attempt: number; notice: string }
   | { type: "usage"; input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number };
 
+export type PersonalMemoryEntry = { id: string; title: string; text: string };
+export type PersonalMemoryTools = {
+  search(query: string): Promise<PersonalMemoryEntry[]>;
+  /** 新记一条；replaces 给出时是纠正：旧条目被新说法替代。 */
+  remember(input: { title: string; text: string; replaces?: string }): Promise<PersonalMemoryEntry>;
+  forget(input: { id: string }): Promise<{ id: string }>;
+};
+
 export type ConversationRuntime = {
   promptHash?: string;
   modelSlot?: string;
@@ -60,7 +68,9 @@ export type ConversationRuntime = {
     runId?: string;
     referencesSnapshot: TReferenceSnapshot[];
     /** 与本轮原话相关的本人个人记忆（只有本人可见）；放进上下文包的 personalMemory。 */
-    personalMemory?: { title: string; text: string }[];
+    personalMemory?: { id: string; title: string; text: string }[];
+    /** 本人个人记忆的检索与「记住 / 改成 / 忘掉」，已绑定本人；运行时据此给主 Agent 提供工具。失败时抛错，只作为工具报错。 */
+    personalMemoryTools?: PersonalMemoryTools;
     recentMessages?: { role: "user" | "assistant"; content: string; createdAt: string }[];
     runtimeEntries: unknown[];
     piSessionId: string;

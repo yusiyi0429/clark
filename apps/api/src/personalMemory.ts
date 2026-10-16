@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Pool, PoolClient } from 'pg';
+import type { PersonalMemoryTools } from './conversations.js';
 export type PersonalSection = {
     id: string;
     title: string;
@@ -21,6 +22,7 @@ export type PersonalChange = {
 };
 export type PersonalReference = {
     handle: string;
+    id: string;
     kind: 'personal';
     title: string;
     text: string;
@@ -219,6 +221,9 @@ export function createPersonalMemory({ pool, storageDir }: {
                 return saved;
             }, connection);
         },
+        async epoch(personId: string, connection?: Pick<PoolClient, 'query'>): Promise<number> {
+            return Number((await (connection ?? pool).query<{ epoch: number }>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1", [personId])).rows[0]?.epoch ?? 0);
+        },
         readBlocked(personId:string, connection?: PoolClient) {
             return locked(personId, async(client)=> (await client.query<{key:string;title:string;text:string;throughJobId:string;conversationCutoffs:Record<string,number>}>(`SELECT attribute_key AS key,title,text,through_job_id::text AS "throughJobId",conversation_cutoffs AS "conversationCutoffs" FROM personal_memory_exclusions WHERE person_id=$1 ORDER BY created_at DESC LIMIT 100`,[personId])).rows, connection);
         },
@@ -236,7 +241,7 @@ export function createPersonalMemory({ pool, storageDir }: {
             let bytes = 0;
             return doc.sections.map(item => ({ item, score: [...grams(item.title + ' ' + item.text)].filter(term => terms.has(term)).length, stable: /协作|沟通|表达|偏好/.test(item.title) })).filter(row => row.score > 0 || row.stable).sort((a, b) => b.score - a.score).flatMap(({ item, stable, score }) => {
                 const handle = randomUUID();
-                const reference = { handle, kind: 'personal' as const, title: boundedText(item.title, 200), text: boundedText(item.text, stable && score === 0 ? 1400 : 3000) };
+                const reference = { handle, id: item.id, kind: 'personal' as const, title: boundedText(item.title, 200), text: boundedText(item.text, stable && score === 0 ? 1400 : 3000) };
                 while (Buffer.byteLength(JSON.stringify(reference)) > (stable && score === 0 ? 2048 : 4096)) reference.text = boundedText(reference.text, Math.floor(Buffer.byteLength(reference.text) * 0.8));
                 const size = Buffer.byteLength(JSON.stringify(reference));
                 if (bytes + size > (stable && score === 0 ? 2048 : 8192)) return [];
@@ -273,4 +278,45 @@ export function createPersonalMemory({ pool, storageDir }: {
         }
     };
     return api;
+}
+
+/**
+ * 主 Agent 的个人记忆工具（3c）：绑定本人，只改本人的记忆。
+ * 「记住」「改成」「忘掉」由主 Agent 在回答过程中调用；失败只抛错给工具，不影响主回答与上下文。
+ * 与后台提炼并发时按版本重试一次。
+ */
+export function personalMemoryToolsFor(memory: PersonalMemory, personId: string, log: (event: { event: string } & Record<string, unknown>) => void): PersonalMemoryTools {
+    const retrying = async <T>(action: () => Promise<T>): Promise<T> => {
+        try { return await action(); }
+        catch (error) {
+            if ((error as { code?: string }).code !== 'MEMORY_VERSION_CONFLICT') throw error;
+            return action();
+        }
+    };
+    const logged = async <T>(operation: string, action: () => Promise<T>): Promise<T> => {
+        try {
+            const result = await retrying(action);
+            log({ event: 'personal_memory.tool', operation, status: 'succeeded' });
+            return result;
+        } catch (error) {
+            log({ event: 'personal_memory.tool', operation, status: 'failed', errorCode: (error as { code?: string }).code ?? 'PERSONAL_MEMORY_UNAVAILABLE' });
+            throw error;
+        }
+    };
+    return {
+        search: async (query) => (await memory.select(personId, query)).map(({ id, title, text }) => ({ id, title, text })),
+        remember: (input) => logged(input.replaces ? 'correct' : 'remember', async () => {
+            const doc = await memory.readOwn(personId);
+            if (input.replaces && !doc.sections.some(section => section.id === input.replaces)) throw fault('PERSONAL_SECTION_NOT_FOUND');
+            const id = input.replaces ?? `note-${randomUUID().slice(0, 8)}`;
+            await memory.apply(personId, { expectedRevision: doc.revision, epoch: doc.epoch, explicit: true,
+                changes: [{ operation: input.replaces ? 'update' : 'add', attributeKey: id, title: input.title, text: input.text }] });
+            return { id, title: input.title, text: input.text };
+        }),
+        forget: (input) => logged('forget', async () => {
+            const doc = await memory.readOwn(personId);
+            await memory.forgetOwn(personId, { expectedRevision: doc.revision, sectionIds: [input.id] });
+            return { id: input.id };
+        }),
+    };
 }

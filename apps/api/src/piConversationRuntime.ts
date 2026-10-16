@@ -91,7 +91,7 @@ export const SYSTEM_PROMPT = `# 角色
 
 内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实用企业知识章节与段落标注。面向 CEO 的表述中，公司知识库一律称“企业知识”，不要出现 CompanyMemory 这个词。
 
-你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
+你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：CEO 明确要你记住、纠正或忘掉 CEO 本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。企业知识对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
 
 ${MATERIAL_EDITING_RULES}
 
@@ -150,7 +150,7 @@ export function driSystemPrompt(displayName: string, personalCard = false): stri
 
 内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实用企业知识章节与段落标注。公司知识库一律称“企业知识”，不要出现 CompanyMemory 这个词。
 
-你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件或记忆。企业知识对你只读。你产出的是候选材料，不形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
+你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：本人明确要你记住、纠正或忘掉本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。企业知识对你只读。你产出的是候选材料，不形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
 
 ${MATERIAL_EDITING_RULES}
 
@@ -272,8 +272,6 @@ export type PiConversationRuntimeOptions = {
   readOntology?: (args: { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string }) => Promise<Record<string, unknown> | null>;
   /** 本体只读公司事实（按需工具 query_company，按人授权的域）；不提供时没有这个工具。 */
   company?: CompanyReader;
-  /** 本人个人记忆的按需检索（search_personal_memory，只读本人的）；每轮相关条目由路由层放进 input.personalMemory。 */
-  personalMemory?: { select(personId: string, query: string): Promise<{ title: string; text: string }[]> };
   listMissions?: (filters: { period?: string; battlefieldId?: string; capabilityId?: string; ownerId?: string }, viewer?: { personId: string; role: "ceo" | "member" }) => Promise<unknown[]>;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
   /** 每轮分档用的快模型分诊（conversationRouting.ts）；不提供时只按本地规则分档，定不了的走检索问答档。 */
@@ -812,11 +810,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const viewerBoardTools = isCeo ? availableBoardTools : availableBoardTools.filter((tool) => !CEO_ONLY_TOOLS.has(tool.name) && !(personalCard && tool.name === "list_missions"));
       // 个人记忆与本体公司事实（PR #12）：本人的个人记忆、按人授权的本体公司事实，都只读。
       const textResult = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value });
-      const selectPersonal = async (query: string) => options.personalMemory
-        ? withRetrieve(RETRIEVE_SOURCES.personalMemory, () => ({ hasQuery: Boolean(query) }),
-          () => options.personalMemory!.select(input.viewer.personId, query), (entries) => ({ entries: entries.length }))
-          .then((entries) => entries.map(({ title, text }) => ({ title, text })))
-        : [];
+      const personal = input.personalMemoryTools;
       // World 分页游标只留在服务端，模型拿到的是本轮短句柄（CP1、CP2…），续页沿用原查询条件。
       const companyCursors = new Map<string, { cursor: string; query?: string }>();
       const memoryTools = [
@@ -839,13 +833,34 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
               ...(view.message ? { message: view.message } : {}), ...(nextCursor ? { nextCursor } : {}) });
           },
         })] : []),
-        ...(options.personalMemory ? [defineTool({
-          name: "search_personal_memory",
-          label: "检索个人记忆",
-          description: "按关键词检索本人的个人记忆（只有本人可见）。个人记忆是本人的想法与偏好，不能当作公司事实。",
-          parameters: Type.Object({ query: Type.String({ minLength: 1, maxLength: 1000 }) }, { additionalProperties: false }),
-          execute: async (_id, args) => textResult({ entries: await selectPersonal((args as { query: string }).query) }),
-        })] : []),
+        ...(personal ? [
+          defineTool({
+            name: "search_personal_memory",
+            label: "检索个人记忆",
+            description: "按关键词检索本人的个人记忆（只有本人可见）。个人记忆是本人的想法与偏好，不能当作公司事实。",
+            parameters: Type.Object({ query: Type.String({ minLength: 1, maxLength: 1000 }) }, { additionalProperties: false }),
+            execute: async (_id, args) => textResult({ entries: await withRetrieve(RETRIEVE_SOURCES.personalMemory, () => ({ hasQuery: true }),
+              () => personal.search((args as { query: string }).query), (entries) => ({ entries: entries.length })) }),
+          }),
+          defineTool({
+            name: "remember_personal_memory",
+            label: "记住",
+            description: "本人明确要你记住、或纠正一条个人记忆时调用（只改本人的）。纠正时 replaces 填被替代条目的 id，旧条目标为被新说法替代。没有本人明确要求时不调用。",
+            parameters: Type.Object({
+              title: Type.String({ minLength: 1, maxLength: 100 }),
+              text: Type.String({ minLength: 1, maxLength: 2000 }),
+              replaces: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
+            }, { additionalProperties: false }),
+            execute: async (_id, args) => textResult({ saved: await personal.remember(args as { title: string; text: string; replaces?: string }) }),
+          }),
+          defineTool({
+            name: "forget_personal_memory",
+            label: "忘掉",
+            description: "本人明确要你忘掉某条个人记忆时调用，id 取自 personalMemory 或 search_personal_memory。没有本人明确要求时不调用。",
+            parameters: Type.Object({ id: Type.String({ minLength: 1, maxLength: 160 }) }, { additionalProperties: false }),
+            execute: async (_id, args) => textResult({ forgotten: await personal.forget(args as { id: string }) }),
+          }),
+        ] : []),
       ];
       const missionCardId = /^mission-card:(.+)$/.exec(input.scope)?.[1];
       const missionCardTools = missionCardId && options.materialPool ? (() => {
