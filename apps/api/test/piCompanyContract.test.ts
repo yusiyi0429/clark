@@ -55,18 +55,23 @@ async function runCalls(args: Record<string, string>[]) {
 
 afterEach(async () => { await flushLangSmith(); configureLangSmith({}); });
 
-test("company query and continuation are exclusive and continuation preserves the original query", async () => {
+test("company tool exposes object parameters and continuation preserves the original query", async () => {
   const { contexts, reads } = await runCalls([{ query: "original" }, { cursor: "CP1" }]);
   const schema = contexts[0].tools!.find(tool => tool.name === "query_company")!.parameters;
+  expect(schema.type).toBe("object");
+  expect(schema.anyOf).toBeUndefined();
   expect(Value.Check(schema, {})).toBe(true);
   expect(Value.Check(schema, { query: "original" })).toBe(true);
   expect(Value.Check(schema, { cursor: "CP1" })).toBe(true);
-  expect(Value.Check(schema, { query: "changed", cursor: "CP1" })).toBe(false);
+  expect(Value.Check(schema, { cursor: "" })).toBe(false);
+  expect(Value.Check(schema, { query: "x".repeat(1001) })).toBe(false);
+  expect(Value.Check(schema, { cursor: "x".repeat(101) })).toBe(false);
+  expect(Value.Check(schema, { unexpected: "value" })).toBe(false);
   expect(reads).toEqual([{ query: "original", cursor: undefined }, { query: "original", cursor: "world-page-two" }]);
 });
 
-test("mixed query and cursor is rejected before reaching Company", async () => {
-  const { contexts, reads } = await runCalls([{ query: "original" }, { query: "changed", cursor: "CP1" }]);
+test.each(["changed", "original", ""])("mixed query %j and cursor is rejected before reaching Company", async (query) => {
+  const { contexts, reads } = await runCalls([{ query: "original" }, { query, cursor: "CP1" }]);
   expect(reads).toHaveLength(1);
   const rejected = contexts.at(-1)!.messages.findLast(item => item.role === "toolResult");
   expect(rejected).toMatchObject({ role: "toolResult", toolCallId: "company-call-1", isError: true });

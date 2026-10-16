@@ -479,11 +479,11 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         };
         const companyTools = [
           defineTool({ name: 'query_company', label: '查询公司事实', description: '只读查询当前授权范围的 World 正式公司内容；返回可读 Company。状态、草稿与日期不可当作确认结果。不可用时不能用页面或旧历史补事实。新查询可带 query；续页只带 cursor，沿用原查询条件。',
-            parameters: Type.Union([
-              Type.Object({ query: Type.Optional(Type.String({ maxLength: 1000 })) }, { additionalProperties: false }),
-              Type.Object({ cursor: Type.String({ minLength: 1, maxLength: 100 }) }, { additionalProperties: false }),
-            ]),
-            execute: async (_id, args) => memoryResult(await companyView(args)) }),
+            parameters: Type.Object({ query: Type.Optional(Type.String({ maxLength: 1000 })), cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })) }, { additionalProperties: false }),
+            execute: async (_id, args) => {
+              if (args.query !== undefined && args.cursor !== undefined) throw new Error('query 与 cursor 不能同时提供；续页只传 cursor。');
+              return memoryResult(await companyView(args));
+            } }),
           defineTool({ name: 'search_memory', label: '检索记忆', description: '按需检索公司事实或本人个人记忆；公司正式事实只来自 World，个人偏好不能证明公司目标。',
             parameters: Type.Object({ module: Type.Union([Type.Literal('company'), Type.Literal('personal')]), query: Type.String({ maxLength: 1000 }) }, { additionalProperties: false }),
             execute: async (_id, args) => memoryResult(args.module === 'company' ? await companyView({ query: args.query }) : await personalView(args.query)) }),
