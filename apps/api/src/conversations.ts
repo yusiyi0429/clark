@@ -27,6 +27,7 @@ import { getPersonalMissionCard } from "./personalMissionCards.js";
 import { canReadTask, getTaskView } from "./tasks.js";
 import type { MemoryPerson } from "./companyMemory.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
+import type { HistoryHit } from "./conversationHistorySearch.js";
 
 export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
@@ -71,6 +72,8 @@ export type ConversationRuntime = {
     personalMemory?: { id: string; title: string; text: string }[];
     /** 本人个人记忆的检索与「记住 / 改成 / 忘掉」，已绑定本人；运行时据此给主 Agent 提供工具。失败时抛错，只作为工具报错。 */
     personalMemoryTools?: PersonalMemoryTools;
+    /** 检索本人历史对话原文（跨所有页面与归档，只读、已绑定本人）；运行时据此提供 search_conversation_history。 */
+    searchHistory?: (query: string) => Promise<{ hits: HistoryHit[]; message?: string }>;
     recentMessages?: { role: "user" | "assistant"; content: string; createdAt: string }[];
     runtimeEntries: unknown[];
     piSessionId: string;

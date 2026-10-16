@@ -34,6 +34,7 @@ import { getObjectMaterial } from "../objectMaterials.js";
 import { withNotice } from "../conversationRouting.js";
 import { ConversationTurnError, recoveryNote, resumeInstruction, shortFailureReason, turnFailureCopy, type TurnFailureKind, type TurnRecoverySummary } from "../conversationRecovery.js";
 import { personalMemoryToolsFor } from "../personalMemory.js";
+import { searchOwnConversationHistory } from "../conversationHistorySearch.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -408,6 +409,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             referencesSnapshot: references.snapshots,
             ...(personalMemory.length ? { personalMemory } : {}),
             personalMemoryTools,
+            // 本人历史对话原文检索（3e）：跨所有页面与归档，只查本人，本轮这条不算。
+            searchHistory: (query: string) => searchOwnConversationHistory(q, { personId: owner, query, excludeRunId: runId }),
             recentMessages: recent.rows.reverse().map((message) => ({
               role: message.role,
               content: message.content,

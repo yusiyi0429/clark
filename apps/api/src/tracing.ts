@@ -78,6 +78,8 @@ export const RETRIEVE_SOURCES = {
   worldCompany: "world-company",
   /** 本人个人记忆（personalMemory.ts）。 */
   personalMemory: "personal-memory",
+  /** 本人历史对话原文（conversationHistorySearch.ts）。 */
+  conversationHistory: "conversation-history",
 } as const;
 export type RetrieveSource = (typeof RETRIEVE_SOURCES)[keyof typeof RETRIEVE_SOURCES];
 
