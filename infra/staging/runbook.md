@@ -5,6 +5,8 @@
 
 ## 0. 火山主机准备（方案 B，一次性）
 
+> **当前以 `tk.tokenkingos.com` 为准（2026-10-14）。** 下面第 3、4、7、8 条写的 `mvp` 域名、证书和 Nginx 切换是 9/28 切站前的记录，现网不要照做；`mvp.tokenkingos.com` 仍归 clark。日常发布用 `release.sh`，步骤见 [release.md](release.md)。
+
 > **2026-09-29 实际上线**：天枢生产域名改为 `tk.tokenkingos.com`（新建 `sites-available/tk.conf`，配置见 `infra/host-nginx/tk.tokenkingos.com.conf`，证书 certbot webroot 签发）；`mvp.tokenkingos.com` 保持 clark 不变。镜像在主机上按国内源构建，公众号 sidecar 用 `infra/volcano.override.yml` 的本地标签。每日 05:00 备份：`crontab` 读 `infra/backup.env`（`BACKUP_TARGET=local`，存 `/srv/tokenhub/backups/tianshu`，保留 14 天，只留本机、不是异地）；age 公钥在 `backup.env`，**私钥只在 `TokenkingOS/tkos-secrets` 的 `tianshu/backup-age.key`**，主机上不留。恢复时私钥经 stdin 传入（`age -d -i -`），不落盘。
 
 主机是 `tokenhub-prod-app-01`（Ubuntu 22.04，8C16G，公网 115.191.26.230），同时跑着 TokenHub 官网、clark-main（`demo`/旧 `mvp`）、本体 world-lab、openviking、tkos-lab 等。宿主机 Nginx 占 80/443，站点配置在 `/etc/nginx/sites-available/` 并软链到 `sites-enabled/`，证书由 certbot（nginx 插件）签发与续期。天枢只把 edge 绑在 `127.0.0.1:3130`，由宿主机 Nginx 终止 TLS 后整域名转发过来，不按路径拆。
@@ -35,6 +37,8 @@
 8. **`tkos.ai` 跳转（已就绪，2026-09-28）**：`.ai` 不能在大陆备案，请求打到这台主机会被火山拦截，所以跳转在 Porkbun 的 URL Forwarding 做，不经宿主机 Nginx：`tkos.ai`、`www.tkos.ai` → `https://tokenkingos.com`（301，不带路径）；`mvp.tkos.ai` → `https://mvp.tokenkingos.com`（301，带路径）。用户最终停在 `mvp.tokenkingos.com`，登录 Cookie 也只在这个域名下；发给成员 Agent 的连接地址一律写 `mvp.tokenkingos.com`（301 会让部分客户端把 POST 改成 GET）。
 
 ## 1. 部署顺序
+
+> 本节是首次上线的顺序。已上线后的版本更新用 [release.md](release.md)，不要在现网直接 `up -d --build`：部署目录不是 Git 工作区，现网 `volcano.override.yml` 已固定镜像。
 
 1. 宿主机准备 `infra/.env`（变量清单见 `.env.example`；真实 Bocha key、公众号 sidecar token、模型 key、人员 seed 路径）。
 2. `docker compose -f infra/docker-compose.yml --env-file infra/.env config`（检查边界，不启动）。
