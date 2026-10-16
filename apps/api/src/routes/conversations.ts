@@ -232,7 +232,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           && lastAt !== null && Date.now() - lastAt.getTime() >= CONVERSATION_IDLE_RESTART_MS;
         // 后台压缩（conversationCompaction.ts）：已就绪的快照这时换进这一轮的模型历史（毫秒级，不调模型、不等后台任务）；
         // 闲置重开用的也是换进来之后最近的那份摘要。历史已经很长又没有快照在做时，顺手在后台补起一次。
-        let prepared = conversationCompaction
+        const prepared = conversationCompaction
           ? await conversationCompaction.prepareTurn(client.query.bind(client), row)
           : { runtimeEntries: row.runtime_entries };
         // 个人记忆（PR #12）：任务卡私聊不学；其余页面每条消息排一个 explicit 提炼任务，与这条消息同一事务落库。
@@ -263,9 +263,6 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           memoryClarification = state?.clarification ?? (state?.status === "superseded" ? "个人记忆已被其他操作更新，请重新明确这次修改。"
             : state?.status === "failed" ? "个人记忆修改未能确认完成，请稍后查看并重试。"
             : state?.status !== "succeeded" ? "个人记忆修改尚未完成，已保存请求稍后重试。" : undefined);
-          row = (await client.query<typeof row>("SELECT id, pi_session_id, runtime_entries FROM conversations WHERE id = $1", [row.id])).rows[0];
-          // 显式改动会清空本人所有会话的模型历史（personalMemory.ts invalidate）。
-          if (Array.isArray(row.runtime_entries) && row.runtime_entries.length === 0) prepared = { runtimeEntries: [] };
         }
         // 与本轮原话相关的本人个人记忆：读不到时这一轮照常回答，只是不带（记日志）。
         const personalMemory = learnsPersonal

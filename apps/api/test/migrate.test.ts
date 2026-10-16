@@ -400,7 +400,7 @@ describe("migration", () => {
       expect((await running("30000000-0000-4000-8000-000000000002")).rowCount).toBe(0);
     });
   });
-  it("069 个人记忆：只新增表和带默认值的列，已有会话的模型历史不动，可重复执行", async () => {
+  it("069 个人记忆：只新增表，已有会话的模型历史不动，可重复执行", async () => {
     await createTestDb(async ({ db }: TestDb) => {
       const files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith(".sql") && Number(f.split("_")[0]) <= 68).sort();
       await db.query("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
@@ -412,8 +412,8 @@ describe("migration", () => {
         VALUES ('00000000-0000-4000-8000-000000000001', 'person-a', 'global', '10000000-0000-4000-8000-000000000001', '[{"entry":1}]'::jsonb)`);
       await migrate(db);
       await migrate(db);
-      expect((await db.query("SELECT runtime_entries, memory_epoch, memory_history_cutoff FROM conversations")).rows)
-        .toEqual([{ runtime_entries: [{ entry: 1 }], memory_epoch: 0, memory_history_cutoff: 0 }]);
+      expect((await db.query("SELECT runtime_entries FROM conversations")).rows)
+        .toEqual([{ runtime_entries: [{ entry: 1 }] }]);
       expect((await db.query("SELECT to_regclass('personal_memory_jobs') IS NOT NULL AS jobs, to_regclass('memory_documents') IS NOT NULL AS docs")).rows)
         .toEqual([{ jobs: true, docs: true }]);
     });

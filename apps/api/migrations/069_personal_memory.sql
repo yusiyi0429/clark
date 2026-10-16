@@ -1,4 +1,5 @@
 -- 个人记忆（PR #12 的 061 + 062 合并，从 069 起重新编号）：每人一份 Personal.md，库里只记版本、遗忘排除与提炼任务。
+-- 不再给 conversations 加 memory_epoch / memory_history_cutoff：显式改动不清空会话上下文。
 -- 只新增表和可空/带默认值的列，不改已有行，可在已有库上执行。
 CREATE TABLE IF NOT EXISTS memory_documents (
   module text NOT NULL CHECK (module = 'personal'),
@@ -21,8 +22,6 @@ CREATE TABLE IF NOT EXISTS personal_memory_exclusions (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (person_id, attribute_key)
 );
-ALTER TABLE conversations ADD COLUMN IF NOT EXISTS memory_epoch integer NOT NULL DEFAULT 0;
-ALTER TABLE conversations ADD COLUMN IF NOT EXISTS memory_history_cutoff integer NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS personal_memory_jobs (
   id bigserial PRIMARY KEY,
   person_id text NOT NULL,

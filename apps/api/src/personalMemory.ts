@@ -130,7 +130,6 @@ export function createPersonalMemory({ pool, storageDir }: {
                 await client.query('INSERT INTO personal_memory_exclusions(person_id,attribute_key,through_job_id,conversation_cutoffs,title,text) VALUES($1,$2,$3,$4::jsonb,$5,$6) ON CONFLICT(person_id,attribute_key) DO UPDATE SET through_job_id=EXCLUDED.through_job_id,conversation_cutoffs=EXCLUDED.conversation_cutoffs,title=EXCLUDED.title,text=EXCLUDED.text,created_at=now()', [personId, key, throughJob, JSON.stringify(Object.fromEntries(cutoffs.map(row => [row.id, row.sequence]))),previous.find(item=>item.id===key)?.title ?? "",previous.find(item=>item.id===key)?.text.slice(0,2048) ?? ""]);
             state.epoch++;
             await client.query("UPDATE memory_documents SET epoch=$2,last_explicit_job_id=$3 WHERE module='personal' AND scope_key=$1", [personId, state.epoch, explicitJobId ?? null]);
-            await client.query("UPDATE conversations c SET runtime_entries='[]'::jsonb,pi_session_id=$2,memory_epoch=$3,memory_history_cutoff=COALESCE((SELECT MAX(sequence) FROM conversation_messages WHERE conversation_id=c.id),0) WHERE owner_id=$1", [personId, randomUUID(), state.epoch]);
             await client.query('COMMIT');
         }
         catch (error) {

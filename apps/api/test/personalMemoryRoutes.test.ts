@@ -46,6 +46,27 @@ test('main chat receives the owner\'s relevant personal memory and no longer aft
     }
 });
 
+test('forgetting a memory keeps the model context of every conversation of that person (3d)', async () => {
+    const inputs: Parameters<ConversationRuntime['run']>[0][] = [];
+    const t = await createTestApp({}, { async run(input) { inputs.push(input); return { assistantMessage: '回复', runtimeEntries: [{ turn: inputs.length }] }; } });
+    try {
+        const cookie = await t.loginCookie(), headers = { cookie, origin: t.publicOrigin };
+        const doc = (await t.app.inject({ method: 'PUT', url: '/api/me/memory/personal', headers, payload: { expectedRevision: 0, markdown: '# Personal\n\n## 协作偏好\n\n先给结论。' } })).json();
+        await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '第一轮' } });
+        // 同一个人在另一个页面的对话。
+        await t.sql("INSERT INTO conversations (id, owner_id, scope, pi_session_id, runtime_entries) VALUES (gen_random_uuid(), 'person-fixture-001', 'issue:other', gen_random_uuid(), '[{\"other\":1}]'::jsonb)");
+        const before = await t.sql("SELECT scope, runtime_entries, pi_session_id FROM conversations WHERE owner_id = 'person-fixture-001' ORDER BY scope");
+        expect((await t.app.inject({ method: 'POST', url: '/api/me/memory/personal/forget', headers, payload: { expectedRevision: doc.revision, sectionIds: [doc.sections[0].id] } })).statusCode).toBe(200);
+        expect(await t.sql("SELECT scope, runtime_entries, pi_session_id FROM conversations WHERE owner_id = 'person-fixture-001' ORDER BY scope")).toEqual(before);
+        await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '第二轮' } });
+        expect(inputs[1].runtimeEntries).toEqual([{ turn: 1 }]);
+        expect(inputs[1].personalMemory).toBeUndefined();
+    }
+    finally {
+        await t.close();
+    }
+});
+
 test('a busy personal document degrades main chat promptly instead of holding the turn',async()=>{
  const t=await createTestApp();const blocker=await t.pool.connect();let timer:ReturnType<typeof setTimeout>|undefined;
  try{const cookie=await t.loginCookie();await blocker.query('SELECT pg_advisory_lock(hashtext($1))',['memory:personal:person-fixture-001']);
