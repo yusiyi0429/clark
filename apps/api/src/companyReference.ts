@@ -1,3 +1,4 @@
+import { traceRetrieval } from "./langsmith.js";
 import { Type } from "@sinclair/typebox";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { companyProse, readCompanyContext, type CompanyContext } from "./companyContext.js";
@@ -11,7 +12,7 @@ export function createCompanyReference(context: CompanyContext, signal?: AbortSi
       return { status: "unavailable", entries: [], message: "公司参考分页已失效，请重新查询。" };
     }
     const query = saved ? saved.query : request.query;
-    const view = await readCompanyContext(context, query, signal, saved?.cursor);
+    const view = await traceRetrieval("company", () => readCompanyContext(context, query, signal, saved?.cursor));
     const prose = companyProse(view);
     if (!view.nextCursor) return prose;
     const cursor = `CP${continuations.size + 1}`;

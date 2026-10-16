@@ -65,6 +65,8 @@ const env: AppEnv = {
   // 可选观测：未配置时 LangSmith 完全 no-op，不阻断启动或业务
   langsmithApiKey: process.env.LANGSMITH_API_KEY,
   langsmithProject: process.env.LANGSMITH_PROJECT,
+  langsmithTracing: process.env.LANGSMITH_TRACING,
+  langsmithIdentitySalt: process.env.LANGSMITH_IDENTITY_SALT,
   materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
   conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,
   recordingStorageDir: process.env.MEETING_RECORDING_STORAGE_DIR,

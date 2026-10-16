@@ -71,7 +71,7 @@ export function createPersonalDistillation(options: {
           }
           const effectiveEpoch = doc.epoch;
           const resumingExplicit = job.kind === 'explicit' && lastExplicitJob === job.id;
-          const messages = (await client.query<{ sequence: number; content: string }>(`SELECT m.sequence,m.content FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
+          const messages = (await client.query<{ sequence: number; content: string; logical_turn_id?: string }>(`SELECT m.sequence,m.content,m.logical_turn_id FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
             WHERE c.id=$1 AND c.owner_id=$2 AND c.deleted_at IS NULL AND m.role='user' AND m.sequence<=$3 AND (m.sequence>c.memory_history_cutoff OR ($4::boolean AND m.sequence=$3))
             ORDER BY m.sequence DESC LIMIT 12`, [job.conversation_id, job.person_id, job.through_sequence, canRebaseExplicit])).rows;
           const currentMessage = messages.find(message => message.sequence === job.through_sequence);
@@ -97,6 +97,7 @@ export function createPersonalDistillation(options: {
           const signal = AbortSignal.any([AbortSignal.timeout(15_000), closing.signal]);
           signal.throwIfAborted();
           const { candidate: result } = await runCandidateAgent({ query: client.query.bind(client), kind: 'personal-memory-distillation', personId: job.person_id,
+            trace: { businessKey: `conversation:${job.conversation_id}`, logicalTurnId: `personal-memory-job-${job.id}`, scope: 'personal-memory', caller: connection ? 'web' : 'worker', parentLogicalTurnId: currentMessage?.logical_turn_id },
             input: { kind: job.kind, currentSequence: job.through_sequence, messages: boundedMessages, memory: doc.sections, blockedAttributes: blocked, blockedAttributesIncomplete }, prompt, schema: Candidate,
             baseUrl: options.baseUrl, apiKey: options.apiKey, modelId: options.modelId, modelSlot: 'light', maxModelCalls: 2, redactObservability: true, streamSimple: options.streamSimple, signal });
           const changes: PersonalChange[] = [];

@@ -78,6 +78,7 @@ export const AnchorSelection = Type.Object({
 export const ConversationMessageRequest = Type.Object(
   {
     message: Type.String({ minLength: 1, maxLength: 20_000 }),
+    logicalTurnId: Type.Optional(Type.String({ pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" })),
     anchorSelection: Type.Optional(AnchorSelection),
     references: Type.Optional(Type.Array(CardReference, { maxItems: 20 })),
     attachments: Type.Optional(Type.Array(ConversationAttachmentRef, { maxItems: 10 })),
@@ -94,6 +95,7 @@ export const ConversationMessage = Type.Object(
     content: Type.String(),
     referencesSnapshot: Type.Array(ReferenceSnapshot),
     attachments: Type.Array(ConversationAttachmentInfo),
+    logicalTurnId: Type.Optional(Type.String()),
     runId: Type.String(),
     createdAt: Type.String({ format: "date-time" }),
   },
@@ -106,6 +108,9 @@ export const ConversationHistory = Type.Object(
 );
 
 const StreamBase = {
+  threadId: Type.Optional(Type.String()),
+  logicalTurnId: Type.Optional(Type.String()),
+  attempt: Type.Optional(Type.Integer({ minimum: 1 })),
   runId: Type.String(),
   scope: ConversationScope,
   sequence: Type.Integer({ minimum: 1 }),

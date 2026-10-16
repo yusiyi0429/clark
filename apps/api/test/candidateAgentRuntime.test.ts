@@ -1,3 +1,4 @@
+import { captureTraceTransport } from "./langsmithTransport.js";
 import { describe, expect, it } from "vitest";
 import { Type } from "@sinclair/typebox";
 import {
@@ -6,7 +7,7 @@ import {
   type Context,
 } from "@earendil-works/pi-ai";
 import { runCandidateAgent } from "../src/candidateAgentRuntime.js";
-import { configureLangSmith } from "../src/langsmith.js";
+import { configureLangSmith, flushLangSmith } from "../src/langsmith.js";
 import { createTestDb } from "./helpers.js";
 import { migrate } from "../src/migrate.js";
 
@@ -125,14 +126,9 @@ describe("batch candidate runtime public seam", () => {
   });
 
   it("records application-visible LangSmith traces for batch runs, including failures", async () => {
-    const payloads: Record<string, any>[] = [];
-    configureLangSmith({
-      apiKey: "ls-batch",
-      fetchImpl: async (_url, init) => {
-        payloads.push(JSON.parse(init.body) as Record<string, any>);
-        return { ok: true, status: 202 };
-      },
-    });
+    let modelCalls=0;
+    const transport=captureTraceTransport();
+    configureLangSmith({apiKey:'ls-batch',tracing:true,fetchImplementation:transport.fetchImplementation});
     try {
       await createTestDb(async ({ db }) => {
         await migrate(db);
@@ -148,12 +144,12 @@ describe("batch candidate runtime public seam", () => {
           baseUrl: "https://provider.invalid/v1/responses",
           apiKey: "test-key",
           modelId: "fake-heavy",
-          streamSimple: () => stream([{
+          streamSimple: () => (modelCalls++, stream([{
             type: "toolCall",
             id: "submit-1",
             name: "submit_candidate",
             arguments: { summary: "选择合作供应链" },
-          }], "toolUse"),
+          }], "toolUse")),
         });
         await expect(runCandidateAgent({
           query: db.query.bind(db),
@@ -164,25 +160,19 @@ describe("batch candidate runtime public seam", () => {
           baseUrl: "https://provider.invalid/v1/responses",
           apiKey: "test-key",
           modelId: "fake-heavy",
-          streamSimple: () => stream([{ type: "text", text: "散文" }], "stop"),
+          streamSimple: () => (modelCalls++, stream([{ type: "text", text: "散文" }], "stop")),
         })).rejects.toThrow("did not call submit_candidate");
-        await new Promise((resolve) => setTimeout(resolve, 10));
-
-        expect(payloads).toHaveLength(2);
-        expect(payloads[0]).toMatchObject({
-          name: "测试乙 · issue-research",
-          inputs: { agentKind: "issue-research", input: { question: "比较供应链" } },
-          outputs: { summary: "选择合作供应链" },
-          extra: { status: "succeeded", usage, toolEvents: [{ name: "submit_candidate", isError: false }], metadata: { user_id: "person-fixture-002", user_name: "测试乙" } },
-        });
-        expect((payloads[0].inputs as { promptHash: string }).promptHash).toMatch(/^[a-f0-9]{64}$/);
-        expect(payloads[1]).toMatchObject({
-          name: "radar-candidate",
-          extra: { status: "failed", toolEvents: [{ name: "submit_candidate", isError: true }] },
-        });
-        expect(payloads[1].error).toContain("submit_candidate");
-        expect(payloads[1].extra.metadata.user_id).toBeUndefined();
-        expect(JSON.stringify(payloads)).not.toContain("ls-batch");
+        await flushLangSmith();
+        const posts=transport.sent.filter(x=>x.method==='POST').map(x=>x.body);
+        expect(posts.filter(x=>x.name.startsWith('turn:'))).toHaveLength(2);
+        expect(posts.filter(x=>x.name==='agent:issue-research')).toHaveLength(1);
+        expect(posts.filter(x=>x.name==='model:warmap/fake-heavy')).toHaveLength(modelCalls);
+        expect(posts.filter(x=>x.name==='tool:submit_candidate')).toHaveLength(1);
+        const failed=posts.find(x=>x.name==='agent:radar-candidate');
+        expect(transport.sent.find(x=>x.method==='PATCH'&&x.url.endsWith(failed.id))?.body.error).toContain('submit_candidate');
+        expect(posts[0].extra.metadata.anon_user_id).not.toBe('person-fixture-002');
+        expect(JSON.stringify(transport.sent)).not.toContain('ls-batch');
+        expect(JSON.stringify(transport.sent)).not.toContain('测试乙');
       });
     } finally {
       configureLangSmith({});

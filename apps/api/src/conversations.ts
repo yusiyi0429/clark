@@ -305,7 +305,7 @@ export async function getConversationHistory(q: Query, owner: string, scope: TCo
   const conversationId = conversation.rows[0]?.id as string | undefined;
   if (!conversationId) return { scope, messages: [] };
   const result = await q(
-    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at
+    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.logical_turn_id, m.created_at
        FROM conversation_messages m
       WHERE m.conversation_id = $1
       ORDER BY m.sequence`,
@@ -319,6 +319,7 @@ export async function getConversationHistory(q: Query, owner: string, scope: TCo
       content: row.content as string,
       referencesSnapshot: row.references_snapshot,
       attachments: (row.attachments as TConversationAttachment[]).map(conversationAttachmentInfo),
+      ...(row.logical_turn_id ? { logicalTurnId: row.logical_turn_id as string } : {}),
       runId: row.run_id as string,
       createdAt: (row.created_at as Date).toISOString(),
     })),

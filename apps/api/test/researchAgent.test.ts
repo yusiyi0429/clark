@@ -158,6 +158,8 @@ describe("issue pre-research publisher feed", () => {
 
 describe("shared Company consumption", () => {
   it("does not read company facts without an explicit service person", async () => {
+    await createTestDb(async ({ db }) => {
+    await migrate(db);
     let reads = 0;
     const contexts: Context[] = [];
     const companyMemory = createCompanyContext(testEnv, { async read() {
@@ -165,7 +167,7 @@ describe("shared Company consumption", () => {
       return { status: "ready", entries: [{ handle: "company:private", title: "私密", text: "不应被读取的内容" }] };
     } });
     const runner = createResearchAgentRunner({
-      query: async () => ({ rows: [] }) as any,
+      query: db.query.bind(db),
       companyMemory, baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-heavy",
       streamSimple: (_model, context) => {
         contexts.push(context);
@@ -176,10 +178,13 @@ describe("shared Company consumption", () => {
     expect(reads).toBe(0);
     expect(JSON.stringify(contexts[0].messages)).toContain("coverage_unavailable");
     expect(JSON.stringify(contexts[0].messages)).not.toContain("不应被读取的内容");
+    });
   });
 });
 
 it("shared research consumes every Company page as prose without internal source metadata", async () => {
+  await createTestDb(async ({ db }) => {
+  await migrate(db);
   const contexts: Context[] = [];
   const viewers: unknown[] = [];
   const cursors: (string | undefined)[] = [];
@@ -189,7 +194,7 @@ it("shared research consumes every Company page as prose without internal source
       : { status: "ready", entries: [{ handle: "company:secret-1", title: "经营战略", text: "优先服务存量客户。" }], nextCursor: "next-page" };
   } });
   const runner = createResearchAgentRunner({
-    query: async () => ({ rows: [] }) as any,
+    query: db.query.bind(db),
     companyMemory, baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-heavy",
     streamSimple: (_model, context) => {
       contexts.push(context);
@@ -207,4 +212,5 @@ it("shared research consumes every Company page as prose without internal source
   expect(modelInput).not.toContain("next-page");
   expect(JSON.stringify(contexts[0].messages)).not.toContain("本期优先改善续约率。");
   expect(contexts[0].tools?.map((tool) => tool.name).sort()).toEqual(["query_company", "submit_candidate"]);
+  });
 });

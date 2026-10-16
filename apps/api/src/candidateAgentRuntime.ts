@@ -1,3 +1,4 @@
+import { streamSimple as responsesStreamSimple } from "@earendil-works/pi-ai/api/openai-responses";
 import { createHash, randomUUID } from "node:crypto";
 import type { QueryResult } from "pg";
 import { Value } from "@sinclair/typebox/value";
@@ -20,7 +21,9 @@ import {
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { logEvent } from "./observability.js";
-import { recordAgentTrace } from "./langsmith.js";
+import { currentTraceIdentity, withTurnTrace, withAgentTrace, traceModelStream, traceTool, type TraceIdentity } from "./langsmith.js";
+import { traceThread, traceAttempt } from "./traceIdentity.js";
+import { v7 } from "uuid";
 
 function normalizedBaseUrl(value: string): string {
   return value.replace(/\/+$/, "").replace(/\/responses$/, "");
@@ -32,9 +35,10 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   query: Query;
   kind: string;
   objectRef?: { type: string; id: string; version?: number };
-  /** 这次 run 属于谁：只进 LangSmith metadata，系统/公司级 run 不传。 */
+  /** 这次 run 属于谁：仅以匿名标识进入 LangSmith，系统/公司级 run 不传。 */
   personId?: string;
   personName?: string;
+  trace?: { businessKey: string; logicalTurnId: string; scope: string; caller: string; parentLogicalTurnId?: string };
   input: unknown;
   prompt: string;
   schema: T;
@@ -50,162 +54,139 @@ export async function runCandidateAgent<T extends TSchema>(options: {
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 }): Promise<{ runId: string; candidate: Static<T> }> {
   const runId = randomUUID();
-  const startedAt = Date.now();
-  const promptHash = createHash("sha256").update(options.prompt).digest("hex");
-  await options.query(
-    `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
-     VALUES ($1, $2, $3::jsonb, 'running', $4, $5, $6::jsonb)`,
-    [runId, options.kind, JSON.stringify(options.objectRef ?? null), options.modelSlot ?? "heavy", promptHash, JSON.stringify(options.redactObservability ? { redacted: true } : options.input)],
-  );
+  const execute = () => withAgentTrace(options.kind, async () => {
+    const startedAt = Date.now();
+    const promptHash = createHash("sha256").update(options.prompt).digest("hex");
+    await options.query(
+      `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
+       VALUES ($1, $2, $3::jsonb, 'running', $4, $5, $6::jsonb)`,
+      [runId, options.kind, JSON.stringify(options.objectRef ?? null), options.modelSlot ?? "heavy", promptHash, JSON.stringify(options.redactObservability ? { redacted: true } : options.input)],
+    );
 
-  const resourceLoader: ResourceLoader = {
-    getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
-    getSkills: () => ({ skills: [], diagnostics: [] }),
-    getPrompts: () => ({ prompts: [], diagnostics: [] }),
-    getThemes: () => ({ themes: [], diagnostics: [] }),
-    getAgentsFiles: () => ({ agentsFiles: [] }),
-    getSystemPrompt: () => options.prompt,
-    getSystemPromptSource: () => undefined,
-    getAppendSystemPrompt: () => [],
-    getAppendSystemPromptSources: () => [],
-    extendResources: () => undefined,
-    reload: async () => undefined,
-  };
+    const resourceLoader: ResourceLoader = {
+      getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
+      getSkills: () => ({ skills: [], diagnostics: [] }),
+      getPrompts: () => ({ prompts: [], diagnostics: [] }),
+      getThemes: () => ({ themes: [], diagnostics: [] }),
+      getAgentsFiles: () => ({ agentsFiles: [] }),
+      getSystemPrompt: () => options.prompt,
+      getSystemPromptSource: () => undefined,
+      getAppendSystemPrompt: () => [],
+      getAppendSystemPromptSources: () => [],
+      extendResources: () => undefined,
+      reload: async () => undefined,
+    };
 
-  let candidate: Static<T> | undefined;
-  let abortAfterSubmit: (() => Promise<void>) | undefined;
-  let usage: unknown;
-  let usageTokens = -1;
-  let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
-  try {
-    const modelRuntime = await ModelRuntime.create({
-      credentials: new InMemoryCredentialStore(),
-      modelsStore: new InMemoryModelsStore(),
-      modelsPath: null,
-      refreshOnCreate: false,
-    });
-    modelRuntime.registerProvider("warmap", {
-      name: "WarMap OpenAI-compatible Responses",
-      baseUrl: normalizedBaseUrl(options.baseUrl),
-      api: "openai-responses",
-      streamSimple: options.streamSimple,
-      models: [{
-        id: options.modelId,
-        name: options.modelId,
-        api: "openai-responses",
-        reasoning: false,
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 128_000,
-        maxTokens: 16_384,
-      }],
-    });
-    if (options.maxModelCalls !== undefined) {
-      const stream = modelRuntime.streamSimple.bind(modelRuntime);
-      let modelCalls = 0;
-      modelRuntime.streamSimple = (providerModel, context, streamOptions) => {
-        if (++modelCalls > options.maxModelCalls!) throw new Error('CANDIDATE_MODEL_BUDGET_EXHAUSTED');
-        return stream(providerModel, context, streamOptions);
-      };
-    }
-    await modelRuntime.setRuntimeApiKey("warmap", options.apiKey);
-    const model = modelRuntime.getModel("warmap", options.modelId);
-    if (!model) throw new Error(`Pi model not found: warmap/${options.modelId}`);
-
-    const submitCandidate = defineTool({
-      name: "submit_candidate",
-      label: "Submit candidate",
-      description: "提交唯一的结构化候选并结束本轮；散文输出不会被保存",
-      parameters: options.schema,
-      execute: async (_id, value) => {
-        if (!Value.Check(options.schema, value)) throw new Error("submit_candidate schema validation failed");
-        candidate = structuredClone(value) as Static<T>;
-        queueMicrotask(() => { void abortAfterSubmit?.(); });
-        return { content: [{ type: "text" as const, text: "candidate accepted" }], details: {} };
-      },
-    });
-    ({ session } = await createAgentSession({
-      model,
-      modelRuntime,
-      resourceLoader,
-      customTools: [submitCandidate, ...(options.extraTools ?? [])],
-      tools: ["submit_candidate", ...(options.extraTools ?? []).map((tool) => tool.name)],
-      sessionManager: SessionManager.inMemory(),
-      settingsManager: SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } }),
-      thinkingLevel: "off",
-    }));
-    abortAfterSubmit = () => session!.abort();
-    const unsubscribe = session.subscribe((event) => {
-      if (event.type === "message_end" && event.message.role === "assistant" && event.message.usage.totalTokens > usageTokens) {
-        usage = event.message.usage;
-        usageTokens = event.message.usage.totalTokens;
-      }
-    });
-    const onAbort = () => void session!.abort();
-    options.signal?.addEventListener("abort", onAbort, { once: true });
+    let candidate: Static<T> | undefined;
+    let abortAfterSubmit: (() => Promise<void>) | undefined;
+    let usage: unknown;
+    let usageTokens = -1;
+    let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
     try {
-      options.signal?.throwIfAborted();
-      await session.prompt(JSON.stringify({ input: options.input }), { expandPromptTemplates: false, source: "rpc" });
+      const modelRuntime = await ModelRuntime.create({
+        credentials: new InMemoryCredentialStore(),
+        modelsStore: new InMemoryModelsStore(),
+        modelsPath: null,
+        refreshOnCreate: false,
+      });
+      modelRuntime.registerProvider("warmap", {
+        name: "WarMap OpenAI-compatible Responses",
+        baseUrl: normalizedBaseUrl(options.baseUrl),
+        api: "openai-responses",
+        streamSimple: (model, context, streamOptions) => traceModelStream(model, context, () => (options.streamSimple ?? responsesStreamSimple)(model as Model<"openai-responses">, context, streamOptions)),
+        models: [{
+          id: options.modelId,
+          name: options.modelId,
+          api: "openai-responses",
+          reasoning: false,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 128_000,
+          maxTokens: 16_384,
+        }],
+      });
+      if (options.maxModelCalls !== undefined) {
+        const stream = modelRuntime.streamSimple.bind(modelRuntime);
+        let modelCalls = 0;
+        modelRuntime.streamSimple = (providerModel, context, streamOptions) => {
+          if (++modelCalls > options.maxModelCalls!) throw new Error('CANDIDATE_MODEL_BUDGET_EXHAUSTED');
+          return stream(providerModel, context, streamOptions);
+        };
+      }
+      await modelRuntime.setRuntimeApiKey("warmap", options.apiKey);
+      const model = modelRuntime.getModel("warmap", options.modelId);
+      if (!model) throw new Error(`Pi model not found: warmap/${options.modelId}`);
+
+      const submitCandidate = defineTool({
+        name: "submit_candidate",
+        label: "Submit candidate",
+        description: "提交唯一的结构化候选并结束本轮；散文输出不会被保存",
+        parameters: options.schema,
+        execute: async (_id, value) => {
+          if (!Value.Check(options.schema, value)) throw new Error("submit_candidate schema validation failed");
+          candidate = structuredClone(value) as Static<T>;
+          queueMicrotask(() => { void abortAfterSubmit?.(); });
+          return { content: [{ type: "text" as const, text: "candidate accepted" }], details: {} };
+        },
+      });
+      ({ session } = await createAgentSession({
+        model,
+        modelRuntime,
+        resourceLoader,
+        customTools: [submitCandidate, ...(options.extraTools ?? [])].map(traceTool),
+        tools: ["submit_candidate", ...(options.extraTools ?? []).map((tool) => tool.name)],
+        sessionManager: SessionManager.inMemory(),
+        settingsManager: SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } }),
+        thinkingLevel: "off",
+      }));
+      abortAfterSubmit = () => session!.abort();
+      const unsubscribe = session.subscribe((event) => {
+        if (event.type === "message_end" && event.message.role === "assistant" && event.message.usage.totalTokens > usageTokens) {
+          usage = event.message.usage;
+          usageTokens = event.message.usage.totalTokens;
+        }
+      });
+      const onAbort = () => void session!.abort();
+      options.signal?.addEventListener("abort", onAbort, { once: true });
+      try {
+        options.signal?.throwIfAborted();
+        await session.prompt(JSON.stringify({ input: options.input }), { expandPromptTemplates: false, source: "rpc" });
+      } finally {
+        options.signal?.removeEventListener("abort", onAbort);
+        unsubscribe();
+      }
+      if (!candidate) throw new Error("Candidate agent did not call submit_candidate");
+      await options.query(
+        `UPDATE agent_runs
+            SET status = 'succeeded', candidate_output = $2::jsonb, usage = $3::jsonb, completed_at = now()
+          WHERE id = $1`,
+        [runId, JSON.stringify(options.redactObservability ? { redacted: true } : candidate), JSON.stringify(usage ?? null)],
+      );
+      logBatchRun({ runId, kind: options.kind, modelId: options.modelId, objectRef: options.objectRef, startedAt, status: "succeeded" });
+      return { runId, candidate };
+    } catch (cause) {
+      const error = options.redactObservability ? "PRIVATE_CANDIDATE_FAILED" : (cause as Error).message || String(cause);
+      await options.query(
+        `UPDATE agent_runs
+            SET status = $2, error = $3, usage = $4::jsonb, completed_at = now()
+          WHERE id = $1`,
+        [runId, options.signal?.aborted ? "aborted" : "failed", error, JSON.stringify(usage ?? null)],
+      );
+      const status = options.signal?.aborted ? "aborted" : "failed";
+      logBatchRun({ runId, kind: options.kind, modelId: options.modelId, objectRef: options.objectRef, startedAt, status, error });
+      throw cause;
     } finally {
-      options.signal?.removeEventListener("abort", onAbort);
-      unsubscribe();
+      session?.dispose();
     }
-    if (!candidate) throw new Error("Candidate agent did not call submit_candidate");
-    await options.query(
-      `UPDATE agent_runs
-          SET status = 'succeeded', candidate_output = $2::jsonb, usage = $3::jsonb, completed_at = now()
-        WHERE id = $1`,
-      [runId, JSON.stringify(options.redactObservability ? { redacted: true } : candidate), JSON.stringify(usage ?? null)],
-    );
-    logBatchRun({ runId, kind: options.kind, modelId: options.modelId, objectRef: options.objectRef, startedAt, status: "succeeded" });
-    void recordAgentTrace({
-      runId,
-      name: options.kind,
-      agentKind: options.kind,
-      promptHash,
-      objectRef: options.objectRef,
-      personId: options.personId,
-      personName: options.personName,
-      inputs: options.redactObservability ? { redacted: true } : options.input,
-      outputs: options.redactObservability ? { redacted: true } : candidate,
-      toolEvents: [{ name: "submit_candidate", isError: false }],
-      usage: usage ?? null,
-      status: "succeeded",
-      startedAt,
-      durationMs: Date.now() - startedAt,
-    });
-    return { runId, candidate };
-  } catch (cause) {
-    const error = options.redactObservability ? "PRIVATE_CANDIDATE_FAILED" : (cause as Error).message || String(cause);
-    await options.query(
-      `UPDATE agent_runs
-          SET status = $2, error = $3, usage = $4::jsonb, completed_at = now()
-        WHERE id = $1`,
-      [runId, options.signal?.aborted ? "aborted" : "failed", error, JSON.stringify(usage ?? null)],
-    );
-    const status = options.signal?.aborted ? "aborted" : "failed";
-    logBatchRun({ runId, kind: options.kind, modelId: options.modelId, objectRef: options.objectRef, startedAt, status, error });
-    void recordAgentTrace({
-      runId,
-      name: options.kind,
-      agentKind: options.kind,
-      promptHash,
-      objectRef: options.objectRef,
-      personId: options.personId,
-      personName: options.personName,
-      inputs: options.redactObservability ? { redacted: true } : options.input,
-      outputs: options.redactObservability ? { redacted: true } : candidate,
-      toolEvents: [{ name: "submit_candidate", isError: !candidate }],
-      usage: usage ?? null,
-      error,
-      status,
-      startedAt,
-      durationMs: Date.now() - startedAt,
-    });
-    throw cause;
-  } finally {
-    session?.dispose();
-  }
+  }, { private: options.redactObservability, inputs: options.input });
+  const active=currentTraceIdentity();
+  if (active && (!options.trace || options.trace.parentLogicalTurnId === active.logicalTurnId)) return execute();
+  const logicalTurnId = options.trace?.logicalTurnId ?? v7();
+  const scope = options.trace?.scope ?? (options.objectRef ? `${options.objectRef.type}:${options.objectRef.id}` : options.kind);
+  const threadId = await traceThread(options.query, options.trace?.businessKey ?? `candidate:${options.personId ?? 'system'}:${scope}`);
+  const attempt = await traceAttempt(options.query, threadId, logicalTurnId);
+  const identity: TraceIdentity = { threadId, logicalTurnId, attempt, scope, userId: options.personId, agentRole: options.kind, caller: options.trace?.caller ?? 'worker' };
+  return withTurnTrace(identity, execute, { rootId: runId, private: options.redactObservability, inputs: options.input });
 }
 
 function logBatchRun(input: {

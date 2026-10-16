@@ -52,3 +52,21 @@ describe("任务卡私聊工具完成后同步正文与批注", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 });
+
+it("reuses a UUID7 logical turn after failure and allocates a new one after completion", async () => {
+  const requests: { logicalTurnId: string }[] = [];
+  let posts = 0;
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, options?: RequestInit) => {
+    if (options?.method !== "POST") return { ok: true, json: async () => ({ messages: [] }) };
+    requests.push(JSON.parse(String(options.body)));
+    if (++posts === 1) return { ok: false, status: 503, json: async () => ({ code: "UNAVAILABLE" }) };
+    return streamedTool("read_anchor");
+  }));
+  const conversation = useConversation("global");
+  expect(await conversation.send("hello", [])).toBe(false);
+  expect(await conversation.send("hello", [])).toBe(true);
+  expect(await conversation.send("hello", [])).toBe(true);
+  expect(requests[0].logicalTurnId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab]/);
+  expect(requests[1].logicalTurnId).toBe(requests[0].logicalTurnId);
+  expect(requests[2].logicalTurnId).not.toBe(requests[1].logicalTurnId);
+});

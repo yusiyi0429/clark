@@ -22,7 +22,9 @@ import {
   resolveReferenceSnapshots,
   storeConversationAttachments,
 } from "../conversations.js";
-import { recordAgentTrace } from "../langsmith.js";
+import { withTurnTrace, setTraceOutcome, traceRetrieval } from "../langsmith.js";
+import { traceThread, traceAttempt } from "../traceIdentity.js";
+import { v7 } from "uuid";
 import { MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch } from "../materialParser.js";
 import { logEvent } from "../observability.js";
 import { personDisplayNames } from "../people.js";
@@ -32,12 +34,6 @@ import { projectMemberIssueCard, projectMemberMeetingCard } from "../memberCards
 import { isActiveMember } from "../threads.js";
 import { getObjectMaterial } from "../objectMaterials.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
-
-/** LangSmith run 名里的部分名称，按 scope 前缀取。 */
-const SECTION_LABELS: Record<string, string> = {
-  global: "全局", issue: "议题", signal: "信号", meeting: "会议", "monthly-plan": "月度计划", mission: "Mission",
-  "mission-card": "Mission Card", "monthly-review-item": "复盘项", "personal-review": "个人复盘", task: "执行事项",
-};
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
   const { pool, q, env, fail, requirePerson, requestContext, runtime, conversationAttachmentStorageDir, conversationTurnTimeoutMs, peopleDirectory } = ctx;
@@ -160,10 +156,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
       const abort = new AbortController();
       let streamFinished = false;
       let eventSequence = 0;
-      const runToolEvents: { name: string; isError?: boolean }[] = [];
       let runStatus = "aborted";
       let runError: string | undefined;
-      let runOutput: unknown;
       try {
         // 主对话 = 这个人最早未删除的会话；不存在则在锁内惰性创建。
         let row: { id: string; pi_session_id: string; runtime_entries: unknown[]; context_schema_version?:number; memory_epoch:number; memory_history_cutoff:number };
@@ -237,251 +231,257 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           while (Buffer.byteLength(JSON.stringify(page())) > 8192) text = boundedText(text, Math.floor(Buffer.byteLength(text) * 0.8));
           return page();
         };
-        const learnsPersonal = !req.params.scope.startsWith('mission-card:');
-        let personalEpoch = learnsPersonal ? ((await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0) : row.memory_epoch;
-        const next = await client.query<{ sequence: number }>(
-          `SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence
-             FROM conversation_messages WHERE conversation_id = $1`,
-          [row.id],
-        );
-        const userSequence = next.rows[0].sequence;
-        let explicitJob: string | undefined;
-        await client.query('BEGIN');
-        try {
-          await client.query(
-            `INSERT INTO conversation_messages
-               (conversation_id, sequence, role, content, references_snapshot, attachments, run_id)
-             VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
-            [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
+        const logicalTurnId = req.body.logicalTurnId ?? v7();
+        const query = client.query.bind(client);
+        const threadId = await traceThread(query, `conversation:${row.id}`);
+        const selection = req.body.anchorSelection;
+        const digest = createHash("sha256").update(JSON.stringify({message:req.body.message,
+          references:(req.body.references ?? []).map(({cardId,version})=>({cardId,version})),
+          attachments:(req.body.attachments ?? []).map(({id})=>({id})),
+          anchorSelection:selection ? {cardId:selection.cardId,version:selection.version,selectedText:selection.selectedText ?? null} : null,
+          viewingMaterialId:req.body.viewingMaterialId ?? null})).digest("hex");
+        const prior = (await client.query(`SELECT m.sequence,m.content,t.input_digest,t.attempt,
+            (SELECT run_id FROM conversation_messages WHERE conversation_id=m.conversation_id AND logical_turn_id=m.logical_turn_id AND role='assistant') AS completed_run_id,
+            (SELECT content FROM conversation_messages WHERE conversation_id=m.conversation_id AND logical_turn_id=m.logical_turn_id AND role='assistant') AS answer,
+            EXISTS(SELECT 1 FROM conversation_messages WHERE conversation_id=m.conversation_id AND role='user' AND sequence>m.sequence) AS has_later
+          FROM trace_turns t LEFT JOIN conversation_messages m
+            ON m.conversation_id=$1 AND m.logical_turn_id=$2::uuid AND m.role='user'
+          WHERE t.thread_id=$3 AND t.logical_turn_id=$2::text`, [row.id,logicalTurnId,threadId])).rows[0];
+        if (prior && prior.input_digest !== digest) return fail(reply,409,"TURN_INPUT_CONFLICT","该轮次的输入已变化，请作为新消息发送");
+        if (prior?.answer != null) {
+          reply.type("text/event-stream; charset=utf-8");
+          requestContext.set(req,{runId:prior.completed_run_id,scope:req.params.scope});
+          const base = { runId:prior.completed_run_id, scope: req.params.scope, threadId, logicalTurnId, attempt: prior.attempt };
+          return void reply.send(`event: message\ndata: ${JSON.stringify({...base,sequence:1,type:'message',delta:prior.answer})}\n\nevent: done\ndata: ${JSON.stringify({...base,sequence:2,type:'done',status:'completed'})}\n\n`);
+        }
+        if (prior?.has_later) return fail(reply,409,"TURN_SUPERSEDED","已有后续消息，请作为新消息发送");
+        const attempt = await traceAttempt(query,threadId,logicalTurnId,digest);
+        if (prior) { row.runtime_entries=[]; row.context_schema_version=0; }
+        await withTurnTrace({threadId,logicalTurnId,attempt,scope:req.params.scope,userId:owner,
+          agentRole:person.role==='ceo'?'ceo-agent':'dri-agent',caller:'web'},async()=>{
+          const learnsPersonal = !req.params.scope.startsWith('mission-card:');
+          let personalEpoch = learnsPersonal ? ((await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0) : row.memory_epoch;
+          const next = await client.query<{ sequence: number }>(
+            `SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence
+               FROM conversation_messages WHERE conversation_id = $1`,
+            [row.id],
           );
-          if (learnsPersonal) explicitJob = await ctx.personalDistillation.enqueue(client, {
-            personId: owner, conversationId: row.id, throughSequence: userSequence, kind: 'explicit', epoch: personalEpoch,
-          });
-          await client.query('COMMIT');
-        } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
-        }
-        // Explicit memory changes are durable before the main model starts, even if its answer fails.
-        let memoryClarification: string | undefined;
-        if (learnsPersonal && isExplicitMemoryRequest(req.body.message)) {
-          await ctx.personalDistillation.processNext(owner, client);
-          const state = await ctx.personalDistillation.status(explicitJob!, client);
-          memoryClarification = state?.clarification ?? (state?.status === 'superseded' ? '个人记忆已被其他操作更新，请重新明确这次修改。' : state?.status === 'failed' ? '个人记忆修改未能确认完成，请稍后查看并重试。' : state?.status !== 'succeeded' ? '个人记忆修改尚未完成，已保存请求稍后重试。' : undefined);
-          personalEpoch = Number((await client.query("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0);
-          // A successful correction invalidates both Pi and historical context immediately.
-          row = (await client.query<typeof row>('SELECT id,pi_session_id,runtime_entries,context_schema_version,memory_epoch,memory_history_cutoff FROM conversations WHERE id=$1', [row.id])).rows[0];
-        }
-        const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
-          `SELECT role, content, created_at
-             FROM conversation_messages
-            WHERE conversation_id = $1 AND run_id <> $2 AND sequence > $3
-            ORDER BY sequence DESC LIMIT 20`,
-          [row.id, runId, row.memory_history_cutoff],
-        );
-        await client.query(
-          `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
-           VALUES ($1, 'conversation', $2::jsonb, 'running', $3, $4, $5::jsonb)`,
-          [
-            runId,
-            JSON.stringify(object.snapshot?.objectRef ?? null),
-            runtime.modelSlot ?? "light",
-            runtime.promptHash ?? createHash("sha256").update("conversation-runtime").digest("hex"),
-            JSON.stringify({
-              scope: req.params.scope,
-              viewerId: owner,
-              conversationId: row.id,
-              message: req.body.message,
-              currentObject: object.snapshot,
-              references: references.snapshots,
-              attachments: attachments.map(conversationAttachmentInfo),
-            }),
-          ],
-        );
-
-        reply.hijack();
-        reply.raw.writeHead(200, {
-          "content-type": "text/event-stream; charset=utf-8",
-          "cache-control": "no-cache, no-transform",
-          connection: "keep-alive",
-          "x-accel-buffering": "no",
-        });
-        reply.raw.on("close", () => {
-          if (!streamFinished) abort.abort(Object.assign(new Error("Conversation client disconnected"), { code: "CLIENT_DISCONNECTED" }));
-        });
-        let runUsage: Record<string, unknown> | null = null;
-        const emit = (event: Record<string, unknown>) => {
-          if (event.type === "usage") {
-            const { type: _type, ...usage } = event;
-            runUsage = usage;
-          }
-          if (event.type === "tool" && event.phase === "completed") {
-            runToolEvents.push({ name: String(event.name), isError: event.isError === true });
-          }
-          if (reply.raw.destroyed) return;
-          const data = { ...event, runId, scope: req.params.scope, sequence: ++eventSequence };
-          reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
-        };
-
-        const beforePersonal = await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner]);
-        let personalReferences = await ctx.personalMemory.select(owner, req.body.message,client).catch((error:unknown) => {
-          app.log.error({code:(error as {code?:string}).code}, "personal memory reference unavailable");
-          return [];
-        });
-        // Recheck the durable barrier after asynchronous assembly; a completed forget wins.
-        const memoryBarrier = (await client.query<{memory_epoch:number;memory_history_cutoff:number}>("SELECT memory_epoch,memory_history_cutoff FROM conversations WHERE id=$1",[row.id])).rows[0];
-        const afterPersonal = (await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0;
-        if (memoryBarrier.memory_epoch !== row.memory_epoch) {
-          row.runtime_entries = [];
-          recent.rows = [];
-          row.memory_epoch = memoryBarrier.memory_epoch;
-        }
-        if (afterPersonal !== (beforePersonal.rows[0]?.epoch ?? 0)) personalReferences = [];
-        const timeout = setTimeout(() => {
-          abort.abort(Object.assign(new Error("Conversation turn exceeded 180 seconds"), { code: "TURN_TIMEOUT" }));
-        }, conversationTurnTimeoutMs);
-        timeout.unref();
-        try {
-          const result = memoryClarification ? { assistantMessage: memoryClarification, runtimeEntries: [] } : await runtime.run({
-            scope: req.params.scope,
-            runId,
-            viewer: { personId: owner, displayName: personDisplayNames(peopleDirectory).get(owner) ?? owner, role: person.role },
-            message: req.body.message,
-            anchor,
-            references: [...boundedReferences, ...personalReferences].filter((reference, index, all) => all.slice(0, index + 1).reduce((bytes, item) => bytes + Buffer.byteLength(JSON.stringify(item)), 0) <= 24576),
-            readReference,
-            currentObject: object.snapshot,
-            referencesSnapshot: references.snapshots,
-            recentMessages: recent.rows.reverse().map((message) => ({
-              role: message.role,
-              content: message.content,
-              createdAt: message.created_at.toISOString(),
-            })),
-            runtimeEntries: row.context_schema_version === 2 ? row.runtime_entries : [],
-            rebuildFromRaw: row.context_schema_version !== 2 && recent.rows.length > 0,
-            piSessionId: row.pi_session_id,
-            signal: abort.signal,
-            emit,
-            checkpoint: async (runtimeEntries) => {
-              await client.query(
-                "UPDATE conversations SET runtime_entries = $2::jsonb, context_schema_version = 2, runtime_updated_at = now() WHERE id = $1 AND memory_epoch = $3",
-                [row.id, JSON.stringify(runtimeEntries), row.memory_epoch],
-              );
-            },
-          });
-          if (abort.signal.aborted) {
-            const reason = abort.signal.reason as { code?: string; message?: string } | undefined;
-            await client.query(
-              "UPDATE agent_runs SET status = 'aborted', error = $2, usage = $3::jsonb, completed_at = now() WHERE id = $1",
-              [runId, reason?.message ?? "Conversation aborted", JSON.stringify(runUsage)],
-            );
-            runError = reason?.message ?? "Conversation aborted";
-            if (reason?.code === "TURN_TIMEOUT") emit({ type: "error", code: "TURN_TIMEOUT", message: reason.message });
-            else emit({ type: "done", status: "aborted" });
-          } else {
-            await client.query("BEGIN");
-            await client.query(
+          const userSequence = prior?.sequence ?? next.rows[0].sequence;
+          let explicitJob: string | undefined;
+          await client.query('BEGIN');
+          try {
+            if (!prior?.sequence) await client.query(
               `INSERT INTO conversation_messages
-                 (conversation_id, sequence, role, content, references_snapshot, run_id)
-               VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4)`,
-              [row.id, userSequence + 1, result.assistantMessage, runId],
+                 (conversation_id, sequence, role, content, references_snapshot, attachments, run_id, logical_turn_id)
+               VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6, $7)`,
+              [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId, logicalTurnId],
             );
-            await client.query(
-              `UPDATE conversations
-                  SET runtime_entries = CASE WHEN memory_epoch=$6 THEN $2::jsonb ELSE '[]'::jsonb END,
-                      context_schema_version = 2,
-                      memory_history_cutoff = CASE WHEN memory_epoch=$6 THEN memory_history_cutoff ELSE GREATEST(memory_history_cutoff,$7) END,
-                      pi_session_id = CASE WHEN memory_epoch=$6 THEN $3 ELSE pi_session_id END,
-                      runtime_updated_at = now(),
-                      recreated_at = CASE WHEN $4::boolean THEN now() ELSE recreated_at END,
-                      runtime_warning = COALESCE($5, runtime_warning)
-                WHERE id = $1`,
-              [
-                row.id,
-                JSON.stringify(result.runtimeEntries),
-                result.piSessionId ?? row.pi_session_id,
-                result.recovery?.recreated === true,
-                result.recovery?.warning ?? null,
-                row.memory_epoch,
-                userSequence + 1,
-              ],
-            );
-            await client.query(
-              `UPDATE agent_runs
-                  SET status = 'succeeded', candidate_output = $2::jsonb, usage = $3::jsonb, completed_at = now()
-                WHERE id = $1`,
-              [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage)],
-            );
-            if (learnsPersonal && !memoryClarification) await ctx.personalDistillation.enqueue(client, {
-              personId: owner, conversationId: row.id, throughSequence: userSequence, kind: 'natural',
-              epoch: personalEpoch,
+            if (learnsPersonal) explicitJob = await ctx.personalDistillation.enqueue(client, {
+              personId: owner, conversationId: row.id, throughSequence: userSequence, kind: 'explicit', epoch: personalEpoch,
             });
-            await client.query("COMMIT");
-            runStatus = "succeeded";
-            runOutput = { assistantMessage: result.assistantMessage };
-            emit({ type: "done", status: "completed" });
+            await client.query('COMMIT');
+          } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
           }
-        } catch (err) {
-          await client.query("ROLLBACK").catch(() => undefined);
-          const reason = abort.signal.reason as { code?: string; message?: string } | undefined;
+          // Explicit memory changes are durable before the main model starts, even if its answer fails.
+          let memoryClarification: string | undefined;
+          if (learnsPersonal && isExplicitMemoryRequest(req.body.message)) {
+            await ctx.personalDistillation.processNext(owner, client);
+            const state = await ctx.personalDistillation.status(explicitJob!, client);
+            memoryClarification = state?.clarification ?? (state?.status === 'superseded' ? '个人记忆已被其他操作更新，请重新明确这次修改。' : state?.status === 'failed' ? '个人记忆修改未能确认完成，请稍后查看并重试。' : state?.status !== 'succeeded' ? '个人记忆修改尚未完成，已保存请求稍后重试。' : undefined);
+            personalEpoch = Number((await client.query("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0);
+            // A successful correction invalidates both Pi and historical context immediately.
+            row = (await client.query<typeof row>('SELECT id,pi_session_id,runtime_entries,context_schema_version,memory_epoch,memory_history_cutoff FROM conversations WHERE id=$1', [row.id])).rows[0];
+          }
+          const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
+            `SELECT role, content, created_at
+               FROM conversation_messages
+              WHERE conversation_id = $1 AND sequence < $2 AND sequence > $3
+              ORDER BY sequence DESC LIMIT 20`,
+            [row.id, userSequence, row.memory_history_cutoff],
+          );
           await client.query(
-            "UPDATE agent_runs SET status = $2, error = $3, usage = $4::jsonb, completed_at = now() WHERE id = $1",
+            `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
+             VALUES ($1, 'conversation', $2::jsonb, 'running', $3, $4, $5::jsonb)`,
             [
               runId,
-              abort.signal.aborted ? "aborted" : "failed",
-              reason?.message ?? (err as Error).message ?? "Pi Runtime 失败",
-              JSON.stringify(runUsage),
+              JSON.stringify(object.snapshot?.objectRef ?? null),
+              runtime.modelSlot ?? "light",
+              runtime.promptHash ?? createHash("sha256").update("conversation-runtime").digest("hex"),
+              JSON.stringify({
+                scope: req.params.scope,
+                viewerId: owner,
+                conversationId: row.id,
+                message: req.body.message,
+                currentObject: object.snapshot,
+                references: references.snapshots,
+                attachments: attachments.map(conversationAttachmentInfo),
+              }),
             ],
           );
-          runStatus = abort.signal.aborted ? "aborted" : "failed";
-          runError = reason?.message ?? (err as Error).message ?? "Pi Runtime 失败";
-          if (reason?.code === "TURN_TIMEOUT") {
-            emit({ type: "error", code: "TURN_TIMEOUT", message: reason.message ?? "Conversation turn exceeded 180 seconds" });
-          } else if (!abort.signal.aborted) {
-            const errorCode = (err as { code?: string }).code;
-            const code = errorCode && ["SEARCH_BUDGET_EXHAUSTED", "TURN_CONTEXT_TOO_LARGE", "CURRENT_QUERY_MISMATCH"].includes(errorCode) ? errorCode : "RUNTIME_FAILED";
-            emit({ type: "error", code, message: (err as Error).message || "Pi Runtime 失败" });
+
+          reply.hijack();
+          reply.raw.writeHead(200, {
+            "content-type": "text/event-stream; charset=utf-8",
+            "cache-control": "no-cache, no-transform",
+            connection: "keep-alive",
+            "x-accel-buffering": "no",
+          });
+          reply.raw.on("close", () => {
+            if (!streamFinished) abort.abort(Object.assign(new Error("Conversation client disconnected"), { code: "CLIENT_DISCONNECTED" }));
+          });
+          let runUsage: Record<string, unknown> | null = null;
+          const emit = (event: Record<string, unknown>) => {
+            if (event.type === "usage") {
+              const { type: _type, ...usage } = event;
+              runUsage = usage;
+            }
+            if (reply.raw.destroyed) return;
+            const data = { ...event, runId, threadId, logicalTurnId, attempt, scope: req.params.scope, sequence: ++eventSequence };
+            reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
+          };
+
+          const beforePersonal = await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner]);
+          let personalReferences = await traceRetrieval("personal", () => ctx.personalMemory.select(owner, req.body.message,client)).catch((error:unknown) => {
+            app.log.error({code:(error as {code?:string}).code}, "personal memory reference unavailable");
+            return [];
+          });
+          // Recheck the durable barrier after asynchronous assembly; a completed forget wins.
+          const memoryBarrier = (await client.query<{memory_epoch:number;memory_history_cutoff:number}>("SELECT memory_epoch,memory_history_cutoff FROM conversations WHERE id=$1",[row.id])).rows[0];
+          const afterPersonal = (await client.query<{epoch:number}>("SELECT epoch FROM memory_documents WHERE module='personal' AND scope_key=$1",[owner])).rows[0]?.epoch ?? 0;
+          if (memoryBarrier.memory_epoch !== row.memory_epoch) {
+            row.runtime_entries = [];
+            recent.rows = [];
+            row.memory_epoch = memoryBarrier.memory_epoch;
           }
-        } finally {
-          clearTimeout(timeout);
-        }
-        const durationMs = Date.now() - runStartedAt;
-        const provider = "warmap";
-        const model = runtime.modelId ?? env.lightModel;
-        logEvent({
-          event: "agent.run",
-          requestId: String(req.id),
-          runId,
-          agentKind: "conversation",
-          scope: req.params.scope,
-          objectRef: object.snapshot ? `${object.snapshot.objectRef.type}:${object.snapshot.objectRef.id}` : undefined,
-          provider,
-          model,
-          durationMs,
-          status: runStatus,
-          errorCode: runError ? (runStatus === "aborted" ? "ABORTED" : "RUNTIME_FAILED") : undefined,
-          error: runError,
-        });
-        const section = req.params.scope.split(":", 1)[0];
-        void recordAgentTrace({
-          runId,
-          name: `对话·${SECTION_LABELS[section] ?? section}`,
-          agentKind: "conversation",
-          promptHash: runtime.promptHash,
-          objectRef: object.snapshot?.objectRef ?? { type: "global", id: "global" },
-          personId: owner,
-          personName: personDisplayNames(peopleDirectory).get(owner),
-          threadId: row.id,
-          metadata: { section, scope: req.params.scope, object_title: object.snapshot?.title },
-          inputs: { message: req.body.message, currentObject: object.snapshot, references: references.snapshots },
-          outputs: runOutput,
-          toolEvents: runToolEvents,
-          usage: runUsage,
-          error: runError,
-          status: runStatus,
-          startedAt: runStartedAt,
-          durationMs,
-        });
+          if (afterPersonal !== (beforePersonal.rows[0]?.epoch ?? 0)) personalReferences = [];
+          const timeout = setTimeout(() => {
+            abort.abort(Object.assign(new Error("Conversation turn exceeded 180 seconds"), { code: "TURN_TIMEOUT" }));
+          }, conversationTurnTimeoutMs);
+          timeout.unref();
+          try {
+            const result = memoryClarification ? { assistantMessage: memoryClarification, runtimeEntries: [] } : await runtime.run({
+              scope: req.params.scope,
+              runId,
+              viewer: { personId: owner, displayName: personDisplayNames(peopleDirectory).get(owner) ?? owner, role: person.role },
+              message: req.body.message,
+              anchor,
+              references: [...boundedReferences, ...personalReferences].filter((reference, index, all) => all.slice(0, index + 1).reduce((bytes, item) => bytes + Buffer.byteLength(JSON.stringify(item)), 0) <= 24576),
+              readReference,
+              currentObject: object.snapshot,
+              referencesSnapshot: references.snapshots,
+              recentMessages: recent.rows.reverse().map((message) => ({
+                role: message.role,
+                content: message.content,
+                createdAt: message.created_at.toISOString(),
+              })),
+              runtimeEntries: row.context_schema_version === 2 ? row.runtime_entries : [],
+              rebuildFromRaw: row.context_schema_version !== 2 && recent.rows.length > 0,
+              piSessionId: row.pi_session_id,
+              signal: abort.signal,
+              emit,
+              checkpoint: async (runtimeEntries) => {
+                await client.query(
+                  "UPDATE conversations SET runtime_entries = $2::jsonb, context_schema_version = 2, runtime_updated_at = now() WHERE id = $1 AND memory_epoch = $3",
+                  [row.id, JSON.stringify(runtimeEntries), row.memory_epoch],
+                );
+              },
+            });
+            if (abort.signal.aborted) {
+              const reason = abort.signal.reason as { code?: string; message?: string } | undefined;
+              await client.query(
+                "UPDATE agent_runs SET status = 'aborted', error = $2, usage = $3::jsonb, completed_at = now() WHERE id = $1",
+                [runId, reason?.message ?? "Conversation aborted", JSON.stringify(runUsage)],
+              );
+              runError = reason?.message ?? "Conversation aborted";
+              if (reason?.code === "TURN_TIMEOUT") emit({ type: "error", code: "TURN_TIMEOUT", message: reason.message });
+              else emit({ type: "done", status: "aborted" });
+            } else {
+              await client.query("BEGIN");
+              await client.query(
+                `INSERT INTO conversation_messages
+                   (conversation_id, sequence, role, content, references_snapshot, run_id, logical_turn_id)
+                 VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4, $5)`,
+                [row.id, userSequence + 1, result.assistantMessage, runId, logicalTurnId],
+              );
+              await client.query(
+                `UPDATE conversations
+                    SET runtime_entries = CASE WHEN memory_epoch=$6 THEN $2::jsonb ELSE '[]'::jsonb END,
+                        context_schema_version = 2,
+                        memory_history_cutoff = CASE WHEN memory_epoch=$6 THEN memory_history_cutoff ELSE GREATEST(memory_history_cutoff,$7) END,
+                        pi_session_id = CASE WHEN memory_epoch=$6 THEN $3 ELSE pi_session_id END,
+                        runtime_updated_at = now(),
+                        recreated_at = CASE WHEN $4::boolean THEN now() ELSE recreated_at END,
+                        runtime_warning = COALESCE($5, runtime_warning)
+                  WHERE id = $1`,
+                [
+                  row.id,
+                  JSON.stringify(result.runtimeEntries),
+                  result.piSessionId ?? row.pi_session_id,
+                  result.recovery?.recreated === true,
+                  result.recovery?.warning ?? null,
+                  row.memory_epoch,
+                  userSequence + 1,
+                ],
+              );
+              await client.query(
+                `UPDATE agent_runs
+                    SET status = 'succeeded', candidate_output = $2::jsonb, usage = $3::jsonb, completed_at = now()
+                  WHERE id = $1`,
+                [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage)],
+              );
+              if (learnsPersonal && !memoryClarification) await ctx.personalDistillation.enqueue(client, {
+                personId: owner, conversationId: row.id, throughSequence: userSequence, kind: 'natural',
+                epoch: personalEpoch,
+              });
+              await client.query("COMMIT");
+              runStatus = "succeeded";
+              emit({ type: "done", status: "completed" });
+            }
+          } catch (err) {
+            await client.query("ROLLBACK").catch(() => undefined);
+            const reason = abort.signal.reason as { code?: string; message?: string } | undefined;
+            await client.query(
+              "UPDATE agent_runs SET status = $2, error = $3, usage = $4::jsonb, completed_at = now() WHERE id = $1",
+              [
+                runId,
+                abort.signal.aborted ? "aborted" : "failed",
+                reason?.message ?? (err as Error).message ?? "Pi Runtime 失败",
+                JSON.stringify(runUsage),
+              ],
+            );
+            runStatus = abort.signal.aborted ? "aborted" : "failed";
+            runError = reason?.message ?? (err as Error).message ?? "Pi Runtime 失败";
+            if (reason?.code === "TURN_TIMEOUT") {
+              emit({ type: "error", code: "TURN_TIMEOUT", message: reason.message ?? "Conversation turn exceeded 180 seconds" });
+            } else if (!abort.signal.aborted) {
+              const errorCode = (err as { code?: string }).code;
+              const code = errorCode && ["SEARCH_BUDGET_EXHAUSTED", "TURN_CONTEXT_TOO_LARGE", "CURRENT_QUERY_MISMATCH"].includes(errorCode) ? errorCode : "RUNTIME_FAILED";
+              emit({ type: "error", code, message: (err as Error).message || "Pi Runtime 失败" });
+            }
+          } finally {
+            clearTimeout(timeout);
+          }
+          const durationMs = Date.now() - runStartedAt;
+          const provider = "warmap";
+          const model = runtime.modelId ?? env.lightModel;
+          logEvent({
+            event: "agent.run",
+            requestId: String(req.id),
+            runId,
+            agentKind: "conversation",
+            scope: req.params.scope,
+            objectRef: object.snapshot ? `${object.snapshot.objectRef.type}:${object.snapshot.objectRef.id}` : undefined,
+            provider,
+            model,
+            durationMs,
+            status: runStatus,
+            errorCode: runError ? (runStatus === "aborted" ? "ABORTED" : "RUNTIME_FAILED") : undefined,
+            error: runError,
+          });
+          setTraceOutcome({status:runStatus},runError);
+        }, {rootId:runId,inputs:{message:req.body.message}});
         streamFinished = true;
         // Fastify inject/browser may observe SSE end before this function's finally runs.
         // Release first so an immediate next turn/delete cannot spuriously see TURN_IN_PROGRESS.

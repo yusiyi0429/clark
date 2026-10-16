@@ -10715,6 +10715,9 @@
                     }
                   }
                 },
+                "logicalTurnId": {
+                  "type": "string"
+                },
                 "runId": {
                   "type": "string"
                 },
@@ -10827,6 +10830,10 @@
             "maxLength": 20000,
             "type": "string"
           },
+          "logicalTurnId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
           "anchorSelection": {
             "additionalProperties": false,
             "type": "object",
@@ -10908,6 +10915,16 @@
               "delta"
             ],
             "properties": {
+              "threadId": {
+                "type": "string"
+              },
+              "logicalTurnId": {
+                "type": "string"
+              },
+              "attempt": {
+                "minimum": 1,
+                "type": "integer"
+              },
               "runId": {
                 "type": "string"
               },
@@ -10942,6 +10959,16 @@
               "name"
             ],
             "properties": {
+              "threadId": {
+                "type": "string"
+              },
+              "logicalTurnId": {
+                "type": "string"
+              },
+              "attempt": {
+                "minimum": 1,
+                "type": "integer"
+              },
               "runId": {
                 "type": "string"
               },
@@ -10996,6 +11023,16 @@
               "totalTokens"
             ],
             "properties": {
+              "threadId": {
+                "type": "string"
+              },
+              "logicalTurnId": {
+                "type": "string"
+              },
+              "attempt": {
+                "minimum": 1,
+                "type": "integer"
+              },
               "runId": {
                 "type": "string"
               },
@@ -11045,6 +11082,16 @@
               "phase"
             ],
             "properties": {
+              "threadId": {
+                "type": "string"
+              },
+              "logicalTurnId": {
+                "type": "string"
+              },
+              "attempt": {
+                "minimum": 1,
+                "type": "integer"
+              },
               "runId": {
                 "type": "string"
               },
@@ -11087,6 +11134,16 @@
               "message"
             ],
             "properties": {
+              "threadId": {
+                "type": "string"
+              },
+              "logicalTurnId": {
+                "type": "string"
+              },
+              "attempt": {
+                "minimum": 1,
+                "type": "integer"
+              },
               "runId": {
                 "type": "string"
               },
@@ -11124,6 +11181,16 @@
               "message"
             ],
             "properties": {
+              "threadId": {
+                "type": "string"
+              },
+              "logicalTurnId": {
+                "type": "string"
+              },
+              "attempt": {
+                "minimum": 1,
+                "type": "integer"
+              },
               "runId": {
                 "type": "string"
               },
@@ -11159,6 +11226,16 @@
               "status"
             ],
             "properties": {
+              "threadId": {
+                "type": "string"
+              },
+              "logicalTurnId": {
+                "type": "string"
+              },
+              "attempt": {
+                "minimum": 1,
+                "type": "integer"
+              },
               "runId": {
                 "type": "string"
               },

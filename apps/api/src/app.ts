@@ -29,7 +29,7 @@ import type { DriExporter } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
 import type { MonthlyReviewService } from "./monthlyReviewService.js";
 import { logEvent } from "./observability.js";
-import { configureLangSmith } from "./langsmith.js";
+import { configureLangSmith, flushLangSmith } from "./langsmith.js";
 import { ensureMaterialStorage } from "./materialParser.js";
 import {
   createFail,
@@ -110,6 +110,8 @@ export type AppEnv = {
   /** 可选 LangSmith adapter；缺失时完全 no-op（.tech/07 §7）。 */
   langsmithApiKey?: string;
   langsmithProject?: string;
+  langsmithTracing?: string | boolean;
+  langsmithIdentitySalt?: string;
   personalMemoryStorageDir?: string;
   materialStorageDir?: string;
   /** 会话附件 API 卷；与 Meeting 材料卷隔离。 */
@@ -187,7 +189,7 @@ export async function buildApp({
   /** 业务时钟；通知与战场投影按公司月读取同一持久对象。 */
   now?: () => Date;
 }): Promise<FastifyInstance> {
-  configureLangSmith({ apiKey: env.langsmithApiKey, project: env.langsmithProject });
+  configureLangSmith({ apiKey: env.langsmithApiKey, project: env.langsmithProject, tracing: env.langsmithTracing, identitySalt: env.langsmithIdentitySalt || env.sessionSecret });
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
   const personalMemory = createPersonalMemory({ pool, storageDir: env.personalMemoryStorageDir ?? "/tmp/warmap-personal-memory" });
   const peopleDirectory = loadPeopleDirectory(env);
@@ -271,6 +273,7 @@ export async function buildApp({
     await research.idle();
     await personalRadar.idle();
     await runtime.close?.();
+    await flushLangSmith();
   });
   const q = pool.query.bind(pool);
   if (worldConfigured(env)) {

@@ -121,7 +121,9 @@ services:
       FFMPEG_PATH: ${FFMPEG_PATH:-}
       BUILD_SHA: ${BUILD_SHA:-dev}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
-      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-warmap}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-clark_oct}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-true}
+      LANGSMITH_IDENTITY_SALT: ${LANGSMITH_IDENTITY_SALT:-}
       MEETING_MATERIAL_STORAGE_DIR: /var/lib/warmap/meeting_materials
       CONVERSATION_ATTACHMENT_STORAGE_DIR: /var/lib/warmap/conversation_attachments
       MEETING_RECORDING_STORAGE_DIR: /var/lib/warmap/meeting_recordings

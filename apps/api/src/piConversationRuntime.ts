@@ -1,3 +1,5 @@
+import { streamSimple as responsesStreamSimple } from "@earendil-works/pi-ai/api/openai-responses";
+import { withAgentTrace, traceTool, traceModelStream, traceRetrieval } from "./langsmith.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { fallbackAnchor, boundedText, readableValue } from "./conversationAnchor.js";
 import { composeTurnContext, TURN_CONTEXT_RULES, type ProviderTurnContext } from "./turnContext.js";
@@ -342,7 +344,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
     name: "WarMap OpenAI-compatible Responses",
     baseUrl: normalizedBaseUrl(options.baseUrl),
     api: "openai-responses",
-    streamSimple: options.streamSimple,
+    streamSimple: (model, context, streamOptions) => traceModelStream(model, context, () => (options.streamSimple ?? responsesStreamSimple)(model as Model<"openai-responses">, context, streamOptions)),
     models: [...new Set([options.modelId, options.compactionModelId ?? options.modelId])].map((id) => ({
       id,
       name: id,
@@ -361,7 +363,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
     if (!context.systemPrompt?.includes(TURN_CONTEXT_RULES)) return dispatch(model, context, streamOptions);
     const turn = turnContext.getStore();
     if (!turn) throw new Error("MISSING_TURN_CONTEXT");
-    try { return dispatch(model, composeTurnContext(context, turn), streamOptions); }
+    try { const composed = composeTurnContext(context, turn); return dispatch(model, composed, streamOptions); }
     catch (error) { turn.error = error as Error; throw error; }
   };
   const model = modelRuntime.getModel("warmap", options.modelId);
@@ -374,366 +376,368 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
     modelSlot: "light",
     modelId: options.modelId,
     async run(input) {
-      const anchor = input.anchor ?? fallbackAnchor(input.scope, input.currentObject);
-      const anchorTools = [defineTool({ name: "read_anchor", label: "展开当前页面",
-        description: "展开本轮页面项或分页目录；只描述本地页面状态，不代表 World 公司事实。",
-        parameters: Type.Object({ handle: Type.Optional(Type.String({ maxLength: 20 })), cursor: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false }),
-        execute: async (_id, args) => { const value = await anchor.read(args); return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value }; },
-      })];
-      const search = options.search ?? unavailableWebSearchAdapter;
-      let outletFeedRead = false;
-      let searchCount = 0;
-      let searchLimitReached = false;
-      const searchBudgetError = Object.assign(new Error("Search limit reached (8)"), { code: "SEARCH_BUDGET_EXHAUSTED" });
-      let abortSearchLoop: (() => Promise<void>) | undefined;
-      const searchTool = defineTool({
-        name: "web_search",
-        label: "Web Search",
-        description: "仅在内部材料不足时检索当前外部事实；证据充分后停止",
-        parameters: WebSearchInput,
-        execute: async (_id, args) => {
-          searchCount += 1;
-          const response = await search.search(args, input.signal);
-          if (searchCount >= 8) {
-            searchLimitReached = true;
-            void abortSearchLoop?.();
-            throw searchBudgetError;
-          }
-          const seen = new Set<string>();
-          const results = response.results.flatMap((result) => {
-            let url: string;
-            try {
-              url = new URL(result.url).toString();
-            } catch {
-              return [];
+      return withAgentTrace(input.viewer.role === "ceo" ? "ceo-agent" : "dri-agent", async () => {
+        const anchor = input.anchor ?? fallbackAnchor(input.scope, input.currentObject);
+        const anchorTools = [defineTool({ name: "read_anchor", label: "展开当前页面",
+          description: "展开本轮页面项或分页目录；只描述本地页面状态，不代表 World 公司事实。",
+          parameters: Type.Object({ handle: Type.Optional(Type.String({ maxLength: 20 })), cursor: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false }),
+          execute: async (_id, args) => { const value = await anchor.read(args); return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value }; },
+        })];
+        const search = options.search ?? unavailableWebSearchAdapter;
+        let outletFeedRead = false;
+        let searchCount = 0;
+        let searchLimitReached = false;
+        const searchBudgetError = Object.assign(new Error("Search limit reached (8)"), { code: "SEARCH_BUDGET_EXHAUSTED" });
+        let abortSearchLoop: (() => Promise<void>) | undefined;
+        const searchTool = defineTool({
+          name: "web_search",
+          label: "Web Search",
+          description: "仅在内部材料不足时检索当前外部事实；证据充分后停止",
+          parameters: WebSearchInput,
+          execute: async (_id, args) => {
+            searchCount += 1;
+            const response = await search.search(args, input.signal);
+            if (searchCount >= 8) {
+              searchLimitReached = true;
+              void abortSearchLoop?.();
+              throw searchBudgetError;
             }
-            if (seen.has(url)) return [];
-            seen.add(url);
-            return [{ ...result, url }];
-          });
-          const value = { results, warnings: response.warnings };
-          return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
-        },
-      });
-      const outletFeedTools = options.outletFeed ? [defineTool({
-        name: "read_outlet_feed",
-        label: "限定发布方媒体",
-        description: "读取当前 Radar 已启用发布方媒体（BBC、彭博、路透、金融时报、CNBC、经济学人等）窗口内的最新条目；不需要指定媒体，返回全部配置媒体。只能代表真实发布方来源，不是全网搜索。",
-        parameters: Type.Object({}, { additionalProperties: false }),
-        execute: async () => {
-          if (outletFeedRead) throw new Error("每轮对话最多读取一次发布方 feed；请基于已返回条目综合回答");
-          // 读取失败不占用额度：否则一次网络抖动就让本轮再也拿不到来源
-          const items = await options.outletFeed!(input.signal);
-          outletFeedRead = true;
-          const value = { items };
-          return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
-        },
-      })] : [];
-      const isCeo = input.viewer.role === "ceo";
-      const ephemeralResults: NonNullable<ProviderTurnContext["toolResults"]> = new Map();
-      const ephemeralTool = (tool: ReturnType<typeof defineTool>): ReturnType<typeof defineTool> => ({ ...tool,
-        execute: async (...args: Parameters<typeof tool.execute>) => {
-          const value = await tool.execute(...args);
-          ephemeralResults.set(args[0], { toolName: tool.name, content: value.content });
-          // Pi persistence and compaction only receive this marker, never the reference body.
-          return { content: [{ type: "text", text: "本轮临时参考已读取；历史中不保留正文，请按当前场景重新查询。" }], details: {} };
-        },
-      });
-      const personalCard = input.scope.startsWith("mission-card:");
-      // The current card has already passed object authorization. The unscoped Mission query must not bypass that boundary.
-      const availableBoardTools = personalCard ? boardTools(input.viewer) : [];
-      const viewerBoardTools = isCeo ? availableBoardTools : availableBoardTools.filter((tool) => !CEO_ONLY_TOOLS.has(tool.name) && !(personalCard && tool.name === "list_missions"));
-      const companyHandles = new Map<string, string>();
-      const companyCursors = new Map<string, { cursor: string; query?: string }>();
-      const personalHandles = new Map<string, string>();
-      const personalCursors = new Map<string, { handle: string; cursor: string }>();
-      const personalView = async (query: string) => {
-        if (!options.personal) return { status: 'not_configured', entries: [] };
-        try {
-          const entries = await options.personal.select(input.viewer.personId, query);
-          return { entries: entries.map((entry) => {
-            let handle = [...personalHandles].find(([, original]) => original === entry.handle)?.[0];
-            if (!handle) { handle = `P${personalHandles.size + 1}`; personalHandles.set(handle, entry.handle); }
+            const seen = new Set<string>();
+            const results = response.results.flatMap((result) => {
+              let url: string;
+              try {
+                url = new URL(result.url).toString();
+              } catch {
+                return [];
+              }
+              if (seen.has(url)) return [];
+              seen.add(url);
+              return [{ ...result, url }];
+            });
+            const value = { results, warnings: response.warnings };
+            return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
+          },
+        });
+        const outletFeedTools = options.outletFeed ? [defineTool({
+          name: "read_outlet_feed",
+          label: "限定发布方媒体",
+          description: "读取当前 Radar 已启用发布方媒体（BBC、彭博、路透、金融时报、CNBC、经济学人等）窗口内的最新条目；不需要指定媒体，返回全部配置媒体。只能代表真实发布方来源，不是全网搜索。",
+          parameters: Type.Object({}, { additionalProperties: false }),
+          execute: async () => {
+            if (outletFeedRead) throw new Error("每轮对话最多读取一次发布方 feed；请基于已返回条目综合回答");
+            // 读取失败不占用额度：否则一次网络抖动就让本轮再也拿不到来源
+            const items = await options.outletFeed!(input.signal);
+            outletFeedRead = true;
+            const value = { items };
+            return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
+          },
+        })] : [];
+        const isCeo = input.viewer.role === "ceo";
+        const ephemeralResults: NonNullable<ProviderTurnContext["toolResults"]> = new Map();
+        const ephemeralTool = (tool: ReturnType<typeof defineTool>): ReturnType<typeof defineTool> => ({ ...tool,
+          execute: async (...args: Parameters<typeof tool.execute>) => {
+            const value = await tool.execute(...args);
+            ephemeralResults.set(args[0], { toolName: tool.name, content: value.content });
+            // Pi persistence and compaction only receive this marker, never the reference body.
+            return { content: [{ type: "text", text: "本轮临时参考已读取；历史中不保留正文，请按当前场景重新查询。" }], details: {} };
+          },
+        });
+        const personalCard = input.scope.startsWith("mission-card:");
+        // The current card has already passed object authorization. The unscoped Mission query must not bypass that boundary.
+        const availableBoardTools = personalCard ? boardTools(input.viewer) : [];
+        const viewerBoardTools = isCeo ? availableBoardTools : availableBoardTools.filter((tool) => !CEO_ONLY_TOOLS.has(tool.name) && !(personalCard && tool.name === "list_missions"));
+        const companyHandles = new Map<string, string>();
+        const companyCursors = new Map<string, { cursor: string; query?: string }>();
+        const personalHandles = new Map<string, string>();
+        const personalCursors = new Map<string, { handle: string; cursor: string }>();
+        const personalView = async (query: string) => {
+          if (!options.personal) return { status: 'not_configured', entries: [] };
+          try {
+            const entries = await traceRetrieval("personal", () => options.personal!.select(input.viewer.personId, query));
+            return { entries: entries.map((entry) => {
+              let handle = [...personalHandles].find(([, original]) => original === entry.handle)?.[0];
+              if (!handle) { handle = `P${personalHandles.size + 1}`; personalHandles.set(handle, entry.handle); }
+              return { ...entry, handle };
+            }) };
+          } catch { return { status: 'unavailable', entries: [], message: '个人记忆暂时不可用。' }; }
+        };
+        const memoryResult = (value: unknown) => Buffer.byteLength(JSON.stringify(value)) <= 8192 ? result(value)
+          : result({ status: 'unavailable', message: '参考超过单次读取范围，请缩小检索内容。' });
+        const companyView = async (request: { query?: string; cursor?: string; handle?: string }) => {
+          if (!options.company) return { status: 'not_configured', entries: [], message: '公司事实读取尚未配置。' };
+          if (request.cursor && !companyCursors.has(request.cursor)) return { status: 'unavailable', entries: [], message: '分页位置不属于本轮参考，请重新查询。' };
+          const continuation = request.cursor ? companyCursors.get(request.cursor) : undefined;
+          const query = request.query ?? continuation?.query;
+          const view = await traceRetrieval("company", () => options.company!.read(input.viewer, { ...request, query, cursor: continuation?.cursor }, input.signal));
+          let nextCursor: string | undefined;
+          if (view.nextCursor) { nextCursor = `CP${companyCursors.size + 1}`; companyCursors.set(nextCursor, { cursor: view.nextCursor, query }); }
+          return { ...view, nextCursor, entries: view.entries.map((entry) => {
+            let handle = [...companyHandles].find(([, original]) => original === entry.handle)?.[0];
+            if (!handle) { handle = `C${companyHandles.size + 1}`; companyHandles.set(handle, entry.handle); }
             return { ...entry, handle };
           }) };
-        } catch { return { status: 'unavailable', entries: [], message: '个人记忆暂时不可用。' }; }
-      };
-      const memoryResult = (value: unknown) => Buffer.byteLength(JSON.stringify(value)) <= 8192 ? result(value)
-        : result({ status: 'unavailable', message: '参考超过单次读取范围，请缩小检索内容。' });
-      const companyView = async (request: { query?: string; cursor?: string; handle?: string }) => {
-        if (!options.company) return { status: 'not_configured', entries: [], message: '公司事实读取尚未配置。' };
-        if (request.cursor && !companyCursors.has(request.cursor)) return { status: 'unavailable', entries: [], message: '分页位置不属于本轮参考，请重新查询。' };
-        const continuation = request.cursor ? companyCursors.get(request.cursor) : undefined;
-        const query = request.query ?? continuation?.query;
-        const view = await options.company.read(input.viewer, { ...request, query, cursor: continuation?.cursor }, input.signal);
-        let nextCursor: string | undefined;
-        if (view.nextCursor) { nextCursor = `CP${companyCursors.size + 1}`; companyCursors.set(nextCursor, { cursor: view.nextCursor, query }); }
-        return { ...view, nextCursor, entries: view.entries.map((entry) => {
-          let handle = [...companyHandles].find(([, original]) => original === entry.handle)?.[0];
-          if (!handle) { handle = `C${companyHandles.size + 1}`; companyHandles.set(handle, entry.handle); }
-          return { ...entry, handle };
-        }) };
-      };
-      const companyTools = [
-        defineTool({ name: 'query_company', label: '查询公司事实', description: '只读查询当前授权范围的 World 正式公司内容；返回可读 Company。状态、草稿与日期不可当作确认结果。不可用时不能用页面或旧历史补事实。支持关键词及后续分页。',
-          parameters: Type.Object({ query: Type.Optional(Type.String({ maxLength: 1000 })), cursor: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false }),
-          execute: async (_id, args) => memoryResult(await companyView(args)) }),
-        defineTool({ name: 'search_memory', label: '检索记忆', description: '按需检索公司事实或本人个人记忆；公司正式事实只来自 World，个人偏好不能证明公司目标。',
-          parameters: Type.Object({ module: Type.Union([Type.Literal('company'), Type.Literal('personal')]), query: Type.String({ maxLength: 1000 }) }, { additionalProperties: false }),
-          execute: async (_id, args) => memoryResult(args.module === 'company' ? await companyView({ query: args.query }) : await personalView(args.query)) }),
-        defineTool({ name: 'read_reference', label: '展开参考', description: '按本轮短句柄展开公司、个人或显式引用；不是公司写入工具。',
-          parameters: Type.Object({ handle: Type.String({ minLength: 1, maxLength: 200 }), cursor: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false }),
-          execute: async (_id, args) => {
-            const companyHandle = companyHandles.get(args.handle);
-            if (companyHandle) return memoryResult(await companyView({ handle: companyHandle }));
-            // The route-supplied reader rechecks object access/version for explicit references.
-            const explicitReader = (input as typeof input & { readReference?: (args: { handle: string; cursor?: string }) => Promise<unknown> }).readReference;
-            if (/^R\d+$/.test(args.handle) && explicitReader) return result(await explicitReader(args));
-            if (options.personal) {
-              const handle = personalHandles.get(args.handle);
-              if (!handle) return result({ status: 'unavailable', message: '参考不属于本轮记忆。' });
-              const continuation = args.cursor ? personalCursors.get(args.cursor) : undefined;
-              if (args.cursor && (!continuation || continuation.handle !== handle)) return result({ status: 'unavailable', message: '参考游标不属于本轮章节。' });
-              try {
-                const value = await options.personal.readReference(input.viewer.personId, { handle, cursor: continuation?.cursor });
-                if (!value || typeof value !== 'object' || !('cursor' in value) || typeof value.cursor !== 'string') return memoryResult(value);
-                const cursor = `PC${personalCursors.size + 1}`;
-                personalCursors.set(cursor, { handle, cursor: value.cursor });
-                return memoryResult({ ...value, cursor });
+        };
+        const companyTools = [
+          defineTool({ name: 'query_company', label: '查询公司事实', description: '只读查询当前授权范围的 World 正式公司内容；返回可读 Company。状态、草稿与日期不可当作确认结果。不可用时不能用页面或旧历史补事实。支持关键词及后续分页。',
+            parameters: Type.Object({ query: Type.Optional(Type.String({ maxLength: 1000 })), cursor: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false }),
+            execute: async (_id, args) => memoryResult(await companyView(args)) }),
+          defineTool({ name: 'search_memory', label: '检索记忆', description: '按需检索公司事实或本人个人记忆；公司正式事实只来自 World，个人偏好不能证明公司目标。',
+            parameters: Type.Object({ module: Type.Union([Type.Literal('company'), Type.Literal('personal')]), query: Type.String({ maxLength: 1000 }) }, { additionalProperties: false }),
+            execute: async (_id, args) => memoryResult(args.module === 'company' ? await companyView({ query: args.query }) : await personalView(args.query)) }),
+          defineTool({ name: 'read_reference', label: '展开参考', description: '按本轮短句柄展开公司、个人或显式引用；不是公司写入工具。',
+            parameters: Type.Object({ handle: Type.String({ minLength: 1, maxLength: 200 }), cursor: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false }),
+            execute: async (_id, args) => {
+              const companyHandle = companyHandles.get(args.handle);
+              if (companyHandle) return memoryResult(await companyView({ handle: companyHandle }));
+              // The route-supplied reader rechecks object access/version for explicit references.
+              const explicitReader = (input as typeof input & { readReference?: (args: { handle: string; cursor?: string }) => Promise<unknown> }).readReference;
+              if (/^R\d+$/.test(args.handle) && explicitReader) return result(await explicitReader(args));
+              if (options.personal) {
+                const handle = personalHandles.get(args.handle);
+                if (!handle) return result({ status: 'unavailable', message: '参考不属于本轮记忆。' });
+                const continuation = args.cursor ? personalCursors.get(args.cursor) : undefined;
+                if (args.cursor && (!continuation || continuation.handle !== handle)) return result({ status: 'unavailable', message: '参考游标不属于本轮章节。' });
+                try {
+                  const value = await options.personal.readReference(input.viewer.personId, { handle, cursor: continuation?.cursor });
+                  if (!value || typeof value !== 'object' || !('cursor' in value) || typeof value.cursor !== 'string') return memoryResult(value);
+                  const cursor = `PC${personalCursors.size + 1}`;
+                  personalCursors.set(cursor, { handle, cursor: value.cursor });
+                  return memoryResult({ ...value, cursor });
+                }
+                catch { return result({ status: 'unavailable', message: '个人记忆暂时不可用。' }); }
               }
-              catch { return result({ status: 'unavailable', message: '个人记忆暂时不可用。' }); }
+              return result({ status: 'unavailable', message: '参考不存在、已变化或不可见。' });
+            } }),
+        ];
+        const missionCardId = /^mission-card:(.+)$/.exec(input.scope)?.[1];
+        const missionCardTools = missionCardId && options.materialPool ? (() => {
+          const pool = options.materialPool!;
+          const people = directory.searchPeople(undefined);
+          const secret = options.missionCardSecret ?? "";
+          const now = options.now ?? (() => new Date());
+          const result = (value: unknown, isError = false) => {
+            // Pi marks a tool as failed only when execute throws; a returned isError property is ignored.
+            if (isError) throw new Error(JSON.stringify(value));
+            return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
+          };
+          return [
+            defineTool({ name: "read_mission_card", label: "阅读当前任务卡",
+              description: "读取当前任务卡的最新原字段、版本、公开批注与修改记录；修改前必须读取。只访问当前页面授权卡。",
+              parameters: Type.Object({}, { additionalProperties: false }),
+              execute: async () => {
+                const card = await readMissionCardForAgent(pool.query.bind(pool), people, secret, input.viewer, missionCardId, now());
+                return card ? result(card) : result({ code: "PERSONAL_MISSION_CARD_NOT_FOUND", message: "任务卡不存在或不可见" }, true);
+              } }),
+            defineTool({ name: "edit_mission_card", label: "改写当前任务卡",
+              description: "仅审核中且本人未完成审核时，改法已明确即可改写有权限的当前任务卡一个字段并保留前后记录；必须使用刚读取的round作为sourceRound、版本与完整原字段。",
+              parameters: Type.Object({ missionId: Type.String({ minLength: 1 }), field: MissionCardField,
+                sourceRound: Type.Integer({ minimum: 1 }), sourceVersion: Type.Integer({ minimum: 1 }), sourceText: Type.String({ maxLength: 12000 }),
+                proposed: Type.String({ minLength: 1, maxLength: 12000 }), reason: Type.String({ minLength: 1, maxLength: 1000 }),
+                annotationId: Type.Optional(Type.String({ format: "uuid" })),
+                clientId: Type.String({ format: "uuid" }),
+              }, { additionalProperties: false }),
+              execute: async (_id, args) => {
+                const saved = await applyMissionCardRevision(pool, people, secret, input.viewer, missionCardId, args, now, "agent");
+                return "error" in saved ? result(saved.error, true) : result(saved);
+              } }),
+            defineTool({ name: "ask_mission_card_question", label: "澄清当前任务改法",
+              description: "改法有歧义时在当前任务卡对应字段旁保存问题与具体选项；界面另附自己输入，答复后立即处理。body 仅保留这一改法的用户原请求，不公开无关私聊。",
+              parameters: Type.Object({ missionId: Type.String({ minLength: 1 }), field: MissionCardField,
+                sourceRound: Type.Integer({ minimum: 1 }), sourceVersion: Type.Integer({ minimum: 1 }), sourceText: Type.String({ maxLength: 12000 }),
+                quote: Type.String({ minLength: 1, maxLength: 2000 }), body: Type.String({ minLength: 1, maxLength: 4000 }),
+                question: Type.String({ minLength: 1, maxLength: 1000 }),
+                options: Type.Array(Type.String({ minLength: 1, maxLength: 400 }), { minItems: 2, maxItems: 4 }),
+                clientId: Type.String({ format: "uuid" }),
+              }, { additionalProperties: false }),
+              execute: async (_id, args) => {
+                const saved = await createMissionCardClarification(pool, people, secret, input.viewer, missionCardId,
+                  { ...args, prefix: "", suffix: "", startOffset: 0 }, now);
+                return "error" in saved ? result(saved.error, true) : result(saved);
+              } }),
+          ];
+        })() : [];
+        const materialScope = /^(issue|task|meeting):(.+)$/.exec(input.scope);
+        const materialTools = materialScope && options.materialPool ? await (async () => {
+          const ref = { objectType: materialScope[1] as "issue" | "task" | "meeting", objectId: materialScope[2] };
+          const pool = options.materialPool!;
+          const q = pool.query.bind(pool);
+          const names = personDisplayNames(directory);
+          const viewer = input.viewer;
+          // 对话守同一道门：能改这里至少一份材料的人才有 edit_material；不能改的人只能提议，提议交给能改的人。
+          const canEditSome = await listObjectMaterials(q, ref, viewer, names).then((list) => list.materials.some((m) => m.canEdit),
+            (cause) => { if (cause instanceof ObjectMaterialError) return false; throw cause; });
+          const result = async (work: () => Promise<unknown>) => {
+            try {
+              const value = await work();
+              return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
+            } catch (cause) {
+              if (!(cause instanceof ObjectMaterialError)) throw cause;
+              const value = { error: cause.code, reason: cause.message, currentVersion: cause.version ?? null };
+              return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
             }
-            return result({ status: 'unavailable', message: '参考不存在、已变化或不可见。' });
-          } }),
-      ];
-      const missionCardId = /^mission-card:(.+)$/.exec(input.scope)?.[1];
-      const missionCardTools = missionCardId && options.materialPool ? (() => {
-        const pool = options.materialPool!;
-        const people = directory.searchPeople(undefined);
-        const secret = options.missionCardSecret ?? "";
-        const now = options.now ?? (() => new Date());
-        const result = (value: unknown, isError = false) => {
-          // Pi marks a tool as failed only when execute throws; a returned isError property is ignored.
-          if (isError) throw new Error(JSON.stringify(value));
-          return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
-        };
-        return [
-          defineTool({ name: "read_mission_card", label: "阅读当前任务卡",
-            description: "读取当前任务卡的最新原字段、版本、公开批注与修改记录；修改前必须读取。只访问当前页面授权卡。",
-            parameters: Type.Object({}, { additionalProperties: false }),
-            execute: async () => {
-              const card = await readMissionCardForAgent(pool.query.bind(pool), people, secret, input.viewer, missionCardId, now());
-              return card ? result(card) : result({ code: "PERSONAL_MISSION_CARD_NOT_FOUND", message: "任务卡不存在或不可见" }, true);
-            } }),
-          defineTool({ name: "edit_mission_card", label: "改写当前任务卡",
-            description: "仅审核中且本人未完成审核时，改法已明确即可改写有权限的当前任务卡一个字段并保留前后记录；必须使用刚读取的round作为sourceRound、版本与完整原字段。",
-            parameters: Type.Object({ missionId: Type.String({ minLength: 1 }), field: MissionCardField,
-              sourceRound: Type.Integer({ minimum: 1 }), sourceVersion: Type.Integer({ minimum: 1 }), sourceText: Type.String({ maxLength: 12000 }),
-              proposed: Type.String({ minLength: 1, maxLength: 12000 }), reason: Type.String({ minLength: 1, maxLength: 1000 }),
-              annotationId: Type.Optional(Type.String({ format: "uuid" })),
-              clientId: Type.String({ format: "uuid" }),
-            }, { additionalProperties: false }),
-            execute: async (_id, args) => {
-              const saved = await applyMissionCardRevision(pool, people, secret, input.viewer, missionCardId, args, now, "agent");
-              return "error" in saved ? result(saved.error, true) : result(saved);
-            } }),
-          defineTool({ name: "ask_mission_card_question", label: "澄清当前任务改法",
-            description: "改法有歧义时在当前任务卡对应字段旁保存问题与具体选项；界面另附自己输入，答复后立即处理。body 仅保留这一改法的用户原请求，不公开无关私聊。",
-            parameters: Type.Object({ missionId: Type.String({ minLength: 1 }), field: MissionCardField,
-              sourceRound: Type.Integer({ minimum: 1 }), sourceVersion: Type.Integer({ minimum: 1 }), sourceText: Type.String({ maxLength: 12000 }),
-              quote: Type.String({ minLength: 1, maxLength: 2000 }), body: Type.String({ minLength: 1, maxLength: 4000 }),
-              question: Type.String({ minLength: 1, maxLength: 1000 }),
-              options: Type.Array(Type.String({ minLength: 1, maxLength: 400 }), { minItems: 2, maxItems: 4 }),
-              clientId: Type.String({ format: "uuid" }),
-            }, { additionalProperties: false }),
-            execute: async (_id, args) => {
-              const saved = await createMissionCardClarification(pool, people, secret, input.viewer, missionCardId,
-                { ...args, prefix: "", suffix: "", startOffset: 0 }, now);
-              return "error" in saved ? result(saved.error, true) : result(saved);
-            } }),
-        ];
-      })() : [];
-      const materialScope = /^(issue|task|meeting):(.+)$/.exec(input.scope);
-      const materialTools = materialScope && options.materialPool ? await (async () => {
-        const ref = { objectType: materialScope[1] as "issue" | "task" | "meeting", objectId: materialScope[2] };
-        const pool = options.materialPool!;
-        const q = pool.query.bind(pool);
-        const names = personDisplayNames(directory);
-        const viewer = input.viewer;
-        // 对话守同一道门：能改这里至少一份材料的人才有 edit_material；不能改的人只能提议，提议交给能改的人。
-        const canEditSome = await listObjectMaterials(q, ref, viewer, names).then((list) => list.materials.some((m) => m.canEdit),
-          (cause) => { if (cause instanceof ObjectMaterialError) return false; throw cause; });
-        const result = async (work: () => Promise<unknown>) => {
-          try {
-            const value = await work();
+          };
+          return [
+            defineTool({ name: "list_materials", label: "列出材料", description: "列出当前议题、执行事项或会议的群组材料；canEdit=true 的才能直接改",
+              parameters: Type.Object({}, { additionalProperties: false }),
+              execute: async () => result(async () => {
+                const list = await listObjectMaterials(q, ref, viewer, names);
+                return { materials: list.materials.map((m) => ({ id: m.id, fileName: m.fileName, format: m.format, ...(m.url ? { url: m.url } : {}),
+                  editable: m.editable, canEdit: m.canEdit, version: m.version, owner: m.owner })) };
+              }) }),
+            defineTool({ name: "read_material", label: "阅读材料", description: "读取当前对象一份材料及版本；修改前必须调用。HTML 只返回最多 100,000 字符的源码，不返回去标签全文；截断时须用能唯一匹配的原文片段修改，或在文末追加",
+              parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), version: Type.Optional(Type.Integer({ minimum: 1 })) }, { additionalProperties: false }),
+              execute: async (_id, args) => result(async () => {
+                const material = await readObjectMaterial(q, ref, args.materialId, viewer, args.version);
+                // 链接只有地址：天枢不抓外部页面，Agent 也不该假装读过里面的内容。
+                if (material.format === "link") return { id: args.materialId, title: material.fileName, url: material.url,
+                  note: "这是一条外部链接，天枢不读取链接里的内容", editable: false };
+                return { id: args.materialId, body: material.format === "html" ? material.body.slice(0, 100_000) : material.body,
+                  ...(material.format === "html" && material.body.length > 100_000 ? { truncated: true,
+                    note: "材料太长只给了前 100,000 字符；改动请用能唯一匹配的原文片段，或在文末追加" } : {}), version: material.version,
+                  currentVersion: material.currentVersion, editable: material.format === "markdown" || material.format === "html" };
+              }) }),
+            ...(canEditSome ? [defineTool({ name: "edit_material", label: "修改材料", description: "按当前版本修改 Markdown 或 HTML 材料；只在用户明确要求、且这份材料 canEdit=true 时使用。HTML 可能只读到前 100,000 字符；find 必须在完整源码中唯一匹配，append 会插在最后一个 </body> 前（没有时追加到文末）",
+              parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), baseVersion: Type.Integer({ minimum: 1 }),
+                edits: Type.Array(Type.Union([
+                  Type.Object({ find: Type.String({ minLength: 1 }), replace: Type.String() }, { additionalProperties: false }),
+                  Type.Object({ append: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+                ]), { minItems: 1, maxItems: 20 }), summary: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
+              execute: async (_id, args) => result(() => editObjectMaterial(pool, ref, args.materialId, viewer,
+                args.baseVersion, args.edits, args.summary, input.runId ?? null)) })] : []),
+            defineTool({ name: "create_material", label: "新写材料", description: "在当前对象中新写 Markdown 材料；只在用户明确要求时使用",
+              parameters: Type.Object({ title: Type.String({ minLength: 1, maxLength: 237 }), body: Type.String({ minLength: 1, maxLength: 100000 }),
+                summary: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
+              execute: async (_id, args) => result(() => createObjectMaterial(pool, ref, viewer,
+                args.title, args.body, args.summary, input.runId ?? null)) }),
+            defineTool({ name: "propose_material_edit", label: "提议修改材料", description: "双方就当前材料的具体改法达成明确共识时提议，或对方要改一份 canEdit=false 的材料时把改法交给能改的人；能改的人点『按这个改』才生效。先读最新版，find 必须唯一",
+              parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), summary: Type.String({ minLength: 1, maxLength: 200 }),
+                edits: Type.Array(Type.Object({ find: Type.String({ minLength: 1 }), replace: Type.String() }, { additionalProperties: false }), { minItems: 1, maxItems: 20 }) }, { additionalProperties: false }),
+              execute: async (_id, args) => result(() => proposeMaterialEdit(pool, ref, args.materialId, viewer, args.summary, args.edits, names)) }),
+          ];
+        })() : [];
+        // 复盘项对话：agent 只能给某一栏提改写建议，负责人点「采用」才写入；不经过 Action 签名，仓储函数锁内校验
+        const reviewItemId = /^monthly-review-item:(.+)$/.exec(input.scope)?.[1];
+        const reviewTools = reviewItemId && options.materialPool ? [defineTool({
+          name: "propose_review_edit",
+          label: "提改写建议",
+          description: "给负责人某一栏复盘自评的改写建议；负责人点「采用」才写入。用户要求改写、或上传了手写复盘时使用",
+          parameters: Type.Object({
+            field: MonthlyReviewField,
+            text: Type.String({ minLength: 1, maxLength: 4000 }),
+            rationale: Type.String({ maxLength: 500 }),
+          }, { additionalProperties: false }),
+          execute: async (_id, args) => {
+            const value = await proposeMonthlyReviewSuggestion(options.materialPool!, reviewItemId, input.viewer, args, new Date());
             return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
-          } catch (cause) {
-            if (!(cause instanceof ObjectMaterialError)) throw cause;
-            const value = { error: cause.code, reason: cause.message, currentVersion: cause.version ?? null };
-            return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
+          },
+        })] : [];
+        const recreated = input.rebuildFromRaw === true || !validRuntimeEntries(input.runtimeEntries, input.piSessionId);
+        const piSessionId = recreated ? randomUUID() : input.piSessionId;
+        const warning = recreated ? (input.rebuildFromRaw ? "Conversation context upgraded; rebuilt from recent raw messages" : "Pi runtime entries were corrupted; rebuilt from current object and recent raw messages") : undefined;
+        const manager = SessionManager.inMemory(
+          process.cwd(),
+          { id: piSessionId },
+          recreated ? undefined : structuredClone(input.runtimeEntries) as Parameters<typeof SessionManager.inMemory>[2],
+        );
+        if (recreated) {
+          appendRecentMessages(manager, input.recentMessages ?? [], options.modelId);
+          input.emit({ type: "warning", code: "RUNTIME_RECREATED", message: warning! });
+        }
+        const compactionSettings = { enabled: true, reserveTokens: 16_384, keepRecentTokens: 20_000 };
+        const settings = SettingsManager.inMemory({ compaction: compactionSettings, retry: { enabled: false } });
+        const { session } = await createAgentSession({
+          model,
+          modelRuntime,
+          resourceLoader: personalCard ? resourceLoaderFor(`${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`)
+            : isCeo ? ceoResourceLoader : resourceLoaderFor(driSystemPrompt(input.viewer.displayName)),
+          customTools: [...anchorTools.map(ephemeralTool), peopleTool, ...companyTools.map(ephemeralTool), ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...outletFeedTools, searchTool].map(traceTool),
+          tools: ["read_anchor", "search_people", ...companyTools.map((tool) => tool.name), ...viewerBoardTools.map((tool) => tool.name), ...missionCardTools.map((tool) => tool.name), ...materialTools.map((tool) => tool.name), ...reviewTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
+          sessionManager: manager,
+          settingsManager: settings,
+          thinkingLevel: "off",
+        });
+        abortSearchLoop = () => session.abort();
+        let checkpointDone = Promise.resolve();
+        const unsubscribe = session.subscribe((event) => {
+          if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+            input.emit({ type: "message", delta: event.assistantMessageEvent.delta });
+          } else if (event.type === "tool_execution_start") {
+            input.emit({ type: "tool", phase: "started", toolCallId: event.toolCallId, name: event.toolName });
+          } else if (event.type === "tool_execution_end") {
+            input.emit({ type: "tool", phase: "completed", toolCallId: event.toolCallId, name: event.toolName, isError: event.isError });
+          } else if (event.type === "compaction_start") {
+            input.emit({ type: "compaction", phase: "started" });
+          } else if (event.type === "compaction_end" && event.result) {
+            input.emit({ type: "compaction", phase: "completed" });
+            const header = manager.getHeader();
+            const entries = [...(header ? [header] : []), ...manager.getEntries()];
+            checkpointDone = checkpointDone.then(() => input.checkpoint?.(entries));
+          } else if (event.type === "message_end" && event.message.role === "assistant") {
+            const usage = event.message.usage;
+            input.emit({
+              type: "usage",
+              input: usage.input,
+              output: usage.output,
+              cacheRead: usage.cacheRead,
+              cacheWrite: usage.cacheWrite,
+              totalTokens: usage.totalTokens,
+            });
           }
-        };
-        return [
-          defineTool({ name: "list_materials", label: "列出材料", description: "列出当前议题、执行事项或会议的群组材料；canEdit=true 的才能直接改",
-            parameters: Type.Object({}, { additionalProperties: false }),
-            execute: async () => result(async () => {
-              const list = await listObjectMaterials(q, ref, viewer, names);
-              return { materials: list.materials.map((m) => ({ id: m.id, fileName: m.fileName, format: m.format, ...(m.url ? { url: m.url } : {}),
-                editable: m.editable, canEdit: m.canEdit, version: m.version, owner: m.owner })) };
-            }) }),
-          defineTool({ name: "read_material", label: "阅读材料", description: "读取当前对象一份材料及版本；修改前必须调用。HTML 只返回最多 100,000 字符的源码，不返回去标签全文；截断时须用能唯一匹配的原文片段修改，或在文末追加",
-            parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), version: Type.Optional(Type.Integer({ minimum: 1 })) }, { additionalProperties: false }),
-            execute: async (_id, args) => result(async () => {
-              const material = await readObjectMaterial(q, ref, args.materialId, viewer, args.version);
-              // 链接只有地址：天枢不抓外部页面，Agent 也不该假装读过里面的内容。
-              if (material.format === "link") return { id: args.materialId, title: material.fileName, url: material.url,
-                note: "这是一条外部链接，天枢不读取链接里的内容", editable: false };
-              return { id: args.materialId, body: material.format === "html" ? material.body.slice(0, 100_000) : material.body,
-                ...(material.format === "html" && material.body.length > 100_000 ? { truncated: true,
-                  note: "材料太长只给了前 100,000 字符；改动请用能唯一匹配的原文片段，或在文末追加" } : {}), version: material.version,
-                currentVersion: material.currentVersion, editable: material.format === "markdown" || material.format === "html" };
-            }) }),
-          ...(canEditSome ? [defineTool({ name: "edit_material", label: "修改材料", description: "按当前版本修改 Markdown 或 HTML 材料；只在用户明确要求、且这份材料 canEdit=true 时使用。HTML 可能只读到前 100,000 字符；find 必须在完整源码中唯一匹配，append 会插在最后一个 </body> 前（没有时追加到文末）",
-            parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), baseVersion: Type.Integer({ minimum: 1 }),
-              edits: Type.Array(Type.Union([
-                Type.Object({ find: Type.String({ minLength: 1 }), replace: Type.String() }, { additionalProperties: false }),
-                Type.Object({ append: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
-              ]), { minItems: 1, maxItems: 20 }), summary: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
-            execute: async (_id, args) => result(() => editObjectMaterial(pool, ref, args.materialId, viewer,
-              args.baseVersion, args.edits, args.summary, input.runId ?? null)) })] : []),
-          defineTool({ name: "create_material", label: "新写材料", description: "在当前对象中新写 Markdown 材料；只在用户明确要求时使用",
-            parameters: Type.Object({ title: Type.String({ minLength: 1, maxLength: 237 }), body: Type.String({ minLength: 1, maxLength: 100000 }),
-              summary: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
-            execute: async (_id, args) => result(() => createObjectMaterial(pool, ref, viewer,
-              args.title, args.body, args.summary, input.runId ?? null)) }),
-          defineTool({ name: "propose_material_edit", label: "提议修改材料", description: "双方就当前材料的具体改法达成明确共识时提议，或对方要改一份 canEdit=false 的材料时把改法交给能改的人；能改的人点『按这个改』才生效。先读最新版，find 必须唯一",
-            parameters: Type.Object({ materialId: Type.String({ format: "uuid" }), summary: Type.String({ minLength: 1, maxLength: 200 }),
-              edits: Type.Array(Type.Object({ find: Type.String({ minLength: 1 }), replace: Type.String() }, { additionalProperties: false }), { minItems: 1, maxItems: 20 }) }, { additionalProperties: false }),
-            execute: async (_id, args) => result(() => proposeMaterialEdit(pool, ref, args.materialId, viewer, args.summary, args.edits, names)) }),
-        ];
-      })() : [];
-      // 复盘项对话：agent 只能给某一栏提改写建议，负责人点「采用」才写入；不经过 Action 签名，仓储函数锁内校验
-      const reviewItemId = /^monthly-review-item:(.+)$/.exec(input.scope)?.[1];
-      const reviewTools = reviewItemId && options.materialPool ? [defineTool({
-        name: "propose_review_edit",
-        label: "提改写建议",
-        description: "给负责人某一栏复盘自评的改写建议；负责人点「采用」才写入。用户要求改写、或上传了手写复盘时使用",
-        parameters: Type.Object({
-          field: MonthlyReviewField,
-          text: Type.String({ minLength: 1, maxLength: 4000 }),
-          rationale: Type.String({ maxLength: 500 }),
-        }, { additionalProperties: false }),
-        execute: async (_id, args) => {
-          const value = await proposeMonthlyReviewSuggestion(options.materialPool!, reviewItemId, input.viewer, args, new Date());
-          return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
-        },
-      })] : [];
-      const recreated = input.rebuildFromRaw === true || !validRuntimeEntries(input.runtimeEntries, input.piSessionId);
-      const piSessionId = recreated ? randomUUID() : input.piSessionId;
-      const warning = recreated ? (input.rebuildFromRaw ? "Conversation context upgraded; rebuilt from recent raw messages" : "Pi runtime entries were corrupted; rebuilt from current object and recent raw messages") : undefined;
-      const manager = SessionManager.inMemory(
-        process.cwd(),
-        { id: piSessionId },
-        recreated ? undefined : structuredClone(input.runtimeEntries) as Parameters<typeof SessionManager.inMemory>[2],
-      );
-      if (recreated) {
-        appendRecentMessages(manager, input.recentMessages ?? [], options.modelId);
-        input.emit({ type: "warning", code: "RUNTIME_RECREATED", message: warning! });
-      }
-      const compactionSettings = { enabled: true, reserveTokens: 16_384, keepRecentTokens: 20_000 };
-      const settings = SettingsManager.inMemory({ compaction: compactionSettings, retry: { enabled: false } });
-      const { session } = await createAgentSession({
-        model,
-        modelRuntime,
-        resourceLoader: personalCard ? resourceLoaderFor(`${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`)
-          : isCeo ? ceoResourceLoader : resourceLoaderFor(driSystemPrompt(input.viewer.displayName)),
-        customTools: [...anchorTools.map(ephemeralTool), peopleTool, ...companyTools.map(ephemeralTool), ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...outletFeedTools, searchTool],
-        tools: ["read_anchor", "search_people", ...companyTools.map((tool) => tool.name), ...viewerBoardTools.map((tool) => tool.name), ...missionCardTools.map((tool) => tool.name), ...materialTools.map((tool) => tool.name), ...reviewTools.map((tool) => tool.name), ...outletFeedTools.map((tool) => tool.name), "web_search"],
-        sessionManager: manager,
-        settingsManager: settings,
-        thinkingLevel: "off",
-      });
-      abortSearchLoop = () => session.abort();
-      let checkpointDone = Promise.resolve();
-      const unsubscribe = session.subscribe((event) => {
-        if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-          input.emit({ type: "message", delta: event.assistantMessageEvent.delta });
-        } else if (event.type === "tool_execution_start") {
-          input.emit({ type: "tool", phase: "started", toolCallId: event.toolCallId, name: event.toolName });
-        } else if (event.type === "tool_execution_end") {
-          input.emit({ type: "tool", phase: "completed", toolCallId: event.toolCallId, name: event.toolName, isError: event.isError });
-        } else if (event.type === "compaction_start") {
-          input.emit({ type: "compaction", phase: "started" });
-        } else if (event.type === "compaction_end" && event.result) {
-          input.emit({ type: "compaction", phase: "completed" });
+        });
+        const onAbort = () => void session.abort();
+        input.signal.addEventListener("abort", onAbort, { once: true });
+        try {
+          if (input.signal.aborted) throw new Error("Conversation aborted");
+          const previousUsage = getLastAssistantUsage(manager.getEntries());
+          if (previousUsage && shouldCompact(calculateContextTokens(previousUsage), model.contextWindow, compactionSettings)) {
+            await session.setModel(compactionModel);
+            await session.compact("保留 CEO WarMap 当前对象、证据来源、未决问题和明确结论；不要引入新事实。");
+            await checkpointDone;
+            await session.setModel(model);
+          }
+          const references = input.references?.map((reference) => {
+            if (reference.kind !== "personal") return reference;
+            const handle = `P${personalHandles.size + 1}`;
+            personalHandles.set(handle, reference.handle);
+            return { ...reference, handle };
+          }) ?? input.referencesSnapshot.map((snapshot, index) => ({ handle: `R${index + 1}`, kind: "explicit" as const,
+            title: snapshot.title, text: boundedText(JSON.stringify(readableValue(snapshot.payload)), 4096), state: "本地页面引用" }));
+          const turn: ProviderTurnContext = { query: input.message, anchor: anchor.view, references, toolResults: ephemeralResults };
+          const preflightContext = () => composeTurnContext({ systemPrompt: session.systemPrompt,
+            messages: [...convertToLlm(session.messages), { role: "user", content: input.message, timestamp: Date.now() }],
+            tools: session.getAllTools(),
+          }, turn);
+          try { preflightContext(); }
+          catch (error) {
+            if ((error as { code?: string }).code !== "TURN_CONTEXT_TOO_LARGE" || !session.messages.length) throw error;
+            await session.setModel(compactionModel);
+            await session.compact("保留用户意图、下一步和未决问题；历史事实仅代表当时讨论，不当作当前公司事实。");
+            await checkpointDone;
+            await session.setModel(model);
+            preflightContext();
+          }
+          await turnContext.run(turn, () => session.prompt(input.message, { expandPromptTemplates: false, source: "rpc" }));
+          if (turn.error) throw turn.error;
+          await checkpointDone;
+          if (searchLimitReached) throw searchBudgetError;
+          if (input.signal.aborted) throw new Error("Conversation aborted");
+          const last = [...session.messages].reverse().find((item) => item.role === "assistant");
+          if (!last || last.stopReason !== "stop") {
+            throw new Error(last?.errorMessage || `Pi stopped without success: ${last?.stopReason ?? "missing response"}`);
+          }
           const header = manager.getHeader();
-          const entries = [...(header ? [header] : []), ...manager.getEntries()];
-          checkpointDone = checkpointDone.then(() => input.checkpoint?.(entries));
-        } else if (event.type === "message_end" && event.message.role === "assistant") {
-          const usage = event.message.usage;
-          input.emit({
-            type: "usage",
-            input: usage.input,
-            output: usage.output,
-            cacheRead: usage.cacheRead,
-            cacheWrite: usage.cacheWrite,
-            totalTokens: usage.totalTokens,
-          });
+          return {
+            assistantMessage: session.getLastAssistantText() ?? "",
+            runtimeEntries: [...(header ? [header] : []), ...manager.getEntries()],
+            piSessionId,
+            ...(warning ? { recovery: { recreated: true as const, warning } } : {}),
+          };
+        } finally {
+          input.signal.removeEventListener("abort", onAbort);
+          unsubscribe();
+          session.dispose();
         }
       });
-      const onAbort = () => void session.abort();
-      input.signal.addEventListener("abort", onAbort, { once: true });
-      try {
-        if (input.signal.aborted) throw new Error("Conversation aborted");
-        const previousUsage = getLastAssistantUsage(manager.getEntries());
-        if (previousUsage && shouldCompact(calculateContextTokens(previousUsage), model.contextWindow, compactionSettings)) {
-          await session.setModel(compactionModel);
-          await session.compact("保留 CEO WarMap 当前对象、证据来源、未决问题和明确结论；不要引入新事实。");
-          await checkpointDone;
-          await session.setModel(model);
-        }
-        const references = input.references?.map((reference) => {
-          if (reference.kind !== "personal") return reference;
-          const handle = `P${personalHandles.size + 1}`;
-          personalHandles.set(handle, reference.handle);
-          return { ...reference, handle };
-        }) ?? input.referencesSnapshot.map((snapshot, index) => ({ handle: `R${index + 1}`, kind: "explicit" as const,
-          title: snapshot.title, text: boundedText(JSON.stringify(readableValue(snapshot.payload)), 4096), state: "本地页面引用" }));
-        const turn: ProviderTurnContext = { query: input.message, anchor: anchor.view, references, toolResults: ephemeralResults };
-        const preflightContext = () => composeTurnContext({ systemPrompt: session.systemPrompt,
-          messages: [...convertToLlm(session.messages), { role: "user", content: input.message, timestamp: Date.now() }],
-          tools: session.getAllTools(),
-        }, turn);
-        try { preflightContext(); }
-        catch (error) {
-          if ((error as { code?: string }).code !== "TURN_CONTEXT_TOO_LARGE" || !session.messages.length) throw error;
-          await session.setModel(compactionModel);
-          await session.compact("保留用户意图、下一步和未决问题；历史事实仅代表当时讨论，不当作当前公司事实。");
-          await checkpointDone;
-          await session.setModel(model);
-          preflightContext();
-        }
-        await turnContext.run(turn, () => session.prompt(input.message, { expandPromptTemplates: false, source: "rpc" }));
-        if (turn.error) throw turn.error;
-        await checkpointDone;
-        if (searchLimitReached) throw searchBudgetError;
-        if (input.signal.aborted) throw new Error("Conversation aborted");
-        const last = [...session.messages].reverse().find((item) => item.role === "assistant");
-        if (!last || last.stopReason !== "stop") {
-          throw new Error(last?.errorMessage || `Pi stopped without success: ${last?.stopReason ?? "missing response"}`);
-        }
-        const header = manager.getHeader();
-        return {
-          assistantMessage: session.getLastAssistantText() ?? "",
-          runtimeEntries: [...(header ? [header] : []), ...manager.getEntries()],
-          piSessionId,
-          ...(warning ? { recovery: { recreated: true as const, warning } } : {}),
-        };
-      } finally {
-        input.signal.removeEventListener("abort", onAbort);
-        unsubscribe();
-        session.dispose();
-      }
     },
     async close() {
 

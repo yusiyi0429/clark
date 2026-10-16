@@ -49,7 +49,7 @@ describe("我的 Agent 按人私有", () => {
         { personId: TEST_CEO.personId, displayName: "测试甲", role: "ceo" },
         { personId: TEST_MEMBER.personId, displayName: "测试乙", role: "member" },
       ]);
-      const runs = await t.agentRuns();
+      const runs = (await t.agentRuns()).filter(run => run.kind === "conversation");
       expect(runs.map((run) => (run.input_snapshot as { viewerId: string }).viewerId)).toEqual([TEST_CEO.personId, TEST_MEMBER.personId]);
     } finally {
       await t.close();

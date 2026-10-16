@@ -1,5 +1,6 @@
 "use client";
 
+import { v7 } from "uuid";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "@/lib/api/schema";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
@@ -70,6 +71,7 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   const [uploading, setUploading] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const pendingTurn = useRef<{ scope: string; request: string; id: string } | null>(null);
 
   const historyUrl = messagesEndpoint(scope);
 
@@ -144,15 +146,18 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     const attachmentRefs = attachments.map((attachment) => ({ id: attachment.id }));
     setMessages((current) => [...current, { sequence: current.length + 1, role: "user", content: text }]);
 
+    const request = JSON.stringify({ message: text, references, attachments: attachmentRefs,
+      ...(anchorSelection ? { anchorSelection } : {}), ...(viewingMaterial ? { viewingMaterialId: viewingMaterial.id } : {}) });
+    if (pendingTurn.current?.scope !== scope || pendingTurn.current.request !== request)
+      pendingTurn.current = { scope, request, id: v7() };
+    const logicalTurnId = pendingTurn.current.id;
     let accepted = false;
     let reply = "";
     try {
       const response = await fetch(historyUrl, {
         method: "POST",
         headers: { accept: "text/event-stream", "content-type": "application/json" },
-        body: JSON.stringify({ message: text, references, attachments: attachmentRefs,
-          ...(anchorSelection ? { anchorSelection } : {}),
-          ...(viewingMaterial ? { viewingMaterialId: viewingMaterial.id } : {}) }),
+        body: JSON.stringify({ ...JSON.parse(request), logicalTurnId }),
         signal: controller.signal,
       });
       if (response.status === 401) {
@@ -199,6 +204,7 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
       }
       if (!completed) throw new TurnError(undefined, "Conversation 流在完成前断开");
       await loadHistory();
+      pendingTurn.current = null;
       setPartial("");
       setAttachments([]);
       setLastReply({ text: reply, ms: Date.now() - began });

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { HealthResponse } from "@warmap/contracts";
-import { configureLangSmith, recordAgentTrace } from "../src/langsmith.js";
+import { configureLangSmith, flushLangSmith, withTurnTrace } from "../src/langsmith.js";
 import { logEvent, redactSecrets } from "../src/observability.js";
 import { SESSION_COOKIE, createSessionToken } from "../src/session.js";
 import { buildApp } from "../src/app.js";
@@ -9,7 +9,8 @@ import { migrate } from "../src/migrate.js";
 import type { RadarService } from "../src/radar.js";
 import { TEST_CEO, createTestApp, createTestDb, testEnv } from "./helpers.js";
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 10));
+import { captureTraceTransport } from "./langsmithTransport.js";
+import { v7 } from "uuid";
 
 const fakeRuntime = () => {
   const runtime = {
@@ -136,7 +137,7 @@ describe("structured logs and redaction", () => {
         headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" },
         payload: { message: "总结当前决策面" },
       });
-      await flush();
+      await flushLangSmith();
 
       const actionLog = capture.lines.find((line) => line.event === "http.request" && line.actionType === "issue.dismiss");
       expect(actionLog).toMatchObject({
@@ -256,136 +257,62 @@ describe("health", () => {
   });
 });
 
-describe("LangSmith optional adapter", () => {
-  it("is a no-op when unconfigured and never fails the business path", async () => {
+describe("LangSmith SDK adapter", () => {
+  it("is a no-op when tracing is disabled and preserves the business result", async () => {
     const t = await createTestApp({}, fakeRuntime());
+    const transport = captureTraceTransport();
     try {
-      configureLangSmith({});
-      let calls = 0;
-      configureLangSmith({ fetchImpl: async () => { calls += 1; return { ok: true, status: 200 }; } });
-      await recordAgentTrace({
-        runId: "r0", name: "conversation", agentKind: "conversation",
-        status: "succeeded", startedAt: Date.now(), durationMs: 1,
-      });
-      expect(calls).toBe(0);
-
-      const cookie = await t.loginCookie();
-      const res = await t.app.inject({
-        method: "POST",
-        url: "/api/conversations/global/messages",
-        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" },
-        payload: { message: "hello" },
-      });
-      expect(res.body).toContain('"status":"completed"');
-    } finally {
-      configureLangSmith({});
-      await t.close();
-    }
+      configureLangSmith({ apiKey: 'test-key', tracing: false, fetchImplementation: transport.fetchImplementation });
+      const cookie=await t.loginCookie();
+      const result=await t.app.inject({method:'POST',url:'/api/conversations/global/messages',headers:{cookie,origin:t.publicOrigin},payload:{message:'hello'}});
+      await flushLangSmith();
+      expect(result.body).toContain('"status":"completed"');
+      expect(transport.sent).toHaveLength(0);
+    } finally { await t.close(); configureLangSmith({}); }
   });
 
-  it("records application-visible I/O, tool events, usage and status with credentials redacted", async () => {
-    const payloads: { url: string; body: Record<string, unknown> }[] = [];
-    const t = await createTestApp({}, fakeRuntime());
+  it("records only actual runs, strict durable identity and redacted application inputs", async () => {
+    const runtime=fakeRuntime();
+    const t=await createTestApp({},runtime);
+    const transport=captureTraceTransport();
     try {
-      configureLangSmith({
-        apiKey: "ls-secret-key",
-        project: "warmap-test",
-        endpoint: "https://langsmith.test",
-        fetchImpl: async (url, init) => {
-          payloads.push({ url, body: JSON.parse(init.body) as Record<string, unknown> });
-          return { ok: true, status: 202 };
-        },
-      });
-      const cookie = await t.loginCookie();
-      await t.app.inject({
-        method: "POST",
-        url: "/api/conversations/global/messages",
-        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" },
-        payload: { message: "总结当前决策面" },
-      });
-      await flush();
-
-      expect(payloads).toHaveLength(1);
-      expect(payloads[0].url).toBe("https://langsmith.test/runs");
-      expect(payloads[0].body).toMatchObject({
-        name: "测试甲 · 对话·全局",
-        session_name: "warmap-test",
-        inputs: { agentKind: "conversation", promptHash: "c".repeat(64), input: { message: "总结当前决策面" } },
-        outputs: { assistantMessage: "answer" },
-        extra: {
-          status: "succeeded",
-          toolEvents: [{ name: "web_search", isError: false }],
-          usage: { input: 3, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 5 },
-          metadata: { user_id: TEST_CEO.personId, user_name: "测试甲", section: "global", scope: "global" },
-        },
-      });
-      const threadId = (payloads[0].body.extra as { metadata: { thread_id: string } }).metadata.thread_id;
-      expect(threadId).toBe((await t.pool.query("SELECT id FROM conversations WHERE owner_id = $1 AND scope = 'global'", [TEST_CEO.personId])).rows[0].id);
-
-      // 对象页上的对话：run 名带部分，metadata 带对象标题
-      const issue = await t.createIssue();
-      await t.app.inject({
-        method: "POST",
-        url: `/api/conversations/issue:${issue.objectRef.id}/messages`,
-        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" },
-        payload: { message: "这个议题怎么看" },
-      });
-      await flush();
-      expect(payloads[1].body).toMatchObject({
-        name: "测试甲 · 对话·议题",
-        extra: { metadata: { section: "issue", scope: `issue:${issue.objectRef.id}`, object_title: "测试议题：是否调整渠道投入" } },
-      });
-      expect(JSON.stringify(payloads)).not.toContain("ls-secret-key");
-      payloads.length = 0;
-
-      await recordAgentTrace({
-        runId: "r-redact",
-        name: "conversation",
-        agentKind: "conversation",
-        inputs: { password: "p", token: "t", transcript: { turns: [{ text: "逐字稿" }] }, passages: [{ text: "公司认知" }] },
-        outputs: { assistantMessage: "ok" },
-        status: "succeeded",
-        startedAt: Date.now(),
-        durationMs: 2,
-      });
-      const redactedInput = (payloads[0].body.inputs as { input: Record<string, unknown> }).input;
-      expect(redactedInput).toEqual({
-        password: "[REDACTED]",
-        token: "[REDACTED]",
-        transcript: "[REDACTED]",
-        passages: "[REDACTED]",
-      });
-    } finally {
-      configureLangSmith({});
-      await t.close();
-    }
+      configureLangSmith({apiKey:'test-key',project:'clark_oct',tracing:true,endpoint:'https://langsmith.test',fetchImplementation:transport.fetchImplementation});
+      const cookie=await t.loginCookie();
+      const send=(message:string)=>t.app.inject({method:'POST',url:'/api/conversations/global/messages',headers:{cookie,origin:t.publicOrigin},payload:{message}});
+      await send('总结当前决策面'); await send('继续'); await flushLangSmith();
+      const roots=transport.sent.filter(x=>x.method==='POST').map(x=>x.body);
+      // A controlled runtime emits fake UI events, not real tool/model invocations: no invented spans.
+      expect(roots).toHaveLength(4); // two roots and two actual Personal retrievals
+      const turns=roots.filter(x=>x.name.startsWith('turn:'));
+      expect(turns).toHaveLength(2);
+      expect(turns[0]).toMatchObject({run_type:'chain',session_name:'clark_oct',inputs:{message:'总结当前决策面'},extra:{metadata:{scope:'global',agent_role:'ceo-agent',attempt:1}}});
+      const first=turns[0].extra.metadata;
+      expect(first.thread_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);
+      expect(turns[1].extra.metadata.thread_id).toBe(first.thread_id);
+      expect(turns[1].extra.metadata.logical_turn_id).not.toBe(first.logical_turn_id);
+      expect(first.anon_user_id).not.toBe(TEST_CEO.personId);
+      expect(roots.every(x=>!['llm','tool'].includes(x.run_type))).toBe(true);
+      expect(transport.sent.find(x=>x.method==='PATCH'&&x.url.endsWith(turns[0].id))?.body).toMatchObject({outputs:{status:'succeeded'}});
+      await withTurnTrace({threadId:v7(),logicalTurnId:v7(),attempt:1,scope:'test',agentRole:'test',caller:'test'},async()=>{},
+        {inputs:{password:'p',token:'t',transcript:{text:'逐字稿'},passages:[{text:'公司认知'}]}});
+      await flushLangSmith();
+      expect(transport.sent.filter(x=>x.method==='POST').at(-1)?.body.inputs).toEqual({password:'[REDACTED]',token:'[REDACTED]',transcript:'[REDACTED]',passages:'[REDACTED]'});
+      expect(JSON.stringify(transport.sent)).not.toContain('test-key');
+    } finally { await t.close(); configureLangSmith({}); }
   });
 
-  it("downgrades a LangSmith failure to a warning without changing the AgentRun or business result", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const t = await createTestApp({}, fakeRuntime());
+  it("isolates SDK transport failures from the AgentRun, business result and credentials", async () => {
+    const errors=vi.spyOn(console,'error').mockImplementation(()=>{});
+    const t=await createTestApp({},fakeRuntime());
     try {
-      configureLangSmith({
-        apiKey: "ls-secret-key",
-        fetchImpl: async () => {
-          throw new Error("langsmith unreachable");
-        },
-      });
-      const cookie = await t.loginCookie();
-      const res = await t.app.inject({
-        method: "POST",
-        url: "/api/conversations/global/messages",
-        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" },
-        payload: { message: "hello" },
-      });
-      await flush();
+      configureLangSmith({apiKey:'test-secret-key',tracing:true,fetchImplementation:async()=>{throw new Error('test-secret-key unavailable');}});
+      const cookie=await t.loginCookie();
+      const res=await t.app.inject({method:'POST',url:'/api/conversations/global/messages',headers:{cookie,origin:t.publicOrigin},payload:{message:'hello'}});
+      await flushLangSmith();
       expect(res.body).toContain('"status":"completed"');
-      expect(await t.agentRuns()).toEqual([expect.objectContaining({ kind: "conversation", status: "succeeded" })]);
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining("langsmith trace failed"));
-    } finally {
-      warn.mockRestore();
-      configureLangSmith({});
-      await t.close();
-    }
+      expect(await t.agentRuns()).toEqual([expect.objectContaining({kind:'conversation',status:'succeeded'})]);
+      expect(errors).toHaveBeenCalled();
+      expect(errors.mock.calls.flat().map(String).join()).not.toContain('test-secret-key');
+    } finally {await t.close();configureLangSmith({});errors.mockRestore();}
   });
 });

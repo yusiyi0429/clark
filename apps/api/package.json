@@ -27,11 +27,13 @@
     "@warmap/contracts": "workspace:*",
     "fastify": "^5.2.1",
     "jszip": "3.10.1",
+    "langsmith": "0.11.0",
     "mammoth": "1.12.3",
     "pdfjs-dist": "5.4.296",
     "pg": "^8.14.1",
     "sanitize-html": "2.17.0",
-    "tencentcloud-sdk-nodejs-asr": "^4.1.315"
+    "tencentcloud-sdk-nodejs-asr": "^4.1.315",
+    "uuid": "11.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

@@ -30,7 +30,7 @@
      printf '%-45s ' "$u"; curl -s -o /dev/null -m 10 -w '%{http_code}\n' "$u" || echo 不通
    done
    ```
-   模型接口（`PI_BASE_URL` 所在域名）不通时对话、雷达与预研全部不可用。雷达的 GitHub Trending 来源依赖 `github.com`，大陆访问时好时坏。`LANGSMITH_*` 在大陆多半不通，生产留空即可（缺失时完全 no-op）。
+   模型接口（`PI_BASE_URL` 所在域名）不通时对话、雷达与预研全部不可用。雷达的 GitHub Trending 来源依赖 `github.com`，大陆访问时好时坏。LangSmith 使用 SDK 上报；启用时配置 `LANGSMITH_API_KEY`、`LANGSMITH_PROJECT=clark_oct`、`LANGSMITH_TRACING=true` 并允许出网访问 `api.smith.langchain.com`。缺 key 或设置 tracing=false 时不上传；上传失败不改变业务结果。Thread/Turn/Span 契约见 `docs/adr/0028-langsmith-thread-turn-spans.md`。
 7. **`infra/.env`**：`PUBLIC_DOMAIN=mvp.tokenkingos.com`；`EXTRA_ALLOWED_ORIGINS` 留空；其余按 `.env.example`。
 8. **`tkos.ai` 跳转（已就绪，2026-09-28）**：`.ai` 不能在大陆备案，请求打到这台主机会被火山拦截，所以跳转在 Porkbun 的 URL Forwarding 做，不经宿主机 Nginx：`tkos.ai`、`www.tkos.ai` → `https://tokenkingos.com`（301，不带路径）；`mvp.tkos.ai` → `https://mvp.tokenkingos.com`（301，带路径）。用户最终停在 `mvp.tokenkingos.com`，登录 Cookie 也只在这个域名下；发给成员 Agent 的连接地址一律写 `mvp.tokenkingos.com`（301 会让部分客户端把 POST 改成 GET）。
 

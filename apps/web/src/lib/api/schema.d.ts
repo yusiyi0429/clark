@@ -2535,6 +2535,7 @@ export interface components {
                     sizeBytes: number;
                     pageCount?: number;
                 }[];
+                logicalTurnId?: string;
                 runId: string;
                 /** Format: date-time */
                 createdAt: string;
@@ -2560,6 +2561,7 @@ export interface components {
         };
         ConversationMessageRequest: {
             message: string;
+            logicalTurnId?: string;
             anchorSelection?: {
                 cardId: string;
                 version: number;
@@ -2576,6 +2578,9 @@ export interface components {
             viewingMaterialId?: string;
         };
         ConversationSseEvent: {
+            threadId?: string;
+            logicalTurnId?: string;
+            attempt?: number;
             runId: string;
             /** @description global 或稳定对象 scope */
             scope: string;
@@ -2584,6 +2589,9 @@ export interface components {
             type: "message";
             delta: string;
         } | {
+            threadId?: string;
+            logicalTurnId?: string;
+            attempt?: number;
             runId: string;
             /** @description global 或稳定对象 scope */
             scope: string;
@@ -2595,6 +2603,9 @@ export interface components {
             name: string;
             isError?: boolean;
         } | {
+            threadId?: string;
+            logicalTurnId?: string;
+            attempt?: number;
             runId: string;
             /** @description global 或稳定对象 scope */
             scope: string;
@@ -2607,6 +2618,9 @@ export interface components {
             cacheWrite: number;
             totalTokens: number;
         } | {
+            threadId?: string;
+            logicalTurnId?: string;
+            attempt?: number;
             runId: string;
             /** @description global 或稳定对象 scope */
             scope: string;
@@ -2615,6 +2629,9 @@ export interface components {
             type: "compaction";
             phase: "started" | "completed";
         } | {
+            threadId?: string;
+            logicalTurnId?: string;
+            attempt?: number;
             runId: string;
             /** @description global 或稳定对象 scope */
             scope: string;
@@ -2625,6 +2642,9 @@ export interface components {
             code: "RUNTIME_RECREATED";
             message: string;
         } | {
+            threadId?: string;
+            logicalTurnId?: string;
+            attempt?: number;
             runId: string;
             /** @description global 或稳定对象 scope */
             scope: string;
@@ -2634,6 +2654,9 @@ export interface components {
             code: string;
             message: string;
         } | {
+            threadId?: string;
+            logicalTurnId?: string;
+            attempt?: number;
             runId: string;
             /** @description global 或稳定对象 scope */
             scope: string;
