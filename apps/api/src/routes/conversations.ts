@@ -242,9 +242,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
            VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
           [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
         );
-        // 个人记忆：任何页面都读本人的记忆；任务卡私聊不做后台提炼（沿用 #12）。
+        // 个人记忆：任何页面都读本人的记忆；后台提炼按游标增量跑（personalDistillation.ts），这里不排任务。
         // 「记住」「忘掉」「改成」由主 Agent 调工具完成，不在主回答之前同步跑提炼：记忆改动失败只是工具报错，不替换回答、不动上下文（3c）。
-        const learnsPersonal = !req.params.scope.startsWith("mission-card:");
         // 当前页面对象就是这一轮的 anchor：检索时只比对象、不比版本；钉住的版本比现在旧时标「基于旧版本」（R8）。
         const objectRef = object.snapshot?.objectRef;
         const currentObject = objectRef ? { target: `${objectRef.type}:${objectRef.id}`, version: objectRef.version } : undefined;
@@ -473,9 +472,6 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
                 WHERE id = $1`,
               [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage), routeSnapshot(undefined, recoverySummary)],
             );
-            // 回答落库后再排一个 natural 提炼任务（PR #12 原样）。
-            if (learnsPersonal) await ctx.personalDistillation.enqueue(client, {
-              personId: owner, conversationId: row.id, throughSequence: userSequence });
             await client.query("COMMIT");
             if (prepared.snapshotId) await conversationCompaction?.markApplied(client.query.bind(client), prepared.snapshotId);
             runStatus = "succeeded";

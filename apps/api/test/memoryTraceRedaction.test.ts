@@ -82,9 +82,9 @@ test("personal memory distillation traces the user's words and memory, never the
       await db.query("INSERT INTO conversation_messages (conversation_id, sequence, role, content, run_id) VALUES ($1, 1, 'user', $2, $3)",
         [conversationId, `我的想法：县城样板优先。顺便 ${CREDENTIAL}`, randomUUID()]);
       const worker = createPersonalDistillation({ pool, memory, baseUrl: "https://provider.invalid/v1", apiKey: "test-key", modelId: "fake-light",
-        streamSimple: () => reply([{ type: "toolCall", id: "c1", name: "submit_candidate", arguments: { status: "noop", changes: [], clarification: "" } }], "toolUse") });
-      await worker.enqueue(db, { personId: "alice", conversationId, throughSequence: 1 });
+        streamSimple: () => reply([{ type: "toolCall", id: "c1", name: "submit_candidate", arguments: { status: "noop", items: [], clarification: "" } }], "toolUse"), settings: { idleMs: 0 } });
       await worker.processNext();
+      expect(await worker.cursor("alice")).toMatchObject({ attempts: 0, lastError: null });
       await settle();
       const wire = fake.wire();
       expect(wire).toContain("PRIVATE_MEMORY_BODY");

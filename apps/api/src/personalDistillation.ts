@@ -1,13 +1,31 @@
 import type { Pool, PoolClient } from 'pg';
 import { Type } from '@sinclair/typebox';
 import { runCandidateAgent } from './candidateAgentRuntime.js';
+import { logEvent } from './observability.js';
 import type { MemoryAnchor, MemoryReference, PersonalMemory } from './personalMemory.js';
 
 /**
- * 个人记忆的后台提炼（PR #12）：回答成功后排一个任务，按人串行，从本人原话里归纳想法、立场、未决问题、理由和偏好。
- * 每条改动必须有本轮原话逐字支持；整批校验通过才写，写的是逐条增删（personalMemory.ts），不整份覆盖。
- * 「记住」「忘掉」「改成」的明确请求由主 Agent 的工具完成，这里只做自然归纳。
+ * 个人记忆的后台提炼（3f）：按人一个游标，只处理游标之后本人的新消息，跨本人所有页面（任务卡私聊除外）。
+ * - 攒够一批（batchSize 条）或最后一条新消息之后空闲够久（idleMs）才跑；一次最多 windowMessages 条、windowChars 字。
+ * - 成功：写入记忆与推进游标在同一个事务里；失败：游标不动、退避重试（不丢消息，R9），原话本来就永久保留、可检索（R3）。
+ * - 不再每条消息排任务；「记住」「忘掉」「改成」由主 Agent 的工具完成，这里只做自然归纳。
+ * - 内部分批对用户不可见。
+ * 从本人原话里归纳想法、立场、未决问题、理由和偏好；每条改动必须有窗口内某条本人原话逐字支持；整批校验通过才写。
  */
+export const DISTILLATION_DEFAULTS = {
+  batchSize: 6,
+  idleMs: 3 * 60_000,
+  windowMessages: 20,
+  windowChars: 24_000,
+  /** 一批的时限。没有生产实测数据：先按一次 light 模型、最多两次调用、两万多字输入估 60 秒，每批记 durationMs 便于按日志调。 */
+  timeoutMs: 60_000,
+  /** 退避：30 秒起翻倍，封顶 1 小时；不跳过，避免漏学。 */
+  backoffBaseMs: 30_000,
+  backoffMaxMs: 60 * 60_000,
+  tickMs: 15_000,
+};
+export type DistillationSettings = typeof DISTILLATION_DEFAULTS;
+
 const Kind = Type.Union([Type.Literal('idea'), Type.Literal('stance'), Type.Literal('open_question'), Type.Literal('reason'), Type.Literal('preference')]);
 const Candidate = Type.Object({
   status: Type.Union([Type.Literal('apply'), Type.Literal('noop'), Type.Literal('needs_clarification')]),
@@ -15,12 +33,12 @@ const Candidate = Type.Object({
     op: Type.Union([Type.Literal('add'), Type.Literal('supersede'), Type.Literal('forget')]),
     kind: Kind,
     title: Type.String({ maxLength: 100 }), text: Type.String({ maxLength: 2000 }),
-    anchor: Type.String({ minLength: 1, maxLength: 300, description: 'anchorCandidates 里某个 target，或 topic:<主题>' }),
+    anchor: Type.String({ minLength: 1, maxLength: 300, description: '证据所在消息的 anchorCandidates 里某个 target，或 topic:<主题>' }),
     replaces: Type.Optional(Type.String({ maxLength: 64, description: 'supersede / forget 时：现有条目的 id' })),
-    evidence: Type.Array(Type.Object({ sequence: Type.Integer({ description: '每条至少一条证据的 sequence 等于 currentSequence；历史消息只用来理解' }), quote: Type.String({ minLength: 1, maxLength: 2000 }) }, { additionalProperties: false }), { minItems: 1, maxItems: 5 }),
+    evidence: Type.Array(Type.Object({ message: Type.String({ maxLength: 8, description: 'messages 里的 ref，如 M3；earlier 里的不能当证据' }), quote: Type.String({ minLength: 1, maxLength: 2000 }) }, { additionalProperties: false }), { minItems: 1, maxItems: 5 }),
     inferred: Type.Boolean(),
     matchedForgottenId: Type.Optional(Type.String({ maxLength: 64 })),
-  }, { additionalProperties: false }), { maxItems: 8 }),
+  }, { additionalProperties: false }), { maxItems: 12 }),
   clarification: Type.String({ maxLength: 500 }),
 }, { additionalProperties: false });
 /** 提炼提示词（3b，R4/R5）：记想法、立场、未决问题、理由和偏好，每条带 anchor 与依据；纠正时新建并替代，不覆盖。 */
@@ -28,149 +46,191 @@ export const DISTILLATION_PROMPT = `你负责整理本人私有的个人记忆�
 
 要记的是本人自己的：想法（idea）、立场（stance）、未决问题（open_question）、理由（reason）、偏好与习惯（preference）。不记：公司事实（目标、职责、数字等以本体为准）、他人的话、假设与角色扮演、一次性的格式要求、寒暄。
 
-只从 currentSequence 那条本人消息学；更早的消息只用来理解指代，不补记历史内容。每条至少一条证据 sequence=currentSequence，quote 逐字摘自那条消息；证据不是正文。
+messages 是本人在各个页面新说的话（按时间先后，可能来自不同对话），只从这些消息学；每条消息后的 reply 是当时助手的回答，earlier 是更早已经整理过的话，二者都只用来理解指代，不能当证据。每条至少一条证据：message 填消息的 ref，quote 逐字摘自那条消息；证据不是正文。同一件事说了几次、前后改了说法，按最后的说法记。
 
-每条写清：kind；title（十几个字说清是什么）；text（按本人的意思写完整：想法或立场是什么、理由是什么、还没定的是什么；拿不准的用「可能」「倾向于」并标 inferred=true，不贴人格标签）；anchor（关于哪个对象就照抄 anchorCandidates 里的 target；没有具体对象就写 topic:<主题>，主题用几个字）。
+每条写清：kind；title（十几个字说清是什么）；text（按本人的意思写完整：想法或立场是什么、理由是什么、还没定的是什么；拿不准的用「可能」「倾向于」并标 inferred=true，不贴人格标签）；anchor（关于哪个对象就照抄证据所在消息的 anchorCandidates 里的 target；没有具体对象就写 topic:<主题>，主题用几个字）。
 
 本人改了说法、否定了以前的想法：op=supersede，replaces 填被替代条目的 id，text 写新的完整说法；旧条目不改，由系统标为已替代。本人明确说某条作废、不要再记：op=forget，replaces 填该条 id。其余新内容 op=add。与现有条目意思相同就不再提交。supersede 与 forget 必须是本人原话明确表达的，inferred=false。
 
 forgotten 是本人要求忘掉的内容，不得再记；新内容与其中某条同义时填 matchedForgottenId。
 
-没有新内容：status=noop、items=[]、clarification=""。有改动：status=apply、items 非空、clarification=""。确实需要本人澄清：status=needs_clarification、items=[]、clarification 只写问题。`;
+没有新内容：status=noop、items=[]、clarification=""。有改动：status=apply、items 非空、clarification=""。确实需要本人澄清：status=needs_clarification、items=[]、clarification 只写问题（只记日志，不打扰本人）。`;
+
+type Cursor = { at: Date; conversationId: string; sequence: number };
+type PendingMessage = { conversation_id: string; sequence: number; content: string; created_at: Date; scope: string; run_id: string; refs: unknown; current: unknown; reply: string | null };
 type AnchorCandidate = { target: string; version?: number; title?: string };
-/**
- * 这条消息可以钉在哪些对象上（R5）：当时页面上的对象与本人显式引用的卡片（type:id，写入时钉版本）；
- * 都没有、但会话本身挂在一个对象页面上时，用会话的 scope。
- */
-async function anchorCandidatesOf(client: Pick<PoolClient, 'query'>, conversationId: string, sequence: number, scope?: string): Promise<AnchorCandidate[]> {
-  const row = (await client.query<{ current: { objectRef?: { type: string; id: string; version?: number }; title?: string } | null; refs: { objectRef?: { type: string; id: string; version?: number }; title?: string }[] }>(
-    `SELECT r.input_snapshot->'currentObject' AS current, m.references_snapshot AS refs
-       FROM conversation_messages m LEFT JOIN agent_runs r ON r.id = m.run_id
-      WHERE m.conversation_id = $1 AND m.sequence = $2`, [conversationId, sequence])).rows[0];
+export type PersonalDistillation = ReturnType<typeof createPersonalDistillation>;
+const fault = (code: string) => Object.assign(new Error(code), { code });
+
+/** 游标之后本人新说的话（任务卡私聊不学，已删除的对话不学）。 */
+const PENDING = `c.deleted_at IS NULL AND c.scope NOT LIKE 'mission-card:%' AND m.role = 'user'
+  AND (k.through_at IS NULL OR (m.created_at, m.conversation_id, m.sequence) > (k.through_at, k.through_conversation, k.through_sequence))`;
+
+/** 一条消息可以钉在哪些对象上（R5）：当时页面上的对象与显式引用的卡片（type:id，版本由服务端钉）；都没有时用会话所在对象页。 */
+function anchorCandidatesOf(message: PendingMessage): AnchorCandidate[] {
   const candidates = new Map<string, AnchorCandidate>();
-  for (const snapshot of [row?.current, ...(Array.isArray(row?.refs) ? row!.refs : [])]) {
+  const snapshots = [message.current, ...(Array.isArray(message.refs) ? message.refs : [])] as ({ objectRef?: { type?: string; id?: string; version?: number }; title?: string } | null)[];
+  for (const snapshot of snapshots) {
     const ref = snapshot?.objectRef;
     if (!ref?.type || !ref.id) continue;
     const target = `${ref.type}:${ref.id}`;
     if (!candidates.has(target)) candidates.set(target, { target, ...(typeof ref.version === 'number' ? { version: ref.version } : {}), ...(snapshot?.title ? { title: snapshot.title } : {}) });
   }
-  if (!candidates.size && scope && scope !== 'global') candidates.set(scope, { target: scope });
+  if (!candidates.size && message.scope !== 'global') candidates.set(message.scope, { target: message.scope });
   return [...candidates.values()];
 }
-/** 模型给的 anchor 只能是候选里的对象（版本由服务端钉）或 topic:<主题>。 */
+/** 模型给的 anchor 只能是证据所在消息的候选对象（版本由服务端钉）或 topic:<主题>。 */
 function anchorOf(anchor: string, candidates: AnchorCandidate[]): MemoryAnchor {
   const candidate = candidates.find(item => item.target === anchor);
   if (candidate) return { target: candidate.target, ...(candidate.version !== undefined ? { pinnedVersion: candidate.version } : {}) };
   if (/^topic:\S.{0,79}$/u.test(anchor)) return { target: anchor };
   throw fault('INVALID_ANCHOR');
 }
-type JobInput = { personId: string; conversationId: string; throughSequence: number };
-type Job = { id: string; person_id: string; conversation_id: string; through_sequence: number; attempts: number };
-export type PersonalDistillation = ReturnType<typeof createPersonalDistillation>;
-const fault = (code: string) => Object.assign(new Error(code), { code });
 
 export function createPersonalDistillation(options: {
   pool: Pool; memory: PersonalMemory; baseUrl: string; apiKey: string; modelId: string;
   streamSimple?: Parameters<typeof runCandidateAgent>[0]['streamSimple'];
+  settings?: Partial<DistillationSettings>;
 }) {
   const { pool, memory } = options;
+  const settings = { ...DISTILLATION_DEFAULTS, ...options.settings };
   const closing = new AbortController();
-  async function enqueue(client: Pick<PoolClient, 'query'>, input: JobInput): Promise<string> {
-    const result = await client.query<{ id: string }>(`INSERT INTO personal_memory_jobs(person_id,conversation_id,through_sequence)
-      SELECT $1,$2,$3 WHERE EXISTS(SELECT 1 FROM conversations WHERE id=$2 AND owner_id=$1 AND scope NOT LIKE 'mission-card:%')
-      ON CONFLICT(person_id,conversation_id,through_sequence) DO UPDATE SET person_id=EXCLUDED.person_id RETURNING id`,
-    [input.personId, input.conversationId, input.throughSequence]);
-    return result.rows[0]?.id;
+
+  /** 到点该跑的人：游标之后有新话，攒够一批或已空闲够久，且不在退避中。 */
+  async function duePeople(client: Pick<PoolClient, 'query'>, personId?: string): Promise<string[]> {
+    const rows = (await client.query<{ person_id: string }>(`SELECT c.owner_id AS person_id
+        FROM conversation_messages m JOIN conversations c ON c.id = m.conversation_id
+        LEFT JOIN personal_memory_cursors k ON k.person_id = c.owner_id
+       WHERE c.owner_id IS NOT NULL AND ($1::text IS NULL OR c.owner_id = $1) AND ${PENDING}
+         AND (k.next_attempt_at IS NULL OR k.next_attempt_at <= now())
+       GROUP BY c.owner_id
+      HAVING count(*) >= $2 OR max(m.created_at) <= now() - make_interval(secs => $3::double precision / 1000)
+       ORDER BY min(m.created_at) LIMIT 20`, [personId ?? null, settings.batchSize, settings.idleMs])).rows;
+    return rows.map(row => row.person_id);
   }
-  async function status(id: string, connection?: PoolClient) {
-    const result = await (connection ?? pool).query('SELECT status,attempts,error_code AS "errorCode" FROM personal_memory_jobs WHERE id=$1', [id]);
-    return result.rows[0];
+
+  async function window(client: Pick<PoolClient, 'query'>, personId: string) {
+    const rows = (await client.query<PendingMessage>(`SELECT m.conversation_id, m.sequence, m.content, m.created_at, c.scope, m.run_id, m.references_snapshot AS refs,
+          r.input_snapshot->'currentObject' AS current,
+          (SELECT a.content FROM conversation_messages a WHERE a.conversation_id = m.conversation_id AND a.sequence = m.sequence + 1 AND a.role = 'assistant') AS reply
+        FROM conversation_messages m JOIN conversations c ON c.id = m.conversation_id
+        LEFT JOIN personal_memory_cursors k ON k.person_id = c.owner_id
+        LEFT JOIN agent_runs r ON r.id = m.run_id
+       WHERE c.owner_id = $1 AND ${PENDING}
+       ORDER BY m.created_at, m.conversation_id, m.sequence LIMIT $2`, [personId, settings.windowMessages])).rows;
+    // 字数上限：第一条整条保留（HTTP 已限 2 万字，尾部意图不能截掉），之后放不下的留到下一批。
+    let chars = 0;
+    return rows.filter((row, index) => {
+      chars += row.content.length;
+      return index === 0 || chars <= settings.windowChars;
+    });
   }
-  async function distill(client: PoolClient, job: Job) {
-    const conversation = (await client.query<{ scope: string }>('SELECT scope FROM conversations WHERE id=$1', [job.conversation_id])).rows[0];
-    const messages = (await client.query<{ sequence: number; content: string; created_at: Date }>(`SELECT m.sequence,m.content,m.created_at FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
-      WHERE c.id=$1 AND c.owner_id=$2 AND c.deleted_at IS NULL AND m.role='user' AND m.sequence<=$3
-      ORDER BY m.sequence DESC LIMIT 12`, [job.conversation_id, job.person_id, job.through_sequence])).rows;
-    const currentMessage = messages.find(message => message.sequence === job.through_sequence);
-    if (!currentMessage) throw fault('HISTORY_EXCLUDED');
-    // HTTP bounds the current query to 20,000 characters. Preserve all of it, including tail intent.
-    let remaining = Math.max(16000, currentMessage.content.length);
-    const boundedMessages = messages.flatMap(message => {
-      const content = message.sequence === job.through_sequence ? message.content : message.content.slice(0, Math.min(8000, remaining));
-      remaining -= content.length;
-      return content ? [{ sequence: message.sequence, content }] : [];
-    }).reverse();
-    const active = await memory.list(job.person_id, { status: 'active' }, client);
+
+  async function earlier(client: Pick<PoolClient, 'query'>, personId: string) {
+    return (await client.query<{ content: string }>(`SELECT left(m.content, 1000) AS content
+        FROM conversation_messages m JOIN conversations c ON c.id = m.conversation_id
+        JOIN personal_memory_cursors k ON k.person_id = c.owner_id
+       WHERE c.owner_id = $1 AND c.deleted_at IS NULL AND c.scope NOT LIKE 'mission-card:%' AND m.role = 'user'
+         AND (m.created_at, m.conversation_id, m.sequence) <= (k.through_at, k.through_conversation, k.through_sequence)
+       ORDER BY m.created_at DESC, m.conversation_id DESC, m.sequence DESC LIMIT 4`, [personId])).rows.map(row => row.content).reverse();
+  }
+
+  async function distill(client: PoolClient, personId: string, messages: PendingMessage[]): Promise<{ applied: number }> {
+    const refOf = (index: number) => `M${index + 1}`;
+    const candidatesByRef = new Map(messages.map((message, index) => [refOf(index), anchorCandidatesOf(message)]));
+    const active = await memory.list(personId, { status: 'active' }, client);
     let blockedBudget = 16000;
-    const blocked = (await memory.blocked(job.person_id, client)).flatMap(entry => {
+    const blocked = (await memory.blocked(personId, client)).flatMap(entry => {
       const size = entry.title.length + entry.text.length;
       if (size > blockedBudget) return [];
       blockedBudget -= size;
-      return [{ key: entry.id, title: entry.title, text: entry.text }];
+      return [{ id: entry.id, title: entry.title, text: entry.text }];
     });
-    const anchorCandidates = await anchorCandidatesOf(client, job.conversation_id, job.through_sequence, conversation?.scope);
-    const signal = AbortSignal.any([AbortSignal.timeout(30_000), closing.signal]);
-    const { candidate: result } = await runCandidateAgent({ query: client.query.bind(client), kind: 'personal-memory-distillation', personId: job.person_id,
-      input: { currentSequence: job.through_sequence, messages: boundedMessages, anchorCandidates: anchorCandidates.map(({ target, title }) => ({ target, ...(title ? { title } : {}) })),
-        memory: active.map(({ id, kind, title, text }) => ({ id, kind, title, text })), forgotten: blocked },
+    const signal = AbortSignal.any([AbortSignal.timeout(settings.timeoutMs), closing.signal]);
+    const { candidate: result } = await runCandidateAgent({ query: client.query.bind(client), kind: 'personal-memory-distillation', personId,
+      input: {
+        messages: messages.map((message, index) => ({ ref: refOf(index), at: new Date(message.created_at).toISOString(), page: message.scope, content: message.content,
+          ...(message.reply ? { reply: message.reply.slice(0, 800) } : {}),
+          anchorCandidates: candidatesByRef.get(refOf(index))!.map(({ target, title }) => ({ target, ...(title ? { title } : {}) })) })),
+        earlier: await earlier(client, personId),
+        memory: active.map(({ id, kind, title, text }) => ({ id, kind, title, text })),
+        forgotten: blocked,
+      },
       prompt: DISTILLATION_PROMPT, schema: Candidate, baseUrl: options.baseUrl, apiKey: options.apiKey, modelId: options.modelId, modelSlot: 'light', maxModelCalls: 2,
       streamSimple: options.streamSimple, signal });
     if ((result.status === 'apply' && (!result.items.length || result.clarification !== ''))
         || (result.status === 'noop' && (result.items.length || result.clarification !== ''))
         || (result.status === 'needs_clarification' && (result.items.length || !result.clarification.trim()))) throw fault('INVALID_CANDIDATE_STATUS');
-    // 整批先校验，再在一个事务里逐条写。
+    if (result.status === 'needs_clarification') logEvent({ event: 'personal_memory.clarification_skipped', messages: messages.length });
+    // 整批先校验，再和推进游标一起在一个事务里写。
     const writes: (() => Promise<unknown>)[] = [];
     for (const change of result.items) {
-      if (change.evidence.some(evidence => !boundedMessages.some(message => message.sequence === evidence.sequence && message.content.includes(evidence.quote)))) throw fault('INVALID_USER_EVIDENCE');
-      if (!change.evidence.some(evidence => evidence.sequence === job.through_sequence)) throw fault('NO_CURRENT_USER_EVIDENCE');
+      const evidenceMessages = change.evidence.map(evidence => {
+        const index = Number(/^M(\d+)$/.exec(evidence.message)?.[1]) - 1;
+        const message = messages[index];
+        if (!message || !message.content.includes(evidence.quote)) throw fault('INVALID_USER_EVIDENCE');
+        return { message, ref: evidence.message, quote: evidence.quote };
+      });
       if (change.op !== 'add' && change.inferred) throw fault('INVALID_EXPLICIT_EVIDENCE');
-      if (change.matchedForgottenId && !blocked.some(entry => entry.key === change.matchedForgottenId)) throw fault('UNKNOWN_FORGOTTEN_ITEM');
+      if (change.matchedForgottenId && !blocked.some(entry => entry.id === change.matchedForgottenId)) throw fault('UNKNOWN_FORGOTTEN_ITEM');
       const existing = change.replaces ? active.find(entry => entry.id === change.replaces) : undefined;
       if (change.op !== 'add' && !existing) {
         if (change.op === 'forget') continue;
         throw fault('UNKNOWN_PERSONAL_ITEM');
       }
-      if (change.op === 'forget') { writes.push(() => memory.forget(job.person_id, existing!.id, client)); continue; }
+      if (change.op === 'forget') { writes.push(() => memory.forget(personId, existing!.id, client)); continue; }
       // 本人忘掉过的内容不再学回来；与现有条目相同的不重复记。
       if (change.matchedForgottenId || blocked.some(entry => entry.text.trim() === change.text.trim())) continue;
       if (active.some(entry => entry.text.trim() === change.text.trim())) continue;
-      const references: MemoryReference[] = change.evidence.map(evidence => ({ ref: `chat:${job.conversation_id}#${evidence.sequence}`, quote: evidence.quote,
-        at: new Date(messages.find(message => message.sequence === evidence.sequence)!.created_at).toISOString() }));
-      const value = { kind: change.kind, title: change.title || '个人记忆', text: change.text, anchors: [anchorOf(change.anchor, anchorCandidates)], references };
-      writes.push(change.op === 'add' ? () => memory.add(job.person_id, value, client) : () => memory.supersede(job.person_id, existing!.id, value, client));
+      const references: MemoryReference[] = evidenceMessages.map(({ message, quote }) => ({ ref: `chat:${message.conversation_id}#${message.sequence}`, quote, at: new Date(message.created_at).toISOString() }));
+      const candidates = [...new Map(evidenceMessages.flatMap(({ ref }) => candidatesByRef.get(ref)!).map(item => [item.target, item])).values()];
+      const value = { kind: change.kind, title: change.title || '个人记忆', text: change.text, anchors: [anchorOf(change.anchor, candidates)], references };
+      writes.push(change.op === 'add' ? () => memory.add(personId, value, client) : () => memory.supersede(personId, existing!.id, value, client));
     }
+    const last = messages[messages.length - 1];
     await client.query('BEGIN');
     try {
       for (const write of writes) await write();
-      await client.query("UPDATE personal_memory_jobs SET status='succeeded',error_code=NULL WHERE id=$1", [job.id]);
+      await client.query(`INSERT INTO personal_memory_cursors (person_id, through_at, through_conversation, through_sequence, attempts, next_attempt_at, last_error, updated_at)
+          VALUES ($1, $2, $3, $4, 0, NULL, NULL, now())
+          ON CONFLICT (person_id) DO UPDATE SET through_at = EXCLUDED.through_at, through_conversation = EXCLUDED.through_conversation,
+            through_sequence = EXCLUDED.through_sequence, attempts = 0, next_attempt_at = NULL, last_error = NULL, updated_at = now()`,
+        [personId, last.created_at, last.conversation_id, last.sequence]);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     }
+    return { applied: writes.length };
   }
-  async function processNext(personId?: string, connection?: PoolClient): Promise<boolean> {
+
+  /** 跑一个到点的人的一批；没有到点的返回 false。force：不等攒批与空闲（测试、手动补跑）。 */
+  async function processNext(personId?: string, connection?: PoolClient, force = false): Promise<boolean> {
     if (closing.signal.aborted) return false;
     const client = connection ?? await pool.connect();
     let lock: string | undefined;
     try {
-      const jobs = await client.query<Job>(`SELECT * FROM personal_memory_jobs WHERE status='pending' AND ($1::text IS NULL OR person_id=$1) ORDER BY id LIMIT 20`, [personId ?? null]);
-      for (const candidate of jobs.rows) {
-        lock = `memory:distillation:${candidate.person_id}`;
+      const people = force && personId ? [personId] : await duePeople(client, personId);
+      for (const person of people) {
+        lock = `memory:distillation:${person}`;
         if (!(await client.query<{ locked: boolean }>('SELECT pg_try_advisory_lock(hashtext($1)) AS locked', [lock])).rows[0].locked) { lock = undefined; continue; }
-        // Always process the earliest durable job for this person after acquiring the lock.
-        const job = (await client.query<Job>("SELECT * FROM personal_memory_jobs WHERE person_id=$1 AND status='pending' ORDER BY id LIMIT 1", [candidate.person_id])).rows[0];
-        if (!job) return false;
-        await client.query('UPDATE personal_memory_jobs SET attempts=attempts+1 WHERE id=$1', [job.id]);
+        const messages = await window(client, person);
+        if (!messages.length) return false;
+        const startedAt = Date.now();
         try {
-          await distill(client, job);
+          const { applied } = await distill(client, person, messages);
+          logEvent({ event: 'personal_memory.distilled', status: 'succeeded', messages: messages.length, applied, durationMs: Date.now() - startedAt });
         } catch (error) {
-          if (closing.signal.aborted) {
-            await client.query("UPDATE personal_memory_jobs SET attempts=GREATEST(attempts-1,0) WHERE id=$1", [job.id]);
-            return false;
-          }
-          const code = (error as { code?: string }).code ?? (error as Error).message;
-          await client.query("UPDATE personal_memory_jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,error_code=$2 WHERE id=$1", [job.id, /^[A-Z][A-Z0-9_]{0,99}$/.test(code) ? code : 'MODEL_GENERATION_FAILED']);
+          if (closing.signal.aborted) return false;
+          const raw = (error as { code?: string }).code ?? (error as Error).message;
+          const code = /^[A-Z][A-Z0-9_]{0,99}$/.test(raw) ? raw : 'MODEL_GENERATION_FAILED';
+          // 游标不动：这批消息下次重试，退避翻倍、封顶。
+          await client.query(`INSERT INTO personal_memory_cursors (person_id, through_at, through_conversation, through_sequence, attempts, next_attempt_at, last_error, updated_at)
+              VALUES ($1, NULL, NULL, NULL, 1, now() + make_interval(secs => $2::double precision / 1000), $3, now())
+              ON CONFLICT (person_id) DO UPDATE SET attempts = personal_memory_cursors.attempts + 1, last_error = EXCLUDED.last_error, updated_at = now(),
+                next_attempt_at = now() + make_interval(secs => LEAST($4::double precision, $2::double precision * power(2, personal_memory_cursors.attempts)) / 1000)`,
+            [person, settings.backoffBaseMs, code, settings.backoffMaxMs]);
+          logEvent({ event: 'personal_memory.distilled', status: 'failed', errorCode: code, messages: messages.length, durationMs: Date.now() - startedAt });
         }
         return true;
       }
@@ -180,14 +240,19 @@ export function createPersonalDistillation(options: {
       if (!connection) client.release();
     }
   }
+  async function cursor(personId: string): Promise<{ cursor: Cursor | null; attempts: number; nextAttemptAt: Date | null; lastError: string | null }> {
+    const row = (await pool.query('SELECT through_at, through_conversation, through_sequence, attempts, next_attempt_at, last_error FROM personal_memory_cursors WHERE person_id = $1', [personId])).rows[0];
+    if (!row) return { cursor: null, attempts: 0, nextAttemptAt: null, lastError: null };
+    return { cursor: row.through_at ? { at: row.through_at, conversationId: row.through_conversation, sequence: row.through_sequence } : null, attempts: row.attempts, nextAttemptAt: row.next_attempt_at, lastError: row.last_error };
+  }
   let timer: ReturnType<typeof setInterval> | undefined;
   let running: Promise<void> | undefined;
   const tick = () => {
     if (running) return;
     running = (async () => { for (let count = 0; count < 20 && await processNext(); count++); })().catch(() => undefined).finally(() => { running = undefined; });
   };
-  return { enqueue, processNext, status,
-    start() { if (!timer) { timer = setInterval(tick, 1000); timer.unref(); tick(); } },
+  return { processNext, cursor,
+    start() { if (!timer) { timer = setInterval(tick, settings.tickMs); timer.unref(); tick(); } },
     async close() { if (timer) clearInterval(timer); timer = undefined; closing.abort(new Error('DISTILLATION_SHUTDOWN')); await running; },
   };
 }

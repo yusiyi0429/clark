@@ -19,16 +19,17 @@ CREATE TABLE IF NOT EXISTS personal_memory_items (
 );
 CREATE INDEX IF NOT EXISTS personal_memory_items_person_idx ON personal_memory_items (person_id, status, created_at DESC);
 
--- 后台提炼任务：回答成功后排一个（下一步改成按游标增量）。
-CREATE TABLE IF NOT EXISTS personal_memory_jobs (
-  id bigserial PRIMARY KEY,
-  person_id text NOT NULL,
-  conversation_id uuid NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  through_sequence integer NOT NULL,
-  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'succeeded', 'failed')),
+-- 后台提炼的游标（每人一行）：已整理到本人哪一条消息（按 created_at、会话、序号排序）；through_* 为空表示还没整理过。
+-- 失败时游标不动，attempts / next_attempt_at 做退避重试。不再每条消息排一个任务。
+CREATE TABLE IF NOT EXISTS personal_memory_cursors (
+  person_id text PRIMARY KEY,
+  through_at timestamptz,
+  through_conversation uuid,
+  through_sequence integer,
   attempts integer NOT NULL DEFAULT 0,
-  error_code text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (person_id, conversation_id, through_sequence)
+  next_attempt_at timestamptz,
+  last_error text,
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS personal_memory_jobs_pending ON personal_memory_jobs (id) WHERE status = 'pending';
+-- 按人取游标之后的消息。
+CREATE INDEX IF NOT EXISTS conversation_messages_created_idx ON conversation_messages (created_at, conversation_id, sequence);
