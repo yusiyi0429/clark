@@ -14,7 +14,7 @@ services:
       M2_ACCOUNT_MAP_FILE: /var/lib/m2/seed/accounts.json
       M2_SEED_DIR: /var/lib/m2/seed
       M2_INTERNAL_TOKEN: ${M2_INTERNAL_TOKEN:?M2_INTERNAL_TOKEN required}
-      DECODING_API_BASE: ${M2_MODEL_BASE:-http://115.191.26.230:8000/api/openai/v1}
+      DECODING_API_BASE: ${M2_MODEL_BASE:-https://tokenhub.corp.tokenkingos.com/api/openai/v1}
       DECODING_API_KEY: ${M2_MODEL_KEY:?M2_MODEL_KEY required}
       DECODING_MODEL: ${M2_MODEL:-wangsu/gpt-6.1-sol}
       TKOS_WORLD_PRODUCT_TOKEN: ${M2_WORLD_READ_TOKEN:-}

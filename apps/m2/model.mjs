@@ -6,7 +6,8 @@ import {pathToFileURL} from 'node:url';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 
-export const TOKENHUB_BASE='http://115.191.26.230:8000/api/openai/v1';
+// TokenHub moved to an HTTPS domain on 2026-10-16 (王创峰, TKOS 全员); the old IP:port address is no longer used.
+export const TOKENHUB_BASE='https://tokenhub.corp.tokenkingos.com/api/openai/v1';
 export const TOKENHUB_MODEL='aliyun/deepseek-v4.1-flash';
 // Request shape per model whose thinking parameters were checked on TokenHub; other models stop rather than guess.
 export const MODEL_PROFILES={
@@ -59,7 +60,7 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
  const model=env.DECODING_MODEL||TOKENHUB_MODEL;
  const endpoint=new URL(base.replace(/\/?$/,'/')+'chat/completions');
  const tokenhub=endpoint.origin===new URL(TOKENHUB_BASE).origin&&endpoint.pathname==='/api/openai/v1/chat/completions';
- if(endpoint.username||endpoint.password||endpoint.search||endpoint.hash||(!tokenhub&&endpoint.protocol!=='https:'))throw Error('模型接口必须使用 HTTPS，仅允许文档指定的 TokenHub HTTP 地址');
+ if(endpoint.username||endpoint.password||endpoint.search||endpoint.hash||endpoint.protocol!=='https:')throw Error('模型接口必须使用 HTTPS');
  const ark=endpoint.hostname==='ark.cn-beijing.volces.com';
  let key=env.DECODING_API_KEY||(tokenhub?env.TOKENHUB_API_KEY:ark?env.ARK_API_KEY:undefined);
  if(!key&&env.DECODING_API_KEY_FILE)key=(await readSecretFile(env.DECODING_API_KEY_FILE,'utf8')).trim();

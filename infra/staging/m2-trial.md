@@ -16,7 +16,7 @@
 4. 将私有数据目录通过受控渠道交接到服务器，归 uid/gid 1000，目录 0700，文件 0600。
 5. 在服务器受限 env 中配置：M2_SEED_DIR（私有目录）、M2_INTERNAL_TOKEN（随机至少32字符）、M2_MODEL_KEY（服务端模型凭据），以及可选 M2_WORLD_READ_TOKEN（产品专用只读凭证）。模型沿用本次 demo 的明确模型；修改模型或技能属于另一轮验证，不混入本次接入。
 
-模型默认还是团队记录中的 TokenHub HTTP 地址。正式发布人需核对同机地址可用性、真实模型配置与安全网络条件；可通过 M2_MODEL_BASE 显式配置团队核对过的 HTTPS 地址。不能把个人钥匙串或 Codex agent.token 复制到服务器。
+模型默认走 TokenHub 的 HTTPS 域名 `https://tokenhub.corp.tokenkingos.com/api/openai/v1`（2026-10-16 起替换原 IP 加端口的 HTTP 地址）。程序只接受 HTTPS。发布人需核对容器内能解析并访问该域名；可通过 M2_MODEL_BASE 显式配置其他团队核对过的 HTTPS 地址。不能把个人钥匙串或 Codex agent.token 复制到服务器。
 
 ## 部署
 
