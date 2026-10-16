@@ -845,13 +845,15 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           defineTool({
             name: "remember_personal_memory",
             label: "记住",
-            description: "本人明确要你记住、或纠正一条个人记忆时调用（只改本人的）。纠正时 replaces 填被替代条目的 id，旧条目标为被新说法替代。没有本人明确要求时不调用。",
+            description: "本人明确要你记住、或纠正一条个人记忆时调用（只改本人的）。kind：idea 想法、stance 立场、open_question 未决问题、reason 理由、preference 偏好与习惯；text 写完整的意思和理由。不是关于当前页面对象、而是一个主题时填 topic。纠正时 replaces 填被替代条目的 id，旧条目标为被新说法替代。没有本人明确要求时不调用。",
             parameters: Type.Object({
+              kind: Type.Optional(Type.Union([Type.Literal("idea"), Type.Literal("stance"), Type.Literal("open_question"), Type.Literal("reason"), Type.Literal("preference")])),
               title: Type.String({ minLength: 1, maxLength: 100 }),
               text: Type.String({ minLength: 1, maxLength: 2000 }),
+              topic: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
               replaces: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
             }, { additionalProperties: false }),
-            execute: async (_id, args) => textResult({ saved: await personal.remember(args as { title: string; text: string; replaces?: string }) }),
+            execute: async (_id, args) => textResult({ saved: await personal.remember(args as Parameters<typeof personal.remember>[0]) }),
           }),
           defineTool({
             name: "forget_personal_memory",

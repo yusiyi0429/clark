@@ -10,15 +10,18 @@ import type { PersonalMemoryTools } from './conversations.js';
  * 一次只改一行，没有整份覆盖，也没有 16 KiB 的总量上限。
  */
 export type MemoryStatus = 'active' | 'superseded' | 'forgotten';
+/** 记什么（R4）：想法、立场、未决问题、理由、偏好与习惯。 */
+export const MEMORY_KINDS = ['idea', 'stance', 'open_question', 'reason', 'preference'] as const;
+export type MemoryKind = (typeof MEMORY_KINDS)[number];
 export type MemoryAnchor = { target: string; pinnedVersion?: number };
 export type MemoryReference = { ref: string; quote?: string; at: string };
 export type PersonalItem = {
-    id: string; title: string; text: string; status: MemoryStatus; supersededBy: string | null;
+    id: string; kind: MemoryKind; title: string; text: string; status: MemoryStatus; supersededBy: string | null;
     anchors: MemoryAnchor[]; references: MemoryReference[]; createdAt: string; updatedAt: string;
 };
-export type NewPersonalItem = { title: string; text: string; anchors?: MemoryAnchor[]; references?: MemoryReference[] };
+export type NewPersonalItem = { kind?: MemoryKind; title: string; text: string; anchors?: MemoryAnchor[]; references?: MemoryReference[] };
 /** 装进对话的一条：basedOnOldVersion 表示它钉住的对象已经改版（R8）。 */
-export type PersonalSelection = { id: string; title: string; text: string; createdAt: string; anchors: MemoryAnchor[]; basedOnOldVersion?: boolean };
+export type PersonalSelection = { id: string; kind: MemoryKind; title: string; text: string; createdAt: string; anchors: MemoryAnchor[]; basedOnOldVersion?: boolean };
 export type PersonalMemory = ReturnType<typeof createPersonalMemory>;
 type Q = Pick<PoolClient, 'query'>;
 
@@ -43,13 +46,17 @@ function validItem(input: NewPersonalItem) {
     const title = input.title.replace(/[\r\n]+/g, ' ').trim();
     const text = input.text.trim();
     if (!title || !text || title.length > MAX_TITLE || text.length > MAX_TEXT) throw fault('INVALID_PERSONAL_ITEM');
+    if (input.kind && !MEMORY_KINDS.includes(input.kind)) throw fault('INVALID_PERSONAL_ITEM');
     for (const anchor of input.anchors ?? []) if (!anchor.target || anchor.target.length > 300) throw fault('INVALID_PERSONAL_ITEM');
-    return { title, text, anchors: input.anchors ?? [], references: input.references ?? [] };
+    return { kind: input.kind ?? 'idea', title, text, anchors: input.anchors ?? [], references: input.references ?? [] };
 }
 
-const ROW = `id, title, text, status, superseded_by, anchors, refs, created_at, updated_at`;
-function item(row: { id: string; title: string; text: string; status: MemoryStatus; superseded_by: string | null; anchors: MemoryAnchor[]; refs: MemoryReference[]; created_at: Date; updated_at: Date }): PersonalItem {
-    return { id: row.id, title: row.title, text: row.text, status: row.status, supersededBy: row.superseded_by, anchors: row.anchors, references: row.refs,
+const ROW = `id, kind, title, text, status, superseded_by, anchors, refs, created_at, updated_at`;
+const INSERT = `INSERT INTO personal_memory_items (id, person_id, kind, title, text, anchors, refs) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb) RETURNING ${ROW}`;
+const insertParams = (id: string, personId: string, value: ReturnType<typeof validItem>) =>
+    [id, personId, value.kind, value.title, value.text, JSON.stringify(value.anchors), JSON.stringify(value.references)];
+function item(row: { id: string; kind: MemoryKind; title: string; text: string; status: MemoryStatus; superseded_by: string | null; anchors: MemoryAnchor[]; refs: MemoryReference[]; created_at: Date; updated_at: Date }): PersonalItem {
+    return { id: row.id, kind: row.kind, title: row.title, text: row.text, status: row.status, supersededBy: row.superseded_by, anchors: row.anchors, references: row.refs,
         createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString() };
 }
 
@@ -77,9 +84,7 @@ export function createPersonalMemory({ pool }: { pool: Pool }) {
         },
         async add(personId: string, input: NewPersonalItem, connection?: Q): Promise<PersonalItem> {
             const value = validItem(input);
-            const row = (await (connection ?? pool).query(`INSERT INTO personal_memory_items (id, person_id, title, text, anchors, refs) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb) RETURNING ${ROW}`,
-                [randomUUID(), personId, value.title, value.text, JSON.stringify(value.anchors), JSON.stringify(value.references)])).rows[0];
-            return item(row);
+            return item((await (connection ?? pool).query(INSERT, insertParams(randomUUID(), personId, value))).rows[0]);
         },
         /** 纠正：新建一条，旧条目标为被它替代（R4）；旧条目已不是 active 时不改，报 PERSONAL_ITEM_NOT_ACTIVE。 */
         async supersede(personId: string, oldId: string, input: NewPersonalItem, connection?: PoolClient): Promise<PersonalItem> {
@@ -90,8 +95,7 @@ export function createPersonalMemory({ pool }: { pool: Pool }) {
                 await client.query(own ? 'BEGIN' : 'SAVEPOINT personal_supersede');
                 try {
                     const id = randomUUID();
-                    const row = (await client.query(`INSERT INTO personal_memory_items (id, person_id, title, text, anchors, refs) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb) RETURNING ${ROW}`,
-                        [id, personId, value.title, value.text, JSON.stringify(value.anchors), JSON.stringify(value.references)])).rows[0];
+                    const row = (await client.query(INSERT, insertParams(id, personId, value))).rows[0];
                     const old = await client.query(`UPDATE personal_memory_items SET status = 'superseded', superseded_by = $3, updated_at = now()
                         WHERE person_id = $1 AND id::text = $2 AND status = 'active'`, [personId, oldId, id]);
                     if (!old.rowCount) throw fault((await api.get(personId, oldId, client)) ? 'PERSONAL_ITEM_NOT_ACTIVE' : 'PERSONAL_ITEM_NOT_FOUND');
@@ -115,7 +119,7 @@ export function createPersonalMemory({ pool }: { pool: Pool }) {
             const current = await api.get(personId, id, connection);
             if (!current) throw fault('PERSONAL_ITEM_NOT_FOUND');
             if (current.status !== 'active') throw fault('PERSONAL_ITEM_NOT_ACTIVE');
-            const value = validItem({ title: input.title ?? current.title, text: input.text ?? current.text, anchors: current.anchors });
+            const value = validItem({ kind: current.kind, title: input.title ?? current.title, text: input.text ?? current.text, anchors: current.anchors });
             const row = (await (connection ?? pool).query(`UPDATE personal_memory_items SET title = $3, text = $4, updated_at = now()
                 WHERE person_id = $1 AND id::text = $2 AND status = 'active' RETURNING ${ROW}`, [personId, id, value.title, value.text])).rows[0];
             if (!row) throw fault('PERSONAL_ITEM_NOT_ACTIVE');
@@ -138,10 +142,10 @@ export function createPersonalMemory({ pool }: { pool: Pool }) {
             return items.map(entry => {
                 const onCurrent = Boolean(current && entry.anchors.some(anchor => sameTarget(anchor.target, current.target)));
                 const score = [...grams(`${entry.title} ${entry.text}`)].filter(term => terms.has(term)).length + (onCurrent ? 3 : 0);
-                return { entry, onCurrent, score, stable: /协作|沟通|表达|偏好/.test(entry.title) };
+                return { entry, onCurrent, score, stable: entry.kind === 'preference' || /协作|沟通|表达|偏好/.test(entry.title) };
             }).filter(row => row.score > 0 || row.stable).sort((left, right) => right.score - left.score).flatMap(({ entry, onCurrent }) => {
                 const pinned = onCurrent ? entry.anchors.find(anchor => sameTarget(anchor.target, current!.target))?.pinnedVersion : undefined;
-                const selection: PersonalSelection = { id: entry.id, title: boundedText(entry.title, 200), text: boundedText(entry.text, 3000), createdAt: entry.createdAt, anchors: entry.anchors,
+                const selection: PersonalSelection = { id: entry.id, kind: entry.kind, title: boundedText(entry.title, 200), text: boundedText(entry.text, 3000), createdAt: entry.createdAt, anchors: entry.anchors,
                     ...(pinned !== undefined && current?.version !== undefined && pinned < current.version ? { basedOnOldVersion: true } : {}) };
                 const size = Buffer.byteLength(JSON.stringify(selection));
                 if (bytes + size > SELECT_BUDGET_BYTES) return [];
@@ -170,13 +174,16 @@ export function personalMemoryToolsFor(memory: PersonalMemory, personId: string,
             throw error;
         }
     };
-    const evidence = () => ({ anchors: context.anchors ?? [], references: context.reference ? [context.reference] : [] });
+    // anchor：当前页面对象；没有对象、或本人说的是一个主题时用 topic:<主题>（R5）。
+    const evidence = (topic?: string) => ({
+        anchors: [...(context.anchors ?? []), ...(topic?.trim() ? [{ target: `topic:${topic.trim()}` }] : [])],
+        references: context.reference ? [context.reference] : [],
+    });
     return {
         search: async (query) => (await memory.select(personId, query)).map(({ id, title, text }) => ({ id, title, text })),
         remember: (input) => logged(input.replaces ? 'correct' : 'remember', async () => {
-            const saved = input.replaces
-                ? await memory.supersede(personId, input.replaces, { title: input.title, text: input.text, ...evidence() })
-                : await memory.add(personId, { title: input.title, text: input.text, ...evidence() });
+            const value = { kind: input.kind, title: input.title, text: input.text, ...evidence(input.topic) };
+            const saved = input.replaces ? await memory.supersede(personId, input.replaces, value) : await memory.add(personId, value);
             return { id: saved.id, title: saved.title, text: saved.text };
         }),
         forget: (input) => logged('forget', async () => ({ id: (await memory.forget(personId, input.id)).id })),

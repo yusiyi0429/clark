@@ -43681,6 +43681,7 @@
         "type": "object",
         "required": [
           "id",
+          "kind",
           "title",
           "text",
           "status",
@@ -43693,6 +43694,31 @@
         "properties": {
           "id": {
             "type": "string"
+          },
+          "kind": {
+            "description": "想法、立场、未决问题、理由、偏好与习惯",
+            "anyOf": [
+              {
+                "const": "idea",
+                "type": "string"
+              },
+              {
+                "const": "stance",
+                "type": "string"
+              },
+              {
+                "const": "open_question",
+                "type": "string"
+              },
+              {
+                "const": "reason",
+                "type": "string"
+              },
+              {
+                "const": "preference",
+                "type": "string"
+              }
+            ]
           },
           "title": {
             "type": "string"
@@ -43795,6 +43821,7 @@
               "type": "object",
               "required": [
                 "id",
+                "kind",
                 "title",
                 "text",
                 "status",
@@ -43807,6 +43834,31 @@
               "properties": {
                 "id": {
                   "type": "string"
+                },
+                "kind": {
+                  "description": "想法、立场、未决问题、理由、偏好与习惯",
+                  "anyOf": [
+                    {
+                      "const": "idea",
+                      "type": "string"
+                    },
+                    {
+                      "const": "stance",
+                      "type": "string"
+                    },
+                    {
+                      "const": "open_question",
+                      "type": "string"
+                    },
+                    {
+                      "const": "reason",
+                      "type": "string"
+                    },
+                    {
+                      "const": "preference",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "title": {
                   "type": "string"

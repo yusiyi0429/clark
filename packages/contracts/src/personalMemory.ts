@@ -11,8 +11,11 @@ export const PersonalMemoryReference = Type.Object({
   at: Type.String({ format: 'date-time' }),
 }, { additionalProperties: false });
 export const PersonalMemoryStatus = Type.Union([Type.Literal('active'), Type.Literal('superseded'), Type.Literal('forgotten')]);
+export const PersonalMemoryKind = Type.Union([Type.Literal('idea'), Type.Literal('stance'), Type.Literal('open_question'), Type.Literal('reason'), Type.Literal('preference')],
+  { description: '想法、立场、未决问题、理由、偏好与习惯' });
 export const PersonalMemoryItem = Type.Object({
   id: Type.String(),
+  kind: PersonalMemoryKind,
   title: Type.String(),
   text: Type.String(),
   status: PersonalMemoryStatus,

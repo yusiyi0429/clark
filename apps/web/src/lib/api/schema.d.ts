@@ -7629,6 +7629,8 @@ export interface components {
         };
         PersonalMemoryItem: {
             id: string;
+            /** @description 想法、立场、未决问题、理由、偏好与习惯 */
+            kind: "idea" | "stance" | "open_question" | "reason" | "preference";
             title: string;
             text: string;
             status: "active" | "superseded" | "forgotten";
@@ -7654,6 +7656,8 @@ export interface components {
         PersonalMemoryList: {
             items: {
                 id: string;
+                /** @description 想法、立场、未决问题、理由、偏好与习惯 */
+                kind: "idea" | "stance" | "open_question" | "reason" | "preference";
                 title: string;
                 text: string;
                 status: "active" | "superseded" | "forgotten";
