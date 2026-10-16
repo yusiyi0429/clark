@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { Type } from '@sinclair/typebox';
 import { runCandidateAgent } from './candidateAgentRuntime.js';
 import { logEvent } from './observability.js';
+import { ADDRESS_STYLE } from './promptStyle.js';
 import type { MemoryAnchor, MemoryReference, PersonalMemory } from './personalMemory.js';
 
 /**
@@ -54,7 +55,9 @@ messages 是本人在各个页面新说的话（按时间先后，可能来自�
 
 forgotten 是本人要求忘掉的内容，不得再记；新内容与其中某条同义时填 matchedForgottenId。
 
-没有新内容：status=noop、items=[]、clarification=""。有改动：status=apply、items 非空、clarification=""。确实需要本人澄清：status=needs_clarification、items=[]、clarification 只写问题（只记日志，不打扰本人）。`;
+没有新内容：status=noop、items=[]、clarification=""。有改动：status=apply、items 非空、clarification=""。确实需要本人澄清：status=needs_clarification、items=[]、clarification 只写问题（只记日志，不打扰本人）。
+
+${ADDRESS_STYLE}`;
 
 type Cursor = { at: Date; conversationId: string; sequence: number };
 type PendingMessage = { conversation_id: string; sequence: number; content: string; created_at: Date; scope: string; run_id: string; refs: unknown; current: unknown; reply: string | null };
