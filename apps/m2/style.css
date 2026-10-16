@@ -296,3 +296,24 @@
 .minutes-waiting{margin:5px 0 0;font-size:12px;line-height:1.7;color:#536879}
 .entry-metadata>p{margin:0 0 8px}.entry-metadata dl{margin:0}.entry-metadata dl>div{display:flex;gap:14px;margin:5px 0}.entry-metadata dt{flex:0 0 60px;font-weight:600}.entry-metadata dd{margin:0;min-width:0;color:#28445f}.entry-source-titles{display:block;color:#71869a;font-size:11px;margin-top:2px}
 .entry-metadata .audit-notice{background:none;border:0;padding:0;color:inherit;gap:8px}.entry-audit-details{margin-top:6px}.entry-audit-details summary{cursor:pointer;color:var(--brand)}.entry-audit-details h3{font-size:12px;margin:16px 0 8px}.entry-audit-details article{padding:10px 0;border-bottom:1px solid #dce4ed}.entry-audit-details p{margin:5px 0}.entry-audit-details li{margin-bottom:8px}
+/* Work Plan (template v0.3): name + one-line result, owner, week blocks with result gates */
+.work-plan table{min-width:640px}
+.work-plan th:nth-child(1){width:44%}.work-plan th:nth-child(2){width:10%}.work-plan th.week{width:auto;text-align:center;padding:10px 4px}
+.work-plan th.week span{display:block}.work-plan th.week small{display:block;font-size:10px;color:#8a9aaa;font-weight:400}
+.work-plan td.plan-name p{margin:4px 0 0;color:#4a5b6b;font-size:12px;line-height:1.6}
+.work-plan td.plan-owner{white-space:nowrap;color:#4a5b6b}
+.work-plan td.week{padding:6px 2px;text-align:center;vertical-align:middle;border-left:1px solid #f0f3f6}
+.work-plan td.week.active{background:linear-gradient(#dbe8fb,#dbe8fb) center/100% 18px no-repeat}
+.work-plan .gate{display:block;color:#1d4f9c;font-size:12px;line-height:1.2}.work-plan .gate small{display:block;font-size:10px;color:#3d5f8f;white-space:normal}
+.plan-legend{margin:8px 2px 0;font-size:11px;color:#8a9aaa}
+.card-more{margin-top:12px}.card-more>summary{cursor:pointer;color:#4a6584;font-size:13px}
+.card-deferred ol{margin:0;padding-left:18px;font-size:12px;line-height:1.8}.card-deferred span{color:#5b6b7b}
+.doc-time{color:#5b6b7b}
+.card-simple>table+table,.card-simple .card-more>table{margin-top:10px}
+.card-deferred li+li{margin-top:4px}
+.activity-generator p{font-size:13px;color:#4a5b6b;line-height:1.8;margin:6px 0}
+.activity-start{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:8px 16px;border-radius:999px;border:0;background:#1d4f9c;color:#fff;font-size:13px;cursor:pointer}
+.activity-running{display:flex;gap:12px;align-items:center}.activity-spinner{width:18px;height:18px;border-radius:50%;border:2px solid #c9d8ee;border-top-color:#1d4f9c;animation:activity-spin 1s linear infinite;flex-shrink:0}
+@keyframes activity-spin{to{transform:rotate(360deg)}}
+.activity-note{display:block;color:#7a8a9a;font-size:12px}
+.plan-type{display:block;font-size:10px;color:#8a9aaa}
