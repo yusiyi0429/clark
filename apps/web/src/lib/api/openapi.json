@@ -7219,61 +7219,31 @@
     },
     "/api/me/memory/personal": {
       "get": {
-        "operationId": "getPersonalMemory",
-        "summary": "读取本人的个人记忆（只有本人可见）",
+        "operationId": "listPersonalMemory",
+        "summary": "列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "superseded",
+                "forgotten",
+                "all"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "本人个人记忆",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PersonalMemoryDocument"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "replacePersonalMemory",
-        "summary": "本人整份改写个人记忆；版本不符 409",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReplacePersonalMemoryRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "更新后的个人记忆",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PersonalMemoryDocument"
+                  "$ref": "#/components/schemas/PersonalMemoryList"
                 }
               }
             }
@@ -7289,26 +7259,6 @@
             }
           },
           "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "413": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -7331,27 +7281,37 @@
         }
       }
     },
-    "/api/me/memory/personal/forget": {
-      "post": {
-        "operationId": "forgetPersonalMemory",
-        "summary": "本人忘掉指定的个人记忆条目",
+    "/api/me/memory/personal/items/{id}": {
+      "patch": {
+        "operationId": "updatePersonalMemoryItem",
+        "summary": "本人改一条个人记忆的标题或正文；已替代或已忘掉的 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ForgetPersonalMemoryRequest"
+                "$ref": "#/components/schemas/UpdatePersonalMemoryItemRequest"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "遗忘后的个人记忆",
+            "description": "改后的条目",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PersonalMemoryDocument"
+                  "$ref": "#/components/schemas/PersonalMemoryItem"
                 }
               }
             }
@@ -7362,6 +7322,72 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "forgetPersonalMemoryItem",
+        "summary": "本人删掉（忘掉）一条个人记忆：不再装进对话，后台提炼也不再学回来",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "忘掉后的条目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalMemoryItem"
                 }
               }
             }
@@ -43650,28 +43676,119 @@
           }
         }
       },
-      "PersonalMemoryDocument": {
+      "PersonalMemoryItem": {
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "revision",
-          "epoch",
-          "markdown",
-          "sections"
+          "id",
+          "title",
+          "text",
+          "status",
+          "supersededBy",
+          "anchors",
+          "references",
+          "createdAt",
+          "updatedAt"
         ],
         "properties": {
-          "revision": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "epoch": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "markdown": {
+          "id": {
             "type": "string"
           },
-          "sections": {
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "active",
+                "type": "string"
+              },
+              {
+                "const": "superseded",
+                "type": "string"
+              },
+              {
+                "const": "forgotten",
+                "type": "string"
+              }
+            ]
+          },
+          "supersededBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "anchors": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "target"
+              ],
+              "properties": {
+                "target": {
+                  "description": "对象 id（如 issue:<id>）或 topic:<主题>",
+                  "type": "string"
+                },
+                "pinnedVersion": {
+                  "minimum": 0,
+                  "description": "写入时钉住的对象版本",
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "ref",
+                "at"
+              ],
+              "properties": {
+                "ref": {
+                  "description": "依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号>",
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "PersonalMemoryList": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
             "type": "array",
             "items": {
               "additionalProperties": false,
@@ -43679,7 +43796,13 @@
               "required": [
                 "id",
                 "title",
-                "text"
+                "text",
+                "status",
+                "supersededBy",
+                "anchors",
+                "references",
+                "createdAt",
+                "updatedAt"
               ],
               "properties": {
                 "id": {
@@ -43690,51 +43813,105 @@
                 },
                 "text": {
                   "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "active",
+                      "type": "string"
+                    },
+                    {
+                      "const": "superseded",
+                      "type": "string"
+                    },
+                    {
+                      "const": "forgotten",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "supersededBy": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "anchors": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "target"
+                    ],
+                    "properties": {
+                      "target": {
+                        "description": "对象 id（如 issue:<id>）或 topic:<主题>",
+                        "type": "string"
+                      },
+                      "pinnedVersion": {
+                        "minimum": 0,
+                        "description": "写入时钉住的对象版本",
+                        "type": "integer"
+                      }
+                    }
+                  }
+                },
+                "references": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "ref",
+                      "at"
+                    ],
+                    "properties": {
+                      "ref": {
+                        "description": "依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号>",
+                        "type": "string"
+                      },
+                      "quote": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "format": "date-time",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "type": "string"
                 }
               }
             }
           }
         }
       },
-      "ReplacePersonalMemoryRequest": {
+      "UpdatePersonalMemoryItemRequest": {
         "additionalProperties": false,
+        "minProperties": 1,
         "type": "object",
-        "required": [
-          "expectedRevision",
-          "markdown"
-        ],
         "properties": {
-          "expectedRevision": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "markdown": {
-            "maxLength": 16384,
+          "title": {
+            "minLength": 1,
+            "maxLength": 200,
             "type": "string"
-          }
-        }
-      },
-      "ForgetPersonalMemoryRequest": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "expectedRevision",
-          "sectionIds"
-        ],
-        "properties": {
-          "expectedRevision": {
-            "minimum": 0,
-            "type": "integer"
           },
-          "sectionIds": {
-            "minItems": 1,
-            "maxItems": 100,
-            "uniqueItems": true,
-            "type": "array",
-            "items": {
-              "minLength": 1,
-              "type": "string"
-            }
+          "text": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
           }
         }
       },

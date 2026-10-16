@@ -152,8 +152,6 @@ export type AppEnv = {
   recordingStorageDir?: string;
   /** 第二个只读实例（词元云集 TK scope）：resolveWorldTkEnv 给出；不设 TKOS_WORLD_TK_INSTANCE 时为空（关闭）。 */
   worldTk?: WorldEnv;
-  /** 个人记忆 Personal.md 的目录（每人一个子目录）；不配时 /tmp/warmap-personal-memory。 */
-  personalMemoryStorageDir?: string;
 } & CompanyMemorySeedEnv & WorldEnv & CompanyEnv;
 
 export async function buildApp({
@@ -293,7 +291,7 @@ export async function buildApp({
   } : undefined;
   const tierModels = conversationTierModels({ defaultModel: env.heavyModel, conversationModel: env.conversationModel });
   // 个人记忆（PR #12）：只有本人可见，不写进本体；后台按对话提炼。
-  const personalMemory = createPersonalMemory({ pool, storageDir: env.personalMemoryStorageDir ?? "/tmp/warmap-personal-memory" });
+  const personalMemory = createPersonalMemory({ pool });
   const personalDistillation = createPersonalDistillation({ pool, memory: personalMemory, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     modelId: env.lightModel, streamSimple: personalDistillationStream });
   // 本体只读公司事实（PR #12 的 query_company）：按人授权的域读取；读不到时如实说明并回退本地（company.ts）。

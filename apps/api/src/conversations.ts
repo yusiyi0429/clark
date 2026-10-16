@@ -69,7 +69,7 @@ export type ConversationRuntime = {
     runId?: string;
     referencesSnapshot: TReferenceSnapshot[];
     /** 与本轮原话相关的本人个人记忆（只有本人可见）；放进上下文包的 personalMemory。 */
-    personalMemory?: { id: string; title: string; text: string }[];
+    personalMemory?: { id: string; title: string; text: string; createdAt?: string; basedOnOldVersion?: boolean }[];
     /** 本人个人记忆的检索与「记住 / 改成 / 忘掉」，已绑定本人；运行时据此给主 Agent 提供工具。失败时抛错，只作为工具报错。 */
     personalMemoryTools?: PersonalMemoryTools;
     /** 检索本人历史对话原文（跨所有页面与归档，只读、已绑定本人）；运行时据此提供 search_conversation_history。 */

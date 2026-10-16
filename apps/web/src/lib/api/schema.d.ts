@@ -1845,10 +1845,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 读取本人的个人记忆（只有本人可见） */
-        get: operations["getPersonalMemory"];
-        /** 本人整份改写个人记忆；版本不符 409 */
-        put: operations["replacePersonalMemory"];
+        /** 列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的 */
+        get: operations["listPersonalMemory"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1856,7 +1855,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/memory/personal/forget": {
+    "/api/me/memory/personal/items/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1865,12 +1864,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 本人忘掉指定的个人记忆条目 */
-        post: operations["forgetPersonalMemory"];
-        delete?: never;
+        post?: never;
+        /** 本人删掉（忘掉）一条个人记忆：不再装进对话，后台提炼也不再学回来 */
+        delete: operations["forgetPersonalMemoryItem"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** 本人改一条个人记忆的标题或正文；已替代或已忘掉的 409 */
+        patch: operations["updatePersonalMemoryItem"];
         trace?: never;
     };
     "/api/me/voiceprint": {
@@ -7627,23 +7627,59 @@ export interface components {
             updatedAt: string | null;
             configured: boolean;
         };
-        PersonalMemoryDocument: {
-            revision: number;
-            epoch: number;
-            markdown: string;
-            sections: {
+        PersonalMemoryItem: {
+            id: string;
+            title: string;
+            text: string;
+            status: "active" | "superseded" | "forgotten";
+            supersededBy: string | null;
+            anchors: {
+                /** @description 对象 id（如 issue:<id>）或 topic:<主题> */
+                target: string;
+                /** @description 写入时钉住的对象版本 */
+                pinnedVersion?: number;
+            }[];
+            references: {
+                /** @description 依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号> */
+                ref: string;
+                quote?: string;
+                /** Format: date-time */
+                at: string;
+            }[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PersonalMemoryList: {
+            items: {
                 id: string;
                 title: string;
                 text: string;
+                status: "active" | "superseded" | "forgotten";
+                supersededBy: string | null;
+                anchors: {
+                    /** @description 对象 id（如 issue:<id>）或 topic:<主题> */
+                    target: string;
+                    /** @description 写入时钉住的对象版本 */
+                    pinnedVersion?: number;
+                }[];
+                references: {
+                    /** @description 依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号> */
+                    ref: string;
+                    quote?: string;
+                    /** Format: date-time */
+                    at: string;
+                }[];
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
             }[];
         };
-        ReplacePersonalMemoryRequest: {
-            expectedRevision: number;
-            markdown: string;
-        };
-        ForgetPersonalMemoryRequest: {
-            expectedRevision: number;
-            sectionIds: string[];
+        UpdatePersonalMemoryItemRequest: {
+            title?: string;
+            text?: string;
         };
         DictationResult: {
             text: string;
@@ -13641,9 +13677,11 @@ export interface operations {
             };
         };
     };
-    getPersonalMemory: {
+    listPersonalMemory: {
         parameters: {
-            query?: never;
+            query?: {
+                status?: "active" | "superseded" | "forgotten" | "all";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -13656,49 +13694,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PersonalMemoryDocument"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    replacePersonalMemory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReplacePersonalMemoryRequest"];
-            };
-        };
-        responses: {
-            /** @description 更新后的个人记忆 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PersonalMemoryDocument"];
+                    "application/json": components["schemas"]["PersonalMemoryList"];
                 };
             };
             /** @description ApiError 统一错误 */
@@ -13720,7 +13716,38 @@ export interface operations {
                 };
             };
             /** @description ApiError 统一错误 */
-            409: {
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    forgetPersonalMemoryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 忘掉后的条目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryItem"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13729,7 +13756,16 @@ export interface operations {
                 };
             };
             /** @description ApiError 统一错误 */
-            413: {
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13748,26 +13784,28 @@ export interface operations {
             };
         };
     };
-    forgetPersonalMemory: {
+    updatePersonalMemoryItem: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ForgetPersonalMemoryRequest"];
+                "application/json": components["schemas"]["UpdatePersonalMemoryItemRequest"];
             };
         };
         responses: {
-            /** @description 遗忘后的个人记忆 */
+            /** @description 改后的条目 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PersonalMemoryDocument"];
+                    "application/json": components["schemas"]["PersonalMemoryItem"];
                 };
             };
             /** @description ApiError 统一错误 */

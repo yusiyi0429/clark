@@ -414,8 +414,8 @@ describe("migration", () => {
       await migrate(db);
       expect((await db.query("SELECT runtime_entries FROM conversations")).rows)
         .toEqual([{ runtime_entries: [{ entry: 1 }] }]);
-      expect((await db.query("SELECT to_regclass('personal_memory_jobs') IS NOT NULL AS jobs, to_regclass('memory_documents') IS NOT NULL AS docs")).rows)
-        .toEqual([{ jobs: true, docs: true }]);
+      expect((await db.query("SELECT to_regclass('personal_memory_jobs') IS NOT NULL AS jobs, to_regclass('personal_memory_items') IS NOT NULL AS items")).rows)
+        .toEqual([{ jobs: true, items: true }]);
     });
   });
 });

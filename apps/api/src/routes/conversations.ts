@@ -245,13 +245,20 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         // 个人记忆：任何页面都读本人的记忆；任务卡私聊不做后台提炼（沿用 #12）。
         // 「记住」「忘掉」「改成」由主 Agent 调工具完成，不在主回答之前同步跑提炼：记忆改动失败只是工具报错，不替换回答、不动上下文（3c）。
         const learnsPersonal = !req.params.scope.startsWith("mission-card:");
-        const personalMemory = await ctx.personalMemory.select(owner, req.body.message, client)
-          .then((entries) => entries.map(({ id, title, text }) => ({ id, title, text })), (error: unknown) => {
+        // 当前页面对象就是这一轮的 anchor：检索时只比对象、不比版本；钉住的版本比现在旧时标「基于旧版本」（R8）。
+        const objectRef = object.snapshot?.objectRef;
+        const currentObject = objectRef ? { target: `${objectRef.type}:${objectRef.id}`, version: objectRef.version } : undefined;
+        const personalMemory = await ctx.personalMemory.select(owner, req.body.message, { currentObject }, client)
+          .then((entries) => entries.map(({ id, title, text, createdAt, basedOnOldVersion }) => ({ id, title, text, createdAt, ...(basedOnOldVersion ? { basedOnOldVersion } : {}) })), (error: unknown) => {
             logEvent({ event: "personal_memory.unavailable", requestId: String(req.id), runId, scope: req.params.scope, errorCode: (error as { code?: string })?.code ?? "PERSONAL_MEMORY_UNAVAILABLE" });
             return [];
           });
+        // 主 Agent 记下的条目：依据是本轮这句原话，anchor 是当前页面对象（钉住此刻的版本）。
         const personalMemoryTools = personalMemoryToolsFor(ctx.personalMemory, owner, (event) =>
-          logEvent({ ...event, requestId: String(req.id), runId, scope: req.params.scope }));
+          logEvent({ ...event, requestId: String(req.id), runId, scope: req.params.scope }), {
+          reference: { ref: `chat:${row.id}#${userSequence}`, quote: req.body.message.slice(0, 500), at: new Date().toISOString() },
+          anchors: currentObject ? [{ target: currentObject.target, ...(typeof currentObject.version === "number" ? { pinnedVersion: currentObject.version } : {}) }] : [],
+        });
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
              FROM conversation_messages
@@ -468,7 +475,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             );
             // 回答落库后再排一个 natural 提炼任务（PR #12 原样）。
             if (learnsPersonal) await ctx.personalDistillation.enqueue(client, {
-              personId: owner, conversationId: row.id, throughSequence: userSequence, kind: "natural", epoch: await ctx.personalMemory.epoch(owner, client) });
+              personId: owner, conversationId: row.id, throughSequence: userSequence });
             await client.query("COMMIT");
             if (prepared.snapshotId) await conversationCompaction?.markApplied(client.query.bind(client), prepared.snapshotId);
             runStatus = "succeeded";

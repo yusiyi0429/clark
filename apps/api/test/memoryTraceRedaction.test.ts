@@ -3,9 +3,6 @@
  * 不连 LangSmith：假 client 记录 SDK 发出的 create / update。
  */
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
 import { redactSecrets } from "../src/observability.js";
@@ -77,17 +74,16 @@ test("personal memory distillation traces the user's words and memory, never the
   configureTracing({ enabled: true, client: fake.client, salt: "test-salt" });
   await createTestDb(async ({ db, pool }) => {
     await migrate(db);
-    const storageDir = await mkdtemp(join(tmpdir(), "trace-distill-"));
-    try {
-      const memory = createPersonalMemory({ pool, storageDir });
-      await memory.replaceOwn("alice", { expectedRevision: 0, markdown: "# Personal\n\n## 沟通偏好\n\nPRIVATE_MEMORY_BODY 先给结论。" });
+    {
+      const memory = createPersonalMemory({ pool });
+      await memory.add("alice", { title: "沟通偏好", text: "PRIVATE_MEMORY_BODY 先给结论。" });
       const conversationId = randomUUID();
       await db.query("INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, 'alice', 'global', $2)", [conversationId, randomUUID()]);
       await db.query("INSERT INTO conversation_messages (conversation_id, sequence, role, content, run_id) VALUES ($1, 1, 'user', $2, $3)",
         [conversationId, `我的想法：县城样板优先。顺便 ${CREDENTIAL}`, randomUUID()]);
       const worker = createPersonalDistillation({ pool, memory, baseUrl: "https://provider.invalid/v1", apiKey: "test-key", modelId: "fake-light",
         streamSimple: () => reply([{ type: "toolCall", id: "c1", name: "submit_candidate", arguments: { status: "noop", changes: [], clarification: "" } }], "toolUse") });
-      await worker.enqueue(db, { personId: "alice", conversationId, throughSequence: 1, kind: "natural", epoch: await memory.epoch("alice") });
+      await worker.enqueue(db, { personId: "alice", conversationId, throughSequence: 1 });
       await worker.processNext();
       await settle();
       const wire = fake.wire();
@@ -95,6 +91,6 @@ test("personal memory distillation traces the user's words and memory, never the
       expect(wire).toContain("县城样板优先");
       expect(wire).not.toContain(CREDENTIAL);
       expect(wire).not.toContain("test-key");
-    } finally { await rm(storageDir, { recursive: true, force: true }); }
+    }
   });
 });

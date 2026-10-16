@@ -1,26 +1,32 @@
 import { expect, test } from 'vitest';
-import { createTestApp } from './helpers.js';
+import { createTestApp, TEST_CEO } from './helpers.js';
 import type { ConversationRuntime } from '../src/conversations.js';
 
-test('authenticated people edit only their own Personal, reject stale revisions and forgery', async () => {
+type T = Awaited<ReturnType<typeof createTestApp>>;
+const seed = async (t: T, title: string, text: string, owner: string = TEST_CEO.personId) =>
+    String((await t.sql('INSERT INTO personal_memory_items (id, person_id, title, text) VALUES (gen_random_uuid(), $1, $2, $3) RETURNING id', [owner, title, text]))[0].id);
+
+test('people list, edit and forget only their own personal memory (R7)', async () => {
     const t = await createTestApp();
     try {
-        const alice = await t.loginCookie(), bob = await t.memberCookie();
-        const call = (method: 'GET' | 'PUT' | 'POST', cookie: string, payload?: unknown, url = '/api/me/memory/personal') => t.app.inject({ method, url, headers: { cookie, origin: t.publicOrigin }, ...(payload ? { payload } : {}) });
+        const alice = { cookie: await t.loginCookie(), origin: t.publicOrigin }, bob = { cookie: await t.memberCookie(), origin: t.publicOrigin };
         expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal' })).statusCode).toBe(401);
-        const initial = await call('GET', alice);
-        expect(initial.statusCode).toBe(200);
-        expect(initial.headers['cache-control']).toBe('no-store');
-        const saved = await call('PUT', alice, { expectedRevision: 0, markdown: '# Personal\n\n## 协作偏好\n\n请先给结论。' });
-        expect(saved.statusCode).toBe(200);
-        expect((await call('GET', bob)).json().markdown).not.toContain('结论');
-        expect((await call('PUT', alice, { expectedRevision: 0, markdown: '旧内容' })).statusCode).toBe(409);
-        expect((await call('PUT', alice, { expectedRevision: 1, markdown: '非法', owner: 'bob' })).statusCode).toBe(400);
-        const removed = await call('POST', alice, { expectedRevision: 1, sectionIds: [saved.json().sections[0].id] }, '/api/me/memory/personal/forget');
-        expect(removed.statusCode).toBe(200);
-        expect(removed.json().markdown).not.toContain('结论');
-    }
-    finally {
+        const id = await seed(t, '协作偏好', '请先给结论。');
+        const listed = await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers: alice });
+        expect(listed.statusCode).toBe(200);
+        expect(listed.headers['cache-control']).toBe('no-store');
+        expect(listed.json().items).toMatchObject([{ id, title: '协作偏好', text: '请先给结论。', status: 'active', anchors: [], references: [] }]);
+        expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers: bob })).json().items).toEqual([]);
+        expect((await t.app.inject({ method: 'PATCH', url: `/api/me/memory/personal/items/${id}`, headers: bob, payload: { text: '改别人的' } })).statusCode).toBe(404);
+        expect((await t.app.inject({ method: 'DELETE', url: `/api/me/memory/personal/items/${id}`, headers: bob })).statusCode).toBe(404);
+        expect((await t.app.inject({ method: 'PATCH', url: `/api/me/memory/personal/items/${id}`, headers: alice, payload: { text: '先给结论，再给依据。', owner: 'bob' } })).statusCode).toBe(400);
+        const edited = await t.app.inject({ method: 'PATCH', url: `/api/me/memory/personal/items/${id}`, headers: alice, payload: { text: '先给结论，再给依据。' } });
+        expect(edited.json()).toMatchObject({ id, text: '先给结论，再给依据。' });
+        expect((await t.app.inject({ method: 'DELETE', url: `/api/me/memory/personal/items/${id}`, headers: alice })).json()).toMatchObject({ id, status: 'forgotten' });
+        expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers: alice })).json().items).toEqual([]);
+        expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal?status=all', headers: alice })).json().items).toMatchObject([{ id, status: 'forgotten' }]);
+        expect((await t.app.inject({ method: 'PATCH', url: `/api/me/memory/personal/items/${id}`, headers: alice, payload: { text: '再改' } })).statusCode).toBe(409);
+    } finally {
         await t.close();
     }
 });
@@ -29,19 +35,17 @@ test('main chat receives the owner\'s relevant personal memory and no longer aft
     const inputs: Parameters<ConversationRuntime['run']>[0][] = [];
     const t = await createTestApp({}, { async run(input) { inputs.push(input); return { assistantMessage: '回复', runtimeEntries: input.runtimeEntries }; } });
     try {
-        const cookie = await t.loginCookie(), headers = { cookie, origin: t.publicOrigin };
-        await t.app.inject({ method: 'PUT', url: '/api/me/memory/personal', headers, payload: { expectedRevision: 0, markdown: '# Personal\n\n## 协作偏好\n\n先给结论。' } });
+        const headers = { cookie: await t.loginCookie(), origin: t.publicOrigin };
+        const id = await seed(t, '协作偏好', '先给结论。');
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '帮我分析一下' } });
-        expect(inputs[0].personalMemory).toMatchObject([{ title: '协作偏好', text: '先给结论。' }]);
+        expect(inputs[0].personalMemory).toMatchObject([{ id, title: '协作偏好', text: '先给结论。' }]);
         // 别人的对话里看不到。
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers: { cookie: await t.memberCookie(), origin: t.publicOrigin }, payload: { message: '帮我分析一下' } });
         expect(inputs[1].personalMemory).toBeUndefined();
-        const saved = (await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers })).json();
-        await t.app.inject({ method: 'POST', url: '/api/me/memory/personal/forget', headers, payload: { expectedRevision: 1, sectionIds: [saved.sections[0].id] } });
+        await t.app.inject({ method: 'DELETE', url: `/api/me/memory/personal/items/${id}`, headers });
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '继续' } });
         expect(inputs[2].personalMemory).toBeUndefined();
-    }
-    finally {
+    } finally {
         await t.close();
     }
 });
@@ -50,19 +54,18 @@ test('forgetting a memory keeps the model context of every conversation of that 
     const inputs: Parameters<ConversationRuntime['run']>[0][] = [];
     const t = await createTestApp({}, { async run(input) { inputs.push(input); return { assistantMessage: '回复', runtimeEntries: [{ turn: inputs.length }] }; } });
     try {
-        const cookie = await t.loginCookie(), headers = { cookie, origin: t.publicOrigin };
-        const doc = (await t.app.inject({ method: 'PUT', url: '/api/me/memory/personal', headers, payload: { expectedRevision: 0, markdown: '# Personal\n\n## 协作偏好\n\n先给结论。' } })).json();
+        const headers = { cookie: await t.loginCookie(), origin: t.publicOrigin };
+        const id = await seed(t, '协作偏好', '先给结论。');
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '第一轮' } });
         // 同一个人在另一个页面的对话。
         await t.sql("INSERT INTO conversations (id, owner_id, scope, pi_session_id, runtime_entries) VALUES (gen_random_uuid(), 'person-fixture-001', 'issue:other', gen_random_uuid(), '[{\"other\":1}]'::jsonb)");
         const before = await t.sql("SELECT scope, runtime_entries, pi_session_id FROM conversations WHERE owner_id = 'person-fixture-001' ORDER BY scope");
-        expect((await t.app.inject({ method: 'POST', url: '/api/me/memory/personal/forget', headers, payload: { expectedRevision: doc.revision, sectionIds: [doc.sections[0].id] } })).statusCode).toBe(200);
+        expect((await t.app.inject({ method: 'DELETE', url: `/api/me/memory/personal/items/${id}`, headers })).statusCode).toBe(200);
         expect(await t.sql("SELECT scope, runtime_entries, pi_session_id FROM conversations WHERE owner_id = 'person-fixture-001' ORDER BY scope")).toEqual(before);
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '第二轮' } });
         expect(inputs[1].runtimeEntries).toEqual([{ turn: 1 }]);
         expect(inputs[1].personalMemory).toBeUndefined();
-    }
-    finally {
+    } finally {
         await t.close();
     }
 });
@@ -72,7 +75,7 @@ test('an explicit memory request whose memory update fails keeps the main answer
     const t = await createTestApp({}, { async run(input) { inputs.push(input); input.emit({ type: 'message', delta: '主回答' }); return { assistantMessage: '主回答', runtimeEntries: [{ turn: inputs.length }] }; } },
         { personalDistillationStream: () => { throw new Error('memory model down'); } });
     try {
-        const cookie = await t.loginCookie(), headers = { cookie, origin: t.publicOrigin };
+        const headers = { cookie: await t.loginCookie(), origin: t.publicOrigin };
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '第一轮' } });
         const reply = await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '忘掉我先看结论的偏好。' } });
         expect(reply.body).toContain('主回答');
@@ -81,45 +84,43 @@ test('an explicit memory request whose memory update fails keeps the main answer
         expect(await t.sql("SELECT runtime_entries FROM conversations WHERE owner_id = 'person-fixture-001'")).toEqual([{ runtime_entries: [{ turn: 2 }] }]);
         const history = (await t.app.inject({ method: 'GET', url: '/api/conversations/global/messages', headers })).json();
         expect(history.messages.map((message: { content: string }) => message.content)).toEqual(['第一轮', '主回答', '忘掉我先看结论的偏好。', '主回答']);
-    }
-    finally {
+    } finally {
         await t.close();
     }
 });
 
-test('the main agent remembers, corrects and forgets through its own tools; a failed tool call does not touch the answer (3c)', async () => {
+test('the main agent remembers, corrects and forgets through its own tools with the current words as reference (3c)', async () => {
     const outcomes: unknown[] = [];
     const t = await createTestApp({}, { async run(input) {
         const tools = input.personalMemoryTools!;
         if (input.message === '记住我习惯先看结论。') outcomes.push(await tools.remember({ title: '沟通偏好', text: '习惯先看结论。' }));
-        if (input.message === '忘掉那条偏好。') {
+        if (input.message === '不对，改成先看推导。') {
             const [entry] = await tools.search('先看结论');
+            outcomes.push(await tools.remember({ title: '沟通偏好', text: '习惯先看推导。', replaces: entry.id }));
+        }
+        if (input.message === '忘掉那条偏好。') {
+            const [entry] = await tools.search('先看推导');
             outcomes.push(await tools.forget({ id: entry.id }));
             outcomes.push(await tools.forget({ id: entry.id }).catch((error: Error) => error.message));
         }
         return { assistantMessage: '好的', runtimeEntries: input.runtimeEntries };
     } });
     try {
-        const cookie = await t.loginCookie(), headers = { cookie, origin: t.publicOrigin };
-        await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '记住我习惯先看结论。' } });
-        expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers })).json().markdown).toContain('习惯先看结论');
-        const reply = await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '忘掉那条偏好。' } });
+        const headers = { cookie: await t.loginCookie(), origin: t.publicOrigin };
+        const send = (message: string) => t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message } });
+        await send('记住我习惯先看结论。');
+        const [remembered] = (await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers })).json().items;
+        expect(remembered).toMatchObject({ text: '习惯先看结论。', references: [{ ref: expect.stringMatching(/^chat:.+#1$/), quote: '记住我习惯先看结论。' }] });
+        await send('不对，改成先看推导。');
+        const all = (await t.app.inject({ method: 'GET', url: '/api/me/memory/personal?status=all', headers })).json().items;
+        const corrected = all.find((item: { text: string }) => item.text === '习惯先看推导。');
+        expect(all.find((item: { id: string }) => item.id === remembered.id)).toMatchObject({ status: 'superseded', supersededBy: corrected.id });
+        const reply = await send('忘掉那条偏好。');
         expect(reply.body).toContain('completed');
-        expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers })).json().markdown).not.toContain('习惯先看结论');
-        expect(outcomes[2]).toContain('PERSONAL_SECTION_NOT_FOUND');
-        // 别人看不到，也改不了。
-        expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers: { cookie: await t.memberCookie(), origin: t.publicOrigin } })).json().sections).toEqual([]);
-    }
-    finally {
+        expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers })).json().items).toEqual([]);
+        expect(outcomes[3]).toContain('PERSONAL_ITEM_NOT_ACTIVE');
+        expect((await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers: { cookie: await t.memberCookie(), origin: t.publicOrigin } })).json().items).toEqual([]);
+    } finally {
         await t.close();
     }
-});
-
-test('a busy personal document degrades main chat promptly instead of holding the turn',async()=>{
- const t=await createTestApp();const blocker=await t.pool.connect();let timer:ReturnType<typeof setTimeout>|undefined;
- try{const cookie=await t.loginCookie();await blocker.query('SELECT pg_advisory_lock(hashtext($1))',['memory:personal:person-fixture-001']);
- const pending=t.app.inject({method:'POST',url:'/api/conversations/global/messages',headers:{cookie,origin:t.publicOrigin},payload:{message:'你好'}});
- const result=await Promise.race([pending,new Promise<'timeout'>(resolve=>{timer=setTimeout(()=>resolve('timeout'),1000);})]);
- expect(result).not.toBe('timeout');if(result!=='timeout')expect(result.body).toContain('event: done');
- }finally{if(timer)clearTimeout(timer);await blocker.query('SELECT pg_advisory_unlock(hashtext($1))',['memory:personal:person-fixture-001']);blocker.release();await t.close();}
 });
