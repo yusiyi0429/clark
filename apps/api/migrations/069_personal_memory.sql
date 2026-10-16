@@ -31,5 +31,3 @@ CREATE TABLE IF NOT EXISTS personal_memory_cursors (
   last_error text,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
--- 按人取游标之后的消息。
-CREATE INDEX IF NOT EXISTS conversation_messages_created_idx ON conversation_messages (created_at, conversation_id, sequence);
