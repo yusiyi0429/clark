@@ -46,20 +46,22 @@
 .edit:hover { color: #2f6bb4; background: #1d1d1f0a; }
 .edit:focus-visible, .ghost:focus-visible, .primary:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
 .tag { flex: none; margin: 0; padding: 0 6px; border-radius: 5px; background: #1d1d1f0a; font-size: 12px; line-height: 20px; color: #7a7f89; width: fit-content; }
+/* 输入框沿用全站字段变量（globals.css 的 --field-*）：1px 细边，聚焦只换边色。 */
 .titleInput, .textInput {
   display: block;
   box-sizing: border-box;
   width: 100%;
-  border: 1px solid #1d1d1f1f;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--field-border);
+  background: var(--field-bg);
   font: inherit;
-  color: #25282e;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  color: var(--field-ink);
+  caret-color: var(--field-caret);
+  transition: border-color 140ms ease;
 }
-.titleInput { height: 32px; padding: 0 9px; font-weight: 500; }
-.textInput { margin-top: 6px; padding: 7px 9px; min-height: 88px; max-height: 40vh; resize: vertical; line-height: 1.6; }
-.titleInput:focus, .textInput:focus { outline: none; border-color: #3a83f7aa; box-shadow: 0 0 0 3px #3a83f71f; }
+.titleInput { height: 32px; padding: 0 10px; border-radius: 10px; font-weight: 500; }
+.textInput { margin-top: 6px; padding: 7px 10px; border-radius: 12px; min-height: 88px; max-height: 40vh; resize: vertical; line-height: 1.6; }
+.titleInput:hover, .textInput:hover { border-color: var(--field-border-hover); }
+.titleInput:focus, .textInput:focus { outline: none; border-color: var(--field-border-focus); }
 .actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 .ghost, .primary { height: 28px; padding: 0 12px; border: 0; border-radius: 8px; font: inherit; font-size: 12px; cursor: pointer; transition: background-color 140ms ease, opacity 140ms ease; }
 .ghost { background: none; color: #7a7f89; }
