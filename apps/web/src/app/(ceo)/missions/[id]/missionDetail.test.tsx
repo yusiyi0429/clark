@@ -73,7 +73,7 @@ describe("Mission 详情渲染", () => {
     expect(html).toContain("边界");
     expect(html).toContain("来源追溯");
     expect(html).toContain("修订 revision 3");
-    expect(html).toContain("外部文档更新不会自动覆盖当前正式版本");
+    expect(html).not.toContain("外部文档更新不会自动覆盖");
   });
 
   it("同周期月度计划已签发时显示生效中，不显示进度或完成率", () => {

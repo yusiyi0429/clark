@@ -37,6 +37,7 @@ describe("一号位页面文案不出现口语化、聊天式用语", () => {
 
   it("议题页备选方案小节用商定的标题、角标与说明", () => {
     const source = readFileSync(join(SRC, "cards/IssueCard.tsx"), "utf8");
-    for (const text of ["\"备选方案\"", "\"AI 预研\"", "各方案的取舍与前提，供决策参考。", "\"提交会议讨论\""]) expect(source).toContain(text);
+    for (const text of ["\"备选方案\"", "\"AI 预研\"", "\"提交会议讨论\""]) expect(source).toContain(text);
+    expect(source).not.toContain("各方案的取舍与前提");
   });
 });

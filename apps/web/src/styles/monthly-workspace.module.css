@@ -73,7 +73,6 @@
 .workspace .recipientEdit{flex:none;border:0;background:none;padding:0;font:inherit;color:#0068d9;cursor:pointer}
 .workspace .recipientEdit:hover{text-decoration:underline}
 .workspace .commitInfo span{font-size:12px;color:#5a5a60}
-.workspace .commitInfo small{font-size:11px;color:#6e6e73}
 /* pen：保存计划为次按钮，签发计划为 accent 主按钮（未确认签发时禁用）。 */
 .workspace .save{display:flex;align-items:center;justify-content:center;flex:none;min-height:36px;border:1px solid #d9dde5;border-radius:10px;background:#fff;padding:10px 18px;font-size:13px;font-weight:500;color:#303741;white-space:nowrap;transition:background .14s,border-color .14s}
 .workspace .save:hover:not(:disabled){background:#f7f8fa;border-color:#c4c9d2}
@@ -146,4 +145,4 @@
 .workspace .notes select:not(:disabled){border-color:#d9dde5;background:#fff;color:#1d1d1f}
 .workspace .notes select:focus{outline:none;border-color:#3285de;box-shadow:0 0 0 3px #007aff20}
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
-@media(max-width:959px){.workspace .commitInfo.commitInfo>small,.workspace .receipt.receipt>small{font-size:13px}.check.check>span,.workspace .commitInfo.commitInfo>span{font-size:14px}}
+@media(max-width:959px){.workspace .receipt.receipt>small{font-size:13px}.check.check>span,.workspace .commitInfo.commitInfo>span{font-size:14px}}

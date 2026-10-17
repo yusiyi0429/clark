@@ -48,22 +48,17 @@ export function ConnectionDialog({ role }: { role: "ceo" | "member" }) {
   const activeCount = tokens.filter((token) => !token.expiresAt || Date.parse(token.expiresAt) > Date.now()).length;
   const commandBlock = (label: string, value: string) => <div key={label} className={s.commandBlock}><strong>{label}</strong><div className={s.command}><code>{value}</code><button type="button" onClick={() => void copy(label, value)}>复制</button></div></div>;
   return <div className={s.root}>
-    <p className={s.lead}>{role === "ceo"
-      ? "让你自己用的 AI 工具（Codex、Claude Code 等）连上天枢，随时问它：今天有什么要我拍板、某个议题进展如何、这周各战场怎么样。它只能看，拍板、签发、确认仍在天枢里做。"
-      : "让你自己用的 AI 工具（Codex、Claude Code、OpenCode 等）连上天枢：它能读你的执行事项、帮你写进展、放进做出来的东西，做完提交给你验收。"}</p>
     <section className={s.section} aria-label="连接一个 Agent"><h3>连接一个 Agent</h3>
       <ConnectAgentForm role={role} activeCount={activeCount} revokedIds={revokedIds}
         onCreated={(view) => setTokens((current) => [view, ...current])}
         onUpdated={(view) => setTokens((current) => current.map((item) => item.id === view.id ? view : item))} />
     </section>
     {role === "member" ? <section className={s.section} aria-label="每周同步进展"><h3>每周同步进展</h3>
-      <p className={s.muted}>连上以后，随时对你的 Agent 说「同步本周进展」。需要每周五自动运行时，再让 Agent 设置系统定时任务；连接授权本身不会创建任务。</p>
       <details className={s.manual}><summary>同步指令和定时命令</summary>
         <div className={s.manualBody}>
           <div className={s.commandBlock}><strong>同步指令</strong><div className={s.command}><code>{SYNC_INSTRUCTION}</code><button type="button" onClick={() => void copy("同步指令", SYNC_INSTRUCTION)}>复制指令</button></div></div>
           {commandBlock("Codex 定时运行", syncCommand("codex"))}
           {commandBlock("Claude Code 定时运行", syncCommand("claude"))}
-          <p className={s.muted}>放进系统定时任务（Windows 任务计划程序，macOS 的 LaunchAgent，Linux 的 crontab），工作目录设成你放项目的目录，装着多个仓库的上级目录也行。</p>
         </div>
       </details>
     </section> : null}

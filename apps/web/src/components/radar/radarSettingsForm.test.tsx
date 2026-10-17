@@ -112,15 +112,15 @@ afterEach(() => {
 });
 
 describe("雷达设置表单（spec §4.2）", () => {
-  it("先方向、后来源；占位文案逐字照抄 spec；来源写明可不填", () => {
-    expect(DIRECTION_PLACEHOLDER).toBe("用一句话写你想看的，比如「1 号位产品的设计」");
+  it("先方向、后来源；占位只给例子；来源写明可不填，不写全网检索的说明", () => {
+    expect(DIRECTION_PLACEHOLDER).toBe("比如「1 号位产品的设计」");
     expect(SOURCE_PLACEHOLDER).toBe("粘贴网址，或选常用来源");
     const markup = html({ draft: draft({}) });
     expect(markup).toContain(`placeholder="${DIRECTION_PLACEHOLDER}"`);
     expect(markup).toContain(`placeholder="${SOURCE_PLACEHOLDER}"`);
     expect(markup.indexOf(DIRECTION_PLACEHOLDER)).toBeLessThan(markup.indexOf(SOURCE_PLACEHOLDER));
     expect(markup).toContain("可不填");
-    expect(markup).toContain("不填时，按你的方向在全网检索。");
+    expect(markup).not.toContain("不填时，按你的方向在全网检索。");
   });
 
   it("成员最上面是「开启雷达」开关，关着只露一句说明、两栏收起；CEO 没有开关，写明改的是公司雷达", () => {
@@ -128,7 +128,8 @@ describe("雷达设置表单（spec §4.2）", () => {
     expect(off).toContain('role="switch"');
     expect(off).toContain('aria-checked="false"');
     expect(off).toContain("开启雷达");
-    expect(off).toContain("打开后，我每天按你的方向替你看一遍，结果只给你自己看。");
+    expect(off).toContain("仅你可见");
+    expect(off).not.toContain("我每天按你的方向替你看一遍");
     expect(off).toMatch(/data-open="false" inert=""/);
     const on = html({ draft: draft({}) });
     expect(on).toContain('aria-checked="true"');
@@ -219,7 +220,7 @@ describe("雷达设置表单（spec §4.2）", () => {
     expect(applied(onDraft, draft({})).sources).toEqual(["ft.com", "36kr.com/p/1"]);
   });
 
-  it("fieldErrors 标在对应胶囊上；全部来源都暂不支持时当场提示；全网检索没开通时如实说明", () => {
+  it("fieldErrors 标在对应胶囊上；全部来源都暂不支持时当场提示；全网检索没开通时不写说明，来源也不再标可不填", () => {
     const markup = html({
       view: { ...view, sources: [{ value: "github.com/trending", name: "GitHub Trending", kind: "unsupported", note: "榜单读取器还在开发，暂不支持" }] },
       draft: draft({ directions: ["!!!"], sources: ["github.com/trending"] }),
@@ -227,8 +228,10 @@ describe("雷达设置表单（spec §4.2）", () => {
     });
     expect(markup).toMatch(/data-invalid="true"[^]*方向要写成一句话/);
     expect(markup).toContain("GitHub Trending · 榜单读取器还在开发，暂不支持");
-    expect(markup).toContain("这些来源暂时都读不了，雷达不会有结果");
-    expect(html({ view: { ...view, webSearch: false }, draft: draft({}) })).toContain("全网检索暂未开通：现在只能读订阅源；只写方向、不填来源，不会有结果。");
+    expect(markup).toContain("这些来源暂时都读不了");
+    const noWeb = html({ view: { ...view, webSearch: false }, draft: draft({}) });
+    expect(noWeb).not.toContain("全网检索暂未开通");
+    expect(noWeb).not.toContain("可不填");
   });
 
   it("「设置已保存」与扫描状态分两行；引导传「稍后」时才有它", () => {

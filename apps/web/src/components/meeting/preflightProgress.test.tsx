@@ -122,11 +122,12 @@ describe("预审 v4 的结论段", () => {
       ],
     }));
     for (const text of ["材料自带的待决题", "2 道 · 1 道需要一号位判断", "需要一号位判断", "改变灯塔项目范围和成本，跨战场", "负责人可定",
-      "开放分歧", "价值取舍 · 需要一号位选择", "判断分歧 · 已收敛到哪里、还差什么", "已收敛", "都认可先做路由评测", "事实不足 · 转监测，不阻塞本次决定",
+      "开放分歧", "价值取舍", "判断分歧", "已收敛", "都认可先做路由评测", "事实不足",
       "若回答「已有可核验口径」", "可以把延伸条件写进本次决定", "若回答「还没有口径」", "待决题与分歧"]) expect(html).toContain(text);
     // 价值取舍排在最前：剩下需要一号位选的先看。
-    expect(html.indexOf("价值取舍 ·")).toBeLessThan(html.indexOf("判断分歧 ·"));
-    expect(html.indexOf("判断分歧 ·")).toBeLessThan(html.indexOf("事实不足 ·"));
+    expect(html.indexOf("<small>价值取舍</small>")).toBeLessThan(html.indexOf("<small>判断分歧</small>"));
+    expect(html).not.toContain("转监测，不阻塞本次决定");
+    expect(html.indexOf("<small>判断分歧</small>")).toBeLessThan(html.indexOf("<small>事实不足</small>"));
   });
 
   it("预审进行中：会议页显示过程，替代「进行中」的空白说明；刷新后从卡片里的进度接着显示", () => {

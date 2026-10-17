@@ -182,13 +182,12 @@ export function MissionManagementScreen({
       <header className={c.header}>
         <p className={c.eyebrow}>MISSION SETTINGS</p>
         <h1 className={c.title}>Mission 配置</h1>
-        <p className={c.subtitle}>编辑 Mission 的结果承诺、责任人和组织关系。修改生成新版本，不覆盖历史来源。</p>
       </header>
 
       <div className={m.body}>
         <section className={m.listCard} aria-label="已登记 Mission">
           <h2 className={m.listTitle}>已登记 Mission</h2>
-          <p className={m.listMeta}>{missions.length} 条 · 按周期与能力域排序</p>
+          <p className={m.listMeta}>{missions.length} 条</p>
           <label className={m.search}>
             <Search aria-hidden="true" />
             <input value={query} placeholder="按编号、标题或负责人搜索" aria-label="搜索 Mission" onChange={(event) => setQuery(event.target.value)} />
@@ -221,11 +220,9 @@ export function MissionManagementScreen({
             <div className={m.fields}>
               <h2 className={m.editorTitle}>{selected.payload.title}</h2>
               <MissionStatus mission={selected.payload} />
-              <p className={m.editorMeta} role="status">
-                {selected.payload.personalCard.status === "confirmed"
-                  ? "个人 Mission Card 已确定，不能在配置页单独修改；要改字段，请在任务卡上更正。"
-                  : "此 Mission 属于个人 Mission Card，需在本轮制定中讨论并统一确认，不能在配置页单独修改。"}
-              </p>
+              <button type="button" className={m.cancel} onClick={() => router.push(`/mission-cards/${selected.payload.personalCard!.cardId}`)}>
+                打开任务卡
+              </button>
               <p className={m.source}>来源 · {selected.payload.sourceTitle}</p>
             </div>
           ) : selected && draft ? (
@@ -321,7 +318,7 @@ export function MissionManagementScreen({
 
               <div className={m.footer}>
                 <p className={m.footerHint} data-kind={status?.kind} role="status">
-                  {status?.text ?? "保存后 version +1；历史来源与旧版本保持可追溯。"}
+                  {status?.text}
                 </p>
                 <div className={m.actions}>
                   <button
@@ -341,7 +338,7 @@ export function MissionManagementScreen({
               </div>
             </>
           ) : (
-            <p className={m.empty}>选择左侧 Mission 后编辑结果承诺与关系。</p>
+            <p className={m.empty}>未选择 Mission</p>
           )}
         </section>
       </div>

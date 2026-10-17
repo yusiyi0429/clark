@@ -27,7 +27,6 @@ import s from "./mission-card.module.css";
 type RoundAction = Pick<CardAction, "actionId" | "actionType" | "label">;
 const taskViews: MaterialTab[] = [
   { id: "details", label: "任务细节", title: "任务细节" },
-  { id: "execution", label: "执行拆分", title: "执行拆分 · 下一版本由 Co-Agent 基于当前任务生成", isDisabled: true, hint: "即将开放" },
 ];
 function requestError(cause: unknown, fallback: string): string {
   if (!(cause instanceof Error) || cause instanceof TypeError || /failed to fetch|fetch failed|networkerror|network request failed|load failed/i.test(cause.message)) return fallback;
@@ -65,7 +64,6 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   const isOwner = workspace.viewerId === card.ownerId;
   const ownerReview = isOwner && effectivePhase === "open";
   const ownerConfirmed = Boolean(card.ownerConfirmedAt);
-  const agentNote = effectivePhase === "open" ? ownerConfirmed ? isOwner ? "本人已确认，取消确认后可继续修改" : "本人已确认，需退回本人后修改" : payload.selfReview.canEdit ? "仅你可见 · 按你的明确改法修改" : "可引用讨论，正文由本人修改" : effectivePhase === "confirmed" ? "任务已确定，需由战场 DRI 退回本人后修改" : effectivePhase === "drafting" ? "Co-Agent 正在起草" : "可引用讨论，正文暂不可修改";
   const refresh = useCallback(() => {
     if (refreshInFlight.current) return refreshInFlight.current;
     const epoch = refreshEpoch.current;
@@ -145,7 +143,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
   }, [card.cardId]);
   useEffect(() => { void loadLinkedItems().catch(() => undefined); }, [loadLinkedItems]);
   const cards = useMemo(() => [view], [view]);
-  const group = useMemo(() => ({ cardId: card.cardId, viewerId: workspace.viewerId ?? card.ownerId, members: card.members, phase: effectivePhase === "drafting" ? "draft" as const : effectivePhase, round: round.round, reference: null, onRemoveReference: () => undefined, onRefresh: refresh, agentNote, canDiscuss: false }), [card.cardId, card.ownerId, workspace.viewerId, card.members, effectivePhase, round.round, refresh, agentNote]);
+  const group = useMemo(() => ({ cardId: card.cardId, viewerId: workspace.viewerId ?? card.ownerId, members: card.members, phase: effectivePhase === "drafting" ? "draft" as const : effectivePhase, round: round.round, reference: null, onRemoveReference: () => undefined, onRefresh: refresh, canDiscuss: false }), [card.cardId, card.ownerId, workspace.viewerId, card.members, effectivePhase, round.round, refresh]);
   const title = `${card.ownerName} · ${Number(round.period.slice(5))}月任务`;
   useRegisterDetail({ scope: `mission-card:${card.cardId}`, label: title, mark: null, cards, group });
 
@@ -213,7 +211,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
       if (!response.ok || data?.cards[0]?.kind !== "personal-mission-card") { await refreshInFlight.current; await refresh(); throw new Error(failure?.message ?? "本人确认未保存，请重试"); }
       refreshEpoch.current++;
       acceptView(data.cards[0]);
-      setNotice(ownerConfirmed ? "已取消本人确认，可以继续修改。" : "本人确认已保存。");
+      setNotice(ownerConfirmed ? "已取消本人确认" : "本人确认已保存。");
       window.dispatchEvent(new Event("mission-round-changed")); router.refresh();
     } catch (cause) { setError(requestError(cause, "暂时无法连接服务器，请稍后重试。")); }
     finally { actionInFlight.current = false; setPending(false); }

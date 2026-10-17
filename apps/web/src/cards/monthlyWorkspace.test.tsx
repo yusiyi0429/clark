@@ -55,7 +55,8 @@ describe("月度计划 · 已签发", () => {
     expect(html).toContain('id="monthly-title">月度计划 2026-09<');
     expect(html).toContain("data-close-view");
     expect(html).not.toContain("草案已就绪");
-    expect(html).toContain("本计划已签发，是当月目标的唯一来源。");
+    expect(html).toContain("本计划已签发");
+    expect(html).not.toContain("唯一来源");
     expect(html).toContain("签发于 2026-09-16");
     // 已签发是只读终态：服务端不下发 update_draft/sign 时不得渲染任何提交入口。
     expect(html).not.toContain("保存计划");
@@ -147,7 +148,9 @@ describe("月度计划 · 正文两列", () => {
     expect(html).toContain("Re-architecture · 能力 PO");
     expect(html).toContain("九月跑通第一个客户交付");
     expect(html).toContain("已核对 Re-architecture 能力 PO");
-    expect(html).toContain("能力结果");
+    // 底栏是核对进度（数字对比），能力 PO 计入总数，不再写一句「签发前必须核对……」。
+    expect(html).toMatch(/已核对 \d+ \/ \d+ 项/);
+    expect(html).not.toContain("签发前必须核对");
   });
 });
 
@@ -206,7 +209,7 @@ describe("月度计划 · 签发确认名单", () => {
       { battlefieldId: "01", name: "灯塔项目", people: ["白田田", "于斯一"] },
       { battlefieldId: "03", name: "002 客户", people: [] },
     ]} />);
-    expect(html).toContain("签发后为这些人起草 10 月任务卡并直接发给本人");
+    expect(html).toContain("10 月任务卡名单");
     expect(html).toContain("灯塔项目");
     expect(html).toContain("白田田、于斯一");
     expect(html).toContain('data-empty="true">名单为空');

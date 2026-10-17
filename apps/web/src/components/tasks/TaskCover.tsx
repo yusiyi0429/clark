@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { ArrowUpRight, Check, ChevronRight, CircleCheck, FileText, Globe, Link2, Plus, Upload } from "lucide-react";
 import { ActionButton, FormField, StatusBadge, TianshuPortalTheme } from "ts-design";
-import { Button, Popover, Tooltip } from "ts-design/primitives";
+import { Button, Popover } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
 import type { TMaterialView } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
@@ -75,7 +75,6 @@ function Identity({ detail, onInvite }: { detail: Detail; onInvite: () => void }
     {task.status === "returned" ? <p className={c.returned}>已退回{task.returnReason ? `：${task.returnReason}` : ""}</p> : null}
     <div className={c.titleRow}>
       <h2 className={c.title}>{task.title}</h2>
-      {owner && task.status !== "done" && task.status !== "returned" ? <AgentButton /> : null}
     </div>
     <div className={c.metaRow}>
       <span className={c.meta}>{due ? `${due}前完成` : "截止日期待定"}{start ? ` · 计划 ${start}开始` : ""} · 参与：{people}</span>
@@ -89,19 +88,6 @@ function Identity({ detail, onInvite }: { detail: Detail; onInvite: () => void }
       {acceptance.verdict ? <p className={c.verdict}>{acceptance.verdict}</p> : null}
     </div> : null}
   </section>;
-}
-
-/** 天枢的执行 Agent 接入前只是禁用态：按钮可以聚焦，悬停或聚焦时说明原因；手机上原因直接写在旁边。 */
-function AgentButton() {
-  return <span className={c.agentRow}>
-    <Tooltip delay={200}>
-      <Button variant="secondary" className={c.agent} aria-disabled="true" aria-describedby="task-agent-hint">
-        <TianshuMark className={c.agentMark} />让 Agent 推进
-      </Button>
-      <Tooltip.Content>Agent 执行接入后可用</Tooltip.Content>
-    </Tooltip>
-    <span id="task-agent-hint" className={c.agentHint}>Agent 执行接入后可用</span>
-  </span>;
 }
 
 function Standards({ detail, area, onEdit }: { detail: Detail; area: MaterialAreaApi; onEdit: () => void }) {
@@ -129,7 +115,7 @@ function Standards({ detail, area, onEdit }: { detail: Detail; area: MaterialAre
     <h3>完成标准</h3>
     {detail.standards.length ? <ul className={c.standards}>{detail.standards.map((text, index) => <li key={index}><span className={c.ring} aria-hidden /><span className={c.standardText}>{text}</span></li>)}</ul>
       : <div className={c.emptyRow}>
-        <p className={s.paneNote}>{owner ? "还没写完成标准，验收时会逐条对照。" : "还没写完成标准。"}</p>
+        <p className={s.paneNote}>还没写完成标准。</p>
         {owner ? <Button variant="ghost" size="sm" onPress={onEdit}>写完成标准</Button> : null}
       </div>}
   </section>;
@@ -149,13 +135,12 @@ function Materials({ area, title, adding }: { area: MaterialAreaApi; title: stri
           <Upload className={c.entryIcon} strokeWidth={1.8} aria-hidden /><span className={c.entryText}><strong>上传文件</strong><span>PDF、Word、Markdown、HTML</span></span>
         </button>
         <button type="button" className={c.entry} onClick={area.pasteLink}>
-          <Link2 className={c.entryIcon} strokeWidth={1.8} aria-hidden /><span className={c.entryText}><strong>粘贴链接</strong><span>Claude、Figma、飞书里做的东西</span></span>
+          <Link2 className={c.entryIcon} strokeWidth={1.8} aria-hidden /><span className={c.entryText}><strong>粘贴链接</strong></span>
         </button>
         {area.draft ? <button type="button" className={c.entry} onClick={area.draft}>
-          <TianshuMark className={c.entryIcon} /><span className={c.entryText}><strong>起草文档</strong><span>说要写什么，我的 Agent 写成文档</span></span>
+          <TianshuMark className={c.entryIcon} /><span className={c.entryText}><strong>起草文档</strong></span>
         </button> : null}
       </div>
-      <p className={c.dropHint}>文件也可以直接拖进这一页。</p>
     </>}
   </section>;
 }
@@ -167,7 +152,7 @@ function AddCard({ area }: { area: MaterialAreaApi }) {
   return <Popover isOpen={open} onOpenChange={setOpen}>
     <Button variant="ghost" className={`${c.entry} ${c.addCard}`} data-add="true" isDisabled={area.uploading}>
       <Plus className={c.entryIcon} strokeWidth={1.9} aria-hidden />
-      <span className={c.entryText}><strong>添加</strong><span>{area.draft ? "上传、粘贴链接或起草文档" : "上传文件或粘贴链接"}</span></span>
+      <span className={c.entryText}><strong>添加</strong></span>
     </Button>
     <Popover.Content placement="bottom start" offset={6} className={t.popover}>
       <TianshuPortalTheme>

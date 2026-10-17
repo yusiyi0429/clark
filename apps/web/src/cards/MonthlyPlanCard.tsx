@@ -59,7 +59,7 @@ type RecipientRow = { battlefieldId: string; name: string; people: string[] };
 export function SignRecipients({ month, rows, onEdit }: { month: number; rows: RecipientRow[] | "loading" | "error"; onEdit: (battlefieldId: string) => void }) {
   return (
     <section className={s.recipients} aria-label="任务卡起草名单">
-      <p className={s.recipientsTitle}>签发后为这些人起草 {month} 月任务卡并直接发给本人</p>
+      <p className={s.recipientsTitle}>{month} 月任务卡名单</p>
       {rows === "loading" ? (
         <p className={s.recipientsNote} role="status">正在读取名单…</p>
       ) : rows === "error" ? (
@@ -359,7 +359,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
               {todos.length === 0 ? <p className={s.empty}>本月没有普通待办。</p> : null}
               {peopleError && todos.length ? (
                 <p id="monthly-people-error" className={s.source} role="status">
-                  人员目录暂时读取失败，负责人先按 personId 填写。
+                  人员目录暂时读取失败
                 </p>
               ) : null}
             </section>
@@ -403,8 +403,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
           />
         ) : null}
         <div className={s.commitInfo}>
-          <span>签发后会更新各战场的本月目标和雷达的监测方向；不会直接改企业知识。</span>
-          <small>已核对 {checked.length} 项 · 签发前必须核对企业结果、战场结果、能力结果与普通待办</small>
+          <span>已核对 {checked.length} / {1 + battlefields.length + capabilities.length + todos.filter((todo) => todo.id).length} 项</span>
         </div>
         <div className={s.edit}>
           {actionOf("monthly-plan.retry_draft") ? (
@@ -427,7 +426,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
               <label className={s.check}>
                 <span>
                   <input type="checkbox" checked={signArmed} disabled={locked} onChange={(event) => setSignArmed(event.target.checked)} /> 我确认签发{" "}
-                  {payload.period} 计划，签发后成为当月目标唯一来源
+                  {payload.period} 计划
                 </span>
               </label>
               <button
@@ -447,7 +446,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
 
       {payload.status === "confirmed" ? (
         <p className={s.receipt}>
-          本计划已签发，是当月目标的唯一来源。
+          本计划已签发
           {payload.confirmedAt ? <small>签发于 {calendarDate(payload.confirmedAt)}</small> : null}
         </p>
       ) : null}

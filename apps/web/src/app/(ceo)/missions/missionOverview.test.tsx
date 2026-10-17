@@ -99,7 +99,8 @@ describe("Mission 总览渲染", () => {
     expect(html).toContain("刘人豪 · 04 Agent 能力 · 灯塔项目");
     expect(html).toContain("白田田 · 05 经营效率 · Token Ops · 002 客户");
     expect(html).not.toContain("上月 Mission");
-    expect(html).toContain("2 条 · 按能力域与编号排序");
+    expect(html).toMatch(/>2(<!-- -->)? 条</);
+    expect(html).not.toContain("按能力域与编号排序");
   });
 
   it("筛选面板覆盖周期/战场/能力域/DRI，并保留全战场选项", () => {

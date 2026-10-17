@@ -6,7 +6,6 @@ import { ArrowLeft, ArrowLeftRight, ChevronRight, Crown } from "lucide-react";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type BattlefieldPayload, type MissionPayload } from "./payloads";
 import { useBattlefieldDisplay } from "./battlefieldDisplay";
-import { BattlefieldProgressPreview } from "./BattlefieldProgressPreview";
 import { HeroButton } from "@/components/HeroButton";
 import { IssueRow, meetingTimesByIssue } from "@/components/IssueRow";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
@@ -159,7 +158,6 @@ export function BattlefieldCard({ card, collection, onNavigate }: CardRenderProp
               ) : null}
             </Button>
           </header>
-          <BattlefieldProgressPreview id={id} />
           <div
             className={s.evidence}
             data-open={evidenceOpen}

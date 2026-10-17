@@ -85,7 +85,7 @@ describe("雷达信号列表", () => {
   it("演示模式仍能刷新和设置，并如实显示扫描失败，不宣称每日自动调度", () => {
     expect(render([])).toContain("查看监测范围");
     expect(render([])).toContain("发现更多");
-    expect(radarStatusLine({ ...payload, lastRun: null } as unknown as RadarPayload, false, false)).toBe("尚未扫描 · 点击「发现更多」开始");
+    expect(radarStatusLine({ ...payload, lastRun: null } as unknown as RadarPayload, false)).toBe("尚未扫描");
     expect(radarScanStatusLine({ trigger: "manual", status: "failed", companyDay: "2026-09-22", createdSignals: 0, warnings: ["提供方不可用"] })).toBe("扫描未完成 · 新增 0 条信号");
     expect(radarScanStatusLine({ trigger: "manual", status: "completed", companyDay: "2026-09-22", createdSignals: 2, warnings: [] })).toBe("刷新完成 · 新增 2 条信号");
   });
@@ -108,7 +108,8 @@ describe("雷达信号列表", () => {
   });
 
   it("没有信号时的空态是大白话，不出现「本体」这类内部用语", () => {
-    expect(render([])).toContain("暂无信号，点击「发现更多」开始扫描");
+    expect(render([])).toContain(">暂无信号<");
+    expect(render([])).not.toContain("点击「发现更多」");
     expect(render([])).not.toContain("本体");
   });
 });

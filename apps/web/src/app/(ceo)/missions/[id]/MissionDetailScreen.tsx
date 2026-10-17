@@ -87,8 +87,6 @@ export function MissionDetailScreen({ mission, planStatus, card }: { mission: Mi
                   {mission.sourceTitle} · 修订 revision {mission.sourceRevision}
                   <br />
                   {mission.sourceRef}
-                  <br />
-                  {mission.personalCard && mission.personalCard.status !== "confirmed" ? "讨论草稿，待本轮统一确认；外部文档更新不会自动覆盖当前草稿" : "外部文档更新不会自动覆盖当前正式版本"}
                 </p>
               </section>
             </div>

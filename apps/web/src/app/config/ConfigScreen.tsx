@@ -170,7 +170,6 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
           <button type="button" className={c.secondary} onClick={() => router.push("/config/missions")}>
             <Flag aria-hidden="true" /> 管理 Mission
           </button>
-          <span className={c.draft}>配置变更写入业务库并同步 Radar 监测范围</span>
           <button
             type="button"
             className={c.secondary}
@@ -188,12 +187,11 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
       <header className={c.header}>
         <p className={c.eyebrow}>SETTINGS</p>
         <h1 className={c.title}>配置</h1>
-        <p className={c.subtitle}>创建与管理组织级对象：会议、议题、战场与能力。新建后立刻进入对应的决策流程。</p>
       </header>
 
       <div className={c.grid}>
         <form className={`${c.card} ${c.ltco}`} onSubmit={saveStrategy}>
-          <CardHead title="公司长期目标" desc="未来 6 个月的公司结果方向，每月审视时窗口往后滑一个月；月度计划据此拆出当月目标。" />
+          <CardHead title="公司长期目标" />
           <textarea
             className={c.ltcoInput}
             aria-label="公司长期目标"
@@ -201,13 +199,13 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
             value={ltco}
             onChange={(event) => setLtco(event.target.value)}
           />
-          <CardFooter hint="长期目标更新后，下一次月度草案使用新版本" status={status.strategy}>
+          <CardFooter status={status.strategy}>
             {primary("strategy", "保存长期目标")}
           </CardFooter>
         </form>
 
         <form className={c.card} onSubmit={createMeeting}>
-          <CardHead title="新建会议" desc="拉起一场有准备的会：上传材料 → 会前预审 → 会后复盘。" icon={<Calendar aria-hidden="true" />} />
+          <CardHead title="新建会议" icon={<Calendar aria-hidden="true" />} />
           <Fields>
             <Field label="会议名称">
               <input value={meeting.title} placeholder="例如：Q4 定价策略评审会" onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} required />
@@ -251,13 +249,13 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
             </span>
             <input ref={fileRef} className={c.fileInput} type="file" multiple accept={MATERIAL_ACCEPT} onChange={(event) => addMaterials(event.target.files)} />
           </div>
-          <CardFooter hint="创建后进入会前预审" status={status.meeting}>
+          <CardFooter status={status.meeting}>
             {primary("meeting", "创建并进入会前预审")}
           </CardFooter>
         </form>
 
         <form className={c.card} onSubmit={createIssue}>
-          <CardHead title="新建议题" desc="把一件事升格为需要拍板的议题，进入待决策队列。" icon={<Target aria-hidden="true" />} />
+          <CardHead title="新建议题" icon={<Target aria-hidden="true" />} />
           <Fields>
             <Field label="议题标题">
               <input maxLength={25} value={issue.title} placeholder="例如：是否追加东南亚渠道预算 40%" onChange={(e) => setIssue({ ...issue, title: e.target.value })} required />
@@ -270,13 +268,13 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
               <DatePicker label="决定期限" value={issue.decisionBy} clearable onChange={(decisionBy) => setIssue((current) => ({ ...current, decisionBy }))} />
             </Field>
           </Fields>
-          <CardFooter hint="议题进入待决策队列" status={status.issue}>
+          <CardFooter status={status.issue}>
             {primary("issue", "新建议题")}
           </CardFooter>
         </form>
 
         <form className={`${c.card} ${c.tall}`} onSubmit={createBattlefield}>
-          <CardHead title="新建战场" desc="定义一块要打赢的战场：目标、负责人与推进节奏。" icon={<Flag aria-hidden="true" />} />
+          <CardHead title="新建战场" icon={<Flag aria-hidden="true" />} />
           <Fields>
             <Field label="显示编号 / 顺序">
               <span className={c.pair}>
@@ -309,7 +307,7 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
               />
             </Field>
           </Fields>
-          <CardFooter hint="创建后进入战场管理" status={status.battlefield}>
+          <CardFooter status={status.battlefield}>
             <span className={c.footerActions}>
               <button type="button" className={c.secondary} onClick={() => router.push("/config/battlefields")}>
                 管理战场
@@ -320,7 +318,7 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
         </form>
 
         <form className={`${c.card} ${c.tall}`} onSubmit={createCapability}>
-          <CardHead title="新建能力" desc="登记一项可复用的组织能力，供议题与计划引用。" icon={<Layers aria-hidden="true" />} />
+          <CardHead title="新建能力" icon={<Layers aria-hidden="true" />} />
           <Fields>
             <Field label="显示编号 / 顺序">
               <span className={c.pair}>
@@ -352,7 +350,7 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
               />
             </Field>
           </Fields>
-          <CardFooter hint="出现在首页公司能力面板" status={status.capability}>
+          <CardFooter status={status.capability}>
             <span className={c.footerActions}>
               <button type="button" className={c.secondary} onClick={() => router.push("/config/capabilities")}>
                 管理能力
@@ -366,12 +364,11 @@ export function ConfigScreen({ people, battlefields, strategy }: { people: Perso
   );
 }
 
-function CardHead({ title, desc, icon }: { title: string; desc: string; icon?: ReactNode }) {
+function CardHead({ title, icon }: { title: string; icon?: ReactNode }) {
   return (
     <>
       <div className={c.cardHead}>
         <h2>{title}</h2>
-        <p>{desc}</p>
       </div>
       {icon ? <span className={c.iconChip}>{icon}</span> : null}
     </>
@@ -392,11 +389,11 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 
-function CardFooter({ hint, status, children }: { hint: string; status: Status; children: ReactNode }) {
+function CardFooter({ status, children }: { status: Status; children: ReactNode }) {
   return (
     <div className={c.cardFooter}>
       <span className={c.footerHint} data-kind={status?.kind} role="status">
-        {status?.message ?? hint}
+        {status?.message}
       </span>
       {children}
     </div>

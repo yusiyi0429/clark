@@ -149,9 +149,9 @@ export function radarSourceMessage(key: string, source: { configured: boolean; m
 const RUN_STATUS: Record<string, string> = { completed: "已完成", succeeded: "已完成", running: "进行中", failed: "失败", partial: "部分完成" };
 
 /** 状态行（clark：`{run.phase} · 时间`）：最近一次扫描的方式、结果与时间，按公司时区显示。 */
-export function radarStatusLine(payload: RadarPayload, scanning: boolean, scheduled = true): string {
+export function radarStatusLine(payload: RadarPayload, scanning: boolean): string {
   if (scanning) return "正在扫描外部信息";
-  if (!payload.lastRun) return scheduled ? "尚未扫描 · 每天定时扫描一次" : "尚未扫描 · 点击「发现更多」开始";
+  if (!payload.lastRun) return "尚未扫描";
   const how = payload.lastRun.trigger === "manual" ? "手动刷新" : "定时扫描";
   // 这一次运行自己的时间（手动刷新不会更新 lastScheduledAt）。
   const when = monthDayTime(payload.lastRun.completedAt ?? payload.lastRun.startedAt ?? payload.lastScheduledAt);
@@ -323,7 +323,7 @@ export function RadarCard({ card, collection, onCard, onNavigate, initialView = 
             </div>
           </div>
           <div className={f.status} role="status">
-            {scanPending ? radarStatusLine(payload, true, true) : scan ? radarScanStatusLine(scan) : radarStatusLine(payload, false, true)}
+            {scanPending ? radarStatusLine(payload, true) : scan ? radarScanStatusLine(scan) : radarStatusLine(payload, false)}
           </div>
           {scanError ? (
             <p className={f.error} role="alert">
@@ -359,7 +359,7 @@ export function RadarCard({ card, collection, onCard, onNavigate, initialView = 
             <div className={f.empty} data-empty="filtered">
               <div className={f.orbit} aria-hidden="true" />
               <h2>当前筛选条件排除了全部信号</h2>
-              <p>{`${available} 条信号都不满足「${radarFilterSummary(view.filters)}」。清空筛选即可恢复全部信号。`}</p>
+              <p>{`${available} 条信号都不满足「${radarFilterSummary(view.filters)}」`}</p>
               <Button className={f.emptyAction} variant="tertiary" onPress={clearFilters}>
                 清空筛选
               </Button>
@@ -367,10 +367,7 @@ export function RadarCard({ card, collection, onCard, onNavigate, initialView = 
           ) : (
             <div className={f.empty}>
               <div className={`${f.orbit} ${scanPending ? f.spinning : ""}`} aria-hidden="true" />
-              <h2>{scanPending ? "正在扫描外部变化" : "暂无信号，点击「发现更多」开始扫描"}</h2>
-              <p>
-                每天定时扫描一次，也可点「发现更多」立即扫描。
-              </p>
+              <h2>{scanPending ? "正在扫描外部变化" : "暂无信号"}</h2>
             </div>
           )}
         </div>
@@ -381,12 +378,11 @@ export function RadarCard({ card, collection, onCard, onNavigate, initialView = 
         <Modal isOpen onOpenChange={(open) => (open ? undefined : setConfigOpen(false))}>
           <Modal.Backdrop className={a.backdrop} isDismissable>
             <Modal.Container size="lg">
-              <Modal.Dialog className={a.dialog} aria-labelledby="radar-scope-title" aria-describedby="radar-scope-description">
+              <Modal.Dialog className={a.dialog} aria-labelledby="radar-scope-title">
                 <header className={a.header}>
                   <div>
                     <span className={a.eyebrow}>雷达 · 公司级监测</span>
                     <h2 id="radar-scope-title">监测范围</h2>
-                    <p id="radar-scope-description">持续观察可能改变公司判断的外部变化。</p>
                   </div>
                   <Button isIconOnly variant="tertiary" className={a.close} aria-label="关闭监测范围" onPress={() => setConfigOpen(false)}>
                     <X size={19} aria-hidden="true" />
@@ -436,12 +432,11 @@ export function RadarCard({ card, collection, onCard, onNavigate, initialView = 
                         </span>
                         <div>
                           <h3 id="radar-sources-title">监测来源</h3>
-                          <p>当前启用的外部检索渠道。</p>
                         </div>
                       </div>
                     </div>
                     <div className={a.appendList}>
-                      {Object.entries(payload.sources).map(([key, source], index) => (
+                      {Object.entries(payload.sources).filter(([, source]) => source.configured).map(([key, source], index) => (
                         <article key={key} className={a.appendItem}>
                           <span className={a.index}>{String(index + 1).padStart(2, "0")}</span>
                           <div>
@@ -457,7 +452,6 @@ export function RadarCard({ card, collection, onCard, onNavigate, initialView = 
                   </section>
                 </div>
                 <footer className={a.footer}>
-                  <div>「发现更多」与定时扫描共用同一条管线；手工方向和媒体来源在个人菜单「雷达设置」中修改；公众号与全网检索由运营侧配置。</div>
                   <div className={a.actions}>
                     <Button variant="tertiary" onPress={() => setConfigOpen(false)}>
                       关闭

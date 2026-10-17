@@ -43,8 +43,8 @@ describe("战场管理页渲染", () => {
 
   it("渲染页头与战场列表，默认选中第一个战场", () => {
     expect(html).toContain("战场管理");
-    expect(html).toContain("选择战场后管理其关联议题，可以把已有议题加入战场。");
-    expect(html).toContain("2 个战场 · 选择后管理关联议题");
+    expect(html).not.toContain("选择战场后管理其关联议题");
+    expect(html).toContain(">2 个战场<");
     expect(html).toContain("负责人 陈珂 · 2 个议题");
     expect(html).toContain("负责人 待指派 · 1 个议题");
     expect(html.match(/data-selected="true"/g)).toHaveLength(1);
@@ -56,24 +56,24 @@ describe("战场管理页渲染", () => {
     expect(html).toContain("增长战场 · 2 个议题");
     expect(html).toContain("增长战场 · 期限 09-30");
     expect(html).toContain("增长战场、交付战场 · 待校准");
-    expect(html).toContain("议题可同时关联多个战场");
+    expect(html).not.toContain("议题可同时关联多个战场");
     // i3 未归属增长战场，只出现在添加议题里
     expect(html.split("二期触发条件阈值口径")).toHaveLength(2);
   });
 
   it("添加议题列出全部待决策议题，勾选态即归属态", () => {
     expect(html).toContain("已有议题（3）");
-    expect(html).toContain("从已有议题中选择加入本战场");
+    expect(html).not.toContain("从已有议题中选择加入本战场");
     expect(html).toContain("未归属 · 期限 10-10");
     // i1、i2 已属增长战场：行与勾选圆点各一处
     expect(html.match(/data-member="true"/g)).toHaveLength(4);
-    expect(html).toContain("加入后议题会出现在该战场的关联议题中");
+    expect(html).not.toContain("加入后议题会出现在该战场的关联议题中");
   });
 
   it("默认不展开删除确认与编辑弹层，页脚给出两条完成出口", () => {
     expect(html).not.toContain("删除该战场？");
     expect(html).not.toContain("编辑战场");
-    expect(html).toContain("删除战场会解除其议题关联");
+    expect(html).not.toContain("删除战场会解除其议题关联");
     expect(html.match(/完成/g)).toHaveLength(2);
   });
 
