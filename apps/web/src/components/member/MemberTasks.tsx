@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { Card } from "@heroui/react";
-import { ArrowUpRight, Check, ChevronRight, Plus } from "lucide-react";
+import { ArrowUpRight, Check, ChevronRight } from "lucide-react";
 import { Button } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
 import { monthDayTime } from "@/lib/companyTime";
+import { StartTaskButton } from "@/components/tours/StartTaskButton";
 import s from "@/components/tasks/tasks.module.css";
 
 export type MemberTask = components["schemas"]["TaskView"];
@@ -42,7 +43,7 @@ export function MemberTasks({ tasks, error, onNavigate }: {
   // 完成的收进「已完成」，默认折叠；最近更新的在前。
   const done = sorted.filter((task) => task.status === "done").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return <section className={s.tasks} aria-label="执行事项">
-    <div className={s.taskToolbar}><span>{open} 项执行事项在推进</span><Button variant="ghost" size="sm" onPress={(event) => onNavigate?.("/me/tasks/new", event.target as Element)}><Plus size={15} aria-hidden />开启执行事项</Button></div>
+    <div className={s.taskToolbar}><span>{open} 项执行事项在推进</span><StartTaskButton onNavigate={onNavigate} /></div>
     {error ? <p className={s.error} role="alert">{error}</p> : null}
     {active.length ? <div className={s.taskGrid}>{active.map((task) => {
       const href = `/me/tasks/${encodeURIComponent(task.id)}`;
