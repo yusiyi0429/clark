@@ -253,11 +253,19 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             return [];
           });
         // 主 Agent 记下的条目：依据是本轮这句原话，anchor 是当前页面对象（钉住此刻的版本）。
-        const personalMemoryTools = personalMemoryToolsFor(ctx.personalMemory, owner, (event) =>
+        const memoryTools = personalMemoryToolsFor(ctx.personalMemory, owner, (event) =>
           logEvent({ ...event, requestId: String(req.id), runId, scope: req.params.scope }), {
           reference: { ref: `chat:${row.id}#${userSequence}`, quote: req.body.message.slice(0, 500), at: new Date().toISOString() },
           anchors: currentObject ? [{ target: currentObject.target, ...(typeof currentObject.version === "number" ? { pinnedVersion: currentObject.version } : {}) }] : [],
         });
+        // 本轮实际装进上下文的个人记忆 id：上下文包里的，加上检索工具返回的；随回答存进 memory_used。
+        const memoryUsed = new Set(personalMemory.map((entry) => entry.id));
+        const personalMemoryTools = { ...memoryTools, search: async (query: string) => {
+          const entries = await memoryTools.search(query);
+          for (const entry of entries) memoryUsed.add(entry.id);
+          return entries;
+        } };
+        const memoryUsedJson = () => (memoryUsed.size ? JSON.stringify([...memoryUsed]) : null);
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
              FROM conversation_messages
@@ -368,9 +376,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           if (partial || !stopped) {
             const content = withNotice(notice, partial ? `${streamedBody.trimEnd()}\n\n${note}` : note);
             saved = await client.query(
-              `INSERT INTO conversation_messages (conversation_id, sequence, role, content, references_snapshot, run_id)
-               VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4)`,
-              [row.id, userSequence + 1, content, runId],
+              `INSERT INTO conversation_messages (conversation_id, sequence, role, content, references_snapshot, run_id, memory_used)
+               VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4, $5::jsonb)`,
+              [row.id, userSequence + 1, content, runId, memoryUsedJson()],
             ).then(() => true, () => false);
           }
           const entries = (cause as { runtimeEntries?: unknown })?.runtimeEntries;
@@ -446,9 +454,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             await client.query("BEGIN");
             await client.query(
               `INSERT INTO conversation_messages
-                 (conversation_id, sequence, role, content, references_snapshot, run_id, recovery_note)
-               VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4, $5::jsonb)`,
-              [row.id, userSequence + 1, result.assistantMessage, runId, note ? JSON.stringify(note) : null],
+                 (conversation_id, sequence, role, content, references_snapshot, run_id, recovery_note, memory_used)
+               VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4, $5::jsonb, $6::jsonb)`,
+              [row.id, userSequence + 1, result.assistantMessage, runId, note ? JSON.stringify(note) : null, memoryUsedJson()],
             );
             await client.query(
               `UPDATE conversations

@@ -1,12 +1,12 @@
 -- 个人记忆（PR #12 的个人记忆部分，从 069 起重新编号；069 尚未发布，按本分支的最终结构写）。
--- 每条记忆一行，不再是一份整写的 Personal.md：记想法、立场、未决问题、理由和偏好（kind），带时间、状态（active / superseded / forgotten）、被谁替代，
+-- 每条记忆一行，不再是一份整写的 Personal.md：记想法、立场、未决问题、理由、偏好与做法（kind），带时间、状态（active / superseded / forgotten）、被谁替代，
 -- anchor（关于什么，[{target, pinnedVersion?}]）与 reference（依据在哪，[{ref, quote?, at}]，列名 refs 避开保留字）分开。
 -- 只有本人可见，不写进本体。不给 conversations 加列：显式改动不清空会话上下文。
 -- 只新增表，不改已有行，可在已有库上执行。
 CREATE TABLE IF NOT EXISTS personal_memory_items (
   id uuid PRIMARY KEY,
   person_id text NOT NULL,
-  kind text NOT NULL DEFAULT 'idea' CHECK (kind IN ('idea', 'stance', 'open_question', 'reason', 'preference')),
+  kind text NOT NULL DEFAULT 'idea' CHECK (kind IN ('idea', 'stance', 'open_question', 'reason', 'preference', 'practice')),
   title text NOT NULL,
   text text NOT NULL,
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'superseded', 'forgotten')),

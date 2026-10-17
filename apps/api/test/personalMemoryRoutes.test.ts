@@ -50,6 +50,26 @@ test('main chat receives the owner\'s relevant personal memory and no longer aft
     }
 });
 
+test('the answer records which personal memory was actually put into context this turn, and only that', async () => {
+    const t = await createTestApp({}, { async run(input) {
+        await input.personalMemoryTools!.search('县城样板');
+        return { assistantMessage: '回复', runtimeEntries: input.runtimeEntries };
+    } });
+    try {
+        const headers = { cookie: await t.loginCookie(), origin: t.publicOrigin };
+        const style = await seed(t, '协作偏好', '先给结论。');
+        const channel = await seed(t, '渠道想法', '渠道下沉先做县城样板。');
+        await seed(t, '饮食', '喜欢咖啡。');
+        await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '帮我分析一下' } });
+        const rows = await t.sql("SELECT role, memory_used FROM conversation_messages ORDER BY sequence");
+        expect(rows[0]).toEqual({ role: 'user', memory_used: null });
+        expect(rows[1].role).toBe('assistant');
+        expect([...rows[1].memory_used].sort()).toEqual([style, channel].sort());
+    } finally {
+        await t.close();
+    }
+});
+
 test('forgetting a memory keeps the model context of every conversation of that person (3d)', async () => {
     const inputs: Parameters<ConversationRuntime['run']>[0][] = [];
     const t = await createTestApp({}, { async run(input) { inputs.push(input); return { assistantMessage: '回复', runtimeEntries: [{ turn: inputs.length }] }; } });

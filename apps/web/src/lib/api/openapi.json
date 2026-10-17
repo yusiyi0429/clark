@@ -43696,7 +43696,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "想法、立场、未决问题、理由、偏好与习惯",
+            "description": "想法、立场、未决问题、理由、偏好与表达方式、做法",
             "anyOf": [
               {
                 "const": "idea",
@@ -43716,6 +43716,10 @@
               },
               {
                 "const": "preference",
+                "type": "string"
+              },
+              {
+                "const": "practice",
                 "type": "string"
               }
             ]
@@ -43836,7 +43840,7 @@
                   "type": "string"
                 },
                 "kind": {
-                  "description": "想法、立场、未决问题、理由、偏好与习惯",
+                  "description": "想法、立场、未决问题、理由、偏好与表达方式、做法",
                   "anyOf": [
                     {
                       "const": "idea",
@@ -43856,6 +43860,10 @@
                     },
                     {
                       "const": "preference",
+                      "type": "string"
+                    },
+                    {
+                      "const": "practice",
                       "type": "string"
                     }
                   ]

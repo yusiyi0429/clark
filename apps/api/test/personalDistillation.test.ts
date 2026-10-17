@@ -30,8 +30,8 @@ const add = (text: string, message: string, quote: string, extra: Record<string,
 async function setup(db: import('pg').PoolClient, pool: import('pg').Pool) {
   const memory = createPersonalMemory({ pool });
   const conversations = new Map<string, string>();
-  let clock = Date.parse('2026-08-01T00:00:00Z');
-  const say = async (scope: string, content: string, options: { owner?: string; role?: 'user' | 'assistant'; runId?: string } = {}) => {
+  let clock = Date.now() - 2 * 86_400_000;
+  const say = async (scope: string, content: string, options: { owner?: string; role?: 'user' | 'assistant'; runId?: string; at?: Date } = {}) => {
     const key = `${options.owner ?? 'alice'}|${scope}`;
     if (!conversations.has(key)) {
       const id = randomUUID();
@@ -42,7 +42,7 @@ async function setup(db: import('pg').PoolClient, pool: import('pg').Pool) {
     const sequence = Number((await db.query('SELECT COALESCE(MAX(sequence),0)+1 AS next FROM conversation_messages WHERE conversation_id=$1', [conversationId])).rows[0].next);
     clock += 60_000;
     await db.query('INSERT INTO conversation_messages(conversation_id,sequence,role,content,run_id,created_at) VALUES($1,$2,$3,$4,$5,$6)',
-      [conversationId, sequence, options.role ?? 'user', content, options.runId ?? randomUUID(), new Date(clock)]);
+      [conversationId, sequence, options.role ?? 'user', content, options.runId ?? randomUUID(), options.at ?? new Date(clock)]);
     return { conversationId, sequence };
   };
   const worker = (streamSimple: (model: unknown, context: Context) => ReturnType<typeof candidate>, settings: Partial<DistillationSettings> = { idleMs: 0 }) =>
@@ -50,14 +50,14 @@ async function setup(db: import('pg').PoolClient, pool: import('pg').Pool) {
   return { memory, say, worker };
 }
 
-test('one batch covers the owner\'s new words across pages, with replies only as context; others and task-card chats are excluded (3f, R1)', async () => {
+test('one batch covers the owner\'s new words across pages, with replies only as context; others and Mission card pages are excluded (3f, R1)', async () => {
   await createTestDb(async ({ db, pool }) => {
     await migrate(db);
     const { memory, say, worker } = await setup(db, pool);
     const home = await say('global', '我觉得渠道下沉要先做县城样板。');
     await say('global', '公司目标是十家客户。', { role: 'assistant' });
     const issue = await say('issue:i1', '这个议题我倾向先不扩编。');
-    await say('mission-card:c1', '任务卡私聊里的话');
+    await say('mission-card:c1', 'Mission 卡页里的话');
     await say('global', 'bob 的话', { owner: 'bob' });
     const inputs: Input[] = [];
     const run = worker((_model, context) => { inputs.push(inputOf(context)); return candidate({ items: [
@@ -68,7 +68,7 @@ test('one batch covers the owner\'s new words across pages, with replies only as
     expect(inputs[0].messages.map(message => [message.ref, message.page, message.content])).toEqual([
       ['M1', 'global', '我觉得渠道下沉要先做县城样板。'], ['M2', 'issue:i1', '这个议题我倾向先不扩编。']]);
     expect(inputs[0].messages[0].reply).toBe('公司目标是十家客户。');
-    expect(JSON.stringify(inputs)).not.toContain('任务卡私聊');
+    expect(JSON.stringify(inputs)).not.toContain('Mission 卡页');
     expect(JSON.stringify(inputs)).not.toContain('bob 的话');
     const items = await memory.list('alice');
     expect(items.find(item => item.kind === 'stance')).toMatchObject({ anchors: [{ target: 'issue:i1' }], references: [{ ref: `chat:${issue.conversationId}#${issue.sequence}` }] });
@@ -146,6 +146,22 @@ test('a failed run keeps the cursor, backs off, and the same messages are learne
     expect(await ok.processNext()).toBe(true);
     expect((await memory.list('alice')).map(item => item.text)).toEqual(['先做样板。']);
     expect(await ok.cursor('alice')).toMatchObject({ attempts: 0, nextAttemptAt: null, lastError: null });
+  });
+});
+
+test('a person without a cursor is backfilled with the last 30 days only; practices are learned as their own kind', async () => {
+  await createTestDb(async ({ db, pool }) => {
+    await migrate(db);
+    const { memory, say, worker } = await setup(db, pool);
+    await say('global', '两个月前说的：周报我先列风险。', { at: new Date(Date.now() - 60 * 86_400_000) });
+    await say('global', '十天前说的：周会我先过阻塞再过进展。', { at: new Date(Date.now() - 10 * 86_400_000) });
+    const inputs: Input[] = [];
+    const run = worker((_model, context) => { inputs.push(inputOf(context)); return candidate({ items: [
+      add('周会先过阻塞再过进展。', 'M1', '周会我先过阻塞再过进展', { kind: 'practice' })] }); });
+    expect(await run.processNext('alice')).toBe(true);
+    expect(inputs[0].messages.map(message => message.content)).toEqual(['十天前说的：周会我先过阻塞再过进展。']);
+    expect(await memory.list('alice')).toMatchObject([{ kind: 'practice', text: '周会先过阻塞再过进展。' }]);
+    expect(await run.processNext('alice')).toBe(false);
   });
 });
 
@@ -268,7 +284,7 @@ test.each([
 });
 
 test('the prompt asks for ideas, stances, open questions, reasons and preferences, each with anchor and reference (3b)', () => {
-  for (const word of ['想法（idea）', '立场（stance）', '未决问题（open_question）', '理由（reason）', '偏好与习惯（preference）', 'anchorCandidates', 'topic:<主题>', 'op=supersede', '旧条目不改'])
+  for (const word of ['想法（idea）', '立场（stance）', '未决问题（open_question）', '理由（reason）', '偏好与表达方式（preference）', '做法（practice', 'anchorCandidates', 'topic:<主题>', 'op=supersede', '旧条目不改'])
     expect(DISTILLATION_PROMPT).toContain(word);
   expect(DISTILLATION_PROMPT).not.toContain('记忆是长期个人偏好、习惯、个人约束');
 });

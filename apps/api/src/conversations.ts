@@ -51,7 +51,7 @@ export type PersonalMemoryEntry = { id: string; title: string; text: string };
 export type PersonalMemoryTools = {
   search(query: string): Promise<PersonalMemoryEntry[]>;
   /** 新记一条；replaces 给出时是纠正：旧条目被新说法替代。 */
-  remember(input: { kind?: "idea" | "stance" | "open_question" | "reason" | "preference"; title: string; text: string; topic?: string; replaces?: string }): Promise<PersonalMemoryEntry>;
+  remember(input: { kind?: "idea" | "stance" | "open_question" | "reason" | "preference" | "practice"; title: string; text: string; topic?: string; replaces?: string }): Promise<PersonalMemoryEntry>;
   forget(input: { id: string }): Promise<{ id: string }>;
 };
 

@@ -10,8 +10,8 @@ import type { PersonalMemoryTools } from './conversations.js';
  * 一次只改一行，没有整份覆盖，也没有 16 KiB 的总量上限。
  */
 export type MemoryStatus = 'active' | 'superseded' | 'forgotten';
-/** 记什么（R4）：想法、立场、未决问题、理由、偏好与习惯。 */
-export const MEMORY_KINDS = ['idea', 'stance', 'open_question', 'reason', 'preference'] as const;
+/** 记什么（R4）：想法、立场、未决问题、理由、偏好与表达方式、做法。 */
+export const MEMORY_KINDS = ['idea', 'stance', 'open_question', 'reason', 'preference', 'practice'] as const;
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 export type MemoryAnchor = { target: string; pinnedVersion?: number };
 export type MemoryReference = { ref: string; quote?: string; at: string };
@@ -142,7 +142,7 @@ export function createPersonalMemory({ pool }: { pool: Pool }) {
             return items.map(entry => {
                 const onCurrent = Boolean(current && entry.anchors.some(anchor => sameTarget(anchor.target, current.target)));
                 const score = [...grams(`${entry.title} ${entry.text}`)].filter(term => terms.has(term)).length + (onCurrent ? 3 : 0);
-                return { entry, onCurrent, score, stable: entry.kind === 'preference' || /协作|沟通|表达|偏好/.test(entry.title) };
+                return { entry, onCurrent, score, stable: entry.kind === 'preference' || entry.kind === 'practice' || /协作|沟通|表达|偏好/.test(entry.title) };
             }).filter(row => row.score > 0 || row.stable).sort((left, right) => right.score - left.score).flatMap(({ entry, onCurrent }) => {
                 const pinned = onCurrent ? entry.anchors.find(anchor => sameTarget(anchor.target, current!.target))?.pinnedVersion : undefined;
                 const selection: PersonalSelection = { id: entry.id, kind: entry.kind, title: boundedText(entry.title, 200), text: boundedText(entry.text, 3000), createdAt: entry.createdAt, anchors: entry.anchors,

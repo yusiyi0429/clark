@@ -155,6 +155,7 @@ describe("migration", () => {
         "067_conversation_archive.sql",
         "068_conversation_compactions.sql",
         "069_personal_memory.sql",
+        "070_conversation_memory_used.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -162,7 +163,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(69);
+      expect(Number(again.rows[0].count)).toBe(70);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(
