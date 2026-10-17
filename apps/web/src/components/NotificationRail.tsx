@@ -19,6 +19,7 @@ import { MissionCardNoticeGroup } from "./missionCards/MissionCardNoticeGroup";
 import { roundStatusText } from "./missionCards/roundStatusText";
 import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
 import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
+import { RequestNotices } from "./requests/RequestNotices";
 import { CycleCountdown } from "./CycleCountdown";
 import { RADAR_ORIGIN_LABEL, RadarOriginIcon } from "./OriginTag";
 import { preflightInFlight } from "@/cards/meetingIssueModel";
@@ -289,6 +290,7 @@ export function NotificationRail({
         <CycleCountdown />
         {onCard ? <StrategicConfirmCard cards={cards} onCard={onCard} onNavigate={onNavigate} /> : null}
         <PersonalReviewBoard onNavigate={onNavigate} />
+        <RequestNotices base="/requests" currentHref={currentHref} onNavigate={onNavigate} />
         <MonthlyReviewNotices onNavigate={onNavigate} ceo />
         {groups.map((group) => {
           const current = group.items.some((item) => item.href === currentHref || (item.missionRound && payloadOf<TMissionRoundSummary>(item.missionRound).cards.some((row) => `/mission-cards/${row.cardId}` === currentHref?.split("?")[0])));

@@ -1,0 +1,173 @@
+/* ⑨ 传话：二级页沿用任务卡的阅读面（晨光冷白、840 正文栏、同一套 token）；通知栏那一组沿用 notifications.module.css。 */
+.screen { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.screen :global(.ts-detail) { background: var(--surface); overflow-y: auto; overscroll-behavior: contain; }
+.content { box-sizing: border-box; width: 100%; min-width: 0; padding: 24px calc(32px + var(--conversation-lane, 0px)) 128px 32px; color: var(--ink-muted); transition: padding-right var(--dur-slow) var(--ease-brand); }
+.stack { display: grid; gap: 20px; min-width: 0; max-width: 760px; margin-inline: auto; }
+
+/* 状态小标：圆点 + 字，和复盘页同一族。 */
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-pill-radius); color: var(--ink); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); }
+.chip[data-tone='wait']::before { background: var(--onboarding-blue); }
+.chip[data-tone='done']::before { background: var(--confirmed); }
+.chip[data-tone='draft'] { color: var(--ink-muted); font-weight: 500; }
+.tag { display: inline-flex; align-items: center; padding: 0 8px; border-radius: var(--onboarding-pill-radius); font-size: 12px; line-height: 20px; font-weight: 500; white-space: nowrap; color: var(--ink-muted); background: color-mix(in oklab, var(--ink) 6%, var(--surface)); }
+.tag[data-tone='wait'] { color: var(--brand-deep); background: color-mix(in oklab, var(--onboarding-blue) 11%, var(--surface)); }
+.tag[data-tone='done'] { color: var(--confirmed); background: color-mix(in oklab, var(--confirmed) 10%, var(--surface)); }
+.count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--solid-fg); background: var(--onboarding-blue); }
+.count[data-tone='done'] { color: var(--confirmed); background: color-mix(in oklab, var(--confirmed) 12%, var(--surface)); }
+.ratio { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--brand-deep); }
+.ratio[data-done] { color: var(--confirmed); }
+.fieldName { color: var(--ink-faint); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.error { margin: 0; color: var(--onboarding-error); font-size: 14px; line-height: 1.7; }
+.empty { margin: 32px 0; color: var(--ink-faint); font-size: 14px; text-align: center; }
+
+/* 按钮：主按钮蓝底胶囊，次按钮只有字。 */
+.primary.primary { min-height: 40px; padding: 8px 18px; gap: 6px; border-radius: var(--onboarding-pill-radius); background: var(--onboarding-blue); color: var(--solid-fg); font-size: 15px; font-weight: 600; }
+.primary.primary[data-disabled] { opacity: .38; }
+.ghost.ghost { min-height: 40px; padding: 8px 14px; gap: 6px; border-radius: var(--onboarding-control-radius); color: var(--brand-deep); font-size: 14px; font-weight: 500; }
+.ghost.ghost[data-disabled] { color: var(--ink-faint); }
+.avatar { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: color-mix(in oklab, var(--onboarding-blue) 12%, var(--surface)); color: var(--brand-deep); font-size: 11px; font-weight: 600; letter-spacing: -.02em; }
+
+/* 步骤：做完打勾、当前呼吸点、没开始置灰（呼吸节奏同对话进度行）。 */
+.steps { display: grid; gap: 0; margin: 0; padding: 4px 0; list-style: none; }
+.step { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; padding: 5px 0; color: var(--ink-faint); font-size: 14px; line-height: 20px; }
+.step:not(:last-child)::after { content: ""; position: absolute; left: 8.5px; top: 25px; bottom: -5px; width: 1px; background: var(--hairline); }
+.stepIcon { display: grid; place-items: center; width: 18px; height: 18px; margin-top: 1px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--hairline-strong); background: var(--surface); }
+.step[data-status='done'] { color: var(--ink-muted); }
+.step[data-status='done'] .stepIcon { border: 0; background: var(--confirmed); color: var(--solid-fg); }
+.step[data-status='current'] { color: var(--ink); font-weight: 600; }
+.step[data-status='current'] .stepIcon { border-color: var(--onboarding-blue); }
+.step[data-status='current'] .stepIcon::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--onboarding-blue); animation: breathe 1.8s ease-in-out infinite; }
+.stepText { display: grid; gap: 2px; min-width: 0; }
+.stepText small { color: var(--ink-muted); font-size: 13px; font-weight: 400; line-height: 1.6; overflow-wrap: anywhere; }
+@keyframes breathe { 50% { opacity: .3; transform: scale(.8); } }
+
+/* 起草：一个大输入框，键在右下角。 */
+.composer { display: grid; gap: 8px; padding: 14px 14px 10px; border: 1px solid var(--field-border); border-radius: var(--field-radius); background: var(--field-bg); transition: border-color 140ms ease; }
+.composer:hover { border-color: var(--field-border-hover); }
+.composer:focus-within { border-color: var(--field-border-focus); box-shadow: var(--field-focus-ring); }
+.composer textarea { width: 100%; min-height: 0; border: 0; border-radius: 0; padding: 0; background: transparent; font-size: 17px; line-height: 1.7; }
+.composer[data-compact] textarea { font-size: 15px; color: var(--ink-muted); }
+.composerBar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.kbd { color: var(--ink-faint); font: 500 12px/1 var(--font-sans, inherit); letter-spacing: .02em; }
+
+/* 「要你定」与「问答」的分组页头。 */
+.panel, .thread { display: grid; gap: 12px; min-width: 0; }
+.panelHead { display: flex; align-items: center; gap: 8px; }
+.panelHead h2 { margin: 0; color: var(--ink); font-size: 15px; font-weight: 600; line-height: 1.5; }
+.clarifyList { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.clarifyList li { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid color-mix(in oklab, var(--onboarding-blue) 22%, var(--surface)); border-radius: var(--onboarding-inset-radius); background: color-mix(in oklab, var(--onboarding-blue) 4%, var(--surface)); }
+.clarifyList label { color: var(--ink); font-size: 15px; line-height: 1.6; font-weight: 500; overflow-wrap: anywhere; }
+.clarifyList input { width: 100%; }
+.clarifyList li:has(input[data-filled]) { border-color: var(--hairline); background: var(--surface); }
+
+/* 预览（Superhuman 式）：收件人、主题、正文同一张卡，发送键只在卡底。 */
+.preview { display: grid; min-width: 0; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); background: var(--surface); box-shadow: 0 1px 2px rgb(16 24 40 / 4%), 0 8px 24px rgb(16 24 40 / 6%); transition: opacity .2s ease; }
+.preview[data-stale] { opacity: .55; }
+.toRow { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--hairline); }
+.toRow > .fieldName { line-height: 32px; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.personChip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 3px; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-pill-radius); background: var(--surface); color: var(--ink-muted); font: inherit; font-size: 14px; cursor: pointer; transition: background .14s ease, border-color .14s ease, color .14s ease; }
+.personChip .avatar { width: 24px; height: 24px; font-size: 10px; background: color-mix(in oklab, var(--ink) 6%, var(--surface)); color: var(--ink-muted); }
+.personChip[aria-pressed='true'] { border-color: color-mix(in oklab, var(--onboarding-blue) 45%, var(--surface)); background: color-mix(in oklab, var(--onboarding-blue) 8%, var(--surface)); color: var(--ink); }
+.personChip[aria-pressed='true'] .avatar { background: var(--onboarding-blue); color: var(--solid-fg); }
+.personChip:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+.addPerson { flex: none; width: 112px; }
+.subject { padding: 16px 16px 0; color: var(--ink); font-size: 19px; line-height: 1.5; font-weight: 600; overflow-wrap: anywhere; }
+.preview .prose { padding: 8px 16px 16px; }
+.previewFoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px 10px 16px; border-top: 1px solid var(--hairline); background: color-mix(in oklab, var(--ink) 2%, var(--surface)); border-radius: 0 0 var(--onboarding-inset-radius) var(--onboarding-inset-radius); }
+.version { color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* 说明正文。 */
+.prose { min-width: 0; color: var(--ink); font-size: 15px; line-height: 1.8; overflow-wrap: anywhere; }
+.prose > :first-child { margin-top: 0; }
+.prose > :last-child { margin-bottom: 0; }
+.prose p { margin: 0 0 10px; }
+.prose ul, .prose ol { margin: 0 0 10px; padding-left: 22px; }
+.prose ul { list-style: disc; }
+.prose ol { list-style: decimal; }
+.prose li { margin: 2px 0; }
+.prose strong { font-weight: 600; }
+.prose a { color: var(--brand-deep); text-decoration: underline; text-underline-offset: 3px; }
+
+/* 接收人（飞书审批卡式）：一排人和各自状态，本人的「标记完成」在同一处。 */
+.roster { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 16px; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); background: var(--morning-start, var(--surface)); }
+.rosterHead { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; }
+.roster:has(> button) .rosterHead { grid-column: 1; }
+.roster > button { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+.rosterList { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.rosterList li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rosterList li[data-status='done'] .avatar { background: var(--confirmed); color: var(--solid-fg); }
+.rosterName { color: var(--ink); font-size: 14px; font-weight: 500; }
+.rosterState { color: var(--ink-faint); font-size: 13px; font-variant-numeric: tabular-nums; }
+.rosterList li[data-status='pending'] .rosterState { color: var(--brand-deep); }
+
+/* 问答（GitHub conversation 式）：一问一答成对，答案挂在问题下面一条竖线里。 */
+.threadList { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.qa { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--hairline); }
+.qa:last-child { border-bottom: 0; padding-bottom: 0; }
+.entry { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; }
+.entryBody { display: grid; gap: 2px; min-width: 0; }
+.entryMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; line-height: 28px; }
+.entryMeta strong { color: var(--ink); font-size: 14px; font-weight: 600; }
+.entryMeta time { color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.entryBody p { margin: 0; color: var(--ink); font-size: 15px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.answer, .reply { margin-left: 13px; padding-left: 25px; border-left: 2px solid color-mix(in oklab, var(--onboarding-blue) 22%, var(--surface)); }
+.reply { display: grid; gap: 8px; }
+.reply textarea, .askPreview textarea { width: 100%; min-height: 64px; field-sizing: content; max-height: 240px; }
+.replyBar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+
+/* 卡上提问：输入条（同对话输入条的圆角与发送键），之后是步骤和预览。 */
+.ask { display: grid; gap: 12px; min-width: 0; }
+.askInput { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 16px; border: 1px solid var(--field-border); border-radius: var(--field-radius); background: var(--field-bg); transition: border-color 140ms ease; }
+.askInput:hover { border-color: var(--field-border-hover); }
+.askInput:focus-within { border-color: var(--field-border-focus); box-shadow: var(--field-focus-ring); }
+.askInput textarea { flex: 1; min-width: 0; border: 0; border-radius: 0; padding: 7px 0; background: transparent; field-sizing: content; max-height: 160px; }
+.askInput textarea:focus, .composer textarea:focus { outline: none; }
+.send.send { flex: none; width: 34px; min-width: 34px; height: 34px; padding: 0; border-radius: 50%; background: var(--onboarding-blue); color: var(--solid-fg); }
+.send.send[data-disabled] { background: var(--hairline-strong); color: var(--surface); }
+.found { display: grid; gap: 10px; }
+.found blockquote { margin: 0; padding: 12px 16px; border-left: 3px solid var(--confirmed); border-radius: 0 var(--onboarding-control-radius) var(--onboarding-control-radius) 0; background: color-mix(in oklab, var(--confirmed) 7%, var(--surface)); color: var(--ink); font-size: 15px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.askPreview { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); box-shadow: 0 8px 24px rgb(16 24 40 / 6%); }
+.askTo { color: var(--ink-muted); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.askTo strong { color: var(--ink); font-weight: 600; }
+.askTo span { color: var(--ink-faint); }
+
+/* 列表（Linear Inbox 式）。 */
+.listBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.list { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--hairline); }
+.list li { border-bottom: 1px solid var(--hairline); }
+.row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 10px 8px; border: 0; border-radius: var(--onboarding-control-radius); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background .14s ease; }
+.row:hover { background: color-mix(in oklab, var(--ink) 4%, var(--surface)); }
+.row:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: -2px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.row[data-unread] .dot { background: var(--onboarding-blue); }
+.rowText { display: grid; gap: 2px; min-width: 0; }
+.rowText > span { color: var(--ink); font-size: 15px; line-height: 1.5; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row[data-unread] .rowText > span { font-weight: 600; }
+.rowText small { color: var(--ink-faint); font-size: 13px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rowMeta { display: flex; align-items: center; gap: 8px; }
+
+/* 通知栏那一组：页头整块进列表，右上角「+」。 */
+.glyph { color: #2f3d55; }
+.headerOpen.headerOpen { padding: 0; margin: 0; background: transparent; text-align: left; font: inherit; border-radius: 6px; }
+.corner.corner { position: absolute; z-index: 2; top: 50%; right: 10px; display: grid; place-items: center; width: 32px; height: 32px; margin-top: -16px; padding: 0; border-radius: 50%; color: inherit; background: color-mix(in srgb, currentColor 14%, transparent); }
+.corner.corner:hover { background: color-mix(in srgb, currentColor 24%, transparent); }
+
+@media (max-width: 1000px) { .content { padding-inline: 24px calc(24px + var(--conversation-lane, 0px)); } }
+@media (max-width: 959px) { .content { padding-bottom: 152px; } }
+@media (max-width: 759px) {
+  .content { padding: 16px 16px 152px; }
+  .headerChip { display: none; }
+  .stack { gap: 18px; }
+  .roster { grid-template-columns: minmax(0, 1fr); }
+  .roster:has(> button) .rosterHead { grid-column: 1; }
+  .roster > button { grid-row: auto; grid-column: 1; width: 100%; }
+  .toRow { flex-direction: column; gap: 6px; }
+  .toRow > .fieldName { line-height: 1.5; }
+  .previewFoot .primary { flex: 1; }
+  .rowMeta .ratio { display: none; }
+  .answer, .reply { margin-left: 0; padding-left: 14px; }
+}
+@media (hover: none) { .kbd { display: none; } }
+@media (prefers-reduced-motion: reduce) { .step[data-status='current'] .stepIcon::after { animation: none; } .content, .preview { transition: none; } }
