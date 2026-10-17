@@ -42,7 +42,7 @@ export async function linkWorldMissions(client: WorldClient): Promise<WorldHead[
         const head = await client.getHead(objectId);
         const refs = head.external_refs ?? [];
         return {
-          action_type: "world_revise_object", contract_version: "tkos.world/0.2", target: worldTarget(head), expected_versions: [],
+          action_type: "world_revise_object", contract_version: head.contract_version, target: worldTarget(head), expected_versions: [],
           idempotency_key: key, reason: "天枢 Mission 关联本体",
           params: {
             payload: { external_refs: [...refs.filter((ref) => !(ref.system === "tianshu" && ref.id === externalId)), { system: "tianshu", id: externalId }] },

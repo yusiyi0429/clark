@@ -26,5 +26,5 @@ export async function withWorld(run: (client: WorldClient, db: TestDb) => Promis
   });
 }
 export function projection(head: any) {
-  return { business: { ...head, attributes: { external_refs: head.external_refs ?? [] } }, records: { lifecycle: head.lifecycle } };
+  return { business: { ...head, attributes: { external_refs: head.external_refs ?? [] } }, records: { lifecycle: head.lifecycle }, protocol: { contract_version: head.contract_version } };
 }
