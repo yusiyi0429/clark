@@ -35,6 +35,9 @@ describe("新写法：正文直接说观点，出处是句末的小标记", () =
     const html = render("两个项目都延期到下旬[《交付周报》](cite:memory:a.md#s1)、[《9 月复盘》](cite:memory:b.md#s2)。");
     expect(marks(html)).toHaveLength(2);
     expect(visible(html)).toBe("两个项目都延期到下旬。");
+    const adjacent = render("采集器装好了一半[10/16 Codex 记录](cite:collector:c1)[10/16 进展 · 采集器安装](cite:progress:p1)[Mission M2](cite:mission:m2)。");
+    expect(marks(adjacent)).toHaveLength(3);
+    expect(visible(adjacent)).toBe("采集器装好了一半。");
   });
 
   it("最新数据、各方意见这类词后面照样是标记（「据」「见」只在单独成词时才算引出语）", () => {

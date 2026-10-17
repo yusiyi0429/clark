@@ -3989,6 +3989,13 @@ export interface components {
                     sources: string[];
                 };
             } | null;
+            generationSteps: {
+                id: "missions" | "weekly" | "collector" | "draft";
+                label: string;
+                status: "pending" | "running" | "done" | "failed";
+                result?: string;
+            }[];
+            editedFields: ("overall" | "judgments" | "nextFocus" | "escalations")[];
             missions: {
                 id: string;
                 code: string;
@@ -4015,6 +4022,12 @@ export interface components {
                 label: string;
                 itemId?: string;
             }[];
+        };
+        PersonalReviewGenerationStep: {
+            id: "missions" | "weekly" | "collector" | "draft";
+            label: string;
+            status: "pending" | "running" | "done" | "failed";
+            result?: string;
         };
         PersonalReviewBoard: {
             monthlyReviewId: string;
@@ -4123,6 +4136,13 @@ export interface components {
                         sources: string[];
                     };
                 } | null;
+                generationSteps: {
+                    id: "missions" | "weekly" | "collector" | "draft";
+                    label: string;
+                    status: "pending" | "running" | "done" | "failed";
+                    result?: string;
+                }[];
+                editedFields: ("overall" | "judgments" | "nextFocus" | "escalations")[];
                 missions: {
                     id: string;
                     code: string;
@@ -4189,6 +4209,13 @@ export interface components {
                         sources: string[];
                     };
                 } | null;
+                generationSteps: {
+                    id: "missions" | "weekly" | "collector" | "draft";
+                    label: string;
+                    status: "pending" | "running" | "done" | "failed";
+                    result?: string;
+                }[];
+                editedFields: ("overall" | "judgments" | "nextFocus" | "escalations")[];
                 missions: {
                     id: string;
                     code: string;

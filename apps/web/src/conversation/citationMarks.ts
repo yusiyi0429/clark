@@ -80,7 +80,12 @@ function markRuns(children: MdNode[]) {
   for (let start = 0; start < children.length; start++) {
     if (!isSourceLink(children[start])) continue;
     let end = start;
-    while (isSourceLink(children[end + 2]) && isText(children[end + 1]) && BETWEEN.test(children[end + 1].value!)) end += 2;
+    // 中间隔着分隔符，或者直接紧挨着（`[A](cite:…)[B](cite:…)`）。
+    for (;;) {
+      if (isSourceLink(children[end + 1])) end += 1;
+      else if (isSourceLink(children[end + 2]) && isText(children[end + 1]) && BETWEEN.test(children[end + 1].value!)) end += 2;
+      else break;
+    }
     const links = children.slice(start, end + 1).filter(isSourceLink);
     if (links.every((link) => link.data?.hProperties?.[CITE_MARK_PROP] !== undefined)) { start = end; continue; }
     const prev = children[start - 1];
@@ -99,7 +104,7 @@ function markRuns(children: MdNode[]) {
     if (before && after) {
       if (stripped) { prev!.value = prevText!; next!.value = nextText!; }
       for (const link of links) markLink(link);
-      for (let index = start + 1; index < end; index += 2) children[index].value = "";
+      for (let index = start + 1; index < end; index++) if (isText(children[index])) children[index].value = "";
     }
     start = end;
   }
