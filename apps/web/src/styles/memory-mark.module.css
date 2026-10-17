@@ -1,0 +1,87 @@
+/*
+ * 回答里的个人记忆标记（conversation/MemoryMark.tsx）：和句末出处圆点同一套灰、同一高度上移，但是一个小图标 + 极淡底色的小胶囊，
+ * 一眼分得清「这是你的记忆」和「这是资料出处」。热区向外扩到约 28px，视觉不变。
+ * 点开的浮层沿用出处浮层（citations.module.css 的 .pop / .sheet），里面只有这条记忆和修改。
+ */
+.mark {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 15px;
+  margin: 0 1px 0 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: #1d1d1f0d;
+  line-height: 0;
+  vertical-align: 0.28em;
+  color: #7a7f89;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+.mark::after { content: ""; position: absolute; inset: -7px -5px; border-radius: 8px; }
+.mark:hover, .mark[aria-expanded="true"] { color: #2f6bb4; background: #2f6bb41a; }
+.mark:focus-visible { outline: 2px solid #3a83f788; outline-offset: 1px; }
+.pop { padding: 12px 14px 12px; }
+.body { font-size: 13px; line-height: 1.6; color: #25282e; }
+.head { display: flex; align-items: flex-start; gap: 8px; }
+.title { flex: 1 1 auto; min-width: 0; margin: 0; font-weight: 500; overflow-wrap: anywhere; }
+.text { margin: 4px 0 0; color: #3f4754; white-space: pre-wrap; overflow-wrap: anywhere; }
+.edit {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -2px -6px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: #9599a1;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+.edit:hover { color: #2f6bb4; background: #1d1d1f0a; }
+.edit:focus-visible, .ghost:focus-visible, .primary:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
+.tag { flex: none; margin: 0; padding: 0 6px; border-radius: 5px; background: #1d1d1f0a; font-size: 12px; line-height: 20px; color: #7a7f89; width: fit-content; }
+.titleInput, .textInput {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #1d1d1f1f;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  color: #25282e;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.titleInput { height: 32px; padding: 0 9px; font-weight: 500; }
+.textInput { margin-top: 6px; padding: 7px 9px; min-height: 88px; max-height: 40vh; resize: vertical; line-height: 1.6; }
+.titleInput:focus, .textInput:focus { outline: none; border-color: #3a83f7aa; box-shadow: 0 0 0 3px #3a83f71f; }
+.actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+.ghost, .primary { height: 28px; padding: 0 12px; border: 0; border-radius: 8px; font: inherit; font-size: 12px; cursor: pointer; transition: background-color 140ms ease, opacity 140ms ease; }
+.ghost { background: none; color: #7a7f89; }
+.ghost:hover { background: #1d1d1f0a; color: #3f4754; }
+.primary { background: #2f6bb4; color: #fff; }
+.primary:hover { background: #285d9e; }
+.primary:disabled, .ghost:disabled { opacity: .5; cursor: default; }
+.failed { margin-right: auto; font-size: 12px; color: #c2410c; }
+.skeleton { display: grid; gap: 7px; padding: 3px 0; }
+.skeleton i { display: block; height: 9px; border-radius: 4px; background: #1d1d1f0f; }
+.skeleton i:first-child { width: 45%; }
+.skeleton i:last-child { width: 70%; }
+/* 手机：底部升起，字号放大一级，按钮够大。 */
+.sheet { padding-top: 22px; }
+.sheetClose { position: absolute; top: 8px; right: 8px; }
+.large { font-size: 15px; }
+.large .head { padding-right: 40px; }
+.large .edit { width: 44px; height: 44px; margin: -12px -8px -8px 0; }
+.large .titleInput { width: calc(100% - 40px); height: 44px; font-size: 16px; }
+.large .textInput { font-size: 16px; }
+.large .actions { gap: 8px; margin-top: 12px; }
+.large .ghost, .large .primary { height: 44px; padding: 0 18px; font-size: 15px; }
+.large .tag { font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .mark, .edit, .titleInput, .textInput { transition: none; } }
+@media (prefers-contrast: more) { .mark, .tag, .ghost { color: #4f5561; } }

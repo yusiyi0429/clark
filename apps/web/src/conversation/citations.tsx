@@ -10,6 +10,7 @@ import { defaultUrlTransform, type Components } from "react-markdown";
 import { parseSourceRef } from "@/cards/meetingSources";
 import { citationRoute, knownCitation, openCitation, queueCitation, type CitationSurface } from "./citationBridge";
 import { CITE_MARK_PROP, NAMED_SOURCE } from "./citationMarks";
+import { MemoryMark } from "./MemoryMark";
 import s from "@/styles/citations.module.css";
 
 /**
@@ -97,6 +98,9 @@ type AnchorProps = ComponentPropsWithoutRef<"a"> & { node?: unknown; [CITE_MARK_
 
 export function CitationAnchor({ node: _node, href, children, [CITE_MARK_PROP]: mark, ...rest }: AnchorProps) {
   const { linked, surface } = useContext(SurfaceContext);
+  // 个人记忆（cite:pmem:<id>）：不论在句中哪里，都是记忆小标记，点开看这条记忆、当场修改。
+  const memory = href?.startsWith(CITE_SCHEME) ? parseSourceRef(citationRef(href) ?? "") : null;
+  if (memory?.kind === "pmem") return <MemoryMark id={memory.id} />;
   if (mark !== undefined && href) return <CitationMark href={href} title={plainText(children)} />;
   if (!href?.startsWith(CITE_SCHEME)) return <a href={href} {...rest}>{children}</a>;
   const ref = citationRef(href);
