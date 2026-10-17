@@ -91,4 +91,37 @@ describe("流式事件", () => {
     const view = render();
     expect(view.messages.at(-1)).toMatchObject({ role: "assistant", content: "回答正文", recoveryNote: note });
   });
+
+  it("step 事件按 id 取代、按首次出现的顺序排；下一句发出时清空", async () => {
+    render();
+    gets().at(-1)!.resolve(history([]));
+    await flush();
+    const step = (sequence: number, id: string, label: string, status: string, result?: string) =>
+      `event: step\ndata: ${JSON.stringify({ type: "step", id, label, status, ...(result ? { result } : {}), runId: "r1", scope: "global", sequence })}\n\n`;
+    const chunks = [
+      step(1, "s1", "读 Mission 卡", "active"),
+      step(2, "s1", "读 Mission 卡", "done"),
+      step(3, "s2", "查企业知识", "active"),
+      step(4, "s2", "查企业知识", "done", "已读企业知识《经营原则》"),
+      `event: done\ndata: ${JSON.stringify({ type: "done", status: "completed", runId: "r1", scope: "global", sequence: 5 })}\n\n`,
+    ];
+    let index = 0;
+    const encoder = new TextEncoder();
+    const sending = render().send("问一个", []);
+    await flush();
+    posts().at(-1)!.resolve({ ok: true, status: 200, body: { getReader: () => ({
+      read: async () => (index < chunks.length ? { done: false, value: encoder.encode(chunks[index++]) } : { done: true, value: undefined }),
+      cancel: async () => undefined,
+    }) } });
+    for (let i = 0; i < 5 && !gets()[1]; i++) await flush();
+    gets().at(-1)!.resolve(history([]));
+    await sending;
+    expect(render().steps).toEqual([
+      { id: "s1", label: "读 Mission 卡", status: "done" },
+      { id: "s2", label: "查企业知识", status: "done", result: "已读企业知识《经营原则》" },
+    ]);
+    void render().send("再问一个", []);
+    await flush();
+    expect(render().steps).toEqual([]);
+  });
 });

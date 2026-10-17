@@ -141,6 +141,21 @@ export const ConversationSseEvent = Type.Union([
     },
     { additionalProperties: false },
   ),
+  /**
+   * Agent 处理时的当前步骤（服务端在工具开始、结束时映射）：同一 id 的后一条取代前一条。
+   * label 是短动词短语；result 是这一步读到了什么（系统生成），有就直接显示。
+   */
+  Type.Object(
+    {
+      ...StreamBase,
+      type: Type.Literal("step"),
+      id: Type.String(),
+      label: Type.String(),
+      status: Type.Union([Type.Literal("done"), Type.Literal("active"), Type.Literal("pending"), Type.Literal("stopped")]),
+      result: Type.Optional(Type.String()),
+    },
+    { additionalProperties: false },
+  ),
   /** 本轮档位：快答 / 检索问答 / 深度；检索问答与深度档带一句开场说明（notice），界面先显示它和预计用时。 */
   Type.Object(
     {

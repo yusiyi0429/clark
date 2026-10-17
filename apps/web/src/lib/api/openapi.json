@@ -11158,6 +11158,66 @@
               "scope",
               "sequence",
               "type",
+              "id",
+              "label",
+              "status"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "scope": {
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "description": "global 或稳定对象 scope",
+                "type": "string"
+              },
+              "sequence": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "step",
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "done",
+                    "type": "string"
+                  },
+                  {
+                    "const": "active",
+                    "type": "string"
+                  },
+                  {
+                    "const": "pending",
+                    "type": "string"
+                  },
+                  {
+                    "const": "stopped",
+                    "type": "string"
+                  }
+                ]
+              },
+              "result": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "runId",
+              "scope",
+              "sequence",
+              "type",
               "tier",
               "source",
               "expectSeconds",

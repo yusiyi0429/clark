@@ -20,7 +20,7 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
   // 状态区：回答进行中一直占着位置。
   const status = data.streaming ? (
     <ConversationStatusSlot>
-      {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} thought={data.thought} /> : null}
+      {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} /> : null}
     </ConversationStatusSlot>
   ) : null;
   return (

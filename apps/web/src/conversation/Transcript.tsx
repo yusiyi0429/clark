@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remend from "remend";
 import { ArrowDown, Paperclip, Quote } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
+import { StepCount, StepList, type Step } from "@/components/steps/StepList";
 import type { Message, ThinkingStage, TurnProgress, TurnThought } from "./useConversation";
 import { QuoteChips } from "./QuoteChips";
 import { pageContextBattlefield, readQuotedMessage } from "./quotes";
@@ -272,10 +273,12 @@ export function ThinkingStream({ text }: { text: string }) {
  * 回答进行中的一行（clark `ConversationThinking`）：脉冲点、阶段、在查什么 / 思考要点、已用秒数（深度档另附预计用时）、停止。
  * 非深度档中途升级时，上方多一行「这个问题需要更深入的分析，预计还需约 X 秒。」；正文开始后整行淡化。
  */
-export function ConversationThinking({ stage, startedAt, onStop, route, progress, thought }: {
+export function ConversationThinking({ stage, startedAt, onStop, route, progress, steps = [], thought }: {
   stage: ThinkingStage; startedAt: number; onStop: () => void;
   route?: { tier: "quick" | "grounded" | "deep"; expectSeconds: number } | null;
   progress?: TurnProgress;
+  /** 服务端给的步骤：有步骤时替代进度行的单行文字和计数；正文开始后收成一个勾和步数。 */
+  steps?: Step[];
   /** 思考摘要：正文开始前在进度行上方滚动显示，正文开始后收到这条回答的「已思考 N 秒」里。 */
   thought?: TurnThought | null;
 }) {
@@ -287,20 +290,24 @@ export function ConversationThinking({ stage, startedAt, onStop, route, progress
   }, [startedAt]);
   const deep = route?.tier === "deep";
   const escalation = !deep && stage !== "answering" ? progress?.escalation : null;
-  const detail = progressDetail(stage, progress);
+  const stepped = steps.length > 0;
+  const detail = stepped ? null : progressDetail(stage, progress);
+  const answering = stage === "answering";
   return (
-    <div className={s.thinkingGroup} data-stage={stage}>
+    <div className={s.thinkingGroup} data-stage={stage} data-steps={stepped && !answering ? "" : undefined}>
       {escalation ? <p className={s.thinkingNote} data-testid="conversation-escalation" aria-live="polite">{escalation.notice}</p> : null}
       {thought?.text && thought.seconds === null && stage !== "answering" ? <ThinkingStream text={thought.text} /> : null}
       <div className={s.thinking} data-testid="conversation-thinking" data-tier={route?.tier} data-stage={stage}>
         <span className={s.pulse} aria-hidden />
         <span role="status">{(deep || escalation ? DEEP_STAGE_COPY : STAGE_COPY)[stage]}</span>
         {detail ? <span className={s.progressDetail} data-testid="conversation-progress">{detail}</span> : null}
+        {stepped && answering ? <StepCount steps={steps} /> : null}
         <span className={s.elapsed}>{seconds(elapsed)}{deep && stage !== "answering" ? " · 预计 1–2 分钟" : ""}</span>
         <HeroButton variant="ghost" size="sm" onPress={onStop} aria-label="停止本次回答">
           停止
         </HeroButton>
       </div>
+      {stepped && !answering ? <StepList steps={steps} /> : null}
     </div>
   );
 }

@@ -2656,6 +2656,17 @@ export interface components {
             scope: string;
             sequence: number;
             /** @constant */
+            type: "step";
+            id: string;
+            label: string;
+            status: "done" | "active" | "pending" | "stopped";
+            result?: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
             type: "route";
             tier: "quick" | "grounded" | "deep";
             source: "rule" | "model" | "fallback";

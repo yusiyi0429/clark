@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
+import type { Step, StepStatus } from "@/components/steps/StepList";
 import { afterResize, resizing } from "./resizeGate";
 import { useStableCallback } from "./stableCallback";
 
@@ -187,6 +188,8 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   const [route, setRoute] = useState<TurnRoute | null>(null);
   /** 进度行：最近一步在查什么、已经查完几项。 */
   const [progress, setProgress] = useState<TurnProgress>({ label: null, checked: 0 });
+  /** Agent 处理时的步骤（服务端 step 事件，按 id 取代）；有步骤时进度行的单行文字和计数由步骤列表替代。 */
+  const [steps, setSteps] = useState<Step[]>([]);
   /** 本轮（或刚结束那一轮）的思考摘要；换 scope、发下一句时清空。 */
   const [thought, setThought] = useState<TurnThought | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -405,6 +408,7 @@ ${input}` : input;
     setStartedAt(began);
     setRoute(null);
     setProgress({ label: null, checked: 0 });
+    setSteps([]);
     setThought(null);
     setStatus("streaming");
     const attachmentRefs = attachments.map((attachment) => ({ id: attachment.id }));
@@ -514,6 +518,10 @@ ${input}` : input;
             }
             reply += event.delta ?? "";
             if (live()) showPartial(withNotice(notice, reply), live);
+          }
+          if (event.type === "step" && event.id && event.label && live()) {
+            const step: Step = { id: event.id, label: event.label, status: (event.status ?? "active") as StepStatus, ...(event.result ? { result: event.result } : {}) };
+            setSteps((current) => current.some((item) => item.id === step.id) ? current.map((item) => (item.id === step.id ? step : item)) : [...current, step]);
           }
           if (event.type === "tool" && event.phase === "started") runningTools += 1;
           if (event.type === "tool" && event.phase === "completed") runningTools = Math.max(0, runningTools - 1);
@@ -643,6 +651,7 @@ ${input}` : input;
     startedAt,
     route,
     progress,
+    steps,
     thought,
     error,
     /** 这一轮没完成、能接着来时的那个按钮（「继续」从断点续写 / 「重新回答」用已查到的材料重答）；回答进行中没有。 */

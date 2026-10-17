@@ -29,6 +29,8 @@
 :global([data-tone=light]) .thinkingNote{color:#7a7f89}
 .thinking{transition:opacity .3s ease}
 .thinkingGroup[data-stage=answering] .thinking{opacity:.6}
+/* 有步骤列表时（StepList）：进度行下沿收紧，步骤列表接在下面。 */
+.thinkingGroup[data-steps] .thinking{margin-bottom:4px}
 /*
  * 思考过程（模型返回的思考摘要）：正文开始前在进度行上方滚动，只露最近四行。有人会读：13px、比正文浅一级的灰（与正文分层），不整片蒙淡；
  * 超过四行、最上面一行被切开时（data-clipped）只把那一行淡出。

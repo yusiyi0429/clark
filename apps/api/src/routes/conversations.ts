@@ -32,6 +32,7 @@ import { withNotice } from "../conversationRouting.js";
 import { ConversationTurnError, recoveryNote, resumeInstruction, shortFailureReason, turnFailureCopy, type TurnFailureKind, type TurnRecoverySummary } from "../conversationRecovery.js";
 import { personalMemoryToolsFor } from "../personalMemory.js";
 import { searchOwnConversationHistory } from "../conversationHistorySearch.js";
+import { createStepTracker } from "../conversationSteps.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -286,10 +287,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             // 界面只用它显示档位；时限统一是绝对上限。
             event = { ...event, timeoutMs: conversationTurnTimeoutMs };
           }
-          if (reply.raw.destroyed) return;
-          const data = { ...event, runId, scope: req.params.scope, sequence: ++eventSequence };
-          reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
+          if (!reply.raw.destroyed) {
+            const data = { ...event, runId, scope: req.params.scope, sequence: ++eventSequence };
+            reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
+          }
+          // 连接断了也照样记步骤：运行记录里要有完整的步骤。
+          if (event.type === "tool") steps.tool(event as Parameters<typeof steps.tool>[0]);
         };
+        // 当前步骤（已定设计第 6 节第 2 条）：工具开始、结束映射成 step 事件；整轮的步骤随运行记录存下。
+        const steps = createStepTracker((step) => emit({ type: "step", ...step }));
 
         // 整轮卡住检测（最后一道）：模型调用自己的卡住会就地恢复并发 recovery 事件；这里只在连恢复都没有进展时停下。
         const stall = setInterval(() => {
@@ -301,7 +307,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         const routeSnapshot = (partial?: boolean, summary?: TurnRecoverySummary) => JSON.stringify({ route: { tier: routeTier ?? null, model: routeModel ?? null, recoveries,
           ...(summary ? { recovery: { originalModel: summary.originalModel, fallbackModel: summary.fallbackModel ?? null, reasons: summary.reasons,
             actions: summary.actions, retries: summary.retries } } : {}) },
-          ...(partial === undefined ? {} : { partial }) });
+          ...(partial === undefined ? {} : { partial }), steps: steps.list() });
         let recoverySummary: TurnRecoverySummary | undefined;
         /**
          * 这一轮没完成（出错、超时、卡住、一号位停止或关掉页面）：已写出的部分连同开场说明存成这一轮的回答，末尾一行说明；
@@ -309,6 +315,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
          */
         const settleFailure = async (kind: TurnFailureKind, raw: string, cause?: unknown) => {
           const partial = streamedBody.trim().length > 0;
+          steps.finish(true);
           const copy = turnFailureCopy(kind, { partial, recoveries, stallSeconds: Math.max(1, Math.round(conversationStallTimeoutMs / 1000)), capMinutes: Math.max(1, Math.round(conversationTurnTimeoutMs / 60_000)) });
           const stopped = kind === "aborted";
           const note = stopped
@@ -394,6 +401,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           } else {
             // 这一轮走过恢复（用了备用模型、重试、续写、精简历史）：回答末尾一行很淡的说明，随消息存下。
             recoverySummary = result.recoverySummary;
+            steps.finish(false);
             const note = recoveryNote(recoverySummary);
             await client.query("BEGIN");
             await client.query(
