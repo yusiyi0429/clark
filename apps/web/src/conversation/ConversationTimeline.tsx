@@ -26,6 +26,7 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
   return (
     <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status}
       thought={data.thought?.seconds != null ? { text: data.thought.text, seconds: data.thought.seconds } : null}
+      steps={!data.thinking || data.stage === "answering" ? data.steps : null}
       footer={(index) => (index === lastIndex && options.length ? <AnswerOptions scope={data.scope} options={options} /> : null)} />
   );
 }

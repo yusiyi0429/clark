@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { StepList, type Step } from "@/components/steps/StepList";
-import { ConversationThinking } from "./Transcript";
+import { StepList, StepToggle, type Step } from "@/components/steps/StepList";
+import { ConversationThinking, ConversationTurn } from "./Transcript";
 
 /** 当前步骤（已定设计第 6 节第 2 条）：做完打勾、当前高亮、没开始置灰，有结果直接显示；有步骤时替代进度行的单行文字和计数。 */
 const noop = () => undefined;
@@ -31,10 +32,25 @@ describe("步骤列表", () => {
     expect(html.indexOf('data-testid="conversation-thinking"')).toBeLessThan(html.indexOf('data-testid="step-list"'));
   });
 
-  it("正文开始后步骤收起，进度行里只留一个勾和做完的步数", () => {
-    const html = renderToStaticMarkup(<ConversationThinking stage="answering" startedAt={Date.now()} onStop={noop} steps={steps} />);
-    expect(html).not.toContain('data-testid="step-list"');
-    expect(html).toMatch(/data-testid="step-count" aria-label="已完成 2 步">.*2<\/span>/);
+  it("正文开始后步骤收起：进度行里不再有步骤，这条回答的「用时」一行多一个「✓ N 步」，默认收起", () => {
+    const thinking = renderToStaticMarkup(<ConversationThinking stage="answering" startedAt={Date.now()} onStop={noop} steps={steps} />);
+    expect(thinking).not.toContain("step-list");
+    expect(thinking).not.toContain("step-toggle");
+    const turn = renderToStaticMarkup(<ConversationTurn message={{ sequence: 2, role: "assistant", content: "先做县城样板。" }} streaming steps={steps} />);
+    expect(turn).toMatch(/data-testid="step-toggle"[^>]*>.*2 步<\/button>/);
+    expect(turn).toMatch(/aria-expanded="false"[^>]*data-testid="step-toggle"/);
+    expect(turn).not.toContain('data-testid="step-list"');
+    expect(renderToStaticMarkup(<ConversationTurn message={{ sequence: 2, role: "assistant", content: "先做县城样板。" }} />)).not.toContain("step-toggle");
+  });
+
+  it("「✓ N 步」点一下展开、再点收起；一步都没做完时不出现", () => {
+    const onToggle = vi.fn();
+    const element = StepToggle({ steps, open: false, onToggle }) as ReactElement<{ onClick: () => void; "aria-expanded": boolean }>;
+    expect(element.props["aria-expanded"]).toBe(false);
+    element.props.onClick();
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect((StepToggle({ steps, open: true, onToggle }) as ReactElement<{ "aria-expanded": boolean }>).props["aria-expanded"]).toBe(true);
+    expect(StepToggle({ steps: [{ id: "s1", label: "查企业知识", status: "active" }], open: false, onToggle })).toBeNull();
   });
 
   it("没有步骤事件时，进度行与原来一样", () => {

@@ -9,10 +9,10 @@ export type Step = { id: string; label: string; status: StepStatus; result?: str
  * 做完的打勾，当前的高亮，没开始的置灰；某一步有结果就直接跟在后面。只用图标、状态色和短标签表达，不加说明句。
  * 排在对话进度行之下，和阶段文字对齐，字号与颜色都比正文低一级，不抢正文。
  */
-export function StepList({ steps }: { steps: Step[] }) {
+export function StepList({ steps, className, id }: { steps: Step[]; className?: string; id?: string }) {
   if (!steps.length) return null;
   return (
-    <ol className={s.list} data-testid="step-list">
+    <ol id={id} className={className ? `${s.list} ${className}` : s.list} data-testid="step-list">
       {steps.map((step) => (
         <li key={step.id} className={s.step} data-status={step.status} aria-current={step.status === "active" ? "step" : undefined}>
           <span className={s.mark} aria-hidden>
@@ -28,13 +28,14 @@ export function StepList({ steps }: { steps: Step[] }) {
   );
 }
 
-/** 正文开始后步骤收起：进度行里只留一个勾和做完的步数。 */
-export function StepCount({ steps }: { steps: Step[] }) {
+/** 正文开始后步骤收起成「✓ N 步」，挂在这条回答的「用时」一行；点一下展开步骤列表。className 由宿主给（与同一行的其他开关同一样式）。 */
+export function StepToggle({ steps, open, onToggle, className, controls }: { steps: Step[]; open: boolean; onToggle: () => void; className?: string; controls?: string }) {
   const done = steps.filter((step) => step.status === "done").length;
   if (!done) return null;
   return (
-    <span className={s.count} data-testid="step-count" aria-label={`已完成 ${done} 步`}>
-      <Check size={11} strokeWidth={2.4} aria-hidden />{done}
-    </span>
+    <button type="button" className={className ? `${s.toggle} ${className}` : s.toggle} aria-expanded={open} aria-controls={open ? controls : undefined}
+      onClick={onToggle} data-testid="step-toggle">
+      <Check size={11} strokeWidth={2.4} aria-hidden />{done} 步
+    </button>
   );
 }
