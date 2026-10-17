@@ -1,8 +1,10 @@
 /** 「连接到外部工具」：给非技术同事的一份说明文件，发给自己的 Codex、Claude Code 或其他 AI 工具，由它照着完成设置。 */
 
 export type AgentClient = "codex" | "claude" | "other";
+/** collector 是本机采集器的令牌：只出现在连接列表里，不走 MCP 连接说明。 */
+export type TokenClient = AgentClient | "collector";
 
-export const clientName = (client: AgentClient) => client === "codex" ? "Codex" : client === "claude" ? "Claude Code" : "AI 工具";
+export const clientName = (client: TokenClient) => client === "codex" ? "Codex" : client === "claude" ? "Claude Code" : client === "collector" ? "本机采集器" : "AI 工具";
 
 export const SYNC_INSTRUCTION = "用天枢 MCP 同步我本周的工作进展：先调用 tianshu 的 list_my_items（status=all）看我负责的执行事项；我已知的协作事项用 get_item 核对。再根据我这周实际做过的事（当前目录及其下各仓库的提交、文档，以及我们的对话），为每件有进展的事项调用一次 append_progress，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 add_link 放进对应事项。我推进的事项已经做完的，用 submit_for_acceptance 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条。";
 

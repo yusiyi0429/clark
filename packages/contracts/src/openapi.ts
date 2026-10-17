@@ -124,6 +124,7 @@ import {
   ListPersonalTokensResponse,
   CreatePersonalTokenRequest,
   CreatePersonalTokenResponse,
+  CollectorHeartbeatRequest, CollectorHeartbeatResponse, CollectorReportRequest, CollectorReportResponse,
   OAuthConsentRequest,
   OAuthConsentResponse,
   OAuthConsentDecisionResponse,
@@ -1325,6 +1326,20 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "新令牌", content: { "application/json": { schema: { $ref: "#/components/schemas/CreatePersonalTokenResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "409": errorResponse },
         },
       },
+      "/api/collector/heartbeat": {
+        post: {
+          operationId: "collectorHeartbeat", summary: "本机采集器心跳：设备、版本、各来源状态（collector 个人令牌）",
+          requestBody: jsonBody({ $ref: "#/components/schemas/CollectorHeartbeatRequest" }),
+          responses: { "200": { description: "已记下", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorHeartbeatResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+      },
+      "/api/collector/reports": {
+        post: {
+          operationId: "collectorReport", summary: "本机采集器上报一段工作与本机清单，按 clientEventId 幂等（collector 个人令牌）",
+          requestBody: jsonBody({ $ref: "#/components/schemas/CollectorReportRequest" }),
+          responses: { "200": { description: "新记下与重放的条数", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorReportResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+      },
       "/api/me/tokens/{id}": {
         delete: {
           operationId: "revokePersonalToken", summary: "撤销本人令牌",
@@ -2422,6 +2437,10 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ListPersonalTokensResponse: ListPersonalTokensResponse as JsonSchema,
         CreatePersonalTokenRequest: CreatePersonalTokenRequest as JsonSchema,
         CreatePersonalTokenResponse: CreatePersonalTokenResponse as JsonSchema,
+        CollectorHeartbeatRequest: CollectorHeartbeatRequest as JsonSchema,
+        CollectorHeartbeatResponse: CollectorHeartbeatResponse as JsonSchema,
+        CollectorReportRequest: CollectorReportRequest as JsonSchema,
+        CollectorReportResponse: CollectorReportResponse as JsonSchema,
         TaskPerson: TaskPerson as JsonSchema,
         TaskMissionRef: TaskMissionRef as JsonSchema,
         CreateMyTaskRequest: CreateMyTaskRequest as JsonSchema,

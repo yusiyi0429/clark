@@ -5864,6 +5864,102 @@
         }
       }
     },
+    "/api/collector/heartbeat": {
+      "post": {
+        "operationId": "collectorHeartbeat",
+        "summary": "本机采集器心跳：设备、版本、各来源状态（collector 个人令牌）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectorHeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已记下",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectorHeartbeatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/collector/reports": {
+      "post": {
+        "operationId": "collectorReport",
+        "summary": "本机采集器上报一段工作与本机清单，按 clientEventId 幂等（collector 个人令牌）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectorReportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "新记下与重放的条数",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectorReportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/tokens/{id}": {
       "delete": {
         "operationId": "revokePersonalToken",
@@ -33530,6 +33626,10 @@
           {
             "const": "other",
             "type": "string"
+          },
+          {
+            "const": "collector",
+            "type": "string"
           }
         ]
       },
@@ -33567,6 +33667,10 @@
               },
               {
                 "const": "other",
+                "type": "string"
+              },
+              {
+                "const": "collector",
                 "type": "string"
               }
             ]
@@ -36733,6 +36837,10 @@
                     {
                       "const": "other",
                       "type": "string"
+                    },
+                    {
+                      "const": "collector",
+                      "type": "string"
                     }
                   ]
                 },
@@ -36825,6 +36933,10 @@
               {
                 "const": "other",
                 "type": "string"
+              },
+              {
+                "const": "collector",
+                "type": "string"
               }
             ]
           },
@@ -36892,6 +37004,10 @@
                   {
                     "const": "other",
                     "type": "string"
+                  },
+                  {
+                    "const": "collector",
+                    "type": "string"
                   }
                 ]
               },
@@ -36945,6 +37061,477 @@
                 ]
               }
             }
+          }
+        }
+      },
+      "CollectorHeartbeatRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "device",
+          "version",
+          "sources"
+        ],
+        "properties": {
+          "device": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "platform"
+            ],
+            "properties": {
+              "id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "maxLength": 80,
+                "type": "string"
+              },
+              "platform": {
+                "anyOf": [
+                  {
+                    "const": "windows",
+                    "type": "string"
+                  },
+                  {
+                    "const": "macos",
+                    "type": "string"
+                  },
+                  {
+                    "const": "linux",
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "version": {
+            "minLength": 1,
+            "maxLength": 40,
+            "type": "string"
+          },
+          "sources": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "source",
+                "status",
+                "coverageUntil",
+                "lastNewEvidenceAt",
+                "errorCode"
+              ],
+              "properties": {
+                "source": {
+                  "pattern": "^[a-z0-9_-]{1,32}$",
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "ok",
+                      "type": "string"
+                    },
+                    {
+                      "const": "not_found",
+                      "type": "string"
+                    },
+                    {
+                      "const": "error",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "coverageUntil": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "lastNewEvidenceAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errorCode": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[A-Z0-9_]{1,40}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "CollectorHeartbeatResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "receivedAt"
+        ],
+        "properties": {
+          "receivedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "CollectorReportRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "device",
+          "version",
+          "kind",
+          "windowStart",
+          "windowEnd",
+          "sources",
+          "items"
+        ],
+        "properties": {
+          "device": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "platform"
+            ],
+            "properties": {
+              "id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "maxLength": 80,
+                "type": "string"
+              },
+              "platform": {
+                "anyOf": [
+                  {
+                    "const": "windows",
+                    "type": "string"
+                  },
+                  {
+                    "const": "macos",
+                    "type": "string"
+                  },
+                  {
+                    "const": "linux",
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "version": {
+            "minLength": 1,
+            "maxLength": 40,
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "digest",
+                "type": "string"
+              },
+              {
+                "const": "eod",
+                "type": "string"
+              },
+              {
+                "const": "catchup",
+                "type": "string"
+              }
+            ]
+          },
+          "windowStart": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "windowEnd": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "sources": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "source",
+                "status",
+                "coverageUntil",
+                "lastNewEvidenceAt",
+                "errorCode"
+              ],
+              "properties": {
+                "source": {
+                  "pattern": "^[a-z0-9_-]{1,32}$",
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "ok",
+                      "type": "string"
+                    },
+                    {
+                      "const": "not_found",
+                      "type": "string"
+                    },
+                    {
+                      "const": "error",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "coverageUntil": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "lastNewEvidenceAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errorCode": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[A-Z0-9_]{1,40}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "items": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "clientEventId",
+                "source",
+                "startedAt",
+                "endedAt",
+                "summary",
+                "links",
+                "taskHint"
+              ],
+              "properties": {
+                "clientEventId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "source": {
+                  "pattern": "^[a-z0-9_-]{1,32}$",
+                  "type": "string"
+                },
+                "startedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "endedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "summary": {
+                  "minLength": 1,
+                  "maxLength": 4000,
+                  "type": "string"
+                },
+                "links": {
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "url"
+                    ],
+                    "properties": {
+                      "url": {
+                        "pattern": "^https?://",
+                        "maxLength": 500,
+                        "type": "string"
+                      },
+                      "title": {
+                        "maxLength": 120,
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "taskHint": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "inventory": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "scheduledTasks",
+              "feishuDocs"
+            ],
+            "properties": {
+              "scheduledTasks": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "schedule",
+                    "command"
+                  ],
+                  "properties": {
+                    "name": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "schedule": {
+                      "anyOf": [
+                        {
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "command": {
+                      "anyOf": [
+                        {
+                          "maxLength": 500,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "feishuDocs": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "url",
+                    "title",
+                    "readAt"
+                  ],
+                  "properties": {
+                    "url": {
+                      "pattern": "^https://",
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    "title": {
+                      "anyOf": [
+                        {
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "readAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "CollectorReportResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "accepted",
+          "duplicates",
+          "receivedAt"
+        ],
+        "properties": {
+          "accepted": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "duplicates": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": "string"
           }
         }
       },

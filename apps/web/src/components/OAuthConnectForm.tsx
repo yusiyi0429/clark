@@ -49,7 +49,7 @@ export function OAuthConnectForm({ role, activeCount = 0, actionsTarget, onCreat
           if (view) {
             if (!announced.current.has(view.id)) { announced.current.add(view.id); callbacks.current.onCreated?.(view); }
             callbacks.current.onUpdated?.(view);
-            if (view.lastUsedAt) { setConnected(view.client); setStatus(""); return; }
+            if (view.lastUsedAt) { setConnected(view.client as AgentClient); setStatus(""); return; }
             setStatus("已允许连接，等待工具完成验证…");
           }
         } else if (data) initial.current = new Set(data.tokens.map((token) => token.id));

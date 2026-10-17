@@ -28,6 +28,7 @@ import { createPersonalReviewDraftAgent } from "./personalReviewAgent.js";
 import { createMonthlyReviewAssessAgent, createMonthlyReviewDraftAgent, createMonthlyReviewSummaryAgent } from "./monthlyReviewAgents.js";
 import { createMonthlyReviewScheduler } from "./monthlyReviewScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
+import { createCollectorHealthScheduler } from "./collector.js";
 import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
@@ -184,6 +185,7 @@ const monthlyReviewService = createMonthlyReviewService({
 const monthlyReviewScheduler = createMonthlyReviewScheduler(monthlyReviewService);
 const now = () => new Date();
 const missionRoundScheduler = createMissionRoundScheduler(pool, now);
+const collectorHealthScheduler = createCollectorHealthScheduler(pool, now);
 await recoverStaleMissionDrafts(pool, now());
 // 启动补偿：崩溃中断的 running 扫描标为 failed（不自动重跑）
 await radarService.recoverStaleRuns();
@@ -224,10 +226,12 @@ app.addHook("onClose", async () => {
   monthlyReviewScheduler.close();
   await monthlyReviewService.idle();
   missionRoundScheduler.close();
+  collectorHealthScheduler.close();
 });
 scheduler.start();
 monthlyScheduler.start();
 monthlyReviewScheduler.start();
 missionRoundScheduler.start();
+collectorHealthScheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);

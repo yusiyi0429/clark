@@ -8,7 +8,7 @@ import { Button } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { monthDayTime } from "@/lib/companyTime";
-import { GUIDE_FILE_NAME, clientName, connectCommands, connectionGuide } from "@/lib/connectionGuide";
+import { GUIDE_FILE_NAME, clientName, connectCommands, connectionGuide, type AgentClient } from "@/lib/connectionGuide";
 import f from "@/components/onboarding/foundation.module.css";
 import s from "@/styles/connection-dialog.module.css";
 import { OAuthConnectForm } from "./OAuthConnectForm";
@@ -92,7 +92,7 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
   const endpoint = `${origin}/mcp/me`;
   const download = () => {
     if (!created) return;
-    const text = connectionGuide({ role, client: created.view.client, endpoint, token: created.token, expires: expiryText(created.view.expiresAt), weeklySync: createdWeekly });
+    const text = connectionGuide({ role, client: created.view.client as AgentClient, endpoint, token: created.token, expires: expiryText(created.view.expiresAt), weeklySync: createdWeekly });
     const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url; link.download = GUIDE_FILE_NAME;
@@ -137,7 +137,7 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
         <div className={s.manualBody}>
           {commandBlock("令牌", created.token)}
           <p className={s.muted}>连接地址：{endpoint}</p>
-          {connectCommands(created.view.client, endpoint, created.token).map(({ label, value }) => commandBlock(label, value))}
+          {connectCommands(created.view.client as AgentClient, endpoint, created.token).map(({ label, value }) => commandBlock(label, value))}
           {created.view.client === "codex" ? <p className={s.muted}>保存后完全退出并重新打开 Codex。</p> : null}
         </div>
       </details>
