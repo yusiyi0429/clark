@@ -53,6 +53,7 @@
 
 /* 「要你定」与「问答」的分组页头。 */
 .panel, .thread { display: grid; gap: 12px; min-width: 0; }
+.thread { scroll-margin-top: 88px; }
 .panelHead { display: flex; align-items: center; gap: 8px; }
 .panelHead h2 { margin: 0; color: var(--ink); font-size: 15px; font-weight: 600; line-height: 1.5; }
 .clarifyList { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }

@@ -136,10 +136,20 @@ describe("送达通道 ⑨ 传话", () => {
     // 准备阶段不写库：确认前发起人收不到任何问题。
     expect(await call("ceo", "GET", `/api/requests/${sent.id}`).then((res) => (res.json() as { request: TRequestView }).request.questions)).toHaveLength(0);
 
-    const asked = await act("b", await view("b", sent.id), "request.ask", { question: prepared.question });
+    const askView = await view("b", sent.id);
+    const asked = await act("b", askView, "request.ask", { question: prepared.question });
     expect(asked.statusCode).toBe(200);
+    // 确认发出的问题送到发起人：一条「有人提问」，重放不再插问题、不再通知。
+    expect((await act("b", askView, "request.ask", { question: prepared.question })).statusCode).toBe(200);
+    const askedNotices = () => t!.sql("SELECT actor_id, item_id, read_at FROM notifications WHERE person_id = $1 AND kind = 'request_asked'", [TEST_CEO.personId]);
+    expect(await askedNotices()).toEqual([expect.objectContaining({ actor_id: TEST_MEMBER.personId, read_at: null })]);
+    // CEO 的通知栏读「发出的」列表：这条请求未读、有 1 问待回答。
+    const sentBox = (await call("ceo", "GET", "/api/me/requests?box=sent")).json() as { items: { id: string; unread: boolean; openQuestions: number }[] };
+    expect(sentBox.items).toEqual([expect.objectContaining({ id: sent.id, unread: true, openQuestions: 1 })]);
     const atInitiator = await view("ceo", sent.id);
     const question = atInitiator.questions[0];
+    expect((await askedNotices())[0]).toMatchObject({ item_id: question.id });
+    expect((await askedNotices())[0].read_at).not.toBeNull();
     expect(question).toMatchObject({ askerName: "测试乙", question: "备案信息表：截图放哪", answer: null, mergedIntoBody: false });
 
     const draft = await call("ceo", "POST", `/api/requests/${sent.id}/questions/${question.id}/answer-draft`);
@@ -166,6 +176,7 @@ describe("送达通道 ⑨ 传话", () => {
     expect(again.steps.map((item) => item.status)).toEqual(["done", "done", "pending", "pending"]);
     expect(again.steps[1].result).toBe("已有人问过，测试甲答过");
     expect((await view("ceo", sent.id)).questions).toHaveLength(1);
+    expect(await askedNotices()).toHaveLength(1);
   });
 
   it("标记完成：本人那一行变完成并通知发起人，全部完成后请求关闭，重放不重复通知", async () => {
@@ -196,6 +207,9 @@ describe("送达通道 ⑨ 传话", () => {
     const ownV2 = ((await call("b", "POST", "/api/requests/draft", { prompt: own.prompt, requestId: own.id,
       clarifications: [{ question: SCREENSHOT_QUESTION, answer: "直接贴进表格" }] })).json() as { request: TRequestView }).request;
     expect((await act("b", ownV2, "request.send", { recipientIds: [THIRD.personId] })).statusCode).toBe(200);
+    expect((await act("c", await view("c", own.id), "request.ask", { question: "截图放哪个文件夹？" })).statusCode).toBe(200);
+    expect((await notifications("b")).filter((item) => item.kind === "request_asked").map((item) => [item.text, item.objectId]))
+      .toEqual([["测试丙问你：填备案信息表", own.id]]);
     expect((await act("c", await view("c", own.id), "request.mark_done")).statusCode).toBe(200);
     const unreadSent = (await call("b", "GET", "/api/me/requests?box=sent")).json() as { items: { id: string; unread: boolean }[] };
     expect(unreadSent.items).toEqual([expect.objectContaining({ id: own.id, unread: true })]);

@@ -7667,7 +7667,7 @@ export interface components {
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked";
                 text: string;
                 objectType: "task" | "meeting" | "issue" | "request";
                 objectId: string;

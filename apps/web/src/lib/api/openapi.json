@@ -43699,6 +43699,10 @@
                     {
                       "const": "request_done",
                       "type": "string"
+                    },
+                    {
+                      "const": "request_asked",
+                      "type": "string"
                     }
                   ]
                 },

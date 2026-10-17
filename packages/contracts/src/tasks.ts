@@ -360,10 +360,11 @@ export const NotificationKind = Type.Union([
   Type.Literal("task_submitted"),
   /** 一号位把议题指派给本人主责（issue.assign）；objectType=issue。 */
   Type.Literal("issue_assigned"),
-  /** 送达通道（⑨ 传话）：收到请求、我的问题有人回答、接收人标记完成；objectType=request。 */
+  /** 送达通道（⑨ 传话）：收到请求、我的问题有人回答、接收人标记完成、接收人提问（给发起人）；objectType=request。 */
   Type.Literal("request_received"),
   Type.Literal("request_answered"),
   Type.Literal("request_done"),
+  Type.Literal("request_asked"),
 ]);
 
 /** 通知只指向对象；text 在读取时按对象当前状态组合。 */

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 通知栏里的「请求」一组（参照 Linear Inbox 的待处理）：收到还没完成的待办卡、我发出的有问题待回答的、有人完成或回答了还没看的。
+ * 通知栏里的「请求」一组（参照 Linear Inbox 的待处理）：收到还没完成的待办卡、我发出的有问题待回答的（点开落到问答区）、有人完成或回答了还没看的。
  * 打开那条请求即读；页头右上角「+」发起新请求，点页头进列表。CEO 和成员共用，各自传入路径前缀。
  */
 import { useCallback, useEffect, useState } from "react";
@@ -15,7 +15,8 @@ import n from "@/styles/notifications.module.css";
 import s from "./requests.module.css";
 
 type Navigate = (href: string, origin?: Element | null) => void;
-type Notice = { id: string; title: string; detail: string; tone: "amber" | "neutral" };
+/** qa：点开直接落到问答区（有问题等我回答时）。 */
+type Notice = { id: string; title: string; detail: string; tone: "amber" | "neutral"; qa?: boolean };
 
 export function requestNotices(inbox: TRequestListItem[], sent: TRequestListItem[]): Notice[] {
   const received = inbox.filter((item) => item.myStatus === "pending" || item.unread).map<Notice>((item) => ({
@@ -23,7 +24,7 @@ export function requestNotices(inbox: TRequestListItem[], sent: TRequestListItem
     detail: [item.initiatorName, monthDayTime(item.sentAt), item.myStatus === "done" ? "已完成" : ""].filter(Boolean).join(" · "),
   }));
   const mine = sent.filter((item) => item.status !== "draft" && (item.openQuestions > 0 || item.unread)).map<Notice>((item) => ({
-    id: item.id, title: item.title, tone: item.openQuestions > 0 ? "amber" : "neutral",
+    id: item.id, title: item.title, tone: item.openQuestions > 0 ? "amber" : "neutral", qa: item.openQuestions > 0,
     detail: item.openQuestions > 0 ? `${item.openQuestions} 问待回答` : `${item.recipientsDone}/${item.recipientNames.length} 完成`,
   }));
   return [...received, ...mine];
@@ -68,8 +69,8 @@ export function RequestNotices({ base, currentHref, onNavigate }: { base: string
           {notices.map((notice) => {
             const href = `${base}/${encodeURIComponent(notice.id)}`;
             return (
-              <button key={notice.id} type="button" className={n.item} data-tone={notice.tone} aria-current={href === currentHref ? "true" : undefined}
-                onClick={(event) => onNavigate(href, origin(event.target))}>
+              <button key={notice.id} type="button" className={n.item} data-tone={notice.tone} aria-current={href === currentHref?.split("#")[0] ? "true" : undefined}
+                onClick={(event) => onNavigate(notice.qa ? `${href}#qa` : href, origin(event.target))}>
                 <span className={n.mark} aria-hidden="true" />
                 <span className={n.itemText}><span>{notice.title}</span><small>{notice.detail}</small></span>
                 <ChevronRight size={15} aria-hidden="true" />

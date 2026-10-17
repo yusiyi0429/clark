@@ -246,10 +246,13 @@ function SentRequest({ request, onChange }: { request: TRequestView; onChange: (
 function QuestionThread({ request, busy, perform }: {
   request: TRequestView; busy: boolean; perform: (action: TActionDescriptor | undefined, input?: unknown) => Promise<boolean>;
 }) {
+  const ref = useRef<HTMLElement>(null);
+  // 从「有人提问」的通知点进来（#qa）：直接落到问答区。
+  useEffect(() => { if (window.location.hash === "#qa") ref.current?.scrollIntoView({ block: "start" }); }, []);
   if (!request.questions.length) return null;
   const open = request.questions.filter((question) => question.answer === null).length;
   return (
-    <section className={s.thread} aria-labelledby="request-qa">
+    <section ref={ref} id="qa" className={s.thread} aria-labelledby="request-qa">
       <header className={s.panelHead}>
         <h2 id="request-qa">问答</h2>
         <b className={s.count} data-tone={open ? "wait" : "done"}>{open || request.questions.length}</b>

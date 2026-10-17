@@ -261,8 +261,11 @@ async function executeInTransaction(client: PoolClient, viewerId: string, scope:
   if (scope.actionType === "request.ask") {
     if (!mine || scope.itemId !== viewerId) return failure(403, "FORBIDDEN", "只有接收人可以提问");
     if (mine.status === "done") return failure(409, "REQUEST_ALREADY_DONE", "已经标记完成");
-    await q(`INSERT INTO request_questions (id, request_id, asker_id, question, fingerprint) VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (fingerprint) DO NOTHING`, [randomUUID(), row.id, viewerId, (input as { question: string }).question.trim(), fingerprint]);
+    // 走到这一步的问题，是本人在「查有没有人问过」之后确认要发的：落库并通知发起人；重放不再插、不再通知。
+    const questionId = randomUUID();
+    const inserted = await q(`INSERT INTO request_questions (id, request_id, asker_id, question, fingerprint) VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (fingerprint) DO NOTHING`, [questionId, row.id, viewerId, (input as { question: string }).question.trim(), fingerprint]);
+    if (inserted.rowCount) await insertNotification(client, { personId: row.initiator_id, kind: "request_asked", objectType: "request", objectId: row.id, itemId: questionId, actorId: viewerId });
     return { ok: true };
   }
 

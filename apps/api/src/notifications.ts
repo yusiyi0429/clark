@@ -63,6 +63,8 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}请你：${row.request_title ?? ""}`;
     case "request_answered":
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}回答了你的问题：${row.request_title ?? ""}`;
+    case "request_asked":
+      return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}问你：${row.request_title ?? ""}`;
     case "request_done":
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}完成了：${row.request_title ?? ""}`;
   }
