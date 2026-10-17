@@ -6,12 +6,12 @@ import type { Query } from "./meetingStore.js";
 import { personDisplayNames } from "./people.js";
 
 /**
- * 通知只存指向哪个对象：object_type/object_id 指向执行事项或会议，
+ * 通知只存指向哪个对象：object_type/object_id 指向执行事项、会议、议题或请求，
  * strategic_rejected 另用 item_id 指向会议里的战略项；文案读取时按对象当前状态组合。
  */
 export async function insertNotification(
   client: PoolClient,
-  input: { personId: string; kind: TNotificationKind; objectType: "task" | "meeting" | "issue"; objectId: string; itemId?: string; actorId?: string },
+  input: { personId: string; kind: TNotificationKind; objectType: "task" | "meeting" | "issue" | "request"; objectId: string; itemId?: string; actorId?: string },
 ): Promise<void> {
   await client.query(
     `INSERT INTO notifications (id, person_id, kind, object_type, object_id, item_id, actor_id)
@@ -23,7 +23,7 @@ export async function insertNotification(
 type NotificationRow = {
   id: string;
   kind: TNotificationKind;
-  object_type: "task" | "meeting" | "issue";
+  object_type: "task" | "meeting" | "issue" | "request";
   object_id: string;
   actor_id: string | null;
   created_at: Date;
@@ -35,6 +35,7 @@ type NotificationRow = {
   item_title: string | null;
   item_id: string | null;
   issue_assignments: { assignedAt: string; note: string | null }[] | null;
+  request_title: string | null;
 };
 
 function composeText(row: NotificationRow, names: Map<string, string>): string {
@@ -58,6 +59,12 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
       const note = row.issue_assignments?.find((entry) => entry.assignedAt === row.item_id)?.note;
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"} 请你主责议题「${row.issue_title ?? ""}」${note ? `：${note}` : ""}`;
     }
+    case "request_received":
+      return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}请你：${row.request_title ?? ""}`;
+    case "request_answered":
+      return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}回答了你的问题：${row.request_title ?? ""}`;
+    case "request_done":
+      return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}完成了：${row.request_title ?? ""}`;
   }
 }
 
@@ -65,12 +72,13 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
 export async function listMyNotifications(q: Query, companyMemory: CompanyMemoryRepository, personId: string): Promise<TNotificationView[]> {
   const result = await q(
     `SELECT n.id::text, n.kind, n.object_type, n.object_id, n.item_id, n.actor_id, n.created_at, n.read_at,
-            t.title AS task_title, t.return_reason, m.title AS meeting_title, i.title AS issue_title, i.assignments AS issue_assignments,
+            t.title AS task_title, t.return_reason, m.title AS meeting_title, i.title AS issue_title, i.assignments AS issue_assignments, r.title AS request_title,
             (SELECT item->>'title' FROM jsonb_array_elements(m.outcome->'items') AS item WHERE item->>'id' = n.item_id) AS item_title
        FROM notifications n
        LEFT JOIN tasks t ON n.object_type = 'task' AND t.id::text = n.object_id
        LEFT JOIN meetings m ON m.id::text = CASE WHEN n.object_type = 'task' THEN t.origin_meeting_id::text ELSE n.object_id END
        LEFT JOIN issues i ON n.object_type = 'issue' AND i.id::text = n.object_id
+       LEFT JOIN requests r ON n.object_type = 'request' AND r.id::text = n.object_id
       WHERE n.person_id = $1
       ORDER BY n.read_at IS NOT NULL, n.created_at DESC
       LIMIT 50`,

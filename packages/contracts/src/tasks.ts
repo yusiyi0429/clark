@@ -360,6 +360,10 @@ export const NotificationKind = Type.Union([
   Type.Literal("task_submitted"),
   /** 一号位把议题指派给本人主责（issue.assign）；objectType=issue。 */
   Type.Literal("issue_assigned"),
+  /** 送达通道（⑨ 传话）：收到请求、我的问题有人回答、接收人标记完成；objectType=request。 */
+  Type.Literal("request_received"),
+  Type.Literal("request_answered"),
+  Type.Literal("request_done"),
 ]);
 
 /** 通知只指向对象；text 在读取时按对象当前状态组合。 */
@@ -369,7 +373,7 @@ export const NotificationView = Type.Object(
     kind: NotificationKind,
     text: Type.String({ minLength: 1 }),
     /** issue：被拉进议题群（工单 08），点开进 /me/issues/{objectId}。 */
-    objectType: Type.Union([Type.Literal("task"), Type.Literal("meeting"), Type.Literal("issue")]),
+    objectType: Type.Union([Type.Literal("task"), Type.Literal("meeting"), Type.Literal("issue"), Type.Literal("request")]),
     objectId: Type.String({ minLength: 1 }),
     /** ISO 8601 */
     createdAt: Type.String({ minLength: 1 }),

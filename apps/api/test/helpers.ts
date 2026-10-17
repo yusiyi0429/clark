@@ -29,6 +29,7 @@ import type { MaterialAnnotationAgent } from "../src/materialAnnotationAgent.js"
 import type { MissionCardAnnotationAgent } from "../src/missionCardAnnotationAgent.js";
 import type { MissionCardReviewAgent } from "../src/missionCardReview.js";
 import type { MissionCardDraftAgent } from "../src/missionCardDraftAgent.js";
+import type { RequestAgent } from "../src/delivery/requestAgent.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
@@ -218,6 +219,8 @@ export async function createTestApp(
     missionCardAnnotationAgent?: MissionCardAnnotationAgent;
     missionCardReviewAgent?: MissionCardReviewAgent;
     missionCardDraftAgent?: MissionCardDraftAgent;
+    /** 送达通道的假 Agent；不注入时用真实装配（测试里不会被调用）。 */
+    requestAgent?: RequestAgent;
     driExporter?: DriExporter;
     ontologyUpdater?: OntologyUpdater;
     monthlyDraftAgent?: MonthlyDraftAgent;

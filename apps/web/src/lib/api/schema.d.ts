@@ -771,6 +771,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/requests/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发起人一句话，Agent 起草请求（标题、说明、接收人候选）并自查歧义；带 requestId 时按回答重写同一份草稿 */
+        post: operations["draftRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读一条请求；只有发起人和接收人看得到，打开即把这条请求的通知标为已读 */
+        get: operations["getRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/{id}/questions/prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 接收人提问前：先在说明和已有问答里找答案，找不到就整理成问题等本人确认；不写库 */
+        post: operations["prepareRequestQuestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/{id}/questions/{questionId}/answer-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发起人的 Agent 起草回答（存为草稿，发起人确认后才发出） */
+        post: operations["draftRequestAnswer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/actions/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** request.send / ask / answer / mark_done；send 校验 actionId 里的版本，发出的就是预览那一版 */
+        post: operations["executeRequestAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我收到的（inbox）或我发出的（sent）请求，最近 100 条 */
+        get: operations["listMyRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/radar": {
         parameters: {
             query?: never;
@@ -7565,9 +7667,9 @@ export interface components {
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done";
                 text: string;
-                objectType: "task" | "meeting" | "issue";
+                objectType: "task" | "meeting" | "issue" | "request";
                 objectId: string;
                 createdAt: string;
                 readAt: string | null;
@@ -7707,6 +7809,290 @@ export interface components {
         };
         SeenMarksResponse: {
             keys: string[];
+        };
+        RequestStep: {
+            label: string;
+            status: "done" | "current" | "pending";
+            result: string | null;
+        };
+        RequestPerson: {
+            personId: string;
+            displayName: string;
+        };
+        RequestRecipientView: {
+            personId: string;
+            displayName: string;
+            status: "pending" | "done";
+            doneByName: string | null;
+            doneAt: string | null;
+        };
+        RequestQuestionView: {
+            id: string;
+            askerId: string;
+            askerName: string;
+            question: string;
+            answer: string | null;
+            answerDraft: string | null;
+            answeredAt: string | null;
+            mergedIntoBody: boolean;
+            createdAt: string;
+        };
+        RequestClarification: {
+            question: string;
+            answer: string | null;
+        };
+        RequestView: {
+            id: string;
+            kind: "relay" | "collection" | "impact" | "supplement";
+            status: "draft" | "open" | "done";
+            version: number;
+            title: string;
+            body: string;
+            prompt: string;
+            initiator: {
+                personId: string;
+                displayName: string;
+            };
+            createdAt: string;
+            sentAt: string | null;
+            recipients: {
+                personId: string;
+                displayName: string;
+                status: "pending" | "done";
+                doneByName: string | null;
+                doneAt: string | null;
+            }[];
+            candidates: {
+                personId: string;
+                displayName: string;
+            }[];
+            directory: {
+                personId: string;
+                displayName: string;
+            }[];
+            clarifications: {
+                question: string;
+                answer: string | null;
+            }[];
+            questions: {
+                id: string;
+                askerId: string;
+                askerName: string;
+                question: string;
+                answer: string | null;
+                answerDraft: string | null;
+                answeredAt: string | null;
+                mergedIntoBody: boolean;
+                createdAt: string;
+            }[];
+            viewer: {
+                isInitiator: boolean;
+                isRecipient: boolean;
+                myStatus: "pending" | "done" | null;
+            };
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        RequestResponse: {
+            request: {
+                id: string;
+                kind: "relay" | "collection" | "impact" | "supplement";
+                status: "draft" | "open" | "done";
+                version: number;
+                title: string;
+                body: string;
+                prompt: string;
+                initiator: {
+                    personId: string;
+                    displayName: string;
+                };
+                createdAt: string;
+                sentAt: string | null;
+                recipients: {
+                    personId: string;
+                    displayName: string;
+                    status: "pending" | "done";
+                    doneByName: string | null;
+                    doneAt: string | null;
+                }[];
+                candidates: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                directory: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                clarifications: {
+                    question: string;
+                    answer: string | null;
+                }[];
+                questions: {
+                    id: string;
+                    askerId: string;
+                    askerName: string;
+                    question: string;
+                    answer: string | null;
+                    answerDraft: string | null;
+                    answeredAt: string | null;
+                    mergedIntoBody: boolean;
+                    createdAt: string;
+                }[];
+                viewer: {
+                    isInitiator: boolean;
+                    isRecipient: boolean;
+                    myStatus: "pending" | "done" | null;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+        };
+        DraftRequestRequest: {
+            prompt: string;
+            requestId?: string;
+            clarifications?: {
+                question: string;
+                answer: string | null;
+            }[];
+        };
+        DraftRequestResponse: {
+            request: {
+                id: string;
+                kind: "relay" | "collection" | "impact" | "supplement";
+                status: "draft" | "open" | "done";
+                version: number;
+                title: string;
+                body: string;
+                prompt: string;
+                initiator: {
+                    personId: string;
+                    displayName: string;
+                };
+                createdAt: string;
+                sentAt: string | null;
+                recipients: {
+                    personId: string;
+                    displayName: string;
+                    status: "pending" | "done";
+                    doneByName: string | null;
+                    doneAt: string | null;
+                }[];
+                candidates: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                directory: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                clarifications: {
+                    question: string;
+                    answer: string | null;
+                }[];
+                questions: {
+                    id: string;
+                    askerId: string;
+                    askerName: string;
+                    question: string;
+                    answer: string | null;
+                    answerDraft: string | null;
+                    answeredAt: string | null;
+                    mergedIntoBody: boolean;
+                    createdAt: string;
+                }[];
+                viewer: {
+                    isInitiator: boolean;
+                    isRecipient: boolean;
+                    myStatus: "pending" | "done" | null;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+            steps: {
+                label: string;
+                status: "done" | "current" | "pending";
+                result: string | null;
+            }[];
+        };
+        RequestListItem: {
+            id: string;
+            title: string;
+            status: "draft" | "open" | "done";
+            initiatorName: string;
+            createdAt: string;
+            sentAt: string | null;
+            myStatus: "pending" | "done" | null;
+            recipientNames: string[];
+            recipientsDone: number;
+            openQuestions: number;
+            unread: boolean;
+        };
+        RequestListResponse: {
+            items: {
+                id: string;
+                title: string;
+                status: "draft" | "open" | "done";
+                initiatorName: string;
+                createdAt: string;
+                sentAt: string | null;
+                myStatus: "pending" | "done" | null;
+                recipientNames: string[];
+                recipientsDone: number;
+                openQuestions: number;
+                unread: boolean;
+            }[];
+        };
+        PrepareRequestQuestionRequest: {
+            question: string;
+        };
+        PrepareRequestQuestionResponse: {
+            steps: {
+                label: string;
+                status: "done" | "current" | "pending";
+                result: string | null;
+            }[];
+            answer: {
+                source: "body" | "question";
+                text: string;
+                questionId: string | null;
+            } | null;
+            question: string;
+        };
+        DraftRequestAnswerResponse: {
+            steps: {
+                label: string;
+                status: "done" | "current" | "pending";
+                result: string | null;
+            }[];
+            answer: string;
+        };
+        RequestSendInput: {
+            recipientIds: string[];
+        };
+        RequestAskInput: {
+            question: string;
+        };
+        RequestAnswerInput: {
+            answer: string;
+        };
+        ExecuteRequestActionRequest: {
+            actionId: string;
+            input?: unknown;
         };
     };
     responses: never;
@@ -9836,6 +10222,345 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    draftRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftRequestRequest"];
+            };
+        };
+        responses: {
+            /** @description 草稿与处理步骤 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRequestResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 请求 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    prepareRequestQuestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrepareRequestQuestionRequest"];
+            };
+        };
+        responses: {
+            /** @description 处理步骤与结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrepareRequestQuestionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    draftRequestAnswer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                questionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 回答草稿 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRequestAnswerResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    executeRequestAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecuteRequestActionRequest"];
+            };
+        };
+        responses: {
+            /** @description 请求的最新视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMyRequests: {
+        parameters: {
+            query: {
+                box: "inbox" | "sent";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 请求列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
