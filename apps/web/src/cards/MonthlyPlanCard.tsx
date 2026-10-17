@@ -2,14 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@heroui/react";
-import { ChevronLeft, X } from "lucide-react";
 import type { CardRenderProps } from "./registry";
 import type { TUpdateMonthlyPlanDraftRequest } from "@warmap/contracts";
 import { payloadOf, type MonthlyPlanPayload } from "./payloads";
 import { registryName } from "./scopeNames";
-import { ContextMark } from "@/components/ContextMark";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { browserApi } from "@/lib/api/client";
 import { calendarDate, monthDayTime } from "@/lib/companyTime";
@@ -217,29 +215,16 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
     );
   }
 
-  /** 眉题（clark 月度协商）：月份 + 状态；已签发看签发日期，协商中看草案生成状态。 */
-  const [year, month] = payload.period.split("-");
+  /** 眉题：状态；已签发看签发日期，协商中看草案生成状态。 */
+  const month = payload.period.split("-")[1];
   const status =
     payload.status === "confirmed"
       ? `已签发${payload.confirmedAt ? ` · ${calendarDate(payload.confirmedAt)}` : ""}`
       : `协商中 · ${GENERATION_LABEL[payload.generation.status] ?? payload.generation.status}`;
-  const eyebrow = `月度协商 · ${year} 年 ${Number(month)} 月 · ${status}`;
 
   return (
     <section className={s.workspace} data-testid="monthly-workspace" aria-labelledby="monthly-title">
-      <header className={s.header}>
-        <div className={s.identity}>
-          <ContextMark kind="monthly" />
-          <div>
-            <span className={s.eyebrow}>{eyebrow}</span>
-            <h1 id="monthly-title">月度计划 {payload.period}</h1>
-          </div>
-        </div>
-        <Button isIconOnly variant="tertiary" className={s.close} data-close-view onPress={() => onNavigate("/")} aria-label="关闭月度计划">
-          <X size={19} aria-hidden="true" className={s.closeIcon} />
-          <ChevronLeft size={24} aria-hidden="true" className={s.backIcon} />
-        </Button>
-      </header>
+      <DetailFrame title={`月度计划 ${payload.period}`} subtitle={status} headingId="monthly-title" onBack={() => onNavigate("/")}>
 
       <div className={s.body}>
         <div className={s.materials}>
@@ -466,6 +451,7 @@ export function MonthlyPlanCard({ card, onCard, onNavigate }: CardRenderProps) {
           {payload.confirmedAt ? <small>签发于 {calendarDate(payload.confirmedAt)}</small> : null}
         </p>
       ) : null}
+      </DetailFrame>
     </section>
   );
 }

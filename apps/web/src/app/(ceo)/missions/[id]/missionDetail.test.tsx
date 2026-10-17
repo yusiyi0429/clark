@@ -42,11 +42,12 @@ const render = (overrides: Partial<MissionPayload> = {}, planStatus: string | nu
 describe("Mission 详情渲染", () => {
   const html = render();
 
-  it("页头眉题给出编号与周期，页头动作返回总览 / 编辑 Mission，正文写唯一负责人；未签发时不显示生效中", () => {
+  it("标准页头：眉题给出编号与周期，只有一颗返回、动作是编辑 Mission，正文写唯一负责人；未签发时不显示生效中", () => {
+    expect(html).toContain('class="ts-detail-header"');
     expect(html).toContain("Mission LHR-A · 2026-09");
-    expect(html).toContain("返回总览");
+    expect(html.match(/返回总览/g)).toHaveLength(1);
+    expect(html).toContain("data-close-view");
     expect(html).toContain("编辑 Mission");
-    expect(html).toContain('aria-label="返回全局"');
     expect(html).toContain("唯一负责人 · 刘人豪");
     expect(html).not.toContain("生效中");
   });

@@ -81,11 +81,12 @@ describe("Mission 总览派生", () => {
 describe("Mission 总览渲染", () => {
   const html = markup(<MissionOverviewScreen missions={missions} battlefields={battlefields} />);
 
-  it("展开页页头（眉题 + 标题 + 管理 Mission + 返回全局）与四项统计", () => {
-    expect(html).toContain("月度承诺 · Mission");
+  it("标准页头（返回 + 眉题 + 标题 + 管理 Mission）与四项统计", () => {
+    expect(html).toContain('class="ts-detail-header"');
+    expect(html).toContain('<p class="ts-eyebrow">月度承诺</p>');
     expect(html).toContain("Mission 总览");
     expect(html).toContain("管理 Mission");
-    expect(html).toContain('aria-label="返回全局"');
+    expect(html).toContain("data-close-view");
     expect(html).toContain("本月 Mission");
     expect(html).toContain("负责人");
     expect(html).toContain("关联战场");

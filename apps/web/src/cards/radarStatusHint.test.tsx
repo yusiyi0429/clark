@@ -59,12 +59,12 @@ const render = (collection: Card[]) =>
 
 /** clark 雷达展开页：页头、筛选 / 排序、可见的状态行、一竖列信号。 */
 describe("雷达信号列表", () => {
-  it("页头：外部信息 · 雷达 + 雷达信号，圆形关闭回到全局", () => {
+  it("标准页头：返回 + 外部信息 + 雷达信号", () => {
     const html = render([]);
-    expect(html).toContain("外部信息 · 雷达");
+    expect(html).toContain('class="ts-detail-header"');
+    expect(html).toContain('<p class="ts-eyebrow">外部信息</p>');
     expect(html).toContain(">雷达信号<");
-    expect(html).toContain('aria-label="返回全局"');
-    expect(html).toContain('data-context-mark="signal"');
+    expect(html).toContain("data-close-view");
   });
 
   it("工具条：全部 / 未读 / 收藏，按时间 / 按重要程度，监测范围与发现更多", () => {

@@ -6,7 +6,7 @@ import { Button, ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { RefreshCw, SlidersHorizontal } from "lucide-react";
 import { browserApi, type Card } from "@/lib/api/client";
 import { MenuDialog } from "@/components/AccountMenu";
-import { DetailHeader } from "@/components/shell/DetailHeader";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { SignalStoryView } from "@/cards/SignalStory";
 import { RadarSettingsEditor } from "./RadarSettingsEditor";
@@ -140,12 +140,10 @@ export function MemberRadarScreen({ radar, signals }: { radar: MyRadar; signals:
 
   return (
     <>
-      <DetailHeader
-        mark="signal"
-        eyebrow="外部信息 · 只给你看"
+      <DetailFrame
         title="我的雷达"
-        closeLabel="关闭我的雷达"
-        onClose={close}
+        subtitle="外部信息"
+        onBack={close}
         actions={
           <div className={f.headerActions}>
             <Button size="sm" variant="tertiary" aria-label="雷达设置" aria-haspopup="dialog" onPress={() => setSettings({ enable: false })}>
@@ -160,7 +158,7 @@ export function MemberRadarScreen({ radar, signals }: { radar: MyRadar; signals:
             ) : null}
           </div>
         }
-      />
+      >
       <div className={w.expandedScroll}>
         <div className={f.feed} data-testid="member-radar">
           {!radar.enabled && listed.length ? (
@@ -234,6 +232,7 @@ export function MemberRadarScreen({ radar, signals }: { radar: MyRadar; signals:
           ) : null}
         </div>
       </div>
+      </DetailFrame>
       {settings ? (
         <MenuDialog title="我的雷达" wide onClose={() => setSettings(null)}>
           <RadarSettingsEditor mode="person" enable={settings.enable} />

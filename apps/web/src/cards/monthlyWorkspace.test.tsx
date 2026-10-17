@@ -48,11 +48,12 @@ function render(card: Card): string {
 }
 
 describe("月度计划 · 已签发", () => {
-  it("页头：月度标记、月份与签发状态，关闭写明关闭月度计划；签发回执为卡，且不出现签发/保存按钮", () => {
+  it("标准页头：月份与签发状态、返回；签发回执为卡，且不出现签发/保存按钮", () => {
     const html = render(planCard({}));
-    expect(html).toContain("月度协商 · 2026 年 9 月 · 已签发 · 2026-09-16");
-    expect(html).toContain('data-context-mark="monthly"');
-    expect(html).toContain('aria-label="关闭月度计划"');
+    expect(html).toContain('class="ts-detail-header"');
+    expect(html).toContain('<p class="ts-eyebrow">已签发 · 2026-09-16</p>');
+    expect(html).toContain('id="monthly-title">月度计划 2026-09<');
+    expect(html).toContain("data-close-view");
     expect(html).not.toContain("草案已就绪");
     expect(html).toContain("本计划已签发，是当月目标的唯一来源。");
     expect(html).toContain("签发于 2026-09-16");

@@ -12,7 +12,7 @@ import type { CardRenderProps } from "./registry";
 import { payloadOf, type RadarPayload, type SignalPayload } from "./payloads";
 import { registryName } from "./scopeNames";
 import { SignalStoryView } from "./SignalStory";
-import { DetailHeader } from "@/components/shell/DetailHeader";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { calendarDate, monthDayTime, publishedDate } from "@/lib/companyTime";
 import w from "@/styles/app-shell.module.css";
@@ -252,7 +252,7 @@ export function RadarCard({ card, collection, onCard, onNavigate, initialView = 
 
   return (
     <>
-      <DetailHeader mark="signal" eyebrow="外部信息 · 雷达" title="雷达信号" closeLabel="返回全局" onClose={() => onNavigate("/")} />
+      <DetailFrame title="雷达信号" subtitle="外部信息" onBack={() => onNavigate("/")}>
       <div className={w.expandedScroll}>
         <div className={f.feed} data-testid="radar-view">
           <div className={f.toolbar}>
@@ -375,6 +375,7 @@ export function RadarCard({ card, collection, onCard, onNavigate, initialView = 
           )}
         </div>
       </div>
+      </DetailFrame>
 
       {configOpen ? (
         <Modal isOpen onOpenChange={(open) => (open ? undefined : setConfigOpen(false))}>

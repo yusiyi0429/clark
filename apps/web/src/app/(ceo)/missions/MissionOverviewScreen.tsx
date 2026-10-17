@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@heroui/react";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
-import { DetailHeader } from "@/components/shell/DetailHeader";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import { ArrowRight, ChevronRight } from "lucide-react";
 import type { MissionPayload } from "@/cards/payloads";
 import type { Card } from "@/lib/api/client";
@@ -102,18 +102,16 @@ export function MissionOverviewScreen({
   const statLabel = filters.period === latest ? "本月 Mission" : `${filters.period} Mission`;
 
   return (
-    <>
-      <DetailHeader
-        eyebrow="月度承诺 · Mission"
-        title="Mission 总览"
-        actions={
-          <Button size="sm" variant="secondary" onPress={() => navigate("/config/missions")}>
-            管理 Mission
-          </Button>
-        }
-        closeLabel="返回全局"
-        onClose={close}
-      />
+    <DetailFrame
+      title="Mission 总览"
+      subtitle="月度承诺"
+      onBack={close}
+      actions={
+        <Button size="sm" variant="secondary" onPress={() => navigate("/config/missions")}>
+          管理 Mission
+        </Button>
+      }
+    >
       <div className={w.expandedScroll}>
         <div className={m.content}>
           <p className={m.intro}>查看本月负责人的结果承诺与讨论草稿，以及每条 Mission 与战场、能力域和本月目标的关系。</p>
@@ -176,7 +174,7 @@ export function MissionOverviewScreen({
           </div>
         </div>
       </div>
-    </>
+    </DetailFrame>
   );
 }
 
