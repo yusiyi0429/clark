@@ -129,7 +129,7 @@ export function MemoryBody({ id, large = false, onLayout, initial }: { id: strin
   useLayoutEffect(() => { onLayout?.(); }, [load, editing, onLayout]);
 
   if (load.state === "loading") return <div className={s.skeleton} aria-busy="true"><i /><i /><i /></div>;
-  if (load.state === "missing") return <p className={s.tag} data-memory-state="missing">已删除</p>;
+  if (load.state === "missing") return <p className={s.tag} data-memory-state="missing">没读到</p>;
   const { item } = load;
   const tag = STATUS_TAG[item.status];
   const save = async () => {

@@ -12,7 +12,7 @@ import { pageContextBattlefield, readQuotedMessage } from "./quotes";
 import { createArrivalLog, rehypeArrival, type ArrivalLog } from "./arrival";
 import { parseAnswerOptions } from "./answerOptions";
 import { splitStableBlocks, useSmoothText } from "./smoothText";
-import { CITATION_MARKDOWN } from "./citations";
+import { CITATION_MARKDOWN, MemoryUsedProvider } from "./citations";
 import { holdOpenLink, remarkCitationMarks } from "./citationMarks";
 import { RichPre, RichSkeleton } from "./richBlocks/RichBlocks";
 import { CONVERSATION_REHYPE_PLUGINS, CONVERSATION_REMARK_PLUGINS, holdOpenMath } from "./richBlocks/markdown";
@@ -102,6 +102,8 @@ const MarkdownBody = memo(function MarkdownBody({ text, streaming }: { text: str
   );
 });
 
+const NO_MEMORY: readonly string[] = [];
+
 /** 已经收起的思考摘要：正文开始以后挂在这条回答的「用时」一行，点开看全文。 */
 type SettledThought = { text: string; seconds: number };
 type TurnProps = { message: Message; ms?: number; streaming?: boolean; thought?: SettledThought };
@@ -116,6 +118,7 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && previous.thought?.text === next.thought?.text && previous.thought?.seconds === next.thought?.seconds
     && a.role === b.role && a.content === b.content
     && a.recoveryNote?.text === b.recoveryNote?.text && a.recoveryNote?.detail === b.recoveryNote?.detail
+    && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
@@ -133,6 +136,8 @@ export const ConversationTurn = memo(function ConversationTurn({ message, ms, st
   const quoted = useMemo(() => (user ? readQuotedMessage(message.content) : { message: parseAnswerOptions(message.content, streaming).body, quotes: [] }),
     [user, message.content, streaming]);
   const battlefield = user ? pageContextBattlefield(message.content) : null;
+  const memoryKey = streaming ? "" : (message.memoryUsed ?? []).join("|");
+  const memoryUsed = useMemo(() => (memoryKey ? memoryKey.split("|") : NO_MEMORY), [memoryKey]);
   return (
     <article className={user ? s.user : s.assistant} data-chat-role={message.role} aria-label={user ? "你" : "天枢"}
       data-testid={streaming ? "conversation-streaming-turn" : undefined} aria-busy={streaming || undefined}>
@@ -179,7 +184,9 @@ export const ConversationTurn = memo(function ConversationTurn({ message, ms, st
       {battlefield ? <div className={s.pageTag}>战场 · {battlefield}</div> : null}
       {quoted.quotes.length ? <QuoteChips quotes={quoted.quotes} sent /> : null}
       <div className={s.prose}>
-        <MarkdownBody text={quoted.message} streaming={streaming} />
+        <MemoryUsedProvider value={memoryUsed}>
+          <MarkdownBody text={quoted.message} streaming={streaming} />
+        </MemoryUsedProvider>
       </div>
       {/* 这一轮用了备用模型或走过恢复：末尾一行很淡的小字，悬停看具体一点的说明（不写模型名和英文原文）。 */}
       {!user && !streaming && message.recoveryNote?.text ? (

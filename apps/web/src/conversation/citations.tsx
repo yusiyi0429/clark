@@ -83,6 +83,13 @@ export function plainText(node: ReactNode): string {
 }
 
 type SurfaceValue = { linked: boolean; surface: CitationSurface; expand?: () => void };
+
+/**
+ * 这条回答里可以显示的记忆标记：本轮实际装进上下文的记忆 id（memoryUsed）。不在里面的 id（模型编的、抄错的）不显示；
+ * 正在写的回答还不知道，先都不显示，写完读回历史再出现。
+ */
+const MemoryUsedContext = createContext<readonly string[]>([]);
+export const MemoryUsedProvider = MemoryUsedContext.Provider;
 const SurfaceContext = createContext<SurfaceValue>({ linked: false, surface: "rail" });
 
 /**
@@ -98,9 +105,10 @@ type AnchorProps = ComponentPropsWithoutRef<"a"> & { node?: unknown; [CITE_MARK_
 
 export function CitationAnchor({ node: _node, href, children, [CITE_MARK_PROP]: mark, ...rest }: AnchorProps) {
   const { linked, surface } = useContext(SurfaceContext);
-  // 个人记忆（cite:pmem:<id>）：不论在句中哪里，都是记忆小标记，点开看这条记忆、当场修改。
+  const memoryUsed = useContext(MemoryUsedContext);
+  // 个人记忆（cite:pmem:<id>）：不论在句中哪里，都是记忆小标记，点开看这条记忆、当场修改；不是本轮用到的 id 不显示。
   const memory = href?.startsWith(CITE_SCHEME) ? parseSourceRef(citationRef(href) ?? "") : null;
-  if (memory?.kind === "pmem") return <MemoryMark id={memory.id} />;
+  if (memory?.kind === "pmem") return memoryUsed.includes(memory.id) ? <MemoryMark id={memory.id} /> : null;
   if (mark !== undefined && href) return <CitationMark href={href} title={plainText(children)} />;
   if (!href?.startsWith(CITE_SCHEME)) return <a href={href} {...rest}>{children}</a>;
   const ref = citationRef(href);

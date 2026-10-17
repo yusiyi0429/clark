@@ -39,6 +39,12 @@ export function boundedText(text: string, bytes: number): string {
     return result;
 }
 
+/** 回答里的记忆标记 [记忆](cite:pmem:<id>) 中，不是本轮实际装进上下文的那些 id（质量信号：模型编了或抄错了 id）。 */
+export function unknownMemoryMarks(text: string, used: ReadonlySet<string>): string[] {
+    const ids = [...text.matchAll(/\(cite:pmem:([^)\s]+)\)/g)].map((match) => match[1]);
+    return [...new Set(ids.filter((id) => !used.has(id)))];
+}
+
 /** anchor 检索时去掉版本：只比 target。 */
 const sameTarget = (left: string, right: string) => left === right;
 

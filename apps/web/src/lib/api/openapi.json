@@ -10991,6 +10991,12 @@
                       "type": "string"
                     }
                   }
+                },
+                "memoryUsed": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               }
             }

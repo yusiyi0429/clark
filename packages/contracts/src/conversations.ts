@@ -106,6 +106,8 @@ export const ConversationMessage = Type.Object(
     createdAt: Type.String({ format: "date-time" }),
     /** 只在助手回答上、且这一轮走过恢复时才有。 */
     recoveryNote: Type.Optional(ConversationRecoveryNote),
+    /** 只在助手回答上：这一轮实际装进上下文的个人记忆 id。回答里的记忆标记只认这里有的。 */
+    memoryUsed: Type.Optional(Type.Array(Type.String())),
   },
   { additionalProperties: false },
 );

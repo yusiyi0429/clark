@@ -2613,6 +2613,7 @@ export interface components {
                     text: string;
                     detail: string;
                 };
+                memoryUsed?: string[];
             }[];
         };
         ConversationMessageRequest: {

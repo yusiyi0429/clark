@@ -30,7 +30,7 @@ import { isActiveMember } from "../threads.js";
 import { getObjectMaterial } from "../objectMaterials.js";
 import { withNotice } from "../conversationRouting.js";
 import { ConversationTurnError, recoveryNote, resumeInstruction, shortFailureReason, turnFailureCopy, type TurnFailureKind, type TurnRecoverySummary } from "../conversationRecovery.js";
-import { personalMemoryToolsFor } from "../personalMemory.js";
+import { personalMemoryToolsFor, unknownMemoryMarks } from "../personalMemory.js";
 import { searchOwnConversationHistory } from "../conversationHistorySearch.js";
 import { createStepTracker } from "../conversationSteps.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
@@ -304,10 +304,22 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         }, Math.min(5_000, Math.max(5, Math.floor(conversationStallTimeoutMs / 4))));
         stall.unref();
         /** 运行记录里这一轮的档位与恢复：原模型、备用模型、触发原因、各类恢复次数、合计重试次数（没有恢复过就没有 recovery）。 */
-        const routeSnapshot = (partial?: boolean, summary?: TurnRecoverySummary) => JSON.stringify({ route: { tier: routeTier ?? null, model: routeModel ?? null, recoveries,
-          ...(summary ? { recovery: { originalModel: summary.originalModel, fallbackModel: summary.fallbackModel ?? null, reasons: summary.reasons,
-            actions: summary.actions, retries: summary.retries } } : {}) },
-          ...(partial === undefined ? {} : { partial }), steps: steps.list() });
+        /**
+         * 质量信号：回答里的记忆标记指向不在本轮 memory_used 里的 id（界面不显示这种标记）。记日志并随运行记录存下，之后进管理员视图。
+         */
+        const qualitySignals = (text: string) => {
+          const unknown = unknownMemoryMarks(text, memoryUsed);
+          if (!unknown.length) return [];
+          logEvent({ event: "conversation.quality_signal", signal: "memory_mark_unknown_id", requestId: String(req.id), runId, scope: req.params.scope, count: unknown.length });
+          return [{ signal: "memory_mark_unknown_id", ids: unknown }];
+        };
+        const routeSnapshot = (partial: boolean | undefined, summary: TurnRecoverySummary | undefined, text: string) => {
+          const signals = qualitySignals(text);
+          return JSON.stringify({ route: { tier: routeTier ?? null, model: routeModel ?? null, recoveries,
+            ...(summary ? { recovery: { originalModel: summary.originalModel, fallbackModel: summary.fallbackModel ?? null, reasons: summary.reasons,
+              actions: summary.actions, retries: summary.retries } } : {}) },
+            ...(partial === undefined ? {} : { partial }), steps: steps.list(), ...(signals.length ? { qualitySignals: signals } : {}) });
+        };
         let recoverySummary: TurnRecoverySummary | undefined;
         /**
          * 这一轮没完成（出错、超时、卡住、一号位停止或关掉页面）：已写出的部分连同开场说明存成这一轮的回答，末尾一行说明；
@@ -343,7 +355,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           recoverySummary = (cause as { details?: { recoverySummary?: TurnRecoverySummary } })?.details?.recoverySummary;
           await client.query(
             "UPDATE agent_runs SET status = $2, error = $3, usage = $4::jsonb, input_snapshot = input_snapshot || $5::jsonb, completed_at = now() WHERE id = $1",
-            [runId, stopped || abort.signal.aborted ? "aborted" : "failed", raw, JSON.stringify(runUsage), routeSnapshot(partial && saved, recoverySummary)],
+            [runId, stopped || abort.signal.aborted ? "aborted" : "failed", raw, JSON.stringify(runUsage), routeSnapshot(partial && saved, recoverySummary, streamedBody)],
           ).catch(() => undefined);
           runStatus = stopped || abort.signal.aborted ? "aborted" : "failed";
           runError = raw;
@@ -430,7 +442,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
               `UPDATE agent_runs
                   SET status = 'succeeded', candidate_output = $2::jsonb, usage = $3::jsonb, input_snapshot = input_snapshot || $4::jsonb, completed_at = now()
                 WHERE id = $1`,
-              [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage), routeSnapshot(undefined, recoverySummary)],
+              [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage), routeSnapshot(undefined, recoverySummary, result.assistantMessage)],
             );
             await client.query("COMMIT");
             if (prepared.snapshotId) await conversationCompaction?.markApplied(client.query.bind(client), prepared.snapshotId);

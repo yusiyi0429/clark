@@ -70,6 +70,29 @@ test('the answer records which personal memory was actually put into context thi
     }
 });
 
+test('history carries memoryUsed on the answer; a memory mark with an id not used this turn is recorded as a quality signal', async () => {
+    let answer = '';
+    const t = await createTestApp({}, { async run(input) { return { assistantMessage: answer, runtimeEntries: input.runtimeEntries }; } });
+    try {
+        const headers = { cookie: await t.loginCookie(), origin: t.publicOrigin };
+        const style = await seed(t, '协作偏好', '先给结论。');
+        answer = `先说结论[记忆](cite:pmem:${style})。另一条[记忆](cite:pmem:made-up-id)。`;
+        await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '帮我分析一下' } });
+        const history = (await t.app.inject({ method: 'GET', url: '/api/conversations/global/messages', headers })).json();
+        expect(history.messages[0]).not.toHaveProperty('memoryUsed');
+        expect(history.messages[1].memoryUsed).toEqual([style]);
+        const [run] = await t.sql("SELECT input_snapshot->'qualitySignals' AS signals FROM agent_runs WHERE kind = 'conversation'");
+        expect(run.signals).toEqual([{ signal: 'memory_mark_unknown_id', ids: ['made-up-id'] }]);
+        // 标记都对得上时没有质量信号。
+        answer = `先说结论[记忆](cite:pmem:${style})。`;
+        await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '再分析一下' } });
+        const runs = await t.sql("SELECT input_snapshot ? 'qualitySignals' AS has FROM agent_runs WHERE kind = 'conversation' ORDER BY started_at");
+        expect(runs.map((row) => row.has)).toEqual([true, false]);
+    } finally {
+        await t.close();
+    }
+});
+
 test('forgetting a memory keeps the model context of every conversation of that person (3d)', async () => {
     const inputs: Parameters<ConversationRuntime['run']>[0][] = [];
     const t = await createTestApp({}, { async run(input) { inputs.push(input); return { assistantMessage: '回复', runtimeEntries: [{ turn: inputs.length }] }; } });
