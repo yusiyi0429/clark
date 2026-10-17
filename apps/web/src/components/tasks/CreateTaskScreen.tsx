@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
-import { ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button as AriaButton, Calendar, CalendarCell, CalendarGrid, CalendarGridBody, CalendarGridHeader, CalendarHeaderCell, Dialog, DialogTrigger, Heading, I18nProvider, Popover } from "react-aria-components";
 import { TianshuPortalTheme } from "ts-design";
 import { Button } from "ts-design/primitives";
@@ -10,7 +10,6 @@ import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
-import { ExecutionItemsTour } from "@/components/tours/ExecutionItemsTour";
 import c from "./create-task.module.css";
 
 type Plan = components["schemas"]["MonthPlanResponse"];
@@ -79,7 +78,6 @@ export function CreateTaskScreen() {
   const [doneDefinition, setDoneDefinition] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [tourOpen, setTourOpen] = useState(false);
   const clientId = useRef<string | null>(null);
   const change = (set: (value: string) => void, value: string) => { set(value); setError(""); clientId.current = null; };
 
@@ -131,7 +129,7 @@ export function CreateTaskScreen() {
     void create();
   };
 
-  return <DetailFrame title="开启执行事项" subtitle="我的工作台" onBack={workspace.close} actions={<Button variant="ghost" isIconOnly className={c.help} aria-label="查看执行事项使用说明" onPress={() => setTourOpen(true)}><CircleHelp size={17} aria-hidden /></Button>}>
+  return <DetailFrame title="开启执行事项" subtitle="我的工作台" onBack={workspace.close}>
     <form className={c.flow} onSubmit={submit} noValidate>
       <ol className={c.steps} aria-label={`第 ${index + 1} 步，共 ${steps.length} 步`}>
         {steps.map((item, position) => <li key={item} data-state={position < index ? "done" : position === index ? "current" : "next"}>
@@ -195,6 +193,5 @@ export function CreateTaskScreen() {
           : <Button variant="primary" type="submit" isDisabled={!title.trim()} className={c.primary}>下一步<ArrowRight size={15} aria-hidden /></Button>}
       </div>
     </form>
-    {tourOpen ? <ExecutionItemsTour isOpen onExit={() => setTourOpen(false)} /> : null}
   </DetailFrame>;
 }

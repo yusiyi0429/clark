@@ -3,7 +3,6 @@
 /** 整页移植 clark mission-cards/workspace；数据、权限、意见与阶段由 API 持有。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CircleHelp } from "lucide-react";
 import { Button } from "ts-design/primitives";
 import type { TMissionCardField, TPersonalMissionCardPayload, TTaskView } from "@warmap/contracts";
 import { browserApi, type Card, type CardAction } from "@/lib/api/client";
@@ -19,9 +18,6 @@ import { MissionRoundProgress } from "./MissionRoundProgress";
 import { RoundClock } from "./RoundClock";
 import { useRoundNow } from "./useRoundNow";
 import { useMissionAnnotations } from "./MissionAnnotations";
-import { useSeenMarks } from "@/lib/useSeenMarks";
-import { RELEASE, releaseSeenKey } from "@/lib/releaseNotes";
-import { MissionCardTour, MISSION_CARD_TOUR_KEY } from "@/components/tours/MissionCardTour";
 import s from "./mission-card.module.css";
 
 type RoundAction = Pick<CardAction, "actionId" | "actionType" | "label">;
@@ -123,20 +119,6 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
     window.addEventListener("mission-round-changed", roundChanged);
     return () => { window.removeEventListener("mission-card-changed", changed); window.removeEventListener("mission-round-changed", roundChanged); };
   }, [card.cardId, refresh, annotations.refresh]);
-  const { seen, mark } = useSeenMarks();
-  const [tourOpen, setTourOpen] = useState(false);
-  useEffect(() => {
-    if (!seen?.has(releaseSeenKey(RELEASE.id)) || seen.has(MISSION_CARD_TOUR_KEY)) return;
-    // 更新说明有退场动画；等它真正离开再开始，避免两个模态叠在一起。
-    const show = () => {
-      if (document.querySelector('[role="dialog"], dialog[open]')) return;
-      observer.disconnect(); setTourOpen(true);
-    };
-    const observer = new MutationObserver(show);
-    observer.observe(document.body, { childList: true, subtree: true });
-    show();
-    return () => observer.disconnect();
-  }, [seen]);
   const loadLinkedItems = useCallback(async () => {
     const { data } = await browserApi.GET("/api/mission-cards/{cardId}/items", { params: { path: { cardId: card.cardId } } });
     if (data) setLinkedItems(Object.fromEntries(data.missions.map((mission) => [mission.missionId, mission.items])));
@@ -217,7 +199,7 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
     finally { actionInFlight.current = false; setPending(false); }
   };
   return <div className={s.screen}>
-    <DetailFrame title={title} subtitle={round.battlefieldName} onBack={leaveCard} actions={<div className={s.headerActions}>{effectivePhase !== "confirmed" ? <RoundClock round={shownPayload.round} now={now} /> : null}{ownerReview ? <Button variant={ownerConfirmed ? "ghost" : "primary"} className={s.headerPrimary} isDisabled={pending || annotations.pending || !(ownerConfirmed ? payload.selfReview.canCancel : payload.selfReview.canConfirm)} aria-describedby={payload.selfReview.blockedReason ? "mission-self-review-state" : undefined} aria-label={ownerConfirmed ? "取消本人确认" : "确认我的任务"} onPress={() => void toggleOwnerReview()}>{ownerConfirmed ? "取消确认" : "确认我的任务"}</Button> : null}{round.approver || round.cards.some((row) => !row.mine) ? <MissionRoundProgress key={round.roundId} round={shownPayload.round} entry={entry} compact onNavigate={workspace.navigate} onRefresh={() => void refresh()} /> : null}<Button variant="ghost" isIconOnly className={s.help} aria-label="查看任务使用说明" onPress={() => setTourOpen(true)}><CircleHelp size={17} aria-hidden /></Button></div>}>
+    <DetailFrame title={title} subtitle={round.battlefieldName} onBack={leaveCard} actions={<div className={s.headerActions}>{effectivePhase !== "confirmed" ? <RoundClock round={shownPayload.round} now={now} /> : null}{ownerReview ? <Button variant={ownerConfirmed ? "ghost" : "primary"} className={s.headerPrimary} isDisabled={pending || annotations.pending || !(ownerConfirmed ? payload.selfReview.canCancel : payload.selfReview.canConfirm)} aria-describedby={payload.selfReview.blockedReason ? "mission-self-review-state" : undefined} aria-label={ownerConfirmed ? "取消本人确认" : "确认我的任务"} onPress={() => void toggleOwnerReview()}>{ownerConfirmed ? "取消确认" : "确认我的任务"}</Button> : null}{round.approver || round.cards.some((row) => !row.mine) ? <MissionRoundProgress key={round.roundId} round={shownPayload.round} entry={entry} compact onNavigate={workspace.navigate} onRefresh={() => void refresh()} /> : null}</div>}>
       <InHeader><span data-mission-people><PeopleMenu round={shownPayload.round} cardId={card.cardId} onSelect={(id) => workspace.navigate(`${entry === "member" ? "/me" : ""}/mission-cards/${id}`)} /></span><span data-mission-view><MaterialMenu tabs={taskViews} selected="details" onSelect={() => undefined} label="任务视图" switchLabel="切换任务视图" /></span></InHeader>
       <div className={s.content}>
         <section className={s.goals} aria-label="任务目标"><div><h2>长期目标</h2><p>{round.goals?.sixMonthOutcome || "长期目标尚未提供"}</p></div><div><h2>本月目标</h2><p>{round.goals?.monthOutcome || "本月目标尚未提供"}</p></div></section>
@@ -234,6 +216,5 @@ export function MissionCardScreen({ initialCard, entry }: { initialCard: Card; e
  }} />
       </div>
     </DetailFrame>
-    {tourOpen ? <MissionCardTour isOpen onExit={() => { mark(MISSION_CARD_TOUR_KEY); setTourOpen(false); }} /> : null}
   </div>;
 }

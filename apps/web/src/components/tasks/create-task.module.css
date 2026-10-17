@@ -124,8 +124,6 @@ textarea.input { resize: vertical; min-height: 76px; }
 .back:focus-visible { outline: 2px solid var(--onboarding-blue, #3e82f7); outline-offset: 2px; }
 .primary.primary { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 18px; font-size: 14px; }
 /* 页头右上角的问号：回看「执行事项怎么用」，和任务卡页同款。 */
-.help.help { min-width: 32px; width: 32px; height: 32px; min-height: 32px; padding: 0; border-radius: 50%; color: var(--ink-faint); }
-.help.help:hover { color: var(--ink-muted); background: transparent; }
 
 @media (max-width: 959px) {
   .flow { padding: 28px 18px 140px; }
