@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vitest";
-import { createTestApp, createTestDb } from "./helpers.js";
+import { createTestApp, createTestDb, TEST_CEO } from "./helpers.js";
 import { migrate } from "../src/migrate.js";
 import { historyTerms, searchOwnConversationHistory } from "../src/conversationHistorySearch.js";
 import type { ConversationRuntime } from "../src/conversations.js";
@@ -79,7 +79,8 @@ test("the main agent gets a history search bound to the signed-in person that sk
     const member = { cookie: await t.memberCookie(), origin: t.publicOrigin };
     await t.app.inject({ method: "POST", url: "/api/conversations/global/messages", headers: member, payload: { message: "县城样板是成员的想法" } });
     await t.app.inject({ method: "POST", url: "/api/conversations/global/messages", headers: ceo, payload: { message: "先做县城样板。" } });
-    await t.app.inject({ method: "POST", url: "/api/conversations/global/new", headers: ceo });
+    // 067 归档过的旧对话（界面上已不再有新建对话）：原话仍能检索到。
+    await t.sql("UPDATE conversations SET archived_at = now() WHERE owner_id = $1", [TEST_CEO.personId]);
     await t.app.inject({ method: "POST", url: "/api/conversations/global/messages", headers: ceo, payload: { message: "上次说的县城样板是什么？" } });
     const [found] = results as { hits: { snippet: string; archived: boolean }[] }[];
     expect(found.hits.map((hit) => hit.snippet)).toEqual(["先做县城样板。"]);

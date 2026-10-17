@@ -114,33 +114,7 @@ export const ConversationHistory = Type.Object(
   {
     scope: ConversationScope,
     messages: Type.Array(ConversationMessage),
-    /** 这个人在这个页面已归档、有内容的历史对话条数（当前对话为空时界面据此给一行「查看历史对话」）。 */
-    archivedCount: Type.Optional(Type.Integer({ minimum: 0 })),
   },
-  { additionalProperties: false },
-);
-
-/** 已归档的一段对话：首问原文（前 4000 字，含引用与页面前缀的原样格式；界面解析后取前 20 字作标题）、起止时间与条数。 */
-export const ArchivedConversation = Type.Object(
-  {
-    id: Type.String({ format: "uuid" }),
-    firstQuestion: Type.String(),
-    startedAt: Type.String({ format: "date-time" }),
-    lastAt: Type.String({ format: "date-time" }),
-    archivedAt: Type.String({ format: "date-time" }),
-    messageCount: Type.Integer({ minimum: 1 }),
-  },
-  { additionalProperties: false },
-);
-
-export const ArchivedConversationList = Type.Object(
-  { conversations: Type.Array(ArchivedConversation, { maxItems: 200 }) },
-  { additionalProperties: false },
-);
-
-/** 新建对话 / 切回一段历史对话之后，当前对话是哪一条；archived：原来那条有内容、已归档。 */
-export const ConversationSwitchResponse = Type.Object(
-  { conversationId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]), archived: Type.Boolean() },
   { additionalProperties: false },
 );
 
@@ -280,7 +254,4 @@ export type TConversationMessageRequest = Static<typeof ConversationMessageReque
 export type TConversationMessage = Static<typeof ConversationMessage>;
 export type TConversationHistory = Static<typeof ConversationHistory>;
 export type TConversationRecoveryNote = Static<typeof ConversationRecoveryNote>;
-export type TArchivedConversation = Static<typeof ArchivedConversation>;
-export type TArchivedConversationList = Static<typeof ArchivedConversationList>;
-export type TConversationSwitchResponse = Static<typeof ConversationSwitchResponse>;
 export type TConversationSseEvent = Static<typeof ConversationSseEvent>;

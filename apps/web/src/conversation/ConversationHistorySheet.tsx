@@ -6,7 +6,6 @@ import { HeroButton } from "@/components/HeroButton";
 import { TianshuMark } from "@/components/TianshuMark";
 import { SelectionToolbar, useSelectionQuote } from "@/components/SelectionQuote";
 import { AttachmentStatus } from "./ConversationAttachments";
-import { ArchiveEntry, ConversationArchive, NewConversationKey, useArchivePanel } from "./ConversationArchive";
 import { ConversationHistoryState, conversationOwner } from "./ConversationHistoryState";
 import { ConversationNotice, ConversationStatusSlot, JumpToLatest, useComposerClearance } from "./Transcript";
 import { ConversationTimeline } from "./ConversationTimeline";
@@ -25,8 +24,7 @@ import t from "@/styles/conversation-transcript.module.css";
  * 点对话层外的空白处、Esc 也收起（宿主在对话层外放一层透明的点击区，不盖遮罩）。附件键在输入条上（D2）。记录归谁写在 data-conversation-owner 上。
  * 输入条上方没有气泡（D6）：听写出错（notice）、发送失败（data.error）都作为轻提示写在这里。
  * 载入中、没读到、真的没有记录分开画。提案卡插在触发它的那轮回答之后（ConversationTimeline，B5）。
- * 全局对话：星标右边一颗很小的灰色「+」（新对话，当前对话有内容时才有）；空白对话里有归档过的对话时多一行很淡的「查看历史对话」，
- * 点开在正文的位置换成历史对话列表 / 只读回看（ConversationArchive）。
+ * 一条连续的对话（已定设计第 1 节）：没有「新建对话」「+」，也没有历史对话列表；换话题说一句话就行。
  * 划词引用（B4）：选中消息正文浮出「引用」，交给 onQuote 进本对话的输入框上方，对话层不关。
  * 滚动（useConversationScroll）：打开时停在底部并跟随；发送后刚发的那条推到顶部、回答进行中不跟随；不在真实末尾时浮出 ↓。
  * ↓ 按对话层定位，底边贴在输入条（composerRef）上沿之上 12px，跟着输入条长高变矮（D3）；输出中是三点。
@@ -69,7 +67,6 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
     return resizeWindow(element);
   }, [wide]);
   const expand = useCallback(() => onWide?.(true), [onWide]);
-  const archive = useArchivePanel(data.streaming);
 
   return (
     <section ref={sheet} className={`${w.sheet} ${w.historySheet}`} role="dialog" aria-modal="false" aria-label={`${label}的对话记录`} data-testid="conversation-sheet"
@@ -87,13 +84,11 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
           {wide ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
         </HeroButton>
       ) : null}
-      {global ? <NewConversationKey data={data} className={w.sheetNewKey} /> : null}
       <HeroButton variant="ghost" size="sm" isIconOnly className={`${w.glassButton} ${w.sheetCollapse}`} onPress={onClose} aria-label="收起对话记录">
         <ChevronDown size={20} strokeWidth={1.9} />
       </HeroButton>
       <div className={w.sheetScroll} ref={scroll.scrollRef} data-testid="conversation-scroll" onMouseUp={onQuote ? selection.onMouseUp : undefined}>
         <div className={w.historyContent} ref={scroll.contentRef}>
-          {archive.open ? <ConversationArchive data={data} onClose={archive.hide} /> : <>
           <CitationSurfaceProvider linked={wide} surface="sheet" expand={onWide && !wide ? expand : undefined}>
             {/* 富内容块：放大时完整铺开；收起时大块是缩略卡，点了放大（≥1280）或底部 sheet。 */}
             <RichSurfaceProvider expanded={wide} expand={onWide && !wide ? expand : undefined}>
@@ -103,12 +98,9 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
           <ConversationHistoryState data={data} empty={
             <div className={w.chatWelcome}>
               <p>{global ? "可从当前关注的问题开始讨论。" : `可从「${label}」中待澄清的问题开始讨论。`}</p>
-              {global ? <ArchiveEntry data={data} onOpen={archive.show} /> : null}
             </div>
           } />
-          {data.switchError ? <ConversationNotice text={data.switchError} /> : null}
-          </>}
-          {data.error && !data.streaming && !archive.open ? <ConversationNotice text={data.error} action={data.recovery} /> : null}
+          {data.error && !data.streaming ? <ConversationNotice text={data.error} action={data.recovery} /> : null}
           {notice ? <ConversationNotice text={notice} /> : null}
           <AttachmentStatus data={data} className={t.meta} />
           {/* 回答进行中，思考与进度排在时间线里本轮正文之后、本轮卡片之前（ConversationTimeline）；这里只在没有回答进行时留出同样高度的空位。 */}

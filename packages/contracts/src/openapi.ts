@@ -6,8 +6,6 @@ import {
   CardCollection,
   ExecuteActionRequest,
   ConversationHistory,
-  ArchivedConversationList,
-  ConversationSwitchResponse,
   ConversationMessageRequest,
   ConversationSseEvent,
   ConversationAttachment,
@@ -711,62 +709,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: {
             "200": { description: "SSE 事件流", content: { "text/event-stream": { schema: { $ref: "#/components/schemas/ConversationSseEvent" } } } },
             "400": errorResponse,
-            "401": errorResponse,
-            "404": errorResponse,
-            "409": errorResponse,
-          },
-        },
-      },
-      "/api/conversations/{scope}/new": {
-        post: {
-          operationId: "startNewConversation",
-          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
-          summary: "新建对话：本人在该 scope 的当前对话有内容时归档（不删除），之后的消息进一条空白对话",
-          responses: {
-            "200": { description: "当前对话", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationSwitchResponse" } } } },
-            "401": errorResponse,
-            "404": errorResponse,
-            "409": errorResponse,
-          },
-        },
-      },
-      "/api/conversations/{scope}/archived": {
-        get: {
-          operationId: "listArchivedConversations",
-          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
-          summary: "本人在该 scope 已归档、有内容的历史对话（新的在前）",
-          responses: {
-            "200": { description: "历史对话", content: { "application/json": { schema: { $ref: "#/components/schemas/ArchivedConversationList" } } } },
-            "401": errorResponse,
-            "404": errorResponse,
-          },
-        },
-      },
-      "/api/conversations/{scope}/archived/{id}/messages": {
-        get: {
-          operationId: "getArchivedConversationMessages",
-          parameters: [
-            { name: "scope", in: "path", required: true, schema: { type: "string" } },
-            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-          ],
-          summary: "只读回看一段历史对话",
-          responses: {
-            "200": { description: "Conversation 历史", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationHistory" } } } },
-            "401": errorResponse,
-            "404": errorResponse,
-          },
-        },
-      },
-      "/api/conversations/{scope}/archived/{id}/restore": {
-        post: {
-          operationId: "restoreArchivedConversation",
-          parameters: [
-            { name: "scope", in: "path", required: true, schema: { type: "string" } },
-            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-          ],
-          summary: "切回一段历史对话继续：当前对话归档，这一段成为当前对话",
-          responses: {
-            "200": { description: "当前对话", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationSwitchResponse" } } } },
             "401": errorResponse,
             "404": errorResponse,
             "409": errorResponse,
@@ -2275,8 +2217,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,
         ExecuteActionRequest: ExecuteActionRequest as JsonSchema,
         ConversationHistory: ConversationHistory as JsonSchema,
-        ArchivedConversationList: ArchivedConversationList as JsonSchema,
-        ConversationSwitchResponse: ConversationSwitchResponse as JsonSchema,
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
         ConversationSseEvent: ConversationSseEvent as JsonSchema,
         CreateBattlefieldRequest: CreateBattlefieldRequest as JsonSchema,

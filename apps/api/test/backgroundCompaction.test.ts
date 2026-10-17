@@ -507,16 +507,6 @@ describe("后台压缩的生命周期（真路由、真库）", () => {
       const call = seen.slice(before).find((item) => !isSummary(item))!;
       expect(textOf(call.context.messages)).toContain("否决了自建 Token 工厂");
       expect((await t.sql("SELECT status FROM conversation_compactions WHERE id <> 'cccccccc-0000-4000-8000-000000000001' ORDER BY started_at LIMIT 1"))[0]).toEqual({ status: "applied" });
-      // 新建对话：旧对话归档，新对话里没有旧快照。
-      const created = await app.inject({ method: "POST", url: "/api/conversations/global/new", headers: { cookie, origin: t.publicOrigin } });
-      expect(created.statusCode).toBe(200);
-      const fresh = seen.length;
-      await ask("新对话的第一问");
-      const freshCall = seen.slice(fresh).find((item) => !isSummary(item))!;
-      expect(textOf(freshCall.context.messages)).not.toContain("否决了自建 Token 工厂");
-      const rows = await t.sql("SELECT DISTINCT conversation_id FROM conversation_compactions");
-      const archived = await t.sql("SELECT id FROM conversations WHERE archived_at IS NOT NULL");
-      expect(rows.map((row) => row.conversation_id)).toEqual(archived.map((row) => row.id));
     } finally { await t.close(); }
   });
 });

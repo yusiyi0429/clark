@@ -76,20 +76,10 @@ export function pendingUserMessage(sequence: number, content: string, references
 /** 一句话发出 / 这一轮结束（成功、失败、停止都算）：detail.scope 是这条对话。 */
 export const CONVERSATION_TURN_SENT = "conversation-turn-sent";
 export const CONVERSATION_TURN_SETTLED = "conversation-turn-settled";
-/** 换了当前对话（新建 / 切回）：跟着这条对话走的部分（提案卡、台账）各自重读。 */
-export const CONVERSATION_SWITCHED = "conversation-switched";
 
 export function messagesEndpoint(scope: string): string {
   return `/api/conversations/${encodeURIComponent(scope)}/messages`;
 }
-
-/** 新建对话、历史对话列表、只读回看、切回继续（都按 scope，只认本人的）。 */
-export const conversationEndpoints = {
-  new: (scope: string) => `/api/conversations/${encodeURIComponent(scope)}/new`,
-  archived: (scope: string) => `/api/conversations/${encodeURIComponent(scope)}/archived`,
-  archivedMessages: (scope: string, id: string) => `/api/conversations/${encodeURIComponent(scope)}/archived/${encodeURIComponent(id)}/messages`,
-  restore: (scope: string, id: string) => `/api/conversations/${encodeURIComponent(scope)}/archived/${encodeURIComponent(id)}/restore`,
-};
 
 export function isAttachable(file: { name: string }): boolean {
   return /\.(pdf|docx|md)$/i.test(file.name);
@@ -206,13 +196,6 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [historyStatus, setHistoryStatus] = useState<HistoryStatus>("loading");
   const [historyError, setHistoryError] = useState<string | null>(null);
-  /** 已归档、有内容的历史对话条数（服务端随历史一起给）：当前对话为空时据此给一行「查看历史对话」。 */
-  const [archivedCount, setArchivedCount] = useState(0);
-  /** 正在新建 / 切换对话：按钮不重复触发；失败时说明放在 switchError。 */
-  const [switching, setSwitching] = useState(false);
-  const [switchError, setSwitchError] = useState<string | null>(null);
-  /** 换过几次当前对话：跟着对话走的数据（提案卡、撤销）按它重读。 */
-  const [revision, setRevision] = useState(0);
   /** 这一轮没完成时能不能接着来（「继续」/「重新回答」）：哪一轮、怎么接；发下一句、换 scope 时清空。 */
   const [recoveryState, setRecoveryState] = useState<{ mode: TurnRecoveryMode; runId: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -305,12 +288,11 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
         failedStatus = response.status;
         throw new Error(`历史读取失败：${response.status}`);
       }
-      const body = (await response.json()) as { messages?: unknown; archivedCount?: unknown };
+      const body = (await response.json()) as { messages?: unknown };
       if (!Array.isArray(body.messages)) throw new Error("历史格式不对");
       if (!current()) return null;
       const loaded = withPendingTurn(body.messages as Message[], pendingTurn.current);
       setMessages(loaded);
-      setArchivedCount(typeof body.archivedCount === "number" ? body.archivedCount : 0);
       setHistoryStatus("ready");
       setHistoryError(null);
       return loaded;
@@ -332,8 +314,6 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     setLastReply(null);
     setThought(null);
     setRecoveryState(null);
-    setArchivedCount(0);
-    setSwitchError(null);
     // 附件挂在上一个 scope 的对话上，不能带到这里发送。
     setAttachments((current) => (current.length ? [] : current));
     setUploading(false);
@@ -644,61 +624,6 @@ ${input}` : input;
     return send(RESUME_TEXT[recoveryState.mode], [], { resumeRunId: recoveryState.runId });
   }
 
-  /**
-   * 换当前对话（新建一条空白的 / 切回一段历史对话）：服务端在「人 × scope」锁里切，成功后清掉本轮的展示态、重读历史。
-   * 回答进行中不切；失败只给一句说明，已显示的对话不动。
-   */
-  async function switchTo(url: string): Promise<boolean> {
-    if (status === "streaming" || switching) return false;
-    const started = generation.current;
-    setSwitching(true);
-    setSwitchError(null);
-    try {
-      let response: Response;
-      try {
-        response = await fetch(url, { method: "POST", headers: { accept: "application/json" } });
-      } catch {
-        throw new TurnError("UNREACHABLE", "");
-      }
-      if (response.status === 401) {
-        window.location.assign("/access");
-        return false;
-      }
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { code?: string; message?: string };
-        throw new TurnError(body.code ?? `HTTP_${response.status}`, body.message ?? "");
-      }
-      if (generation.current !== started) return true;
-      pendingTurn.current = null;
-      setMessages([]);
-      setPartial("");
-      setStatus("idle");
-      setError(null);
-      setLastReply(null);
-      setThought(null);
-      setRecoveryState(null);
-      // 待发附件挂在原来那条对话上：换了对话就不再带着。
-      setAttachments((current) => (current.length ? [] : current));
-      setAttachmentError(null);
-      await loadHistory("show");
-      setRevision((value) => value + 1);
-      window.dispatchEvent(new CustomEvent(CONVERSATION_SWITCHED, { detail: { scope } }));
-      return true;
-    } catch (cause) {
-      if (generation.current === started) {
-        const code = (cause as TurnError).code;
-        setSwitchError(code === "TURN_IN_PROGRESS" ? "上一轮回答还没结束，请等它写完或点「停止」后再切换对话。"
-          : code === "UNREACHABLE" ? "没有连上天枢服务，对话没有切换，可以稍后再试。"
-          : "对话没有切换成功（原因已记录），当前对话不受影响，可以稍后再试。");
-      }
-      return false;
-    } finally {
-      if (generation.current === started) setSwitching(false);
-    }
-  }
-  const startNew = useStableCallback(() => switchTo(conversationEndpoints.new(scope)));
-  const restoreArchived = useStableCallback((id: string) => switchTo(conversationEndpoints.restore(scope, id)));
-
   const stop = useCallback(() => abortRef.current?.abort(), []);
   // 交给输入条（memo）的回调身份不变：流式中整棵对话树每帧重画，输入条不跟着重画。
   const stableSend = useStableCallback(send);
@@ -726,15 +651,6 @@ ${input}` : input;
     historyStatus,
     historyError,
     retryHistory,
-    /** 已归档、有内容的历史对话条数。 */
-    archivedCount,
-    /** 新建对话：当前对话有内容就归档，换一条空白的。 */
-    startNew,
-    /** 切回一段历史对话继续。 */
-    restoreArchived,
-    switching,
-    switchError,
-    revision,
     attachments,
     uploading,
     attachmentError,

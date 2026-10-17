@@ -284,8 +284,6 @@
 @media(max-width:959px){.expandedIdentity.expandedIdentity>div>span{font-size:13px}}
 /* 触屏的工作台（pointer:coarse，规范 §1）：战场 / 雷达 / 已处理页头右上角的关闭键 42 → 44（手持时它在左上角、已是 44）。 */
 @media(pointer:coarse){.closeRound{width:44px;height:44px}}
-/* 对话层左上角星标右边那颗很小的「+ 新对话」（ConversationArchive）：低对比度灰色，不是玻璃圆键。 */
-.historySheet .sheetNewKey{position:absolute;z-index:4;top:15px;left:56px}
 
 .m2Entry{display:flex;justify-content:flex-end;padding:8px 16px 0}
 .m2Entry a{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border,rgba(0,0,0,.12));border-radius:12px;color:inherit;font-size:14px;text-decoration:none;background:var(--surface,#fff)}

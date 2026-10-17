@@ -127,29 +127,5 @@
 .prose :global(.katex-display>.katex){text-align:left}
 .prose :global(.katex-error){color:inherit!important}
 
-/*
- * 新建对话与历史对话（ConversationArchive）：存在感越低越好。「+」是一颗 13px 的低对比度灰色小图标；
- * 历史入口只在空白对话里出现一行 12px 的淡字；列表是首问 13px + 日期 12px。不加新颜色。
- */
-.newConversation{display:grid;place-items:center;width:28px;height:28px;min-width:28px;padding:0;border:0;border-radius:50%;background:none;color:#a5a5af;cursor:pointer;transition:color 150ms ease,background 150ms ease}
-.newConversation:hover{color:#5c626d;background:#1d1d1f0a}
-.newConversation:focus-visible{outline:2px solid #3A83F788;outline-offset:2px}
-.newConversation:disabled{cursor:default;opacity:.5}
-.archiveEntry{display:block;width:fit-content;margin:4px 0 0;padding:0;border:0;background:none;color:#a5a5af;font-size:12px;line-height:1.5;cursor:pointer}
-.archiveEntry:hover,.archiveEntry:focus-visible{color:#7a7f89;text-decoration:underline;text-underline-offset:3px}
-.archive{margin:0 0 24px}
-.archiveHead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;margin:0 0 16px;font-size:12px;line-height:1.5;color:#7a7f89}
-.archiveActions{display:flex;flex-wrap:wrap;gap:12px}
-.archiveActions button,.archiveInline{padding:0;border:0;background:none;color:#7a7f89;font-size:12px;line-height:1.5;cursor:pointer;text-decoration:underline;text-underline-offset:3px;text-decoration-color:#1d1d1f12}
-.archiveActions button:hover,.archiveInline:hover{color:#3f4754}
-.archiveActions button:disabled{cursor:default;opacity:.5}
-.archiveInline{margin-left:6px}
-.archiveList{margin:0;padding:0;list-style:none}
-.archiveList button{display:flex;align-items:baseline;justify-content:space-between;gap:12px;width:100%;padding:12px 0;border:0;border-bottom:1px solid #1d1d1f12;background:none;text-align:left;cursor:pointer}
-.archiveList button:focus-visible{outline:2px solid #3A83F788;outline-offset:2px}
-.archiveTitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:1.6;color:#3f4754}
-.archiveList button:hover .archiveTitle{color:#25282e}
-.archiveDate{flex:none;font-size:12px;line-height:1.5;color:#a5a5af}
-.archiveNote{margin:0 0 16px;font-size:13px;line-height:1.6;color:#7a7f89}
 /* 这一轮用了备用模型或走过恢复：回答末尾一行很淡的 12px 小字，悬停看说明。 */
 .recoveryNote{width:fit-content;margin:12px 0 0;font-size:12px;line-height:1.5;color:#a5a5af;cursor:default}

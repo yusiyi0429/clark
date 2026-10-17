@@ -13,10 +13,7 @@ import {
   CONVERSATION_IDLE_RESTART_MS,
   conversationAttachmentInfo,
   ensureMainConversation,
-  getArchivedConversationHistory,
   getConversationHistory,
-  listArchivedConversations,
-  switchConversation,
   getScopeObject,
   loadConversationAttachments,
   resolveReferenceSnapshots,
@@ -41,7 +38,6 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
   const { pool, q, env, fail, requirePerson, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
-  const archivedParams = Type.Object({ scope: ConversationScope, id: Type.String({ format: "uuid" }) }, { additionalProperties: false });
   // 我的 Agent 按「人 × 页面」私有；任务卡 scope 始终复查对象成员及当前拍板权。
   const scopeObjectFor = async (person: SessionPerson, scope: TConversationScope) => {
     if (person.role !== "ceo" && (scope.startsWith("issue:") || scope.startsWith("meeting:"))) {
@@ -68,58 +64,6 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
       const object = await scopeObjectFor(req.person!, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
       return getConversationHistory(q, req.person!.personId, req.params.scope);
-    },
-  );
-
-  /**
-   * 新建对话：当前对话有内容就归档（不删除，能回看、能切回去继续），之后的消息进一条空白对话。
-   * 一轮回答还没结束时不切（409）。当前对话本来就是空的就什么都不做。
-   */
-  app.post(
-    "/api/conversations/:scope/new",
-    { preHandler: requirePerson, schema: { params: conversationParams } },
-    async (req, reply) => {
-      if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      const result = await switchConversation(pool, req.person!.personId, req.params.scope);
-      if (result.status === "busy") return fail(reply, 409, "TURN_IN_PROGRESS", "上一轮回答还没结束，请等它写完或点「停止」后再新建对话。");
-      if (result.status !== "ok") return fail(reply, 404, "CONVERSATION_NOT_FOUND", "对话不存在");
-      logEvent({ event: "conversation.new", requestId: String(req.id), scope: req.params.scope, archived: result.archived });
-      return { conversationId: result.conversationId, archived: result.archived };
-    },
-  );
-
-  /** 历史对话列表（新归档的在前），只有本人在这个页面归档、有内容的。 */
-  app.get(
-    "/api/conversations/:scope/archived",
-    { preHandler: requirePerson, schema: { params: conversationParams } },
-    async (req, reply) => {
-      if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      return listArchivedConversations(q, req.person!.personId, req.params.scope);
-    },
-  );
-
-  /** 只读回看一段历史对话。 */
-  app.get(
-    "/api/conversations/:scope/archived/:id/messages",
-    { preHandler: requirePerson, schema: { params: archivedParams } },
-    async (req, reply) => {
-      if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      const history = await getArchivedConversationHistory(q, req.person!.personId, req.params.scope, req.params.id);
-      return history ?? fail(reply, 404, "CONVERSATION_NOT_FOUND", "这段历史对话找不到了");
-    },
-  );
-
-  /** 切回一段历史对话继续：当前对话归档，这一段成为当前对话。 */
-  app.post(
-    "/api/conversations/:scope/archived/:id/restore",
-    { preHandler: requirePerson, schema: { params: archivedParams } },
-    async (req, reply) => {
-      if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      const result = await switchConversation(pool, req.person!.personId, req.params.scope, req.params.id);
-      if (result.status === "busy") return fail(reply, 409, "TURN_IN_PROGRESS", "上一轮回答还没结束，请等它写完或点「停止」后再切换。");
-      if (result.status !== "ok") return fail(reply, 404, "CONVERSATION_NOT_FOUND", "这段历史对话找不到了");
-      logEvent({ event: "conversation.restore", requestId: String(req.id), scope: req.params.scope, archived: result.archived });
-      return { conversationId: result.conversationId, archived: result.archived };
     },
   );
 
