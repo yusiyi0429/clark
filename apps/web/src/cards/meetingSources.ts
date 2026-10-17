@@ -7,7 +7,8 @@ import { knowledgeName, materialTitle } from "@/lib/displayText";
  * 预审条目、历史决定、执行变化里的来源都是这一套 ref；这里只做解析和定位，不发请求：
  * - `material:<id>@v<n>[#p<k>]` 群材料当时那一版（可带段落）；`material:<id>` 旧会前材料；
  * - `discussion:<messageId>` 群讨论发言；`decision:<id>` 已确认的历史决定；`fact:` 执行事实；`feedback:` 阶段反馈；
- * - `signal:<id>` 外部信号；`outcome:<meetingId>#<itemId>` 会后条目；`meeting:` / `transcript:` / `issue:` / `research:` / `memory:`。
+ * - `signal:<id>` 外部信号；`outcome:<meetingId>#<itemId>` 会后条目；`meeting:` / `transcript:` / `issue:` / `research:` / `memory:`（企业知识章节）；
+ * - `chat:<会话>#<序号>` 本人以前说过的原话；`pmem:<id>` 本人的一条个人记忆（只有本人可见）。
  * 名字里不出现内部编号；认不出的来源写「其他来源」，不把原始 ref 摆给 CEO。
  */
 
@@ -25,6 +26,8 @@ export type ParsedSource =
   | { kind: "issue"; ref: string; id: string }
   | { kind: "research"; ref: string; issueId: string }
   | { kind: "memory"; ref: string; file: string; section: number | null }
+  | { kind: "chat"; ref: string; conversationId: string; sequence: number }
+  | { kind: "pmem"; ref: string; id: string }
   | { kind: "unknown"; ref: string };
 
 const MATERIAL_VERSION = /^material:([^@#\s]+)@v(\d+)(?:#p(\d+))?$/;
@@ -57,6 +60,11 @@ export function parseSourceRef(ref: string): ParsedSource {
       const match = /^(.*?)(?:#s(\d+))?(?:#p\d+)?$/.exec(rest);
       return { kind: "memory", ref, file: match?.[1] || rest, section: match?.[2] ? Number(match[2]) : null };
     }
+    case "chat": {
+      const match = /^([^#\s]+)#(\d+)$/.exec(rest);
+      return match ? { kind: "chat", ref, conversationId: match[1], sequence: Number(match[2]) } : { kind: "unknown", ref };
+    }
+    case "pmem": return /^[^\s#:]+$/.test(rest) ? { kind: "pmem", ref, id: rest } : { kind: "unknown", ref };
     default: return { kind: "unknown", ref };
   }
 }
@@ -206,6 +214,8 @@ export function sourceLabel(ref: string, context: SourceContext, issueId?: strin
       // 内部文件名（kd-*）换成中文名，不把 ID 摆给 CEO。
       return `《${knowledgeName(parsed.file)}》${parsed.section ? `第 ${parsed.section} 节` : ""}`;
     }
+    case "chat": return "原话";
+    case "pmem": return "个人记忆";
     default: return "其他来源";
   }
 }

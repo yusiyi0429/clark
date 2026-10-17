@@ -74,6 +74,10 @@ describe("依据 ref 解析", () => {
     expect(parseSourceRef(`outcome:${MEETING}#i-2`)).toMatchObject({ kind: "outcome", meetingId: MEETING, itemId: "i-2" });
     expect(parseSourceRef(`outcome:${OLD_MEETING}`)).toMatchObject({ kind: "outcome", meetingId: OLD_MEETING, itemId: null });
     expect(parseSourceRef("memory:经营原则.md#s2")).toMatchObject({ kind: "memory", file: "经营原则.md", section: 2 });
+    expect(parseSourceRef("chat:7d1c0f7e-3c1b-4f4e-9b1e-1c2d3e4f5a6b#12")).toEqual({ kind: "chat", ref: "chat:7d1c0f7e-3c1b-4f4e-9b1e-1c2d3e4f5a6b#12", conversationId: "7d1c0f7e-3c1b-4f4e-9b1e-1c2d3e4f5a6b", sequence: 12 });
+    expect(parseSourceRef("chat:7d1c0f7e")).toMatchObject({ kind: "unknown" });
+    expect(parseSourceRef("pmem:5f0e8c1a-2b3c")).toEqual({ kind: "pmem", ref: "pmem:5f0e8c1a-2b3c", id: "5f0e8c1a-2b3c" });
+    expect(parseSourceRef("pmem:a b")).toMatchObject({ kind: "unknown" });
     expect(parseSourceRef("signal:s-1")).toMatchObject({ kind: "signal", id: "s-1" });
     expect(parseSourceRef("whatever")).toMatchObject({ kind: "unknown" });
   });

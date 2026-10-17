@@ -68,7 +68,8 @@ function endsInRoute(target: SourceTarget): boolean {
  */
 export function citationRoute(ref: string, surface: CitationSurface, page: PageCitations | null = visiblePage()): CitationRoute {
   const parsed = parseSourceRef(ref);
-  if (parsed.kind === "unknown") return "none";
+  // 原话、个人记忆没有可以打开的原文页：只显示名称（个人记忆有自己的小标记）。
+  if (parsed.kind === "unknown" || parsed.kind === "chat" || parsed.kind === "pmem") return "none";
   if (surface === "sheet" || !page) return "panel";
   if (parsed.kind === "issue" || parsed.kind === "research") {
     const target = sourceTarget(ref, page.context);

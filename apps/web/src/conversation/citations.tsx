@@ -58,6 +58,8 @@ export function citationLocator(ref: string): string | null {
     case "transcript": return "会议记录";
     case "issue": return "议题";
     case "research": return "议题研究";
+    case "chat": return "原话";
+    case "pmem": return "个人记忆";
     default: return null;
   }
 }
@@ -98,7 +100,7 @@ export function CitationAnchor({ node: _node, href, children, [CITE_MARK_PROP]: 
   if (mark !== undefined && href) return <CitationMark href={href} title={plainText(children)} />;
   if (!href?.startsWith(CITE_SCHEME)) return <a href={href} {...rest}>{children}</a>;
   const ref = citationRef(href);
-  if (!ref || !linked) return <span className={s.plain} data-cite={ref ? "plain" : "invalid"}>{children}</span>;
+  if (!ref || !linked || citationRoute(ref, surface) === "none") return <span className={s.plain} data-cite={ref ? "plain" : "invalid"}>{children}</span>;
   return <CitationLink citeRef={ref} surface={surface}>{children}</CitationLink>;
 }
 
@@ -125,7 +127,9 @@ export function markTarget(href: string): MarkTarget {
 export function canOpenMark(target: MarkTarget, surface: SurfaceValue): boolean {
   if (target.kind === "url") return true;
   if (target.kind === "named") return false;
-  return surface.linked || citationRoute(target.ref, surface.surface) === "page" || Boolean(surface.expand);
+  const route = citationRoute(target.ref, surface.surface);
+  if (route === "none") return false;
+  return surface.linked || route === "page" || Boolean(surface.expand);
 }
 
 /** 打开原文：放大时直接交给依据导航；平时页面接得住就交给页面，否则先放大、放大后依据面板接着打开。 */
