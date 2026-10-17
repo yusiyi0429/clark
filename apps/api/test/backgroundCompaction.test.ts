@@ -121,7 +121,7 @@ describe("压缩计划：滚动增量、切点落在提问上、带「覆盖到�
     expect(text).toContain('web_search({"query":"硅基流动 融资"})');
     expect(text).toContain("prop-42");
     expect(text).not.toContain("内部推理");
-    expect(text).toMatch(/\[一号位 · 10\/13 16:0\d/);
+    expect(text).toMatch(/\[本人 · 10\/13 16:0\d/);
   });
 });
 
@@ -131,11 +131,23 @@ describe("压缩提示与覆盖范围", () => {
     const plan = planOf(s.entries(), { keepRecentTokens: 10 });
     expect(plan.keptQuestions.map((item) => item.text)).toEqual(["统一成一段话来说，不要分开说"]);
     const prompt = summaryPromptFor({ ...plan, previousSummary: `旧记忆。\n\n${coverageNote({ coveredTurns: 1, lastCoveredAt: Date.parse("2026-10-13T08:00:00Z") })}` });
-    expect(prompt).toContain("<之后几轮一号位的原话>");
+    expect(prompt).toContain("<之后几轮本人的原话>");
     expect(prompt).toContain("统一成一段话来说，不要分开说");
     expect(prompt).toContain("<之前的对话记忆>\n旧记忆。\n</之前的对话记忆>");
     expect(coverageNote(plan)).toMatch(/^（这份对话记忆覆盖到第 3 轮（最后一问在 10\/13 16:\d\d）；之后的对话以原文为准/);
     expect(withoutCoverageNote(`记忆正文\n\n${coverageNote(plan)}`)).toBe("记忆正文");
+  });
+
+  it("压缩写的是这个人的对话记忆：想法与立场、没定的问题和理由、偏好与做法、引用过的对象 id；正式事实不进摘要", () => {
+    const s = session([...turns(3), { q: "我倾向先做县城样板，理由是一线获客太贵", a: "明白。", usage: 70_000 }]);
+    const plan = planOf(s.entries(), { keepRecentTokens: 10 });
+    const prompt = summaryPromptFor(plan);
+    for (const section of ["## 想法与立场", "## 还没定的问题", "## 偏好与做法", "## 引用过的对象"]) expect(prompt).toContain(section);
+    expect(prompt).toMatch(/目标、进展、指标、议题、会议、数字、日期这些正式事实[^。]*一律不写/);
+    expect(prompt).toContain("[本人 · ");
+    expect(prompt).not.toContain("一号位");
+    expect(prompt).not.toContain("已形成的结论");
+    expect(COMPACTION_SYSTEM_PROMPT).not.toContain("CEO");
   });
 });
 
