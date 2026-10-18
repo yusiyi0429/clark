@@ -38,7 +38,8 @@ export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
   | { type: "warning"; code: "RUNTIME_RECREATED"; message: string }
   | { type: "compaction"; phase: "started" | "completed" }
-  | { type: "tool"; phase: "started" | "completed"; toolCallId: string; name: string; isError?: boolean; label?: string; detail?: string }
+  /** errorCode：工具出错的类别（只在出错时有，路由层记成质量信号，不发给界面）。 */
+  | { type: "tool"; phase: "started" | "completed"; toolCallId: string; name: string; isError?: boolean; label?: string; detail?: string; errorCode?: string }
   /** 本轮档位（conversationRouting.ts）：路由层据此设整轮时限，界面据此显示预计用时；深度档带开场说明。 */
   | { type: "route"; tier: "quick" | "grounded" | "deep"; source: "rule" | "model" | "fallback"; expectSeconds: number; timeoutMs: number; notice?: string; model?: string }
   /**

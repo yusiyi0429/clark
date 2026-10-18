@@ -437,6 +437,14 @@ export function seedIdleRestart(
 const COMPACTION_MAX_TOKENS = 12_000;
 
 /** 这条会话最近一轮主答是不是 Claude（Anthropic 协议）；一条会话里混着几个档位时按最近那一轮算。 */
+/** 工具出错的类别（质量信号用）：超时、检索到上限、工具自己给的错误码，其余记 TOOL_ERROR。 */
+export function toolErrorCode(result: unknown): string {
+  const text = typeof result === "string" ? result : JSON.stringify(result ?? "");
+  if (/秒没有返回|timed? ?out/i.test(text)) return "TOOL_TIMEOUT";
+  if (/检索已到上限|SEARCH_BUDGET_EXHAUSTED/.test(text)) return "SEARCH_LIMIT";
+  return /code\\?"\s*:\s*\\?"([A-Z][A-Z0-9_]{2,})/.exec(text)?.[1] ?? "TOOL_ERROR";
+}
+
 export function latestAnswerIsClaude(entries: ReturnType<SessionManager["getBranch"]>): boolean {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
@@ -1275,7 +1283,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           // 查证进度：这一步实际读到了什么，由系统按工具结果生成。
           const detail = event.isError ? undefined : toolResultDetail(event.toolName, toolArgs.get(event.toolCallId), event.result);
           toolArgs.delete(event.toolCallId);
-          input.emit({ type: "tool", phase: "completed", toolCallId: event.toolCallId, name: event.toolName, isError: event.isError, ...(detail ? { detail } : {}) });
+          input.emit({ type: "tool", phase: "completed", toolCallId: event.toolCallId, name: event.toolName, isError: event.isError, ...(detail ? { detail } : {}),
+            ...(event.isError ? { errorCode: toolErrorCode(event.result) } : {}) });
         } else if (event.type === "message_end" && event.message.role === "assistant") {
           if (event.message.stopReason !== "error" && event.message.stopReason !== "aborted") pendingText = "";
           escalation.assistantToolCalls(event.message.content.flatMap((block) => (block.type === "toolCall" ? [block.name] : [])));

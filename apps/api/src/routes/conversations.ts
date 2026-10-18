@@ -292,6 +292,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         /** 本档实际用的主答模型（按档位换模型以后，runtime.modelId 只是默认的那个）。 */
         let routeModel: string | undefined;
         let recoveries = 0;
+        const toolErrors: { kind: "tool_error"; tool: string; code: string; at: string }[] = [];
         // 绝对上限只防死循环（10 分钟）；正常的长回答按进展判断，不按档位截断。
         const timeout = setTimeout(() => abort.abort(Object.assign(
           new Error(`Conversation turn exceeded ${Math.max(1, Math.round(conversationTurnTimeoutMs / 1000))} seconds`), { code: "TURN_TIMEOUT" })), conversationTurnTimeoutMs);
@@ -311,6 +312,14 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
             notice = typeof event.notice === "string" ? event.notice : undefined;
             // 界面只用它显示档位；时限统一是绝对上限。
             event = { ...event, timeoutMs: conversationTurnTimeoutMs };
+          }
+          // 工具报错或超时：记一条质量信号（随运行记录存下，管理员视图的「质量信号」读它）；errorCode 只给运行记录，不发给界面。
+          if (event.type === "tool" && event.phase === "completed" && event.isError) {
+            const { errorCode, ...rest } = event as Record<string, unknown> & { errorCode?: unknown };
+            const signal = { kind: "tool_error" as const, tool: String(event.name), code: typeof errorCode === "string" ? errorCode : "TOOL_ERROR", at: new Date().toISOString() };
+            toolErrors.push(signal);
+            logEvent({ event: "conversation.quality_signal", signal: "tool_error", requestId: String(req.id), runId, scope: req.params.scope, tool: signal.tool, code: signal.code });
+            event = rest;
           }
           if (!reply.raw.destroyed) {
             const data = { ...event, runId, scope: req.params.scope, sequence: ++eventSequence };
@@ -371,7 +380,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           return [{ signal: "memory_mark_unknown_id", ids: unknown }];
         };
         const routeSnapshot = (partial: boolean | undefined, summary: TurnRecoverySummary | undefined, text: string) => {
-          const signals = qualitySignals(text);
+          const signals = [...qualitySignals(text), ...toolErrors];
           return JSON.stringify({ route: { tier: routeTier ?? null, model: routeModel ?? null, recoveries,
             ...(summary ? { recovery: { originalModel: summary.originalModel, fallbackModel: summary.fallbackModel ?? null, reasons: summary.reasons,
               actions: summary.actions, retries: summary.retries } } : {}) },
