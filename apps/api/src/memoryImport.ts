@@ -390,9 +390,14 @@ export async function reconcileCandidates(candidates: Candidate[], existing: Exi
 
 // ── 默认勾选和要本人看的 ────────────────────────────────────────────────────
 
-/** 来源可信度：只在过往对话里出现过的、提示词自评把握低的，打折。 */
+/**
+ * 来源可信度：只在过往对话里出现过的、提示词自评把握低的，打折；
+ * 写在项目级说明文件（项目里的 CLAUDE.md / AGENTS.md、Claude 导出里的项目指令）里的个人偏好，可能只对那个项目成立，
+ * 不默认勾选、请本人看（导入设计 4.5「在个人偏好和项目指令之间摇摆的」）。
+ */
 export function effectiveConfidence(candidate: Candidate): number {
     let confidence = candidate.confidence ?? 0;
+    if ((candidate.hints.fileKind === 'instructions' && !candidate.hints.global) || (candidate.hints.fileKind === 'export' && candidate.project)) confidence = Math.min(confidence, HEARSAY_CAP);
     if (candidate.hints.promptConfidence === '低') confidence = Math.min(confidence, LOW_CAP);
     if (candidate.hints.promptSource === '过往对话' || candidate.hints.promptSource === '不确定') confidence = Math.min(confidence, HEARSAY_CAP);
     return confidence;

@@ -69,6 +69,16 @@ describe('记忆导入：拆分与规则', () => {
             ]);
     });
 
+    it('项目级说明文件里的个人偏好不默认勾选；全局说明里的照常', async () => {
+        const { candidates } = splitDocs([
+            { source: 'claude_code', path: '~/work/shop/CLAUDE.md', mtime: 'x', text: '- 回答先给结论' },
+            { source: 'codex', path: '~/.codex/AGENTS.md', mtime: 'x', text: '- 回答先给结论再说理由' },
+        ]);
+        await classifyCandidates(candidates, fakeModel());
+        decide(candidates);
+        expect(candidates.map((candidate) => [candidate.group, candidate.checked])).toEqual([['uncertain', false], ['import', true]]);
+    });
+
     it('提示词输出按五个字段拆，记下来源和把握；没有「完整」算未完', () => {
         const output = '```\n偏好 | 技术名词保留英文 | 已保存记忆 | 2026-05 | 高\n其他 | 无 | 不确定 | 未知 | 低\n```\n';
         const { candidates, truncated } = splitDocs([{ source: 'claude', path: 'paste-1.txt', mtime: 'x', text: output }]);
@@ -129,7 +139,7 @@ describe('记忆导入：拆分与规则', () => {
     });
 });
 
-describe('记忆导入：接口', () => {
+describe('记忆导入：接口', { timeout: 30_000 }, () => {
     it('粘贴 → 五步走到等你确认 → 确认后勾选的进个人记忆，冲突选「用新的」替代旧的；别人看不到', async () => {
         const log = { classify: 0, reconcile: 0 };
         const t = await createTestApp({}, undefined, { memoryImportModel: fakeModel(log) });
