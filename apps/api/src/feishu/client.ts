@@ -13,6 +13,7 @@ export class FeishuApiError extends Error {
 }
 
 export type FeishuUserInfo = { openId: string; unionId?: string; name?: string };
+export type FeishuReceiveIdType = "open_id" | "union_id" | "user_id" | "chat_id";
 
 /** 用到的飞书开放接口；测试注入假实现。 */
 export type FeishuClient = {
@@ -23,6 +24,8 @@ export type FeishuClient = {
   /** refresh token 只能用一次；成功后旧的立即失效。 */
   refreshUserToken(refreshToken: string): Promise<FeishuUserToken>;
   getUserInfo(userAccessToken: string): Promise<FeishuUserInfo>;
+  /** 以机器人身份发消息（tenant_access_token）。content 是消息体对象，发送时序列化。 */
+  sendMessage(receiveIdType: FeishuReceiveIdType, receiveId: string, msgType: "text" | "interactive", content: object): Promise<{ messageId: string }>;
 };
 
 type Fetch = typeof fetch;
@@ -55,11 +58,13 @@ function data(body: Record<string, unknown>, what: string): Record<string, unkno
   return (body.data ?? {}) as Record<string, unknown>;
 }
 
-export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch }: {
+export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch, now = () => Date.now() }: {
   appId: string;
   appSecret: string;
   fetch?: Fetch;
+  now?: () => number;
 }): FeishuClient {
+  let tenant: { token: string; expiresAt: number } | undefined;
 
   async function tokenRequest(fields: Record<string, string>): Promise<FeishuUserToken> {
     const response = await fetchImpl(`${ACCOUNTS}/oauth/v3/token`, {
@@ -69,6 +74,23 @@ export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch 
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     return userToken(await readJson(response));
+  }
+
+  /** tenant_access_token 有效 2 小时，提前 5 分钟换新。 */
+  async function tenantToken(): Promise<string> {
+    if (tenant && tenant.expiresAt > now()) return tenant.token;
+    const response = await fetchImpl(`${OPEN_API}/auth/v3/tenant_access_token/internal`, {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const body = await readJson(response);
+    if (Number(body.code ?? -1) !== 0 || typeof body.tenant_access_token !== "string") {
+      throw new FeishuApiError(Number(body.code ?? 0), `获取 tenant_access_token 失败：${String(body.msg ?? "未知错误")}`);
+    }
+    tenant = { token: body.tenant_access_token, expiresAt: now() + (Number(body.expire ?? 7200) - 300) * 1000 };
+    return tenant.token;
   }
 
   return {
@@ -94,6 +116,16 @@ export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch 
         ...(typeof info.union_id === "string" ? { unionId: info.union_id } : {}),
         ...(typeof info.name === "string" ? { name: info.name } : {}),
       };
+    },
+    async sendMessage(receiveIdType, receiveId, msgType, content) {
+      const response = await fetchImpl(`${OPEN_API}/im/v1/messages?receive_id_type=${receiveIdType}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${await tenantToken()}`, "content-type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ receive_id: receiveId, msg_type: msgType, content: JSON.stringify(content) }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      const sent = data(await readJson(response), "发送飞书消息");
+      return { messageId: String(sent.message_id ?? "") };
     },
   };
 }
