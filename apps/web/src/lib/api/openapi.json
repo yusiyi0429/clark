@@ -40423,7 +40423,6 @@
             "type": "object",
             "required": [
               "today",
-              "generatedAt",
               "redLines",
               "onTrack",
               "summaries",
@@ -40432,10 +40431,6 @@
             "properties": {
               "today": {
                 "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                "type": "string"
-              },
-              "generatedAt": {
-                "description": "ISO 8601",
                 "type": "string"
               },
               "redLines": {
@@ -40522,8 +40517,7 @@
                             "startDate",
                             "dueDate",
                             "plannedDays",
-                            "usedDays",
-                            "lastVerifiedAt"
+                            "usedDays"
                           ],
                           "properties": {
                             "taskId": {
@@ -40561,17 +40555,6 @@
                             "usedDays": {
                               "minimum": 0,
                               "type": "integer"
-                            },
-                            "lastVerifiedAt": {
-                              "anyOf": [
-                                {
-                                  "description": "ISO 8601",
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
                             }
                           }
                         },
@@ -40694,8 +40677,7 @@
                               "startDate",
                               "dueDate",
                               "plannedDays",
-                              "usedDays",
-                              "lastVerifiedAt"
+                              "usedDays"
                             ],
                             "properties": {
                               "taskId": {
@@ -40733,17 +40715,6 @@
                               "usedDays": {
                                 "minimum": 0,
                                 "type": "integer"
-                              },
-                              "lastVerifiedAt": {
-                                "anyOf": [
-                                  {
-                                    "description": "ISO 8601",
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
                               }
                             }
                           }
@@ -40855,8 +40826,7 @@
                         "startDate",
                         "dueDate",
                         "plannedDays",
-                        "usedDays",
-                        "lastVerifiedAt"
+                        "usedDays"
                       ],
                       "properties": {
                         "taskId": {
@@ -40894,17 +40864,6 @@
                         "usedDays": {
                           "minimum": 0,
                           "type": "integer"
-                        },
-                        "lastVerifiedAt": {
-                          "anyOf": [
-                            {
-                              "description": "ISO 8601",
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
                         }
                       }
                     },
@@ -40986,7 +40945,6 @@
                           "additionalProperties": false,
                           "type": "object",
                           "required": [
-                            "weeklyReviewId",
                             "href",
                             "weekStart",
                             "weekEnd",
@@ -40994,10 +40952,6 @@
                             "progress"
                           ],
                           "properties": {
-                            "weeklyReviewId": {
-                              "minLength": 1,
-                              "type": "string"
-                            },
                             "href": {
                               "minLength": 1,
                               "type": "string"

@@ -41,7 +41,6 @@ export const ProgressTask = Type.Object(
     plannedDays: Type.Integer({ minimum: 0 }),
     /** 已用工作日（startDate..今天，含首尾；没开始为 0）。 */
     usedDays: Type.Integer({ minimum: 0 }),
-    lastVerifiedAt: NullableDateTime,
   },
   { additionalProperties: false },
 );
@@ -98,7 +97,6 @@ export const ProgressPersonSummary = Type.Object(
     weeklyReview: Type.Union([
       Type.Object(
         {
-          weeklyReviewId: Type.String({ minLength: 1 }),
           href: Type.String({ minLength: 1 }),
           weekStart: Day,
           weekEnd: Day,
@@ -159,7 +157,6 @@ export const OffPlanItem = Type.Object(
 export const ProgressOverview = Type.Object(
   {
     today: Day,
-    generatedAt: DateTime,
     redLines: Type.Array(ProgressRedLine),
     onTrack: Type.Array(ProgressOnTrack),
     summaries: Type.Array(ProgressPersonSummary),

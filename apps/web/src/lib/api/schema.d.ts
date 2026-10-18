@@ -7259,8 +7259,6 @@ export interface components {
         ProgressOverviewResponse: {
             progress: {
                 today: string;
-                /** @description ISO 8601 */
-                generatedAt: string;
                 redLines: ({
                     /** @constant */
                     kind: "slow";
@@ -7282,7 +7280,6 @@ export interface components {
                         dueDate: string;
                         plannedDays: number;
                         usedDays: number;
-                        lastVerifiedAt: string | null;
                     };
                     artifacts: {
                         url: string;
@@ -7311,7 +7308,6 @@ export interface components {
                         dueDate: string;
                         plannedDays: number;
                         usedDays: number;
-                        lastVerifiedAt: string | null;
                     }[];
                     artifacts: {
                         url: string;
@@ -7337,7 +7333,6 @@ export interface components {
                         dueDate: string;
                         plannedDays: number;
                         usedDays: number;
-                        lastVerifiedAt: string | null;
                     };
                     artifacts: {
                         url: string;
@@ -7351,7 +7346,6 @@ export interface components {
                         name: string;
                     };
                     weeklyReview: {
-                        weeklyReviewId: string;
                         href: string;
                         weekStart: string;
                         weekEnd: string;

@@ -10,6 +10,7 @@ import { BattlefieldDisplayProvider, useBattlefieldDisplay, type BattlefieldMode
 import { HeroButton } from "@/components/HeroButton";
 import { IssueRow, meetingTimesByIssue, type IssueRowData } from "@/components/IssueRow";
 import { ReferenceButton } from "@/conversation/references";
+import { useProgressCounts } from "@/components/progress/useProgressCounts";
 import { calendarDate } from "@/lib/companyTime";
 import b from "@/styles/home-board.module.css";
 import r from "@/styles/radar.module.css";
@@ -71,6 +72,12 @@ export function capabilitySections(cards: Card[]): CapabilitySection[] {
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 }
 
+/** 「全局进展」入口的读屏名称：带上红线、计划外的条数。首页手持的「公司全局」同用。 */
+export function progressEntryLabel(counts: { redLines: number; offPlan: number } | null): string {
+  const parts = counts ? [counts.redLines ? `${counts.redLines} 条红线` : "", counts.offPlan ? `${counts.offPlan} 条计划外` : ""].filter(Boolean) : [];
+  return parts.length ? `全局进展，${parts.join("，")}` : "全局进展";
+}
+
 function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
   const display = useBattlefieldDisplay();
   const radar = cards.find((card) => card.kind === "radar");
@@ -82,6 +89,7 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
   const row = (card: Card) => <IssueRow key={card.id} issue={issueRowData(card, meetingTimes)} card={card} onNavigate={onNavigate} />;
 
   const radarStatus = radarStatusText(radar ? payloadOf<RadarPayload>(radar) : null);
+  const progress = useProgressCounts();
 
   return (
     <div className={b.board} data-testid="decision-home">
@@ -126,20 +134,37 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
 
       <div className={b.battlefieldToolbar} data-testid="battlefield-toolbar">
         <span>战场</span>
-        <ToggleButtonGroup
-          className={b.modeSwitch}
-          aria-label="战场展示方式"
-          selectionMode="single"
-          disallowEmptySelection
-          selectedKeys={[display.mode]}
-          onSelectionChange={(keys) => {
-            const next = [...keys][0] as BattlefieldMode | undefined;
-            if (next) display.setMode(next);
-          }}
-        >
-          <ToggleButton id="decisions">待决策</ToggleButton>
-          <ToggleButton id="progress">进展</ToggleButton>
-        </ToggleButtonGroup>
+        <div className={b.toolbarActions}>
+          <HeroButton
+            variant="ghost"
+            size="sm"
+            data-ts-layout="true"
+            type="button"
+            className={b.progressEntry}
+            data-origin="/progress"
+            aria-label={progressEntryLabel(progress)}
+            onPress={(event) => onNavigate("/progress", event.target as Element)}
+          >
+            全局进展
+            {progress?.redLines ? <span className={b.progressBadge} data-tone="red">{progress.redLines} 红线</span> : null}
+            {progress?.offPlan ? <span className={b.progressBadge}>{progress.offPlan} 计划外</span> : null}
+            <ChevronRight size={14} aria-hidden="true" />
+          </HeroButton>
+          <ToggleButtonGroup
+            className={b.modeSwitch}
+            aria-label="战场展示方式"
+            selectionMode="single"
+            disallowEmptySelection
+            selectedKeys={[display.mode]}
+            onSelectionChange={(keys) => {
+              const next = [...keys][0] as BattlefieldMode | undefined;
+              if (next) display.setMode(next);
+            }}
+          >
+            <ToggleButton id="decisions">待决策</ToggleButton>
+            <ToggleButton id="progress">进展</ToggleButton>
+          </ToggleButtonGroup>
+        </div>
       </div>
       <div className={b.battlefields}>
         {battlefields.map((card) => (

@@ -84,7 +84,7 @@ const NOW = new Date("2026-10-16T02:00:00.000Z"); // 周五 10:00（上海）
 async function seedTask(f: Fixture, title: string, missionId: string, status: string, start: string, due: string, owner = MEMBER) {
   const id = randomUUID();
   await f.t.sql(`INSERT INTO tasks(id,title,status,owner_id,created_by,mission_id,step_order,start_date,due_date)
-    VALUES($1,$2,$3,$4,$4,$5,(SELECT COALESCE(max(step_order),0)+1 FROM tasks WHERE mission_id=$5),$6,$7)`, [id, title, status, owner, missionId, start, due]);
+    VALUES($1,$2,$3,$4,'plan',$5,(SELECT COALESCE(max(step_order),0)+1 FROM tasks WHERE mission_id=$5),$6,$7)`, [id, title, status, owner, missionId, start, due]);
   await f.t.sql("INSERT INTO task_members(task_id,person_id,role,added_by) VALUES($1,$2,'owner',$2)", [id, owner]);
   return id;
 }

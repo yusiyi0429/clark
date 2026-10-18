@@ -23,7 +23,7 @@ import { addDays, BATTLEFIELD_MEMBERS, visibleOwners, weeklyReviewHref, weekStar
  * 计划外工作：采集器整理时归不上 Task 的进展（待挂靠、待改计划），本人挂上之前一直列着；提出改计划后照样列着，带上提出时间。
  */
 
-export const NO_PROGRESS_WORKDAYS = 3;
+const NO_PROGRESS_WORKDAYS = 3;
 /** 摘要读最近几周的周复盘、最近几天的采集整理结果；计划外列最近 30 天的。 */
 const WEEKLY_REVIEW_LOOKBACK_DAYS = 35;
 const RECENT_DAYS = 14;
@@ -174,7 +174,6 @@ export async function readProgressOverview(q: Query, viewer: ReviewViewer, peopl
   const view = (task: TaskRow): TProgressTask => ({
     taskId: task.id, title: task.title, status: task.status, startDate: task.start_date, dueDate: task.due_date,
     plannedDays: workdaysBetween(task.start_date, task.due_date), usedDays: workdaysBetween(task.start_date, today),
-    lastVerifiedAt: task.last_verified_at?.toISOString() ?? null,
   });
   const plan = (task: TaskRow): PlanTask => ({ status: task.status, startDate: task.start_date, dueDate: task.due_date, lastVerifiedAt: task.last_verified_at });
   const missionRef = (task: TaskRow): TProgressMissionRef => ({ missionId: task.mission_id, title: task.mission_title, deadline: missionDeadline(task.milestones, task.period) });
@@ -228,7 +227,7 @@ export async function readProgressOverview(q: Query, viewer: ReviewViewer, peopl
     const links = mine.flatMap((row) => row.links ?? []);
     summaries.push({
       person: person(id),
-      weeklyReview: review ? { weeklyReviewId: review.id, href: weeklyReviewHref(review.id, viewer.role === "ceo"), weekStart: review.week_start,
+      weeklyReview: review ? { href: weeklyReviewHref(review.id, viewer.role === "ceo"), weekStart: review.week_start,
         weekEnd: addDays(review.week_start, 6), overall: plainReviewText(review.body?.overall?.text ?? ""), progress: plainReviewText(review.body?.progress?.text ?? "") } : null,
       recent: mine.map((row) => ({ text: row.text, endedAt: row.ended_at.toISOString(), taskTitle: row.task_title, links: uniqueArtifacts(row.links ?? []) })),
       artifacts: uniqueArtifacts(links), coverageUntil: coverage(id),
@@ -239,7 +238,7 @@ export async function readProgressOverview(q: Query, viewer: ReviewViewer, peopl
     || a.person.name.localeCompare(b.person.name, "zh-CN"));
 
   const offPlan = (await readOffPlanRows(q, owners, now)).map((row) => projectOffPlan(row, person));
-  return { today, generatedAt: now.toISOString(), redLines: redLines.map((entry) => entry.line), onTrack, summaries, offPlan };
+  return { today, redLines: redLines.map((entry) => entry.line), onTrack, summaries, offPlan };
 }
 
 // ---------- 本人的计划外 ----------
