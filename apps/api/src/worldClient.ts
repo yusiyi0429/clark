@@ -111,6 +111,16 @@ export type WorldObject = {
   records: { lifecycle: unknown };
   protocol: { contract_version: WorldContractVersion };
 };
+/** 读回的引用：对象、块或组件，ref 是写入时用的字符串形式。 */
+export type WorldReadRef = { ref: string } & Record<string, unknown>;
+/** 读回的组件比写入多了 ref，refs、scope 是对象形式（写回时要换回字符串）。 */
+export type WorldReadComponent = { id: string; type: string; text?: string; refs?: WorldReadRef[]; scope?: WorldReadRef | null;
+  artifacts?: string[]; attributes?: Record<string, unknown>; ref?: string };
+/** GET /v1/world/objects/{id}/state 的 snapshot：blocks 是列表，每项 value 为块值（null 表示空块）。 */
+export type WorldStateSnapshot = {
+  object_id: string; as_of: string; period?: string; payload_type: { id: string } | string;
+  blocks: { id: string; value: { text?: string; refs?: WorldReadRef[]; artifacts?: string[]; components?: WorldReadComponent[] } | null }[];
+};
 export const worldRef = (head: Pick<WorldHead, "object_id" | "version">): string => `${head.object_id}@${head.version}`;
 export const worldTarget = (head: WorldHead) => ({ object_id: head.object_id, revision_id: head.revision_id, expected_version: head.object_version });
 export type WorldAction = {
@@ -221,6 +231,10 @@ export class WorldClient {
   /** 取事件（只读）：subject_refs 含该对象、occurred_at 不早于 since 的事件。 */
   async getEvents(id: string, since?: string): Promise<{ items?: Record<string, unknown>[]; events?: Record<string, unknown>[] } & Record<string, unknown>> {
     return this.request(`/v1/world/objects/${encodeURIComponent(id)}/events${since ? `?since=${encodeURIComponent(since)}` : ""}`);
+  }
+  /** 取状态（只读）：对象最新一条状态快照；没有快照时 snapshot 为 null。 */
+  async getState(id: string): Promise<{ object_id: string; snapshot: WorldStateSnapshot | null }> {
+    return this.request(`/v1/world/objects/${encodeURIComponent(id)}/state`);
   }
   async identity(): Promise<WorldIdentity> { return this.request("/v1/identity"); }
   async getObject(id: string): Promise<WorldObject> { return this.request(`/v1/world/objects/${encodeURIComponent(id)}`); }

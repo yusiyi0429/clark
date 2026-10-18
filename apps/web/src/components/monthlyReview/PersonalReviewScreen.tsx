@@ -8,8 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import { Check, Loader2, Sparkles, X } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { Button } from "ts-design/primitives";
 import type { TMonthlyReviewField, TPersonalReviewPayload } from "@warmap/contracts";
 import { browserApi, type Card } from "@/lib/api/client";
@@ -22,29 +21,12 @@ import { REVIEW_INSTRUCTION, openConnectionDialog, personalStatusText, runPerson
 import { FeedbackLink } from "./FeedbackLink";
 import { Sources } from "./Sources";
 import { fromEditable, inlineSources, toEditable } from "./citationText";
-import { CITATION_MARKDOWN } from "@/conversation/citations";
-import { remarkCitationMarks } from "@/conversation/citationMarks";
+import { GenerationSteps, ReviewText } from "./ReviewParts";
 import s from "@/components/missionCards/mission-card.module.css";
 import r from "./monthly-review.module.css";
 
 type Drafts = Partial<Record<TMonthlyReviewField, string>>;
 const NO_CARDS: Card[] = [];
-const REMARK_PLUGINS = [remarkCitationMarks];
-
-/** 一栏正文：每行一段，句末出处显示成小标记。 */
-function ReviewText({ text }: { text: string }) {
-  return <div className={r.reviewText}><ReactMarkdown remarkPlugins={REMARK_PLUGINS} {...CITATION_MARKDOWN}>{text.replace(/\n+/g, "\n\n")}</ReactMarkdown></div>;
-}
-
-/** 生成的步骤：读 Mission 卡 → 读每周复盘 → 读采集记录 → 起草。 */
-function GenerationSteps({ steps }: { steps: TPersonalReviewPayload["generationSteps"] }) {
-  return <ol className={r.steps}>
-    {steps.map((step) => <li key={step.id} data-state={step.status}>
-      <span className={r.stepMark} aria-hidden>{step.status === "running" ? <Loader2 size={12} /> : step.status === "done" ? <Check size={12} /> : step.status === "failed" ? <X size={12} /> : null}</span>
-      <span>{step.label}{step.result ? <small>{step.result}</small> : null}</span>
-    </li>)}
-  </ol>;
-}
 const SOURCE_TEXT = { agent_tool: "你的 AI 工具", co_agent: "Co-Agent", manual: "手写" } as const;
 
 function tone(status: TPersonalReviewPayload["status"]): "wait" | "warn" | "done" | undefined {

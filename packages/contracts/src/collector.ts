@@ -77,6 +77,19 @@ export const CollectorReportResponse = Type.Object({
   receivedAt: Instant,
 }, { additionalProperties: false });
 
+/**
+ * 上手时本人同意采集（D-02）：同意后本机采集器上报的原文片段才被收下，服务端用统一的模型整理成进展；
+ * 原文只有本人能看，收到 14 天后删除。没同意或撤回后，上报的工作段一律不收（心跳照收），撤回时清空本人的原文。
+ */
+export const CollectorConsent = Type.Object({
+  granted: Type.Boolean(),
+  updatedAt: Type.Union([Instant, Type.Null()]),
+}, { additionalProperties: false });
+export const CollectorConsentResponse = Type.Object({ consent: CollectorConsent }, { additionalProperties: false });
+export const UpdateCollectorConsentRequest = Type.Object({ granted: Type.Boolean() }, { additionalProperties: false });
+
+export type TCollectorConsent = Static<typeof CollectorConsent>;
+export type TCollectorConsentResponse = Static<typeof CollectorConsentResponse>;
 export type TCollectorDevice = Static<typeof CollectorDevice>;
 export type TCollectorSourceState = Static<typeof CollectorSourceState>;
 export type TCollectorHeartbeatRequest = Static<typeof CollectorHeartbeatRequest>;

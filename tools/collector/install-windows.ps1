@@ -36,7 +36,7 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatt
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 
 if ($DryRun) {
-  Write-Output "[dry-run] 复制 tkos_collector.py、collect_sessions.py 到 $Target"
+  Write-Output "[dry-run] 复制 tkos_collector.py、collect_sessions.py、sanitize.py 到 $Target"
   Write-Output "[dry-run] 写配置 $ConfigFile ：server=$Server eod_time=$EodTime"
   if (-not (Test-Path $TokenFile)) { Write-Output "[dry-run] 提示粘贴采集器令牌，存到 $TokenFile" }
   Write-Output "[dry-run] 注册计划任务 $TaskName ：$Python `"$script`" check"
@@ -45,7 +45,7 @@ if ($DryRun) {
 }
 
 New-Item -ItemType Directory -Force -Path $Target | Out-Null
-Copy-Item -Force (Join-Path $PSScriptRoot "tkos_collector.py"), (Join-Path $PSScriptRoot "collect_sessions.py") $Target
+Copy-Item -Force (Join-Path $PSScriptRoot "tkos_collector.py"), (Join-Path $PSScriptRoot "collect_sessions.py"), (Join-Path $PSScriptRoot "sanitize.py") $Target
 [System.IO.File]::WriteAllText($ConfigFile, (@{ server = $Server; eod_time = $EodTime } | ConvertTo-Json), (New-Object System.Text.UTF8Encoding $false))
 if (-not (Test-Path $TokenFile)) {
   $secure = Read-Host "粘贴天枢里生成的「本机采集器」令牌" -AsSecureString

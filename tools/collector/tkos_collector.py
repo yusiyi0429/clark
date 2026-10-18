@@ -5,6 +5,8 @@
     python tkos_collector.py check --dry-run   # 只打印要发的内容，不联网、不改状态
 
 会话读取复用 collect_sessions.py（与 tkos-world-daily skill 里的同一份，未改动）。
+上传前在本机脱敏和裁剪（sanitize.py）：去掉密钥、令牌、环境变量的值、长代码块和工具输出，只留对话文字、时间、仓库名；整理在天枢服务端做。
+天枢那边要本人在上手流程里同意采集才收工作段，没同意时上报返回 403，待发的留在本机，同意后下次检查原样发出。
 水位线与设备 id 存在 ~/.tkos-world/daily-state.json；服务地址在 ~/.tkos-world/collector.json；
 令牌在 ~/.tkos-world/collector.token（或环境变量 TKOS_COLLECTOR_TOKEN），不进仓库、不打印。
 """
@@ -26,6 +28,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import collect_sessions as cs  # noqa: E402
+import sanitize  # noqa: E402
 
 VERSION = "0.1.0"
 HOME = Path.home() / ".tkos-world"
@@ -101,18 +104,17 @@ SOURCE = {"Codex": "codex", "Claude Code": "claude"}
 
 def to_item(session: cs.Session, device_id: str, start: datetime, end: datetime) -> dict[str, Any]:
     times = session.times()
-    cwd = session.cwd or ""
-    lines = [f"工作目录：{cwd or '未知'}"]
+    hint = sanitize.repo_name(session.cwd or "")
+    lines = [f"仓库：{hint or '未知'}"]
     texts: list[str] = []
     for title, entries in (("请求", session.requests), ("答复", session.answers)):
         if entries:
             lines.append(f"{title}：")
             for moment, text in entries[-12:]:
-                clean = cs.redact(text)
+                clean = sanitize.sanitize(text)
                 texts.append(clean)
                 lines.append(f"- {moment.astimezone(start.tzinfo):%H:%M} {cs.clip(clean, 300)}")
     links = list(dict.fromkeys(url.rstrip(".,;:，。；") for text in texts for url in cs._URL.findall(text)))
-    hint = Path(cwd.replace("\\", "/")).name if cwd else ""
     return {
         "clientEventId": str(uuid.uuid5(uuid.NAMESPACE_URL, f"tkos-collector:{device_id}:{session.tool}:{session.session_id}:{iso(start)}:{iso(end)}")),
         "source": SOURCE[session.tool],
@@ -163,7 +165,7 @@ def scheduled_tasks() -> list[dict[str, Any]]:
     except (OSError, ValueError, subprocess.SubprocessError):
         return []
     return [{"name": str(row["name"])[:200], "schedule": (str(row.get("schedule") or "")[:200] or None),
-             "command": (cs.redact(str(row.get("command") or ""))[:500] or None)} for row in rows if row.get("name")][:200]
+             "command": (sanitize.redact_secrets(str(row.get("command") or ""))[:500] or None)} for row in rows if row.get("name")][:200]
 
 
 # ---------- 上报 ----------

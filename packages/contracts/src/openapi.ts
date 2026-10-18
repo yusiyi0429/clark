@@ -128,6 +128,8 @@ import {
   CreatePersonalTokenRequest,
   CreatePersonalTokenResponse,
   CollectorHeartbeatRequest, CollectorHeartbeatResponse, CollectorReportRequest, CollectorReportResponse,
+  CollectorConsentResponse, UpdateCollectorConsentRequest,
+  WeeklyReviewBoardResponse, WeeklyReviewResponse, ExecuteWeeklyReviewActionRequest, ExecuteWeeklyReviewActionResponse, WeeklyReviewUpdateInput,
   OAuthConsentRequest,
   OAuthConsentResponse,
   OAuthConsentDecisionResponse,
@@ -1330,7 +1332,39 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         post: {
           operationId: "collectorReport", summary: "本机采集器上报一段工作与本机清单，按 clientEventId 幂等（collector 个人令牌）",
           requestBody: jsonBody({ $ref: "#/components/schemas/CollectorReportRequest" }),
-          responses: { "200": { description: "新记下与重放的条数", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorReportResponse" } } } }, "400": errorResponse, "401": errorResponse },
+          responses: { "200": { description: "新记下与重放的条数", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorReportResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse },
+        },
+      },
+      "/api/me/collector/consent": {
+        get: {
+          operationId: "getCollectorConsent", summary: "本人是否同意本机采集（上手流程里的开关读这里）",
+          responses: { "200": { description: "同意状态", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorConsentResponse" } } } }, "401": errorResponse },
+        },
+        put: {
+          operationId: "updateCollectorConsent", summary: "本人同意或撤回本机采集；撤回时清空本人的原文片段，整理结果保留",
+          requestBody: jsonBody({ $ref: "#/components/schemas/UpdateCollectorConsentRequest" }),
+          responses: { "200": { description: "同意状态", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorConsentResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+      },
+      "/api/weekly-reviews/board": {
+        get: {
+          operationId: "getWeeklyReviewBoard", summary: "周复盘名单：看得到的人（本人、同战场、CEO 看全部）这一周的状态；不带 week 取本周",
+          parameters: [{ name: "week", in: "query", required: false, schema: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" } }],
+          responses: { "200": { description: "周复盘名单", content: { "application/json": { schema: { $ref: "#/components/schemas/WeeklyReviewBoardResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+      },
+      "/api/weekly-reviews/{weeklyReviewId}": {
+        get: {
+          operationId: "getWeeklyReview", summary: "读一份周复盘：本人、同战场的人、CEO；别人提交前看不到正文；其余 404",
+          parameters: [{ name: "weeklyReviewId", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "周复盘", content: { "application/json": { schema: { $ref: "#/components/schemas/WeeklyReviewResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/weekly-reviews/actions/execute": {
+        post: {
+          operationId: "executeWeeklyReviewAction", summary: "执行周复盘动作（修改、提交、重新生成）；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT",
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExecuteWeeklyReviewActionRequest" }),
+          responses: { "200": { description: "周复盘的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/ExecuteWeeklyReviewActionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
         },
       },
       "/api/me/tokens/{id}": {
@@ -2453,6 +2487,13 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         CollectorHeartbeatResponse: CollectorHeartbeatResponse as JsonSchema,
         CollectorReportRequest: CollectorReportRequest as JsonSchema,
         CollectorReportResponse: CollectorReportResponse as JsonSchema,
+        CollectorConsentResponse: CollectorConsentResponse as JsonSchema,
+        UpdateCollectorConsentRequest: UpdateCollectorConsentRequest as JsonSchema,
+        WeeklyReviewBoardResponse: WeeklyReviewBoardResponse as JsonSchema,
+        WeeklyReviewResponse: WeeklyReviewResponse as JsonSchema,
+        ExecuteWeeklyReviewActionRequest: ExecuteWeeklyReviewActionRequest as JsonSchema,
+        ExecuteWeeklyReviewActionResponse: ExecuteWeeklyReviewActionResponse as JsonSchema,
+        WeeklyReviewUpdateInput: WeeklyReviewUpdateInput as JsonSchema,
         TaskPerson: TaskPerson as JsonSchema,
         TaskMissionRef: TaskMissionRef as JsonSchema,
         CreateMyTaskRequest: CreateMyTaskRequest as JsonSchema,

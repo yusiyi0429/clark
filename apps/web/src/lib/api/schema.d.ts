@@ -1614,6 +1614,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/collector/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人是否同意本机采集（上手流程里的开关读这里） */
+        get: operations["getCollectorConsent"];
+        /** 本人同意或撤回本机采集；撤回时清空本人的原文片段，整理结果保留 */
+        put: operations["updateCollectorConsent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/weekly-reviews/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 周复盘名单：看得到的人（本人、同战场、CEO 看全部）这一周的状态；不带 week 取本周 */
+        get: operations["getWeeklyReviewBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/weekly-reviews/{weeklyReviewId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读一份周复盘：本人、同战场的人、CEO；别人提交前看不到正文；其余 404 */
+        get: operations["getWeeklyReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/weekly-reviews/actions/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 执行周复盘动作（修改、提交、重新生成）；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT */
+        post: operations["executeWeeklyReviewAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/tokens/{id}": {
         parameters: {
             query?: never;
@@ -6824,6 +6893,188 @@ export interface components {
             duplicates: number;
             /** Format: date-time */
             receivedAt: string;
+        };
+        CollectorConsentResponse: {
+            consent: {
+                granted: boolean;
+                updatedAt: string | null;
+            };
+        };
+        UpdateCollectorConsentRequest: {
+            granted: boolean;
+        };
+        WeeklyReviewBoardResponse: {
+            board: {
+                weekStart: string;
+                weekEnd: string;
+                isCurrentWeek: boolean;
+                counts: {
+                    total: number;
+                    submitted: number;
+                };
+                rows: {
+                    weeklyReviewId: string;
+                    personId: string;
+                    personName: string;
+                    status: "drafting" | "draft_failed" | "draft" | "submitted";
+                    origin: "tianshu" | "import";
+                    isSelf: boolean;
+                    href: string;
+                }[];
+                previousWeek: string | null;
+                nextWeek: string | null;
+            } | null;
+        };
+        WeeklyReviewResponse: {
+            review: {
+                weeklyReviewId: string;
+                version: number;
+                personId: string;
+                personName: string;
+                weekStart: string;
+                weekEnd: string;
+                status: "drafting" | "draft_failed" | "draft" | "submitted";
+                origin: "tianshu" | "import";
+                importSource: {
+                    title: string;
+                    url: string;
+                } | null;
+                body: {
+                    overall: {
+                        text: string;
+                        sources: string[];
+                    };
+                    progress: {
+                        text: string;
+                        sources: string[];
+                    };
+                    issues: {
+                        text: string;
+                        sources: string[];
+                    };
+                    implications: {
+                        text: string;
+                        sources: string[];
+                    };
+                    actions: {
+                        text: string;
+                        sources: string[];
+                    };
+                } | null;
+                draftError: {
+                    code: string;
+                    message: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                generationSteps: {
+                    id: "missions" | "progress" | "meetings" | "collector" | "previous" | "draft";
+                    label: string;
+                    status: "pending" | "running" | "done" | "failed";
+                    result?: string;
+                }[];
+                editedFields: ("overall" | "progress" | "issues" | "implications" | "actions")[];
+                revisions: {
+                    /** @description ISO 8601 */
+                    at: string;
+                    kind: "generate" | "edit" | "submit" | "import";
+                    byName: string;
+                    fields: ("overall" | "progress" | "issues" | "implications" | "actions")[];
+                }[];
+                submittedAt: string | null;
+                viewer: {
+                    isSelf: boolean;
+                    isCeo: boolean;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+        };
+        ExecuteWeeklyReviewActionRequest: {
+            actionId: string;
+            input?: unknown;
+        };
+        ExecuteWeeklyReviewActionResponse: {
+            review: {
+                weeklyReviewId: string;
+                version: number;
+                personId: string;
+                personName: string;
+                weekStart: string;
+                weekEnd: string;
+                status: "drafting" | "draft_failed" | "draft" | "submitted";
+                origin: "tianshu" | "import";
+                importSource: {
+                    title: string;
+                    url: string;
+                } | null;
+                body: {
+                    overall: {
+                        text: string;
+                        sources: string[];
+                    };
+                    progress: {
+                        text: string;
+                        sources: string[];
+                    };
+                    issues: {
+                        text: string;
+                        sources: string[];
+                    };
+                    implications: {
+                        text: string;
+                        sources: string[];
+                    };
+                    actions: {
+                        text: string;
+                        sources: string[];
+                    };
+                } | null;
+                draftError: {
+                    code: string;
+                    message: string;
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+                generationSteps: {
+                    id: "missions" | "progress" | "meetings" | "collector" | "previous" | "draft";
+                    label: string;
+                    status: "pending" | "running" | "done" | "failed";
+                    result?: string;
+                }[];
+                editedFields: ("overall" | "progress" | "issues" | "implications" | "actions")[];
+                revisions: {
+                    /** @description ISO 8601 */
+                    at: string;
+                    kind: "generate" | "edit" | "submit" | "import";
+                    byName: string;
+                    fields: ("overall" | "progress" | "issues" | "implications" | "actions")[];
+                }[];
+                submittedAt: string | null;
+                viewer: {
+                    isSelf: boolean;
+                    isCeo: boolean;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+        };
+        WeeklyReviewUpdateInput: {
+            fields: {
+                field: "overall" | "progress" | "issues" | "implications" | "actions";
+                text: string;
+                sources?: string[];
+            }[];
         };
         TaskPerson: {
             personId: string;
@@ -13221,6 +13472,244 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getCollectorConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 同意状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorConsentResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateCollectorConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCollectorConsentRequest"];
+            };
+        };
+        responses: {
+            /** @description 同意状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorConsentResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getWeeklyReviewBoard: {
+        parameters: {
+            query?: {
+                week?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 周复盘名单 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeeklyReviewBoardResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getWeeklyReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                weeklyReviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 周复盘 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeeklyReviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    executeWeeklyReviewAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecuteWeeklyReviewActionRequest"];
+            };
+        };
+        responses: {
+            /** @description 周复盘的最新视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecuteWeeklyReviewActionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

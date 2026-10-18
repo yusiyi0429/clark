@@ -48,7 +48,7 @@ EOF
 }
 
 if [ "$DRY" = 1 ]; then
-  echo "[dry-run] 复制 tkos_collector.py、collect_sessions.py 到 $TARGET"
+  echo "[dry-run] 复制 tkos_collector.py、collect_sessions.py、sanitize.py 到 $TARGET"
   echo "[dry-run] 写配置 $ROOT/collector.json：server=$SERVER eod_time=$EOD"
   [ -f "$ROOT/collector.token" ] || echo "[dry-run] 提示粘贴采集器令牌，存到 $ROOT/collector.token"
   echo "[dry-run] 写 $PLIST 并 launchctl bootstrap gui/$(id -u)："
@@ -57,7 +57,7 @@ if [ "$DRY" = 1 ]; then
 fi
 
 mkdir -p "$TARGET" "$ROOT/logs" "$HOME/Library/LaunchAgents"
-cp "$HERE/tkos_collector.py" "$HERE/collect_sessions.py" "$TARGET/"
+cp "$HERE/tkos_collector.py" "$HERE/collect_sessions.py" "$HERE/sanitize.py" "$TARGET/"
 "$PY" -c 'import json,sys; json.dump({"server": sys.argv[1], "eod_time": sys.argv[2]}, open(sys.argv[3], "w"), ensure_ascii=False)' \
   "$SERVER" "$EOD" "$ROOT/collector.json"
 if [ ! -f "$ROOT/collector.token" ]; then

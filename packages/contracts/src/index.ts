@@ -31,3 +31,4 @@ export * from "./missionCardAnnotations.js";
 export * from "./requests.js";
 export * from "./personalMemory.js";
 export * from "./collector.js";
+export * from "./weeklyReviews.js";
